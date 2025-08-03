@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://lbedner.github.io/aegis-stack/index.html</loc>
+         <lastmod>2025-08-03</lastmod>
+    </url>
+    <url>
+         <loc>https://lbedner.github.io/aegis-stack/philosophy.html</loc>
+         <lastmod>2025-08-03</lastmod>
+    </url>
+    <url>
+         <loc>https://lbedner.github.io/aegis-stack/guides/lifecycle.html</loc>
+         <lastmod>2025-08-03</lastmod>
+    </url>
+    <url>
+         <loc>https://lbedner.github.io/aegis-stack/guides/services.html</loc>
+         <lastmod>2025-08-03</lastmod>
+    </url>
+</urlset>

@@ -11,6 +11,18 @@ from pathlib import Path
 from app.core.log import logger
 
 
+def auto_discover_services() -> None:
+    """
+    Auto-discover services from the standard services directory.
+
+    This function automatically finds and imports all modules in the 'app/services'
+    directory, allowing them to self-register their lifecycle tasks. This block runs
+    once when called, triggering the execution of the module's top-level code.
+    """
+    services_dir = Path(__file__).parent.parent / "services"
+    discover_and_import_services(services_dir)
+
+
 def discover_and_import_services(package_path: str | Path) -> None:
     """
     Dynamically discovers and imports all modules in a given package path.

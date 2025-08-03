@@ -1,23 +1,14 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import flet.fastapi as flet_fastapi
 from fastapi import FastAPI
 
 from app.backend.main import create_backend_app
-from app.core.discovery import discover_and_import_services
+from app.core.discovery import auto_discover_services
 from app.core.lifecycle import SHUTDOWN_TASKS, STARTUP_TASKS
-from app.core.log import logger, setup_logging
+from app.core.log import logger
 from app.frontend.main import create_frontend_app
-
-# --- DYNAMIC SERVICE DISCOVERY ---
-# This block runs once when the module is first imported.
-# It automatically finds and imports all modules in the 'app/services' directory,
-# allowing them to self-register their lifecycle tasks.
-SERVICES_DIR = Path(__file__).parent.parent / "services"
-discover_and_import_services(SERVICES_DIR)
-# ---------------------------------
 
 
 @asynccontextmanager
@@ -27,8 +18,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     It executes registered startup and shutdown tasks in the correct order.
     """
     # --- STARTUP ---
-    setup_logging()
     logger.info("--- Running application startup tasks ---")
+
+    # Auto-discover services (allows them to register lifecycle tasks)
+    auto_discover_services()
+
     await flet_fastapi.app_manager.start()
     for task in STARTUP_TASKS:
         await task()

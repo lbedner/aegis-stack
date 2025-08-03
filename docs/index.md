@@ -1,5 +1,9 @@
 # Aegis Stack 🛡️
 
+[![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
+[![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+
 **A production-ready, async-first Python foundation for builders who refuse to wait.**
 
 Aegis Stack provides a minimal, yet powerful, set of tools and patterns to help you build and deploy robust, scalable applications quickly. It's designed for developers who think in systems, not scripts, and who value speed, simplicity, and scalability.
@@ -23,9 +27,20 @@ Aegis Stack is built on three pillars:
 2.  **Simplicity:** Favor clear, Pythonic patterns over complex, magical frameworks.
 3.  **Scalability:** Start with a simple monolith and evolve into a distributed system as your needs grow.
 
-To learn more, check out the full [**Documentation**](https://aegis-stack.github.io/aegis-stack/). (Note: This link will be valid once deployed via GitHub Pages).
 
-## Usage
+## Getting Started
+
+### Environment Setup
+
+1. **Copy the environment template:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Customize your environment:**
+   Edit `.env` to match your local setup. The defaults work for development.
+
+### Usage
 
 This project uses a `Makefile` to provide convenient commands for common tasks.
 
@@ -43,7 +58,7 @@ To serve the documentation locally with live reloading:
 ```bash
 make docs-serve
 ```
-The documentation will be available at `http://127.0.0.1:8001`.
+The documentation will be available at `http://localhost:8001/aegis-stack/`.
 
 ### Code Quality and Tests
 

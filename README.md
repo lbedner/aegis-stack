@@ -27,9 +27,20 @@ Aegis Stack is built on three pillars:
 2.  **Simplicity:** Favor clear, Pythonic patterns over complex, magical frameworks.
 3.  **Scalability:** Start with a simple monolith and evolve into a distributed system as your needs grow.
 
-To learn more, check out the full [**Documentation**](https://lbedner.github.io/aegis-stack/).
 
-## Usage
+## Getting Started
+
+### Environment Setup
+
+1. **Copy the environment template:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Customize your environment:**
+   Edit `.env` to match your local setup. The defaults work for development.
+
+### Usage
 
 This project uses a `Makefile` to provide convenient commands for common tasks.
 
@@ -47,7 +58,7 @@ To serve the documentation locally with live reloading:
 ```bash
 make docs-serve
 ```
-The documentation will be available at `http://127.0.0.1:8001`.
+The documentation will be available at `http://localhost:8001/aegis-stack/`.
 
 ### Code Quality and Tests
 

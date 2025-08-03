@@ -27,6 +27,10 @@ theme:
 nav:
   - Home: index.md
   - Philosophy: philosophy.md
+  - Components:
+    - Overview: components/index.md
+    - Web Server: components/webserver.md
+    - Frontend: components/frontend.md
   - Guides:
     - Application Lifecycle: guides/lifecycle.md
     - Services & Discovery: guides/services.md

@@ -1,0 +1,62 @@
+
+x-app: &app
+  image: ${AEGIS_STACK_TAG:-aegis-stack:latest}
+  build:
+    context: .
+    args:
+      - AEGIS_STACK_VERSION=${AEGIS_STACK_VERSION:-dev}
+  env_file:
+    - ${AEGIS_STACK_ENV_FILE:-.env}
+  volumes:
+    - .:/code
+  labels:
+    logging: "aegis-stack"
+
+services:
+  # DEVELOPMENT PROFILE
+
+  webserver:
+    <<: *app
+    command:
+      - webserver
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    profiles:
+      - dev
+
+  # Future components will be added here as services:
+  # scheduler:
+  #   <<: *app
+  #   command:
+  #     - scheduler
+  #   profiles:
+  #     - dev
+
+  # TEST PROFILE
+
+  test_runner:
+    <<: *app
+    command:
+      - test
+    env_file:
+      - ${AEGIS_STACK_ENV_FILE:-.env}
+    profiles:
+      - test
+
+volumes:
+  aegis-data:

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # Log level for the application
     LOG_LEVEL: str = "INFO"
 
+    # Docker settings (used by docker-compose)
+    AEGIS_STACK_TAG: str = "aegis-stack:latest"
+    AEGIS_STACK_VERSION: str = "dev"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

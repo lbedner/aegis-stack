@@ -7,7 +7,7 @@ The core philosophy of Aegis Stack is built on three pillars: **Speed**, **Simpl
 Development should be fast. Aegis Stack is designed to get you from idea to production as quickly as possible.
 
 - **Async-First:** Built from the ground up with `asyncio` to handle high-concurrency workloads efficiently.
-- **Full-Stack Python:** Use a single language for your entire stack, from the Flet frontend to the FastAPI backend, reducing context-switching and cognitive load.
+- **Full-Stack Python:** Use a single language for your entire stack, reducing context-switching and cognitive load.
 - **Minimalist by Default:** No unnecessary bloat. The stack provides a clean, strong foundation that you can build upon, not a heavy framework you have to fight against.
 
 ## Simplicity: Powerful Patterns, Not Prescriptive Frameworks

@@ -1,0 +1,44 @@
+# mkdocs.yml
+site_name: Aegis Stack
+site_description: A production-ready Python foundation for builders who refuse to wait.
+site_author: Aegis Stack Contributors
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for light vs dark mode
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Philosophy: philosophy.md
+  - Guides:
+    - Application Lifecycle: guides/lifecycle.md
+    - Services & Discovery: guides/services.md
+
+# Plugins
+plugins:
+  - gen-files:
+      scripts:
+        - scripts/gen_docs.py
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_source: true

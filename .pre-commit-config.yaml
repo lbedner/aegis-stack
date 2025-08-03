@@ -1,0 +1,20 @@
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Use the same version as in pyproject.toml for consistency
+    rev: v0.12.7 
+    hooks:
+      - id: ruff
+        args:
+          - "--fix"
+          - "--exit-non-zero-on-fix"
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: make typecheck
+        language: system
+        types: [python]
+        pass_filenames: false

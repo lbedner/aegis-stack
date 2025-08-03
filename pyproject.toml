@@ -23,6 +23,7 @@ dev = [
     "mkdocstrings[python]>=0.24.0",
     "mkdocs-gen-files>=0.5.0",
     "pre-commit>=3.7.0",
+    "pip-audit>=2.6.0",
 ]
 
 [build-system]

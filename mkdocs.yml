@@ -2,6 +2,7 @@
 site_name: Aegis Stack
 site_description: A production-ready Python foundation for builders who refuse to wait.
 site_author: Aegis Stack Contributors
+site_url: https://lbedner.github.io/aegis-stack/
 
 theme:
   name: material

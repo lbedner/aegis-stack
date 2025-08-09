@@ -10,6 +10,8 @@ dependencies = [
     "uvicorn>=0.35.0",
     "structlog>=24.1.0",
     "pydantic-settings>=2.2.0",
+    "typer>=0.9.0",
+    "cookiecutter>=2.6.0",
 ]
 
 [project.optional-dependencies]
@@ -18,13 +20,19 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "ruff>=0.1.0",
     "mypy>=1.8.0",
+    "pre-commit>=3.7.0",
+    "pip-audit>=2.6.0",
+]
+docs = [
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.5.0",
     "mkdocstrings[python]>=0.24.0",
     "mkdocs-gen-files>=0.5.0",
-    "pre-commit>=3.7.0",
-    "pip-audit>=2.6.0",
+    "pymdown-extensions>=10.0.0",
 ]
+
+[project.scripts]
+aegis = "aegis.__main__:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -36,25 +44,50 @@ packages = ["app"]
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+exclude = ["aegis/templates", "test-scheduler-validation"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W"]
+select = ["E", "F", "I", "N", "W", "UP"]  # Added UP for pyupgrade (modern Python syntax)
 ignore = []
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+force-single-line = false
+force-sort-within-sections = true
+known-first-party = ["app", "aegis"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
+exclude = ["aegis/templates", "test-scheduler-validation"]
 
 [[tool.mypy.overrides]]
 module = "flet.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "cookiecutter.*"
 ignore_missing_imports = true
 
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (CLI integration tests that generate projects)"
+]
 
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+]
+docs = [
+    "pymdown-extensions>=10.16.1",
 ]

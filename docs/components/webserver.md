@@ -1,102 +1,87 @@
-# Web Server Component
+# Backend Component
 
-The **Web Server** component handles HTTP requests, API endpoints, and web traffic for your Aegis Stack application.
+The **Backend Component** handles HTTP requests and API endpoints for your Aegis Stack application using [FastAPI](https://fastapi.tiangolo.com/).
 
-## Current Implementation: FastAPI
+## Adding API Routes
 
-FastAPI is the current web server implementation, chosen for its high performance, automatic API documentation, and excellent async support.
+API routes require **explicit registration** to maintain clear dependency tracking:
 
-### Why FastAPI?
-
-- **High Performance**: Built on Starlette and Pydantic, one of the fastest Python frameworks
-- **Async Native**: Perfect match for Aegis Stack's async-first architecture  
-- **Type Safety**: Automatic validation and serialization using Python type hints
-- **Auto Documentation**: Generates OpenAPI/Swagger docs automatically
-- **Modern**: Designed for Python 3.6+ with modern language features
-
-### How It's Integrated
-
-FastAPI is set up in the `app/backend/` directory:
-
+**Step 1: Create your router**
 ```python
-# app/backend/main.py
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-def create_backend_app(app: FastAPI) -> FastAPI:
-    """Configure FastAPI app with all backend concerns"""
-    
-    # Basic CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    
-    # Include all routes
-    include_routers(app)
-    
-    return app
-```
-
-### Adding API Routes
-
-Routes are organized in `app/backend/api/`:
-
-```python
-# app/backend/api/health.py
+# app/components/backend/api/data.py
 from fastapi import APIRouter
+from app.services.data_service import get_dashboard_stats, trigger_manual_ingestion
 
 router = APIRouter()
 
-@router.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "aegis-stack"}
+@router.get("/data/stats")
+async def get_stats():
+    stats = await get_dashboard_stats()
+    return {"status": "success", "data": stats}
+
+@router.post("/data/ingest")
+async def trigger_ingestion():
+    await trigger_manual_ingestion()
+    return {"status": "ingestion_started"}
 ```
 
-Register routes in `app/backend/api/routing.py`:
-
+**Step 2: Register explicitly**
 ```python
-from app.backend.api import health
+# app/components/backend/api/routing.py
+from app.components.backend.api import data
 
 def include_routers(app: FastAPI) -> None:
-    app.include_router(health.router, tags=["health"])
+    app.include_router(data.router, prefix="/api", tags=["data"])
 ```
 
-### Configuration
+> **Why manual registration?** API routes define your application's public interface. Explicit registration makes dependencies clear and prevents accidental exposure of endpoints.
 
-FastAPI is configured through the integration layer and runs with:
+## Adding Backend Hooks (Auto-Discovered)
 
-- **CORS enabled** for cross-origin requests
-- **Automatic JSON serialization** 
-- **Built-in validation** using Pydantic models
-- **Exception handling** for clean error responses
+Backend hooks are **automatically discovered** by dropping files in designated folders:
 
-### Development Features
+```
+app/components/backend/
+├── middleware/     # Auto-discovered middleware  
+├── startup/        # Auto-discovered startup hooks
+└── shutdown/       # Auto-discovered shutdown hooks
+```
 
-- **Auto-reload** during development
+**Example: Add CORS middleware**
+```python
+# app/components/backend/middleware/cors.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+async def register_middleware(app: FastAPI) -> None:
+    """Auto-discovered middleware registration."""
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"]
+    )
+```
+
+**No registration required** - just drop the file and restart. See the [Integration Patterns](../integration-patterns.md) for complete details.
+
+## Integration
+
+FastAPI integrates with your application and provides:
+
 - **Interactive docs** at `/docs` (Swagger UI)
-- **Alternative docs** at `/redoc` 
-- **OpenAPI schema** at `/openapi.json`
+- **API schema** at `/openapi.json`  
+- **Health check** at `/health`
+- **CORS enabled** for frontend integration
 
-## Integration with Aegis Stack
+## Configuration
 
-FastAPI aligns perfectly with Aegis Stack's core principles:
+The backend runs on port 8000 and is configured through the integration layer with automatic JSON serialization and validation.
 
-- **Python-First**: Pure Python with excellent type safety
-- **Async-Native**: Built for async/await from the ground up
-- **Developer Experience**: Automatic validation, serialization, and documentation
-- **Production Ready**: High performance with excellent error handling
 
-## Performance Characteristics
+## Next Steps
 
-FastAPI provides:
-
-- **Async request handling** for high concurrency
-- **Automatic validation** without performance penalty
-- **JSON serialization** optimized with orjson under the hood
-- **Middleware support** for cross-cutting concerns
-
-FastAPI's async-first design allows Aegis Stack to handle thousands of concurrent connections efficiently while maintaining type safety and developer productivity.
+- **[FastAPI Documentation](https://fastapi.tiangolo.com/)** - Complete API framework capabilities
+- **[FastAPI Tutorial](https://fastapi.tiangolo.com/tutorial/)** - Building APIs with FastAPI
+- **[Component Overview](./index.md)** - Understanding Aegis Stack's component architecture
+- **[Philosophy Guide](../philosophy.md)** - Component architecture principles

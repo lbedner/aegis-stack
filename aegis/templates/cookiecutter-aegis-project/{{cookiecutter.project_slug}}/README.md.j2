@@ -1,0 +1,143 @@
+# {{ cookiecutter.project_name }} 🛡️
+
+{{ cookiecutter.project_description }}
+
+## Components
+
+This Aegis Stack project includes the following components:
+
+- **✅ Backend**: FastAPI-based async web server
+- **✅ Frontend**: Flet-based Python UI framework
+{%- if cookiecutter.include_scheduler == "yes" %}
+- **✅ Scheduler**: APScheduler-based async task scheduling
+{%- endif %}
+{%- if cookiecutter.include_database == "yes" %}
+- **✅ Database**: SQLAlchemy + asyncpg for PostgreSQL
+{%- endif %}
+{%- if cookiecutter.include_cache == "yes" %}
+- **✅ Cache**: Redis-based async caching
+{%- endif %}
+
+## Getting Started
+
+### Prerequisites
+
+- Python {{ cookiecutter.python_version }}+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+
+### Installation
+
+1. **Install dependencies:**
+   ```bash
+   uv sync                    # Core dependencies only
+   # Or for development: uv sync --all-extras  (includes testing, linting, docs)
+   ```
+
+2. **Activate virtual environment:**
+   ```bash
+   source .venv/bin/activate
+   ```
+
+3. **Set up environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+4. **Run the application:**
+   ```bash
+   make run-local
+   ```
+
+The application will be available at `http://127.0.0.1:8000`.
+
+## Development
+
+### Running Tests
+```bash
+make test
+```
+
+### Code Quality
+```bash
+make check  # Run linting, type checking, and tests
+```
+
+### CLI Commands
+
+Your project gets its own CLI command **automatically installed** when first used - no setup required! 🎉
+
+```bash
+# Health monitoring (auto-installs CLI if needed)
+make health                     # Basic health check  
+make health-detailed            # Detailed component status
+make health-json               # JSON output for scripts
+make health-quick              # Quick healthy/unhealthy check
+
+# Direct CLI usage (after first make command)
+{{ cookiecutter.project_slug }} health check              # Basic health check
+{{ cookiecutter.project_slug }} health check --detailed   # Detailed component status
+{{ cookiecutter.project_slug }} health check --json       # JSON output for scripts
+{{ cookiecutter.project_slug }} health quick              # Quick healthy/unhealthy check
+
+# Explore all commands
+{{ cookiecutter.project_slug }} --help                    # See all available commands
+{{ cookiecutter.project_slug }} health --help             # See health subcommand options
+```
+
+**Environment Issues?** If CLI commands don't work:
+```bash
+# Ensure you're in the project's virtual environment
+unset VIRTUAL_ENV               # Clear Docker contamination  
+source .venv/bin/activate       # Activate local venv
+make health                     # This will auto-install CLI
+# Or manually: make install-cli
+```
+
+### Documentation
+```bash
+make docs-serve  # Serve docs at http://localhost:8001/{{ cookiecutter.project_slug }}/
+```
+
+## Docker
+
+### Development
+```bash
+docker compose --profile dev up
+```
+
+### Production
+```bash
+docker compose --profile prod up
+```
+
+## Project Structure
+
+```
+{{ cookiecutter.project_slug }}/
+├── app/                    # Application code
+│   ├── components/         # Component implementations
+│   │   ├── backend/       # FastAPI backend
+│   │   └── frontend/      # Flet frontend
+{%- if cookiecutter.include_scheduler == "yes" %}
+│   │   └── scheduler/     # APScheduler background tasks
+{%- endif %}
+│   ├── cli/               # CLI commands and health monitoring  
+│   ├── core/              # Core utilities
+│   │   ├── config.py      # Environment-dependent configuration
+│   │   ├── constants.py   # Immutable constants (12-Factor App)
+│   │   └── log.py         # Structured logging
+│   ├── entrypoints/       # Execution entry points
+│   ├── integrations/      # App composition layer
+{%- if cookiecutter._has_additional_components == "yes" %}
+│   └── services/          # Business logic services
+{%- endif %}
+├── tests/                 # Test suite
+├── docs/                  # Documentation
+├── docker-compose.yml     # Docker services
+└── pyproject.toml        # Project configuration
+```
+
+---
+
+Generated with [Aegis Stack](https://github.com/lbedner/aegis-stack) 🛡️

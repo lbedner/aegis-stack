@@ -1,43 +1,87 @@
 # Components Overview
 
-Aegis Stack follows a **Voltron philosophy** - each component provides a specific **capability** (like web serving, frontend UI, scheduling) with carefully chosen Python-native implementations that work seamlessly together.
+Components are the building blocks of your Aegis Stack application. Each component provides a specific capability like API serving, background tasks, or data persistence.
 
-## What Are Components?
+> 💡 **New to Aegis Stack?** See the [Philosophy Guide](../philosophy.md) for the complete component design principles.
 
-Components provide core capabilities your application needs:
+## Component Selection
 
-- **Web Server**: Handles HTTP requests and API endpoints
-- **Frontend**: Provides user interface and interactions  
-- **Scheduling**: Manages background tasks and cron jobs *(coming soon)*
-- **Database**: Stores and retrieves application data *(coming soon)*
-- **Caching**: Improves performance with data caching *(coming soon)*
+**⚠️ Important:** Components must be selected during project creation. There is currently no way to add components to existing projects.
 
-## Current Components
+```bash
+# Basic stack (FastAPI + Flet)
+aegis init my-project
 
-### Web Server
-**Implementation**: [FastAPI](webserver.md)  
-**Capability**: High-performance async web framework for building APIs
+# Add scheduler capability
+aegis init my-project --components scheduler
 
-### Frontend  
-**Implementation**: [Flet](frontend.md)  
-**Capability**: Python-based UI framework for desktop and web
+# Multiple components (future)
+aegis init my-project --components scheduler,database,cache
+```
 
-## Component Philosophy
+## Component Architecture
 
-### Why This Approach?
+```mermaid
+graph TB
+    subgraph "Core Components (Always Included)"
+        CLI[CLI Commands<br/>Typer]
+        API[FastAPI Backend<br/>Async REST API]
+        Frontend[Flet Frontend<br/>Cross-platform UI]
+    end
+    
+    subgraph "Optional Components"
+        Scheduler[Scheduler<br/>APScheduler]
+        Database[Database<br/>PostgreSQL + SQLAlchemy]
+        Cache[Cache<br/>Redis]
+    end
+    
+    subgraph "Business Layer"
+        Services[Services<br/>Pure Business Logic]
+        Constants[Constants<br/>Immutable Values]
+        Config[Configuration<br/>Environment Settings]
+    end
+    
+    CLI --> API
+    API --> Frontend
+    API --> Services
+    Services --> Scheduler
+    Services --> Database
+    Services --> Cache
+    Services --> Constants
+    Services --> Config
+    
+    style CLI fill:#e1f5fe
+    style API fill:#e8f5e8
+    style Frontend fill:#fff3e0
+    style Scheduler fill:#f3e5f5
+    style Database fill:#f3e5f5
+    style Cache fill:#f3e5f5
+```
 
-1. **Python-First**: All components are Python-native for consistency
-2. **Async Architecture**: Every component supports async/await patterns
-3. **Standards**: Each component follows consistent integration patterns
-4. **Evolution**: Start with solid foundations, add capabilities as needed
+## Available Components
 
-### How Components Work
+| Component | Purpose | Implementation | Status |
+|-----------|---------|----------------|--------|
+| **Core** (Backend + Frontend + CLI) | API + UI + Management | [FastAPI](https://fastapi.tiangolo.com/) + [Flet](https://flet.dev/) + [Typer](https://typer.tiangolo.com/) | ✅ Always included |
+| **[Scheduler](./scheduler.md)** | Background tasks, cron jobs | [APScheduler](https://apscheduler.readthedocs.io/) | ✅ Available |
+| **Database** | Data persistence, migrations | [PostgreSQL](https://postgresql.org/) + [SQLAlchemy](https://sqlalchemy.org/) | 🚧 Coming soon |
+| **Cache** | Session storage, performance | [Redis](https://redis.io/) | 🚧 Coming soon |
 
-Each component:
+### Technology Integration
 
-- **Integrates cleanly** with the lifecycle management system
-- **Follows standard patterns** for configuration and setup
-- **Supports async operation** for high performance
-- **Provides examples** for common use cases
+Each component integrates proven open-source technologies:
 
-Each component is carefully chosen to maintain Aegis Stack's Python-first, async-native philosophy while providing the capabilities needed for modern applications.
+- **Backend**: [FastAPI](https://fastapi.tiangolo.com/) provides async web serving with automatic API documentation
+- **Frontend**: [Flet](https://flet.dev/) enables Python-native cross-platform UI development  
+- **CLI Integration**: [Typer](https://typer.tiangolo.com/) creates command-line interfaces that hook directly into your Python logic
+- **Monitoring**: [Rich](https://rich.readthedocs.io/) provides terminal formatting for CLI commands and health displays
+- **System Monitoring**: [psutil](https://psutil.readthedocs.io/) enables cross-platform system health monitoring
+
+Components are designed as **capability interfaces** - the current implementations can be replaced with alternatives while maintaining the same component API.
+
+## Next Steps
+
+- **[Backend Component](./webserver.md)** - FastAPI backend configuration
+- **[Frontend Component](./frontend.md)** - Building user interfaces with Flet  
+- **[Scheduler Component](./scheduler.md)** - Scheduling and cron job system
+- **[Philosophy Guide](../philosophy.md)** - Component design principles and architecture

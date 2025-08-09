@@ -1,0 +1,95 @@
+/* Mermaid diagram styling for light and dark modes */
+
+/* Base mermaid diagram styling */
+.mermaid {
+    text-align: center;
+    margin: 1em 0;
+}
+
+/* Light mode styling */
+[data-md-color-scheme="default"] .mermaid {
+    --mermaid-primary-color: #1976d2;
+    --mermaid-primary-text-color: #000000;
+    --mermaid-primary-border-color: #1976d2;
+    --mermaid-line-color: #333333;
+    --mermaid-secondary-color: #e3f2fd;
+    --mermaid-tertiary-color: #f5f5f5;
+    --mermaid-background: #ffffff;
+    --mermaid-main-bkg: #ffffff;
+    --mermaid-second-bkg: #f8f9fa;
+    --mermaid-tertiary-bkg: #e9ecef;
+}
+
+/* Dark mode styling */
+[data-md-color-scheme="slate"] .mermaid {
+    --mermaid-primary-color: #64b5f6;
+    --mermaid-primary-text-color: #ffffff;
+    --mermaid-primary-border-color: #64b5f6;
+    --mermaid-line-color: #ffffff;
+    --mermaid-secondary-color: #1e1e1e;
+    --mermaid-tertiary-color: #2d2d2d;
+    --mermaid-background: #1e1e1e;
+    --mermaid-main-bkg: #1e1e1e;
+    --mermaid-second-bkg: #2d2d2d;
+    --mermaid-tertiary-bkg: #404040;
+}
+
+/* Ensure mermaid diagrams are visible in dark mode */
+[data-md-color-scheme="slate"] .mermaid svg {
+    background: transparent !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .node rect,
+[data-md-color-scheme="slate"] .mermaid .node circle,
+[data-md-color-scheme="slate"] .mermaid .node ellipse,
+[data-md-color-scheme="slate"] .mermaid .node polygon {
+    fill: var(--mermaid-main-bkg) !important;
+    stroke: var(--mermaid-primary-border-color) !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .node .label {
+    color: var(--mermaid-primary-text-color) !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .edgePath .path {
+    stroke: var(--mermaid-line-color) !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .edgeLabel {
+    background-color: var(--mermaid-background) !important;
+    color: var(--mermaid-primary-text-color) !important;
+}
+
+/* Flowchart specific styling */
+[data-md-color-scheme="slate"] .mermaid .cluster rect {
+    fill: var(--mermaid-second-bkg) !important;
+    stroke: var(--mermaid-primary-border-color) !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .cluster .label {
+    color: var(--mermaid-primary-text-color) !important;
+}
+
+/* Sequence diagram specific styling */
+[data-md-color-scheme="slate"] .mermaid .actor {
+    fill: var(--mermaid-main-bkg) !important;
+    stroke: var(--mermaid-primary-border-color) !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .actor-line {
+    stroke: var(--mermaid-line-color) !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .messageLine0,
+[data-md-color-scheme="slate"] .mermaid .messageLine1 {
+    stroke: var(--mermaid-line-color) !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .messageText {
+    fill: var(--mermaid-primary-text-color) !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .note {
+    fill: var(--mermaid-tertiary-bkg) !important;
+    stroke: var(--mermaid-primary-border-color) !important;
+}

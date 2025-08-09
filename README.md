@@ -4,65 +4,62 @@
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-**A production-ready, async-first Python foundation for builders who refuse to wait.**
+**Build production-ready Python applications with your chosen components.**
 
-Aegis Stack provides a minimal, yet powerful, set of tools and patterns to help you build and deploy robust, scalable applications quickly. It's designed for developers who think in systems, not scripts, and who value speed, simplicity, and scalability.
+Aegis Stack is a CLI-driven framework for creating custom Python applications. Select exactly the components you need - no bloat, no unused dependencies.
 
----
+## 🚀 Quick Start
 
-## Core Features
-
-- **Full-Stack Python:** A unified development experience with [FastAPI](https://fastapi.tiangolo.com/) for the backend and [Flet](https://flet.dev/) for the frontend.
-- **Async-First Architecture:** Built from the ground up with `asyncio` to handle high-concurrency workloads efficiently.
-- **Composable Lifecycle Management:** A powerful, registry-based system for managing startup and shutdown events.
-- **Automatic Service Discovery:** A "drop-in" architecture where services are automatically discovered and integrated, no manual configuration required.
-- **Structured, Production-Ready Logging:** Out-of-the-box structured logging with `structlog`, providing human-readable logs for development and JSON logs for production.
-- **Modern Documentation:** A beautiful, maintainable documentation site powered by [MkDocs](https://www.mkdocs.org/) and the [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) theme.
-
-## Philosophy
-
-Aegis Stack is built on three pillars:
-
-1.  **Speed:** Get from idea to production as quickly as possible.
-2.  **Simplicity:** Favor clear, Pythonic patterns over complex, magical frameworks.
-3.  **Scalability:** Start with a simple monolith and evolve into a distributed system as your needs grow.
-
-
-## Getting Started
-
-### Environment Setup
-
-1. **Copy the environment template:**
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Customize your environment:**
-   Edit `.env` to match your local setup. The defaults work for development.
-
-### Usage
-
-This project uses a `Makefile` to provide convenient commands for common tasks.
-
-### Running the Application
-
-To run the local development server with live reloading:
 ```bash
-make run-local
+# Install
+pip install aegis-stack
+
+# Create a simple API
+aegis init my-api
+
+# Create with background processing  
+aegis init task-processor --components scheduler
+
+# Start building
+cd my-project && uv sync && source .venv/bin/activate && make run-local
 ```
-The application will be available at `http://127.0.0.1:8000`.
 
-### Documentation
+## 🧩 Available Components
 
-To serve the documentation locally with live reloading:
+| Component | Purpose | Status |
+|-----------|---------|--------|
+| **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Included** |
+| **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
+| **Database** | PostgreSQL + SQLAlchemy + Alembic | 🚧 **Coming Soon** |
+| **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
+
+## What You Get
+
+- **FastAPI backend** with automatic API documentation
+- **Flet frontend** with system health dashboard  
+- **CLI management** with health monitoring commands
+- **Production ready** with structured logging and containerization
+- **Async-first** architecture for high-concurrency workloads
+
+## 📱 System Health Dashboard
+
+![System Health Dashboard](docs/images/dashboard.png)
+
+Real-time monitoring with component status, health percentages, and cross-platform deployment (web, desktop, mobile).
+
+## 📚 Learn More
+
+- **[📖 CLI Reference](docs/cli-reference.md)** - Complete command reference
+- **[🏗️ Components](docs/components/index.md)** - Deep dive into available components  
+- **[🧠 Philosophy](docs/philosophy.md)** - Architecture and design principles
+
+## Development Commands
+
 ```bash
-make docs-serve
+make run-local    # Start development server
+make test         # Run test suite  
+make check        # Run all quality checks
+make docs-serve   # Serve documentation
 ```
-The documentation will be available at `http://localhost:8001/aegis-stack/`.
 
-### Code Quality and Tests
-
-To run all checks (linting, type checking, and tests) at once:
-```bash
-make check
-```
+Built on FastAPI, Flet, Typer, and other open-source tools.

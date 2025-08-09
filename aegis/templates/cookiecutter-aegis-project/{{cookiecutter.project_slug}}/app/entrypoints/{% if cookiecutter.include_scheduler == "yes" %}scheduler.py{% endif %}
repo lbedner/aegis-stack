@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""
+Scheduler service entry point for Aegis Stack.
+Runs only the scheduler component as a microservice.
+"""
+
+import asyncio
+
+from app.core.log import logger, setup_logging
+from app.components.scheduler import scheduler_component
+
+
+async def main() -> None:
+    """Main scheduler component entry point"""
+    setup_logging()
+    logger.info("Starting Aegis Stack Scheduler Component...")
+
+    try:
+        # Start the scheduler component
+        await scheduler_component.start()
+        logger.info("Scheduler component started successfully")
+
+        # Keep the service running
+        while True:
+            await asyncio.sleep(1)
+
+    except KeyboardInterrupt:
+        logger.info("Received shutdown signal")
+    except Exception as e:
+        logger.error(f"Scheduler component error: {e}")
+        raise
+    finally:
+        # Clean shutdown
+        await scheduler_component.stop()
+        logger.info("Scheduler component stopped")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

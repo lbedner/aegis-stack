@@ -1,0 +1,97 @@
+# {{ cookiecutter.project_name }} 🛡️
+
+{{ cookiecutter.project_description }}
+
+## Components
+
+This Aegis Stack project includes the following components:
+
+- **✅ Backend**: FastAPI-based async web server
+- **✅ Frontend**: Flet-based Python UI framework
+{%- if cookiecutter.include_scheduler == "yes" %}
+- **✅ Scheduler**: APScheduler-based async task scheduling
+{%- endif %}
+{%- if cookiecutter.include_database == "yes" %}
+- **✅ Database**: SQLAlchemy + asyncpg for PostgreSQL
+{%- endif %}
+{%- if cookiecutter.include_cache == "yes" %}
+- **✅ Cache**: Redis-based async caching
+{%- endif %}
+
+## Getting Started
+
+### Prerequisites
+
+- Python {{ cookiecutter.python_version }}+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+
+### Installation
+
+1. **Install dependencies:**
+   ```bash
+   uv sync
+   ```
+
+2. **Set up environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Run the application:**
+   ```bash
+   make run-local
+   ```
+
+The application will be available at `http://127.0.0.1:8000`.
+
+## Development
+
+### Running Tests
+```bash
+make test
+```
+
+### Code Quality
+```bash
+make check  # Run linting, type checking, and tests
+```
+
+### Documentation
+```bash
+make docs-serve  # Serve docs at http://localhost:8001/{{ cookiecutter.project_slug }}/
+```
+
+## Docker
+
+### Development
+```bash
+docker compose --profile dev up
+```
+
+### Production
+```bash
+docker compose --profile prod up
+```
+
+## Project Structure
+
+```
+{{ cookiecutter.project_slug }}/
+├── app/                    # Application code
+│   ├── backend/           # FastAPI backend
+│   ├── frontend/          # Flet frontend  
+│   ├── core/              # Core utilities
+│   ├── integrations/      # App integration layer
+{%- if cookiecutter._has_additional_components == "yes" %}
+│   └── services/          # Business logic services
+{%- endif %}
+├── tests/                 # Test suite
+├── docs/                  # Documentation
+├── docker-compose.yml     # Docker services
+└── pyproject.toml        # Project configuration
+```
+
+---
+
+Generated with [Aegis Stack](https://github.com/lbedner/aegis-stack) 🛡️

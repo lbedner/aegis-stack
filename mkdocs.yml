@@ -31,7 +31,9 @@ nav:
     - Overview: components/index.md
     - Web Server: components/webserver.md
     - Frontend: components/frontend.md
+    - Scheduler: components/scheduler.md
   - Guides:
+    - Project Creation: guides/project-creation.md
     - Application Lifecycle: guides/lifecycle.md
     - Services & Discovery: guides/services.md
 

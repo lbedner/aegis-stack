@@ -13,14 +13,21 @@ from app.core.log import logger
 
 def auto_discover_services() -> None:
     """
-    Auto-discover services from the standard services directory.
+    Auto-discover services and components from standard directories.
 
-    This function automatically finds and imports all modules in the 'app/services'
-    directory, allowing them to self-register their lifecycle tasks. This block runs
-    once when called, triggering the execution of the module's top-level code.
+    This function automatically finds and imports all modules from a list of
+    standard directories (`app/components` and `app/services`), allowing them
+    to self-register their lifecycle tasks.
     """
-    services_dir = Path(__file__).parent.parent / "services"
-    discover_and_import_services(services_dir)
+    app_root = Path(__file__).parent.parent
+    discovery_paths = [
+        app_root / "components",
+        app_root / "services",
+    ]
+
+    for path in discovery_paths:
+        if path.exists() and path.is_dir():
+            discover_and_import_services(path)
 
 
 def discover_and_import_services(package_path: str | Path) -> None:

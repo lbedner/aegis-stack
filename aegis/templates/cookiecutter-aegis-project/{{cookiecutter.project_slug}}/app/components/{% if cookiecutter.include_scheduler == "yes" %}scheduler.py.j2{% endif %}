@@ -1,0 +1,109 @@
+"""
+Scheduler service for {{ cookiecutter.project_name }}.
+
+This service provides async task scheduling capabilities using APScheduler.
+"""
+
+from typing import Any, Awaitable, Callable, Union
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+
+from app.core.lifecycle import SHUTDOWN_TASKS, STARTUP_TASKS
+from app.core.log import logger
+
+
+class SchedulerService:
+    """
+    Async task scheduler service using APScheduler.
+
+    Provides methods for scheduling one-time and recurring tasks.
+    """
+
+    def __init__(self) -> None:
+        self.scheduler = AsyncIOScheduler()
+        self._is_running = False
+
+    async def start(self) -> None:
+        """Start the scheduler service."""
+        if not self._is_running:
+            logger.info("Starting scheduler service")
+            self.scheduler.start()
+            self._is_running = True
+
+            # Schedule some example tasks
+            await self._schedule_example_tasks()
+
+    async def stop(self) -> None:
+        """Stop the scheduler service."""
+        if self._is_running:
+            logger.info("Stopping scheduler service")
+            self.scheduler.shutdown(wait=False)
+            self._is_running = False
+
+    async def schedule_task(
+        self,
+        func: Union[Callable[[], None], Callable[[], Awaitable[None]]],
+        trigger_type: str = "interval",
+        **trigger_kwargs: Any
+    ) -> str:
+        """
+        Schedule a task with the given trigger.
+
+        Args:
+            func: The function to schedule
+            trigger_type: Type of trigger ("interval", "cron", "date")
+            **trigger_kwargs: Trigger-specific arguments
+
+        Returns:
+            Job ID for the scheduled task
+        """
+        if trigger_type == "interval":
+            trigger = IntervalTrigger(**trigger_kwargs)
+        elif trigger_type == "cron":
+            trigger = CronTrigger(**trigger_kwargs)
+        else:
+            raise ValueError(f"Unsupported trigger type: {trigger_type}")
+
+        job = self.scheduler.add_job(func, trigger)
+        logger.info(f"Scheduled task {func.__name__} with trigger {trigger_type}")
+        return str(job.id)
+
+    async def remove_task(self, job_id: str) -> None:
+        """Remove a scheduled task by ID."""
+        self.scheduler.remove_job(job_id)
+        logger.info(f"Removed scheduled task: {job_id}")
+
+    async def _schedule_example_tasks(self) -> None:
+        """Schedule some example tasks."""
+        # Example: Log system status every 5 minutes
+        await self.schedule_task(
+            self._log_system_status,
+            trigger_type="interval",
+            minutes=5
+        )
+
+        # Example: Daily cleanup at 2 AM
+        await self.schedule_task(
+            self._daily_cleanup,
+            trigger_type="cron",
+            hour=2,
+            minute=0
+        )
+
+    async def _log_system_status(self) -> None:
+        """Example scheduled task: Log system status."""
+        logger.info("System status check - All systems operational")
+
+    async def _daily_cleanup(self) -> None:
+        """Example scheduled task: Daily cleanup."""
+        logger.info("Running daily cleanup tasks")
+        # Add your cleanup logic here
+
+
+# Create global scheduler instance
+scheduler_component = SchedulerService()
+
+# Note: Lifecycle registration is handled by the scheduler entrypoint
+# to avoid starting scheduler in webserver process

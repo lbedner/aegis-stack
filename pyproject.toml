@@ -10,6 +10,8 @@ dependencies = [
     "uvicorn>=0.35.0",
     "structlog>=24.1.0",
     "pydantic-settings>=2.2.0",
+    "typer>=0.9.0",
+    "cookiecutter>=2.6.0",
 ]
 
 [project.optional-dependencies]
@@ -44,15 +46,23 @@ ignore = []
 [tool.mypy]
 python_version = "3.11"
 strict = true
+exclude = ["aegis/templates"]
 
 [[tool.mypy.overrides]]
 module = "flet.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "cookiecutter.*"
 ignore_missing_imports = true
 
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (CLI integration tests that generate projects)"
+]
 
 [dependency-groups]
 dev = [

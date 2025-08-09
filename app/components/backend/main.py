@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.backend.api.routing import include_routers
+from app.components.backend.api.routing import include_routers
 
 
 def create_backend_app(app: FastAPI) -> FastAPI:

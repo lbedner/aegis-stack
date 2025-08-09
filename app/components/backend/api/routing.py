@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.backend.api import health
+from app.components.backend.api import health
 
 
 def include_routers(app: FastAPI) -> None:

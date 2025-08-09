@@ -27,8 +27,39 @@ Aegis Stack is built on three pillars:
 2.  **Simplicity:** Favor clear, Pythonic patterns over complex, magical frameworks.
 3.  **Scalability:** Start with a simple monolith and evolve into a distributed system as your needs grow.
 
+## Creating New Projects
 
-## Getting Started
+Use the Aegis Stack CLI to generate new projects with your choice of components:
+
+### Basic Project
+```bash
+python -m aegis init my-project
+```
+
+### Project with Components
+```bash
+# Add scheduler for background tasks
+python -m aegis init my-project --components scheduler
+
+# Add multiple components (when available)
+python -m aegis init my-project --components scheduler,database,cache
+```
+
+### Available Components
+
+- **scheduler**: APScheduler integration for background and scheduled tasks
+- **database**: SQLAlchemy + PostgreSQL integration *(coming soon)*
+- **cache**: Redis integration for high-performance caching *(coming soon)*
+
+### Component Integration
+
+Components are automatically integrated into your project's lifecycle:
+
+- **Scheduler**: Provides async task scheduling with automatic startup/shutdown
+- **Services Discovery**: All components are auto-discovered and initialized
+- **Unified Configuration**: Components share configuration through the settings system
+
+## Getting Started (Development)
 
 ### Environment Setup
 

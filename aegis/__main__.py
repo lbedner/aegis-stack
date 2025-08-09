@@ -192,8 +192,9 @@ def init(
         for comp in component_list:
             try:
                 selected_components.add(ComponentType(comp))
-            except ValueError:
+            except ValueError as e:
                 typer.echo(f"❌ Invalid component: {comp}", err=True)
+                typer.echo(f"   Error: {str(e)}", err=True)
                 valid_components = [c.value for c in ComponentType]
                 typer.echo(
                     f"   Valid components: {', '.join(valid_components)}", err=True

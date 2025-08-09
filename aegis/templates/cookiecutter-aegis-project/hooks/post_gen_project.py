@@ -25,7 +25,8 @@ def process_j2_templates():
     Process all .j2 template files in the generated project.
     Renders them with cookiecutter context and removes the .j2 originals.
     """
-    # Cookiecutter context variables
+    # Cookiecutter context variables - these template strings are processed
+    # by cookiecutter before this hook runs, so they contain actual values
     context = {
         "cookiecutter": {
             "project_name": "{{ cookiecutter.project_name }}",

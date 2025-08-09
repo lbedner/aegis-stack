@@ -8,12 +8,25 @@ These tests validate:
 - Component integration
 """
 
+import re
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Generator, List
 
 import pytest
+
+
+def find_project_root() -> Path:
+    """Find the project root directory by looking for pyproject.toml."""
+    current_path = Path(__file__).resolve()
+    for parent in current_path.parents:
+        if (parent / "pyproject.toml").exists() and (parent / "aegis").exists():
+            return parent
+    raise RuntimeError("Could not find project root directory")
+
+
+PROJECT_ROOT = find_project_root()
 
 
 class CLITestResult:
@@ -37,7 +50,7 @@ def temp_output_dir() -> Generator[Path, None, None]:
 def run_aegis_init(
     project_name: str,
     components: List[str] | None = None,
-    output_dir: Path | None = None,
+    output_dir: Path = Path.cwd(),
     interactive: bool = False,
     force: bool = True,
     yes: bool = True,
@@ -73,10 +86,10 @@ def run_aegis_init(
         cmd,
         capture_output=True,
         text=True,
-        cwd=Path(__file__).parent.parent.parent,  # Run from aegis-stack root
+        cwd=PROJECT_ROOT,  # Run from aegis-stack root
     )
 
-    project_path = (output_dir or Path.cwd()) / project_name
+    project_path = output_dir / project_name
     return CLITestResult(result.returncode, result.stdout, result.stderr, project_path)
 
 
@@ -370,10 +383,13 @@ class TestCLIHelp:
             ["uv", "run", "python", "-m", "aegis", "init", "--help"],
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent.parent.parent,
+            cwd=PROJECT_ROOT,
         )
 
+        # Remove ANSI color codes for reliable string matching
+        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+
         assert result.returncode == 0
-        assert "Initialize a new Aegis Stack project" in result.stdout
-        assert "--components" in result.stdout
-        assert "scheduler,database,cache" in result.stdout
+        assert "Initialize a new Aegis Stack project" in clean_output
+        assert "--components" in clean_output
+        assert "scheduler,database,cache" in clean_output

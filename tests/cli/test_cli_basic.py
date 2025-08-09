@@ -5,6 +5,7 @@ These tests focus on command parsing, help text, and basic functionality
 without doing full project generation.
 """
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -45,11 +46,14 @@ class TestCLIBasics:
     def test_init_help(self) -> None:
         """Test init command help."""
         result = run_cli_command("init", "--help")
-        assert "Initialize a new Aegis Stack project" in result.stdout
-        assert "--components" in result.stdout
-        assert "scheduler,database,cache" in result.stdout
-        assert "--no-interactive" in result.stdout
-        assert "--force" in result.stdout
+
+        # Remove ANSI color codes for reliable string matching
+        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+        assert "Initialize a new Aegis Stack project" in clean_output
+        assert "--components" in clean_output
+        assert "scheduler,database,cache" in clean_output
+        assert "--no-interactive" in clean_output
+        assert "--force" in clean_output
 
     def test_version_command(self) -> None:
         """Test version command."""

@@ -4,6 +4,8 @@
 # This script demonstrates how to run the CLI test suite in different modes.
 
 set -e  # Exit on error
+set -u  # Treat unset variables as errors
+set -o pipefail  # Fail if any command in a pipeline fails
 
 echo "🛡️  Aegis Stack CLI Test Suite"
 echo "================================"

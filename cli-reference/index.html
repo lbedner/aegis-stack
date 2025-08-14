@@ -12,13 +12,13 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/frontend.html">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/cli-reference/">
       
       
-        <link rel="prev" href="webserver.html">
+        <link rel="prev" href="../components/scheduler/">
       
       
-        <link rel="next" href="../guides/lifecycle.html">
+        <link rel="next" href="../integration-patterns/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -26,7 +26,7 @@
     
     
       
-        <title>Frontend - Aegis Stack</title>
+        <title>CLI Reference - Aegis Stack</title>
       
     
     
@@ -54,6 +54,8 @@
     
       <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
     <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -80,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#frontend-component" class="md-skip">
+        <a href="#cli-reference" class="md-skip">
           Skip to content
         </a>
       
@@ -94,7 +96,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../index.html" title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -114,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Frontend
+              CLI Reference
             
           </span>
         </div>
@@ -215,7 +217,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../index.html" class="md-tabs__link">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -234,7 +236,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../philosophy.html" class="md-tabs__link">
+      <a href="../philosophy/" class="md-tabs__link">
         
   
   
@@ -251,13 +253,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="index.html" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../components/" class="md-tabs__link">
           
   
   
@@ -273,15 +273,17 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../guides/lifecycle.html" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
           
   
   
-  Guides
+  Reference
 
         </a>
       </li>
@@ -311,7 +313,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../index.html" title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -329,7 +331,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../index.html" class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -351,7 +353,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../philosophy.html" class="md-nav__link">
+      <a href="../philosophy/" class="md-nav__link">
         
   
   
@@ -362,6 +364,146 @@
   
 
       </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Components
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Components
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/webserver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backend
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Frontend
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/scheduler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Scheduler
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -389,15 +531,15 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
             
   
   
   <span class="md-ellipsis">
-    Components
+    Reference
     
   </span>
   
@@ -405,58 +547,12 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_3">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
-            Components
+            Reference
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="index.html" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Overview
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="webserver.html" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Web Server
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -479,7 +575,7 @@
   
   
   <span class="md-ellipsis">
-    Frontend
+    CLI Reference
     
   </span>
   
@@ -487,12 +583,12 @@
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <a href="frontend.html" class="md-nav__link md-nav__link--active">
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
   <span class="md-ellipsis">
-    Frontend
+    CLI Reference
     
   </span>
   
@@ -515,120 +611,63 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#current-implementation-flet" class="md-nav__link">
+  <a href="#aegis-init" class="md-nav__link">
     <span class="md-ellipsis">
-      Current Implementation: Flet
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Current Implementation: Flet">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#why-flet" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why Flet?
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#how-its-integrated" class="md-nav__link">
-    <span class="md-ellipsis">
-      How It's Integrated
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#integration-with-fastapi" class="md-nav__link">
-    <span class="md-ellipsis">
-      Integration with FastAPI
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#key-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      Key Features
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Key Features">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#component-based-architecture" class="md-nav__link">
-    <span class="md-ellipsis">
-      Component-Based Architecture
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#state-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      State Management
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#responsive-design" class="md-nav__link">
-    <span class="md-ellipsis">
-      Responsive Design
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#development-experience" class="md-nav__link">
-    <span class="md-ellipsis">
-      Development Experience
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#integration-with-aegis-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      Integration with Aegis Stack
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#performance-characteristics" class="md-nav__link">
-    <span class="md-ellipsis">
-      Performance Characteristics
+      aegis init
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#deployment-options" class="md-nav__link">
+  <a href="#aegis-version" class="md-nav__link">
     <span class="md-ellipsis">
-      Deployment Options
+      aegis version
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#global-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Global Options
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exit Codes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environment
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Project Structure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Workflow
     </span>
   </a>
   
@@ -643,54 +682,6 @@
 
               
             
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
-        
-          
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    Guides
-    
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4">
-            <span class="md-nav__icon md-icon"></span>
-            Guides
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
               
                 
   
@@ -698,12 +689,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../guides/lifecycle.html" class="md-nav__link">
+      <a href="../integration-patterns/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Application Lifecycle
+    Integration Patterns
     
   </span>
   
@@ -721,12 +712,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../guides/services.html" class="md-nav__link">
+      <a href="../technology/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Services & Discovery
+    Technology Stack
     
   </span>
   
@@ -771,120 +762,63 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#current-implementation-flet" class="md-nav__link">
+  <a href="#aegis-init" class="md-nav__link">
     <span class="md-ellipsis">
-      Current Implementation: Flet
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Current Implementation: Flet">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#why-flet" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why Flet?
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#how-its-integrated" class="md-nav__link">
-    <span class="md-ellipsis">
-      How It's Integrated
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#integration-with-fastapi" class="md-nav__link">
-    <span class="md-ellipsis">
-      Integration with FastAPI
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#key-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      Key Features
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Key Features">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#component-based-architecture" class="md-nav__link">
-    <span class="md-ellipsis">
-      Component-Based Architecture
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#state-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      State Management
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#responsive-design" class="md-nav__link">
-    <span class="md-ellipsis">
-      Responsive Design
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#development-experience" class="md-nav__link">
-    <span class="md-ellipsis">
-      Development Experience
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#integration-with-aegis-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      Integration with Aegis Stack
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#performance-characteristics" class="md-nav__link">
-    <span class="md-ellipsis">
-      Performance Characteristics
+      aegis init
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#deployment-options" class="md-nav__link">
+  <a href="#aegis-version" class="md-nav__link">
     <span class="md-ellipsis">
-      Deployment Options
+      aegis version
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#global-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Global Options
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exit Codes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Environment
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Project Structure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Workflow
     </span>
   </a>
   
@@ -906,117 +840,118 @@
 
 
 
-<h1 id="frontend-component">Frontend Component</h1>
-<p>The <strong>Frontend</strong> component provides the user interface and handles user interactions for your Aegis Stack application.</p>
-<h2 id="current-implementation-flet">Current Implementation: Flet</h2>
-<p>Flet is the current frontend implementation, chosen for its Python-native approach and ability to create both web and desktop applications from the same codebase.</p>
-<h3 id="why-flet">Why Flet?</h3>
+<h1 id="cli-reference">CLI Reference</h1>
+<p>Complete reference for the Aegis Stack command-line interface.</p>
+<h2 id="aegis-init">aegis init</h2>
+<p>Create a new Aegis Stack project with your chosen components.</p>
+<p><strong>Usage:</strong>
+<div class="highlight"><pre><span></span><code>aegis<span class="w"> </span>init<span class="w"> </span>PROJECT_NAME<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</code></pre></div></p>
+<p><strong>Arguments:</strong></p>
 <ul>
-<li><strong>Pure Python</strong>: Write UI logic in Python without JavaScript/HTML/CSS</li>
-<li><strong>Multi-Platform</strong>: Same code runs as web app, desktop app, or mobile app</li>
-<li><strong>Fast Development</strong>: No context switching between languages</li>
-<li><strong>Modern UI</strong>: Based on Flutter, providing smooth animations and responsive design</li>
-<li><strong>Real-time</strong>: Built-in WebSocket support for live updates</li>
+<li><code>PROJECT_NAME</code> - Name of the new project to create (required)</li>
 </ul>
-<h3 id="how-its-integrated">How It's Integrated</h3>
-<p>Flet is set up in the <code>app/frontend/</code> directory and integrated with FastAPI:</p>
-<pre><code class="language-python"># app/frontend/main.py
-import flet as ft
-
-def create_frontend_app():
-    &quot;&quot;&quot;Create and return Flet session handler&quot;&quot;&quot;
-
-    async def main(page: ft.Page):
-        page.title = &quot;Aegis Stack&quot;
-        page.theme_mode = ft.ThemeMode.LIGHT
-
-        # Your UI components here
-        page.add(
-            ft.Text(&quot;Welcome to Aegis Stack!&quot;, size=24),
-            ft.ElevatedButton(&quot;Click me!&quot;, on_click=handle_click)
-        )
-
-    return main
-
-async def handle_click(e):
-    e.page.add(ft.Text(&quot;Button clicked!&quot;))
-    e.page.update()
-</code></pre>
-<h3 id="integration-with-fastapi">Integration with FastAPI</h3>
-<p>Flet mounts seamlessly on FastAPI using the official integration:</p>
-<pre><code class="language-python"># app/integrations/main.py
-import flet.fastapi as flet_fastapi
-
-# Create and mount the Flet app
-session_handler = create_frontend_app()
-flet_app = flet_fastapi.app(session_handler)
-app.mount(&quot;/&quot;, flet_app)
-</code></pre>
-<h3 id="key-features">Key Features</h3>
-<h4 id="component-based-architecture">Component-Based Architecture</h4>
-<pre><code class="language-python"># Reusable components
-class CustomButton(ft.UserControl):
-    def __init__(self, text, on_click):
-        super().__init__()
-        self.text = text
-        self.on_click = on_click
-
-    def build(self):
-        return ft.ElevatedButton(
-            text=self.text,
-            on_click=self.on_click
-        )
-</code></pre>
-<h4 id="state-management">State Management</h4>
-<pre><code class="language-python"># Reactive state updates
-async def update_counter(e):
-    counter.value += 1
-    counter.update()  # Automatically syncs with browser
-</code></pre>
-<h4 id="responsive-design">Responsive Design</h4>
-<pre><code class="language-python"># Adaptive layouts
-ft.ResponsiveRow([
-    ft.Container(
-        content=ft.Text(&quot;Left panel&quot;),
-        col={&quot;sm&quot;: 6, &quot;md&quot;: 4, &quot;xl&quot;: 3}
-    ),
-    ft.Container(
-        content=ft.Text(&quot;Right panel&quot;), 
-        col={&quot;sm&quot;: 6, &quot;md&quot;: 8, &quot;xl&quot;: 9}
-    )
-])
-</code></pre>
-<h3 id="development-experience">Development Experience</h3>
+<p><strong>Options:</strong></p>
 <ul>
-<li><strong>Hot Reload</strong>: Changes appear instantly during development</li>
-<li><strong>Python Debugging</strong>: Use standard Python debuggers and tools</li>
-<li><strong>Type Safety</strong>: Full type hints and IDE support</li>
-<li><strong>No Build Step</strong>: No compilation or bundling required</li>
+<li><code>--components, -c TEXT</code> - Comma-separated list of components (scheduler,database,cache)</li>
+<li><code>--interactive / --no-interactive, -i / -ni</code> - Use interactive component selection (default: interactive)</li>
+<li><code>--force, -f</code> - Overwrite existing directory if it exists</li>
+<li><code>--output-dir, -o PATH</code> - Directory to create the project in (default: current directory) </li>
+<li><code>--yes, -y</code> - Skip confirmation prompt</li>
 </ul>
-<h3 id="integration-with-aegis-stack">Integration with Aegis Stack</h3>
-<p>Flet integrates seamlessly with Aegis Stack's architecture:</p>
+<p><strong>Examples:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Simple API project</span>
+aegis<span class="w"> </span>init<span class="w"> </span>my-api
+
+<span class="c1"># Background processing system</span>
+aegis<span class="w"> </span>init<span class="w"> </span>task-processor<span class="w"> </span>--components<span class="w"> </span>scheduler
+
+<span class="c1"># Full stack (future)</span>
+aegis<span class="w"> </span>init<span class="w"> </span>webapp<span class="w"> </span>--components<span class="w"> </span>scheduler,database,cache
+
+<span class="c1"># Non-interactive with custom location</span>
+aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--components<span class="w"> </span>scheduler<span class="w"> </span>--no-interactive<span class="w"> </span>--output-dir<span class="w"> </span>/projects<span class="w"> </span>--yes
+</code></pre></div></p>
+<p><strong>Available Components:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Status</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scheduler</code></td>
+<td>✅ Available</td>
+<td>APScheduler-based async task scheduling</td>
+</tr>
+<tr>
+<td><code>database</code></td>
+<td>🚧 Coming Soon</td>
+<td>SQLAlchemy + asyncpg for PostgreSQL</td>
+</tr>
+<tr>
+<td><code>cache</code></td>
+<td>🚧 Coming Soon</td>
+<td>Redis-based async caching</td>
+</tr>
+</tbody>
+</table>
+<h2 id="aegis-version">aegis version</h2>
+<p>Show the Aegis Stack CLI version.</p>
+<p><strong>Usage:</strong>
+<div class="highlight"><pre><span></span><code>aegis<span class="w"> </span>version
+</code></pre></div></p>
+<p><strong>Example Output:</strong>
+<div class="highlight"><pre><span></span><code>Aegis Stack CLI v1.0.0
+</code></pre></div></p>
+<h2 id="global-options">Global Options</h2>
+<p><strong>Help:</strong>
+<div class="highlight"><pre><span></span><code>aegis<span class="w"> </span>--help<span class="w">          </span><span class="c1"># Show general help</span>
+aegis<span class="w"> </span>COMMAND<span class="w"> </span>--help<span class="w">  </span><span class="c1"># Show help for specific command</span>
+</code></pre></div></p>
+<h2 id="exit-codes">Exit Codes</h2>
 <ul>
-<li><strong>Lifecycle Management</strong>: Automatic startup and shutdown handling</li>
-<li><strong>Structured Logging</strong>: Integrated with Aegis Stack's logging system</li>
-<li><strong>Async Compatibility</strong>: Works with FastAPI's async request handling</li>
+<li><code>0</code> - Success</li>
+<li><code>1</code> - Error (invalid arguments, project creation failed, etc.)</li>
 </ul>
-<h2 id="performance-characteristics">Performance Characteristics</h2>
-<p>Flet provides:</p>
+<h2 id="environment">Environment</h2>
+<p>The CLI respects these environment variables:</p>
 <ul>
-<li><strong>Real-time Updates</strong>: WebSocket-based communication with server</li>
-<li><strong>Efficient Rendering</strong>: Flutter's optimized rendering engine</li>
-<li><strong>Small Bundle Size</strong>: No heavy JavaScript frameworks</li>
-<li><strong>Cross-Platform</strong>: Same performance characteristics across platforms</li>
+<li>Standard Python environment variables</li>
+<li>UV environment variables (for dependency management)</li>
 </ul>
-<h2 id="deployment-options">Deployment Options</h2>
-<p>Flet applications can be deployed as:</p>
-<ul>
-<li><strong>Web App</strong>: Served through FastAPI (current setup)</li>
-<li><strong>Desktop App</strong>: Standalone executable for Windows/Mac/Linux</li>
-<li><strong>Mobile App</strong>: Native iOS/Android applications</li>
-<li><strong>PWA</strong>: Progressive Web App with offline capabilities</li>
-</ul>
-<p>This makes Flet an ideal choice for Aegis Stack's Python-first, async-native philosophy.</p>
+<h2 id="project-structure">Project Structure</h2>
+<p>Projects created with <code>aegis init</code> follow this structure:</p>
+<div class="highlight"><pre><span></span><code>my-project/
+├── app/
+│   ├── components/
+│   │   ├── backend/        # FastAPI backend
+│   │   ├── frontend/       # Flet frontend  
+│   │   └── scheduler.py    # APScheduler (if included)
+│   ├── core/              # Framework utilities
+│   ├── services/          # Business logic
+│   └── integrations/      # App composition
+├── tests/                 # Test suite
+├── docs/                  # Documentation
+├── pyproject.toml         # Project configuration
+├── Dockerfile             # Container definition
+├── docker-compose.yml     # Multi-service orchestration
+├── Makefile              # Development commands
+└── .env.example          # Environment template
+</code></pre></div>
+<h2 id="development-workflow">Development Workflow</h2>
+<p>After creating a project:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>my-project
+uv<span class="w"> </span>sync<span class="w">                    </span><span class="c1"># Install dependencies and create virtual environment</span>
+<span class="nb">source</span><span class="w"> </span>.venv/bin/activate<span class="w">  </span><span class="c1"># Activate virtual environment (important!)</span>
+cp<span class="w"> </span>.env.example<span class="w"> </span>.env<span class="w">       </span><span class="c1"># Configure environment</span>
+make<span class="w"> </span>run-local<span class="w">             </span><span class="c1"># Start development server</span>
+make<span class="w"> </span><span class="nb">test</span><span class="w">                  </span><span class="c1"># Run test suite</span>
+make<span class="w"> </span>check<span class="w">                 </span><span class="c1"># Run all quality checks</span>
+</code></pre></div>
 
 
 
@@ -1075,6 +1010,10 @@ ft.ResponsiveRow([
     
     
       <script src="../assets/javascripts/bundle.50899def.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10.6.0/dist/mermaid.min.js"></script>
+      
+        <script src="../javascripts/mermaid-config.js"></script>
       
     
   </body>

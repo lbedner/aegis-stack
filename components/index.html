@@ -12,13 +12,13 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/index.html">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/">
       
       
-        <link rel="prev" href="../philosophy.html">
+        <link rel="prev" href="../philosophy/">
       
       
-        <link rel="next" href="webserver.html">
+        <link rel="next" href="webserver/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -53,6 +53,8 @@
     
     
       <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
     
     <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
@@ -94,7 +96,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../index.html" title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -215,7 +217,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../index.html" class="md-tabs__link">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -234,7 +236,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../philosophy.html" class="md-tabs__link">
+      <a href="../philosophy/" class="md-tabs__link">
         
   
   
@@ -257,7 +259,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="index.html" class="md-tabs__link">
+        <a href="./" class="md-tabs__link">
           
   
   
@@ -277,11 +279,11 @@
     
     
       <li class="md-tabs__item">
-        <a href="../guides/lifecycle.html" class="md-tabs__link">
+        <a href="../cli-reference/" class="md-tabs__link">
           
   
   
-  Guides
+  Reference
 
         </a>
       </li>
@@ -311,7 +313,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../index.html" title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -329,7 +331,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../index.html" class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -351,7 +353,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../philosophy.html" class="md-nav__link">
+      <a href="../philosophy/" class="md-nav__link">
         
   
   
@@ -441,7 +443,7 @@
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <a href="index.html" class="md-nav__link md-nav__link--active">
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -469,37 +471,37 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-are-components" class="md-nav__link">
+  <a href="#component-selection" class="md-nav__link">
     <span class="md-ellipsis">
-      What Are Components?
+      Component Selection
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#current-components" class="md-nav__link">
+  <a href="#component-architecture" class="md-nav__link">
     <span class="md-ellipsis">
-      Current Components
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Current Components">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#web-server" class="md-nav__link">
-    <span class="md-ellipsis">
-      Web Server
+      Component Architecture
     </span>
   </a>
   
 </li>
+      
+        <li class="md-nav__item">
+  <a href="#available-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Available Components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Available Components">
+      <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#frontend" class="md-nav__link">
+  <a href="#technology-integration" class="md-nav__link">
     <span class="md-ellipsis">
-      Frontend
+      Technology Integration
     </span>
   </a>
   
@@ -511,35 +513,11 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#component-philosophy" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      Component Philosophy
+      Next Steps
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Component Philosophy">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#why-this-approach" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why This Approach?
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#how-components-work" class="md-nav__link">
-    <span class="md-ellipsis">
-      How Components Work
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -559,12 +537,12 @@
   
   
     <li class="md-nav__item">
-      <a href="webserver.html" class="md-nav__link">
+      <a href="webserver/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Web Server
+    Backend
     
   </span>
   
@@ -582,12 +560,35 @@
   
   
     <li class="md-nav__item">
-      <a href="frontend.html" class="md-nav__link">
+      <a href="frontend/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     Frontend
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="scheduler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Scheduler
     
   </span>
   
@@ -631,7 +632,7 @@
   
   
   <span class="md-ellipsis">
-    Guides
+    Reference
     
   </span>
   
@@ -642,7 +643,7 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
-            Guides
+            Reference
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -653,12 +654,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../guides/lifecycle.html" class="md-nav__link">
+      <a href="../cli-reference/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Application Lifecycle
+    CLI Reference
     
   </span>
   
@@ -676,12 +677,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../guides/services.html" class="md-nav__link">
+      <a href="../integration-patterns/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Services & Discovery
+    Integration Patterns
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Technology Stack
     
   </span>
   
@@ -726,37 +750,37 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-are-components" class="md-nav__link">
+  <a href="#component-selection" class="md-nav__link">
     <span class="md-ellipsis">
-      What Are Components?
+      Component Selection
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#current-components" class="md-nav__link">
+  <a href="#component-architecture" class="md-nav__link">
     <span class="md-ellipsis">
-      Current Components
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Current Components">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#web-server" class="md-nav__link">
-    <span class="md-ellipsis">
-      Web Server
+      Component Architecture
     </span>
   </a>
   
 </li>
+      
+        <li class="md-nav__item">
+  <a href="#available-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Available Components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Available Components">
+      <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#frontend" class="md-nav__link">
+  <a href="#technology-integration" class="md-nav__link">
     <span class="md-ellipsis">
-      Frontend
+      Technology Integration
     </span>
   </a>
   
@@ -768,35 +792,11 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#component-philosophy" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      Component Philosophy
+      Next Steps
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Component Philosophy">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#why-this-approach" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why This Approach?
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#how-components-work" class="md-nav__link">
-    <span class="md-ellipsis">
-      How Components Work
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -817,40 +817,110 @@
 
 
 <h1 id="components-overview">Components Overview</h1>
-<p>Aegis Stack follows a <strong>Voltron philosophy</strong> - each component provides a specific <strong>capability</strong> (like web serving, frontend UI, scheduling) with carefully chosen Python-native implementations that work seamlessly together.</p>
-<h2 id="what-are-components">What Are Components?</h2>
-<p>Components provide core capabilities your application needs:</p>
+<p>Components are the building blocks of your Aegis Stack application. Each component provides a specific capability like API serving, background tasks, or data persistence.</p>
+<blockquote>
+<p>💡 <strong>New to Aegis Stack?</strong> See the <a href="../philosophy/">Philosophy Guide</a> for the complete component design principles.</p>
+</blockquote>
+<h2 id="component-selection">Component Selection</h2>
+<p><strong>⚠️ Important:</strong> Components must be selected during project creation. There is currently no way to add components to existing projects.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Basic stack (FastAPI + Flet)</span>
+aegis<span class="w"> </span>init<span class="w"> </span>my-project
+
+<span class="c1"># Add scheduler capability</span>
+aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--components<span class="w"> </span>scheduler
+
+<span class="c1"># Multiple components (future)</span>
+aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--components<span class="w"> </span>scheduler,database,cache
+</code></pre></div>
+<h2 id="component-architecture">Component Architecture</h2>
+<pre class="mermaid"><code>graph TB
+    subgraph "Core Components (Always Included)"
+        CLI[CLI Commands&lt;br/&gt;Typer]
+        API[FastAPI Backend&lt;br/&gt;Async REST API]
+        Frontend[Flet Frontend&lt;br/&gt;Cross-platform UI]
+    end
+
+    subgraph "Optional Components"
+        Scheduler[Scheduler&lt;br/&gt;APScheduler]
+        Database[Database&lt;br/&gt;PostgreSQL + SQLAlchemy]
+        Cache[Cache&lt;br/&gt;Redis]
+    end
+
+    subgraph "Business Layer"
+        Services[Services&lt;br/&gt;Pure Business Logic]
+        Constants[Constants&lt;br/&gt;Immutable Values]
+        Config[Configuration&lt;br/&gt;Environment Settings]
+    end
+
+    CLI --&gt; API
+    API --&gt; Frontend
+    API --&gt; Services
+    Services --&gt; Scheduler
+    Services --&gt; Database
+    Services --&gt; Cache
+    Services --&gt; Constants
+    Services --&gt; Config
+
+    style CLI fill:#e1f5fe
+    style API fill:#e8f5e8
+    style Frontend fill:#fff3e0
+    style Scheduler fill:#f3e5f5
+    style Database fill:#f3e5f5
+    style Cache fill:#f3e5f5</code></pre>
+<h2 id="available-components">Available Components</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Purpose</th>
+<th>Implementation</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Core</strong> (Backend + Frontend + CLI)</td>
+<td>API + UI + Management</td>
+<td><a href="https://fastapi.tiangolo.com/">FastAPI</a> + <a href="https://flet.dev/">Flet</a> + <a href="https://typer.tiangolo.com/">Typer</a></td>
+<td>✅ Always included</td>
+</tr>
+<tr>
+<td><strong><a href="scheduler/">Scheduler</a></strong></td>
+<td>Background tasks, cron jobs</td>
+<td><a href="https://apscheduler.readthedocs.io/">APScheduler</a></td>
+<td>✅ Available</td>
+</tr>
+<tr>
+<td><strong>Database</strong></td>
+<td>Data persistence, migrations</td>
+<td><a href="https://postgresql.org/">PostgreSQL</a> + <a href="https://sqlalchemy.org/">SQLAlchemy</a></td>
+<td>🚧 Coming soon</td>
+</tr>
+<tr>
+<td><strong>Cache</strong></td>
+<td>Session storage, performance</td>
+<td><a href="https://redis.io/">Redis</a></td>
+<td>🚧 Coming soon</td>
+</tr>
+</tbody>
+</table>
+<h3 id="technology-integration">Technology Integration</h3>
+<p>Each component integrates proven open-source technologies:</p>
 <ul>
-<li><strong>Web Server</strong>: Handles HTTP requests and API endpoints</li>
-<li><strong>Frontend</strong>: Provides user interface and interactions  </li>
-<li><strong>Scheduling</strong>: Manages background tasks and cron jobs <em>(coming soon)</em></li>
-<li><strong>Database</strong>: Stores and retrieves application data <em>(coming soon)</em></li>
-<li><strong>Caching</strong>: Improves performance with data caching <em>(coming soon)</em></li>
+<li><strong>Backend</strong>: <a href="https://fastapi.tiangolo.com/">FastAPI</a> provides async web serving with automatic API documentation</li>
+<li><strong>Frontend</strong>: <a href="https://flet.dev/">Flet</a> enables Python-native cross-platform UI development  </li>
+<li><strong>CLI Integration</strong>: <a href="https://typer.tiangolo.com/">Typer</a> creates command-line interfaces that hook directly into your Python logic</li>
+<li><strong>Monitoring</strong>: <a href="https://rich.readthedocs.io/">Rich</a> provides terminal formatting for CLI commands and health displays</li>
+<li><strong>System Monitoring</strong>: <a href="https://psutil.readthedocs.io/">psutil</a> enables cross-platform system health monitoring</li>
 </ul>
-<h2 id="current-components">Current Components</h2>
-<h3 id="web-server">Web Server</h3>
-<p><strong>Implementation</strong>: <a href="webserver.html">FastAPI</a><br />
-<strong>Capability</strong>: High-performance async web framework for building APIs</p>
-<h3 id="frontend">Frontend</h3>
-<p><strong>Implementation</strong>: <a href="frontend.html">Flet</a><br />
-<strong>Capability</strong>: Python-based UI framework for desktop and web</p>
-<h2 id="component-philosophy">Component Philosophy</h2>
-<h3 id="why-this-approach">Why This Approach?</h3>
-<ol>
-<li><strong>Python-First</strong>: All components are Python-native for consistency</li>
-<li><strong>Async Architecture</strong>: Every component supports async/await patterns</li>
-<li><strong>Standards</strong>: Each component follows consistent integration patterns</li>
-<li><strong>Evolution</strong>: Start with solid foundations, add capabilities as needed</li>
-</ol>
-<h3 id="how-components-work">How Components Work</h3>
-<p>Each component:</p>
+<p>Components are designed as <strong>capability interfaces</strong> - the current implementations can be replaced with alternatives while maintaining the same component API.</p>
+<h2 id="next-steps">Next Steps</h2>
 <ul>
-<li><strong>Integrates cleanly</strong> with the lifecycle management system</li>
-<li><strong>Follows standard patterns</strong> for configuration and setup</li>
-<li><strong>Supports async operation</strong> for high performance</li>
-<li><strong>Provides examples</strong> for common use cases</li>
+<li><strong><a href="webserver/">Backend Component</a></strong> - FastAPI backend configuration</li>
+<li><strong><a href="frontend/">Frontend Component</a></strong> - Building user interfaces with Flet  </li>
+<li><strong><a href="scheduler/">Scheduler Component</a></strong> - Scheduling and cron job system</li>
+<li><strong><a href="../philosophy/">Philosophy Guide</a></strong> - Component design principles and architecture</li>
 </ul>
-<p>Each component is carefully chosen to maintain Aegis Stack's Python-first, async-native philosophy while providing the capabilities needed for modern applications.</p>
 
 
 
@@ -909,6 +979,10 @@
     
     
       <script src="../assets/javascripts/bundle.50899def.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10.6.0/dist/mermaid.min.js"></script>
+      
+        <script src="../javascripts/mermaid-config.js"></script>
       
     
   </body>

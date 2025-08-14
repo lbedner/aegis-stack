@@ -12,28 +12,28 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/webserver.html">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/frontend/">
       
       
-        <link rel="prev" href="index.html">
+        <link rel="prev" href="../webserver/">
       
       
-        <link rel="next" href="frontend.html">
+        <link rel="next" href="../scheduler/">
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.16">
     
     
       
-        <title>Web Server - Aegis Stack</title>
+        <title>Frontend - Aegis Stack</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.7e37652d.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.7e37652d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -52,9 +52,11 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+      <link rel="stylesheet" href="../../stylesheets/mermaid.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#web-server-component" class="md-skip">
+        <a href="#frontend-component" class="md-skip">
           Skip to content
         </a>
       
@@ -94,7 +96,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../index.html" title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -114,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Web Server
+              Frontend
             
           </span>
         </div>
@@ -215,7 +217,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../index.html" class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -234,7 +236,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../philosophy.html" class="md-tabs__link">
+      <a href="../../philosophy/" class="md-tabs__link">
         
   
   
@@ -257,7 +259,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="index.html" class="md-tabs__link">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -277,11 +279,11 @@
     
     
       <li class="md-tabs__item">
-        <a href="../guides/lifecycle.html" class="md-tabs__link">
+        <a href="../../cli-reference/" class="md-tabs__link">
           
   
   
-  Guides
+  Reference
 
         </a>
       </li>
@@ -311,7 +313,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../index.html" title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -329,7 +331,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../index.html" class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -351,7 +353,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../philosophy.html" class="md-nav__link">
+      <a href="../../philosophy/" class="md-nav__link">
         
   
   
@@ -419,12 +421,35 @@
   
   
     <li class="md-nav__item">
-      <a href="index.html" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../webserver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backend
     
   </span>
   
@@ -456,7 +481,7 @@
   
   
   <span class="md-ellipsis">
-    Web Server
+    Frontend
     
   </span>
   
@@ -464,12 +489,12 @@
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <a href="webserver.html" class="md-nav__link md-nav__link--active">
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
   <span class="md-ellipsis">
-    Web Server
+    Frontend
     
   </span>
   
@@ -492,43 +517,24 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#current-implementation-fastapi" class="md-nav__link">
+  <a href="#basic-usage" class="md-nav__link">
     <span class="md-ellipsis">
-      Current Implementation: FastAPI
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Current Implementation: FastAPI">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#why-fastapi" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why FastAPI?
+      Basic Usage
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#how-its-integrated" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#integration-with-backend" class="md-nav__link">
     <span class="md-ellipsis">
-      How It's Integrated
+      Integration with Backend
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#adding-api-routes" class="md-nav__link">
-    <span class="md-ellipsis">
-      Adding API Routes
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       Configuration
@@ -536,11 +542,39 @@
   </a>
   
 </li>
+      
+        <li class="md-nav__item">
+  <a href="#system-health-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      System Health Dashboard
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#technology-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Technology Integration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Technology Integration">
+      <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#development-features" class="md-nav__link">
+  <a href="#flets-innovation" class="md-nav__link">
     <span class="md-ellipsis">
-      Development Features
+      Flet's Innovation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-advantages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Integration Advantages
     </span>
   </a>
   
@@ -552,18 +586,9 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#integration-with-aegis-stack" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      Integration with Aegis Stack
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#performance-characteristics" class="md-nav__link">
-    <span class="md-ellipsis">
-      Performance Characteristics
+      Next Steps
     </span>
   </a>
   
@@ -585,12 +610,12 @@
   
   
     <li class="md-nav__item">
-      <a href="frontend.html" class="md-nav__link">
+      <a href="../scheduler/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Frontend
+    Scheduler
     
   </span>
   
@@ -634,7 +659,7 @@
   
   
   <span class="md-ellipsis">
-    Guides
+    Reference
     
   </span>
   
@@ -645,7 +670,7 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
-            Guides
+            Reference
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -656,12 +681,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../guides/lifecycle.html" class="md-nav__link">
+      <a href="../../cli-reference/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Application Lifecycle
+    CLI Reference
     
   </span>
   
@@ -679,12 +704,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../guides/services.html" class="md-nav__link">
+      <a href="../../integration-patterns/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Services & Discovery
+    Integration Patterns
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../technology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Technology Stack
     
   </span>
   
@@ -729,43 +777,24 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#current-implementation-fastapi" class="md-nav__link">
+  <a href="#basic-usage" class="md-nav__link">
     <span class="md-ellipsis">
-      Current Implementation: FastAPI
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Current Implementation: FastAPI">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#why-fastapi" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why FastAPI?
+      Basic Usage
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#how-its-integrated" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#integration-with-backend" class="md-nav__link">
     <span class="md-ellipsis">
-      How It's Integrated
+      Integration with Backend
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#adding-api-routes" class="md-nav__link">
-    <span class="md-ellipsis">
-      Adding API Routes
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       Configuration
@@ -773,11 +802,39 @@
   </a>
   
 </li>
+      
+        <li class="md-nav__item">
+  <a href="#system-health-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      System Health Dashboard
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#technology-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Technology Integration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Technology Integration">
+      <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#development-features" class="md-nav__link">
+  <a href="#flets-innovation" class="md-nav__link">
     <span class="md-ellipsis">
-      Development Features
+      Flet's Innovation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-advantages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Integration Advantages
     </span>
   </a>
   
@@ -789,18 +846,9 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#integration-with-aegis-stack" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      Integration with Aegis Stack
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#performance-characteristics" class="md-nav__link">
-    <span class="md-ellipsis">
-      Performance Characteristics
+      Next Steps
     </span>
   </a>
   
@@ -822,90 +870,86 @@
 
 
 
-<h1 id="web-server-component">Web Server Component</h1>
-<p>The <strong>Web Server</strong> component handles HTTP requests, API endpoints, and web traffic for your Aegis Stack application.</p>
-<h2 id="current-implementation-fastapi">Current Implementation: FastAPI</h2>
-<p>FastAPI is the current web server implementation, chosen for its high performance, automatic API documentation, and excellent async support.</p>
-<h3 id="why-fastapi">Why FastAPI?</h3>
+<h1 id="frontend-component">Frontend Component</h1>
+<p>The <strong>Frontend Component</strong> provides the user interface for your Aegis Stack application using <a href="https://flet.dev/">Flet</a> - a Python-native framework for building web, desktop, and mobile apps by Feodor Fitsner.</p>
+<h2 id="basic-usage">Basic Usage</h2>
+<p>Create your UI components in the frontend module:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># app/components/frontend/main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">flet</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ft</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">app.services.data_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_dashboard_stats</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">create_frontend_app</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create and return Flet session handler&quot;&quot;&quot;</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">page</span><span class="p">:</span> <span class="n">ft</span><span class="o">.</span><span class="n">Page</span><span class="p">):</span>
+        <span class="n">page</span><span class="o">.</span><span class="n">title</span> <span class="o">=</span> <span class="s2">&quot;My Aegis App&quot;</span>
+        <span class="n">page</span><span class="o">.</span><span class="n">theme_mode</span> <span class="o">=</span> <span class="n">ft</span><span class="o">.</span><span class="n">ThemeMode</span><span class="o">.</span><span class="n">LIGHT</span>
+
+        <span class="c1"># Data display</span>
+        <span class="n">data_view</span> <span class="o">=</span> <span class="n">ft</span><span class="o">.</span><span class="n">Text</span><span class="p">(</span><span class="s2">&quot;Loading...&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="n">e</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_dashboard_stats</span><span class="p">()</span>
+            <span class="n">data_view</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Records: </span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;count&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">page</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+
+        <span class="c1"># Simple dashboard</span>
+        <span class="n">page</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+            <span class="n">ft</span><span class="o">.</span><span class="n">Text</span><span class="p">(</span><span class="s2">&quot;Dashboard&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">24</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">ft</span><span class="o">.</span><span class="n">FontWeight</span><span class="o">.</span><span class="n">BOLD</span><span class="p">),</span>
+            <span class="n">ft</span><span class="o">.</span><span class="n">ElevatedButton</span><span class="p">(</span><span class="s2">&quot;Load Data&quot;</span><span class="p">,</span> <span class="n">on_click</span><span class="o">=</span><span class="n">load_data</span><span class="p">),</span>
+            <span class="n">data_view</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">main</span>
+</code></pre></div>
+<h2 id="integration-with-backend">Integration with Backend</h2>
+<p>The frontend integrates with your FastAPI backend through the application composition:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># app/integrations/main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">flet.fastapi</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">flet_fastapi</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">app.components.frontend.main</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_frontend_app</span>
+
+<span class="c1"># Mount Flet app on FastAPI</span>
+<span class="n">session_handler</span> <span class="o">=</span> <span class="n">create_frontend_app</span><span class="p">()</span>
+<span class="n">flet_app</span> <span class="o">=</span> <span class="n">flet_fastapi</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">session_handler</span><span class="p">)</span>
+<span class="n">app</span><span class="o">.</span><span class="n">mount</span><span class="p">(</span><span class="s2">&quot;/dashboard&quot;</span><span class="p">,</span> <span class="n">flet_app</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="configuration">Configuration</h2>
+<p>Flet runs through the backend container and is accessible at <code>http://localhost:8000/dashboard</code> during development.</p>
+<h2 id="system-health-dashboard">System Health Dashboard</h2>
+<p>The Frontend Component includes a production-ready <strong>System Health Dashboard</strong> that showcases Flet's capabilities:</p>
+<p><img alt="System Health Dashboard" src="../../images/dashboard.png" /></p>
+<p>This dashboard demonstrates:</p>
 <ul>
-<li><strong>High Performance</strong>: Built on Starlette and Pydantic, one of the fastest Python frameworks</li>
-<li><strong>Async Native</strong>: Perfect match for Aegis Stack's async-first architecture  </li>
-<li><strong>Type Safety</strong>: Automatic validation and serialization using Python type hints</li>
-<li><strong>Auto Documentation</strong>: Generates OpenAPI/Swagger docs automatically</li>
-<li><strong>Modern</strong>: Designed for Python 3.6+ with modern language features</li>
+<li><strong>Real-time data integration</strong> with backend APIs</li>
+<li><strong>Responsive component layout</strong> with automatic updates</li>
+<li><strong>Rich visual components</strong> including status cards and progress indicators</li>
+<li><strong>Cross-platform compatibility</strong> - same code runs everywhere</li>
 </ul>
-<h3 id="how-its-integrated">How It's Integrated</h3>
-<p>FastAPI is set up in the <code>app/backend/</code> directory:</p>
-<pre><code class="language-python"># app/backend/main.py
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-def create_backend_app(app: FastAPI) -&gt; FastAPI:
-    &quot;&quot;&quot;Configure FastAPI app with all backend concerns&quot;&quot;&quot;
-
-    # Basic CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[&quot;*&quot;],
-        allow_credentials=True,
-        allow_methods=[&quot;*&quot;],
-        allow_headers=[&quot;*&quot;],
-    )
-
-    # Include all routes
-    include_routers(app)
-
-    return app
-</code></pre>
-<h3 id="adding-api-routes">Adding API Routes</h3>
-<p>Routes are organized in <code>app/backend/api/</code>:</p>
-<pre><code class="language-python"># app/backend/api/health.py
-from fastapi import APIRouter
-
-router = APIRouter()
-
-@router.get(&quot;/health&quot;)
-async def health_check():
-    return {&quot;status&quot;: &quot;healthy&quot;, &quot;service&quot;: &quot;aegis-stack&quot;}
-</code></pre>
-<p>Register routes in <code>app/backend/api/routing.py</code>:</p>
-<pre><code class="language-python">from app.backend.api import health
-
-def include_routers(app: FastAPI) -&gt; None:
-    app.include_router(health.router, tags=[&quot;health&quot;])
-</code></pre>
-<h3 id="configuration">Configuration</h3>
-<p>FastAPI is configured through the integration layer and runs with:</p>
+<h2 id="technology-integration">Technology Integration</h2>
+<p>The Frontend Component leverages <a href="https://flet.dev/">Flet</a>, created by Feodor Fitsner - a revolutionary approach to Python UI development that offers:</p>
+<h3 id="flets-innovation">Flet's Innovation</h3>
 <ul>
-<li><strong>CORS enabled</strong> for cross-origin requests</li>
-<li><strong>Automatic JSON serialization</strong> </li>
-<li><strong>Built-in validation</strong> using Pydantic models</li>
-<li><strong>Exception handling</strong> for clean error responses</li>
+<li><strong>Python-native</strong> - Write UI code entirely in Python, no HTML/CSS/JavaScript required</li>
+<li><strong>Cross-platform</strong> - Same code runs as web app, desktop app, or mobile app</li>
+<li><strong>Real-time updates</strong> - Changes reflect immediately without page refreshes</li>
+<li><strong>Rich controls</strong> - Modern UI components with built-in theming and animations</li>
+<li><strong>Flutter foundation</strong> - Built on Google's Flutter, inheriting its performance and polish</li>
 </ul>
-<h3 id="development-features">Development Features</h3>
+<h3 id="integration-advantages">Integration Advantages</h3>
 <ul>
-<li><strong>Auto-reload</strong> during development</li>
-<li><strong>Interactive docs</strong> at <code>/docs</code> (Swagger UI)</li>
-<li><strong>Alternative docs</strong> at <code>/redoc</code> </li>
-<li><strong>OpenAPI schema</strong> at <code>/openapi.json</code></li>
+<li><strong><a href="https://flet.dev/docs/guides/python/deploying-web-app/fastapi">FastAPI integration</a></strong> - Seamless mounting on existing FastAPI applications</li>
+<li><strong>Async support</strong> - Natural async/await patterns for backend API calls</li>
+<li><strong>Type safety</strong> - Full Python type checking for UI logic</li>
+<li><strong>Shared codebase</strong> - Frontend and backend share the same Python environment</li>
 </ul>
-<h2 id="integration-with-aegis-stack">Integration with Aegis Stack</h2>
-<p>FastAPI aligns perfectly with Aegis Stack's core principles:</p>
+<p>Flet was selected because it eliminates the traditional frontend/backend split, allowing Python developers to build complete applications without leaving their language expertise.</p>
+<h2 id="next-steps">Next Steps</h2>
 <ul>
-<li><strong>Python-First</strong>: Pure Python with excellent type safety</li>
-<li><strong>Async-Native</strong>: Built for async/await from the ground up</li>
-<li><strong>Developer Experience</strong>: Automatic validation, serialization, and documentation</li>
-<li><strong>Production Ready</strong>: High performance with excellent error handling</li>
+<li><strong><a href="https://flet.dev/docs/">Flet Documentation</a></strong> - Complete UI framework capabilities</li>
+<li><strong><a href="https://flet.dev/docs/controls/">Flet Controls Gallery</a></strong> - Available UI components  </li>
+<li><strong><a href="../">Component Overview</a></strong> - Understanding Aegis Stack's component architecture</li>
+<li><strong><a href="../../philosophy/">Philosophy Guide</a></strong> - Component architecture principles</li>
 </ul>
-<h2 id="performance-characteristics">Performance Characteristics</h2>
-<p>FastAPI provides:</p>
-<ul>
-<li><strong>Async request handling</strong> for high concurrency</li>
-<li><strong>Automatic validation</strong> without performance penalty</li>
-<li><strong>JSON serialization</strong> optimized with orjson under the hood</li>
-<li><strong>Middleware support</strong> for cross-cutting concerns</li>
-</ul>
-<p>FastAPI's async-first design allows Aegis Stack to handle thousands of concurrent connections efficiently while maintaining type safety and developer productivity.</p>
 
 
 
@@ -960,10 +1004,14 @@ def include_routers(app: FastAPI) -&gt; None:
     
     
       
-      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.50899def.min.js"></script>
+      <script src="../../assets/javascripts/bundle.50899def.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10.6.0/dist/mermaid.min.js"></script>
+      
+        <script src="../../javascripts/mermaid-config.js"></script>
       
     
   </body>

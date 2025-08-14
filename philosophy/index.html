@@ -12,11 +12,13 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/guides/services.html">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/philosophy/">
       
       
-        <link rel="prev" href="lifecycle.html">
+        <link rel="prev" href="..">
       
+      
+        <link rel="next" href="../components/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -24,7 +26,7 @@
     
     
       
-        <title>Services & Discovery - Aegis Stack</title>
+        <title>Philosophy - Aegis Stack</title>
       
     
     
@@ -52,6 +54,8 @@
     
       <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
     <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -78,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#services-and-discovery" class="md-skip">
+        <a href="#aegis-stack-philosophy" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +96,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../index.html" title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Services & Discovery
+              Philosophy
             
           </span>
         </div>
@@ -213,7 +217,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../index.html" class="md-tabs__link">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -230,9 +234,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../philosophy.html" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -253,7 +259,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../components/index.html" class="md-tabs__link">
+        <a href="../components/" class="md-tabs__link">
           
   
   
@@ -269,17 +275,15 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="lifecycle.html" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../cli-reference/" class="md-tabs__link">
           
   
   
-  Guides
+  Reference
 
         </a>
       </li>
@@ -309,7 +313,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../index.html" title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -327,7 +331,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../index.html" class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -346,10 +350,32 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../philosophy.html" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Philosophy
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -360,6 +386,77 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#speed-for-builders-who-refuse-to-wait" class="md-nav__link">
+    <span class="md-ellipsis">
+      Speed: For Builders Who Refuse to Wait
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simplicity-powerful-patterns-not-prescriptive-frameworks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Simplicity: Powerful Patterns, Not Prescriptive Frameworks
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Simplicity: Powerful Patterns, Not Prescriptive Frameworks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#component-composition-build-exactly-what-you-need" class="md-nav__link">
+    <span class="md-ellipsis">
+      Component Composition: Build Exactly What You Need
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scalability-container-native-growth" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scalability: Container-Native Growth
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-aegis-stack-promise" class="md-nav__link">
+    <span class="md-ellipsis">
+      The Aegis Stack Promise
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -412,7 +509,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/index.html" class="md-nav__link">
+      <a href="../components/" class="md-nav__link">
         
   
   
@@ -435,12 +532,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/webserver.html" class="md-nav__link">
+      <a href="../components/webserver/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Web Server
+    Backend
     
   </span>
   
@@ -458,12 +555,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/frontend.html" class="md-nav__link">
+      <a href="../components/frontend/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     Frontend
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/scheduler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Scheduler
     
   </span>
   
@@ -485,34 +605,29 @@
       
   
   
-    
   
   
-  
     
     
     
     
       
-        
-        
-      
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
   
   <span class="md-ellipsis">
-    Guides
+    Reference
     
   </span>
   
@@ -520,10 +635,10 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
-            Guides
+            Reference
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -534,12 +649,12 @@
   
   
     <li class="md-nav__item">
-      <a href="lifecycle.html" class="md-nav__link">
+      <a href="../cli-reference/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Application Lifecycle
+    CLI Reference
     
   </span>
   
@@ -554,104 +669,43 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    Services & Discovery
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="services.html" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../integration-patterns/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Services & Discovery
+    Integration Patterns
     
   </span>
   
 
       </a>
-      
-        
+    </li>
+  
 
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+              
+            
+              
+                
   
   
   
+  
+    <li class="md-nav__item">
+      <a href="../technology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Technology Stack
     
+  </span>
   
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#the-service-layer-pattern" class="md-nav__link">
-    <span class="md-ellipsis">
-      The Service Layer Pattern
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#automatic-service-discovery" class="md-nav__link">
-    <span class="md-ellipsis">
-      Automatic Service Discovery
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Automatic Service Discovery">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
-    <span class="md-ellipsis">
-      How it Works
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#the-developer-experience" class="md-nav__link">
-    <span class="md-ellipsis">
-      The Developer Experience
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
+
+      </a>
     </li>
   
 
@@ -691,37 +745,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-service-layer-pattern" class="md-nav__link">
+  <a href="#speed-for-builders-who-refuse-to-wait" class="md-nav__link">
     <span class="md-ellipsis">
-      The Service Layer Pattern
+      Speed: For Builders Who Refuse to Wait
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#automatic-service-discovery" class="md-nav__link">
+  <a href="#simplicity-powerful-patterns-not-prescriptive-frameworks" class="md-nav__link">
     <span class="md-ellipsis">
-      Automatic Service Discovery
+      Simplicity: Powerful Patterns, Not Prescriptive Frameworks
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Automatic Service Discovery">
+    <nav class="md-nav" aria-label="Simplicity: Powerful Patterns, Not Prescriptive Frameworks">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
+  <a href="#component-composition-build-exactly-what-you-need" class="md-nav__link">
     <span class="md-ellipsis">
-      How it Works
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#the-developer-experience" class="md-nav__link">
-    <span class="md-ellipsis">
-      The Developer Experience
+      Component Composition: Build Exactly What You Need
     </span>
   </a>
   
@@ -729,6 +774,24 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scalability-container-native-growth" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scalability: Container-Native Growth
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-aegis-stack-promise" class="md-nav__link">
+    <span class="md-ellipsis">
+      The Aegis Stack Promise
+    </span>
+  </a>
   
 </li>
       
@@ -748,34 +811,85 @@
 
 
 
-<h1 id="services-and-discovery">Services and Discovery</h1>
-<p>The <code>app/services</code> directory is the heart of your application's business logic. It's where you answer the question, "What does my application <em>do</em>?"</p>
-<h2 id="the-service-layer-pattern">The Service Layer Pattern</h2>
-<p>A "service" is a focused Python module that manages a specific piece of business logic or a connection to an external resource. This pattern separates the core logic of your application from the web-serving and UI-rendering logic, making the entire system easier to test, maintain, and reason about.</p>
-<p><strong>Good candidates for a service include:</strong></p>
+<h1 id="aegis-stack-philosophy">Aegis Stack Philosophy</h1>
+<p>Aegis Stack believes in <strong>choice over convention</strong> - build exactly the application you need, nothing more, nothing less.</p>
+<p>Built on three pillars: <strong>Speed</strong>, <strong>Simplicity</strong>, and <strong>Scalability</strong>.</p>
+<h2 id="speed-for-builders-who-refuse-to-wait">Speed: For Builders Who Refuse to Wait</h2>
+<p>Development should be fast. Aegis Stack gets you from idea to production quickly.</p>
 <ul>
-<li><strong>Database Interactions:</strong> A <code>database_service.py</code> that contains all your data access logic (CRUD operations).</li>
-<li><strong>External API Clients:</strong> A <code>stripe_service.py</code> that handles all communication with the Stripe API.</li>
-<li><strong>Complex Business Logic:</strong> A <code>reporting_service.py</code> that performs complex data transformations.</li>
-<li><strong>File Processing:</strong> A <code>file_processing_service.py</code> for handling uploads.</li>
+<li><strong>CLI-Driven Generation:</strong> <code>aegis init</code> creates a working application in seconds</li>
+<li><strong>Async-First:</strong> Built with <code>asyncio</code> for high-concurrency workloads</li>
+<li><strong>Full-Stack Python:</strong> Single language for your entire stack</li>
+<li><strong>Minimalist by Default:</strong> No unnecessary bloat or framework overhead</li>
 </ul>
-<p>The API layer in <code>app/backend/api/</code> should remain "thin." Its job is to handle HTTP requests and validation, then call the appropriate service to do the actual work.</p>
-<h2 id="automatic-service-discovery">Automatic Service Discovery</h2>
-<p>Aegis Stack uses a dynamic discovery mechanism to make services "pluggable." You do not need to manually import your services into the main application for them to be active.</p>
-<h3 id="how-it-works">How it Works</h3>
-<ol>
-<li>At startup, the application scans the <code>app/services</code> directory.</li>
-<li>It automatically imports any Python module it finds within that directory.</li>
-<li>This import triggers the top-level code in the service file, which is where services can register themselves with other parts of the application, such as the <a href="lifecycle.html">Lifecycle Registry</a>.</li>
-</ol>
-<h3 id="the-developer-experience">The Developer Experience</h3>
-<p>This system creates a powerful and simple developer workflow:</p>
-<ol>
-<li>Create a new file in <code>app/services</code>.</li>
-<li>Write your service logic and any necessary lifecycle hooks.</li>
-<li>Run the application.</li>
-</ol>
-<p>The service is automatically discovered and integrated into the application. There is no need to modify any central configuration or integration files.</p>
+<h2 id="simplicity-powerful-patterns-not-prescriptive-frameworks">Simplicity: Powerful Patterns, Not Prescriptive Frameworks</h2>
+<p>Aegis Stack favors clear, Pythonic patterns over complex, magical frameworks.</p>
+<ul>
+<li><strong>Transparent Integration:</strong> Components expose capabilities through simple, documented interfaces</li>
+<li><strong>Clear Separation:</strong> Components (capabilities), services (business logic), entrypoints (execution modes)</li>
+<li><strong>Predictable Structure:</strong> Every project follows the same organizational patterns</li>
+<li><strong>Explicit Dependencies:</strong> Import what you need where you need it</li>
+</ul>
+<h3 id="component-composition-build-exactly-what-you-need">Component Composition: Build Exactly What You Need</h3>
+<p>Aegis Stack rejects "one-size-fits-all" frameworks. Instead, compose exactly the capabilities your application requires.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Simple API service</span>
+aegis<span class="w"> </span>init<span class="w"> </span>api-service
+
+<span class="c1"># Background processing system</span>
+aegis<span class="w"> </span>init<span class="w"> </span>processor<span class="w"> </span>--components<span class="w"> </span>scheduler
+
+<span class="c1"># Full application (future)</span>
+aegis<span class="w"> </span>init<span class="w"> </span>webapp<span class="w"> </span>--components<span class="w"> </span>scheduler,database,cache
+</code></pre></div>
+<p><strong>Components are capabilities, not implementations.</strong> When you choose "scheduler," you're choosing the <em>capability</em> to run background tasks. The current implementation uses APScheduler.</p>
+<p><strong>No unused dependencies.</strong> Your <code>pyproject.toml</code> only includes what you actually use. Choose scheduler? You get APScheduler. Skip the database? No SQLAlchemy cluttering your environment.</p>
+<p><strong>Container-native deployment.</strong> Each component runs in its own Docker container, enabling you to scale the parts of your application that need it most.</p>
+<h2 id="scalability-container-native-growth">Scalability: Container-Native Growth</h2>
+<p>Start simple, scale smart as your application grows. Components run in separate Docker containers from day one, enabling resource optimization, independent scaling, and fault isolation.</p>
+<pre class="mermaid"><code>graph TB
+    subgraph "Phase 1: Simple Start"
+        A1[Single Container&lt;br/&gt;All Components]
+    end
+
+    subgraph "Phase 2: Component Separation"
+        B1[Web Container&lt;br/&gt;API + Frontend]
+        B2[Worker Container&lt;br/&gt;Scheduler + Jobs]
+        B3[Database&lt;br/&gt;PostgreSQL]
+    end
+
+    subgraph "Phase 3: Microservices"
+        C1[API Service]
+        C2[Frontend Service]
+        C3[Scheduler Service]
+        C4[Database Cluster]
+        C5[Cache Cluster]
+        C6[Message Queue]
+    end
+
+    A1 --&gt; B1
+    A1 --&gt; B2
+    A1 --&gt; B3
+
+    B1 --&gt; C1
+    B1 --&gt; C2
+    B2 --&gt; C3
+    B3 --&gt; C4
+    B2 --&gt; C5
+    B2 --&gt; C6
+
+    style A1 fill:#e1f5fe
+    style B1 fill:#e8f5e8
+    style B2 fill:#e8f5e8
+    style B3 fill:#e8f5e8
+    style C1 fill:#f3e5f5
+    style C2 fill:#f3e5f5
+    style C3 fill:#f3e5f5</code></pre>
+<h2 id="the-aegis-stack-promise">The Aegis Stack Promise</h2>
+<p><strong>Choose your components.</strong> Get exactly the capabilities you need.<br />
+<strong>Start simple.</strong> Deploy as a single application.<br />
+<strong>Scale smart.</strong> Distribute components as your needs grow.<br />
+<strong>Stay in control.</strong> No vendor lock-in, no framework magic, just clear Python patterns.</p>
+<p>Aegis Stack doesn't make architectural decisions for you - it provides the tools to make them yourself.</p>
 
 
 
@@ -834,6 +948,10 @@
     
     
       <script src="../assets/javascripts/bundle.50899def.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10.6.0/dist/mermaid.min.js"></script>
+      
+        <script src="../javascripts/mermaid-config.js"></script>
       
     
   </body>

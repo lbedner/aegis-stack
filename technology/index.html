@@ -1,0 +1,1228 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A production-ready Python foundation for builders who refuse to wait.">
+      
+      
+        <meta name="author" content="Aegis Stack Contributors">
+      
+      
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/technology/">
+      
+      
+        <link rel="prev" href="../integration-patterns/">
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.16">
+    
+    
+      
+        <title>Technology Stack - Aegis Stack</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.7e37652d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#technology-stack" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Aegis Stack
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Technology Stack
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../philosophy/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Philosophy
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../components/" class="md-tabs__link">
+          
+  
+  
+  Components
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../cli-reference/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Aegis Stack
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../philosophy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Philosophy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Components
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Components
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/webserver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backend
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Frontend
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/scheduler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Scheduler
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../integration-patterns/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Integration Patterns
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Technology Stack
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Technology Stack
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      Core Framework
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Framework">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fastapi-by-sebastian-ramirez" class="md-nav__link">
+    <span class="md-ellipsis">
+      FastAPI by Sebastián Ramírez
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flet-by-feodor-fitsner" class="md-nav__link">
+    <span class="md-ellipsis">
+      Flet by Feodor Fitsner
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typer-by-sebastian-ramirez" class="md-nav__link">
+    <span class="md-ellipsis">
+      Typer by Sebastián Ramírez
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-tooling-excellence" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development &amp; Tooling Excellence
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development &amp; Tooling Excellence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#uv-by-astral" class="md-nav__link">
+    <span class="md-ellipsis">
+      UV by Astral
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rich-by-will-mcgugan" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rich by Will McGugan
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ruff-by-astral" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ruff by Astral
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#infrastructure-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Infrastructure &amp; Components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Infrastructure &amp; Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#apscheduler-by-alex-gronholm" class="md-nav__link">
+    <span class="md-ellipsis">
+      APScheduler by Alex Grönholm
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pydantic-by-samuel-colvin" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pydantic by Samuel Colvin
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#structlog-by-hynek-schlawack" class="md-nav__link">
+    <span class="md-ellipsis">
+      Structlog by Hynek Schlawack
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cookiecutter-by-audrey-feldroy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cookiecutter by Audrey Feldroy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#psutil-by-giampaolo-rodola" class="md-nav__link">
+    <span class="md-ellipsis">
+      psutil by Giampaolo Rodolà
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#integration-philosophy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Integration Philosophy
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-curation-promise" class="md-nav__link">
+    <span class="md-ellipsis">
+      The Curation Promise
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      Core Framework
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Framework">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fastapi-by-sebastian-ramirez" class="md-nav__link">
+    <span class="md-ellipsis">
+      FastAPI by Sebastián Ramírez
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flet-by-feodor-fitsner" class="md-nav__link">
+    <span class="md-ellipsis">
+      Flet by Feodor Fitsner
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typer-by-sebastian-ramirez" class="md-nav__link">
+    <span class="md-ellipsis">
+      Typer by Sebastián Ramírez
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-tooling-excellence" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development &amp; Tooling Excellence
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development &amp; Tooling Excellence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#uv-by-astral" class="md-nav__link">
+    <span class="md-ellipsis">
+      UV by Astral
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rich-by-will-mcgugan" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rich by Will McGugan
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ruff-by-astral" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ruff by Astral
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#infrastructure-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Infrastructure &amp; Components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Infrastructure &amp; Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#apscheduler-by-alex-gronholm" class="md-nav__link">
+    <span class="md-ellipsis">
+      APScheduler by Alex Grönholm
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pydantic-by-samuel-colvin" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pydantic by Samuel Colvin
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#structlog-by-hynek-schlawack" class="md-nav__link">
+    <span class="md-ellipsis">
+      Structlog by Hynek Schlawack
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cookiecutter-by-audrey-feldroy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cookiecutter by Audrey Feldroy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#psutil-by-giampaolo-rodola" class="md-nav__link">
+    <span class="md-ellipsis">
+      psutil by Giampaolo Rodolà
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#integration-philosophy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Integration Philosophy
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-curation-promise" class="md-nav__link">
+    <span class="md-ellipsis">
+      The Curation Promise
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="technology-stack">Technology Stack</h1>
+<p>Aegis Stack is built on the shoulders of giants. Each tool was thoughtfully selected for its excellence in solving specific problems, and for how well it composes with others.</p>
+<h2 id="core-framework">Core Framework</h2>
+<h3 id="fastapi-by-sebastian-ramirez"><a href="https://fastapi.tiangolo.com/">FastAPI</a> by Sebastián Ramírez</h3>
+<p><strong>Why FastAPI</strong>: High-performance async web framework with automatic API documentation</p>
+<p>Sebastián Ramírez built something special that makes high-performance Python web development accessible. FastAPI brings several advantages that align perfectly with Aegis Stack's philosophy:</p>
+<ul>
+<li><strong>Async-first design</strong> - Built for high-concurrency workloads from the ground up</li>
+<li><strong>Automatic API documentation</strong> - Interactive Swagger UI and ReDoc generation</li>
+<li><strong>Type safety integration</strong> - Leverages Python type hints for validation and serialization  </li>
+<li><strong>High performance</strong> - On par with NodeJS and Go thanks to Starlette and Pydantic</li>
+<li><strong>Developer experience</strong> - Excellent editor support with autocompletion and error detection</li>
+</ul>
+<h3 id="flet-by-feodor-fitsner"><a href="https://flet.dev/">Flet</a> by Feodor Fitsner</h3>
+<p><strong>Why Flet</strong>: Python-native cross-platform UI framework</p>
+<p>Feodor Fitsner created a framework that lets Python developers build rich interfaces without leaving their language comfort zone. Flet enables:</p>
+<ul>
+<li><strong>True Python-native UI</strong> - No need to learn JavaScript, HTML, or CSS</li>
+<li><strong>Cross-platform deployment</strong> - Web, desktop, and mobile from the same codebase</li>
+<li><strong>Real-time updates</strong> - WebSocket-based UI updates for dynamic interfaces</li>
+<li><strong>Flutter foundation</strong> - Built on Google's Flutter for native performance</li>
+<li><strong>Reactive programming</strong> - Natural async/await patterns for UI interactions</li>
+</ul>
+<h3 id="typer-by-sebastian-ramirez"><a href="https://typer.tiangolo.com/">Typer</a> by Sebastián Ramírez</h3>
+<p><strong>Why Typer</strong>: Modern CLI framework with excellent Python integration</p>
+<p>The perfect complement to FastAPI for CLI applications. Typer enables our "hook into existing Python logic" philosophy by making CLI commands feel like natural extensions of your application code:</p>
+<ul>
+<li><strong>Type-driven interface</strong> - CLI arguments and options inferred from function signatures</li>
+<li><strong>Rich integration</strong> - Beautiful terminal formatting out of the box</li>
+<li><strong>Automatic help generation</strong> - Documentation from docstrings and type hints</li>
+<li><strong>Validation and conversion</strong> - Automatic parsing and validation of CLI inputs</li>
+<li><strong>Composable commands</strong> - Easy sub-command organization</li>
+</ul>
+<h2 id="development-tooling-excellence">Development &amp; Tooling Excellence</h2>
+<h3 id="uv-by-astral"><a href="https://docs.astral.sh/uv/">UV</a> by Astral</h3>
+<p><strong>Why UV</strong>: Blazing fast Python package manager and environment tool</p>
+<p>Astral's UV represents a generational leap in Python tooling speed and reliability. It makes dependency management fast enough to disappear from your development workflow:</p>
+<ul>
+<li><strong>Rust-powered performance</strong> - 10-100x faster than pip for most operations</li>
+<li><strong>Unified tooling</strong> - Package management, virtual environments, and project setup</li>
+<li><strong>Universal compatibility</strong> - Works with existing pip/Poetry/PDM workflows</li>
+<li><strong>Reliable resolution</strong> - Better dependency resolution than traditional tools</li>
+<li><strong>Production ready</strong> - Used by major Python projects and organizations</li>
+</ul>
+<h3 id="rich-by-will-mcgugan"><a href="https://rich.readthedocs.io/">Rich</a> by Will McGugan</h3>
+<p><strong>Why Rich</strong>: Beautiful terminal formatting and progress displays</p>
+<p>Will McGugan's Rich transforms terminal interfaces from afterthoughts into delightful user experiences. It makes CLI tools feel modern and professional:</p>
+<ul>
+<li><strong>Beautiful formatting</strong> - Rich text, tables, progress bars, and syntax highlighting</li>
+<li><strong>Color and style</strong> - Automatic color detection and graceful degradation</li>
+<li><strong>Interactive elements</strong> - Progress bars, spinners, and status displays</li>
+<li><strong>Cross-platform</strong> - Consistent experience across Windows, macOS, and Linux</li>
+<li><strong>Developer friendly</strong> - Simple APIs that make complex formatting trivial</li>
+</ul>
+<h3 id="ruff-by-astral"><a href="https://docs.astral.sh/ruff/">Ruff</a> by Astral</h3>
+<p><strong>Why Ruff</strong>: Lightning-fast Python linter and formatter</p>
+<p>Astral's Ruff brings Rust-level performance to Python linting. It's fast enough to run on every file save without breaking your flow:</p>
+<ul>
+<li><strong>Extreme performance</strong> - 10-100x faster than existing Python linters</li>
+<li><strong>Comprehensive rules</strong> - Replaces Flake8, isort, pyupgrade, and more</li>
+<li><strong>Zero configuration</strong> - Sensible defaults that work out of the box</li>
+<li><strong>Fix capable</strong> - Automatically fixes hundreds of rule violations</li>
+<li><strong>Editor integration</strong> - Real-time feedback in VS Code, PyCharm, and others</li>
+</ul>
+<h2 id="infrastructure-components">Infrastructure &amp; Components</h2>
+<h3 id="apscheduler-by-alex-gronholm"><a href="https://apscheduler.readthedocs.io/">APScheduler</a> by Alex Grönholm</h3>
+<p><strong>Why APScheduler</strong>: Advanced Python scheduler for background tasks</p>
+<p>The most mature and feature-rich Python scheduler, providing enterprise-grade job scheduling:</p>
+<ul>
+<li><strong>Multiple triggers</strong> - Cron, interval, date-based, and custom triggers</li>
+<li><strong>Persistent storage</strong> - Database, Redis, or memory-based job stores</li>
+<li><strong>Fault tolerance</strong> - Job persistence, retries, and graceful shutdown</li>
+<li><strong>Async support</strong> - Native asyncio integration for non-blocking operations</li>
+<li><strong>Monitoring</strong> - Job status tracking and execution history</li>
+</ul>
+<h3 id="pydantic-by-samuel-colvin"><a href="https://docs.pydantic.dev/">Pydantic</a> by Samuel Colvin</h3>
+<p><strong>Why Pydantic</strong>: Data validation using Python type annotations</p>
+<p>Samuel Colvin created the definitive solution for Python data validation. Pydantic provides:</p>
+<ul>
+<li><strong>Runtime validation</strong> - Catch data issues immediately at entry points</li>
+<li><strong>Type safety</strong> - Convert and validate data using Python type hints</li>
+<li><strong>JSON serialization</strong> - Automatic conversion to/from JSON for APIs</li>
+<li><strong>FastAPI integration</strong> - Native support for request/response validation</li>
+<li><strong>Performance</strong> - Rust-powered validation for high-throughput applications</li>
+</ul>
+<h3 id="structlog-by-hynek-schlawack"><a href="https://www.structlog.org/">Structlog</a> by Hynek Schlawack</h3>
+<p><strong>Why Structlog</strong>: Structured logging for production applications</p>
+<p>Hynek Schlawack's structlog transforms logging from an afterthought into a powerful observability tool:</p>
+<ul>
+<li><strong>Structured data</strong> - JSON-based logs perfect for modern log aggregation</li>
+<li><strong>Context preservation</strong> - Automatic request ID and user context tracking</li>
+<li><strong>Performance</strong> - Lazy evaluation and efficient serialization</li>
+<li><strong>Flexibility</strong> - Works with standard logging while adding structure</li>
+<li><strong>Production ready</strong> - Used by major Python applications in production</li>
+</ul>
+<h3 id="cookiecutter-by-audrey-feldroy"><a href="https://cookiecutter.readthedocs.io/">Cookiecutter</a> by Audrey Feldroy</h3>
+<p><strong>Why Cookiecutter</strong>: Project template engine</p>
+<p>Audrey Feldroy created the gold standard for project scaffolding. Cookiecutter enables:</p>
+<ul>
+<li><strong>Template-driven generation</strong> - Smart project creation from reusable templates</li>
+<li><strong>Cross-platform</strong> - Works consistently across operating systems</li>
+<li><strong>JSON configuration</strong> - Simple variable substitution and conditional logic</li>
+<li><strong>Post-generation hooks</strong> - Custom processing after template rendering</li>
+<li><strong>Community ecosystem</strong> - Thousands of existing templates for common patterns</li>
+</ul>
+<h3 id="psutil-by-giampaolo-rodola"><a href="https://psutil.readthedocs.io/">psutil</a> by Giampaolo Rodolà</h3>
+<p><strong>Why psutil</strong>: Cross-platform system monitoring</p>
+<p>Giampaolo Rodolà's psutil provides the foundation for system monitoring across platforms:</p>
+<ul>
+<li><strong>Universal API</strong> - Same interface for Windows, macOS, Linux, and BSD</li>
+<li><strong>Comprehensive metrics</strong> - CPU, memory, disk, network, and process information</li>
+<li><strong>Real-time data</strong> - Live system statistics for monitoring dashboards</li>
+<li><strong>Lightweight</strong> - Minimal overhead for continuous monitoring</li>
+<li><strong>Battle tested</strong> - Used by system administrators and monitoring tools worldwide</li>
+</ul>
+<h2 id="integration-philosophy">Integration Philosophy</h2>
+<p>Each tool was selected not just for its individual excellence, but for how well it composes with others:</p>
+<p><strong>Async Ecosystem</strong>: FastAPI's async patterns work seamlessly with APScheduler's background tasks and Flet's reactive UI updates.</p>
+<p><strong>Type Safety Chain</strong>: Pydantic's validation integrates naturally across FastAPI APIs, Typer CLI interfaces, and application configuration.</p>
+<p><strong>Developer Experience</strong>: Typer's CLI design philosophy aligns perfectly with Rich's terminal formatting, while UV's speed keeps the development flow uninterrupted.</p>
+<p><strong>Production Ready</strong>: Structlog's structured logging works beautifully with FastAPI's request tracking and APScheduler's job monitoring.</p>
+<h2 id="the-curation-promise">The Curation Promise</h2>
+<p><strong>We curate, we don't compete.</strong> Aegis Stack's value lies in thoughtful integration of exceptional tools, not in rebuilding what others have perfected.</p>
+<p>Each tool represents years of development, community feedback, and real-world testing. By building on these foundations, Aegis Stack can focus on what matters: creating a cohesive, productive development experience that lets you build amazing applications.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.50899def.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10.6.0/dist/mermaid.min.js"></script>
+      
+        <script src="../javascripts/mermaid-config.js"></script>
+      
+    
+  </body>
+</html>

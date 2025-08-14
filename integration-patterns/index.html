@@ -12,13 +12,13 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/guides/lifecycle.html">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/integration-patterns/">
       
       
-        <link rel="prev" href="../components/frontend.html">
+        <link rel="prev" href="../cli-reference/">
       
       
-        <link rel="next" href="services.html">
+        <link rel="next" href="../technology/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -26,7 +26,7 @@
     
     
       
-        <title>Application Lifecycle - Aegis Stack</title>
+        <title>Integration Patterns - Aegis Stack</title>
       
     
     
@@ -54,6 +54,8 @@
     
       <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
     <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -80,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#application-lifecycle" class="md-skip">
+        <a href="#integration-patterns-reference" class="md-skip">
           Skip to content
         </a>
       
@@ -94,7 +96,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../index.html" title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -114,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Application Lifecycle
+              Integration Patterns
             
           </span>
         </div>
@@ -215,7 +217,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../index.html" class="md-tabs__link">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -234,7 +236,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../philosophy.html" class="md-tabs__link">
+      <a href="../philosophy/" class="md-tabs__link">
         
   
   
@@ -255,7 +257,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../components/index.html" class="md-tabs__link">
+        <a href="../components/" class="md-tabs__link">
           
   
   
@@ -277,11 +279,11 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="lifecycle.html" class="md-tabs__link">
+        <a href="../cli-reference/" class="md-tabs__link">
           
   
   
-  Guides
+  Reference
 
         </a>
       </li>
@@ -311,7 +313,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../index.html" title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -329,7 +331,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../index.html" class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -351,7 +353,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../philosophy.html" class="md-nav__link">
+      <a href="../philosophy/" class="md-nav__link">
         
   
   
@@ -414,7 +416,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/index.html" class="md-nav__link">
+      <a href="../components/" class="md-nav__link">
         
   
   
@@ -437,12 +439,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/webserver.html" class="md-nav__link">
+      <a href="../components/webserver/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Web Server
+    Backend
     
   </span>
   
@@ -460,12 +462,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/frontend.html" class="md-nav__link">
+      <a href="../components/frontend/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     Frontend
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/scheduler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Scheduler
     
   </span>
   
@@ -514,7 +539,7 @@
   
   
   <span class="md-ellipsis">
-    Guides
+    Reference
     
   </span>
   
@@ -525,9 +550,32 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
-            Guides
+            Reference
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -550,7 +598,7 @@
   
   
   <span class="md-ellipsis">
-    Application Lifecycle
+    Integration Patterns
     
   </span>
   
@@ -558,12 +606,12 @@
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <a href="lifecycle.html" class="md-nav__link md-nav__link--active">
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
   <span class="md-ellipsis">
-    Application Lifecycle
+    Integration Patterns
     
   </span>
   
@@ -586,27 +634,72 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-lifecycle-registry" class="md-nav__link">
+  <a href="#backend-integration-patterns" class="md-nav__link">
     <span class="md-ellipsis">
-      The Lifecycle Registry
+      Backend Integration Patterns
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#registering-a-new-task" class="md-nav__link">
+  <a href="#service-integration-patterns" class="md-nav__link">
     <span class="md-ellipsis">
-      Registering a New Task
+      Service Integration Patterns
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
+  <a href="#component-communication" class="md-nav__link">
     <span class="md-ellipsis">
-      How it Works
+      Component Communication
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-validation-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Validation Boundaries
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scheduler-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scheduler Integration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Access
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Boundaries
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      Key Principles
     </span>
   </a>
   
@@ -628,12 +721,12 @@
   
   
     <li class="md-nav__item">
-      <a href="services.html" class="md-nav__link">
+      <a href="../technology/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Services & Discovery
+    Technology Stack
     
   </span>
   
@@ -678,27 +771,72 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-lifecycle-registry" class="md-nav__link">
+  <a href="#backend-integration-patterns" class="md-nav__link">
     <span class="md-ellipsis">
-      The Lifecycle Registry
+      Backend Integration Patterns
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#registering-a-new-task" class="md-nav__link">
+  <a href="#service-integration-patterns" class="md-nav__link">
     <span class="md-ellipsis">
-      Registering a New Task
+      Service Integration Patterns
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
+  <a href="#component-communication" class="md-nav__link">
     <span class="md-ellipsis">
-      How it Works
+      Component Communication
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-validation-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Validation Boundaries
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scheduler-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scheduler Integration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Access
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container Boundaries
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      Key Principles
     </span>
   </a>
   
@@ -720,42 +858,130 @@
 
 
 
-<h1 id="application-lifecycle">Application Lifecycle</h1>
-<p>Aegis Stack provides a robust, composable system for managing application startup and shutdown events. This allows services to initialize and release resources cleanly, ensuring a stable and predictable application environment.</p>
-<p>The lifecycle is managed by a single entrypoint: the <code>lifespan</code> context manager in <code>app/integrations/main.py</code>.</p>
-<h2 id="the-lifecycle-registry">The Lifecycle Registry</h2>
-<p>Instead of hardcoding logic into the <code>lifespan</code> manager, Aegis Stack uses a dynamic registry pattern. This allows any service to "hook into" the application lifecycle without modifying the core integration code.</p>
-<p>The registry consists of two lists located in <code>app/core/lifecycle.py</code>:</p>
+<h1 id="integration-patterns-reference">Integration Patterns Reference</h1>
+<p>Quick reference for how different parts of Aegis Stack integrate with each other.</p>
+<h2 id="backend-integration-patterns">Backend Integration Patterns</h2>
+<p><strong>🔄 Auto-Discovered</strong>: Drop files, no registration required</p>
 <ul>
-<li><code>STARTUP_TASKS</code></li>
-<li><code>SHUTDOWN_TASKS</code></li>
+<li><strong>Middleware</strong>: <code>app/components/backend/middleware/</code></li>
+<li><strong>Startup Hooks</strong>: <code>app/components/backend/startup/</code>  </li>
+<li><strong>Shutdown Hooks</strong>: <code>app/components/backend/shutdown/</code></li>
 </ul>
-<h2 id="registering-a-new-task">Registering a New Task</h2>
-<p>To add a startup or shutdown task, a service simply needs to define a function and append it to the appropriate list.</p>
-<p>For example, a hypothetical database service might do this:</p>
-<pre><code class="language-python"># app/services/database_service.py
-from app.core.lifecycle import STARTUP_TASKS, SHUTDOWN_TASKS
+<p><strong>📝 Manual Registration</strong>: Explicit imports for clarity</p>
+<ul>
+<li><strong>API Routes</strong>: Register in <code>app/components/backend/api/routing.py</code></li>
+<li><strong>Services</strong>: Import explicitly where needed</li>
+</ul>
+<h2 id="service-integration-patterns">Service Integration Patterns</h2>
+<p>Put your business logic in <code>app/services/</code> and import it explicitly where needed.</p>
+<p><strong>Services</strong> contain pure business logic functions. <strong>Components</strong> import and use them.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># app/services/report_service.py</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">generate_monthly_report</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Report</span><span class="p">:</span>
+    <span class="c1"># Your business logic here</span>
+    <span class="k">pass</span>
 
-async def connect_to_db():
-    print(&quot;Connecting to database...&quot;)
-    # ... connection logic ...
+<span class="c1"># app/components/backend/api/reports.py  </span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">app.services.report_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_monthly_report</span>
 
-async def close_db_connection():
-    print(&quot;Closing database connection...&quot;)
-    # ... disconnection logic ...
+<span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/reports&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">create_report</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">generate_monthly_report</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
 
-# Register the functions
-STARTUP_TASKS.append(connect_to_db)
-SHUTDOWN_TASKS.append(close_db_connection)
-</code></pre>
-<h2 id="how-it-works">How it Works</h2>
+<span class="c1"># app/components/scheduler/main.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">app.services.report_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_monthly_report</span>
+
+<span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span><span class="n">generate_monthly_report</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">[</span><span class="mi">123</span><span class="p">])</span>
+</code></pre></div>
+<p><strong>What Goes Where:</strong></p>
+<p><strong>Services</strong> (<code>app/services/</code>):</p>
+<ul>
+<li>Database interactions, external API calls, file processing</li>
+<li>Complex business logic and data transformations  </li>
+<li>Pure functions that can be unit tested</li>
+<li>Single files (<code>report_service.py</code>) or folders (<code>system/health.py</code>) for complex domains</li>
+</ul>
+<p><strong>Components</strong> (<code>app/components/</code>):</p>
+<ul>
+<li>API endpoints, scheduled jobs, UI handlers</li>
+<li>Import services explicitly - no magic auto-discovery</li>
+<li>Keep thin - handle requests, call services, return responses</li>
+</ul>
+<p><strong>Why explicit?</strong> Makes dependencies clear, prevents surprises, easier testing.</p>
+<h2 id="component-communication">Component Communication</h2>
+<p><strong>Backend ↔ Services</strong>: Direct imports
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.system</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_system_status</span>
+</code></pre></div></p>
+<p><strong>CLI ↔ Backend</strong>: HTTP API calls
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.system.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">HealthResponse</span>
+<span class="n">health_data</span> <span class="o">=</span> <span class="n">HealthResponse</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">api_response</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+</code></pre></div></p>
+<p><strong>Frontend ↔ Backend</strong>: Flet-FastAPI integration
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.system</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_system_status</span>
+<span class="c1"># Direct function calls within same process</span>
+</code></pre></div></p>
+<h2 id="data-validation-boundaries">Data Validation Boundaries</h2>
+<p><strong>Trust Zones</strong>: Validate at entry points, trust internally</p>
 <ol>
-<li>The application uses a <strong>Service Discovery</strong> mechanism to automatically import all modules within the <code>app/services</code> directory at startup.</li>
-<li>When a service module is imported, the code at its top level is executed. This is when the <code>STARTUP_TASKS.append(...)</code> calls happen.</li>
-<li>The <code>lifespan</code> manager then iterates through these populated lists, running all registered startup tasks.</li>
-<li>Upon shutdown, it iterates through the <code>SHUTDOWN_TASKS</code> in <strong>reverse order</strong> to ensure a clean teardown.</li>
+<li><strong>API Endpoints</strong>: Pydantic <code>response_model</code> validates outgoing data</li>
+<li><strong>CLI Commands</strong>: Pydantic models validate API responses  </li>
+<li><strong>Internal Code</strong>: Direct model attribute access (no <code>.get()</code> patterns)</li>
 </ol>
-<p>This pattern makes the system highly extensible. To add a new service with lifecycle hooks, you just drop a file into the <code>services</code> directory.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Entry point - validate hard</span>
+<span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/health&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">HealthResponse</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">health_check</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">HealthResponse</span><span class="p">:</span>
+    <span class="c1"># Internal code - trust the data</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_system_status</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">HealthResponse</span><span class="p">(</span><span class="n">healthy</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">overall_healthy</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+
+<span class="c1"># CLI - validate API response</span>
+<span class="n">health_data</span> <span class="o">=</span> <span class="n">HealthResponse</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+<span class="c1"># Then trust: health_data.healthy (not health_data.get(&quot;healthy&quot;))</span>
+</code></pre></div>
+<h2 id="scheduler-integration">Scheduler Integration</h2>
+<p><strong>Job Registration</strong>: Explicit in scheduler component</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># app/components/scheduler/main.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">app.services.reports</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_daily_report</span>
+
+<span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
+    <span class="n">generate_daily_report</span><span class="p">,</span>
+    <span class="n">trigger</span><span class="o">=</span><span class="s2">&quot;cron&quot;</span><span class="p">,</span> 
+    <span class="n">hour</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">minute</span><span class="o">=</span><span class="mi">0</span>
+<span class="p">)</span>
+</code></pre></div>
+<p><strong>Service Functions</strong>: Pure business logic
+<div class="highlight"><pre><span></span><code><span class="c1"># app/services/reports.py</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">generate_daily_report</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># Pure business logic, no scheduler dependencies</span>
+</code></pre></div></p>
+<h2 id="configuration-access">Configuration Access</h2>
+<p><strong>Global Settings</strong>: Available everywhere</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
+
+<span class="c1"># Use throughout application</span>
+<span class="n">database_url</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">DATABASE_URL</span>
+<span class="n">api_timeout</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">API_TIMEOUT</span>
+</code></pre></div>
+<p><strong>Constants vs Config</strong>:</p>
+<ul>
+<li><strong>Constants</strong> (<code>app.core.constants</code>): Immutable values (API paths, timeouts)</li>
+<li><strong>Config</strong> (<code>app.core.config</code>): Environment-dependent values (URLs, secrets)</li>
+</ul>
+<h2 id="container-boundaries">Container Boundaries</h2>
+<p>Each component manages its own concerns:</p>
+<ul>
+<li><strong>Backend Container</strong>: Runs FastAPI + Flet, manages backend hooks</li>
+<li><strong>Scheduler Container</strong>: Runs APScheduler, manages scheduled jobs</li>
+<li><strong>Shared</strong>: Services, core utilities, configuration</li>
+</ul>
+<p><strong>No Cross-Container Hooks</strong>: Backend hooks don't affect scheduler, and vice versa.</p>
+<h2 id="key-principles">Key Principles</h2>
+<ol>
+<li><strong>Auto-discovery for infrastructure</strong> (hooks) → convenience</li>
+<li><strong>Explicit imports for business logic</strong> (services, routes) → clarity  </li>
+<li><strong>Validate at boundaries</strong> → security and reliability</li>
+<li><strong>Trust internally</strong> → clean, readable code</li>
+<li><strong>Container isolation</strong> → independent scaling</li>
+</ol>
 
 
 
@@ -814,6 +1040,10 @@ SHUTDOWN_TASKS.append(close_db_connection)
     
     
       <script src="../assets/javascripts/bundle.50899def.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10.6.0/dist/mermaid.min.js"></script>
+      
+        <script src="../javascripts/mermaid-config.js"></script>
       
     
   </body>

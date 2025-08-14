@@ -1,0 +1,102 @@
+# Aegis Stack
+
+Aegis Stack is a CLI-driven framework for creating production-ready Python applications with composable components.
+
+## Core Concept
+
+Build exactly what you need by selecting components during project creation:
+- **Core (always included)**: FastAPI backend + Flet frontend + CLI management
+- **Scheduler**: APScheduler for background tasks and cron jobs (available)
+- **Database**: PostgreSQL + SQLAlchemy + Alembic (coming soon)
+- **Cache**: Redis caching and sessions (coming soon)
+
+## Key Commands
+
+```bash
+# Install
+pip install aegis-stack
+
+# Create simple API
+aegis init my-api
+
+# Create with background processing
+aegis init task-processor --components scheduler
+
+# Create with all components (future)
+aegis init webapp --components scheduler,database,cache
+
+# Project status
+aegis status
+
+# CLI help
+aegis --help
+```
+
+## Architecture
+
+- **Async-first**: Built with asyncio for high-concurrency
+- **Component-based**: Select only needed capabilities
+- **Container-native**: Each component runs in separate Docker containers
+- **Explicit integration**: Services in `app/services/`, import where needed
+- **Scalable**: Start simple, scale to distributed systems
+
+## Generated Project Structure
+
+```
+project/
+├── app/
+│   ├── components/          # Capabilities (backend, frontend, scheduler)
+│   ├── services/           # Business logic (explicit imports)
+│   ├── core/              # Framework utilities
+│   └── integrations/      # App composition
+├── tests/                 # Test suite
+├── pyproject.toml         # Dependencies based on selected components
+├── Dockerfile             # Container definition
+└── docker-compose.yml     # Multi-service orchestration
+```
+
+## Development Workflow
+
+```bash
+cd my-project
+uv sync                    # Install dependencies
+cp .env.example .env       # Configure environment
+make run-local             # Start development server (Docker)
+make run-dev               # Start without Docker
+make test                  # Run test suite
+make check                 # Lint + typecheck + test
+```
+
+## Key Features
+
+- **Health dashboard**: Built-in Flet frontend with real-time monitoring
+- **Structured logging**: Production-ready with structlog
+- **Type safety**: Full mypy support
+- **Quality checks**: Ruff linting, mypy type checking, pytest
+- **Documentation**: Auto-generated with MkDocs
+
+## Philosophy
+
+Three pillars:
+1. **Speed**: CLI-driven generation, async-first, minimal setup
+2. **Simplicity**: Clear patterns, explicit dependencies, no magic
+3. **Scalability**: Container-native, component separation, evolution path
+
+## Technology Stack
+
+- **Backend**: FastAPI (async web framework)
+- **Frontend**: Flet (Python-native cross-platform UI)
+- **CLI**: Typer (command-line interface)
+- **Dependencies**: UV (fast Python package manager)
+- **Scheduling**: APScheduler (background tasks)
+- **Testing**: pytest with async support
+- **Linting**: Ruff (fast Python linter)
+- **Type checking**: mypy (static type checker)
+
+## Links
+
+- Documentation: https://github.com/lbedner/aegis-stack/docs
+- Repository: https://github.com/lbedner/aegis-stack
+- CLI Reference: docs/cli-reference.md
+- Component Guide: docs/components/index.md
+- Philosophy: docs/philosophy.md

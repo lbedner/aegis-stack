@@ -1,0 +1,62 @@
+# mkdocs.yml
+site_name: {{ cookiecutter.project_name }}
+site_description: {{ cookiecutter.project_description }}
+site_author: {{ cookiecutter.author_name }}
+site_url: https://{{ cookiecutter.github_username }}.github.io/{{ cookiecutter.project_slug }}/
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for light vs dark mode
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Development: development.md
+  - API Reference: api.md
+  - Health Monitoring: health.md{% if cookiecutter.include_scheduler == "yes" %}
+  - Components:
+    - Scheduler: components/scheduler.md{% endif %}
+
+# Plugins
+plugins:
+  - gen-files:
+      scripts:
+        - scripts/gen_docs.py
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_source: true
+
+# Markdown extensions
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+# Additional configuration for Mermaid dark mode support
+extra_javascript:
+  - https://unpkg.com/mermaid@10.6.0/dist/mermaid.min.js
+  - javascripts/mermaid-config.js
+
+extra_css:
+  - stylesheets/mermaid.css

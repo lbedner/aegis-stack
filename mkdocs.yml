@@ -29,11 +29,13 @@ nav:
   - Philosophy: philosophy.md
   - Components:
     - Overview: components/index.md
-    - Web Server: components/webserver.md
+    - Backend: components/webserver.md
     - Frontend: components/frontend.md
-  - Guides:
-    - Application Lifecycle: guides/lifecycle.md
-    - Services & Discovery: guides/services.md
+    - Scheduler: components/scheduler.md
+  - Reference:
+    - CLI Reference: cli-reference.md
+    - Integration Patterns: integration-patterns.md
+    - Technology Stack: technology.md
 
 # Plugins
 plugins:
@@ -47,3 +49,19 @@ plugins:
           options:
             show_root_heading: true
             show_source: true
+
+# Markdown extensions
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+# Additional configuration for Mermaid dark mode support
+extra_javascript:
+  - https://unpkg.com/mermaid@10.6.0/dist/mermaid.min.js
+  - javascripts/mermaid-config.js
+
+extra_css:
+  - stylesheets/mermaid.css

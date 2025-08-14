@@ -1,134 +1,95 @@
 # Frontend Component
 
-The **Frontend** component provides the user interface and handles user interactions for your Aegis Stack application.
+The **Frontend Component** provides the user interface for your Aegis Stack application using [Flet](https://flet.dev/) - a Python-native framework for building web, desktop, and mobile apps by Feodor Fitsner.
 
-## Current Implementation: Flet
+## Basic Usage
 
-Flet is the current frontend implementation, chosen for its Python-native approach and ability to create both web and desktop applications from the same codebase.
-
-### Why Flet?
-
-- **Pure Python**: Write UI logic in Python without JavaScript/HTML/CSS
-- **Multi-Platform**: Same code runs as web app, desktop app, or mobile app
-- **Fast Development**: No context switching between languages
-- **Modern UI**: Based on Flutter, providing smooth animations and responsive design
-- **Real-time**: Built-in WebSocket support for live updates
-
-### How It's Integrated
-
-Flet is set up in the `app/frontend/` directory and integrated with FastAPI:
+Create your UI components in the frontend module:
 
 ```python
-# app/frontend/main.py
+# app/components/frontend/main.py
 import flet as ft
+from app.services.data_service import get_dashboard_stats
 
 def create_frontend_app():
     """Create and return Flet session handler"""
     
     async def main(page: ft.Page):
-        page.title = "Aegis Stack"
+        page.title = "My Aegis App"
         page.theme_mode = ft.ThemeMode.LIGHT
         
-        # Your UI components here
+        # Data display
+        data_view = ft.Text("Loading...", size=16)
+        
+        async def load_data(e):
+            data = await get_dashboard_stats()
+            data_view.value = f"Records: {data['count']}"
+            page.update()
+        
+        # Simple dashboard
         page.add(
-            ft.Text("Welcome to Aegis Stack!", size=24),
-            ft.ElevatedButton("Click me!", on_click=handle_click)
+            ft.Text("Dashboard", size=24, weight=ft.FontWeight.BOLD),
+            ft.ElevatedButton("Load Data", on_click=load_data),
+            data_view
         )
     
     return main
-
-async def handle_click(e):
-    e.page.add(ft.Text("Button clicked!"))
-    e.page.update()
 ```
 
-### Integration with FastAPI
+## Integration with Backend
 
-Flet mounts seamlessly on FastAPI using the official integration:
+The frontend integrates with your FastAPI backend through the application composition:
 
 ```python
 # app/integrations/main.py
 import flet.fastapi as flet_fastapi
+from app.components.frontend.main import create_frontend_app
 
-# Create and mount the Flet app
+# Mount Flet app on FastAPI
 session_handler = create_frontend_app()
 flet_app = flet_fastapi.app(session_handler)
-app.mount("/", flet_app)
+app.mount("/dashboard", flet_app)
 ```
 
-### Key Features
+## Configuration
 
-#### Component-Based Architecture
-```python
-# Reusable components
-class CustomButton(ft.UserControl):
-    def __init__(self, text, on_click):
-        super().__init__()
-        self.text = text
-        self.on_click = on_click
-    
-    def build(self):
-        return ft.ElevatedButton(
-            text=self.text,
-            on_click=self.on_click
-        )
-```
+Flet runs through the backend container and is accessible at `http://localhost:8000/dashboard` during development.
 
-#### State Management
-```python
-# Reactive state updates
-async def update_counter(e):
-    counter.value += 1
-    counter.update()  # Automatically syncs with browser
-```
+## System Health Dashboard
 
-#### Responsive Design
-```python
-# Adaptive layouts
-ft.ResponsiveRow([
-    ft.Container(
-        content=ft.Text("Left panel"),
-        col={"sm": 6, "md": 4, "xl": 3}
-    ),
-    ft.Container(
-        content=ft.Text("Right panel"), 
-        col={"sm": 6, "md": 8, "xl": 9}
-    )
-])
-```
+The Frontend Component includes a production-ready **System Health Dashboard** that showcases Flet's capabilities:
 
-### Development Experience
+![System Health Dashboard](../images/dashboard.png)
 
-- **Hot Reload**: Changes appear instantly during development
-- **Python Debugging**: Use standard Python debuggers and tools
-- **Type Safety**: Full type hints and IDE support
-- **No Build Step**: No compilation or bundling required
+This dashboard demonstrates:
 
-### Integration with Aegis Stack
+- **Real-time data integration** with backend APIs
+- **Responsive component layout** with automatic updates
+- **Rich visual components** including status cards and progress indicators
+- **Cross-platform compatibility** - same code runs everywhere
 
-Flet integrates seamlessly with Aegis Stack's architecture:
+## Technology Integration
 
-- **Lifecycle Management**: Automatic startup and shutdown handling
-- **Structured Logging**: Integrated with Aegis Stack's logging system
-- **Async Compatibility**: Works with FastAPI's async request handling
+The Frontend Component leverages [Flet](https://flet.dev/), created by Feodor Fitsner - a revolutionary approach to Python UI development that offers:
 
+### Flet's Innovation
+- **Python-native** - Write UI code entirely in Python, no HTML/CSS/JavaScript required
+- **Cross-platform** - Same code runs as web app, desktop app, or mobile app
+- **Real-time updates** - Changes reflect immediately without page refreshes
+- **Rich controls** - Modern UI components with built-in theming and animations
+- **Flutter foundation** - Built on Google's Flutter, inheriting its performance and polish
 
-## Performance Characteristics
+### Integration Advantages
+- **[FastAPI integration](https://flet.dev/docs/guides/python/deploying-web-app/fastapi)** - Seamless mounting on existing FastAPI applications
+- **Async support** - Natural async/await patterns for backend API calls
+- **Type safety** - Full Python type checking for UI logic
+- **Shared codebase** - Frontend and backend share the same Python environment
 
-Flet provides:
+Flet was selected because it eliminates the traditional frontend/backend split, allowing Python developers to build complete applications without leaving their language expertise.
 
-- **Real-time Updates**: WebSocket-based communication with server
-- **Efficient Rendering**: Flutter's optimized rendering engine
-- **Small Bundle Size**: No heavy JavaScript frameworks
-- **Cross-Platform**: Same performance characteristics across platforms
+## Next Steps
 
-## Deployment Options
-
-Flet applications can be deployed as:
-
-- **Web App**: Served through FastAPI (current setup)
-- **Desktop App**: Standalone executable for Windows/Mac/Linux
-- **Mobile App**: Native iOS/Android applications
-- **PWA**: Progressive Web App with offline capabilities
-
-This makes Flet an ideal choice for Aegis Stack's Python-first, async-native philosophy.
+- **[Flet Documentation](https://flet.dev/docs/)** - Complete UI framework capabilities
+- **[Flet Controls Gallery](https://flet.dev/docs/controls/)** - Available UI components  
+- **[Component Overview](./index.md)** - Understanding Aegis Stack's component architecture
+- **[Philosophy Guide](../philosophy.md)** - Component architecture principles

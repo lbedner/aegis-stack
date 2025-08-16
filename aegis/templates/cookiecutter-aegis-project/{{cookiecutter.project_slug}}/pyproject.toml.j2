@@ -26,6 +26,12 @@ dependencies = [
 {%- if cookiecutter.include_scheduler == "yes" %}
     "apscheduler>=3.10.0",
 {%- endif %}
+{%- if cookiecutter.include_redis == "yes" %}
+    "redis>=5.0.0",
+{%- endif %}
+{%- if cookiecutter.include_worker == "yes" %}
+    "arq>=0.25.0",
+{%- endif %}
 {%- if cookiecutter.include_database == "yes" %}
     "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.29.0", 
@@ -95,6 +101,20 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "apscheduler.*"
+ignore_missing_imports = true
+{%- endif %}
+
+{%- if cookiecutter.include_redis == "yes" or cookiecutter.include_worker == "yes" %}
+
+[[tool.mypy.overrides]]
+module = "redis.*"
+ignore_missing_imports = true
+{%- endif %}
+
+{%- if cookiecutter.include_worker == "yes" %}
+
+[[tool.mypy.overrides]]
+module = "arq.*"
 ignore_missing_imports = true
 {%- endif %}
 

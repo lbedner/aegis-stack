@@ -56,3 +56,5 @@ class HTTP:
     # Headers
     CONTENT_TYPE_JSON = "application/json"
     USER_AGENT = "AegisStack-CLI/1.0"
+
+

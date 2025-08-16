@@ -10,14 +10,18 @@
   
   "_comment_components": "Component selection - these will be set by our CLI",
   "include_scheduler": "no",
+  "include_redis": "no",
+  "include_worker": "no",
   "include_database": "no", 
   "include_cache": "no",
   
   "_comment_internal": "Internal variables for template logic",
-  "_has_additional_components": "{% if cookiecutter.include_scheduler == 'yes' or cookiecutter.include_database == 'yes' or cookiecutter.include_cache == 'yes' %}yes{% else %}no{% endif %}",
+  "_has_additional_components": "{% if cookiecutter.include_scheduler == 'yes' or cookiecutter.include_redis == 'yes' or cookiecutter.include_worker == 'yes' or cookiecutter.include_database == 'yes' or cookiecutter.include_cache == 'yes' %}yes{% else %}no{% endif %}",
   
   "_comment_dependencies": "Component-specific dependencies",
   "_scheduler_deps": "{% if cookiecutter.include_scheduler == 'yes' %}apscheduler>=3.10.0{% endif %}",
+  "_redis_deps": "{% if cookiecutter.include_redis == 'yes' %}redis>=5.0.0{% endif %}",
+  "_worker_deps": "{% if cookiecutter.include_worker == 'yes' %}arq>=0.25.0{% endif %}",
   "_database_deps": "{% if cookiecutter.include_database == 'yes' %}sqlalchemy[asyncio]>=2.0.0,asyncpg>=0.29.0,alembic>=1.13.0{% endif %}",
   "_cache_deps": "{% if cookiecutter.include_cache == 'yes' %}redis[hiredis]>=5.0.0{% endif %}"
 }

@@ -138,12 +138,37 @@ docker-webserver: ## Run only webserver service in Docker
 docker-test: ## Run tests in Docker
 	@docker compose --profile test run --rm test_runner
 
+# Redis commands
+redis-start: ## Start Redis for arq development
+	@echo "🚀 Starting Redis for arq development..."
+	@docker compose --profile dev up -d redis
+
+redis-stop: ## Stop Redis
+	@echo "⏹️  Stopping Redis..."
+	@docker compose stop redis
+
+redis-cli: ## Connect to Redis CLI
+	@echo "🔧 Connecting to Redis CLI..."
+	@docker exec -it $$(docker compose --profile dev ps -q redis) redis-cli
+
+redis-logs: ## Show Redis logs
+	@echo "📋 Showing Redis logs..."
+	@docker compose logs -f redis
+
+redis-stats: ## Show Redis memory stats
+	@echo "📊 Redis stats..."
+	@docker exec -it $$(docker compose --profile dev ps -q redis) redis-cli info memory
+
+redis-reset: ## Reset Redis (clear all data)
+	@echo "🔄 Resetting Redis data..."
+	@docker exec -it $$(docker compose --profile dev ps -q redis) redis-cli flushall
+
 # Show help
 help: ## Show this help message
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $1, $2}'
 
-.PHONY: run-local run-dev{% if cookiecutter.include_scheduler == "yes" %} run-scheduler{% endif %} test health health-detailed health-json health-probe health-fallback lint fix format typecheck check install ensure-cli install-cli clean docs-serve docs-build docker-build docker-up docker-down docker-logs docker-webserver{% if cookiecutter.include_scheduler == "yes" %} docker-scheduler{% endif %} docker-test help
+.PHONY: run-local run-dev{% if cookiecutter.include_scheduler == "yes" %} run-scheduler{% endif %} test health health-detailed health-json health-probe health-fallback lint fix format typecheck check install ensure-cli install-cli clean docs-serve docs-build docker-build docker-up docker-down docker-logs docker-webserver{% if cookiecutter.include_scheduler == "yes" %} docker-scheduler{% endif %} docker-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset help
 
 # Default target
 .DEFAULT_GOAL := help

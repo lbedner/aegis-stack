@@ -1,21 +1,22 @@
 """
 Main CLI application entry point.
 
-Command-line interface for {{cookiecutter.project_name}} management tasks.
+Command-line interface for full-stack management tasks.
 """
 
 import typer
 
-from app.cli import health
+from app.cli import health, load_test
 
 app = typer.Typer(
-    name="{{cookiecutter.project_slug}}",
-    help="{{cookiecutter.project_name}} management CLI",
+    name="full-stack",
+    help="full-stack management CLI",
     no_args_is_help=True,
 )
 
 # Register sub-commands
 app.add_typer(health.app, name="health")
+app.add_typer(load_test.app, name="load-test")
 
 
 def main() -> None:

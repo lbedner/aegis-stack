@@ -1,0 +1,28 @@
+"""
+Worker component constants.
+
+This module contains constants specific to the worker component,
+keeping them separate from global application constants.
+"""
+
+
+class TaskNames:
+    """Worker task function names - must match actual function names in code."""
+    
+    # Orchestrator
+    LOAD_TEST_ORCHESTRATOR = "load_test_orchestrator"
+    
+    # Load test tasks
+    CPU_INTENSIVE_TASK = "cpu_intensive_task"
+    IO_SIMULATION_TASK = "io_simulation_task"
+    MEMORY_OPERATIONS_TASK = "memory_operations_task"
+    FAILURE_TESTING_TASK = "failure_testing_task"
+
+
+class LoadTestTypes:
+    """Load test type identifiers for task selection."""
+    
+    CPU_INTENSIVE = "cpu_intensive"
+    IO_SIMULATION = "io_simulation"
+    MEMORY_OPERATIONS = "memory_operations"
+    FAILURE_TESTING = "failure_testing"

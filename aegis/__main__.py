@@ -4,40 +4,92 @@ Aegis Stack CLI - Main entry point
 
 Usage:
     aegis init PROJECT_NAME
+    aegis components
     aegis --help
 """
 
-from enum import Enum
 from pathlib import Path
 
 import typer
 
-
-# Define available components as an Enum
-# This automatically creates choices for Typer and provides validation
-class ComponentType(str, Enum):
-    """Available component types for Aegis Stack."""
-
-    scheduler = "scheduler"
-    database = "database"
-    cache = "cache"
-
+from aegis import __version__
+from aegis.core.components import COMPONENTS, ComponentType, get_components_by_type
+from aegis.core.dependency_resolver import DependencyResolver
+from aegis.core.template_generator import TemplateGenerator
 
 # Create the main Typer application
-# help= sets the description shown in --help
 app = typer.Typer(
     name="aegis",
     help="Aegis Stack CLI - Component generation and project management",
-    add_completion=False,  # We'll add this later
+    add_completion=False,
 )
 
 
 @app.command()
 def version() -> None:
     """Show the Aegis Stack CLI version."""
-    from aegis import __version__
-
     typer.echo(f"Aegis Stack CLI v{__version__}")
+
+
+@app.command()
+def components() -> None:
+    """List available components and their dependencies."""
+
+    typer.echo("\n📦 CORE COMPONENTS")
+    typer.echo("=" * 40)
+    typer.echo("  backend      - FastAPI backend server (always included)")
+    typer.echo("  frontend     - Flet frontend interface (always included)")
+
+    typer.echo("\n🏗️  INFRASTRUCTURE COMPONENTS")
+    typer.echo("=" * 40)
+
+    infra_components = get_components_by_type(ComponentType.INFRASTRUCTURE)
+    for name, spec in infra_components.items():
+        typer.echo(f"  {name:12} - {spec.description}")
+        if spec.requires:
+            typer.echo(f"               Requires: {', '.join(spec.requires)}")
+        if spec.recommends:
+            typer.echo(f"               Recommends: {', '.join(spec.recommends)}")
+
+    typer.echo(
+        "\n💡 Use 'aegis init PROJECT_NAME --components redis,worker' "
+        "to select components"
+    )
+
+
+def validate_and_resolve_components(
+    ctx: typer.Context, param: typer.CallbackParam, value: str | None
+) -> list[str] | None:
+    """Validate and resolve component dependencies."""
+    if not value:
+        return None
+
+    # Parse comma-separated string
+    selected = [c.strip() for c in value.split(",") if c.strip()]
+
+    # Validate components exist
+    errors = DependencyResolver.validate_components(selected)
+    if errors:
+        for error in errors:
+            typer.echo(f"❌ {error}", err=True)
+        raise typer.Exit(1)
+
+    # Resolve dependencies
+    resolved = DependencyResolver.resolve_dependencies(selected)
+
+    # Show dependency resolution
+    auto_added = DependencyResolver.get_missing_dependencies(selected)
+    if auto_added:
+        typer.echo(f"📦 Auto-added dependencies: {', '.join(auto_added)}")
+
+    # Show recommendations
+    recommendations = DependencyResolver.get_recommendations(resolved)
+    if recommendations:
+        rec_list = ", ".join(recommendations)
+        typer.echo(f"💡 Recommended: {rec_list}")
+        # Note: Skip interactive recommendations for now to keep it simple
+
+    return resolved
 
 
 @app.command()
@@ -49,7 +101,8 @@ def init(
         None,
         "--components",
         "-c",
-        help="Comma-separated list of components (scheduler,database,cache)",
+        callback=validate_and_resolve_components,
+        help="Comma-separated list of components (redis,worker,scheduler)",
     ),
     interactive: bool = typer.Option(
         True,
@@ -76,8 +129,8 @@ def init(
 
     Examples:\n
         - aegis init my-app\n
-        - aegis init my-app --components scheduler,database\n
-        - aegis init my-app --components scheduler,database,cache --no-interactive\n
+        - aegis init my-app --components redis,worker\n
+        - aegis init my-app --components redis,worker,scheduler --no-interactive\n
     """
 
     typer.echo("🛡️  Aegis Stack Project Initialization")
@@ -100,121 +153,55 @@ def init(
         else:
             typer.echo(f"⚠️  Overwriting existing directory: {project_path}")
 
-    # Parse components from command line
-    selected_components = set()
-    if components:
-        component_list = [c.strip() for c in components.split(",")]
-        for comp in component_list:
-            try:
-                selected_components.add(ComponentType(comp))
-            except ValueError as e:
-                typer.echo(f"❌ Invalid component: {comp}", err=True)
-                typer.echo(f"   Error: {str(e)}", err=True)
-                valid_components = [c.value for c in ComponentType]
-                typer.echo(
-                    f"   Valid components: {', '.join(valid_components)}", err=True
-                )
-                raise typer.Exit(1)
-
     # Interactive component selection
+    selected_components = components if components else []
+
     if interactive and not components:
-        typer.echo("🧩 Select components for your project:")
-        typer.echo("   (Core components: backend, frontend are always included)")
-        typer.echo()
+        selected_components = interactive_component_selection()
 
-        # Show available components with descriptions
-        component_descriptions = {
-            ComponentType.scheduler: "APScheduler-based async task scheduling",
-            ComponentType.database: "SQLAlchemy + asyncpg for PostgreSQL",
-            ComponentType.cache: "Redis-based async caching",
-        }
-
-        for comp_type in ComponentType:
-            description = component_descriptions[comp_type]
-
-            # Ask user for each component
-            include = typer.confirm(
-                f"   Include {comp_type.value}? ({description})", default=False
+        # Resolve dependencies for interactively selected components
+        if selected_components:
+            selected_components = DependencyResolver.resolve_dependencies(
+                selected_components
             )
-            if include:
-                selected_components.add(comp_type)
+
+            auto_added = DependencyResolver.get_missing_dependencies(
+                [c for c in selected_components if c not in ["backend", "frontend"]]
+            )
+            if auto_added:
+                typer.echo(f"\n📦 Auto-added dependencies: {', '.join(auto_added)}")
+
+    # Create template generator
+    template_gen = TemplateGenerator(project_name, list(selected_components))
 
     # Show selected configuration
     typer.echo()
     typer.echo(f"📁 Project Name: {project_name}")
     typer.echo("🏗️  Project Structure:")
-    typer.echo("   ✅ Core (backend: FastAPI, frontend: Flet)")
+    typer.echo("   ✅ Core: backend, frontend")
 
-    if selected_components:
-        typer.echo("   ✅ Additional Components:")
-        for comp in sorted(selected_components, key=lambda x: x.value):
-            typer.echo(f"      • {comp.value}")
-    else:
-        typer.echo("   📦 No additional components selected")
-
-    # Show what will be created
-    typer.echo()
-    typer.echo("📄 Files to be generated:")
-
-    # Always created (core files)
-    core_files = [
-        "pyproject.toml",
-        "README.md",
-        "Dockerfile",
-        "docker-compose.yml",
-        ".env.example",
-        "app/components/backend/",
-        "app/components/frontend/",
-        "app/core/",
-        "app/integrations/",
-        "tests/",
-        "docs/",
+    # Show infrastructure components
+    infra_components = [
+        name
+        for name in selected_components
+        if name in COMPONENTS and COMPONENTS[name].type == ComponentType.INFRASTRUCTURE
     ]
+    if infra_components:
+        typer.echo(f"   📦 Infrastructure: {', '.join(infra_components)}")
 
-    for file_path in core_files:
-        typer.echo(f"   • {file_path}")
+    # Show template files that will be generated
+    template_files = template_gen.get_template_files()
+    if template_files:
+        typer.echo("\n📄 Component Files:")
+        for file_path in template_files:
+            typer.echo(f"   • {file_path}")
 
-    # Component-specific files
-    if ComponentType.scheduler in selected_components:
-        typer.echo("   • app/components/scheduler.py")
-        typer.echo("   • tests/components/test_scheduler.py")
-
-    if ComponentType.database in selected_components:
-        typer.echo("   • app/services/database_service.py")
-        typer.echo("   • app/models/")
-        typer.echo("   • tests/test_database.py")
-        typer.echo("   • alembic/")
-
-    if ComponentType.cache in selected_components:
-        typer.echo("   • app/services/cache_service.py")
-        typer.echo("   • tests/test_cache.py")
-
-    # Show dependency information
-    typer.echo()
-    typer.echo("📦 Dependencies to be installed:")
-
-    # Core dependencies (always included)
-    core_deps = [
-        "fastapi",
-        "flet[all]",
-        "uvicorn",
-        "structlog",
-        "pydantic-settings",
-        "typer",
-    ]
-    for dep in core_deps:
-        typer.echo(f"   • {dep}")
-
-    # Component dependencies
-    if ComponentType.scheduler in selected_components:
-        typer.echo("   • apscheduler")
-
-    if ComponentType.database in selected_components:
-        for dep in ["sqlalchemy[asyncio]", "asyncpg", "alembic"]:
+    # Show dependency information using template generator
+    deps = template_gen._get_pyproject_deps()
+    if deps:
+        typer.echo("\n📦 Dependencies to be installed:")
+        for dep in deps:
             typer.echo(f"   • {dep}")
-
-    if ComponentType.cache in selected_components:
-        typer.echo("   • redis[hiredis]")
 
     # Confirm before proceeding
     typer.echo()
@@ -234,24 +221,8 @@ def init(
             Path(__file__).parent / "templates" / "cookiecutter-aegis-project"
         )
 
-        # Prepare cookiecutter context
-        # Extract just the project name from the path
-        clean_project_name = Path(project_name).name
-        extra_context = {
-            "project_name": clean_project_name.replace("-", " ")
-            .replace("_", " ")
-            .title(),
-            "project_slug": clean_project_name,
-            "include_scheduler": "yes"
-            if ComponentType.scheduler in selected_components
-            else "no",
-            "include_database": "yes"
-            if ComponentType.database in selected_components
-            else "no",
-            "include_cache": "yes"
-            if ComponentType.cache in selected_components
-            else "no",
-        }
+        # Use template generator for context
+        extra_context = template_gen.get_template_context()
 
         # Generate project with cookiecutter
         cookiecutter(
@@ -278,6 +249,33 @@ def init(
     except Exception as e:
         typer.echo(f"❌ Error creating project: {e}", err=True)
         raise typer.Exit(1)
+
+
+def interactive_component_selection() -> list[str]:
+    """Interactive component selection with dependency awareness."""
+
+    typer.echo("🎯 Component Selection")
+    typer.echo("=" * 40)
+    typer.echo("✅ Core components (backend + frontend) included automatically\n")
+
+    selected = []
+
+    # Infrastructure components
+    typer.echo("🏗️  Infrastructure Components:")
+    if typer.confirm("  Add Redis (caching, message queues)?"):
+        selected.append("redis")
+
+    if "redis" in selected:
+        if typer.confirm("  Add worker infrastructure (background tasks)?"):
+            selected.append("worker")
+    else:
+        if typer.confirm("  Add worker infrastructure? (will auto-add Redis)"):
+            selected.extend(["redis", "worker"])
+
+    if typer.confirm("  Add scheduler infrastructure (scheduled tasks)?"):
+        selected.append("scheduler")
+
+    return selected
 
 
 # This is what runs when you do: aegis

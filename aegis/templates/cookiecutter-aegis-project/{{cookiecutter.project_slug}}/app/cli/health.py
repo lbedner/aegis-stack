@@ -7,11 +7,11 @@ Command-line interface for system health checking and monitoring via API endpoin
 import asyncio
 import json
 import sys
+from typing import Any
 
 import httpx
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 import typer
 
 from app.core.config import settings
@@ -58,27 +58,26 @@ async def get_health_data(
             if e.response.status_code == 503:
                 try:
                     error_data = e.response.json()
-                    if (
-                        "detail" in error_data
-                        and isinstance(error_data["detail"], dict)
+                    if "detail" in error_data and isinstance(
+                        error_data["detail"], dict
                     ):
                         detail = error_data["detail"]
                         message = detail.get("message", "System is unhealthy")
                         unhealthy_components = detail.get("unhealthy_components", [])
                         health_percentage = detail.get("health_percentage", 0)
-                        
+
                         error_msg = f"{message}"
                         if unhealthy_components:
                             components_str = ", ".join(unhealthy_components)
                             error_msg += f" (Unhealthy: {components_str})"
                         if health_percentage is not None:
                             error_msg += f" - Health: {health_percentage:.1f}%"
-                        
+
                         raise RuntimeError(error_msg) from None
                 except (ValueError, KeyError, TypeError):
                     # Fall back to generic error message if JSON parsing fails
                     pass
-            
+
             raise RuntimeError(
                 f"API returned error {e.response.status_code}: {e.response.text}"
             ) from None
@@ -146,6 +145,45 @@ def health_probe() -> None:
         sys.exit(1)
 
 
+def _display_sub_components(
+    sub_components: dict[str, Any], detailed: bool, level: int
+) -> None:
+    """Recursively display sub-components with appropriate tree indentation."""
+    sub_items = list(sub_components.items())
+
+    # Calculate tree indentation based on level
+    base_indent = "   " * level
+
+    for i, (sub_name, sub_component) in enumerate(sub_items):
+        sub_healthy = sub_component.healthy
+        sub_icon = "✅" if sub_healthy else "❌"
+        sub_color = "green" if sub_healthy else "red"
+
+        # Tree connector: ├── for middle items, └── for last item
+        is_last = i == len(sub_items) - 1
+        tree_connector = f"{base_indent}└── " if is_last else f"{base_indent}├── "
+
+        sub_line = f"{tree_connector}[{sub_color}]{sub_icon} {sub_name}[/{sub_color}]"
+        if detailed and sub_component.response_time_ms is not None:
+            sub_line += f" ([dim]{sub_component.response_time_ms:.1f}ms[/dim])"
+        sub_line += f"    {sub_component.message}"
+        console.print(sub_line)
+
+        # Recursively display sub-sub-components
+        if hasattr(sub_component, "sub_components") and sub_component.sub_components:
+            _display_sub_components(sub_component.sub_components, detailed, level + 1)
+
+        # Show metadata for sub-components if detailed and available
+        elif detailed and sub_component.metadata:
+            metadata_str = json.dumps(sub_component.metadata, separators=(",", ":"))
+            max_length = CLI.MAX_METADATA_DISPLAY_LENGTH
+            if len(metadata_str) > max_length:
+                metadata_str = metadata_str[: max_length - 3] + "..."
+            # Adjust tree indent based on whether this is the last item
+            tree_indent = f"{base_indent}    " if is_last else f"{base_indent}│   "
+            console.print(f"{tree_indent}[dim]({metadata_str})[/dim]")
+
+
 def _display_health_status(
     health_data: HealthResponse | DetailedHealthResponse, detailed: bool = False
 ) -> None:
@@ -156,12 +194,52 @@ def _display_health_status(
     components = health_data.components
     timestamp = health_data.timestamp
 
-    # Calculate health percentage
-    if components:
-        healthy_count = sum(1 for comp in components.values() if comp.healthy)
-        health_percentage = (healthy_count / len(components)) * 100
+    # Use health percentage from API response if available (DetailedHealthResponse)
+    # Otherwise calculate from top-level components (HealthResponse)
+    if hasattr(health_data, "health_percentage"):
+        health_percentage = health_data.health_percentage
+        # For detailed response, use the component counts from API
+        if hasattr(health_data, "healthy_components"):
+            if hasattr(health_data, 'unhealthy_components'):
+                healthy_count = len(health_data.healthy_components)
+                total_count = len(health_data.healthy_components) + len(
+                    health_data.unhealthy_components
+                )
+            else:
+                # HealthResponse doesn't have detailed component lists
+                healthy_count = 1 if health_data.healthy else 0
+                total_count = 1
+        else:
+            # Fallback for detailed response without component lists
+            healthy_count = sum(1 for comp in components.values() if comp.healthy)
+            total_count = len(components)
     else:
-        health_percentage = 0.0
+        # Basic health response - count main sub-components for better overview
+        if components and "aegis" in components:
+            aegis_component = components["aegis"]
+            if (
+                hasattr(aegis_component, "sub_components")
+                and aegis_component.sub_components
+            ):
+                healthy_count = sum(
+                    1
+                    for comp in aegis_component.sub_components.values()
+                    if comp.healthy
+                )
+                total_count = len(aegis_component.sub_components)
+                health_percentage = (
+                    (healthy_count / total_count) * 100 if total_count > 0 else 100.0
+                )
+            else:
+                # Fallback to aegis component only
+                healthy_count = 1 if aegis_component.healthy else 0
+                total_count = 1
+                health_percentage = 100.0 if aegis_component.healthy else 0.0
+        else:
+            # No components or no aegis component
+            healthy_count = 0
+            total_count = 0
+            health_percentage = 0.0
 
     overall_color = "green" if overall_healthy else "red"
     overall_icon = "✅" if overall_healthy else "❌"
@@ -172,14 +250,13 @@ def _display_health_status(
     else:
         title += " Unhealthy"
 
-    healthy_components = [name for name, comp in components.items() if comp.healthy]
     panel_content = [
         f"Overall Status: [bold {overall_color}]"
         + ("Healthy" if overall_healthy else "Unhealthy")
         + f"[/bold {overall_color}]",
         f"Health Percentage: [bold]"
         f"{health_percentage:.{CLI.HEALTH_PERCENTAGE_DECIMALS}f}%[/bold]",
-        f"Components: {len(healthy_components)}/" + f"{len(components)} healthy",
+        f"Components: {healthy_count}/" + f"{total_count} healthy",
         f"Timestamp: {timestamp}",
     ]
 
@@ -189,7 +266,7 @@ def _display_health_status(
 
     # Component Tree Display
     console.print("\n[bold magenta]Component Tree:[/bold magenta]")
-    
+
     # Sort components: unhealthy first, then by name
     sorted_components = sorted(components.items(), key=lambda x: (x[1].healthy, x[0]))
 
@@ -197,51 +274,24 @@ def _display_health_status(
         comp_healthy = component.healthy
         status_icon = "✅" if comp_healthy else "❌"
         status_color = "green" if comp_healthy else "red"
-        
+
         # Display main component
         component_line = f"[{status_color}]{status_icon} {name}[/{status_color}]"
         if detailed and component.response_time_ms is not None:
             component_line += f" ([dim]{component.response_time_ms:.1f}ms[/dim])"
         component_line += f"    {component.message}"
         console.print(component_line)
-        
-        # Display sub-components with tree structure
-        if hasattr(component, 'sub_components') and component.sub_components:
-            sub_items = list(component.sub_components.items())
-            for i, (sub_name, sub_component) in enumerate(sub_items):
-                sub_healthy = sub_component.healthy
-                sub_icon = "✅" if sub_healthy else "❌"
-                sub_color = "green" if sub_healthy else "red"
-                
-                # Tree connector: ├── for middle items, └── for last item
-                is_last = i == len(sub_items) - 1
-                tree_connector = "   └── " if is_last else "   ├── "
-                
-                sub_line = (
-                    f"{tree_connector}[{sub_color}]{sub_icon} {sub_name}[/{sub_color}]"
-                )
-                if detailed and sub_component.response_time_ms is not None:
-                    sub_line += f" ([dim]{sub_component.response_time_ms:.1f}ms[/dim])"
-                sub_line += f"    {sub_component.message}"
-                console.print(sub_line)
-                
-                # Show metadata for sub-components if detailed and available
-                if detailed and sub_component.metadata:
-                    metadata_str = json.dumps(
-                        sub_component.metadata, separators=(",", ":")
-                    )
-                    max_length = CLI.MAX_METADATA_DISPLAY_LENGTH
-                    if len(metadata_str) > max_length:
-                        metadata_str = metadata_str[:max_length - 3] + "..."
-                    tree_indent = "       " if is_last else "   │   "
-                    console.print(f"{tree_indent}[dim]({metadata_str})[/dim]")
-        
+
+        # Display sub-components with tree structure (recursive)
+        if hasattr(component, "sub_components") and component.sub_components:
+            _display_sub_components(component.sub_components, detailed, level=1)
+
         # Show metadata for main components if detailed and available
         elif detailed and component.metadata:
             metadata_str = json.dumps(component.metadata, separators=(",", ":"))
             max_length = CLI.MAX_METADATA_DISPLAY_LENGTH
             if len(metadata_str) > max_length:
-                metadata_str = metadata_str[:max_length - 3] + "..."
+                metadata_str = metadata_str[: max_length - 3] + "..."
             console.print(f"    [dim]({metadata_str})[/dim]")
 
     # System information (only in detailed mode)

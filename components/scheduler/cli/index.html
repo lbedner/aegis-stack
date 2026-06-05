@@ -1370,6 +1370,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tasks-trigger" class="md-nav__link">
+    <span class="md-ellipsis">
+      tasks trigger
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tasks-stats" class="md-nav__link">
     <span class="md-ellipsis">
       tasks stats
@@ -1382,15 +1391,6 @@
   <a href="#tasks-history" class="md-nav__link">
     <span class="md-ellipsis">
       tasks history
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tasks-trigger" class="md-nav__link">
-    <span class="md-ellipsis">
-      tasks trigger
     </span>
   </a>
   
@@ -3404,6 +3404,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tasks-trigger" class="md-nav__link">
+    <span class="md-ellipsis">
+      tasks trigger
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tasks-stats" class="md-nav__link">
     <span class="md-ellipsis">
       tasks stats
@@ -3416,15 +3425,6 @@
   <a href="#tasks-history" class="md-nav__link">
     <span class="md-ellipsis">
       tasks history
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tasks-trigger" class="md-nav__link">
-    <span class="md-ellipsis">
-      tasks trigger
     </span>
   </a>
   
@@ -3540,16 +3540,16 @@ Memory-based scheduling (default) does not support CLI operations.</p>
 </div>
 <p>The scheduler provides a <code>tasks</code> CLI for managing scheduled jobs when persistence is enabled.</p>
 <h2 id="quick-start">Quick Start</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Check if CLI is available</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>my-app<span class="w"> </span>--help
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># List all scheduled jobs</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>list
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># List all scheduled jobs</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>list
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Run a job right now</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>database_backup
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># View scheduler statistics</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>stats
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># See a job&#39;s execution stats</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>stats<span class="w"> </span>database_backup
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># View execution history</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># See recent execution history</span>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>my-app<span class="w"> </span>tasks<span class="w"> </span><span class="nb">history</span>
 </span></code></pre></div>
 <h2 id="commands">Commands</h2>
@@ -3557,129 +3557,111 @@ Memory-based scheduling (default) does not support CLI operations.</p>
 <p>List all scheduled jobs with their status and next run times.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>list
 </span></code></pre></div>
-<p><strong>Example Output:</strong>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Scheduled Jobs (1 total)
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>┌─────────────────────┬───────────────────────┬─────────┬──────────────────────────────┐
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>│ Job ID              │ Name                  │ Status  │ Next Run                     │
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>├─────────────────────┼───────────────────────┼─────────┼──────────────────────────────┤
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>│ daily_health_check  │ Daily Health Check    │ active  │ 2024-09-07 09:00:00          │
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>└─────────────────────┴───────────────────────┴─────────┴──────────────────────────────┘
-</span></code></pre></div></p>
 <p>Shows:</p>
 <ul>
 <li><strong>Job ID</strong> - Unique identifier for the scheduled task</li>
 <li><strong>Name</strong> - Human-readable job name</li>
-<li><strong>Status</strong> - <code>active</code> (scheduled) or <code>paused</code></li>
+<li><strong>Status</strong> - <code>Active</code> (scheduled) or <code>Paused</code></li>
 <li><strong>Next Run</strong> - When the job will execute next</li>
+<li><strong>Trigger</strong> - The trigger type (<code>cron</code>, <code>interval</code>, <code>date</code>)</li>
 </ul>
-<h3 id="tasks-stats"><code>tasks stats</code></h3>
-<p>View overall scheduler statistics and metrics.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>stats
-</span></code></pre></div>
-<p><strong>Example Output:</strong>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Overall Scheduler Statistics
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>╭───────────────────────────────────────────────────────── Scheduler Statistics ──────────────────────────────────────────────────────────╮
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│ Scheduler Overview                                                                                                                      │
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│                                                                                                                                         │
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│ Total Jobs: 1                                                                                                                           │
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│ Active Jobs: 1                                                                                                                          │
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│ Paused Jobs: 0                                                                                                                          │
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│                                                                                                                                         │
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│ Total Executions: 0                                                                                                                     │
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│ Successful: 0                                                                                                                           │
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│ Failed: 0                                                                                                                               │
-</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│                                                                                                                                         │
-</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>│ Overall Success Rate: 0.0%                                                                                                              │
-</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>│ Avg Execution Time: 0.0ms                                                                                                               │
-</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>│                                                                                                                                         │
-</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>│ Scheduler Uptime: Unknown                                                                                                               │
-</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>│ Last Activity: No recent activity                                                                                                       │
-</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-</span></code></pre></div></p>
-<p><strong>Job-Specific Statistics:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>stats<span class="w"> </span>--job-id<span class="w"> </span>JOB_ID
-</span></code></pre></div></p>
-<p><strong>Example:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>stats<span class="w"> </span>--job-id<span class="w"> </span>daily_health_check
-</span></code></pre></div></p>
-<h3 id="tasks-history"><code>tasks history</code></h3>
-<p>View recent job execution history.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span><span class="nb">history</span><span class="w"> </span><span class="o">[</span>--limit<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--job-id<span class="w"> </span>JOB_ID<span class="o">]</span>
-</span></code></pre></div>
-<p><strong>Options:</strong></p>
-<ul>
-<li><code>--limit N</code> - Limit results to N most recent executions (default: 10)</li>
-<li><code>--job-id JOB_ID</code> - Filter to specific job only</li>
-</ul>
-<p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Last 10 executions across all jobs</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>my-app<span class="w"> </span>tasks<span class="w"> </span><span class="nb">history</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Last 20 executions  </span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>my-app<span class="w"> </span>tasks<span class="w"> </span><span class="nb">history</span><span class="w"> </span>--limit<span class="w"> </span><span class="m">20</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># History for specific job</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>my-app<span class="w"> </span>tasks<span class="w"> </span><span class="nb">history</span><span class="w"> </span>--job-id<span class="w"> </span>daily_health_check
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="c1"># Last 5 runs of specific job</span>
-</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>my-app<span class="w"> </span>tasks<span class="w"> </span><span class="nb">history</span><span class="w"> </span>--job-id<span class="w"> </span>cleanup_temp_files<span class="w"> </span>--limit<span class="w"> </span><span class="m">5</span>
-</span></code></pre></div></p>
 <h3 id="tasks-trigger"><code>tasks trigger</code></h3>
-<p>Trigger manual execution of a scheduled job.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>JOB_ID<span class="w"> </span><span class="o">[</span>--wait<span class="o">]</span><span class="w"> </span><span class="o">[</span>--timeout<span class="w"> </span>SECONDS<span class="o">]</span>
+<p>Run a scheduled job immediately, in the CLI process, and record the run to
+execution history (so it also shows up in the dashboard History tab).</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>JOB_ID<span class="w"> </span><span class="o">[</span>--force<span class="o">]</span>
+</span></code></pre></div>
+<p>The command waits for the job to finish and reports the outcome. By default it
+refuses to start if a previous run of the same job is still in progress; pass
+<code>--force</code> (<code>-f</code>) to run anyway.</p>
+<p><strong>Example:</strong>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>$<span class="w"> </span>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>database_backup
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>Running<span class="w"> </span>job:<span class="w"> </span>Daily<span class="w"> </span>Database<span class="w"> </span>Backup
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>Job<span class="w"> </span>completed<span class="w"> </span>successfully:<span class="w"> </span>Daily<span class="w"> </span>Database<span class="w"> </span>Backup
+</span></code></pre></div></p>
+<div class="admonition note">
+<p class="admonition-title">Runs in the calling environment</p>
+<p><code>tasks trigger</code> runs the job <strong>in the process you invoke it from</strong> (unlike
+the dashboard's Run Now, which runs it in the backend). Jobs that shell out
+to system tools (the <code>database_backup</code> job calls <code>pg_dump</code>, which must be
+at least the server's major version) therefore depend on your environment.
+Run such jobs where a matching client lives -- inside the container:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>scheduler<span class="w"> </span>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>database_backup
+</span></code></pre></div>
+<p>Running from a host with an older/missing client fails with a clear error
+rather than a misleading success.</p>
+</div>
+<p>A failing job records the failure (with traceback) to history and exits
+non-zero, so it composes with scripts and CI.</p>
+<h3 id="tasks-stats"><code>tasks stats</code></h3>
+<p>Show aggregate execution statistics for a single job.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>stats<span class="w"> </span>JOB_ID
+</span></code></pre></div>
+<p><strong>Example:</strong>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>$ my-app tasks stats database_backup
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>          Execution Stats: database_backup
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>┌──────────────────┬───────────────────────────────┐
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>│ Total runs       │ 3                             │
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>│ Succeeded        │ 2                             │
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>│ Failed           │ 1                             │
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>│ Success rate     │ 66.7%                         │
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>│ Average duration │ 142 ms                        │
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>│ Last run         │ success @ 2026-06-04 20:16:05 │
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>└──────────────────┴───────────────────────────────┘
+</span></code></pre></div></p>
+<p>Stats are computed from the retained execution history (up to ~100 runs per
+job). A job with no recorded runs prints a short notice instead.</p>
+<h3 id="tasks-history"><code>tasks history</code></h3>
+<p>Show recent job execution history, newest first.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>my-app<span class="w"> </span>tasks<span class="w"> </span><span class="nb">history</span><span class="w"> </span><span class="o">[</span>--job<span class="w"> </span>JOB_ID<span class="o">]</span><span class="w"> </span><span class="o">[</span>--limit<span class="w"> </span>N<span class="o">]</span>
 </span></code></pre></div>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--wait</code> - Wait for job completion before returning</li>
-<li><code>--timeout SECONDS</code> - Maximum wait time when using <code>--wait</code> (default: 30)</li>
+<li><code>--job</code>, <code>-j JOB_ID</code> - Only show history for this job</li>
+<li><code>--limit</code>, <code>-n N</code> - Maximum number of records to show (default: 20)</li>
 </ul>
-<p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Trigger job and return immediately</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>daily_health_check
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Trigger job and wait for completion</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>daily_health_check<span class="w"> </span>--wait
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Trigger with custom timeout</span>
-</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>cleanup_temp_files<span class="w"> </span>--wait<span class="w"> </span>--timeout<span class="w"> </span><span class="m">60</span>
+<p><strong>Example:</strong>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>$ my-app tasks history --job database_backup --limit 5
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>                          Execution History
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┓
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>┃ Started             ┃ Name                  ┃ Status  ┃   Duration ┃
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━┩
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>│ 2026-06-04 20:16:05 │ Daily Database Backup │ success │      90 ms │
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>└─────────────────────┴───────────────────────┴─────────┴────────────┘
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>Total executions: 3
 </span></code></pre></div></p>
-<div class="admonition warning">
-<p class="admonition-title">Implementation Status</p>
-<p>Manual job triggering is currently not implemented but is planned for future releases.
-The command will return an appropriate message indicating this limitation.</p>
-</div>
 <h2 id="cli-availability">CLI Availability</h2>
 <h3 id="checking-cli-status">Checking CLI Status</h3>
 <p>The tasks CLI is automatically available when your project includes both scheduler and database components:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Check available commands</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>my-app<span class="w"> </span>--help
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Check available commands</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>my-app<span class="w"> </span>--help
 </span></code></pre></div>
 <p><strong>Example Output:</strong>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a> Usage: my-app [OPTIONS] COMMAND [ARGS]...                                                                                                   
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a> full-stack management CLI                                                                                                                   
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>╭─ Options ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>│ --install-completion          Install completion for the current shell.                                                                   │
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>│ --show-completion             Show completion for the current shell, to copy it or customize the installation.                            │
-</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>│ --help                        Show this message and exit.                                                                                 │
-</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>╭─ Commands ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>│ health      System health monitoring commands                                                                                             │
-</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>│ load-test   Load testing commands for worker performance analysis                                                                         │
-</span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>│ tasks       Scheduled task management commands                                                                                            │
-</span><span id="__span-12-15"><a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a>╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a> Usage: my-app [OPTIONS] COMMAND [ARGS]...                                                                                                   
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a> full-stack management CLI                                                                                                                   
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>╭─ Options ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>│ --install-completion          Install completion for the current shell.                                                                   │
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>│ --show-completion             Show completion for the current shell, to copy it or customize the installation.                            │
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>│ --help                        Show this message and exit.                                                                                 │
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>╭─ Commands ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>│ health      System health monitoring commands                                                                                             │
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>│ load-test   Load testing commands for worker performance analysis                                                                         │
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>│ tasks       Scheduled task management commands                                                                                            │
+</span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 </span></code></pre></div></p>
 <p>The <code>tasks</code> command appears when your project includes both scheduler and database components.</p>
 <h3 id="troubleshooting-cli-issues">Troubleshooting CLI Issues</h3>
 <p><strong>CLI command not found:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Verify components are included</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>ls<span class="w"> </span>app/components/
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="c1"># Should show both &#39;scheduler&#39; and database-related files</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="c1"># Check project was created with database component</span>
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>grep<span class="w"> </span>-r<span class="w"> </span><span class="s2">&quot;include_database&quot;</span><span class="w"> </span>.<span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Database not included&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Verify components are included</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>ls<span class="w"> </span>app/components/
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="c1"># Should show both &#39;scheduler&#39; and database-related files</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="c1"># Check project was created with database component</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>grep<span class="w"> </span>-r<span class="w"> </span><span class="s2">&quot;include_database&quot;</span><span class="w"> </span>.<span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Database not included&quot;</span>
 </span></code></pre></div></p>
 <p><strong>"Persistence not available" errors:</strong></p>
 <ul>
@@ -3689,21 +3671,21 @@ The command will return an appropriate message indicating this limitation.</p>
 </ul>
 <h2 id="integration-with-development-workflow">Integration with Development Workflow</h2>
 <h3 id="development-commands">Development Commands</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Start all services (including database for CLI)</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>make<span class="w"> </span>serve
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Check scheduler health (includes CLI availability)</span>
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>make<span class="w"> </span>health-detailed
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># View scheduler logs while testing CLI</span>
-</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>make<span class="w"> </span>logs-scheduler
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Start all services (including database for CLI)</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>make<span class="w"> </span>serve
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Check scheduler health (includes CLI availability)</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>make<span class="w"> </span>health-detailed
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1"># View scheduler logs while testing CLI</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>make<span class="w"> </span>logs-scheduler
 </span></code></pre></div>
 <h3 id="production-usage">Production Usage</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># In production, ensure database persistence is configured</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DATABASE_URL</span><span class="o">=</span>sqlite:///data/app.db
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1"># CLI works the same way in production containers</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>my-app-container<span class="w"> </span>my-app<span class="w"> </span>tasks<span class="w"> </span>list
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># In production, ensure database persistence is configured</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DATABASE_URL</span><span class="o">=</span>sqlite:///data/app.db
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># CLI works the same way in production containers</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>my-app-container<span class="w"> </span>my-app<span class="w"> </span>tasks<span class="w"> </span>list
 </span></code></pre></div>
 <h2 id="see-also">See Also</h2>
 <ul>

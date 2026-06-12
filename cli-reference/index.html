@@ -3983,29 +3983,49 @@
 <li><code>--components, -c TEXT</code> - Comma-separated list of components</li>
 <li><code>--services, -s TEXT</code> - Comma-separated list of services</li>
 <li><code>--interactive / --no-interactive, -i / -ni</code> - Use interactive selection (default: interactive)</li>
+<li><code>--guided / --quick</code> - Interactive style: the full-screen guided setup (default) or the classic one-line prompts (<code>--quick</code>). Guided needs a real terminal of at least 60x20; anything else falls back to quick prompts automatically.</li>
 <li><code>--force, -f</code> - Overwrite existing directory if it exists</li>
 <li><code>--output-dir, -o PATH</code> - Directory to create the project in (default: current directory)</li>
 <li><code>--yes, -y</code> - Skip confirmation prompt</li>
 </ul>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Simple API project</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Simple API project (full-screen guided setup)</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-api
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Background processing with scheduler</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>aegis<span class="w"> </span>init<span class="w"> </span>task-processor<span class="w"> </span>--components<span class="w"> </span>scheduler
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Classic one-line prompts instead</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-api<span class="w"> </span>--quick
 </span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># User authentication system</span>
-</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>aegis<span class="w"> </span>init<span class="w"> </span>user-app<span class="w"> </span>--services<span class="w"> </span>auth<span class="w"> </span>--components<span class="w"> </span>database
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># Background processing with scheduler</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>aegis<span class="w"> </span>init<span class="w"> </span>task-processor<span class="w"> </span>--components<span class="w"> </span>scheduler
 </span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>
-</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="c1"># AI chatbot application</span>
-</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>aegis<span class="w"> </span>init<span class="w"> </span>chatbot<span class="w"> </span>--services<span class="w"> </span>ai
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="c1"># User authentication system</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>aegis<span class="w"> </span>init<span class="w"> </span>user-app<span class="w"> </span>--services<span class="w"> </span>auth<span class="w"> </span>--components<span class="w"> </span>database
 </span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>
-</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="c1"># Full stack with auth and AI</span>
-</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>aegis<span class="w"> </span>init<span class="w"> </span>full-app<span class="w"> </span>--services<span class="w"> </span>auth,ai<span class="w"> </span>--components<span class="w"> </span>database,scheduler
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="c1"># AI chatbot application</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>aegis<span class="w"> </span>init<span class="w"> </span>chatbot<span class="w"> </span>--services<span class="w"> </span>ai
 </span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>
-</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="c1"># Non-interactive with custom location</span>
-</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>auth<span class="w"> </span>--components<span class="w"> </span>database<span class="w"> </span>--no-interactive<span class="w"> </span>--output-dir<span class="w"> </span>/projects<span class="w"> </span>--yes
+</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="c1"># Full stack with auth and AI</span>
+</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>aegis<span class="w"> </span>init<span class="w"> </span>full-app<span class="w"> </span>--services<span class="w"> </span>auth,ai<span class="w"> </span>--components<span class="w"> </span>database,scheduler
+</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>
+</span><span id="__span-9-19"><a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a><span class="c1"># Non-interactive with custom location</span>
+</span><span id="__span-9-20"><a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>auth<span class="w"> </span>--components<span class="w"> </span>database<span class="w"> </span>--no-interactive<span class="w"> </span>--output-dir<span class="w"> </span>/projects<span class="w"> </span>--yes
 </span></code></pre></div></p>
+<p><strong>The guided setup:</strong></p>
+<p><a class="glightbox" href="../images/guided-setup.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="The guided setup: the Worker component screen with the selections sidebar" src="../images/guided-setup.png" /></a></p>
+<p>Running <code>aegis init my-app</code> in a normal terminal opens a full-screen guided setup: one page per component and service, each with a short explanation, its hard requirements, what it pairs well with, and a link to its documentation page. A sidebar tracks your selections as you go.</p>
+<p>The flow is welcome page, the preselected foundation (backend + frontend), one question per building block, a review screen showing the resolved plan (with file and dependency detail panes), then the build itself with live progress and a closing summary that includes a copyable one-liner to recreate the same stack anywhere.</p>
+<p>Keys:</p>
+<ul>
+<li><code>←/→</code> move, <code>enter</code> select</li>
+<li><code>esc</code> go back one question (your previous answer is re-asked; every downstream effect is recomputed)</li>
+<li><code>s</code> skip the remaining component questions and jump to services</li>
+<li><code>f</code> finish: keep what you have picked so far and go straight to review</li>
+<li><code>q</code> quit</li>
+<li>On the review screen: <code>f</code> shows the files to be created, <code>d</code> the dependencies, <code>enter</code> builds</li>
+<li>On checklist screens (AI providers): <code>enter</code>/<code>space</code> toggle an entry, pick <code>Continue</code> to move on</li>
+</ul>
+<p>Selections follow the same rules as every other mode: accepting worker pulls in redis (and skips the redis question), a persistent scheduler backend or AI conversation storage brings the database with it, and one database engine serves the whole project.</p>
+<p>The guided setup needs a real terminal of at least 60x20. Pipes, CI, and small terminals fall back to the classic prompts automatically, and <code>--quick</code> forces them.</p>
 <p><strong>Service Auto-Resolution:</strong></p>
 <p>When you select services, required components are automatically added:</p>
 <ul>

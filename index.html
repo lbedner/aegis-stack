@@ -3534,6 +3534,7 @@
 <h2 id="quick-start">Quick Start</h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>my-api<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>my-api<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>make<span class="w"> </span>serve
 </span></code></pre></div>
+<p><code>init</code> opens a full-screen guided setup that walks through every component and service with explanations. Prefer the classic one-line prompts? Pass <code>--quick</code>.</p>
 <details>
 <summary><strong>More examples</strong></summary>
 
@@ -3554,6 +3555,7 @@
 </blockquote>
 <p><strong>Installation alternatives:</strong> See the <a href="installation/">Installation Guide</a> for <code>uv tool install</code>, <code>pip install</code>, and development setup.</p>
 <h2 id="customizing-your-stack">Customizing Your Stack</h2>
+<p><a class="glightbox" href="images/aegis-spinup-demo.gif" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Aegis Stack spinning up a new project" src="images/aegis-spinup-demo.gif" /></a></p>
 <p><strong>Components</strong> are infrastructure pieces (database, workers, scheduler, cache). <strong>Services</strong> are business capabilities (auth, AI, payments, comms).</p>
 <p><strong>Don't worry about what you pick today.</strong> Add anything later with a single command, remove what you outgrow, no rework required.</p>
 <h3 id="components">Components</h3>
@@ -3746,16 +3748,6 @@
 </tbody>
 </table>
 <p><a href="deployment/">Deployment Docs →</a></p>
-<p>Components compose into capabilities you didn't have to build:</p>
-<pre class="mermaid"><code>graph LR
-    Auth[Auth] --&gt; A[User-specific AI conversations]
-    AI[AI] --&gt; A
-    AI --&gt; B[Persistent history &amp;&lt;br/&gt;token analytics]
-    DB[(Database)] --&gt; B
-    AI --&gt; C[Background AI pipelines]
-    Worker[Worker] --&gt; C
-    Scheduler[Scheduler] --&gt; D[Persistent job scheduling]
-    DB --&gt; D</code></pre>
 <h2 id="your-stack-grows-with-you">Your Stack Grows With You</h2>
 <p><strong>Your choices aren't permanent.</strong> Start with what you need today, add when requirements change, remove what you outgrow.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Monday: Ship MVP</span>

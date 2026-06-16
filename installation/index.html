@@ -3409,6 +3409,7 @@
 <div class="tabbed-set tabbed-alternate" data-tabs="1:4"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">uvx (Recommended)</label><label for="__tabbed_1_2">uv tool</label><label for="__tabbed_1_3">pip</label><label for="__tabbed_1_4">Development</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
+<p><code>uvx</code> ships with <a href="https://docs.astral.sh/uv/getting-started/installation/">uv</a> (Astral's Python package manager) and runs a tool in a temporary, isolated environment without installing it first. If you don't have uv yet, install it once and <code>uvx</code> becomes available automatically.</p>
 <p>The fastest way to use Aegis Stack without any installation:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Create a new project</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>my-project
@@ -3422,7 +3423,7 @@
 <p><strong>Benefits:</strong></p>
 <ul>
 <li>No installation required</li>
-<li>Always uses latest version</li>
+<li>Uses the latest version on first run, then a fast cached copy (run <code>uvx aegis-stack@latest</code> to refresh)</li>
 <li>Zero setup, works immediately</li>
 <li>Isolated execution environment</li>
 <li>Perfect for trying Aegis Stack or one-off usage</li>
@@ -3430,6 +3431,7 @@
 <p><strong>Best for:</strong> Quick start, experimentation, CI/CD, one-off usage</p>
 </div>
 <div class="tabbed-block">
+<p>Saw uvx above? <code>uvx</code> runs Aegis Stack without installing it; <code>uv tool install</code> installs it permanently so you can just type <code>aegis</code>.</p>
 <p>Install Aegis Stack as a persistent CLI tool with uv:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Install persistently</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>aegis-stack
@@ -3496,15 +3498,62 @@
 </div>
 </div>
 <h2 id="cli-language-support">CLI Language Support</h2>
-<p>Aegis Stack CLI supports Simplified Chinese (简体中文). Set your language with a flag or environment variable:</p>
+<p>The Aegis Stack CLI is fully localized in 9 languages. Set your language with a flag or an environment variable:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Via flag</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>aegis<span class="w"> </span>--lang<span class="w"> </span>zh<span class="w"> </span>init<span class="w"> </span>my-project
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>aegis<span class="w"> </span>--lang<span class="w"> </span>fr<span class="w"> </span>init<span class="w"> </span>my-project
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Via environment variable</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AEGIS_LANG</span><span class="o">=</span>zh
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AEGIS_LANG</span><span class="o">=</span>fr
 </span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project
 </span></code></pre></div>
-<p>Supported languages: <code>en</code> (English, default), <code>zh</code> (简体中文)</p>
+<p>Supported languages:</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Language</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>en</code></td>
+<td>English (default)</td>
+</tr>
+<tr>
+<td><code>de</code></td>
+<td>Deutsch</td>
+</tr>
+<tr>
+<td><code>es</code></td>
+<td>Español</td>
+</tr>
+<tr>
+<td><code>fr</code></td>
+<td>Français</td>
+</tr>
+<tr>
+<td><code>ja</code></td>
+<td>日本語</td>
+</tr>
+<tr>
+<td><code>ko</code></td>
+<td>한국어</td>
+</tr>
+<tr>
+<td><code>ru</code></td>
+<td>Русский</td>
+</tr>
+<tr>
+<td><code>zh</code></td>
+<td>简体中文 (Simplified Chinese)</td>
+</tr>
+<tr>
+<td><code>zh_Hant</code></td>
+<td>繁體中文 (Traditional Chinese)</td>
+</tr>
+</tbody>
+</table>
+<p>If you don't set a language, Aegis Stack detects it from your system locale and falls back to English.</p>
 
 
 

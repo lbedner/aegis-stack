@@ -3532,26 +3532,29 @@
 <p><strong>Ship FastAPI apps that grow with you.</strong></p>
 <p>Aegis Stack scaffolds complete FastAPI applications with auth, payments, workers, AI, and a built-in control plane. Add what you need, remove what you don't, update when the framework improves.</p>
 <h2 id="quick-start">Quick Start</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>my-api<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>my-api<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>make<span class="w"> </span>serve
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>my-api
 </span></code></pre></div>
 <p><code>init</code> opens a full-screen guided setup that walks through every component and service with explanations. Prefer the classic one-line prompts? Pass <code>--quick</code>.</p>
 <details>
 <summary><strong>More examples</strong></summary>
 
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Add user authentication out of the box</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>user-app<span class="w"> </span>--services<span class="w"> </span>auth
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Skip the guided setup, use the classic one-line prompts</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>my-api<span class="w"> </span>--quick
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Add background processing + scheduling</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>task-processor<span class="w"> </span>--components<span class="w"> </span>scheduler,worker
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Add user authentication out of the box</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>user-app<span class="w"> </span>--services<span class="w"> </span>auth
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Everything wired up at init</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>full-app<span class="w"> </span>--services<span class="w"> </span>auth,payment,comms<span class="w"> </span>--components<span class="w"> </span>worker,scheduler
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Add background processing + scheduling</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>task-processor<span class="w"> </span>--components<span class="w"> </span>scheduler,worker
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Everything wired up at init</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>full-app<span class="w"> </span>--services<span class="w"> </span>auth,payment,comms<span class="w"> </span>--components<span class="w"> </span>worker,scheduler
 </span></code></pre></div>
 
 </details>
 
 <blockquote>
-<p><strong>CLI in 9 languages:</strong> English, German, Spanish, French, Japanese, Korean, Russian, Simplified Chinese, Traditional Chinese. Use <code>aegis --lang &lt;code&gt;</code> or set <code>AEGIS_LANG</code>.</p>
+<p><strong>CLI in 9 languages:</strong> English, German, Spanish, French, Japanese, Korean, Russian, Simplified Chinese, Traditional Chinese. Run e.g. <code>uvx aegis-stack --lang zh init my-api</code>, or set <code>AEGIS_LANG=zh</code>.</p>
 </blockquote>
 <p><strong>Installation alternatives:</strong> See the <a href="installation/">Installation Guide</a> for <code>uv tool install</code>, <code>pip install</code>, and development setup.</p>
 <h2 id="customizing-your-stack">Customizing Your Stack</h2>

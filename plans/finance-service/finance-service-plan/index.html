@@ -1,0 +1,3691 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A production-ready Python foundation for builders who refuse to wait.">
+      
+      
+        <meta name="author" content="Aegis Stack Contributors">
+      
+      
+        <link rel="canonical" href="https://docs.aegis-stack.io/plans/finance-service/finance-service-plan/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.16">
+    
+    
+      
+        <title>Finance Service — aegis-stack Implementation Plan - Aegis Stack</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.7e37652d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-8VHjeDZSsdlQ-9NLIVW9x.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
+
+   <link href="../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+    html.glightbox-open { overflow: initial; height: 100%; }
+    .gslide-title { margin-top: 0px; user-select: text; }
+    .gslide-desc { color: #666; user-select: text; }
+    .gslide-image img { background: white; }
+    .gscrollbar-fixer { padding-right: 15px; }
+    .gdesc-inner { font-size: 0.75rem; }
+    body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
+    body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../assets/javascripts/glightbox.min.js"></script></head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#finance-service-aegis-stack-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+      
+  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Aegis Stack
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Finance Service — aegis-stack Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/lbedner/aegis-stack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    lbedner/aegis-stack
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../.." class="md-tabs__link">
+          
+  
+  
+  Home
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../about/" class="md-tabs__link">
+          
+  
+  
+  Origin Story
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../components/" class="md-tabs__link">
+          
+  
+  
+  Components
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../services/" class="md-tabs__link">
+          
+  
+  
+  Services
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../overseer/" class="md-tabs__link">
+          
+  
+  
+  Overseer
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../deployment/" class="md-tabs__link">
+          
+  
+  
+  Deployment
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../cli-reference/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+      
+  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
+
+    </a>
+    Aegis Stack
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/lbedner/aegis-stack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    lbedner/aegis-stack
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Home
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Origin Story
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Origin Story
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../about/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    About
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../technology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Technology Stack
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    How I Build
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Components
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Components
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Backend
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            Backend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2_2" id="__nav_3_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Middleware
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            Middleware
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/backend/middleware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/backend/middleware/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Performance
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/backend/lifecycle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Lifecycle
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/backend/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Routes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/backend/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Authentication Integration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/backend/load-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Load Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Database
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Frontend
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frontend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/frontend/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/frontend/routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Routing & Views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/frontend/state/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session State
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/frontend/api-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Client
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/frontend/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Events
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/frontend/example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Example
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_5" id="__nav_3_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Scheduler
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_5">
+            <span class="md-nav__icon md-icon"></span>
+            Scheduler
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/scheduler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/scheduler/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/scheduler/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Interface
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/scheduler/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Database Persistence
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/scheduler/running-jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Running Jobs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_6" id="__nav_3_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Worker
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_6">
+            <span class="md-nav__icon md-icon"></span>
+            Worker
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/worker/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/worker/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_6_4" id="__nav_3_6_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Extras
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_6_4">
+            <span class="md-nav__icon md-icon"></span>
+            Extras
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/worker/extras/load-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Load Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/ingress/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Ingress
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Observability
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Services
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Services
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    AI Service
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            AI Service
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/illiana/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Illiana
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/llm-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    LLM Catalog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/rag/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    RAG
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/cost-tracking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cost Tracking
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/voice/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Voice
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/engines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Engines
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Provider Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Service Layer
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Commands
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/ai/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Authentication
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            Authentication
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/auth/levels/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Auth Levels
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/auth/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/auth/integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Service Layer
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/auth/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Commands
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/auth/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Blog (Experimental)
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            Blog (Experimental)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/blog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/blog/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/blog/dashboard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dashboard
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/blog/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Commands
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/blog/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_5" id="__nav_4_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Communications
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_5">
+            <span class="md-nav__icon md-icon"></span>
+            Communications
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/comms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/comms/setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Provider Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/comms/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/comms/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Commands
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Insights (Experimental)
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_6">
+            <span class="md-nav__icon md-icon"></span>
+            Insights (Experimental)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/insights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/insights/data-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Data Sources
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/insights/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Commands
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/insights/dashboard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dashboard
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/insights/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/insights/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Payment (Experimental)
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_7">
+            <span class="md-nav__icon md-icon"></span>
+            Payment (Experimental)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/payment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/payment/setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Provider Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/payment/dashboard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dashboard
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/payment/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/payment/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Commands
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/payment/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Overseer
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Overseer
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../overseer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../overseer/story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    The Story
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../overseer/integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Integration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Deployment
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Deployment
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../evolving-your-stack/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Evolving Your Stack
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integration-patterns/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Integration Patterns
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0-tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      0. TL;DR
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-what-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. What &amp; scope
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-packaging-as-an-aegis-stack-service-the-centerpiece" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Packaging as an aegis-stack service (the centerpiece)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Packaging as an aegis-stack service (the centerpiece)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-the-python-registry-aegiscoreservicespy-servicesfinance" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.1 The Python registry — aegis/core/services.py SERVICES["finance"]
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-the-migration-declarative-finance_migration-in-aegiscoremigration_generatorpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.2 The migration — declarative FINANCE_MIGRATION in aegis/core/migration_generator.py
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-copieryml" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.3 copier.yml
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-dependencies-two-places-kept-in-parity" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.4 Dependencies (two places, kept in parity)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-the-if-include_finance-template-touch-list-mirror-include_payment-17-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.5 The {% if include_finance %} template touch-list (mirror include_payment, ~17 files)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26-new-service-tree-rendered-under-project_slug" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.6 New service tree (rendered under {{ '{{ project_slug }}' }}/)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#27-prerequisites-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.7 Prerequisites &amp; validation
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-connectivity-the-decision-unchanged" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Connectivity — the decision (unchanged)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-data-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Data model
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-provider-integration-plaid-snaptrade-adapters" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Provider integration (Plaid &amp; SnapTrade adapters)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-import-pipeline-quicken-ofx-csv-manual" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Import pipeline — Quicken / OFX / CSV / manual
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-sync-scheduled-jobs-backend-agnostic-inline-not-taskiq" class="md-nav__link">
+    <span class="md-ellipsis">
+      7. Sync &amp; scheduled jobs (backend-agnostic — inline, NOT taskiq)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-net-worth-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      8. Net-worth engine
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-categorization-wasting-money-insights-the-real-illiana-hook" class="md-nav__link">
+    <span class="md-ellipsis">
+      9. Categorization &amp; "wasting money" insights (+ the real Illiana hook)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-ui-flet-dashboard-card-modal-the-template-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      10. UI — Flet dashboard card + modal (the template convention)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-security-encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      11. Security &amp; encryption
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-config-env" class="md-nav__link">
+    <span class="md-ellipsis">
+      12. Config &amp; env
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#13-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      13. Testing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#14-build-phases" class="md-nav__link">
+    <span class="md-ellipsis">
+      14. Build phases
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#15-open-decisions-to-confirm" class="md-nav__link">
+    <span class="md-ellipsis">
+      15. Open decisions to confirm
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-research-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Appendix — research sources
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+  
+                  
+
+
+  
+  
+
+
+<h1 id="finance-service-aegis-stack-implementation-plan">Finance Service — aegis-stack Implementation Plan</h1>
+<blockquote>
+<p>A personal-finance aggregator (Quicken / Empower / Monarch class) authored as a <strong>first-class
+aegis-stack template service</strong>, gated by <code>include_finance</code> and installable via <code>aegis add-service
+finance</code> — so any project generated from the stack can opt in. Aggregates bank / credit-card /
+brokerage accounts, imports Quicken/OFX/CSV, charts net worth over time, surfaces "wasting money"
+insights, and (when <code>include_ai</code>) feeds those insights to the Illiana AI layer.</p>
+<p><strong>Status: planning only — nothing built.</strong> This document is the blueprint. The load-bearing artifact
+is the schema: <a href="../finance-schema-canonical/"><code>finance-schema-canonical.md</code></a> (33 tables).</p>
+<p><strong>Target repo:</strong> <code>aegis-stack</code> (the template), NOT a one-off in a generated project. Everything lives
+under <code>aegis/templates/copier-aegis-project/{{ '{{ project_slug }}' }}/…</code> as <code>.jinja</code>/static sources,
+plus registry entries in <code>aegis/core/</code>.</p>
+</blockquote>
+<hr />
+<h2 id="0-tldr">0. TL;DR</h2>
+<ul>
+<li><strong>Packaging:</strong> a new gated service <code>include_finance</code>, wired the way <code>payment</code>/<code>insights</code> are — in <strong>two parallel systems</strong> that must stay in sync: (1) the <strong>Copier template</strong> (<code>{% if include_finance %}</code> blocks across ~17 <code>.jinja</code> files) and (2) the <strong>Python registry</strong> <code>aegis/core/services.py</code> <code>SERVICES["finance"]</code> (the single source of truth for pruning, <code>aegis add-service</code>, migrations, <code>aegis update</code> detection, and <code>aegis init</code> listing).</li>
+<li><strong>Migrations are declarative, not hand-written.</strong> The 33 tables become a <code>FINANCE_MIGRATION</code> <code>ServiceMigrationSpec</code> (list of <code>TableSpec</code>) in <code>aegis/core/migration_generator.py</code>. Revision IDs are <strong>auto-assigned</strong> so the chain is valid for any <code>include_*</code> combination — there is no "031".</li>
+<li><strong>Dual-engine (sqlite + postgres).</strong> Partial-unique indexes, CHECK constraints, and <code>on_conflict</code> UPSERT all work on both; finance tables get a Postgres <code>finance</code> schema. The dedup contract is unchanged from the design.</li>
+<li><strong>Connectivity (unchanged from the design):</strong> Plaid-first (Chase/AMEX/Vanguard), <strong>SnapTrade for Fidelity</strong> (Plaid-via-Fidelity is unreliable), manual/file import as a permanent fallback — behind one provider-polymorphic connection layer, so adding a provider later needs zero new tables.</li>
+<li><strong>Prereqs:</strong> finance declares <code>required_components=[BACKEND, DATABASE, SCHEDULER]</code>, <code>recommended_components=[WORKER]</code>; auth is <strong>integrated-when-present</strong> via the <code>finance_auth_link</code> migration (which adds the <code>owner_user_id -&gt; user</code> FK only when auth is included), so <code>required_services=[]</code> and finance runs standalone too. The resolver/validator enforce the component prereqs at <code>init</code> and <code>add-service</code>.</li>
+<li><strong>UI = Flet dashboard card + modal</strong> (the template's convention — <code>payment_card.py</code>/<code>insights_card.py</code>). The Alpine "Overseer tabs" from the earlier Pulse draft are a <em>downstream</em> concern; the template ships Flet.</li>
+<li><strong>Illiana hook is real here</strong> (unlike Pulse): the template's AI service exists, so a conditional <code>finance_context.py</code> (gated <code>{% if include_ai and include_finance %}</code>) plugs finance data into the agent prompt, following <code>health_context.py</code>/<code>usage_context.py</code>. v1 "wasting money" signals ship rule-based (no AI required).</li>
+<li><strong>Encryption exists in the template</strong> (<code>app/core/encryption.py</code>, AES-256-GCM). The <strong>key-rotation CLI does not</strong> (it's Pulse-only — pending auth/encryption backport). So the "register encrypted columns in the rotation CLI" step is deferred/blocked on that backport (noted in §11).</li>
+</ul>
+<hr />
+<h2 id="1-what-scope">1. What &amp; scope</h2>
+<p>Same product as the design brief. In scope (v1, populated when <code>include_finance</code> is selected):
+1. <strong>Plaid</strong> connect for Chase (checking/savings/credit + liabilities) and AMEX (cards).
+2. <strong>SnapTrade</strong> connect for Fidelity + brokerages (holdings/positions/trades) — Plaid attempt + manual fallback.
+3. <strong>Import</strong> existing Quicken (QIF, QFX/OFX) + bank CSV, deterministic dedup.
+4. <strong>Accounts + Transactions</strong> on the Flet dashboard.
+5. <strong>Net worth over time</strong> (materialized daily snapshots) + <strong>investments/holdings</strong>.
+6. <strong>Manual accounts &amp; valuations</strong> (real estate, vehicles, crypto — anything with no API).
+7. <strong>Rule-based "wasting money" insights</strong> (recurring/subscription, price hikes, fees, overspend), emitted through the existing <code>insight_event</code> machinery when <code>include_insights</code>, else as finance-local rows.</p>
+<p>Non-goals / later (tables exist, unpopulated): tax-grade cost basis / lots, trade execution, budgeting UI, crypto exchange-key + on-chain connections, rules-engine UI, attachments, the Illiana narration wiring. See the design docs.</p>
+<p>The 33-table schema, connectivity decisions, import/dedup, net-worth engine, and insight signals are documented in <strong><a href="../finance-schema-canonical/"><code>finance-schema-canonical.md</code></a></strong> and the <a href="./finance-research/"><code>finance-research/</code></a> briefs and are <strong>unchanged</strong> by the aegis-stack retargeting. This plan focuses on the parts that DO change: packaging.</p>
+<hr />
+<h2 id="2-packaging-as-an-aegis-stack-service-the-centerpiece">2. Packaging as an aegis-stack service (the centerpiece)</h2>
+<p>Wiring a gated service happens in <strong>two parallel systems</strong>. Mirror <code>payment</code> (the closest DB + API + frontend + migration analog) throughout.</p>
+<h3 id="21-the-python-registry-aegiscoreservicespy-servicesfinance">2.1 The Python registry — <code>aegis/core/services.py</code> <code>SERVICES["finance"]</code></h3>
+<p>This <code>ServiceSpec</code> is the single source of truth. Copy the <code>payment</code> spec and fill:
+- <code>name="finance"</code>, <code>description</code>, <code>long_description</code>, <code>docs_path</code>, <code>version</code>, <code>verified=True</code>, <code>aegis_version</code>.
+- <code>type</code> — reuse a <code>ServiceType</code> or add a member (+ <code>SERVICE_TYPE_I18N_KEYS</code> entry).
+- <strong>Dependencies:</strong> <code>required_components=[BACKEND, DATABASE, SCHEDULER]</code>, <code>recommended_components=[WORKER]</code>, <code>required_services=[]</code> (auth is integrated-when-present via <code>finance_auth_link</code>, so finance runs standalone), <code>conflicts=[]</code>.
+- <strong><code>pyproject_deps=[...]</code></strong> — the finance deps (see §2.4). A parity test (<code>test_pyproject_deps_parity</code>) checks this equals the <code>pyproject.toml.jinja</code> block, so keep them identical and in the same order.
+- <strong><code>files=FileManifest(primary=[...])</code></strong> — every path finance owns (service dir, api dir, cli file, Flet card+modal, tests, seed). This drives post-gen <strong>pruning</strong> when <code>include_finance=false</code>. Use <code>extras={"finance_&lt;opt&gt;": [...]}</code> for option-gated sub-files.
+- <strong><code>template_files=[...]</code></strong> — dirs rendered by <code>ManualUpdater</code> on <code>aegis add-service</code> (post-generation installs).
+- <strong><code>marker_path="app/services/finance"</code></strong> — drives <code>aegis update</code> disk detection.
+- <strong><code>migrations=[FINANCE_MIGRATION]</code></strong> (+ any cross-service link spec).
+- <strong><code>wiring=PluginWiring(routers=[...], deps_providers=[...], dashboard_cards=[...], dashboard_modals=[...])</code></strong>.
+- <strong><code>options=[OptionSpec(...)]</code></strong> if finance exposes <code>finance[...]</code> bracket options (e.g. <code>finance[snaptrade]</code>); register the handler in <code>aegis/cli/callbacks.py::SERVICE_OPTION_HANDLERS</code>.</p>
+<p>Once this spec exists, <code>aegis init</code> listing, <code>aegis add-service finance</code>, pruning, and update-detection all light up automatically.</p>
+<h3 id="22-the-migration-declarative-finance_migration-in-aegiscoremigration_generatorpy">2.2 The migration — declarative <code>FINANCE_MIGRATION</code> in <code>aegis/core/migration_generator.py</code></h3>
+<ul>
+<li>Author the 33 tables as <code>TableSpec</code>/<code>ColumnSpec</code>/<code>IndexSpec</code>/<code>ForeignKeySpec</code>/<code>CheckConstraintSpec</code> (the DSL supports everything the schema needs — partial-unique <code>where=</code>, <code>ondelete=</code>, cross-schema <code>ref_schema="auth"</code>, check constraints). The <code>finance_transaction ↔ finance_transfer</code> circular FK is an <code>AlterTableSpec</code> applied after both tables exist.</li>
+<li>Set <code>schema="finance"</code> on the <code>ServiceMigrationSpec</code> (Postgres schema; ignored on SQLite).</li>
+<li>Add a <strong>finance block to <code>get_services_needing_migrations(context)</code></strong> (mirror payment's; append <code>"payment_auth_link"</code>-style cross-service link only if needed — finance's <code>owner_user_id → auth.user</code> is handled via <code>ref_schema</code>, not a separate link migration, unless auth is toggled independently, in which case follow the <code>payment_auth_link</code> conditional pattern).</li>
+<li>In <code>aegis/core/copier_manager.py</code>: derive <code>is_finance_included</code>, add to <code>needs_migration_files</code>, and add <code>AnswerKeys.FINANCE: is_finance_included</code> to the migration <code>context</code>.</li>
+<li>Revision numbering is automatic (<code>get_next_revision_id</code> / <code>get_previous_revision</code>) — <strong>do not hardcode</strong>.</li>
+</ul>
+<h3 id="23-copieryml">2.3 <code>copier.yml</code></h3>
+<p><div class="language-yaml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">include_finance</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bool</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">help</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Include</span><span class="nv"> </span><span class="s">finance</span><span class="nv"> </span><span class="s">aggregator</span><span class="nv"> </span><span class="s">service</span><span class="nv"> </span><span class="s">(Plaid/SnapTrade/import)?&quot;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">finance_plaid</span><span class="p">:</span><span class="w">      </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">bool</span><span class="p p-Indicator">,</span><span class="nt"> default</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt">  when</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">include_finance</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nt">finance_snaptrade</span><span class="p">:</span><span class="w">  </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">bool</span><span class="p p-Indicator">,</span><span class="nt"> default</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt">  when</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">include_finance</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="l l-Scalar l-Scalar-Plain">finance_investments:{ type</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bool, default</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true,  when</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">include_finance</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="w"> </span><span class="err">}</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="nt">finance_import</span><span class="p">:</span><span class="w">     </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">bool</span><span class="p p-Indicator">,</span><span class="nt"> default</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt">  when</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">include_finance</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</span></code></pre></div>
+- Append <code>or include_finance</code> to <code>_include_migrations</code> (copier.yml ~:327) <strong>and</strong> to the alembic gate in <code>pyproject.toml.jinja</code> (~:78).
+- Add <code>include_finance:</code> (+ sub-flags) to <code>.copier-answers.yml.jinja</code>.
+- Note: the <code>_X_deps</code> computed vars are <strong>dead</strong> (referenced only in copier.yml); real deps go in §2.4.</p>
+<h3 id="24-dependencies-two-places-kept-in-parity">2.4 Dependencies (two places, kept in parity)</h3>
+<ul>
+<li><code>pyproject.toml.jinja</code> (~:118): a <code>{%- if include_finance %}</code> block listing deps.</li>
+<li><code>SERVICES["finance"].pyproject_deps=[...]</code> — identical list/order.</li>
+<li>Candidate deps: <code>plaid-python&gt;=…</code> (Plaid), a SnapTrade SDK or <code>httpx</code> (SnapTrade), <code>ofxtools&gt;=…</code> (OFX/QFX), <code>quiffen&gt;=…</code> (QIF). Keep provider deps gated by their sub-flags where possible.</li>
+</ul>
+<h3 id="25-the-if-include_finance-template-touch-list-mirror-include_payment-17-files">2.5 The <code>{% if include_finance %}</code> template touch-list (mirror <code>include_payment</code>, ~17 files)</h3>
+<p><code>app/components/backend/api/routing.py.jinja</code> (router import + mount) · <code>api/deps.py.jinja</code> (finance deps provider) · <code>app/core/config.py.jinja</code> (PLAID_<em>/SNAPTRADE_</em> settings block) · <code>app/components/frontend/dashboard/cards/__init__.py.jinja</code> (import + grid + the OR-guards that render the services row) · <code>.../modals/__init__.py.jinja</code> · <code>app/cli/main.py.jinja</code> (try/except <code>add_typer</code> for <code>finance.py</code>) · <code>alembic/env.py.jinja</code> (model import block) · <code>app/components/backend/startup/database_init.py.jinja</code> (<code>finance_needs_migrations</code> + seed hook) · <code>app/components/backend/startup/component_health.py.jinja</code> · <code>app/components/scheduler/main.py.jinja</code> (if finance schedules jobs — §7) · <code>pyproject.toml.jinja</code> · <code>.copier-answers.yml.jinja</code> · <code>Dockerfile.jinja</code> · <code>tests/conftest.py.jinja</code> · <code>docker-compose*.jinja</code> (only if finance needs a new service/env). Plus <code>post_gen_tasks.py</code> alembic-removal gets a <code>finance_needs_migrations</code> term.</p>
+<h3 id="26-new-service-tree-rendered-under-project_slug">2.6 New service tree (rendered under <code>{{ '{{ project_slug }}' }}/</code>)</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>app/services/finance/                       # models.py(.jinja), schemas, finance_service.py, deps.py,
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>  providers/{base,plaid,snaptrade,manual}.py(.jinja)   # constants, health, seed, sub-services,
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>  importers/{base,ofx,qif,csv_profiles}.py            # categorize/, recurring.py, jobs.py.jinja
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>  finance_context.py.jinja                  # {% if include_ai %} Illiana provider (§9)
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>app/components/backend/api/finance/         # router.py.jinja, views/display endpoints
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>app/components/frontend/dashboard/cards/finance_card.py      # Flet card (§10)
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>app/components/frontend/dashboard/modals/finance_modal.py    # Flet modal (§10)
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>app/cli/finance.py.jinja                    # import-quicken / import-csv / sync / connect (Typer)
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>tests/services/test_finance_*.py
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>docs/services/finance/                      # shipped service docs
+</span></code></pre></div>
+<h3 id="27-prerequisites-validation">2.7 Prerequisites &amp; validation</h3>
+<p>Declared on the spec (§2.1) and enforced by <code>validate_service_dependencies()</code> + <code>service_resolver.py</code>. Finance requires database + scheduler (components) and auth (service, for <code>owner_user_id</code>). If a sub-option needs more (e.g. a future <code>finance[per_user]</code>), use the conditional cross-service block in <code>service_resolver.py</code> (the <code>insights[per_user] → auth[org]</code> precedent). Missing components are surfaced + auto-added at <code>add-service</code> time.</p>
+<hr />
+<h2 id="3-connectivity-the-decision-unchanged">3. Connectivity — the decision (unchanged)</h2>
+<p>Provider-polymorphic connection layer. Same table as the design: <strong>Plaid</strong> (Chase/AMEX/Vanguard, free Trial = 10 live Items incl. Investments), <strong>SnapTrade</strong> for <strong>Fidelity</strong>/brokerages ($1/user/mo, self-serve, rides Akoya — because <strong>Fidelity-via-Plaid is unreliable</strong>, Fidelity states it "does not utilize Plaid"), <strong>manual/file import</strong> as the permanent fallback, and crypto later (exchange key / on-chain / manual — Plaid doesn't cover it). In the template these are gated by <code>finance_plaid</code> / <code>finance_snaptrade</code> sub-flags; the <code>manual</code> provider always ships. Details + the Fidelity caveat: <a href="../finance-research/03-stocks-crypto-connectivity-brief/"><code>finance-research/03-stocks-crypto-connectivity-brief.md</code></a>.</p>
+<hr />
+<h2 id="4-data-model">4. Data model</h2>
+<p>The full 33-table schema, dedup contract, modeling decisions, ER diagram, and existing-schema touchpoints are in <strong><a href="../finance-schema-canonical/"><code>finance-schema-canonical.md</code></a></strong>. For aegis-stack it is realized as (a) <code>app/services/finance/models.py</code> SQLModel classes and (b) the declarative <code>FINANCE_MIGRATION</code> spec (§2.2) — both dialect-aware, in a Postgres <code>finance</code> schema. 26 tables populate in v1; 7 ship reserved-but-empty (the "never add a table later" insurance). Money = int minor units; enums = String+CheckConstraint (owned) / TEXT (provider taxonomies); two-lane dedup via partial-unique indexes with a <code>ck_dedup_lane</code> guard.</p>
+<hr />
+<h2 id="5-provider-integration-plaid-snaptrade-adapters">5. Provider integration (Plaid &amp; SnapTrade adapters)</h2>
+<p><code>app/services/finance/providers/</code> — a <code>BaseFinanceProvider</code> protocol with normalized result dataclasses, exactly like <code>payment/providers/</code> wraps Stripe behind <code>BasePaymentProvider</code>. <code>plaid.py</code> (official <code>plaid-python</code> SDK: Link token → public_token → <code>/item/public_token/exchange</code> → encrypted access_token; <code>/transactions/sync</code> cursor loop; <code>/investments/*</code>; <code>/liabilities/get</code>; webhook verify). <code>snaptrade.py</code> (brokerage authorization → aggregator_token; positions/balances/transactions normalized into the SAME <code>finance_account</code>/<code>finance_security</code>/<code>finance_holding</code>/<code>finance_trade</code> tables). <code>manual.py</code> (no-op). Token exchange mirrors the existing OAuth "connect-for-data" precedent; secrets encrypted via <code>app.core.encryption.encrypt_secret(..., context="finance_connection:{id}:{col}")</code>. Provider files are gated by their <code>finance_plaid</code>/<code>finance_snaptrade</code> sub-flags; the base protocol + manual always ship. Full flow (Link, sync invariant, pending→posted, webhooks, re-auth): <a href="../finance-research/01-domain-brief/"><code>finance-research/01-domain-brief.md</code></a>.</p>
+<hr />
+<h2 id="6-import-pipeline-quicken-ofx-csv-manual">6. Import pipeline — Quicken / OFX / CSV / manual</h2>
+<p>Mirrors the blog <code>/import</code> <code>UploadFile</code> pattern. <code>POST /api/v1/finance/import</code> dispatches by extension (<code>.qfx</code>/<code>.ofx</code> → <code>ofxtools</code>; <code>.qif</code> → <code>quiffen</code>; <code>.csv</code> → data-driven <code>finance_import_profile</code>). Typer CLI <code>finance import-quicken</code>/<code>import-csv</code> runs the same ingest synchronously. Two-lane dedup + cross-source reconciliation exactly per the schema doc's §2. <code>finance_import_batch</code>/<code>_row</code> give reversible, review-before-commit imports.</p>
+<hr />
+<h2 id="7-sync-scheduled-jobs-backend-agnostic-inline-not-taskiq">7. Sync &amp; scheduled jobs (backend-agnostic — inline, NOT taskiq)</h2>
+<p><strong>Key difference from the Pulse draft:</strong> in the template, <code>worker_backend</code> ∈ {arq, taskiq, dramatiq}, and payment/insights do NOT ship a worker queue — they run scheduled work <strong>inline as async functions in the scheduler</strong> (<code>app/services/insights/jobs.py.jinja</code> → <code>async def collect_*_job()</code>, wired in <code>scheduler/main.py.jinja</code> behind <code>{% if include_insights %}</code>). Finance follows this: <code>app/services/finance/jobs.py.jinja</code> with <code>async def finance_sync_job()</code> / <code>finance_recompute_balances_job()</code>, registered via <code>scheduler.add_job(...)</code> inside a <code>{% if include_finance %}</code> block. This is backend-agnostic (APScheduler just awaits the coroutine). Only if finance genuinely needs distributed execution do we add a <code>queues/finance{,_taskiq,_dramatiq}.py</code> triplet (post-gen renames per backend) — deferred; bound payloads/date ranges regardless (worker-OOM history).</p>
+<hr />
+<h2 id="8-net-worth-engine">8. Net-worth engine</h2>
+<p>Unchanged: materialized daily <code>finance_balance_snapshot</code> (per account) + <code>finance_net_worth_snapshot</code> (per user), recomputed by the inline scheduler job from transactions + valuations + holdings×prices. Net worth is a persistence problem, not derivable from partial history — snapshots start day one. Manual/illiquid assets ride the same series via <code>finance_valuation</code> (source-tagged + staleness).</p>
+<hr />
+<h2 id="9-categorization-wasting-money-insights-the-real-illiana-hook">9. Categorization &amp; "wasting money" insights (+ the real Illiana hook)</h2>
+<ul>
+<li><strong>Categorization:</strong> capture Plaid PFC raw + map to an owned category tree; data-driven <code>finance_rule</code> engine for overrides; <code>finance_category_alias</code> for free-text QIF/CSV categories.</li>
+<li><strong>Insights (rule-based, ship without AI):</strong> recurring/subscription detection (<code>finance_recurring_stream</code>), price-hike, fee/interest, category overspend vs baseline. When <code>include_insights</code>, emit through the existing <code>insight_event</code> machinery (the country-spike rule pattern) so it renders in the insights UI; otherwise store finance-local <code>finance_insight</code> rows.</li>
+<li><strong>Illiana (works in the template):</strong> unlike Pulse, the template's AI service is real when <code>include_ai</code>. Ship <code>app/services/finance/finance_context.py.jinja</code> gated <code>{% if include_ai and include_finance %}</code>, following <code>health_context.py</code>/<code>usage_context.py</code>/<code>rag_context.py</code> — it assembles accounts/spend/streams into the agent prompt so Illiana can narrate "you're wasting money on X." No cross-repo port needed; it's a conditional file.</li>
+</ul>
+<hr />
+<h2 id="10-ui-flet-dashboard-card-modal-the-template-convention">10. UI — Flet dashboard card + modal (the template convention)</h2>
+<p>The template's dashboard is <strong>Flet</strong> (no web_frontend/Alpine — that's Pulse-only). Finance ships <code>frontend/dashboard/cards/finance_card.py</code> (net-worth headline + connection-health chips) and <code>modals/finance_modal.py</code> (Accounts, Transactions, Net Worth, Investments views), registered via <code>PluginWiring.dashboard_cards/dashboard_modals</code> and the <code>cards/__init__.py.jinja</code> grid + OR-guards — mirroring <code>payment_card.py</code>/<code>insights_card.py</code>. (A downstream project with its own web_frontend, like Pulse, would additionally render finance in its own idiom; that is out of scope for the template.)</p>
+<hr />
+<h2 id="11-security-encryption">11. Security &amp; encryption</h2>
+<ul>
+<li><strong>Encryption primitive exists in the template:</strong> <code>app/core/encryption.py</code> (AES-256-GCM, <code>encrypt_secret/decrypt_secret</code> with row-bound AAD <code>context</code>). Finance stores provider tokens as ciphertext columns on <code>finance_connection</code>, encrypted in the service layer; <code>__repr__</code> masks them. Precedent: insights <code>Project.plausible_api_key</code>.</li>
+<li><strong>Key-rotation CLI gap:</strong> the template has <strong>no <code>app/cli/security.py</code></strong> (Pulse-only; pending the auth/encryption backport). So the "register finance encrypted columns in the rotation CLI" step is <strong>blocked/deferred</strong> until that backport lands — flag it, and define the <code>_ENCRYPTED_COLUMNS</code> tuple in the finance service now so wiring it is a one-liner later. (Missing rotation coverage silently strands finance creds on a future key rotation — document loudly.)</li>
+<li>Read-only scopes only; never store bank credentials; Plaid webhook signature verified; <code>/item/remove</code> + soft-delete on disconnect to stop per-Item billing.</li>
+</ul>
+<hr />
+<h2 id="12-config-env">12. Config &amp; env</h2>
+<ul>
+<li><code>app/core/config.py.jinja</code>: a <code>{% if include_finance %}</code> settings block — <code>PLAID_CLIENT_ID/SECRET/ENV/WEBHOOK_URL/REDIRECT_URI</code> (gated by <code>finance_plaid</code>), <code>SNAPTRADE_CLIENT_ID/CONSUMER_KEY</code> (gated by <code>finance_snaptrade</code>), <code>FINANCE_DEFAULT_CURRENCY</code>. Add a prod-safety <code>@model_validator</code> (require keys when <code>PLAID_ENV=production</code>), matching existing validators.</li>
+<li><code>.env.example.jinja</code>: matching <code>{% if include_finance %}</code> documented block.</li>
+</ul>
+<hr />
+<h2 id="13-testing">13. Testing</h2>
+<ul>
+<li><strong>Template-generation tests</strong> (the aegis-stack layer): <code>include_finance</code> on/off renders/prunes correctly; <code>test_pyproject_deps_parity</code> (spec vs jinja block); migration generation produces a valid revision chain across <code>include_*</code> combinations; <code>aegis add-service finance</code> on a generated project.</li>
+<li><strong>Service tests</strong> (rendered project): importers (OFX/QIF/CSV) with known-debit/known-credit sign fixtures + re-import idempotency; dedup two-lane + cross-source reconciliation; transfer pairing; recurring detection; Plaid/SnapTrade adapters against sandbox.</li>
+<li><strong>Dual-engine:</strong> run against <strong>both</strong> sqlite and postgres — the template supports both, and the pytest default may be sqlite (FK/partial-unique/<code>on_conflict</code> dialect paths verify on postgres). Follow existing services' conftest patterns.</li>
+</ul>
+<hr />
+<h2 id="14-build-phases">14. Build phases</h2>
+<ul>
+<li><strong>Phase 0 — Registry + schema + gating.</strong> <code>SERVICES["finance"]</code> spec, <code>FINANCE_MIGRATION</code> (33 <code>TableSpec</code>), copier.yml flags, <code>pyproject</code>/<code>env.py</code>/<code>config</code>/<code>post_gen</code> gating, seeds (currencies + PFC category tree + institutions + import profiles). <em>Exit: <code>aegis init --include-finance</code> on sqlite AND postgres generates a project whose migration applies clean; <code>include_finance=false</code> prunes cleanly; parity test green.</em></li>
+<li><strong>Phase 1 — Manual + import.</strong> Manual accounts + valuations; OFX/QIF/CSV importers + <code>/import</code> + CLI; dedup; Flet card + modal (Accounts/Transactions). <em>Exit: import a Quicken/AMEX file, idempotent re-import.</em></li>
+<li><strong>Phase 2 — Plaid.</strong> <code>providers/plaid.py</code>, Link, <code>/transactions/sync</code>, webhook + health, inline sync job. Chase + AMEX. <em>Exit: sandbox item syncs; reconnect UX.</em></li>
+<li><strong>Phase 3 — Investments + net worth.</strong> Plaid Investments + <strong>SnapTrade (Fidelity)</strong>; securities/holdings/trades; snapshot engine; Investments + Net Worth views. <em>Exit: Fidelity holdings + net-worth chart.</em></li>
+<li><strong>Phase 4 — Insights.</strong> Transfer detection, recurring/subscription, rule-based "wasting money" via <code>insight_event</code>. <em>Exit: subscriptions + a price-hike/overspend insight.</em></li>
+<li><strong>Phase 5 — Illiana + <code>aegis add-service</code>.</strong> <code>finance_context.py</code> (when <code>include_ai</code>); finalize <code>template_files</code> + <code>ManualUpdater</code> path so <code>aegis add-service finance</code> works on existing projects. <em>Exit: add-service onto a generated app; Illiana narrates finance insights.</em></li>
+</ul>
+<hr />
+<h2 id="15-open-decisions-to-confirm">15. Open decisions to confirm</h2>
+<p>Design defaults (money int minor units, disconnect retention, USD-only FX, high-confidence-only cross-source merge, SnapTrade-primary for Fidelity, Transactions+Investments+Liabilities at launch, self-contained trades) are in the schema doc. aegis-stack-specific ones:
+1. <strong>Sub-flag granularity</strong> — one <code>include_finance</code>, or split <code>finance_plaid</code>/<code>finance_snaptrade</code>/<code>finance_investments</code>/<code>finance_import</code> as gating sub-questions? <em>(Default: sub-flags, providers gated individually.)</em>
+2. <strong>Worker: inline vs queue</strong> — inline scheduler jobs (backend-agnostic, matches insights) vs a per-backend <code>queues/finance*</code> triplet for distributed sync. <em>(Default: inline for v1.)</em>
+3. <strong>Postgres-only vs dual-engine</strong> — require postgres for finance, or fully support sqlite dev? <em>(Default: dual-engine, postgres recommended.)</em>
+4. <strong>Encryption/rotation dependency</strong> — proceed with <code>encrypt_secret</code> now and defer rotation-CLI registration until the auth/encryption backport, or pull that backport forward first? <em>(Default: proceed; leave a <code>_ENCRYPTED_COLUMNS</code> hook.)</em>
+5. <strong>Insights coupling</strong> — <code>insight_event</code> reuse requires <code>include_insights</code>; if absent, use finance-local <code>finance_insight</code>. Make finance <em>recommend</em> insights? <em>(Default: recommend, degrade gracefully.)</em></p>
+<hr />
+<h2 id="appendix-research-sources">Appendix — research sources</h2>
+<ul>
+<li><a href="../finance-schema-canonical/"><code>finance-schema-canonical.md</code></a> — the 33-table schema (now framed for the aegis-stack migration DSL).</li>
+<li><a href="../finance-research/00-codebase-conventions/"><code>finance-research/00-codebase-conventions.md</code></a> — conventions (captured from Pulse; the template shares them).</li>
+<li><a href="../finance-research/01-domain-brief/"><code>finance-research/01-domain-brief.md</code></a> — Plaid API, Chase/AMEX, Quicken/OFX/CSV formats, OSS schemas.</li>
+<li><a href="../finance-research/02-product-insights-brief/"><code>finance-research/02-product-insights-brief.md</code></a> — product teardowns + the hard problems.</li>
+<li><a href="../finance-research/03-stocks-crypto-connectivity-brief/"><code>finance-research/03-stocks-crypto-connectivity-brief.md</code></a> — Plaid Investments, Fidelity/SnapTrade/Akoya, crypto + manual.</li>
+</ul>
+<blockquote>
+<p>Note: the earlier Pulse-targeted plan (<code>aegis-pulse/docs/plans/finance-service-plan.md</code>) is superseded by this document. Its architecture/integration sections are largely reusable; the differences are exactly §2 (packaging), §7 (inline jobs), §10 (Flet UI), and §11 (rotation-CLI gap) here.</p>
+</blockquote>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+  <!-- Page Feedback -->
+  <div class="md-feedback" data-md-component="feedback">
+    <fieldset>
+      <legend class="md-feedback__title">Was this page helpful?</legend>
+      <div class="md-feedback__inner">
+        <button type="button" class="md-feedback__icon md-icon" data-md-value="1" title="This page was helpful" aria-label="This page was helpful">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m-5-6c.78 2.34 2.72 4 5 4s4.22-1.66 5-4H7m9-2c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1m-8 0c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1"></path></svg>
+        </button>
+        <button type="button" class="md-feedback__icon md-icon" data-md-value="0" title="This page could be improved" aria-label="This page could be improved">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m-5-6c.78-2.34 2.72-4 5-4s4.22 1.66 5 4H7m1-4c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1m8 0c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1"></path></svg>
+        </button>
+      </div>
+      <div class="md-feedback__note"></div>
+    </fieldset>
+  </div>
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.50899def.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js"></script>
+      
+        <script src="../../../javascripts/mermaid-config.js"></script>
+      
+        <script src="../../../javascripts/feedback.js"></script>
+      
+    
+  <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});
+document$.subscribe(() => { lightbox.reload() });
+</script></body>
+</html>

@@ -2,326 +2,326 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://docs.aegis-stack.io/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/CLAUDE/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/about/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/cli-reference/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/evolving-your-stack/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/installation/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/integration-patterns/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/process/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/technology/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/database/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/ingress/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/observability/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/scheduler/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/backend/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/backend/auth/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/backend/lifecycle/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/backend/load-testing/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/backend/middleware/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/backend/routes/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/backend/middleware/performance/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/frontend/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/frontend/api-client/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/frontend/architecture/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/frontend/events/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/frontend/example/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/frontend/routing/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/frontend/state/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/scheduler/cli/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/scheduler/examples/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/scheduler/persistence/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/scheduler/running-jobs/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/worker/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/worker/configuration/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/worker/examples/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/components/worker/extras/load-testing/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/deployment/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/overseer/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/overseer/integration/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/overseer/story/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/api/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/cli/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/cost-tracking/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/engines/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/examples/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/illiana/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/integration/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/llm-catalog/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/providers/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/rag/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/ai/voice/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/auth/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/auth/api/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/auth/cli/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/auth/examples/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/auth/integration/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/auth/levels/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/blog/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/blog/api/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/blog/cli/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/blog/dashboard/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/blog/examples/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/comms/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/comms/api/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/comms/cli/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/comms/examples/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/comms/setup/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/insights/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/insights/cli/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/insights/configuration/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/insights/dashboard/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/insights/data-sources/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/insights/examples/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/payment/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/payment/api/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/payment/cli/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/payment/dashboard/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/payment/examples/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
     <url>
          <loc>https://docs.aegis-stack.io/services/payment/setup/</loc>
-         <lastmod>2026-07-05</lastmod>
+         <lastmod>2026-07-06</lastmod>
     </url>
 </urlset>

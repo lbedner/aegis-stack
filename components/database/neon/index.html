@@ -12,28 +12,28 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://docs.aegis-stack.io/components/backend/">
+        <link rel="canonical" href="https://docs.aegis-stack.io/components/database/neon/">
       
       
         <link rel="prev" href="../">
       
       
-        <link rel="next" href="middleware/">
+        <link rel="next" href="../../frontend/">
       
       
-      <link rel="icon" href="../../images/aegis_stack_layered_shield.svg">
+      <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.16">
     
     
       
-        <title>Getting Started - Aegis Stack</title>
+        <title>Neon - Aegis Stack</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.7e37652d.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.7e37652d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -52,11 +52,11 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/custom.css">
+      <link rel="stylesheet" href="../../../stylesheets/custom.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -70,7 +70,7 @@
     plausible.init()
   </script>
 
-   <link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+   <link href="../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
     html.glightbox-open { overflow: initial; height: 100%; }
     .gslide-title { margin-top: 0px; user-select: text; }
     .gslide-desc { color: #666; user-select: text; }
@@ -79,7 +79,7 @@
     .gdesc-inner { font-size: 0.75rem; }
     body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
     body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
-    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../assets/javascripts/glightbox.min.js"></script></head>
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../assets/javascripts/glightbox.min.js"></script></head>
   
   
     
@@ -98,7 +98,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#backend-component" class="md-skip">
+        <a href="#neon" class="md-skip">
           Skip to content
         </a>
       
@@ -112,9 +112,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -131,7 +131,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Getting Started
+              Neon
             
           </span>
         </div>
@@ -246,7 +246,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../.." class="md-tabs__link">
+        <a href="../../.." class="md-tabs__link">
           
   
   
@@ -266,7 +266,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../about/" class="md-tabs__link">
+        <a href="../../../about/" class="md-tabs__link">
           
   
   
@@ -288,7 +288,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+        <a href="../../" class="md-tabs__link">
           
   
   
@@ -308,7 +308,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../services/" class="md-tabs__link">
+        <a href="../../../services/" class="md-tabs__link">
           
   
   
@@ -328,7 +328,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../overseer/" class="md-tabs__link">
+        <a href="../../../overseer/" class="md-tabs__link">
           
   
   
@@ -348,7 +348,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../deployment/" class="md-tabs__link">
+        <a href="../../../deployment/" class="md-tabs__link">
           
   
   
@@ -368,7 +368,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../cli-reference/" class="md-tabs__link">
+        <a href="../../../cli-reference/" class="md-tabs__link">
           
   
   
@@ -402,9 +402,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     Aegis Stack
@@ -472,7 +472,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -495,7 +495,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../installation/" class="md-nav__link">
+      <a href="../../../installation/" class="md-nav__link">
         
   
   
@@ -566,7 +566,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../about/" class="md-nav__link">
+      <a href="../../../about/" class="md-nav__link">
         
   
   
@@ -589,7 +589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../technology/" class="md-nav__link">
+      <a href="../../../technology/" class="md-nav__link">
         
   
   
@@ -612,7 +612,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../process/" class="md-nav__link">
+      <a href="../../../process/" class="md-nav__link">
         
   
   
@@ -688,7 +688,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   
@@ -708,8 +708,6 @@
                 
   
   
-    
-  
   
   
     
@@ -720,11 +718,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
         
           
           <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
@@ -740,7 +738,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_2">
             <span class="md-nav__icon md-icon"></span>
             Backend
@@ -751,32 +749,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    Getting Started
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../backend/" class="md-nav__link">
         
   
   
@@ -787,71 +763,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-aegis-adds-on-top-of-fastapi" class="md-nav__link">
-    <span class="md-ellipsis">
-      What Aegis Adds On Top Of FastAPI
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#request-flow" class="md-nav__link">
-    <span class="md-ellipsis">
-      Request Flow
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#anatomy-of-appcomponentsbackend" class="md-nav__link">
-    <span class="md-ellipsis">
-      Anatomy Of app/components/backend/
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#inspecting-the-backend-in-overseer" class="md-nav__link">
-    <span class="md-ellipsis">
-      Inspecting The Backend In Overseer
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      Next Steps
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -905,7 +816,7 @@
   
   
     <li class="md-nav__item">
-      <a href="middleware/" class="md-nav__link">
+      <a href="../../backend/middleware/" class="md-nav__link">
         
   
   
@@ -928,7 +839,7 @@
   
   
     <li class="md-nav__item">
-      <a href="middleware/performance/" class="md-nav__link">
+      <a href="../../backend/middleware/performance/" class="md-nav__link">
         
   
   
@@ -959,7 +870,7 @@
   
   
     <li class="md-nav__item">
-      <a href="lifecycle/" class="md-nav__link">
+      <a href="../../backend/lifecycle/" class="md-nav__link">
         
   
   
@@ -982,7 +893,7 @@
   
   
     <li class="md-nav__item">
-      <a href="routes/" class="md-nav__link">
+      <a href="../../backend/routes/" class="md-nav__link">
         
   
   
@@ -1005,7 +916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="auth/" class="md-nav__link">
+      <a href="../../backend/auth/" class="md-nav__link">
         
   
   
@@ -1028,7 +939,7 @@
   
   
     <li class="md-nav__item">
-      <a href="load-testing/" class="md-nav__link">
+      <a href="../../backend/load-testing/" class="md-nav__link">
         
   
   
@@ -1056,6 +967,8 @@
                 
   
   
+    
+  
   
   
     
@@ -1066,11 +979,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
@@ -1086,7 +999,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_3">
             <span class="md-nav__icon md-icon"></span>
             Database
@@ -1100,7 +1013,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../database/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -1120,10 +1033,32 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../database/neon/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Neon
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1134,6 +1069,71 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      How It Works
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pooled-and-direct-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pooled and Direct Endpoints
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Setup
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#switching-an-existing-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      Switching an Existing Project
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-choose-neon" class="md-nav__link">
+    <span class="md-ellipsis">
+      When to Choose Neon
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1195,7 +1195,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/" class="md-nav__link">
+      <a href="../../frontend/" class="md-nav__link">
         
   
   
@@ -1218,7 +1218,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/architecture/" class="md-nav__link">
+      <a href="../../frontend/architecture/" class="md-nav__link">
         
   
   
@@ -1241,7 +1241,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/routing/" class="md-nav__link">
+      <a href="../../frontend/routing/" class="md-nav__link">
         
   
   
@@ -1264,7 +1264,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/state/" class="md-nav__link">
+      <a href="../../frontend/state/" class="md-nav__link">
         
   
   
@@ -1287,7 +1287,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/api-client/" class="md-nav__link">
+      <a href="../../frontend/api-client/" class="md-nav__link">
         
   
   
@@ -1310,7 +1310,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/events/" class="md-nav__link">
+      <a href="../../frontend/events/" class="md-nav__link">
         
   
   
@@ -1333,7 +1333,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/example/" class="md-nav__link">
+      <a href="../../frontend/example/" class="md-nav__link">
         
   
   
@@ -1405,7 +1405,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/" class="md-nav__link">
+      <a href="../../scheduler/" class="md-nav__link">
         
   
   
@@ -1428,7 +1428,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/examples/" class="md-nav__link">
+      <a href="../../scheduler/examples/" class="md-nav__link">
         
   
   
@@ -1451,7 +1451,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/cli/" class="md-nav__link">
+      <a href="../../scheduler/cli/" class="md-nav__link">
         
   
   
@@ -1474,7 +1474,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/persistence/" class="md-nav__link">
+      <a href="../../scheduler/persistence/" class="md-nav__link">
         
   
   
@@ -1497,7 +1497,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/running-jobs/" class="md-nav__link">
+      <a href="../../scheduler/running-jobs/" class="md-nav__link">
         
   
   
@@ -1569,7 +1569,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/" class="md-nav__link">
+      <a href="../../worker/" class="md-nav__link">
         
   
   
@@ -1592,7 +1592,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/configuration/" class="md-nav__link">
+      <a href="../../worker/configuration/" class="md-nav__link">
         
   
   
@@ -1615,7 +1615,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/examples/" class="md-nav__link">
+      <a href="../../worker/examples/" class="md-nav__link">
         
   
   
@@ -1679,7 +1679,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/extras/load-testing/" class="md-nav__link">
+      <a href="../../worker/extras/load-testing/" class="md-nav__link">
         
   
   
@@ -1718,7 +1718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ingress/" class="md-nav__link">
+      <a href="../../ingress/" class="md-nav__link">
         
   
   
@@ -1741,7 +1741,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../observability/" class="md-nav__link">
+      <a href="../../observability/" class="md-nav__link">
         
   
   
@@ -1812,7 +1812,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/" class="md-nav__link">
+      <a href="../../../services/" class="md-nav__link">
         
   
   
@@ -1876,7 +1876,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/" class="md-nav__link">
+      <a href="../../../services/ai/" class="md-nav__link">
         
   
   
@@ -1899,7 +1899,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/illiana/" class="md-nav__link">
+      <a href="../../../services/ai/illiana/" class="md-nav__link">
         
   
   
@@ -1922,7 +1922,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/llm-catalog/" class="md-nav__link">
+      <a href="../../../services/ai/llm-catalog/" class="md-nav__link">
         
   
   
@@ -1945,7 +1945,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/rag/" class="md-nav__link">
+      <a href="../../../services/ai/rag/" class="md-nav__link">
         
   
   
@@ -1968,7 +1968,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/cost-tracking/" class="md-nav__link">
+      <a href="../../../services/ai/cost-tracking/" class="md-nav__link">
         
   
   
@@ -1991,7 +1991,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/voice/" class="md-nav__link">
+      <a href="../../../services/ai/voice/" class="md-nav__link">
         
   
   
@@ -2014,7 +2014,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/engines/" class="md-nav__link">
+      <a href="../../../services/ai/engines/" class="md-nav__link">
         
   
   
@@ -2037,7 +2037,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/providers/" class="md-nav__link">
+      <a href="../../../services/ai/providers/" class="md-nav__link">
         
   
   
@@ -2060,7 +2060,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/api/" class="md-nav__link">
+      <a href="../../../services/ai/api/" class="md-nav__link">
         
   
   
@@ -2083,7 +2083,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/integration/" class="md-nav__link">
+      <a href="../../../services/ai/integration/" class="md-nav__link">
         
   
   
@@ -2106,7 +2106,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/cli/" class="md-nav__link">
+      <a href="../../../services/ai/cli/" class="md-nav__link">
         
   
   
@@ -2129,7 +2129,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/examples/" class="md-nav__link">
+      <a href="../../../services/ai/examples/" class="md-nav__link">
         
   
   
@@ -2201,7 +2201,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/" class="md-nav__link">
+      <a href="../../../services/auth/" class="md-nav__link">
         
   
   
@@ -2224,7 +2224,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/levels/" class="md-nav__link">
+      <a href="../../../services/auth/levels/" class="md-nav__link">
         
   
   
@@ -2247,7 +2247,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/api/" class="md-nav__link">
+      <a href="../../../services/auth/api/" class="md-nav__link">
         
   
   
@@ -2270,7 +2270,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/integration/" class="md-nav__link">
+      <a href="../../../services/auth/integration/" class="md-nav__link">
         
   
   
@@ -2293,7 +2293,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/cli/" class="md-nav__link">
+      <a href="../../../services/auth/cli/" class="md-nav__link">
         
   
   
@@ -2316,7 +2316,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/examples/" class="md-nav__link">
+      <a href="../../../services/auth/examples/" class="md-nav__link">
         
   
   
@@ -2388,7 +2388,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/" class="md-nav__link">
+      <a href="../../../services/blog/" class="md-nav__link">
         
   
   
@@ -2411,7 +2411,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/api/" class="md-nav__link">
+      <a href="../../../services/blog/api/" class="md-nav__link">
         
   
   
@@ -2434,7 +2434,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/dashboard/" class="md-nav__link">
+      <a href="../../../services/blog/dashboard/" class="md-nav__link">
         
   
   
@@ -2457,7 +2457,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/cli/" class="md-nav__link">
+      <a href="../../../services/blog/cli/" class="md-nav__link">
         
   
   
@@ -2480,7 +2480,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/examples/" class="md-nav__link">
+      <a href="../../../services/blog/examples/" class="md-nav__link">
         
   
   
@@ -2552,7 +2552,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/" class="md-nav__link">
+      <a href="../../../services/comms/" class="md-nav__link">
         
   
   
@@ -2575,7 +2575,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/setup/" class="md-nav__link">
+      <a href="../../../services/comms/setup/" class="md-nav__link">
         
   
   
@@ -2598,7 +2598,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/api/" class="md-nav__link">
+      <a href="../../../services/comms/api/" class="md-nav__link">
         
   
   
@@ -2621,7 +2621,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/cli/" class="md-nav__link">
+      <a href="../../../services/comms/cli/" class="md-nav__link">
         
   
   
@@ -2693,7 +2693,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/" class="md-nav__link">
+      <a href="../../../services/insights/" class="md-nav__link">
         
   
   
@@ -2716,7 +2716,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/data-sources/" class="md-nav__link">
+      <a href="../../../services/insights/data-sources/" class="md-nav__link">
         
   
   
@@ -2739,7 +2739,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/cli/" class="md-nav__link">
+      <a href="../../../services/insights/cli/" class="md-nav__link">
         
   
   
@@ -2762,7 +2762,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/dashboard/" class="md-nav__link">
+      <a href="../../../services/insights/dashboard/" class="md-nav__link">
         
   
   
@@ -2785,7 +2785,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/configuration/" class="md-nav__link">
+      <a href="../../../services/insights/configuration/" class="md-nav__link">
         
   
   
@@ -2808,7 +2808,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/examples/" class="md-nav__link">
+      <a href="../../../services/insights/examples/" class="md-nav__link">
         
   
   
@@ -2880,7 +2880,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/" class="md-nav__link">
+      <a href="../../../services/payment/" class="md-nav__link">
         
   
   
@@ -2903,7 +2903,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/setup/" class="md-nav__link">
+      <a href="../../../services/payment/setup/" class="md-nav__link">
         
   
   
@@ -2926,7 +2926,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/dashboard/" class="md-nav__link">
+      <a href="../../../services/payment/dashboard/" class="md-nav__link">
         
   
   
@@ -2949,7 +2949,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/api/" class="md-nav__link">
+      <a href="../../../services/payment/api/" class="md-nav__link">
         
   
   
@@ -2972,7 +2972,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/cli/" class="md-nav__link">
+      <a href="../../../services/payment/cli/" class="md-nav__link">
         
   
   
@@ -2995,7 +2995,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/examples/" class="md-nav__link">
+      <a href="../../../services/payment/examples/" class="md-nav__link">
         
   
   
@@ -3074,7 +3074,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/" class="md-nav__link">
+      <a href="../../../overseer/" class="md-nav__link">
         
   
   
@@ -3097,7 +3097,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/story/" class="md-nav__link">
+      <a href="../../../overseer/story/" class="md-nav__link">
         
   
   
@@ -3120,7 +3120,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/integration/" class="md-nav__link">
+      <a href="../../../overseer/integration/" class="md-nav__link">
         
   
   
@@ -3191,7 +3191,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../deployment/" class="md-nav__link">
+      <a href="../../../deployment/" class="md-nav__link">
         
   
   
@@ -3262,7 +3262,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli-reference/" class="md-nav__link">
+      <a href="../../../cli-reference/" class="md-nav__link">
         
   
   
@@ -3285,7 +3285,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../evolving-your-stack/" class="md-nav__link">
+      <a href="../../../evolving-your-stack/" class="md-nav__link">
         
   
   
@@ -3308,7 +3308,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../integration-patterns/" class="md-nav__link">
+      <a href="../../../integration-patterns/" class="md-nav__link">
         
   
   
@@ -3358,45 +3358,45 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-aegis-adds-on-top-of-fastapi" class="md-nav__link">
+  <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
-      What Aegis Adds On Top Of FastAPI
+      How It Works
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#request-flow" class="md-nav__link">
+  <a href="#pooled-and-direct-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
-      Request Flow
+      Pooled and Direct Endpoints
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#anatomy-of-appcomponentsbackend" class="md-nav__link">
+  <a href="#setup" class="md-nav__link">
     <span class="md-ellipsis">
-      Anatomy Of app/components/backend/
+      Setup
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#inspecting-the-backend-in-overseer" class="md-nav__link">
+  <a href="#switching-an-existing-project" class="md-nav__link">
     <span class="md-ellipsis">
-      Inspecting The Backend In Overseer
+      Switching an Existing Project
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
+  <a href="#when-to-choose-neon" class="md-nav__link">
     <span class="md-ellipsis">
-      Next Steps
+      When to Choose Neon
     </span>
   </a>
   
@@ -3422,138 +3422,44 @@
   
 
 
-<h1 id="backend-component">Backend Component</h1>
-<p>The <strong>Backend Component</strong> is the HTTP surface of your Aegis project. It is
-<a href="https://fastapi.tiangolo.com/">FastAPI</a> underneath, but Aegis ships an app
-factory and three drop-in directories that turn the backend into a
-composition point for the rest of the stack: services register routes,
-infrastructure components register middleware, and the lifespan is owned by
-auto-discovered startup and shutdown hooks.</p>
-<div class="admonition example">
-<p class="admonition-title">Musings: On Backend Choices (November 2025)</p>
-<p>Most of my experience is with <a href="https://fastapi.tiangolo.com/">FastAPI</a>, but I did have the chance to do some <a href="https://flask.palletsprojects.com/">Flask</a> work in a production environment this past summer, and it was rather fun.</p>
-<p>Regarding using it as a backend, I mean, it's just another backend to learn, and if I can just deal with the sync/async stuff, it's something I can confidently say I wouldn't mind throwing in as an option.</p>
-<p>Of course, with Flet as the frontend (though perhaps forced dependency goes away?), FastAPI will always be there as its own backend. But all API related stuff is handled in Flask... In theory...</p>
-</div>
-<h2 id="what-aegis-adds-on-top-of-fastapi">What Aegis Adds On Top Of FastAPI</h2>
-<p>If you have used FastAPI before, you have written something like:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">()</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span><span class="n">CORSMiddleware</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">my_router</span><span class="p">)</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nd">@app</span><span class="o">.</span><span class="n">on_event</span><span class="p">(</span><span class="s2">&quot;startup&quot;</span><span class="p">)</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_startup</span><span class="p">():</span> <span class="o">...</span>
+<h1 id="neon">Neon</h1>
+<p><a href="https://neon.tech">Neon</a> is serverless Postgres. In Aegis Stack, <code>database[neon]</code> runs your FastAPI app against Neon's cloud in production, with autoscaling, scale-to-zero, and database branching, while development keeps the same local Postgres container as any other PostgreSQL stack.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--components<span class="w"> </span><span class="s2">&quot;database[neon]&quot;</span>
 </span></code></pre></div>
-<p>Aegis splits that single call site into four:</p>
-<table>
-<thead>
-<tr>
-<th>Concern</th>
-<th>Where it lives</th>
-<th>Discovery</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>App factory</td>
-<td><code>app/components/backend/main.py</code></td>
-<td>Explicit</td>
-</tr>
-<tr>
-<td>Middleware</td>
-<td><code>app/components/backend/middleware/*.py</code></td>
-<td>Auto-discovered</td>
-</tr>
-<tr>
-<td>Startup / shutdown</td>
-<td><code>app/components/backend/startup/*.py</code>, <code>shutdown/*.py</code></td>
-<td>Auto-discovered</td>
-</tr>
-<tr>
-<td>Routers</td>
-<td><code>app/components/backend/api/routing.py</code></td>
-<td>Explicit</td>
-</tr>
-</tbody>
-</table>
-<p>The reasoning is asymmetric on purpose. Middleware and lifecycle hooks are
-infrastructure: components and services should be able to drop one in
-without editing a central file. Routers are the public surface of the
-application, so they stay in one explicit registry where you can see the
-whole API shape at a glance.</p>
-<h2 id="request-flow">Request Flow</h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>HTTP request
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    |
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    v
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>+---------------------------------------+
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>| Middleware stack (auto-discovered)    |
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>|   CORS                                |
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>|   SessionMiddleware  (if auth+oauth)  |
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>|   Logfire tracing    (if observ.)     |
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>|   ...your middleware...               |
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>+---------------------------------------+
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    |
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    v
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>+---------------------------------------+
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>| Router (explicit in api/routing.py)   |
-</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>|   /health, /api/v1/*, /events/*, ...  |
-</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>+---------------------------------------+
-</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    |
-</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    v
-</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>+---------------------------------------+
-</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>| Endpoint function -&gt; service layer    |
-</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>+---------------------------------------+
-</span></code></pre></div>
-<p>The lifespan wraps this whole flow. On boot, <code>startup_hook</code> functions in
-<code>startup/*.py</code> run in discovery order. On shutdown, <code>shutdown_hook</code>
-functions in <code>shutdown/*.py</code> run in <strong>reverse</strong> order so resources unwind
-in the opposite order they were acquired.</p>
-<h2 id="anatomy-of-appcomponentsbackend">Anatomy Of <code>app/components/backend/</code></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>app/components/backend/
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>├── main.py              # create_backend_app() + get_configured_app()
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>├── hooks.py             # BackendHooks: discovery + execution machinery
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>├── middleware/          # Auto-discovered middleware modules
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>├── startup/             # Auto-discovered startup hooks
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>├── shutdown/            # Auto-discovered shutdown hooks
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>└── api/
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    ├── routing.py       # The single explicit router registry
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    ├── health.py        # Health endpoints (always present)
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    └── ...              # Service routers (auth, ai, payment, etc.)
-</span></code></pre></div>
-<p><code>create_backend_app(app)</code> in <code>main.py</code> is the single entry point: it stashes
-the configured app for later introspection, runs middleware discovery
-against <code>middleware/</code>, and calls <code>include_routers(app)</code> from
-<code>api/routing.py</code>. Lifespan hooks are wired separately so they run inside
-FastAPI's lifespan context, not at import time.</p>
-<h2 id="inspecting-the-backend-in-overseer">Inspecting The Backend In Overseer</h2>
-<p>Open the Aegis dashboard and click the <strong>Backend</strong> card. The modal has
-three tabs that mirror the four concerns above:</p>
+<p>Neon is not a separate engine. <code>database[neon]</code> is the <strong>postgres</strong> engine hosted on Neon, so every Python model, migration, and query is identical to a self-hosted PostgreSQL stack. See the <a href="../">Database component</a> for the engine itself: models, sessions, migrations, and testing.</p>
+<h2 id="how-it-works">How It Works</h2>
 <ul>
-<li><strong>Overview</strong>: route count, endpoint count, middleware count, security
-  layer count, plus host system metrics (CPU, memory, disk).</li>
-<li><strong>Routes</strong>: every registered route, grouped by OpenAPI tag, with method
-  badges, path parameters, response models, and dependency info. See
-  <a href="routes/">Routes</a>.</li>
-<li><strong>Lifecycle</strong>: a flow diagram of startup hooks, middleware stack, and
-  shutdown hooks, with an inspector panel for the selected item. See
-  <a href="lifecycle/">Lifecycle</a>.</li>
+<li><strong>Development</strong> runs the same local <code>postgres:16</code> container as a plain PostgreSQL stack (zero credentials, fully offline).</li>
+<li><strong>Production</strong> runs no database container at all: the app points <code>DATABASE_URL</code> at Neon's pooled endpoint, injected as a secret.</li>
+<li>The generated connection code detects a Neon host (<code>*.neon.tech</code>) at runtime and applies Neon's pooler-safe connection settings only then, so one codebase runs against the local container in development and Neon in production.</li>
+<li>No extra Python dependencies: the standard <code>asyncpg</code> and <code>psycopg2</code> drivers connect over TCP. There is no Neon-specific Python driver.</li>
 </ul>
-<p><a class="glightbox" href="../../images/backend_dashboard_overview.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../images/backend_dashboard_overview.png" alt="Overseer Backend modal — Overview tab showing API and system metrics"></a></p>
-<p>The dashboard pulls this data from cached metadata that the
-<code>component_health</code> startup hook builds when the app boots. If you add a
-new middleware or hook, restart the backend and it shows up automatically.</p>
-<h2 id="next-steps">Next Steps</h2>
+<h2 id="pooled-and-direct-endpoints">Pooled and Direct Endpoints</h2>
+<p>Neon exposes two connection endpoints per database, and the generated project uses both:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># App runtime uses the POOLED endpoint (note the -pooler host)</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql://user:pass@ep-xxxx-pooler.region.aws.neon.tech/dbname
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Migrations use the DIRECT (unpooled) endpoint</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nv">DATABASE_URL_UNPOOLED</span><span class="o">=</span>postgresql://user:pass@ep-xxxx.region.aws.neon.tech/dbname
+</span></code></pre></div>
+<p>Runtime traffic goes through the pooled endpoint. Migrations run over the direct endpoint automatically, because Neon's pooler (PgBouncer in transaction mode) is unsafe for DDL and session-level features. You set both variables once; the project picks the right one per task.</p>
+<h2 id="setup">Setup</h2>
+<ol>
+<li>Create a Neon account and project (free tier available).</li>
+<li>Copy both connection strings from the Neon console: the pooled one (its host contains <code>-pooler</code>) and the direct one.</li>
+<li>Set <code>DATABASE_URL</code> (pooled) and <code>DATABASE_URL_UNPOOLED</code> (direct) as production secrets in your deployment environment.</li>
+</ol>
+<p>Development needs none of this: <code>make serve</code> runs the local container with zero configuration.</p>
+<h2 id="switching-an-existing-project">Switching an Existing Project</h2>
+<p>The provider is chosen at <code>aegis init</code> today. <code>aegis add</code> and <code>aegis update</code> cannot yet move an existing PostgreSQL project between the local container and Neon, because the Neon connection handling is generated into the project rather than toggled at runtime. Provider switching on a living project is planned.</p>
+<p>Until then, the practical path is to generate a fresh <code>database[neon]</code> project and move your models across. The data itself is standard PostgreSQL: <code>pg_dump</code> from the container, restore into Neon.</p>
+<h2 id="when-to-choose-neon">When to Choose Neon</h2>
 <ul>
-<li><a href="middleware/">Middleware</a>: the auto-discovery contract, the middleware
-  that ships in the templates, and how to add your own.</li>
-<li><a href="lifecycle/">Lifecycle</a>: startup and shutdown hooks, ordering rules,
-  and the Overseer Lifecycle tab.</li>
-<li><a href="routes/">Routes</a>: how routers are registered, what each conditional
-  block maps to, and how to add one.</li>
-<li><a href="auth/">Authentication Integration</a>: how the auth service plugs into
-  the backend through SessionMiddleware, rate limiting, and router
-  registration.</li>
+<li>Serverless and autoscaling deployments</li>
+<li>Per-PR / preview database branches</li>
+<li>Teams that would rather not operate a database server</li>
 </ul>
+<p>One trade-off to know: scale-to-zero adds cold-start latency to the first request after an idle period. If that is unacceptable, or you would rather run and back up your own PostgreSQL service in every environment, use the local container instead: see <a href="../#hosting-postgresql-container-or-neon">Hosting PostgreSQL: container or Neon</a>.</p>
 
 
 
@@ -3625,16 +3531,16 @@ new middleware or hook, restart the backend and it shows up automatically.</p>
     
     
       
-      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.50899def.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.50899def.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js"></script>
       
-        <script src="../../javascripts/mermaid-config.js"></script>
+        <script src="../../../javascripts/mermaid-config.js"></script>
       
-        <script src="../../javascripts/feedback.js"></script>
+        <script src="../../../javascripts/feedback.js"></script>
       
     
   <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});

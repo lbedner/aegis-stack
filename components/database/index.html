@@ -18,7 +18,7 @@
         <link rel="prev" href="../backend/load-testing/">
       
       
-        <link rel="next" href="../frontend/">
+        <link rel="next" href="neon/">
       
       
       <link rel="icon" href="../../images/aegis_stack_layered_shield.svg">
@@ -26,7 +26,7 @@
     
     
       
-        <title>Database - Aegis Stack</title>
+        <title>Getting Started - Aegis Stack</title>
       
     
     
@@ -131,7 +131,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Database
+              Getting Started
             
           </span>
         </div>
@@ -971,6 +971,49 @@
   
   
   
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Database
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            Database
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
     <li class="md-nav__item md-nav__item--active">
       
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
@@ -984,7 +1027,7 @@
   
   
   <span class="md-ellipsis">
-    Database
+    Getting Started
     
   </span>
   
@@ -997,7 +1040,7 @@
   
   
   <span class="md-ellipsis">
-    Database
+    Getting Started
     
   </span>
   
@@ -1157,6 +1200,37 @@
     </ul>
   
 </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="neon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Neon
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
       
     </li>
   
@@ -3608,26 +3682,10 @@
 <li>Per-PR / preview database branches</li>
 <li>Teams that would rather not operate a database server</li>
 </ul>
-<p><strong>How it works:</strong></p>
-<ul>
-<li>Neon is the <strong>postgres</strong> engine, hosted on Neon's cloud. Models,
-  migrations, and SQLModel code are identical to a self-hosted postgres stack.</li>
-<li><strong>Development</strong> runs the same local <code>postgres:16</code> container as a plain
-  postgres stack (zero credentials, fully offline).</li>
-<li><strong>Production</strong> runs no database container at all: the app points
-  <code>DATABASE_URL</code> at Neon's pooled endpoint, injected as a secret.</li>
-<li>Runtime uses the <strong>pooled</strong> endpoint; migrations use the <strong>direct</strong>
-  (unpooled) endpoint, because Neon's pooler (PgBouncer in transaction mode)
-  is unsafe for DDL and session-level features.</li>
-<li>No extra Python dependencies: the standard <code>asyncpg</code> and <code>psycopg2</code> drivers
-  connect over TCP. There is no Neon-specific Python driver.</li>
-</ul>
-<p><strong>Requirements:</strong></p>
-<ul>
-<li>A Neon account and project (free tier available)</li>
-<li><code>DATABASE_URL</code> (pooled) and <code>DATABASE_URL_UNPOOLED</code> (direct) set as
-  production secrets</li>
-</ul>
+<p>Neon is the <strong>postgres</strong> engine hosted on Neon's cloud: development
+still runs the local container, production connects to Neon. See the
+<a href="neon/">Neon page</a> for endpoints, setup, and how the
+generated code adapts at runtime.</p>
 </div>
 </div>
 </div>
@@ -3641,7 +3699,7 @@
 <li><strong>Container</strong> (<code>database[postgres]</code>): a <code>postgres:16</code> service runs in your Docker Compose stack in every environment (<code>make serve</code>, <code>make serve-prod</code>, and <code>aegis deploy</code>). You operate and back up the database.</li>
 <li><strong>Neon</strong> (<code>database[neon]</code>): development still runs the local container, but production has no database service, the app connects to Neon's cloud via <code>DATABASE_URL</code>, and Neon handles autoscaling, scale-to-zero, and branching.</li>
 </ul>
-<p>The generated connection code detects a Neon host (<code>*.neon.tech</code>) at runtime and applies Neon's pooler-safe connection settings only then, so one codebase runs against the local container in development and Neon in production.</p>
+<p>The generated connection code detects a Neon host (<code>*.neon.tech</code>) at runtime and applies Neon's pooler-safe connection settings only then, so one codebase runs against the local container in development and Neon in production. See the <a href="neon/">Neon page</a> for the full provider guide.</p>
 <h2 id="common-patterns">Common Patterns</h2>
 <h3 id="adding-your-first-model">Adding Your First Model</h3>
 <p><strong>Step 1: Create Your Model</strong>

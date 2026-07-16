@@ -3707,6 +3707,10 @@
 <p class="admonition-title">Docker Alternatives</p>
 <p>While the standard workflow uses Docker, generated projects are standard Python applications. Advanced users can manually run components (uvicorn for backend, direct Redis installation, etc.), but this workflow is currently undocumented and unsupported.</p>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Windows</p>
+<p><code>make</code> isn't a native Windows binary. After installing the project's dev dependencies once (<code>uv sync --all-extras</code>), every <code>make &lt;target&gt;</code> command in a generated project also works as <code>uv run poe &lt;target&gt;</code> (for example <code>uv run poe serve</code>), including the standard Docker-based workflow above. Run <code>uv run poe -h</code> for the full list.</p>
+</div>
 <h3 id="installing-docker">Installing Docker</h3>
 <ul>
 <li><strong>macOS/Windows</strong>: <a href="https://www.docker.com/products/docker-desktop/">Docker Desktop</a></li>

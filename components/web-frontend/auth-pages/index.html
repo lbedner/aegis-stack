@@ -12,24 +12,28 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://docs.aegis-stack.io/plans/finance-service/finance-research/02-product-insights-brief/">
+        <link rel="canonical" href="https://docs.aegis-stack.io/components/web-frontend/auth-pages/">
       
       
+        <link rel="prev" href="../asset-pipeline/">
       
       
-      <link rel="icon" href="../../../../images/aegis_stack_layered_shield.svg">
+        <link rel="next" href="../../scheduler/">
+      
+      
+      <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.16">
     
     
       
-        <title>Product Insights & Hard-Won Lessons - Aegis Stack</title>
+        <title>Auth Pages - Aegis Stack</title>
       
     
     
-      <link rel="stylesheet" href="../../../../assets/stylesheets/main.7e37652d.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.7e37652d.min.css">
       
         
-        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -48,11 +52,11 @@
       
     
     
-      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../../../stylesheets/custom.css">
+      <link rel="stylesheet" href="../../../stylesheets/custom.css">
     
-    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -66,7 +70,7 @@
     plausible.init()
   </script>
 
-   <link href="../../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+   <link href="../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
     html.glightbox-open { overflow: initial; height: 100%; }
     .gslide-title { margin-top: 0px; user-select: text; }
     .gslide-desc { color: #666; user-select: text; }
@@ -75,7 +79,7 @@
     .gdesc-inner { font-size: 0.75rem; }
     body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
     body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
-    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../../assets/javascripts/glightbox.min.js"></script></head>
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../assets/javascripts/glightbox.min.js"></script></head>
   
   
     
@@ -94,7 +98,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#product-insights-hard-won-lessons" class="md-skip">
+        <a href="#auth-pages" class="md-skip">
           Skip to content
         </a>
       
@@ -108,9 +112,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -127,7 +131,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Product Insights &amp; Hard-Won Lessons
+              Auth Pages
             
           </span>
         </div>
@@ -242,7 +246,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../.." class="md-tabs__link">
+        <a href="../../.." class="md-tabs__link">
           
   
   
@@ -262,7 +266,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../about/" class="md-tabs__link">
+        <a href="../../../about/" class="md-tabs__link">
           
   
   
@@ -278,11 +282,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../../../components/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../" class="md-tabs__link">
           
   
   
@@ -302,7 +308,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../services/" class="md-tabs__link">
+        <a href="../../../services/" class="md-tabs__link">
           
   
   
@@ -322,7 +328,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../overseer/" class="md-tabs__link">
+        <a href="../../../overseer/" class="md-tabs__link">
           
   
   
@@ -342,7 +348,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../deployment/" class="md-tabs__link">
+        <a href="../../../deployment/" class="md-tabs__link">
           
   
   
@@ -362,7 +368,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../../cli-reference/" class="md-tabs__link">
+        <a href="../../../cli-reference/" class="md-tabs__link">
           
   
   
@@ -396,9 +402,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     Aegis Stack
@@ -466,7 +472,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -489,7 +495,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../installation/" class="md-nav__link">
+      <a href="../../../installation/" class="md-nav__link">
         
   
   
@@ -560,7 +566,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../about/" class="md-nav__link">
+      <a href="../../../about/" class="md-nav__link">
         
   
   
@@ -583,7 +589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../technology/" class="md-nav__link">
+      <a href="../../../technology/" class="md-nav__link">
         
   
   
@@ -606,7 +612,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../process/" class="md-nav__link">
+      <a href="../../../process/" class="md-nav__link">
         
   
   
@@ -633,24 +639,29 @@
       
   
   
+    
   
   
+  
     
     
     
     
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -663,7 +674,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             Components
@@ -677,7 +688,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   
@@ -741,7 +752,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/backend/" class="md-nav__link">
+      <a href="../../backend/" class="md-nav__link">
         
   
   
@@ -805,7 +816,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/backend/middleware/" class="md-nav__link">
+      <a href="../../backend/middleware/" class="md-nav__link">
         
   
   
@@ -828,7 +839,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/backend/middleware/performance/" class="md-nav__link">
+      <a href="../../backend/middleware/performance/" class="md-nav__link">
         
   
   
@@ -859,7 +870,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/backend/lifecycle/" class="md-nav__link">
+      <a href="../../backend/lifecycle/" class="md-nav__link">
         
   
   
@@ -882,7 +893,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/backend/routes/" class="md-nav__link">
+      <a href="../../backend/routes/" class="md-nav__link">
         
   
   
@@ -905,7 +916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/backend/auth/" class="md-nav__link">
+      <a href="../../backend/auth/" class="md-nav__link">
         
   
   
@@ -928,7 +939,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/backend/load-testing/" class="md-nav__link">
+      <a href="../../backend/load-testing/" class="md-nav__link">
         
   
   
@@ -1000,7 +1011,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/database/" class="md-nav__link">
+      <a href="../../database/" class="md-nav__link">
         
   
   
@@ -1023,7 +1034,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/database/neon/" class="md-nav__link">
+      <a href="../../database/neon/" class="md-nav__link">
         
   
   
@@ -1051,6 +1062,8 @@
                 
   
   
+    
+  
   
   
     
@@ -1061,11 +1074,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" checked>
         
           
           <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
@@ -1081,7 +1094,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_4">
             <span class="md-nav__icon md-icon"></span>
             Frontend
@@ -1094,8 +1107,49 @@
   
   
   
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_4_1" id="__nav_3_4_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Flet Dashboard
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            Flet Dashboard
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
     <li class="md-nav__item">
-      <a href="../../../../components/frontend/" class="md-nav__link">
+      <a href="../../frontend/" class="md-nav__link">
         
   
   
@@ -1118,7 +1172,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/frontend/architecture/" class="md-nav__link">
+      <a href="../../frontend/architecture/" class="md-nav__link">
         
   
   
@@ -1141,7 +1195,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/frontend/routing/" class="md-nav__link">
+      <a href="../../frontend/routing/" class="md-nav__link">
         
   
   
@@ -1164,7 +1218,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/frontend/state/" class="md-nav__link">
+      <a href="../../frontend/state/" class="md-nav__link">
         
   
   
@@ -1187,7 +1241,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/frontend/api-client/" class="md-nav__link">
+      <a href="../../frontend/api-client/" class="md-nav__link">
         
   
   
@@ -1210,7 +1264,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/frontend/events/" class="md-nav__link">
+      <a href="../../frontend/events/" class="md-nav__link">
         
   
   
@@ -1233,7 +1287,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/frontend/example/" class="md-nav__link">
+      <a href="../../frontend/example/" class="md-nav__link">
         
   
   
@@ -1244,6 +1298,273 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_4_2" id="__nav_3_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Web Frontend (htmx)
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            Web Frontend (htmx)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../templates-and-partials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Templates & Partials
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../styling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Styling & Theming
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../asset-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Asset Pipeline
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Auth Pages
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Auth Pages
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-ships" class="md-nav__link">
+    <span class="md-ellipsis">
+      What ships
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-deliberate-design-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      Two deliberate design points
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Two deliberate design points">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#login-and-register-are-native-form-posts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Login and register are native form POSTs
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-expiry-handling-is-single-flight" class="md-nav__link">
+    <span class="md-ellipsis">
+      Session-expiry handling is single-flight
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#protecting-a-page" class="md-nav__link">
+    <span class="md-ellipsis">
+      Protecting a page
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -1305,7 +1626,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/scheduler/" class="md-nav__link">
+      <a href="../../scheduler/" class="md-nav__link">
         
   
   
@@ -1328,7 +1649,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/scheduler/examples/" class="md-nav__link">
+      <a href="../../scheduler/examples/" class="md-nav__link">
         
   
   
@@ -1351,7 +1672,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/scheduler/cli/" class="md-nav__link">
+      <a href="../../scheduler/cli/" class="md-nav__link">
         
   
   
@@ -1374,7 +1695,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/scheduler/persistence/" class="md-nav__link">
+      <a href="../../scheduler/persistence/" class="md-nav__link">
         
   
   
@@ -1397,7 +1718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/scheduler/running-jobs/" class="md-nav__link">
+      <a href="../../scheduler/running-jobs/" class="md-nav__link">
         
   
   
@@ -1469,7 +1790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/worker/" class="md-nav__link">
+      <a href="../../worker/" class="md-nav__link">
         
   
   
@@ -1492,7 +1813,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/worker/configuration/" class="md-nav__link">
+      <a href="../../worker/configuration/" class="md-nav__link">
         
   
   
@@ -1515,7 +1836,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/worker/examples/" class="md-nav__link">
+      <a href="../../worker/examples/" class="md-nav__link">
         
   
   
@@ -1579,7 +1900,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/worker/extras/load-testing/" class="md-nav__link">
+      <a href="../../worker/extras/load-testing/" class="md-nav__link">
         
   
   
@@ -1618,7 +1939,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/ingress/" class="md-nav__link">
+      <a href="../../ingress/" class="md-nav__link">
         
   
   
@@ -1641,7 +1962,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../components/observability/" class="md-nav__link">
+      <a href="../../observability/" class="md-nav__link">
         
   
   
@@ -1712,7 +2033,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/" class="md-nav__link">
+      <a href="../../../services/" class="md-nav__link">
         
   
   
@@ -1776,7 +2097,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/" class="md-nav__link">
+      <a href="../../../services/ai/" class="md-nav__link">
         
   
   
@@ -1799,7 +2120,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/illiana/" class="md-nav__link">
+      <a href="../../../services/ai/illiana/" class="md-nav__link">
         
   
   
@@ -1822,7 +2143,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/llm-catalog/" class="md-nav__link">
+      <a href="../../../services/ai/llm-catalog/" class="md-nav__link">
         
   
   
@@ -1845,7 +2166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/rag/" class="md-nav__link">
+      <a href="../../../services/ai/rag/" class="md-nav__link">
         
   
   
@@ -1868,7 +2189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/cost-tracking/" class="md-nav__link">
+      <a href="../../../services/ai/cost-tracking/" class="md-nav__link">
         
   
   
@@ -1891,7 +2212,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/voice/" class="md-nav__link">
+      <a href="../../../services/ai/voice/" class="md-nav__link">
         
   
   
@@ -1914,7 +2235,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/engines/" class="md-nav__link">
+      <a href="../../../services/ai/engines/" class="md-nav__link">
         
   
   
@@ -1937,7 +2258,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/providers/" class="md-nav__link">
+      <a href="../../../services/ai/providers/" class="md-nav__link">
         
   
   
@@ -1960,7 +2281,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/api/" class="md-nav__link">
+      <a href="../../../services/ai/api/" class="md-nav__link">
         
   
   
@@ -1983,7 +2304,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/integration/" class="md-nav__link">
+      <a href="../../../services/ai/integration/" class="md-nav__link">
         
   
   
@@ -2006,7 +2327,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/cli/" class="md-nav__link">
+      <a href="../../../services/ai/cli/" class="md-nav__link">
         
   
   
@@ -2029,7 +2350,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/ai/examples/" class="md-nav__link">
+      <a href="../../../services/ai/examples/" class="md-nav__link">
         
   
   
@@ -2101,7 +2422,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/auth/" class="md-nav__link">
+      <a href="../../../services/auth/" class="md-nav__link">
         
   
   
@@ -2124,7 +2445,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/auth/levels/" class="md-nav__link">
+      <a href="../../../services/auth/levels/" class="md-nav__link">
         
   
   
@@ -2147,7 +2468,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/auth/api/" class="md-nav__link">
+      <a href="../../../services/auth/api/" class="md-nav__link">
         
   
   
@@ -2170,7 +2491,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/auth/integration/" class="md-nav__link">
+      <a href="../../../services/auth/integration/" class="md-nav__link">
         
   
   
@@ -2193,7 +2514,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/auth/cli/" class="md-nav__link">
+      <a href="../../../services/auth/cli/" class="md-nav__link">
         
   
   
@@ -2216,7 +2537,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/auth/examples/" class="md-nav__link">
+      <a href="../../../services/auth/examples/" class="md-nav__link">
         
   
   
@@ -2288,7 +2609,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/blog/" class="md-nav__link">
+      <a href="../../../services/blog/" class="md-nav__link">
         
   
   
@@ -2311,7 +2632,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/blog/api/" class="md-nav__link">
+      <a href="../../../services/blog/api/" class="md-nav__link">
         
   
   
@@ -2334,7 +2655,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/blog/dashboard/" class="md-nav__link">
+      <a href="../../../services/blog/dashboard/" class="md-nav__link">
         
   
   
@@ -2357,7 +2678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/blog/cli/" class="md-nav__link">
+      <a href="../../../services/blog/cli/" class="md-nav__link">
         
   
   
@@ -2380,7 +2701,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/blog/examples/" class="md-nav__link">
+      <a href="../../../services/blog/examples/" class="md-nav__link">
         
   
   
@@ -2452,7 +2773,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/comms/" class="md-nav__link">
+      <a href="../../../services/comms/" class="md-nav__link">
         
   
   
@@ -2475,7 +2796,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/comms/setup/" class="md-nav__link">
+      <a href="../../../services/comms/setup/" class="md-nav__link">
         
   
   
@@ -2498,7 +2819,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/comms/api/" class="md-nav__link">
+      <a href="../../../services/comms/api/" class="md-nav__link">
         
   
   
@@ -2521,12 +2842,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/comms/cli/" class="md-nav__link">
+      <a href="../../../services/comms/cli/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     CLI Commands
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../services/comms/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
     
   </span>
   
@@ -2593,7 +2937,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/insights/" class="md-nav__link">
+      <a href="../../../services/insights/" class="md-nav__link">
         
   
   
@@ -2616,7 +2960,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/insights/data-sources/" class="md-nav__link">
+      <a href="../../../services/insights/data-sources/" class="md-nav__link">
         
   
   
@@ -2639,7 +2983,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/insights/cli/" class="md-nav__link">
+      <a href="../../../services/insights/cli/" class="md-nav__link">
         
   
   
@@ -2662,7 +3006,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/insights/dashboard/" class="md-nav__link">
+      <a href="../../../services/insights/dashboard/" class="md-nav__link">
         
   
   
@@ -2685,7 +3029,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/insights/configuration/" class="md-nav__link">
+      <a href="../../../services/insights/configuration/" class="md-nav__link">
         
   
   
@@ -2708,7 +3052,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/insights/examples/" class="md-nav__link">
+      <a href="../../../services/insights/examples/" class="md-nav__link">
         
   
   
@@ -2780,7 +3124,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/payment/" class="md-nav__link">
+      <a href="../../../services/payment/" class="md-nav__link">
         
   
   
@@ -2803,7 +3147,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/payment/setup/" class="md-nav__link">
+      <a href="../../../services/payment/setup/" class="md-nav__link">
         
   
   
@@ -2826,7 +3170,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/payment/dashboard/" class="md-nav__link">
+      <a href="../../../services/payment/dashboard/" class="md-nav__link">
         
   
   
@@ -2849,7 +3193,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/payment/api/" class="md-nav__link">
+      <a href="../../../services/payment/api/" class="md-nav__link">
         
   
   
@@ -2872,7 +3216,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/payment/cli/" class="md-nav__link">
+      <a href="../../../services/payment/cli/" class="md-nav__link">
         
   
   
@@ -2895,7 +3239,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../services/payment/examples/" class="md-nav__link">
+      <a href="../../../services/payment/examples/" class="md-nav__link">
         
   
   
@@ -2974,7 +3318,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../overseer/" class="md-nav__link">
+      <a href="../../../overseer/" class="md-nav__link">
         
   
   
@@ -2997,7 +3341,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../overseer/story/" class="md-nav__link">
+      <a href="../../../overseer/story/" class="md-nav__link">
         
   
   
@@ -3020,7 +3364,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../overseer/integration/" class="md-nav__link">
+      <a href="../../../overseer/integration/" class="md-nav__link">
         
   
   
@@ -3091,7 +3435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../deployment/" class="md-nav__link">
+      <a href="../../../deployment/" class="md-nav__link">
         
   
   
@@ -3162,7 +3506,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../cli-reference/" class="md-nav__link">
+      <a href="../../../cli-reference/" class="md-nav__link">
         
   
   
@@ -3185,7 +3529,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../evolving-your-stack/" class="md-nav__link">
+      <a href="../../../evolving-your-stack/" class="md-nav__link">
         
   
   
@@ -3208,7 +3552,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../integration-patterns/" class="md-nav__link">
+      <a href="../../../integration-patterns/" class="md-nav__link">
         
   
   
@@ -3258,145 +3602,37 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#a-field-brief-for-building-your-first-personal-finance-aggregator-plaid-quicken-import-chaseamex-wasting-money-insights" class="md-nav__link">
+  <a href="#what-ships" class="md-nav__link">
     <span class="md-ellipsis">
-      A field brief for building your first personal-finance aggregator (Plaid + Quicken import, Chase/AMEX, "wasting money" insights)
+      What ships
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#0-the-one-paragraph-orientation" class="md-nav__link">
+  <a href="#two-deliberate-design-points" class="md-nav__link">
     <span class="md-ellipsis">
-      0. The one-paragraph orientation
+      Two deliberate design points
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#1-feature-landscape-table-stakes-vs-differentiators" class="md-nav__link">
-    <span class="md-ellipsis">
-      1. Feature landscape — table stakes vs differentiators
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#2-things-you-probably-dont-know-highest-value-non-obvious-insights" class="md-nav__link">
-    <span class="md-ellipsis">
-      2. Things you probably don't know (highest-value non-obvious insights)
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-connectivity-recommendation" class="md-nav__link">
-    <span class="md-ellipsis">
-      3. Connectivity recommendation
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-wasting-money-insight-playbook" class="md-nav__link">
-    <span class="md-ellipsis">
-      4. "Wasting money" insight playbook
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#5-schema-implications-feed-straight-into-schema-design" class="md-nav__link">
-    <span class="md-ellipsis">
-      5. Schema implications (feed straight into schema design)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="5. Schema implications (feed straight into schema design)">
+    <nav class="md-nav" aria-label="Two deliberate design points">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#transactions-mutable-upsert-not-append-only-immutable" class="md-nav__link">
+  <a href="#login-and-register-are-native-form-posts" class="md-nav__link">
     <span class="md-ellipsis">
-      Transactions (mutable upsert, NOT append-only immutable)
+      Login and register are native form POSTs
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#categories-tags-splits" class="md-nav__link">
+  <a href="#session-expiry-handling-is-single-flight" class="md-nav__link">
     <span class="md-ellipsis">
-      Categories, tags, splits
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#accounts-balances" class="md-nav__link">
-    <span class="md-ellipsis">
-      Accounts &amp; balances
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#net-worth-engine" class="md-nav__link">
-    <span class="md-ellipsis">
-      Net-worth engine
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#manual-assets-unified-with-accounts" class="md-nav__link">
-    <span class="md-ellipsis">
-      Manual assets (unified with accounts)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#investments-advanced-tier-mark-approximate" class="md-nav__link">
-    <span class="md-ellipsis">
-      Investments (advanced tier — mark approximate)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#insight-recurring-budgeting-engine" class="md-nav__link">
-    <span class="md-ellipsis">
-      Insight / recurring / budgeting engine
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#connections-security" class="md-nav__link">
-    <span class="md-ellipsis">
-      Connections &amp; security
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#two-rules-to-tattoo-on-the-schema" class="md-nav__link">
-    <span class="md-ellipsis">
-      Two rules to tattoo on the schema
+      Session-expiry handling is single-flight
     </span>
   </a>
   
@@ -3404,6 +3640,15 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#protecting-a-page" class="md-nav__link">
+    <span class="md-ellipsis">
+      Protecting a page
+    </span>
+  </a>
   
 </li>
       
@@ -3427,236 +3672,109 @@
   
 
 
-<h1 id="product-insights-hard-won-lessons">Product Insights &amp; Hard-Won Lessons</h1>
-<h3 id="a-field-brief-for-building-your-first-personal-finance-aggregator-plaid-quicken-import-chaseamex-wasting-money-insights">A field brief for building your first personal-finance aggregator (Plaid + Quicken import, Chase/AMEX, "wasting money" insights)</h3>
-<hr />
-<h2 id="0-the-one-paragraph-orientation">0. The one-paragraph orientation</h2>
-<p>You are building three products stapled together: a <strong>net-worth tracker</strong> (a <em>snapshot/persistence</em> problem, not a math problem), a <strong>transaction ledger + importer</strong> (a <em>dedup and mutability</em> problem), and an <strong>insight engine</strong> (a <em>merchant-normalization</em> problem before it is an <em>AI</em> problem). The headline features are all trivial arithmetic; every ounce of difficulty is in the plumbing beneath them — history you had to be capturing since day one, IDs that aren't stable, signs that flip per source, and a bank that silently edits the past. Get the schema right first, because almost every hard bug here is a schema decision you can't retrofit.</p>
-<hr />
-<h2 id="1-feature-landscape-table-stakes-vs-differentiators">1. Feature landscape — table stakes vs differentiators</h2>
+<h1 id="auth-pages">Auth Pages</h1>
+<p>When a project selects both the web frontend and the
+<a href="../../../services/auth/">auth service</a>, it gets working auth pages wired
+to the service's existing endpoints. Without the auth service, none of this is
+generated: no auth routes, no auth templates, no auth JavaScript.</p>
+<p>The pages are a UI over the auth service, not a second implementation of it.
+Sessions, tokens, cookies, lockout, and rate limiting are all owned by the
+service; the pages submit to it and render the results.</p>
+<h2 id="what-ships">What ships</h2>
 <table>
 <thead>
 <tr>
-<th>Category</th>
-<th>Table stakes (users leave if missing)</th>
-<th>Differentiators (what people pay for)</th>
-<th>Where the real work hides</th>
+<th>Page</th>
+<th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Net-worth tracking</strong></td>
-<td>Net-worth-over-time line = Σ(assets) − Σ(liabilities); linked + <strong>manual</strong> accounts; per-account drill-down</td>
-<td>Investment Checkup / allocation analysis across <em>all</em> accounts; fee analyzer; "You Index" vs S&P; Zillow/depreciation valuation of manual assets; IRR on illiquid assets</td>
-<td>The trend line is <strong>stored snapshots</strong>, not recomputed math. If you didn't snapshot from day one, history is <em>unrecoverable</em>.</td>
+<td><code>/login</code></td>
+<td>Sign in. Redirects to <code>?next=</code> on success.</td>
 </tr>
 <tr>
-<td><strong>Budgeting</strong></td>
-<td>Categorized transactions; budget-vs-actual; monthly rollup</td>
-<td>Philosophy (YNAB zero-based envelopes vs Monarch flex-buckets vs Simplifi top-down "available to spend"); anomaly-vs-<em>your-own</em>-baseline alerts; cash-flow forecast</td>
-<td>Two different "overspending" surfaces: budget-vs-actual (a ledger compare) <strong>and</strong> anomaly-vs-baseline (needs rolling 3/6/12-mo averages).</td>
+<td><code>/register</code></td>
+<td>Create an account; lands on the verify-pending page.</td>
 </tr>
 <tr>
-<td><strong>Subscription / "wasting money"</strong></td>
-<td>Detected recurring list; upcoming bills; price-change alerts</td>
-<td>Duplicate-service detection; free-trial-converted; forgotten-annual; fee/interest detection; <strong>bill negotiation/cancellation</strong> (the actual revenue)</td>
-<td>Every insight is a <em>cheap SQL query</em> over one good <code>recurring_series</code> table. The table is the whole game.</td>
+<td><code>/logout</code></td>
+<td>Drops the session and lands on <code>/</code>.</td>
 </tr>
 <tr>
-<td><strong>Investments</strong></td>
-<td>Holdings list; current value; allocation pie</td>
-<td>Cost basis / tax lots; Form 8949; capital-gains estimator; TWR vs IRR performance</td>
-<td>Accurate lots need <strong>full transaction history + corporate actions</strong> — data aggregators don't reliably give you. This is a separate, harder tier.</td>
+<td><code>/forgot-password</code></td>
+<td>Requests a reset email.</td>
 </tr>
 <tr>
-<td><strong>Connectivity</strong></td>
-<td>Auto-sync of transactions + balances; manual file import</td>
-<td>Broad institution coverage; reconnection UX; multi-currency</td>
-<td>Aggregation is a <strong>permanent maintenance tax</strong>, not a one-time integration. Model connection <em>health</em> as a first-class entity.</td>
+<td><code>/reset-password</code></td>
+<td>Consumes the emailed reset token.</td>
+</tr>
+<tr>
+<td><code>/verify-email</code></td>
+<td>Consumes the emailed verification token.</td>
+</tr>
+<tr>
+<td><code>/verify-pending</code></td>
+<td>"Check your inbox", with a resend button.</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Opinion:</strong> For a v1 solo build, ship <em>net-worth + categorized cash-flow + subscription insights</em> and treat <em>tax-grade cost basis</em> as an explicit non-goal (label it "approximate"). Sharesight/Quicken exist because that tier is a product unto itself.</p>
-<hr />
-<h2 id="2-things-you-probably-dont-know-highest-value-non-obvious-insights">2. Things you probably don't know (highest-value non-obvious insights)</h2>
-<p><strong>1. Credit-card-payment double-counting is the #1 credibility bug.</strong> A $500 card payment appears <strong>twice</strong>: an outflow on checking and an inflow on the card. Naively summing outflows counts the $500 payment <em>on top of</em> the $500 of purchases it paid off — Mint was infamous for reporting ~2× real annual spending. Fix: detect + pair both legs, tag a shared <code>transfer_group_id</code>, exclude both from cash-flow/income. <strong>Net worth is immune</strong> (one account down, one liability down, cancels) — only spending/income totals get wrecked.</p>
-<p><strong>2. "Is this a transfer" is genuinely hard, not an equal-and-opposite match.</strong> Amounts differ (partial payments, a $2 fee, FX); legs land days apart or across a sync boundary; two unrelated $50 charges create false positives; you may only have <em>one</em> side linked (then it <em>is</em> real spending — don't hide it); and Venmo-to-a-friend looks identical to an internal move but is real cash-flow out. Build a <strong>confidence score</strong> (amount closeness + date proximity + provider category + recurring counterparty), require <em>both</em> accounts to belong to the same user before auto-hiding, and <strong>suggest-and-confirm</strong> below a high threshold rather than silently zeroing money.</p>
-<p><strong>3. Pending → posted is a DELETE + INSERT, not an update.</strong> Plaid <em>removes</em> the pending row and <em>inserts</em> a new posted row with a <strong>different</strong> <code>transaction_id</code>, linked only by <code>pending_transaction_id</code>. Amounts change (restaurant pending <em>without</em> tip → posts <em>with</em> tip) and dates move 1–5 (up to 14) days. If you key dedup on amount+date+name, the tip breaks it and you show the coffee twice. Key on the stable provider id + the pending linkage.</p>
-<p><strong>4. Phantom pendings never post.</strong> Gas $1/$100 pre-auths, hotel/rental deposits, voided charges show up pending then just <em>drop off</em> (Plaid <code>removed</code> array) — funds released, no posted counterpart. Never build durable history (net-worth snapshots, budget actuals) on pending rows or you manufacture spending that never happened.</p>
-<p><strong>5. Your store cannot be append-only-immutable — the bank edits the past.</strong> Banks retroactively fix descriptions/amounts/categories and <strong>delete</strong> transactions (fraud reversals). Plaid ships this as <code>modified</code> and <code>removed</code> arrays against a persisted <strong>sync cursor</strong>. Engineers instinctively reach for event-sourcing and then can't apply edits, so balances drift permanently and deleted fraud stays visible forever. Model transactions as <strong>mutable upserts + soft-delete</strong>; put any audit need in a <em>separate</em> changelog table.</p>
-<p><strong>6. Sign conventions are inverted and flip per source.</strong> Plaid: <strong>positive = money OUT</strong> (counterintuitive), and it <em>inverts again</em> for investment accounts (a sale is negative). OFX/QFX: trust the <code>TRNAMT</code> <strong>sign</strong>, not the <code>TRNTYPE</code> label — and many banks (Capital One, BofA cards) ship the sign <em>reversed</em> so charges import as payments. CSV is chaos (signed col vs separate debit/credit cols). Normalize to <strong>one documented internal convention</strong> at ingest, store <code>raw_amount</code> + <code>signed_amount</code>, and unit-test every importer with a known debit and known credit.</p>
-<p><strong>7. Manual assets ARE net worth, and they're structurally identical to synced accounts.</strong> A house, car, private company, collectibles are never aggregatable but are a huge share of true wealth. For the net-worth chart, both a synced account and a manual asset reduce to "a dated value" — unify them into one value-history time series (<code>source = sync|manual</code>). Manual assets add a <strong>staleness</strong> concept (nobody re-values their house), so add <code>last_valued_at</code> + <code>is_stale</code> + <code>stale_after_days</code>.</p>
-<p><strong>8. Net-worth-over-time is a persistence problem you can't retrofit.</strong> Aggregators hand you a <em>current</em> balance, never history; Plaid's transaction lookback wall (default 90d, initial ~30d, max 730d, capped by the institution) means you <em>cannot</em> walk backward to reconstruct it. The only way to get a real trend is a <strong>scheduled snapshot job</strong> writing one balance row per account per day starting at link time — independent of whether the user ever opens the app. This is the single most consequential, most easily-missed decision in the whole app.</p>
-<p><strong>9. Balance ≠ Σ(transactions), ever.</strong> You only fetched N days; pending affects available-vs-current differently; the bank has a starting point you never saw. <strong>Trust the provider's reported balance as authoritative</strong>; if you need a running balance, seed a synthetic <strong>starting-balance/adjustment entry</strong> = <code>reported_balance − Σ(known_txns)</code>. New builders assume balance = running sum and then can't explain a $400 disagreement with the bank.</p>
-<p><strong>10. Connection breakage is the steady-state, not an incident.</strong> MFA re-auth breaks on nearly every login for some users; institutions rotate APIs; accounts get stuck "loading"; transactions live in permanent pending limbo. Chase specifically is <em>flaky on Plaid</em> and needs frequent re-auth. Surface <strong>reauth as a product state</strong> (<code>needs_reauth</code>), and on a failed sync <strong>carry forward last-known balance</strong> rather than dropping the account and cratering the net-worth line.</p>
-<p><strong>11. Subscription "unused" detection is a euphemism you must not over-promise.</strong> Bank data <em>cannot</em> see whether you use Netflix. Rocket Money's "inactive" list is really "a known recurring series that stopped charging." "Unused" just presents <em>all</em> detected subscriptions and lets the human decide. And recurring detection is a <strong>merchant-normalization problem before it's ML</strong> — feed raw bank descriptions into cadence clustering and the same service shows up as 3 merchants and never clusters. You need ≥3 occurrences to confirm a series (so annual charges are invisible for a year → model a <em>confidence/maturity</em> field, not a boolean), you must actively <em>exclude</em> habitual spend (groceries/gas/coffee/Amazon), and variable bills (utilities) need an <code>is_variable</code> flag + tolerance band or they false-positive on both detection <em>and</em> price-hike alerts.</p>
-<p><strong>12. The Mint shutdown is a spec, not trivia.</strong> Mint died Nov 2023 because free ad/referral monetization on a budgeting app is structurally weak. Intuit migrated users to Credit Karma and carried over <strong>none</strong> of their history, custom categories, budgets, goals, or recurring labels — a one-way, irreversible strand. The exodus (Monarch/YNAB/Copilot/Rocket Money — all <em>subscription</em>-priced) was driven by people with years of data trapped. Lessons: <strong>(a)</strong> decide monetization before schema (funnel vs subscription changes what you optimize); <strong>(b)</strong> treat the user's history/categories/rules as <strong>theirs from day one</strong> — build export/import early; <strong>(c)</strong> historical snapshots are user data you can <em>never regenerate</em> — treat them as append-only and sacred (acquisition rewrites like Empower's caused literal data loss).</p>
-<p><strong>13. The Plaid access/cost reality for a solo dev.</strong> Plaid's "free tier" is a <strong>demo, not a runway</strong>: ~10 Production Items and ~200 live calls <em>per product</em>, and <strong>failed calls also burn quota</strong> — so one flaky Chase reconnect silently drains it. Beyond that it's pay-as-you-go (~$0.10–0.60/call), Growth needs a 12-month commit, Enterprise is $1k–10k+/mo, and full production requires a business-use-case <em>approval</em> a hobby project won't clear. Prior art: <strong>Maybe Finance (funded team) explicitly refused to ship self-hosted Plaid</strong>, citing OAuth complexity + pricing + per-user cost — telling self-hosters to bring their own keys. That is a strong signal <em>against</em> Plaid-first.</p>
-<p><strong>14. IRR vs TWR is a schema fork you pick before any UI.</strong> Money-weighted IRR needs <em>dated cash flows</em>; time-weighted return needs <em>period balances</em>. Illiquid/manual assets → IRR; index comparison → TWR. And performance numbers <strong>never match the brokerage</strong> — Empower's "You Index" is current holdings "extrapolated backward," an <em>approximation</em>, precisely because true return needs clean dated cash flows aggregators don't deliver. This is expectation-management, not a math bug — label it approximate in the UI.</p>
-<p><strong>15. Cross-source dedup has no shared ID.</strong> Plaid <code>transaction_id</code> and OFX <code>FITID</code> are <em>per-source</em>. Re-linking a broken bank mints a <strong>new Plaid Item → new ids for the same history</strong>, so a naive sync duplicates everything. Within a source, dedup on the stable id; across sources you have only fuzzy signals (account + amount + date window + normalized payee) — <strong>suggest a merge, let the user confirm</strong>, never destructively auto-collapse.</p>
-<hr />
-<h2 id="3-connectivity-recommendation">3. Connectivity recommendation</h2>
-<p><strong>Verdict: file-import-first, with a pluggable multi-provider sync layer bolted on. Do NOT be Plaid-first.</strong></p>
-<p>The reasoning, specific to <em>Chase + AMEX</em>:</p>
-<ul>
-<li><strong>Direct OFX / bill-pay is dead for your two banks.</strong> Direct Connect (the only two-way, bill-pay method) is gone: Chase migrated everything to download-only EWC+; AMEX dropped OFX entirely (~Aug 2024). Chase killed raw OFX Direct Connect in Oct 2022; AMEX's endpoint returns 403/503. Self-hosted <code>ofxtools</code> for Chase requires a per-device <code>CLIENTUID</code> + a secure-message-link + SMS/email code within a 7-day window, and many banks 403 anything not impersonating "Quicken for Windows." <strong>Treat OFX Direct Connect as an at-most best-effort power-user importer, never a backbone.</strong></li>
-<li><strong>Enterprise aggregators (MX/Finicity/Akoya) are unobtainable solo</strong> — all sales-led with signed data-recipient agreements. They're future plug-in slots only.</li>
-<li><strong>The EU "free open-banking" everyone recommends (Nordigen/GoCardless) is closed to new signups (mid-2025) and never covered US banks.</strong> Irrelevant to you.</li>
-</ul>
-<p><strong>Recommended provider ladder for a US solo dev wanting Chase + AMEX:</strong></p>
-<ol>
-<li><strong>Manual/file import (CSV / OFX / QFX / QIF)</strong> — the guaranteed, zero-approval, privacy-preserving <em>floor</em>. Build this excellently first; it's also your Quicken-migration path (see below).</li>
-<li><strong>SimpleFIN Bridge (~$15/yr)</strong> — the cheapest real auto-sync obtainable with <strong>zero approval</strong>. Read-only, credentials never touch your server (a single-use token → long-lived Access URL; MX holds the bank relationship). Covers Chase/AMEX. Tradeoff: ~once-daily refresh, ~90 days history. <strong>This is your best default auto-sync.</strong></li>
-<li><strong>Teller.io (100 free live US connections)</strong> — richer/real-time, self-serve, covers Chase/BofA/Citi/Cap One/AMEX. But it's reverse-engineered against banks' mobile APIs + requires <strong>mTLS client certs</strong>, so it <em>breaks</em> when a bank changes behavior — never your only path.</li>
-<li><strong>Plaid as an optional bring-your-own-keys premium provider</strong> — mirror exactly what Maybe Finance did. Don't make your product depend on it.</li>
-</ol>
-<p><strong>Quicken import surface (Chase/AMEX users migrating off Quicken):</strong> you will <em>never</em> parse the <code>.QDF</code> (undocumented OLE compound file behind paid software). The real artifacts are <strong>QFX/OFX &gt; CSV &gt; QIF</strong>, ranked by fidelity. QFX carries <code>FITID</code> (real dedup key) + balances + cleared status; QIF is officially lossy (drops lots, tax lines, reminders, memorized payees, budgets, often correct balances, and has <em>no</em> stable id so it duplicates on re-import). Ignore the <code>INTU.BID</code> header (it only gates files to a paid Quicken subscription). Document that the user must run Quicken's own Export first.</p>
-<p><strong>The fallback path (always present):</strong> every provider adapter emits into one <strong>normalized internal transaction shape</strong>; if a live provider breaks, the user drops back to file import with zero data-model change. Manual file-import-only is also a genuine <strong>privacy differentiator</strong> — a real segment of users refuses aggregators outright.</p>
-<hr />
-<h2 id="4-wasting-money-insight-playbook">4. "Wasting money" insight playbook</h2>
-<p>Every insight below is a <em>specific query</em> over <code>recurring_series</code> + <code>transactions</code> + <code>spending_baselines</code> — not AI magic. The engine's value is in the tables; the "AI" is mostly the merchant-normalization + per-user categorization model underneath.</p>
-<table>
-<thead>
-<tr>
-<th>Insight</th>
-<th>Detectable signal</th>
-<th>Data it needs</th>
-<th>Gotchas</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Recurring / subscription detection</strong></td>
-<td>Group txns into a "stream" when normalized merchant + amount + cadence align; ≥3 occurrences = "mature," 1–2 = "early_detection"</td>
-<td>Normalized <code>merchant_id</code>; cadence bucket; <code>occurrence_count</code>; <code>confidence/status</code></td>
-<td>Merchant normalization first. <strong>Exclude</strong> groceries/gas/coffee/Amazon or the list fills with false positives.</td>
-</tr>
-<tr>
-<td><strong>Price-hike</strong></td>
-<td><code>last_amount</code> materially &gt; running/expected <code>avg_amount</code> on the same series</td>
-<td><code>expected_amount</code> + <code>last_amount</code> per series; a <strong>tolerance band</strong></td>
-<td>Variable bills (utilities) must be flagged <code>is_variable</code> or they false-alarm every cycle.</td>
-</tr>
-<tr>
-<td><strong>Unused / inactive subscription</strong></td>
-<td>A known series with <strong>no charge in the last cadence window</strong> (that's all bank data can prove)</td>
-<td><code>next_expected_date</code>, <code>last_charge_date</code>, cadence</td>
-<td>You <em>cannot</em> detect actual usage. Frame as "here are all your subscriptions, you decide."</td>
-</tr>
-<tr>
-<td><strong>Duplicate services</strong></td>
-<td>&gt;1 <em>active</em> series in the same <strong>service category</strong> (Spotify + Apple Music)</td>
-<td>merchant → <code>service_type</code> taxonomy (music/video/gym…) on top of merchant matching</td>
-<td>Needs a service-type layer; merchant match alone won't catch two different merchants.</td>
-</tr>
-<tr>
-<td><strong>Free-trial-converted / forgotten annual</strong></td>
-<td>First real charge after a $0/trial pattern; a single large annual charge on a mature-but-sparse cadence</td>
-<td>series history + occurrence dates</td>
-<td>Annual charges are invisible until the 3rd year — use <code>early_detection</code> to surface probable ones sooner.</td>
-</tr>
-<tr>
-<td><strong>Fee / interest detection</strong></td>
-<td>Category/merchant match on overdraft, interest, late-fee, foreign-transaction-fee lines</td>
-<td>category taxonomy incl. fee categories</td>
-<td>FX fees arrive as their <em>own</em> separate line days after the foreign charge.</td>
-</tr>
-<tr>
-<td><strong>Category overspend (budget-vs-actual)</strong></td>
-<td>Category actual &gt; allocated for the period</td>
-<td><code>category_budgets</code> (allocated per period)</td>
-<td>Distinct from anomaly detection below.</td>
-</tr>
-<tr>
-<td><strong>Spending anomaly (vs your own baseline)</strong></td>
-<td>This month's category (or merchant) spend is X% above your trailing 3/6/12-mo average</td>
-<td><code>spending_baselines</code> (rolled trailing averages)</td>
-<td>This is what "you're wasting money" usually <em>means</em>; most naive builds lack the baseline entirely. Simplifi uses a 12-mo average.</td>
-</tr>
-<tr>
-<td><strong>Low-yield cash</strong></td>
-<td>Large balance sitting in a checking/low-APY account</td>
-<td>account balances + account type + a reference APY</td>
-<td>Actionable, high-trust, and free once you have balances.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Categorization precedence is a hard contract, not an implementation detail:</strong> <code>provider/base category</code> → <code>per-user ML prediction (suppressed if low-confidence)</code> → <code>deterministic user rules (highest priority, always win)</code>. Run auto-categorization <em>before</em> user rules. Get this backwards and user corrections get silently overwritten — a trust-killer. Use a <strong>per-user</strong> model (Copilot's approach — "AMZN" is groceries for one person, business supplies for another), with a cold-start fallback to the provider category until ~30 reviewed transactions exist, and a corrections store that feeds <em>only</em> that user's model.</p>
-<p><strong>Rules engine to copy (Lunch Money):</strong> conditions on payee (contains/starts/exact), notes, category, amount type (debit/credit), amount range (between/&gt;/&lt;/=), day-of-month range (with wrap), account; actions set payee/notes/category, add tags, link recurring, split, mark reviewed, notify, delete (one-off only); <strong>priority-ordered</strong>; and setting up a recurring item <strong>auto-spawns a matching rule</strong> so future transactions auto-link.</p>
-<p><strong>Free bonus:</strong> cash-flow forecasting is nearly free once <code>recurring_series</code> has <code>next_expected_date</code> + <code>expected_amount</code>: <code>projected_balance(t) = current_balance + Σ(expected inflows ≤ t) − Σ(expected outflows ≤ t) − planned_spend</code>. Same table that powers subscription detection. Allow a <strong>few-days tolerance</strong> on <code>next_expected_date</code> or date-drift ("monthly" landing on the 1st, then 3rd, then 28th) will churn false "stopped"/"new" series every month.</p>
-<hr />
-<h2 id="5-schema-implications-feed-straight-into-schema-design">5. Schema implications (feed straight into schema design)</h2>
-<p>Consolidated from every reality above. Columns are grouped by concern.</p>
-<h3 id="transactions-mutable-upsert-not-append-only-immutable">Transactions (mutable upsert, NOT append-only immutable)</h3>
-<ul>
-<li><strong>Dedup keys:</strong> <code>source</code> ENUM(plaid, ofx, qfx, csv, qif, manual, simplefin, teller), <code>external_id</code> (nullable — Plaid <code>transaction_id</code> / OFX <code>FITID</code>), <code>external_id_source</code>, <code>source_account_id</code>/<code>external_account_id</code>. <strong>Unique constraint on <code>(account_id, external_id) WHERE external_id IS NOT NULL</code></strong> — scoped <em>per account</em>, never global (Firefly #10914). Plus <code>content_hash</code> and a fuzzy fingerprint (<code>posted_date + amount + normalized_payee + account</code>) for QIF/CSV rows and cross-source matching.</li>
-<li><strong>Pending lifecycle:</strong> <code>pending</code> BOOLEAN; <code>pending_transaction_id</code> (self-FK) linking a posted row to the pending it supersedes; <code>superseded_by</code>/<code>resolved</code> status so a resolved pending doesn't render or double-count.</li>
-<li><strong>Soft-delete / mutability:</strong> <code>is_removed</code> + <code>removed_at</code> (honor Plaid <code>removed</code> + bank deletions); apply <code>modified</code> as an in-place patch. Optional separate append-only <code>transaction_changelog</code> (field, old, new, changed_at, sync_cursor) for audit.</li>
-<li><strong>Amount &amp; currency:</strong> <code>raw_amount</code> (as source delivered, sign and all) <strong>+</strong> <code>signed_amount</code> in ONE documented internal convention (e.g. positive = inflow to account); <code>currency_code</code> (<code>iso_currency_code</code> XOR <code>unofficial_currency_code</code>); <code>original_currency</code>/<code>original_amount</code> vs <code>settled_amount</code> when a foreign charge posts in home currency.</li>
-<li><strong>Dates:</strong> <code>authorized_date</code> (date-only, when swiped — use for spending analytics) <strong>and</strong> <code>posted_date</code>/<code>booked_date</code> (date-only, when money moved — use for balances/reconciliation); optional <code>authorized_datetime</code>/<code>posted_datetime</code>. Store the <strong>user's timezone</strong> on the user/account for correct day/month bucketing.</li>
-<li><strong>Transfers:</strong> <code>transfer_group_id</code> (shared by both legs), <code>is_transfer</code>/<code>excluded_from_cashflow</code> BOOLEAN, <code>transfer_confidence</code> score, <code>transfer_source</code> ENUM(auto, user_confirmed, provider_category).</li>
-<li><strong>Refunds/reversals:</strong> <code>related_transaction_id</code>/<code>refund_of</code> (link without auto-netting; refunds must <em>reduce category spend</em>, not register as income).</li>
-<li><strong>Reconciliation status:</strong> 3-state ENUM <code>UNCLEARED</code> (blank) / <code>CLEARED</code> ('c') / <code>RECONCILED</code> ('R') — <strong>not a boolean</strong>; treat RECONCILED as locked.</li>
-<li><strong>Categorization:</strong> <code>category_id</code>, <code>category_source</code> ENUM(provider, ml, rule, user) so a user correction is never overwritten; <code>is_reviewed</code>; <code>normalized_merchant_id</code> (distinct from <code>raw_description</code>); <code>recurring_series_id</code> (nullable).</li>
-<li><strong>Raw payload:</strong> <code>raw_payload</code> JSONB to re-derive fields later.</li>
-<li><strong>Tenancy:</strong> <code>owner_user_id</code> now (<code>organization_id</code> when orgs go live — parked per project memory).</li>
-</ul>
-<h3 id="categories-tags-splits">Categories, tags, splits</h3>
-<ul>
-<li><strong>Categories:</strong> hierarchical (<code>parent_id</code> self-ref or path), <code>income_expense</code> flag, optional <code>tax_line</code>/<code>tax_form</code> (arrives blank from QIF).</li>
-<li><strong>Tags:</strong> first-class entity, many-to-many <strong>at the split-line level</strong>, not just per transaction.</li>
-<li><strong>Splits:</strong> child <code>transaction_line</code> rows (category, amount, tag, memo per line) with the invariant that lines sum to the parent. A single-category-per-transaction schema <em>cannot</em> represent real Quicken data.</li>
-</ul>
-<h3 id="accounts-balances">Accounts &amp; balances</h3>
-<ul>
-<li><code>account_type</code>/<code>account_subtype</code> (checking, savings, credit, loan, investment) + <code>is_liability</code> — because sign meaning and "increase = you owe more" flip for liability/investment accounts.</li>
-<li><code>current_balance</code> AND <code>available_balance</code>, <code>balance_currency</code>, <code>balance_as_of</code> timestamp — provider-reported, <strong>authoritative</strong> (never derived from summing transactions).</li>
-<li>Explicit <strong>starting/opening-balance</strong> synthetic entry per account (= <code>reported_balance − Σ(known_txns)</code>) so a running balance reconciles; plus a "reconcile / enter current balance" adjustment path.</li>
-<li><code>first_seen</code>/<code>linked_at</code> so the UI can honestly say "history starts here."</li>
-<li>Institution metadata (name, masked account number, connection method) for per-account re-import scoping.</li>
-</ul>
-<h3 id="net-worth-engine">Net-worth engine</h3>
-<ul>
-<li><strong><code>account_balance_snapshot</code> (append-only, immutable):</strong> <code>account_id</code>, <code>snapshot_date</code>, <code>balance</code>, <code>currency</code>, <code>source</code> ENUM(sync, manual). <strong>One row per account per snapshot cadence — this ONE table powers the entire net-worth chart.</strong> Populate from a <strong>scheduled job</strong>, not on user visit. Corrections = new rows, never in-place edits (editing a past value cascades through every chart/IRR calc).</li>
-<li><strong>Do NOT store net worth as a single mutable scalar.</strong> Derive it: <code>Σ(latest snapshot per account as-of date) − liabilities</code>.</li>
-<li>On a failed sync: <strong>carry forward last-known balance</strong> (or mark an explicit gap); never drop the account.</li>
-</ul>
-<h3 id="manual-assets-unified-with-accounts">Manual assets (unified with accounts)</h3>
-<ul>
-<li><code>manual_asset</code>: <code>type</code> ENUM(real_estate, vehicle, crypto_wallet, private_equity, collectible, cash, other), <code>currency</code>, <code>valuation_source</code> ENUM(manual, zillow, price_feed, depreciation_schedule) + optional <code>source_ref</code> (Zillow URL/address), <code>last_valued_at</code>, <code>is_stale</code> + <code>stale_after_days</code>. Its snapshots flow into the <em>same</em> <code>account_balance_snapshot</code> shape with <code>source = manual</code>.</li>
-</ul>
-<h3 id="investments-advanced-tier-mark-approximate">Investments (advanced tier — mark approximate)</h3>
-<ul>
-<li><code>holding</code>: account_id, security_id, quantity, cost_basis, as_of_date (snapshot quantity+price over time if you want allocation history).</li>
-<li><code>security</code>/<code>instrument</code> reference: ticker, name, asset_class, sector, expense_ratio, currency — plus <code>price_history</code> (security_id, date, close). Required for benchmark comparison, allocation checkup, fee analysis; a dataset you must source/maintain.</li>
-<li><code>tax_lot</code>: holding_id, acquire_date, quantity, cost_basis_per_share, <code>disposal_method</code> ENUM(FIFO/LIFO/HIFO/LOFO/avg/specific) — only feasible with transaction ingestion; a <code>placeholder</code> transaction type for missing-history reconciling entries; an <code>action</code> field (buy/sell/reinvest/div/ESPP). Warn users lot identity is often lost in exports.</li>
-<li><code>cash_flow_entry</code> (for IRR on illiquid/manual): asset_id, date, direction(in|out), amount, currency — separate from market transactions.</li>
-<li>Record a <strong>performance methodology</strong> per view (TWR from period balances vs IRR from dated cash flows); if you only snapshot balances, accept "You Index"-style backward-extrapolated approximation and label it.</li>
-</ul>
-<h3 id="insight-recurring-budgeting-engine">Insight / recurring / budgeting engine</h3>
-<ul>
-<li><strong><code>merchants</code></strong> (the prerequisite): raw-description alias map → <code>merchant_id</code>, <code>merchant_name</code> (clean), <code>logo_url</code>, <code>website</code>, <code>default_category</code>, <code>service_type</code> (music_streaming, video_streaming, gym…).</li>
-<li><strong><code>recurring_series</code>:</strong> id, user_id, account_id, merchant_id, direction, <code>cadence</code> ENUM(weekly/biweekly/semimonthly/monthly/bimonthly/quarterly/semiannual/annual), <code>expected_amount</code>, <code>last_amount</code>, <code>amount_is_variable</code>, <code>amount_tolerance</code>, <code>first_seen_date</code>, <code>last_charge_date</code>, <code>next_expected_date</code>, <code>occurrence_count</code>, <code>status</code> ENUM(early_detection/mature/inactive/cancelled), <code>confidence_score</code>, category_id. Plus a <code>recurring_series_transactions</code> join table.</li>
-<li><strong><code>rules</code>:</strong> id, user_id, <code>priority</code> (lower runs first), conditions structure, actions structure; enforce precedence base-category → ML → rules.</li>
-<li><strong><code>category_corrections</code>/<code>ml_feedback</code>:</strong> user_id, transaction_id, predicted_category, corrected_category, feature_snapshot (name, amount, day_of_week, account); gate per-user model activation at ~30 reviewed.</li>
-<li><strong><code>category_budgets</code>:</strong> user_id, category_id (or bucket), period, allocated_amount, rollover_enabled, rollover_balance (supports zero-based <em>or</em> flex).</li>
-<li><strong><code>spending_baselines</code></strong> (materialized): user_id, category_id (+ optional merchant_id), trailing_avg over 3/6/12 mo — powers anomaly insights.</li>
-<li><strong><code>insights</code>/<code>alerts</code>:</strong> user_id, <code>type</code> (price_hike / duplicate_service / free_trial_converted / forgotten_annual / inactive_subscription / fee_charged / large_transaction / overspend_category / spending_anomaly / low_yield_cash), related_series_id or transaction_id, detected_amount, message, status (new/dismissed/actioned), created_at.</li>
-</ul>
-<h3 id="connections-security">Connections &amp; security</h3>
-<ul>
-<li><strong><code>connection</code>/<code>item</code> (first-class, separate from Account):</strong> <code>provider</code> ENUM(manual, csv, ofx, plaid, simplefin, teller, gocardless, enable_banking, mx, finicity, akoya), <code>status</code> ENUM(healthy/reauth_required/error/loading), <code>credential_ref</code> (encrypted — shape differs per provider: Plaid access_token / SimpleFIN Access URL / Teller mTLS cert ref), <code>last_successful_sync_at</code>, <code>last_error_code</code>, <code>needs_reauth</code>, <code>refresh_cadence</code>, <code>sync_cursor</code> (Plaid, for idempotent added/modified/removed), <code>days_requested</code> (set to max history up front — can't be cheaply extended later). An Account must be able to <strong>migrate to a new Connection without losing transaction history</strong> (re-linking is routine).</li>
-<li><strong>Token storage:</strong> <code>encrypted_access_token</code> (AES-256, KMS envelope / app-layer), server-side only, <strong>never in client payloads or logs</strong>, access-logged, with a rotation/invalidation path (Plaid <code>/item/access_token/invalidate</code>). <strong>No bank username/password fields anywhere.</strong> Access tokens don't expire and are silent standing read access to someone's entire financial life — more dangerous than a password.</li>
-<li><strong>Import ledger / tombstones:</strong> <code>import_run</code> id on each transaction (reversible batches, idempotent rollback); tombstones so user deletions <strong>persist across re-syncs</strong> (avoid Firefly #10090 / Actual "reimport deleted" resurrection).</li>
-<li><strong>FX:</strong> <code>fx_rates</code> (base, quote, rate, as_of_date); convert at <em>display</em> time against dated rates, not once at ingest; decide explicitly whether historical net-worth uses rate-at-time or today's rate (they produce different history).</li>
-</ul>
-<h3 id="two-rules-to-tattoo-on-the-schema">Two rules to tattoo on the schema</h3>
-<ol>
-<li><strong>The provider's reported balance is authoritative; transactions are the itemization.</strong> Never compute displayed balance by summing transactions.</li>
-<li><strong>Snapshots and the changelog are append-only and sacred; the queryable transaction row is a mutable upsert.</strong> Corrections are new rows, never in-place edits to history.</li>
-</ol>
-<hr />
-<p><em>Relevant file paths: none — this brief is the deliverable, returned inline.</em></p>
+<p>All of them extend a shared split-screen shell
+(<code>templates/pages/auth/_layout.html</code>) and use the form macros from
+<code>templates/components/auth_macros.html</code>. The shell marks these pages
+<code>noindex, nofollow</code>: reset and verification links carry one-time tokens in
+their URLs, and crawlers must not snapshot them.</p>
+<h2 id="two-deliberate-design-points">Two deliberate design points</h2>
+<h3 id="login-and-register-are-native-form-posts">Login and register are native form POSTs</h3>
+<p>The login and register forms submit as real browser form POSTs, not
+<code>fetch()</code> calls. This is what makes the browser's save-password prompt work:
+the browser needs to see a genuine password-field submit followed by a
+redirect. A JavaScript submit handler that calls <code>fetch()</code> produces an
+identical-looking flow and silently kills the prompt.</p>
+<p>The page handlers delegate to the auth service's own login and register
+endpoints rather than reimplementing them, so lockout, failed-attempt
+tracking, audit events, and rate limits apply identically whether a user
+signs in through the page or through the API.</p>
+<div class="admonition note">
+<p class="admonition-title">No save prompt on plain http://localhost</p>
+<p>Chrome refuses to offer password saving on plain-HTTP localhost. That is
+a browser rule, not a bug in the pages. It works over HTTPS and on real
+hostnames.</p>
+</div>
+<h3 id="session-expiry-handling-is-single-flight">Session-expiry handling is single-flight</h3>
+<p><code>static/js/auth.js</code> provides <code>fetchAuth()</code>, a <code>fetch()</code> wrapper that retries
+once through the auth service's refresh endpoint on a 401, and a global htmx
+hook that does the same for <code>hx-</code> requests.</p>
+<p>The refresh is <em>single-flight</em>: one shared in-flight promise, no matter how
+many requests hit a 401 at the same moment. This matters because the auth
+service rotates refresh tokens with reuse detection. A page that fires several
+authenticated requests in parallel would otherwise trigger several concurrent
+refresh calls, and the second one would replay the token the first had just
+rotated, which the service treats as theft and revokes the whole session.</p>
+<h2 id="protecting-a-page">Protecting a page</h2>
+<p>Page protection is opt-in, mirroring how
+<a href="../../../services/auth/">API endpoints are protected</a>: a page without a
+guard is public. To require a signed-in user, take the optional-user
+dependency and bounce through the helper:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.auth.deps</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_optional_user</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/settings&quot;</span><span class="p">,</span> <span class="n">response_class</span><span class="o">=</span><span class="n">HTMLResponse</span><span class="p">,</span> <span class="n">include_in_schema</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">settings_page</span><span class="p">(</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">User</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_optional_user</span><span class="p">),</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTMLResponse</span><span class="p">:</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">bounce</span> <span class="o">=</span> <span class="n">_current_user_or_redirect</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">if</span> <span class="n">bounce</span><span class="p">:</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="k">return</span> <span class="n">bounce</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">return</span> <span class="n">templates</span><span class="o">.</span><span class="n">TemplateResponse</span><span class="p">(</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="n">request</span><span class="o">=</span><span class="n">request</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;pages/settings.html&quot;</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="n">user</span><span class="p">}</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="p">)</span>
+</span></code></pre></div>
+<p>Anonymous visitors are redirected to <code>/login?next=/settings</code> and returned
+after signing in. The <code>next</code> value is validated server-side: only local paths
+are followed, so the login page cannot be used as an open redirect.</p>
+<p>There is deliberately no default-deny middleware. One protection mechanism,
+attached where you want it, matching the rest of the stack.</p>
 
 
 
@@ -3728,16 +3846,16 @@
     
     
       
-      <script id="__config" type="application/json">{"base": "../../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../../assets/javascripts/bundle.50899def.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.50899def.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js"></script>
       
-        <script src="../../../../javascripts/mermaid-config.js"></script>
+        <script src="../../../javascripts/mermaid-config.js"></script>
       
-        <script src="../../../../javascripts/feedback.js"></script>
+        <script src="../../../javascripts/feedback.js"></script>
       
     
   <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});

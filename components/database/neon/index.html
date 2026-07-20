@@ -1113,6 +1113,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#deploy-and-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deploy and Backups
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#switching-an-existing-project" class="md-nav__link">
     <span class="md-ellipsis">
       Switching an Existing Project
@@ -3621,6 +3630,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#deploy-and-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deploy and Backups
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#switching-an-existing-project" class="md-nav__link">
     <span class="md-ellipsis">
       Switching an Existing Project
@@ -3686,6 +3704,8 @@
 <li>Set <code>DATABASE_URL</code> (pooled) and <code>DATABASE_URL_UNPOOLED</code> (direct) as production secrets in your deployment environment.</li>
 </ol>
 <p>Development needs none of this: <code>make serve</code> runs the local container with zero configuration.</p>
+<h2 id="deploy-and-backups">Deploy and Backups</h2>
+<p><code>aegis deploy</code> is provider-aware. With the local <strong>container</strong> provider it snapshots the database before a deploy (a <code>pg_dump</code> inside the postgres service) and replays that dump if a failed health check triggers a rollback. A <strong>Neon</strong> project runs no database container in production, so there is nothing local to dump: the deploy prints that the database is managed by Neon and skips the local <code>pg_dump</code>/<code>psql</code> steps. Use Neon's own tooling for database backup and recovery, <a href="https://neon.tech/docs/introduction/branching">branches</a> for a pre-deploy snapshot and <a href="https://neon.tech/docs/introduction/point-in-time-restore">point-in-time restore</a> for rollback. Application files on the server are still backed up either way.</p>
 <h2 id="switching-an-existing-project">Switching an Existing Project</h2>
 <p>The provider is chosen at <code>aegis init</code> today. <code>aegis add</code> and <code>aegis update</code> cannot yet move an existing PostgreSQL project between the local container and Neon, because the Neon connection handling is generated into the project rather than toggled at runtime. Provider switching on a living project is planned.</p>
 <p>Until then, the practical path is to generate a fresh <code>database[neon]</code> project and move your models across. The data itself is standard PostgreSQL: <code>pg_dump</code> from the container, restore into Neon.</p>

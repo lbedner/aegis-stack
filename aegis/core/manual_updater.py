@@ -986,9 +986,12 @@ class ManualUpdater:
                             verbose_print(f"      • {var_name}={var_value}")
 
             elif policy.get("warn"):
-                # Only warn if file actually has changes that need manual merge
-                existing_content = output_path.read_text()
-                if content != existing_content:
+                if self._shared_file_is_pristine(output_path, template_file):
+                    self._write_rendered(output_path, content)
+                    verbose_print(f"   Updated: {shared_file}")
+                    shared_files_updated.append(shared_file)
+                # Only warn if a diverged file has changes that need manual merge.
+                elif content != output_path.read_text():
                     print(f"   Manual merge required: {shared_file}")
                     shared_files_need_manual_merge.append(shared_file)
 

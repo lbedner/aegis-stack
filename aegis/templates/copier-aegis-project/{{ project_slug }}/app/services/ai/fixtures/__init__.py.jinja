@@ -1,12 +1,24 @@
-"""LLM fixture/seed data system.
+"""AI fixture/seed data system.
 
-Provides seed data for LLM vendors, models, and pricing.
+Provides seed data for LLM vendors, models, pricing, and the default
+agent registry row.
 """
 {% if ai_backend != "memory" %}
 
+from sqlmodel import Session
+
+from app.services.ai.fixtures.agent_fixtures import load_agent_fixtures
 from app.services.ai.fixtures.llm_fixtures import load_all_llm_fixtures
 
-__all__ = ["load_all_llm_fixtures"]
+
+def load_all_ai_fixtures(session: Session) -> dict[str, int]:
+    """Load every AI seed set (LLM catalog + agent registry)."""
+    counts = load_all_llm_fixtures(session)
+    counts.update(load_agent_fixtures(session))
+    return counts
+
+
+__all__ = ["load_agent_fixtures", "load_all_ai_fixtures", "load_all_llm_fixtures"]
 {% else %}
 
 __all__: list[str] = []

@@ -1,0 +1,168 @@
+"""Tests for per-user agent memory (storage, dedup, guarded injection)."""
+{% if ai_backend != "memory" %}
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel import SQLModel, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+import app.services.ai.user_memory as user_memory_module
+from app.services.ai.models.agents import AgentUserMemory
+from app.services.ai.tools import registered_tool_names
+from app.services.ai.user_memory import (
+    build_user_memory_context,
+    current_user_id,
+    format_user_memory,
+    get_user_memory,
+    replace_user_memory,
+    save_memory,
+    save_user_fact,
+)
+
+
+@pytest.fixture
+async def session() -> AsyncGenerator[AsyncSession]:
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    async with AsyncSession(engine) as session:
+        yield session
+    await engine.dispose()
+
+
+class TestSaveFact:
+    async def test_first_fact_creates_row(self, session: AsyncSession) -> None:
+        await save_user_fact("u1", "allergic to peanuts", "food", session=session)
+
+        row = await get_user_memory(session, "u1")
+        assert row is not None
+        facts = row.memory["structured_facts"]
+        assert len(facts) == 1
+        assert facts[0]["category"] == "food"
+        assert facts[0]["fact"] == "allergic to peanuts"
+        assert facts[0]["saved_at"]
+
+    async def test_duplicate_fact_in_category_does_not_accumulate(
+        self, session: AsyncSession
+    ) -> None:
+        await save_user_fact("u1", "allergic to peanuts", "food", session=session)
+        await save_user_fact("u1", "allergic to peanuts", "food", session=session)
+        # Substring of an existing fact is also a duplicate (both directions).
+        await save_user_fact("u1", "peanuts", "food", session=session)
+
+        row = await get_user_memory(session, "u1")
+        assert row is not None
+        assert len(row.memory["structured_facts"]) == 1
+
+    async def test_same_fact_in_other_category_is_kept(
+        self, session: AsyncSession
+    ) -> None:
+        await save_user_fact("u1", "training for a marathon", "health", session=session)
+        await save_user_fact(
+            "u1", "training for a marathon", "personal", session=session
+        )
+
+        row = await get_user_memory(session, "u1")
+        assert row is not None
+        assert len(row.memory["structured_facts"]) == 2
+
+    async def test_unknown_category_falls_back_to_general(
+        self, session: AsyncSession
+    ) -> None:
+        await save_user_fact("u1", "likes jazz", "nonsense", session=session)
+
+        row = await get_user_memory(session, "u1")
+        assert row is not None
+        assert row.memory["structured_facts"][0]["category"] == "general"
+
+
+class TestReplace:
+    async def test_replace_overwrites_all_facts(self, session: AsyncSession) -> None:
+        await save_user_fact("u1", "allergic to peanuts", "food", session=session)
+
+        await replace_user_memory(
+            "u1", "vegan\nruns marathons", session=session
+        )
+
+        row = await get_user_memory(session, "u1")
+        assert row is not None
+        facts = row.memory["structured_facts"]
+        assert [f["fact"] for f in facts] == ["vegan", "runs marathons"]
+
+
+class TestGuardedFormatting:
+    async def test_format_wraps_facts_in_guard_block(
+        self, session: AsyncSession
+    ) -> None:
+        await save_user_fact("u1", "allergic to peanuts", "food", session=session)
+
+        row = await get_user_memory(session, "u1")
+        block = format_user_memory(row)
+
+        assert block is not None
+        assert block.startswith("<user_memory>")
+        assert block.rstrip().endswith("</user_memory>")
+        assert "- [food] allergic to peanuts" in block
+        # Prompt-injection framing: memory is data, not instructions.
+        assert "not instructions" in block
+
+    async def test_no_memory_formats_to_none(self, session: AsyncSession) -> None:
+        assert format_user_memory(None) is None
+        assert await build_user_memory_context("ghost", session=session) is None
+
+    async def test_saved_fact_reaches_next_context(
+        self, session: AsyncSession
+    ) -> None:
+        """The acceptance loop: save in one conversation, see it in the next."""
+        await save_user_fact("u1", "allergic to peanuts", "food", session=session)
+
+        block = await build_user_memory_context("u1", session=session)
+
+        assert block is not None
+        assert "allergic to peanuts" in block
+
+
+class TestSaveMemoryTool:
+    def test_tools_are_registered(self) -> None:
+        assert "save_memory" in registered_tool_names()
+        assert "replace_memory" in registered_tool_names()
+
+    async def test_tool_saves_fact_for_current_user(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        @asynccontextmanager
+        async def fake_session() -> AsyncGenerator[AsyncSession]:
+            yield session
+
+        monkeypatch.setattr(user_memory_module, "get_async_session", fake_session)
+        token = current_user_id.set("u42")
+        try:
+            reply = await save_memory(new_fact="drinks oat milk", category="food")
+        finally:
+            current_user_id.reset(token)
+
+        assert "drinks oat milk" in reply
+        result = await session.exec(
+            select(AgentUserMemory).where(AgentUserMemory.user_id == "u42")
+        )
+        row = result.first()
+        assert row is not None
+
+    async def test_tool_without_user_context_saves_nothing(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        @asynccontextmanager
+        async def fake_session() -> AsyncGenerator[AsyncSession]:
+            yield session
+
+        monkeypatch.setattr(user_memory_module, "get_async_session", fake_session)
+
+        reply = await save_memory(new_fact="drinks oat milk")
+
+        assert "no user" in reply.lower()
+        result = await session.exec(select(AgentUserMemory))
+        assert result.first() is None
+{% endif %}

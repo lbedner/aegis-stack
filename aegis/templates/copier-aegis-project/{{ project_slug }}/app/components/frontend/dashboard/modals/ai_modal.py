@@ -42,6 +42,15 @@ except ImportError:
     LLMCatalogTab = None  # type: ignore[misc, assignment]
     _HAS_LLM_CATALOG = False
 
+# Agents tab - agent registry management (requires database backend)
+try:
+    from .agents_tab import AgentsTab
+
+    _HAS_AGENTS = True
+except ImportError:
+    _HAS_AGENTS = False
+    AgentsTab = None  # type: ignore[misc, assignment]
+
 # Voice Settings tab - for TTS/STT configuration
 try:
     from .voice_settings_tab import VoiceSettingsTab
@@ -229,6 +238,10 @@ class AIDetailDialog(BaseDetailPopup):
         # Add Cloud Catalog tab
         if _HAS_LLM_CATALOG and LLMCatalogTab is not None:
             tabs_list.append(ft.Tab(text="Cloud Catalog", content=LLMCatalogTab()))
+
+        # Add Agents tab (agent registry requires database backend)
+        if _HAS_AGENTS and AgentsTab is not None:
+            tabs_list.append(ft.Tab(text="Agents", content=AgentsTab()))
 
         # Add RAG tab only if RAG service is enabled
         if _HAS_RAG and RAGTab is not None:

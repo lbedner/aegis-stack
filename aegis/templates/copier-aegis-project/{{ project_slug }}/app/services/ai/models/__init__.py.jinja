@@ -12,6 +12,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 {% if ai_backend != "memory" %}
 
+from .agents import Agent, AgentTool, Tool
 from .llm import (
     Direction,
     LargeLanguageModel,
@@ -22,6 +23,7 @@ from .llm import (
     LLMVendor,
     Modality,
 )
+from .sentiment import SentimentAnalysis
 {% endif %}
 
 
@@ -264,6 +266,12 @@ def get_free_providers() -> list[AIProvider]:
 
 __all__ = [
 {% if ai_backend != "memory" %}
+    # Agent registry models
+    "Agent",
+    "AgentTool",
+    "Tool",
+    # Sentiment analysis
+    "SentimentAnalysis",
     # LLM tracking models
     "LLMVendor",
     "LargeLanguageModel",

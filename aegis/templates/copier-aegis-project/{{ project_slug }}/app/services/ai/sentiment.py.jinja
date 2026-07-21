@@ -1,0 +1,268 @@
+"""Batch conversation sentiment scoring.
+
+Scores persisted conversations with the configured LLM and writes one
+``sentiment_analysis`` row per conversation. Score-once is structural
+(unique ``conversation_id``): the batch only ever selects conversations
+without a verdict, so re-runs never re-score. A conversation that fails
+to score is logged and simply picked up by a later batch.
+
+Present but OFF by default: the scheduled job checks
+``settings.AI_SENTIMENT_ENABLED`` and returns early when disabled,
+because every scored conversation costs model tokens.
+"""
+
+import json
+from typing import Any
+
+from sqlalchemy import func
+from sqlalchemy.orm import selectinload
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.models.conversation import Conversation
+from app.services.ai.config import AIServiceConfig
+from app.services.ai.models.sentiment import (
+    PERFORMANCE_VALUES,
+    SENTIMENT_VALUES,
+    SentimentAnalysis,
+)
+
+SENTIMENT_SYSTEM_PROMPT = (
+    "You are a conversation quality analyst. Given a transcript between "
+    "a user and an AI assistant, return ONLY a JSON object with exactly "
+    "these keys:\n"
+    '- "overall_sentiment": one of "positive", "neutral", "negative", '
+    '"frustrated" (the USER\'s sentiment)\n'
+    '- "overall_score": a number from -1.0 (very negative) to 1.0 (very '
+    "positive)\n"
+    '- "assistant_performance": one of "good", "acceptable", "poor"\n'
+    '- "issues": a list of short strings naming problems, empty if none\n'
+    '- "summary": one sentence describing the conversation\n'
+    "No prose, no code fences, JSON only."
+)
+
+TRANSCRIPT_MESSAGE_LIMIT = 40
+
+
+def _build_transcript(conversation: Conversation) -> str | None:
+    messages = getattr(conversation, "messages", None) or []
+    lines = [
+        f"{message.role}: {message.content}"
+        for message in messages[:TRANSCRIPT_MESSAGE_LIMIT]
+        if message.content
+    ]
+    if not lines:
+        return None
+    return "\n".join(lines)
+
+
+def _extract_json(text: str) -> dict[str, Any]:
+    """Parse the model reply, tolerating prose or fences around the JSON."""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("no JSON object in model reply")
+    payload = json.loads(text[start : end + 1])
+    if not isinstance(payload, dict):
+        raise ValueError("model reply is not a JSON object")
+    return payload
+
+
+def _validate_verdict(payload: dict[str, Any]) -> dict[str, Any]:
+    sentiment = payload.get("overall_sentiment")
+    if sentiment not in SENTIMENT_VALUES:
+        raise ValueError(f"invalid overall_sentiment: {sentiment!r}")
+    performance = payload.get("assistant_performance")
+    if performance not in PERFORMANCE_VALUES:
+        raise ValueError(f"invalid assistant_performance: {performance!r}")
+    score = float(payload.get("overall_score", 0.0))
+    score = max(-1.0, min(1.0, score))
+    issues = payload.get("issues") or []
+    if not isinstance(issues, list):
+        issues = [str(issues)]
+    return {
+        "overall_sentiment": sentiment,
+        "overall_score": score,
+        "assistant_performance": performance,
+        "issues": [str(issue) for issue in issues],
+        "summary": str(payload.get("summary") or "") or None,
+    }
+
+
+async def _llm_score(transcript: str) -> dict[str, Any]:
+    """Ask the configured model for a verdict; returns the raw parsed dict."""
+    config = AIServiceConfig.from_settings(settings)
+{% if ai_framework == "pydantic-ai" %}
+    from app.services.ai.providers import get_agent
+
+    agent = get_agent(config, settings, SENTIMENT_SYSTEM_PROMPT)
+    result = await agent.run(transcript)
+    reply = result.output
+{% else %}
+    from app.services.ai.providers import get_llm
+
+    llm = get_llm(config, settings)
+    result = await llm.ainvoke(
+        [("system", SENTIMENT_SYSTEM_PROMPT), ("human", transcript)]
+    )
+    reply = result.content if hasattr(result, "content") else str(result)
+{% endif %}
+    return _extract_json(str(reply))
+
+
+async def _score_conversation(
+    session: AsyncSession, conversation_id: str, transcript: str
+) -> None:
+    """Score one conversation transcript and write its verdict row."""
+    payload = await _llm_score(transcript)
+    verdict = _validate_verdict(payload)
+    session.add(
+        SentimentAnalysis(
+            conversation_id=conversation_id,
+            model_id=settings.AI_MODEL,
+            **verdict,
+        )
+    )
+    await session.commit()
+
+
+async def _unscored_batch(
+    session: AsyncSession, limit: int
+) -> list[tuple[str, str | None]]:
+    """Snapshot (conversation_id, transcript) for the unscored batch.
+
+    Materialized eagerly, BEFORE any commit in the scoring loop expires
+    the loaded ORM instances (async sessions cannot lazy-load).
+    """
+    stmt = (
+        select(Conversation)
+        .outerjoin(
+            SentimentAnalysis,
+            SentimentAnalysis.conversation_id == Conversation.id,  # type: ignore[arg-type]
+        )
+        .where(SentimentAnalysis.id == None)  # noqa: E711 - SQL IS NULL
+        .options(selectinload(Conversation.messages))  # type: ignore[arg-type]
+        .order_by(Conversation.updated_at)  # type: ignore[arg-type]
+        .limit(limit)
+    )
+    result = await session.exec(stmt)
+    return [
+        (conversation.id, _build_transcript(conversation))
+        for conversation in result.all()
+    ]
+
+
+async def score_unscored_conversations(
+    *,
+    limit: int | None = None,
+    session: AsyncSession | None = None,
+) -> dict[str, int]:
+    """Score a batch of unscored conversations.
+
+    Per-conversation failures (model error, unparseable reply, invalid
+    verdict) are logged and counted, never fatal to the batch; failed
+    conversations stay unscored and are retried by a later run.
+    """
+    if session is None:
+        async with get_async_session() as owned_session:
+            return await score_unscored_conversations(
+                limit=limit, session=owned_session
+            )
+
+    batch_limit = limit or settings.AI_SENTIMENT_BATCH_LIMIT
+    batch = await _unscored_batch(session, batch_limit)
+    counts = {"scored": 0, "skipped": 0, "failed": 0}
+    for conversation_id, transcript in batch:
+        if transcript is None:
+            logger.debug(
+                "Conversation has no scoreable messages; skipping",
+                conversation_id=conversation_id,
+            )
+            counts["skipped"] += 1
+            continue
+        try:
+            await _score_conversation(session, conversation_id, transcript)
+            counts["scored"] += 1
+        except Exception as exc:
+            counts["failed"] += 1
+            logger.error(
+                "Sentiment scoring failed for conversation",
+                conversation_id=conversation_id,
+                error=str(exc),
+            )
+            await session.rollback()
+    logger.info("Sentiment batch finished", **counts)
+    return counts
+
+
+RECENT_NEGATIVE_LIMIT = 5
+
+
+async def sentiment_stats(
+    *, session: AsyncSession | None = None
+) -> dict[str, Any]:
+    """Aggregate sentiment results for CLI and dashboard surfaces.
+
+    Returns zero-filled distributions so consumers can render a stable
+    shape whether or not anything has been scored yet.
+    """
+    if session is None:
+        async with get_async_session() as owned_session:
+            return await sentiment_stats(session=owned_session)
+
+    distribution = dict.fromkeys(SENTIMENT_VALUES, 0)
+    sentiment_rows = await session.exec(
+        select(
+            SentimentAnalysis.overall_sentiment,
+            func.count(),  # type: ignore[arg-type]
+        ).group_by(SentimentAnalysis.overall_sentiment)  # type: ignore[arg-type]
+    )
+    for sentiment, count in sentiment_rows.all():
+        distribution[sentiment] = count
+
+    performance = dict.fromkeys(PERFORMANCE_VALUES, 0)
+    performance_rows = await session.exec(
+        select(
+            SentimentAnalysis.assistant_performance,
+            func.count(),  # type: ignore[arg-type]
+        ).group_by(SentimentAnalysis.assistant_performance)  # type: ignore[arg-type]
+    )
+    for performance_value, count in performance_rows.all():
+        performance[performance_value] = count
+
+    average_row = await session.exec(
+        select(func.avg(SentimentAnalysis.overall_score))  # type: ignore[arg-type]
+    )
+    average_score = average_row.one_or_none() or 0.0
+
+    negatives_result = await session.exec(
+        select(SentimentAnalysis)
+        .where(
+            col(SentimentAnalysis.overall_sentiment).in_(
+                ["negative", "frustrated"]
+            )
+        )
+        .order_by(col(SentimentAnalysis.created_at).desc())
+        .limit(RECENT_NEGATIVE_LIMIT)
+    )
+    recent_negatives = [
+        {
+            "conversation_id": row.conversation_id,
+            "overall_sentiment": row.overall_sentiment,
+            "summary": row.summary,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in negatives_result.all()
+    ]
+
+    return {
+        "enabled": settings.AI_SENTIMENT_ENABLED,
+        "total": sum(distribution.values()),
+        "distribution": distribution,
+        "performance": performance,
+        "average_score": round(float(average_score or 0.0), 3),
+        "recent_negatives": recent_negatives,
+    }

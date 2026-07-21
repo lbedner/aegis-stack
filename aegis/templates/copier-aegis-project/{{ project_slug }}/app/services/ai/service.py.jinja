@@ -6,7 +6,7 @@ conversation management, and provider integration.
 """
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator{% if ai_rag %}, Sequence{% endif %}
 from datetime import UTC, datetime
 from typing import Any
 
@@ -65,7 +65,11 @@ from .providers import ProviderNotInstalledError, get_llm
 {% endif %}
 from .health_context import HealthContext
 from .usage_context import UsageContext
-from .prompts import build_system_prompt
+from .agent_loader import AgentConfig, resolve_agent
+from .prompts import DEFAULT_SYSTEM_PROMPT, build_system_prompt
+{%- if ai_backend != "memory" %}
+from .user_memory import build_user_memory_context
+{%- endif %}
 {% if ai_rag %}
 from app.services.rag.config import get_rag_config
 from app.services.rag.service import RAGService
@@ -388,6 +392,9 @@ class AIService:
             # Get fresh config for metadata (reflects current .env after use-provider)
             current = self.config
 
+            # Resolve the active agent definition (DB row or code default)
+            agent_config = await resolve_agent()
+
             # Setup conversation and add user message
             conversation = self._setup_conversation(
                 message, conversation_id, user_id, config=current
@@ -401,6 +408,7 @@ class AIService:
                     query=message,
                     collection=rag_collection,
                     top_k=rag_top_k,
+                    allowed_collections=agent_config.knowledge_base_ids,
                 )
 
 {% endif %}
@@ -413,6 +421,11 @@ class AIService:
             # Build LLM catalog context
             catalog_context = self._build_catalog_context()
 
+{% if ai_backend != "memory" %}
+            # Guarded per-user memory block (saved via the save_memory tool)
+            memory_context = await build_user_memory_context(user_id)
+
+{% endif %}
 {% if ai_rag %}
             # Build RAG stats context (always included when RAG enabled)
             rag_stats_context = await self._build_rag_stats_context()
@@ -430,6 +443,10 @@ class AIService:
                 health_warning=health_warning,
                 usage_context=usage_context,
                 catalog_context=catalog_context,
+                agent_config=agent_config,
+{% if ai_backend != "memory" %}
+                memory_context=memory_context,
+{% endif %}
             )
 
             # Get AI response
@@ -446,9 +463,9 @@ class AIService:
             # Prepare LLM and messages with full context
             llm, messages = self._prepare_llm_and_messages(
 {% if ai_rag %}
-                conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context
+                conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
 {% else %}
-                conversation, None, None, health_context, health_warning, usage_context, catalog_context
+                conversation, None, None, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
 {% endif %}
             )
 
@@ -476,9 +493,9 @@ class AIService:
 
 {% endif %}
 {% if ai_backend != "memory" %}
-            # Record usage tracking
+            # Record usage tracking, attributed to the resolved agent
             usage = self._extract_usage(result)
-            self._record_usage("chat", usage, user_id)
+            self._record_usage(f"chat:{agent_config.slug}", usage, user_id)
 
             # Add TPS (tokens per second) to metadata for performance monitoring
             output_tokens = usage.get("output_tokens", 0)
@@ -547,6 +564,9 @@ class AIService:
             # Get fresh config for metadata (reflects current .env after use-provider)
             current = self.config
 
+            # Resolve the active agent definition (DB row or code default)
+            agent_config = await resolve_agent()
+
             # Setup conversation and add user message
             conversation = self._setup_conversation(
                 message, conversation_id, user_id, config=current
@@ -564,6 +584,7 @@ class AIService:
                     query=message,
                     collection=rag_collection,
                     top_k=rag_top_k,
+                    allowed_collections=agent_config.knowledge_base_ids,
                 )
 
 {% endif %}
@@ -581,6 +602,11 @@ class AIService:
             rag_stats_context = await self._build_rag_stats_context()
 
 {% endif %}
+{% if ai_backend != "memory" %}
+            # Guarded per-user memory block (saved via the save_memory tool)
+            memory_context = await build_user_memory_context(user_id)
+
+{% endif %}
 {% if ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
             agent, conversation_context = self._prepare_agent_and_context(
@@ -593,14 +619,18 @@ class AIService:
                 health_warning=health_warning,
                 usage_context=usage_context,
                 catalog_context=catalog_context,
+                agent_config=agent_config,
+{% if ai_backend != "memory" %}
+                memory_context=memory_context,
+{% endif %}
             )
 {% else %}
             # Prepare LLM and messages with full context
             llm, messages = self._prepare_llm_and_messages(
 {% if ai_rag %}
-                conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context
+                conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
 {% else %}
-                conversation, None, None, health_context, health_warning, usage_context, catalog_context
+                conversation, None, None, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
 {% endif %}
             )
 {% endif %}
@@ -703,11 +733,11 @@ class AIService:
 {% if ai_backend != "memory" %}
 {% if ai_framework == "pydantic-ai" %}
             # Record usage tracking (PydanticAI provides streaming usage)
-            self._record_usage("stream_chat", stream_usage, user_id)
+            self._record_usage(f"stream_chat:{agent_config.slug}", stream_usage, user_id)
 {% else %}
             # LangChain streaming doesn't provide token counts
             # Record with zero tokens - actual usage tracking requires non-streaming
-            self._record_usage("stream_chat", {"input_tokens": 0, "output_tokens": 0}, user_id)
+            self._record_usage(f"stream_chat:{agent_config.slug}", {"input_tokens": 0, "output_tokens": 0}, user_id)
 {% endif %}
 {% endif %}
 
@@ -812,6 +842,38 @@ class AIService:
 
         return conversation
 
+    def _apply_agent_config(
+        self, config: AIServiceConfig, agent_config: AgentConfig | None
+    ) -> AIServiceConfig:
+        """Overlay the resolved agent's sampling (and optional model pin).
+
+        The default agent carries the same values as settings, so this is
+        an identity transform until an agent row is edited. A ``model_id``
+        pin assumes the current provider serves that model.
+        """
+        if agent_config is None:
+            return config
+        update: dict[str, Any] = {
+            "temperature": agent_config.temperature,
+            "max_tokens": agent_config.max_tokens,
+        }
+        if agent_config.model_id:
+            update["model"] = agent_config.model_id
+        return config.model_copy(update=update)
+
+    def _agent_persona(self, agent_config: AgentConfig | None) -> str | None:
+        """The persona override for this request, or None for the built-in.
+
+        ``DEFAULT_SYSTEM_PROMPT`` is the seeded marker meaning "use the
+        service's dynamic persona"; any other prompt text (an edited agent
+        row) is used verbatim as the persona base.
+        """
+        if agent_config is None:
+            return None
+        if agent_config.system_prompt == DEFAULT_SYSTEM_PROMPT:
+            return None
+        return agent_config.system_prompt
+
 {% if ai_framework == "pydantic-ai" %}
     def _prepare_agent_and_context(
         self,
@@ -824,6 +886,8 @@ class AIService:
         health_warning: str | None = None,
         usage_context: UsageContext | None = None,
         catalog_context: str | None = None,
+        agent_config: AgentConfig | None = None,
+        memory_context: str | None = None,
     ) -> tuple[Any, str]:
         """
         Create agent for request and build conversation context.
@@ -838,13 +902,15 @@ class AIService:
             health_warning: Optional warning if server is down
             usage_context: Optional usage context for self-awareness
             catalog_context: Optional LLM catalog context for model awareness
+            agent_config: Resolved agent definition; supplies sampling
+                parameters, an optional model pin, and an optional persona
 
         Returns:
             tuple[Any, str]: (agent instance, conversation context string)
         """
         # Build system prompt with project context and optional contexts
         # Get fresh config for current model/provider
-        config = self.config
+        config = self._apply_agent_config(self.config, agent_config)
 
         # Use compact mode for Ollama (smaller context for better instruction following)
         is_compact = config.provider.value == "ollama"
@@ -881,6 +947,8 @@ class AIService:
             use_rag=formatted_rag is not None,
             current_model=config.model,
             current_provider=config.provider.value,
+            persona=self._agent_persona(agent_config),
+            memory_context=memory_context,
         )
 
         # Add server-down warning if applicable
@@ -909,6 +977,8 @@ class AIService:
         health_warning: str | None = None,
         usage_context: UsageContext | None = None,
         catalog_context: str | None = None,
+        agent_config: AgentConfig | None = None,
+        memory_context: str | None = None,
     ) -> tuple[Any, list]:
         """
         Create LLM instance and build message list for LangChain.
@@ -921,16 +991,18 @@ class AIService:
             health_warning: Optional warning if server is down
             usage_context: Optional usage context with AI stats
             catalog_context: Optional LLM catalog context for model awareness
+            agent_config: Resolved agent definition; supplies sampling
+                parameters, an optional model pin, and an optional persona
 
         Returns:
             tuple[Any, list]: (LLM instance, list of message tuples)
         """
-        # Create LLM for this request
-        llm = get_llm(self.config, self.settings)
+        # Create LLM for this request (agent sampling/model overlaid)
+        llm = get_llm(self._apply_agent_config(self.config, agent_config), self.settings)
 
         # Build messages list for LangChain
         messages = self._build_langchain_messages(
-            conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context
+            conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config, memory_context=memory_context
         )
 
         return llm, messages
@@ -949,6 +1021,8 @@ class AIService:
         health_warning: str | None = None,
         usage_context: UsageContext | None = None,
         catalog_context: str | None = None,
+        agent_config: AgentConfig | None = None,
+        memory_context: str | None = None,
     ) -> list:
         """
         Build LangChain message list from conversation history.
@@ -982,6 +1056,8 @@ class AIService:
             usage_context=usage_str,
             catalog_context=catalog_context,
             use_rag=rag_context is not None,
+            persona=self._agent_persona(agent_config),
+            memory_context=memory_context,
         )
 
         # Add server-down warning if applicable
@@ -1081,6 +1157,7 @@ class AIService:
         query: str,
         collection: str | None = None,
         top_k: int | None = None,
+        allowed_collections: Sequence[str] | None = None,
     ) -> RAGContext:
         """
         Build RAG context by searching the vector store.
@@ -1089,6 +1166,10 @@ class AIService:
             query: Search query (usually the user's message)
             collection: Collection to search (uses config default if None)
             top_k: Number of results (uses config default if None)
+            allowed_collections: The agent's knowledge-base scope. Empty
+                or None keeps the single-collection behavior; a non-empty
+                scope restricts search to those collections (an explicit
+                ``collection`` inside the scope narrows to just it).
 
         Returns:
             RAGContext with search results
@@ -1096,23 +1177,39 @@ class AIService:
         Raises:
             AIServiceError: If no collection is specified
         """
-        # Determine collection to use
-        target_collection = collection or self.config.rag_default_collection
-        if not target_collection:
-            raise AIServiceError(
-                "No RAG collection specified. Either pass rag_collection parameter "
-                "or set RAG_CHAT_DEFAULT_COLLECTION in config."
-            )
-
         # Determine top_k
         k = top_k or self.config.rag_top_k
 
-        # Search for relevant content
-        results = await self.rag_service.search(
-            query=query,
-            collection_name=target_collection,
-            top_k=k,
-        )
+        scope = [c for c in (allowed_collections or []) if c]
+        if scope:
+            # Agent-scoped retrieval. An explicit in-scope collection
+            # narrows to it; anything outside the scope is refused.
+            if collection and collection in scope:
+                scope = [collection]
+            elif collection:
+                logger.warning(
+                    "Requested RAG collection is outside the agent's scope; "
+                    f"searching scope instead (collection={collection})"
+                )
+            target_collection = ",".join(scope)
+            results = await self.rag_service.search_scoped(
+                query,
+                allowed_collections=scope,
+                top_k=k,
+            )
+        else:
+            # Unscoped: existing single-collection behavior.
+            target_collection = collection or self.config.rag_default_collection
+            if not target_collection:
+                raise AIServiceError(
+                    "No RAG collection specified. Either pass rag_collection "
+                    "parameter or set RAG_CHAT_DEFAULT_COLLECTION in config."
+                )
+            results = await self.rag_service.search(
+                query=query,
+                collection_name=target_collection,
+                top_k=k,
+            )
 
         # Filter by minimum score
         filtered_results = [

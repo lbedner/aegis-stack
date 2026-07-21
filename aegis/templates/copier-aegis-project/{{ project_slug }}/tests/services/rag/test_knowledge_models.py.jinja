@@ -1,0 +1,50 @@
+"""Tests for knowledge base metadata models."""
+{% if ai_backend != "memory" %}
+
+from collections.abc import Generator
+
+import pytest
+from sqlmodel import Session, SQLModel, create_engine, select
+
+from app.services.rag.models.knowledge import KnowledgeBase, KnowledgeBaseSource
+
+
+@pytest.fixture
+def session() -> Generator[Session]:
+    engine = create_engine("sqlite://")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+
+
+class TestKnowledgeModels:
+    def test_kb_and_source_round_trip(self, session: Session) -> None:
+        kb = KnowledgeBase(name="kb-food", description="Food knowledge")
+        session.add(kb)
+        session.commit()
+        session.refresh(kb)
+
+        source = KnowledgeBaseSource(
+            knowledge_base_id=kb.id,
+            name="allergies.md",
+            chunking_strategy="fixed",
+        )
+        session.add(source)
+        session.commit()
+
+        loaded = session.exec(
+            select(KnowledgeBaseSource).where(
+                KnowledgeBaseSource.knowledge_base_id == kb.id
+            )
+        ).one()
+        assert loaded.chunking_strategy == "fixed"
+        assert loaded.loaded is False
+
+    def test_kb_name_is_unique(self, session: Session) -> None:
+        session.add(KnowledgeBase(name="kb-food"))
+        session.commit()
+        session.add(KnowledgeBase(name="kb-food"))
+
+        with pytest.raises(Exception, match="(?i)unique"):
+            session.commit()
+{% endif %}

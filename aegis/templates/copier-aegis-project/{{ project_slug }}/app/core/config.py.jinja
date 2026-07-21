@@ -313,6 +313,12 @@ class Settings(
     # tokens, so "low" cuts spend several-fold on constrained tasks.
     AI_EFFORT: str | None = None
     AI_TIMEOUT_SECONDS: float = 120.0
+{% if ai_backend != "memory" %}
+    # Batch sentiment scoring of conversations. OFF by default: the job
+    # spends model tokens on every unscored conversation.
+    AI_SENTIMENT_ENABLED: bool = False
+    AI_SENTIMENT_BATCH_LIMIT: int = 20
+{% endif %}
 
     # Provider API Keys (optional - many providers offer free tiers)
     OPENAI_API_KEY: str | None = None

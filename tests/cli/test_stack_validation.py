@@ -169,6 +169,32 @@ def test_stack_full_validation(
         f"STDERR: {health_result.stderr}"
     )
 
+    # Agent registry smoke: a sqlite-backed ai stack must come out of
+    # generation with a seeded, inspectable registry (postgres stacks
+    # have no database running during matrix validation).
+    has_sqlite_ai = any(
+        service.startswith("ai[") and "sqlite" in service
+        for service in (combination.services or [])
+    )
+    if has_sqlite_ai:
+        agents_result = run_project_command(
+            ["uv", "run", combination.project_slug, "agents", "list"],
+            project_path,
+            step_name="Agents Registry Test",
+            env_overrides={"VIRTUAL_ENV": ""},
+        )
+        assert agents_result.success, (
+            f"agents list failed for {combination.description}\n"
+            f"Duration: {agents_result.duration:.1f}s\n"
+            f"Error: {agents_result.error_message}\n"
+            f"STDOUT: {agents_result.stdout}\n"
+            f"STDERR: {agents_result.stderr}"
+        )
+        assert "assistant" in agents_result.stdout, (
+            f"seeded default agent missing for {combination.description}\n"
+            f"STDOUT: {agents_result.stdout}"
+        )
+
 
 @pytest.mark.slow
 def test_full_stack_validation_pipeline(get_generated_stack: Any) -> None:

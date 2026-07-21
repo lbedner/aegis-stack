@@ -17,6 +17,8 @@ def build_system_prompt(
     use_rag: bool = False,
     current_model: str | None = None,
     current_provider: str | None = None,
+    persona: str | None = None,
+    memory_context: str | None = None,
 ) -> str:
     """
     Build system prompt with project context.
@@ -31,6 +33,12 @@ def build_system_prompt(
         use_rag: Whether RAG is being used in this session
         current_model: Current model being used for this request
         current_provider: Current provider (openai, anthropic, etc.)
+        persona: Optional persona text replacing the entire built-in base
+            block (identity, features, session info). Live-data context
+            sections are still appended after it. None keeps the built-in
+            dynamic persona.
+        memory_context: Optional guarded per-user memory block (from
+            ``user_memory.build_user_memory_context``) to append.
 
     Returns:
         Complete system prompt for the AI assistant
@@ -106,7 +114,10 @@ stats, $0.00 cost is expected and normal for Ollama models.
         "**Architecture:** Components (backend, frontend, database, "
         "scheduler, worker) + Services (ai, auth, rag)"
     )
-    prompt = f"""I'm Illiana. I watch over your Aegis Stack.
+    if persona is not None:
+        prompt = persona.rstrip() + "\n"
+    else:
+        prompt = f"""I'm Illiana. I watch over your Aegis Stack.
 
 {intro}
 
@@ -170,6 +181,12 @@ The following code was retrieved from THIS project's codebase.
     if catalog_context:
         prompt += f"""
 ## {catalog_context}
+"""
+
+    if memory_context:
+        prompt += f"""
+## Saved User Memory
+{memory_context}
 """
 
     # Health context comes LAST so LLM weights it more heavily

@@ -536,6 +536,242 @@ AI_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
+AGENTS_MIGRATION = ServiceMigrationSpec(
+    service_name="ai_agents",
+    description="AI agent registry tables (agents, tools, agent-tool links)",
+    tables=[
+        # Agent - the DB-driven agent definition. model_id is a plain
+        # indexed string, NOT an FK to large_language_model: the catalog
+        # is ETL-synced and rows churn, so agents stay decoupled from
+        # catalog lifecycle exactly like llm_usage. NULL model_id means
+        # "use the service's active model".
+        TableSpec(
+            name="agent",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("slug", "sa.String()", nullable=False),
+                ColumnSpec("name", "sa.String()", nullable=False),
+                ColumnSpec("description", "sa.String()", nullable=True),
+                ColumnSpec("category", "sa.String()", nullable=True),
+                ColumnSpec("model_id", "sa.String()", nullable=True),
+                ColumnSpec("system_prompt", "sa.String()", nullable=False),
+                ColumnSpec("temperature", "sa.Float()", nullable=False, default="0.7"),
+                ColumnSpec(
+                    "max_tokens", "sa.Integer()", nullable=False, default="1000"
+                ),
+                ColumnSpec("memory_modules", "sa.JSON()", nullable=False, default="[]"),
+                ColumnSpec(
+                    "knowledge_base_ids", "sa.JSON()", nullable=False, default="[]"
+                ),
+                ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_agent_slug", ["slug"], unique=True),
+                IndexSpec("ix_agent_model_id", ["model_id"]),
+            ],
+        ),
+        # Tool - registry rows keyed by name into the Python tool registry.
+        TableSpec(
+            name="tool",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("name", "sa.String()", nullable=False),
+                ColumnSpec("description", "sa.String()", nullable=True),
+                ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+            ],
+            indexes=[IndexSpec("ix_tool_name", ["name"], unique=True)],
+        ),
+        # AgentTool - join rows are agent-owned; CASCADE both sides so
+        # deleting an agent or a tool cleans its links.
+        TableSpec(
+            name="agent_tool",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("agent_id", "sa.Integer()", nullable=False),
+                ColumnSpec("tool_id", "sa.Integer()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("uq_agent_tool_pair", ["agent_id", "tool_id"], unique=True),
+                IndexSpec("ix_agent_tool_tool_id", ["tool_id"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["agent_id"], "agent", ["id"], ondelete="CASCADE"),
+                ForeignKeySpec(["tool_id"], "tool", ["id"], ondelete="CASCADE"),
+            ],
+        ),
+        # MemoryModule - reusable prompt-context blocks agents opt into
+        # via Agent.memory_modules. Hybrid by design: a row may carry
+        # static prompt_content, a dynamic fetch_function, or both;
+        # assembly is column-driven (there is deliberately no "kind").
+        TableSpec(
+            name="memory_module",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("slug", "sa.String()", nullable=False),
+                ColumnSpec("name", "sa.String()", nullable=False),
+                ColumnSpec("description", "sa.String()", nullable=True),
+                ColumnSpec("category", "sa.String()", nullable=True),
+                ColumnSpec("prompt_content", "sa.String()", nullable=True),
+                ColumnSpec("fetch_function", "sa.String()", nullable=True),
+                ColumnSpec("context_key", "sa.String()", nullable=False),
+                ColumnSpec(
+                    "supports_days_back",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec("default_days_back", "sa.Integer()", nullable=True),
+                ColumnSpec("priority", "sa.Integer()", nullable=False, default="100"),
+                ColumnSpec(
+                    "token_estimate", "sa.Integer()", nullable=False, default="0"
+                ),
+                ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[IndexSpec("ix_memory_module_slug", ["slug"], unique=True)],
+        ),
+        # AgentUserMemory - one JSON memory document per user, written by
+        # the built-in save_memory tool and injected (guarded) into chat
+        # context. Same gate as the registry, so it rides the same spec.
+        TableSpec(
+            name="agent_user_memory",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("user_id", "sa.String()", nullable=False),
+                ColumnSpec("memory", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_agent_user_memory_user_id", ["user_id"], unique=True),
+            ],
+        ),
+    ],
+)
+
+KNOWLEDGE_MIGRATION = ServiceMigrationSpec(
+    service_name="ai_knowledge",
+    description="Knowledge base metadata (agent-scoped RAG collections)",
+    tables=[
+        # A knowledge base maps 1:1 onto a Chroma collection by name;
+        # agents scope retrieval via Agent.knowledge_base_ids holding
+        # these names.
+        TableSpec(
+            name="knowledge_base",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("name", "sa.String()", nullable=False),
+                ColumnSpec("description", "sa.String()", nullable=True),
+                ColumnSpec("category", "sa.String()", nullable=True),
+                ColumnSpec("meta_data", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[IndexSpec("ix_knowledge_base_name", ["name"], unique=True)],
+        ),
+        # A source document within a KB; ``loaded`` gates ingestion state
+        # and ``chunking_strategy`` picks the chunker preset per source.
+        TableSpec(
+            name="knowledge_base_source",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("knowledge_base_id", "sa.Integer()", nullable=False),
+                ColumnSpec("name", "sa.String()", nullable=False),
+                ColumnSpec("file_path", "sa.String()", nullable=True),
+                ColumnSpec("content_type", "sa.String()", nullable=True),
+                ColumnSpec(
+                    "chunking_strategy",
+                    "sa.String()",
+                    nullable=False,
+                    default="'paragraph'",
+                ),
+                ColumnSpec("loaded", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("meta_data", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_knowledge_base_source_knowledge_base_id",
+                    ["knowledge_base_id"],
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["knowledge_base_id"],
+                    "knowledge_base",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_knowledge_base_source_chunking_strategy",
+                    sqltext=(
+                        "chunking_strategy IN "
+                        "('paragraph', 'sentence', 'fixed', 'code')"
+                    ),
+                ),
+            ],
+        ),
+    ],
+)
+
+SENTIMENT_MIGRATION = ServiceMigrationSpec(
+    service_name="ai_sentiment",
+    description="Conversation sentiment analysis results",
+    tables=[
+        # One verdict per conversation (unique conversation_id enforces
+        # score-once); rows die with their conversation via CASCADE.
+        TableSpec(
+            name="sentiment_analysis",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("conversation_id", "sa.String()", nullable=False),
+                ColumnSpec("overall_sentiment", "sa.String()", nullable=False),
+                ColumnSpec("overall_score", "sa.Float()", nullable=False),
+                ColumnSpec("assistant_performance", "sa.String()", nullable=False),
+                ColumnSpec("issues", "sa.JSON()", nullable=False, default="[]"),
+                ColumnSpec("summary", "sa.String()", nullable=True),
+                ColumnSpec("model_id", "sa.String()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_sentiment_analysis_conversation_id",
+                    ["conversation_id"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["conversation_id"],
+                    "conversation",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_sentiment_analysis_overall_sentiment",
+                    sqltext=(
+                        "overall_sentiment IN "
+                        "('positive', 'neutral', 'negative', 'frustrated')"
+                    ),
+                ),
+                CheckConstraintSpec(
+                    name="ck_sentiment_analysis_assistant_performance",
+                    sqltext=("assistant_performance IN ('good', 'acceptable', 'poor')"),
+                ),
+            ],
+        ),
+    ],
+)
+
 AUTH_TOKENS_MIGRATION = ServiceMigrationSpec(
     service_name="auth_tokens",
     description="Auth token tables (password reset, email verification, refresh)",
@@ -4058,6 +4294,30 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
         include_ai == "yes" or include_ai is True
     ) and ai_backend != StorageBackends.MEMORY:
         services.append("ai")
+
+    # AI agent registry - rides the exact same gate as the ai catalog
+    # tables: agents are the service's default architecture, and the DB
+    # config source exists whenever there is a persistence backend.
+    if (
+        include_ai == "yes" or include_ai is True
+    ) and ai_backend != StorageBackends.MEMORY:
+        services.append("ai_agents")
+
+    # KB metadata (only with AI persistence AND the rag flag)
+    ai_rag = context.get(AnswerKeys.AI_RAG)
+    if (
+        (include_ai == "yes" or include_ai is True)
+        and ai_backend != StorageBackends.MEMORY
+        and (ai_rag == "yes" or ai_rag is True)
+    ):
+        services.append("ai_knowledge")
+
+    # Sentiment analysis (with AI persistence; the conversation table is
+    # its FK target). The job that populates it is settings-gated off.
+    if (
+        include_ai == "yes" or include_ai is True
+    ) and ai_backend != StorageBackends.MEMORY:
+        services.append("ai_sentiment")
 
     # AI Voice service (only if AI with persistence and voice enabled)
     ai_voice = context.get(AnswerKeys.AI_VOICE)

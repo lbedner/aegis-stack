@@ -150,3 +150,9 @@ demo-*/
 # Generated-project artifact if aegis init ever runs at repo root
 /.copier-answers.yml
 test-project/
+
+# Planning docs (working notes, not published site content)
+docs/plans/
+
+# Editor workspace files
+*.code-workspace

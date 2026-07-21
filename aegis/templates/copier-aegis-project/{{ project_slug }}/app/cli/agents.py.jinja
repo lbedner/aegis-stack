@@ -1,0 +1,252 @@
+"""Agent registry CLI commands.
+
+Inspect and smoke-test the database-driven agent registry: list agents,
+show one agent's full definition, and run a single test turn through the
+agent loader against the configured model. The memory-modules commands
+inspect the reusable context blocks agents opt into.
+"""
+
+import asyncio
+
+import typer
+from rich.panel import Panel
+from rich.table import Table
+
+from app.cli import theme
+from app.i18n import lazy_t, t
+from app.services.ai.agent_loader import AgentConfig
+from app.services.ai.models.agents import Agent, MemoryModule
+
+app = typer.Typer(help=lazy_t("agents.help"))
+modules_app = typer.Typer(help=lazy_t("agents.modules_help"))
+console = theme.console()
+
+
+async def _load_agents() -> list[Agent]:
+    from sqlalchemy.orm import selectinload
+    from sqlmodel import select
+
+    from app.core.db import get_async_session
+
+    async with get_async_session() as session:
+        result = await session.exec(
+            select(Agent)
+            .options(selectinload(Agent.tools))  # type: ignore[arg-type]
+            .order_by(Agent.slug)  # type: ignore[arg-type]
+        )
+        return list(result.all())
+
+
+async def _load_agent(slug: str) -> Agent | None:
+    agents = await _load_agents()
+    return next((agent for agent in agents if agent.slug == slug), None)
+
+
+async def _load_modules() -> list[MemoryModule]:
+    from app.core.db import get_async_session
+    from app.services.ai.memory_modules import list_memory_modules
+
+    async with get_async_session() as session:
+        return await list_memory_modules(session, active_only=False)
+
+
+async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
+    """One turn through the loader: resolved config -> configured model."""
+    from app.core.config import settings
+    from app.services.ai.agent_loader import resolve_agent
+    from app.services.ai.config import AIServiceConfig
+
+    config = await resolve_agent(slug)
+    service_config = AIServiceConfig.from_settings(settings)
+    update: dict[str, object] = {
+        "temperature": config.temperature,
+        "max_tokens": config.max_tokens,
+    }
+    if config.model_id:
+        update["model"] = config.model_id
+    service_config = service_config.model_copy(update=update)
+{% if ai_framework == "pydantic-ai" %}
+    from app.services.ai.providers import get_agent
+
+    agent = get_agent(service_config, settings, config.system_prompt)
+    result = await agent.run(message)
+    return config, str(result.output)
+{% else %}
+    from app.services.ai.providers import get_llm
+
+    llm = get_llm(service_config, settings)
+    result = await llm.ainvoke(
+        [("system", config.system_prompt), ("human", message)]
+    )
+    reply = result.content if hasattr(result, "content") else result
+    return config, str(reply)
+{% endif %}
+
+
+def _active_text(is_active: bool) -> str:
+    return (
+        theme.good_text(t("shared.yes"))
+        if is_active
+        else theme.bad_text(t("shared.no"))
+    )
+
+
+@app.command("list", help=lazy_t("agents.help_list"))
+def list_agents() -> None:
+    agents = asyncio.run(_load_agents())
+    if not agents:
+        console.print(f"[dim]{t('agents.empty')}[/dim]")
+        return
+
+    table = Table(title=t("agents.list_title"), show_header=True, box=None)
+    table.add_column(t("agents.col_slug"), style=theme.ACCENT, no_wrap=True)
+    table.add_column(t("agents.col_name"))
+    table.add_column(t("agents.col_model"), style="dim")
+    table.add_column(t("agents.col_active"), justify="center")
+    table.add_column(t("agents.col_tools"), justify="right")
+    table.add_column(t("agents.col_modules"), justify="right")
+    for agent in agents:
+        table.add_row(
+            agent.slug,
+            agent.name,
+            agent.model_id or t("agents.default_model"),
+            _active_text(agent.is_active),
+            str(len(agent.tools)),
+            str(len(agent.memory_modules)),
+        )
+    console.print(table)
+
+
+@app.command("show", help=lazy_t("agents.help_show"))
+def show_agent(slug: str = typer.Argument(...)) -> None:
+    import sys
+
+    agent = asyncio.run(_load_agent(slug))
+    if agent is None:
+        console.print(
+            f"[{theme.ERROR}]{t('agents.not_found', slug=slug)}[/{theme.ERROR}]"
+        )
+        sys.exit(1)
+
+    none_text = t("agents.none")
+    tools = ", ".join(tool.name for tool in agent.tools) or none_text
+    modules = ", ".join(agent.memory_modules) or none_text
+    kbs = ", ".join(agent.knowledge_base_ids) or none_text
+    lines = [
+        f"[dim]{t('agents.col_name')}[/dim]  {agent.name}",
+        f"[dim]{t('agents.col_model')}[/dim] "
+        f"{agent.model_id or t('agents.default_model')}",
+        f"[dim]{t('agents.col_active')}[/dim] {_active_text(agent.is_active)}",
+        f"[dim]temperature[/dim] {agent.temperature}  "
+        f"[dim]max_tokens[/dim] {agent.max_tokens}",
+        f"[dim]{t('agents.show_tools')}[/dim] {tools}",
+        f"[dim]{t('agents.show_modules')}[/dim] {modules}",
+        f"[dim]{t('agents.show_kbs')}[/dim] {kbs}",
+        "",
+        f"[dim]{t('agents.show_prompt')}[/dim]",
+        agent.system_prompt,
+    ]
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title=f"[bold {theme.ACCENT}]{agent.slug}[/bold {theme.ACCENT}]",
+            border_style=theme.ACCENT,
+            padding=(1, 2),
+        )
+    )
+
+
+@app.command("test", help=lazy_t("agents.help_test"))
+def test_agent(
+    slug: str = typer.Argument("assistant"),
+    message: str = typer.Option(
+        "Reply with one short sentence confirming you are online.",
+        "--message",
+        "-m",
+        help=lazy_t("agents.opt_message"),
+    ),
+) -> None:
+    import sys
+
+    console.print(f"[dim]{t('agents.test_running', slug=slug)}[/dim]")
+    try:
+        config, reply = asyncio.run(_run_test_turn(slug, message))
+    except Exception as e:
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
+        sys.exit(1)
+    title = t("agents.test_reply_title", slug=config.slug)
+    console.print(
+        Panel(
+            reply,
+            title=f"[bold {theme.ACCENT}]{title}[/bold {theme.ACCENT}]",
+            border_style=theme.ACCENT,
+            padding=(1, 2),
+        )
+    )
+
+
+def _module_kind(module: MemoryModule) -> str:
+    if module.prompt_content and module.fetch_function:
+        return t("agents.module_hybrid")
+    if module.fetch_function:
+        return t("agents.module_dynamic")
+    return t("agents.module_static")
+
+
+@modules_app.command("list", help=lazy_t("agents.modules_help_list"))
+def list_modules() -> None:
+    modules = asyncio.run(_load_modules())
+    if not modules:
+        console.print(f"[dim]{t('agents.modules_empty')}[/dim]")
+        return
+
+    table = Table(title=t("agents.modules_title"), show_header=True, box=None)
+    table.add_column(t("agents.col_slug"), style=theme.ACCENT, no_wrap=True)
+    table.add_column(t("agents.col_name"))
+    table.add_column(t("agents.col_kind"), style="dim")
+    table.add_column(t("agents.col_priority"), justify="right")
+    table.add_column(t("agents.col_active"), justify="center")
+    for module in modules:
+        table.add_row(
+            module.slug,
+            module.name,
+            _module_kind(module),
+            str(module.priority),
+            _active_text(module.is_active),
+        )
+    console.print(table)
+
+
+@modules_app.command("show", help=lazy_t("agents.modules_help_show"))
+def show_module(slug: str = typer.Argument(...)) -> None:
+    import sys
+
+    modules = asyncio.run(_load_modules())
+    module = next((m for m in modules if m.slug == slug), None)
+    if module is None:
+        console.print(
+            f"[{theme.ERROR}]{t('agents.module_not_found', slug=slug)}"
+            f"[/{theme.ERROR}]"
+        )
+        sys.exit(1)
+
+    none_text = t("agents.none")
+    lines = [
+        f"[dim]{t('agents.col_name')}[/dim] {module.name}",
+        f"[dim]{t('agents.col_kind')}[/dim] {_module_kind(module)}",
+        f"[dim]{t('agents.col_priority')}[/dim] {module.priority}  "
+        f"[dim]{t('agents.col_active')}[/dim] {_active_text(module.is_active)}",
+        f"[dim]context_key[/dim] {module.context_key}",
+        f"[dim]fetch_function[/dim] {module.fetch_function or none_text}",
+        "",
+        f"[dim]{t('agents.module_content')}[/dim]",
+        module.prompt_content or none_text,
+    ]
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title=f"[bold {theme.ACCENT}]{module.slug}[/bold {theme.ACCENT}]",
+            border_style=theme.ACCENT,
+            padding=(1, 2),
+        )
+    )

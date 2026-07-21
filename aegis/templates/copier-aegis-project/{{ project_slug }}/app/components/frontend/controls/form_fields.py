@@ -24,6 +24,9 @@ from app.components.frontend.styles import PulseColors
 from app.components.frontend.theme import AegisTheme as Theme
 
 FormVariant = Literal["default", "pulse"]
+
+# Error-state border for the pulse variant (matches the web frontend).
+_PULSE_ERROR_BORDER = "#E94E77"
 _PULSE_LABEL_STYLE = ft.TextStyle(letter_spacing=1.6)
 
 
@@ -50,7 +53,7 @@ def _input_kwargs(variant: FormVariant, error: str | None) -> dict[str, Any]:
     """
     if variant == "pulse":
         return {
-            "border_color": PulseColors.BORDER if not error else "#E94E77",
+            "border_color": PulseColors.BORDER if not error else _PULSE_ERROR_BORDER,
             "focused_border_color": PulseColors.TEAL,
             "cursor_color": PulseColors.TEAL,
             "bgcolor": PulseColors.CARD,
@@ -101,6 +104,7 @@ class FormTextField(ft.Container):
         multiline: bool = False,
         min_lines: int | None = None,
         max_lines: int | None = None,
+        input_filter: ft.InputFilter | None = None,
         show_label: bool = True,
         borderless: bool = False,
     ) -> None:
@@ -124,6 +128,7 @@ class FormTextField(ft.Container):
             multiline: Enable multi-line text entry
             min_lines: Minimum visible lines for multi-line fields
             max_lines: Maximum visible lines for multi-line fields
+            input_filter: Optional ``ft.InputFilter`` (e.g. numbers only)
             show_label: When False, skip the label widget and the 4px
                 gap above the field (use when an outer container, e.g.
                 a SectionCard header, already provides the label).
@@ -145,6 +150,10 @@ class FormTextField(ft.Container):
             self.width = width
 
         input_kwargs = _input_kwargs(variant, error)
+        if multiline:
+            # A pinned height collapses multi-line fields; let min/max_lines
+            # drive the height instead.
+            input_kwargs.pop("height", None)
         if borderless:
             input_kwargs["border"] = ft.InputBorder.NONE
             input_kwargs["border_radius"] = 0
@@ -163,6 +172,7 @@ class FormTextField(ft.Container):
             multiline=multiline,
             min_lines=min_lines,
             max_lines=max_lines,
+            input_filter=input_filter,
             expand=width is None,
             width=width,
             **input_kwargs,
@@ -211,7 +221,9 @@ class FormTextField(ft.Container):
         """Set or clear the error message."""
         self._error = error
         if self._variant == "pulse":
-            self._text_field.border_color = "#E94E77" if error else PulseColors.BORDER
+            self._text_field.border_color = (
+                _PULSE_ERROR_BORDER if error else PulseColors.BORDER
+            )
         else:
             self._text_field.border_color = (
                 Theme.Colors.ERROR if error else ft.Colors.OUTLINE
@@ -394,35 +406,57 @@ class FormDropdown(ft.Container):
         error: str | None = None,
         disabled: bool = False,
         width: int | None = None,
+        variant: FormVariant = "default",
+        max_menu_height: int | None = None,
     ) -> None:
         super().__init__()
 
         self._label = label
         self._error = error
         self._on_change = on_change
+        self._variant = variant
 
         initial = value if value is not None else (options[0][0] if options else None)
+
+        if variant == "pulse":
+            dropdown_kwargs: dict[str, Any] = {
+                "border_radius": 4,
+                "bgcolor": PulseColors.CARD,
+                "border_color": PulseColors.BORDER
+                if not error
+                else _PULSE_ERROR_BORDER,
+                "focused_border_color": PulseColors.TEAL,
+                "text_style": ft.TextStyle(color=PulseColors.TEXT, size=14),
+                "content_padding": ft.padding.symmetric(horizontal=12, vertical=10),
+            }
+        else:
+            dropdown_kwargs = {
+                "border_radius": Theme.Components.INPUT_RADIUS,
+                "bgcolor": ft.Colors.SURFACE,
+                "border_color": (Theme.Colors.ERROR if error else ft.Colors.OUTLINE),
+                "focused_border_color": Theme.Colors.PRIMARY,
+                "text_size": 13,
+                "content_padding": ft.padding.symmetric(horizontal=12, vertical=10),
+            }
 
         self._dropdown = ft.Dropdown(
             value=initial,
             options=[ft.dropdown.Option(key=k, text=t) for k, t in options],
             on_change=self._handle_change,
             disabled=disabled,
-            border_radius=Theme.Components.INPUT_RADIUS,
-            bgcolor=ft.Colors.SURFACE,
-            border_color=Theme.Colors.ERROR if error else ft.Colors.OUTLINE,
-            focused_border_color=Theme.Colors.PRIMARY,
-            text_size=13,
-            content_padding=ft.padding.symmetric(horizontal=12, vertical=10),
             expand=width is None,
             width=width,
+            # Caps the open menu so long option lists scroll instead of
+            # spilling past the viewport.
+            max_menu_height=max_menu_height,
+            **dropdown_kwargs,
         )
 
         self._build_content()
 
     def _build_content(self) -> None:
         children: list[ft.Control] = [
-            LabelText(self._label),
+            _build_label(self._label, self._variant),
             ft.Container(height=4),
             self._dropdown,
         ]
@@ -453,9 +487,16 @@ class FormDropdown(ft.Container):
 
     def set_error(self, error: str | None) -> None:
         self._error = error
-        self._dropdown.border_color = (
-            Theme.Colors.ERROR if error else ft.Colors.OUTLINE
-        )
+        # Mirror the init-time per-variant colors so a pulse dropdown
+        # keeps its styling when an error is set or cleared.
+        if self._variant == "pulse":
+            self._dropdown.border_color = (
+                _PULSE_ERROR_BORDER if error else PulseColors.BORDER
+            )
+        else:
+            self._dropdown.border_color = (
+                Theme.Colors.ERROR if error else ft.Colors.OUTLINE
+            )
         self._build_content()
         if self.page:
             self.update()
@@ -472,17 +513,13 @@ class FormDropdown(ft.Container):
         present after the update; otherwise it clears.
         """
         previous = self._dropdown.value if keep_value else None
-        self._dropdown.options = [
-            ft.dropdown.Option(key=k, text=t) for k, t in options
-        ]
+        self._dropdown.options = [ft.dropdown.Option(key=k, text=t) for k, t in options]
         if previous is not None and any(k == previous for k, _ in options):
             self._dropdown.value = previous
         else:
             self._dropdown.value = None
         if self.page:
             self._dropdown.update()
-
-
 
 
 class FormActionButtons(ft.Row):

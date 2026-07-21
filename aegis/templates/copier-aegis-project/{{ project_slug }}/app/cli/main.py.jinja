@@ -151,6 +151,15 @@ except ImportError:
     # LLM ETL service not available, skip llm commands
     pass
 
+# Conditionally register agent registry commands (ai with persistence)
+try:
+    agents_module = importlib.import_module("app.cli.agents")
+    app.add_typer(agents_module.app, name="agents")
+    app.add_typer(agents_module.modules_app, name="memory-modules")
+except ImportError:
+    # Agent registry not available, skip agents commands
+    pass
+
 
 def main() -> None:
     """Entry point for the CLI application."""

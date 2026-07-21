@@ -30,6 +30,14 @@ The **AI Service** brings a complete AI platform to your Aegis Stack project: mu
 
     [:octicons-arrow-right-24: Illiana](illiana.md)
 
+-   :material-account-group: **Agent Registry**
+
+    ---
+
+    Database-driven agents with tool grants, memory modules, per-user memory, and knowledge base scoping
+
+    [:octicons-arrow-right-24: Agents](agents.md)
+
 -   :material-database-search: **LLM Catalog**
 
     ---

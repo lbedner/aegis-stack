@@ -1,0 +1,232 @@
+"""Chat routes through the agent loader: persona, sampling, attribution."""
+{% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+
+import app.services.ai.service as service_module
+from app.services.ai.agent_loader import AgentConfig, default_agent_config
+from app.services.ai.service import AIService
+
+
+class _FakeResult:
+    output = "ok"
+
+    def usage(self) -> None:
+        return None
+
+
+class _FakeStreamResult:
+    async def stream_text(self, delta: bool = True) -> AsyncIterator[str]:
+        yield "ok"
+
+    def usage(self) -> None:
+        return None
+
+
+class _FakeAgent:
+    async def run(self, prompt: str) -> _FakeResult:
+        return _FakeResult()
+
+    @asynccontextmanager
+    async def run_stream(self, prompt: str) -> AsyncIterator[_FakeStreamResult]:
+        yield _FakeStreamResult()
+
+
+def _custom_config(**overrides: object) -> AgentConfig:
+    data: dict[str, object] = {
+        "slug": "support",
+        "name": "Support",
+        "system_prompt": "You are Support.",
+        "model_id": None,
+        "temperature": 0.2,
+        "max_tokens": 512,
+    }
+    data.update(overrides)
+    return AgentConfig(**data)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+def harness(
+    mock_ai_settings: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]:
+    """AIService with provider, contexts, and recorder faked out."""
+    service = AIService(mock_ai_settings)
+
+    async def no_health(self: AIService) -> tuple[None, None]:
+        return (None, None)
+
+    monkeypatch.setattr(AIService, "_build_health_context", no_health)
+    monkeypatch.setattr(AIService, "_build_usage_context", lambda self: None)
+    monkeypatch.setattr(AIService, "_build_catalog_context", lambda self: None)
+
+    recorder = MagicMock()
+    monkeypatch.setattr(service, "_record_usage", recorder)
+
+    captured: dict[str, Any] = {}
+
+    def fake_get_agent(config: Any, settings: Any, system_prompt: str) -> _FakeAgent:
+        captured["config"] = config
+        captured["system_prompt"] = system_prompt
+        return _FakeAgent()
+
+    monkeypatch.setattr(service_module, "get_agent", fake_get_agent)
+    return service, recorder, captured, monkeypatch
+
+
+def _stub_resolve(
+    monkeypatch: pytest.MonkeyPatch, config: AgentConfig
+) -> None:
+    async def resolve(slug: str = "assistant", **kwargs: object) -> AgentConfig:
+        return config
+
+    monkeypatch.setattr(service_module, "resolve_agent", resolve)
+
+
+class TestChatAttribution:
+    async def test_default_agent_keeps_builtin_persona_and_tags_usage(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, recorder, captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        await service.chat("hello")
+
+        assert captured["system_prompt"].startswith("I'm Illiana.")
+        action = recorder.call_args.args[0]
+        assert action == "chat:assistant"
+
+    async def test_custom_agent_persona_and_sampling_reach_the_provider(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, recorder, captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+
+        await service.chat("hello")
+
+        assert captured["system_prompt"].startswith("You are Support.")
+        assert captured["config"].temperature == 0.2
+        assert captured["config"].max_tokens == 512
+        action = recorder.call_args.args[0]
+        assert action == "chat:support"
+
+    async def test_custom_agent_model_pin_overrides_active_model(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, _, captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config(model_id="gpt-4o"))
+
+        await service.chat("hello")
+
+        assert captured["config"].model == "gpt-4o"
+
+
+class TestUserMemoryInjection:
+    async def test_saved_memory_lands_in_the_system_prompt(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """A fact saved earlier is injected (guarded) into the next chat."""
+        service, _, captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        async def fake_memory(user_id: str) -> str:
+            assert user_id == "u9"
+            return "<user_memory>\n- [food] allergic to peanuts\n</user_memory>"
+
+        monkeypatch.setattr(service_module, "build_user_memory_context", fake_memory)
+
+        await service.chat("hello", user_id="u9")
+
+        prompt = captured["system_prompt"]
+        assert "<user_memory>" in prompt
+        assert "allergic to peanuts" in prompt
+
+
+{% if ai_rag %}
+class TestAgentKnowledgeScoping:
+    async def test_scoped_agent_searches_only_its_collections(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """An agent with knowledge_base_ids only retrieves from that scope."""
+        service, _, _, monkeypatch = harness
+        _stub_resolve(
+            monkeypatch, _custom_config(knowledge_base_ids=("kb-food",))
+        )
+
+        searched: dict[str, Any] = {}
+
+        class FakeRagService:
+            async def search_scoped(
+                self,
+                query: str,
+                allowed_collections: Any,
+                top_k: Any = None,
+                filter_metadata: Any = None,
+            ) -> list[Any]:
+                searched["allowed"] = tuple(allowed_collections)
+                return []
+
+            async def search(self, *args: Any, **kwargs: Any) -> list[Any]:
+                searched["unscoped"] = True
+                return []
+
+        monkeypatch.setattr(
+            AIService, "rag_service", property(lambda self: FakeRagService())
+        )
+
+        await service.chat("what can I eat?", use_rag=True)
+
+        assert searched.get("allowed") == ("kb-food",)
+        assert "unscoped" not in searched
+
+    async def test_unscoped_agent_keeps_single_collection_search(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """Empty scope = existing behavior (default collection search)."""
+        service, _, _, monkeypatch = harness
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        searched: dict[str, Any] = {}
+
+        class FakeRagService:
+            async def search_scoped(self, *args: Any, **kwargs: Any) -> list[Any]:
+                searched["scoped"] = True
+                return []
+
+            async def search(
+                self,
+                query: str,
+                collection_name: str,
+                top_k: Any = None,
+            ) -> list[Any]:
+                searched["collection"] = collection_name
+                return []
+
+        monkeypatch.setattr(
+            AIService, "rag_service", property(lambda self: FakeRagService())
+        )
+
+        await service.chat("hello", use_rag=True)
+
+        assert searched.get("collection") == "default"
+        assert "scoped" not in searched
+
+
+{% endif %}
+class TestStreamChatAttribution:
+    async def test_stream_usage_carries_agent_slug(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, recorder, _, monkeypatch = harness
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        async for _chunk in service.stream_chat("hello"):
+            pass
+
+        action = recorder.call_args.args[0]
+        assert action == "stream_chat:assistant"
+{% endif %}

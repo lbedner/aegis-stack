@@ -1545,6 +1545,96 @@ def usage(
     except Exception as e:
         console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
         sys.exit(1)
+
+
+@app.command(help=lazy_t("ai.help_sentiment"))
+def sentiment(
+    url: str = typer.Option(
+        None,
+        "--url",
+        "-u",
+        help=lazy_t("ai.opt_url"),
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help=lazy_t("ai.opt_json"),
+    ),
+) -> None:
+    import asyncio
+    import json
+    import sys
+
+    import httpx
+
+    from app.core.constants import APIEndpoints
+
+    async def fetch_stats(base_url: str) -> dict:
+        api_url = f"{base_url}{APIEndpoints.AI_SENTIMENT_STATS}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(api_url)
+            response.raise_for_status()
+            return response.json()
+
+    def display_stats(stats: dict) -> None:
+        title = t("ai.sentiment_title")
+        console.print(f"\n[bold {theme.ACCENT}]{title}[/bold {theme.ACCENT}]")
+        if not stats.get("enabled", False):
+            console.print(f"[dim]{t('ai.sentiment_disabled_hint')}[/dim]")
+        total = stats.get("total", 0)
+        if total == 0:
+            console.print(f"\n[dim]{t('ai.sentiment_empty')}[/dim]")
+            return
+
+        distribution: dict = stats.get("distribution", {})
+        bar_width = 30
+        console.print(f"\n[bold]{t('ai.sentiment_distribution')}[/bold]")
+        colors = {
+            "positive": theme.ACCENT,
+            "neutral": "dim",
+            "negative": theme.WARNING,
+            "frustrated": theme.ERROR,
+        }
+        for value, count in distribution.items():
+            share = count / total if total else 0
+            bars = "█" * max(1 if count else 0, int(share * bar_width))
+            color = colors.get(value, "dim")
+            console.print(
+                f"  {value:<11} {count:>5}  [{color}]{bars}[/{color}]"
+            )
+
+        avg_label = t("ai.sentiment_avg_score")
+        console.print(f"\n[dim]{avg_label}[/dim] {stats.get('average_score', 0.0)}")
+
+        performance: dict = stats.get("performance", {})
+        perf_line = "  ".join(
+            f"{value}: {count}" for value, count in performance.items()
+        )
+        console.print(
+            f"[dim]{t('ai.sentiment_performance')}[/dim] {perf_line}"
+        )
+
+        negatives = stats.get("recent_negatives", [])
+        if negatives:
+            console.print(f"\n[bold]{t('ai.sentiment_recent_negatives')}[/bold]")
+            for row in negatives:
+                summary = row.get("summary") or row.get("conversation_id", "")
+                console.print(
+                    f"  [{theme.ERROR}]•[/{theme.ERROR}] "
+                    f"[dim]({row.get('overall_sentiment')})[/dim] {summary}"
+                )
+
+    base_url = url or getattr(settings, "API_BASE_URL", "http://localhost:8000")
+    try:
+        stats = asyncio.run(fetch_stats(base_url))
+        if json_output:
+            print(json.dumps(stats, indent=2))
+            return
+        display_stats(stats)
+    except Exception as e:
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
+        sys.exit(1)
 {% endif %}
 
 

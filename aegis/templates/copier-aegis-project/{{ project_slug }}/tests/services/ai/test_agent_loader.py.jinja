@@ -1,0 +1,151 @@
+"""Tests for the agent config loader (DB source, fallback, cache)."""
+{% if ai_backend != "memory" %}
+
+from collections.abc import AsyncGenerator, Generator
+
+import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai.agent_loader import (
+    DEFAULT_AGENT_SLUG,
+    AgentConfig,
+    default_agent_config,
+    invalidate_agent_cache,
+    resolve_agent,
+)
+from app.services.ai.models import Agent, AgentTool, Tool
+
+
+@pytest.fixture(autouse=True)
+def clean_cache() -> Generator[None]:
+    """Loader cache is module-global; keep tests independent."""
+    invalidate_agent_cache()
+    yield
+    invalidate_agent_cache()
+
+
+@pytest.fixture
+async def session() -> AsyncGenerator[AsyncSession]:
+    """In-memory async database session with the agent tables created."""
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    async with AsyncSession(engine) as session:
+        yield session
+    await engine.dispose()
+
+
+async def _add_agent(session: AsyncSession, **overrides: object) -> Agent:
+    data: dict[str, object] = {
+        "slug": "support",
+        "name": "Support",
+        "system_prompt": "You are support.",
+        "temperature": 0.2,
+        "max_tokens": 512,
+    }
+    data.update(overrides)
+    agent = Agent(**data)  # type: ignore[arg-type]
+    session.add(agent)
+    await session.commit()
+    await session.refresh(agent)
+    return agent
+
+
+class TestResolveFromDb:
+    async def test_resolves_row_to_config(self, session: AsyncSession) -> None:
+        await _add_agent(session)
+
+        config = await resolve_agent("support", session=session)
+
+        assert config == AgentConfig(
+            slug="support",
+            name="Support",
+            system_prompt="You are support.",
+            model_id=None,
+            temperature=0.2,
+            max_tokens=512,
+        )
+
+    async def test_only_active_tools_are_exposed(self, session: AsyncSession) -> None:
+        agent = await _add_agent(session)
+        active = Tool(name="lookup")
+        disabled = Tool(name="dangerous", is_active=False)
+        session.add(active)
+        session.add(disabled)
+        await session.commit()
+        # Commit expires instances; re-load before touching .id in async land.
+        await session.refresh(agent)
+        await session.refresh(active)
+        await session.refresh(disabled)
+        session.add(AgentTool(agent_id=agent.id, tool_id=active.id))
+        session.add(AgentTool(agent_id=agent.id, tool_id=disabled.id))
+        await session.commit()
+
+        config = await resolve_agent("support", session=session)
+
+        assert config.tool_names == ("lookup",)
+
+
+class TestFallback:
+    async def test_missing_row_falls_back_to_default(
+        self, session: AsyncSession
+    ) -> None:
+        """Empty DB (memory-mode parity): the code default is the agent."""
+        config = await resolve_agent(DEFAULT_AGENT_SLUG, session=session)
+
+        assert config == default_agent_config()
+
+    async def test_missing_row_is_not_cached(self, session: AsyncSession) -> None:
+        """A row seeded after a fallback resolve must win the next resolve."""
+        first = await resolve_agent("support", session=session)
+        assert first == default_agent_config()
+
+        await _add_agent(session)
+        second = await resolve_agent("support", session=session)
+
+        assert second.system_prompt == "You are support."
+
+    async def test_inactive_agent_falls_back(self, session: AsyncSession) -> None:
+        await _add_agent(session, is_active=False)
+
+        config = await resolve_agent("support", session=session)
+
+        assert config == default_agent_config()
+
+
+class TestCache:
+    async def test_config_is_cached_until_invalidated(
+        self, session: AsyncSession
+    ) -> None:
+        agent = await _add_agent(session)
+
+        first = await resolve_agent("support", session=session)
+        assert first.system_prompt == "You are support."
+
+        agent.system_prompt = "Updated."
+        session.add(agent)
+        await session.commit()
+
+        stale = await resolve_agent("support", session=session)
+        assert stale.system_prompt == "You are support."
+
+        invalidate_agent_cache("support")
+        fresh = await resolve_agent("support", session=session)
+        assert fresh.system_prompt == "Updated."
+
+    async def test_invalidate_all_clears_every_slug(
+        self, session: AsyncSession
+    ) -> None:
+        agent = await _add_agent(session)
+        await resolve_agent("support", session=session)
+
+        agent.name = "Renamed"
+        session.add(agent)
+        await session.commit()
+
+        invalidate_agent_cache()
+        fresh = await resolve_agent("support", session=session)
+        assert fresh.name == "Renamed"
+{% endif %}

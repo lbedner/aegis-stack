@@ -34,6 +34,7 @@ SERVICE_INVOCATIONS: tuple[str, ...] = (
     "insights",
     "payment",
     "blog",
+    "finance",
 )
 
 # Entry chains the webserver and CLI import at process start. Importing

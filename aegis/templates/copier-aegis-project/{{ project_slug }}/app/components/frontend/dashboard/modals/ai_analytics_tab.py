@@ -219,6 +219,78 @@ def _create_model_usage_card(stats: dict[str, Any]) -> PieChartCard:
     return PieChartCard(title="Model Usage", sections=sections)
 
 
+SENTIMENT_COLORS: dict[str, str] = {
+    "positive": Theme.Colors.SUCCESS,
+    "neutral": ft.Colors.BLUE_GREY_300,
+    "negative": Theme.Colors.WARNING,
+    "frustrated": Theme.Colors.ERROR,
+}
+
+
+def sentiment_chart_sections(sentiment: dict[str, Any]) -> list[dict[str, Any]]:
+    """Map a sentiment distribution to pie chart sections (non-zero only)."""
+    distribution = sentiment.get("distribution", {}) or {}
+    total = sum(distribution.values()) or 1
+    return [
+        {
+            "value": count,
+            "color": SENTIMENT_COLORS.get(value, ft.Colors.BLUE_GREY_300),
+            "label": f"{value.title()} ({count / total * 100:.0f}%)",
+        }
+        for value, count in distribution.items()
+        if count
+    ]
+
+
+class SentimentSection(ft.Container):
+    """Conversation sentiment: distribution chart + recent negatives."""
+
+    def __init__(self, sentiment: dict[str, Any]) -> None:
+        super().__init__()
+
+        chart = PieChartCard(
+            title="Conversation Sentiment",
+            sections=sentiment_chart_sections(sentiment),
+        )
+
+        columns = [
+            DataTableColumn("Sentiment", width=110, style=None),
+            DataTableColumn("Summary", width=420, style="secondary"),
+            DataTableColumn("When", width=120, style="secondary"),
+        ]
+        rows: list[list[Any]] = []
+        for row in sentiment.get("recent_negatives", []):
+            value = row.get("overall_sentiment", "")
+            rows.append(
+                [
+                    Tag(
+                        text=value.title(),
+                        color=SENTIMENT_COLORS.get(value, Theme.Colors.WARNING),
+                    ),
+                    row.get("summary") or row.get("conversation_id", ""),
+                    _format_relative_time(row.get("created_at", "")),
+                ]
+            )
+
+        controls: list[ft.Control] = [chart]
+        if rows:
+            controls.extend(
+                [
+                    ft.Container(height=Theme.Spacing.SM),
+                    H3Text("Recent Negative Conversations"),
+                    ft.Container(height=Theme.Spacing.SM),
+                    DataTable(
+                        columns=columns,
+                        rows=rows,
+                        empty_message="No negative conversations",
+                    ),
+                ]
+            )
+
+        self.content = ft.Column(controls, spacing=0)
+        self.padding = Theme.Spacing.MD
+
+
 class RecentActivitySection(ft.Container):
     """Recent activity section showing last N requests in a table."""
 
@@ -341,9 +413,16 @@ class AIAnalyticsTab(ft.Container):
             self._render_error("Could not load usage stats.")
             return
         stats = _transform_api_response(api_data)
-        self._render_stats(stats)
+        # Sentiment is optional: surfaced only when conversations have
+        # been scored (the job is off by default).
+        sentiment = await api.get("/ai/sentiment/stats")
+        self._render_stats(stats, sentiment)
 
-    def _render_stats(self, stats: dict[str, Any]) -> None:
+    def _render_stats(
+        self,
+        stats: dict[str, Any],
+        sentiment: dict[str, Any] | None = None,
+    ) -> None:
         """Render the stats sections with loaded data."""
         # Refresh button row
         refresh_row = ft.Row(
@@ -375,6 +454,8 @@ class AIAnalyticsTab(ft.Container):
             charts_row,
             RecentActivitySection(stats),
         ]
+        if sentiment and sentiment.get("total", 0) > 0:
+            self._content_column.controls.append(SentimentSection(sentiment))
         self._content_column.scroll = ft.ScrollMode.AUTO
         self._content_column.spacing = 0
         self.update()

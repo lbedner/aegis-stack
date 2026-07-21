@@ -57,7 +57,7 @@ class TestGetServicesNeedingMigrations:
         """Test AI service with sqlite backend needs migrations."""
         context = {"include_auth": False, "include_ai": True, "ai_backend": "sqlite"}
         result = get_services_needing_migrations(context)
-        assert result == ["ai"]
+        assert result == ["ai", "ai_agents", "ai_sentiment"]
 
     def test_ai_with_memory_no_migrations(self) -> None:
         """Test AI service with memory backend does NOT need migrations."""
@@ -69,7 +69,7 @@ class TestGetServicesNeedingMigrations:
         """Test both auth and AI services need migrations."""
         context = {"include_auth": True, "include_ai": True, "ai_backend": "sqlite"}
         result = get_services_needing_migrations(context)
-        assert result == ["auth", "auth_tokens", "ai"]
+        assert result == ["auth", "auth_tokens", "ai", "ai_agents", "ai_sentiment"]
 
     def test_neither_service(self) -> None:
         """Test no services need migrations."""
@@ -1127,7 +1127,155 @@ class TestGetServicesNeedingMigrationsVoice:
             "ai_voice": True,
         }
         result = get_services_needing_migrations(context)
-        assert result == ["auth", "auth_tokens", "ai", "ai_voice"]
+        assert result == [
+            "auth",
+            "auth_tokens",
+            "ai",
+            "ai_agents",
+            "ai_sentiment",
+            "ai_voice",
+        ]
+
+
+class TestAgentsMigration:
+    """The agent registry rides its own spec, gated exactly like ``ai``."""
+
+    def test_ai_with_sqlite_includes_agents(self) -> None:
+        """A persistence backend pulls in the agent registry migration."""
+        context = {"include_auth": False, "include_ai": True, "ai_backend": "sqlite"}
+        result = get_services_needing_migrations(context)
+        assert "ai_agents" in result
+        # Chains directly after the ai catalog tables.
+        assert result.index("ai_agents") == result.index("ai") + 1
+
+    def test_ai_with_memory_excludes_agents(self) -> None:
+        """Memory backend means no agent tables (code-fallback config)."""
+        context = {"include_auth": False, "include_ai": True, "ai_backend": "memory"}
+        result = get_services_needing_migrations(context)
+        assert "ai_agents" not in result
+
+    def test_agents_in_migration_specs(self) -> None:
+        """The spec is registered on the ai service."""
+        from aegis.core.migration_generator import AGENTS_MIGRATION
+
+        assert "ai_agents" in MIGRATION_SPECS
+        assert AGENTS_MIGRATION.service_name == "ai_agents"
+
+    def test_generates_agents_migration(self, tmp_path: Path) -> None:
+        """The rendered migration creates agent, tool, and agent_tool."""
+        result = generate_migration(tmp_path, "ai_agents")
+
+        assert result is not None
+        assert result.exists()
+        assert result.name == "001_ai_agents.py"
+
+        content = result.read_text()
+        assert "'agent'" in content
+        assert "'tool'" in content
+        assert "'agent_tool'" in content
+        assert "'agent_user_memory'" in content
+        assert "'memory_module'" in content
+        # Identity, join uniqueness, and one memory row per user.
+        assert "ix_agent_slug" in content
+        assert "uq_agent_tool_pair" in content
+        assert "ix_agent_user_memory_user_id" in content
+        assert "ix_memory_module_slug" in content
+        # Links die with their agent/tool so registry deletes are clean.
+        assert "CASCADE" in content
+        # Rendered migration must be valid Python.
+        ast.parse(content)
+
+    def test_agents_migration_chains_after_ai(self, tmp_path: Path) -> None:
+        """ai -> ai_agents -> ai_voice is the generated chain."""
+        result = generate_migrations_for_services(
+            tmp_path, ["ai", "ai_agents", "ai_voice"]
+        )
+
+        assert [p.name for p in result] == [
+            "001_ai.py",
+            "002_ai_agents.py",
+            "003_ai_voice.py",
+        ]
+        agents_content = result[1].read_text()
+        assert "down_revision = '001'" in agents_content
+
+
+class TestKnowledgeMigration:
+    """KB metadata tables gate on ai + persistence + the rag flag."""
+
+    def test_ai_sqlite_with_rag_includes_knowledge(self) -> None:
+        context = {
+            "include_auth": False,
+            "include_ai": True,
+            "ai_backend": "sqlite",
+            "ai_rag": True,
+        }
+        result = get_services_needing_migrations(context)
+        assert "ai_knowledge" in result
+        assert result.index("ai_knowledge") == result.index("ai_agents") + 1
+
+    def test_no_rag_flag_excludes_knowledge(self) -> None:
+        context = {"include_auth": False, "include_ai": True, "ai_backend": "sqlite"}
+        result = get_services_needing_migrations(context)
+        assert "ai_knowledge" not in result
+
+    def test_rag_with_memory_backend_excludes_knowledge(self) -> None:
+        context = {
+            "include_auth": False,
+            "include_ai": True,
+            "ai_backend": "memory",
+            "ai_rag": True,
+        }
+        result = get_services_needing_migrations(context)
+        assert "ai_knowledge" not in result
+
+    def test_generates_knowledge_migration(self, tmp_path: Path) -> None:
+        result = generate_migration(tmp_path, "ai_knowledge")
+
+        assert result is not None
+        assert result.exists()
+        assert result.name == "001_ai_knowledge.py"
+
+        content = result.read_text()
+        assert "'knowledge_base'" in content
+        assert "'knowledge_base_source'" in content
+        assert "ix_knowledge_base_name" in content
+        # Chunking strategy is DB-enforced to the supported set.
+        assert "ck_knowledge_base_source_chunking_strategy" in content
+        assert "CASCADE" in content
+        ast.parse(content)
+
+
+class TestSentimentMigration:
+    """Sentiment rides its own spec, gated on ai + persistence."""
+
+    def test_ai_with_sqlite_includes_sentiment(self) -> None:
+        context = {"include_auth": False, "include_ai": True, "ai_backend": "sqlite"}
+        result = get_services_needing_migrations(context)
+        assert "ai_sentiment" in result
+        assert result.index("ai_sentiment") > result.index("ai_agents")
+
+    def test_ai_with_memory_excludes_sentiment(self) -> None:
+        context = {"include_auth": False, "include_ai": True, "ai_backend": "memory"}
+        result = get_services_needing_migrations(context)
+        assert "ai_sentiment" not in result
+
+    def test_generates_sentiment_migration(self, tmp_path: Path) -> None:
+        result = generate_migration(tmp_path, "ai_sentiment")
+
+        assert result is not None
+        assert result.exists()
+        assert result.name == "001_ai_sentiment.py"
+
+        content = result.read_text()
+        assert "'sentiment_analysis'" in content
+        # One verdict per conversation; rows die with their conversation.
+        assert "ix_sentiment_analysis_conversation_id" in content
+        assert "CASCADE" in content
+        # Enum-style values are DB-enforced.
+        assert "ck_sentiment_analysis_overall_sentiment" in content
+        assert "ck_sentiment_analysis_assistant_performance" in content
+        ast.parse(content)
 
 
 class TestGenerateVoiceMigration:

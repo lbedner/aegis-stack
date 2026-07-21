@@ -69,9 +69,13 @@ class TestAddServiceMigrationGeneration:
         alembic_dir = project_path / "alembic"
         versions_dir = alembic_dir / "versions"
 
-        # Verify ai migration exists
+        # Verify ai migrations exist (catalog + agent registry)
         ai_migrations = list(versions_dir.glob("001_ai.py"))
         assert len(ai_migrations) == 1, "Should have ai migration"
+        agents_migrations = list(versions_dir.glob("002_ai_agents.py"))
+        assert len(agents_migrations) == 1, "Should have ai_agents migration"
+        sentiment_migrations = list(versions_dir.glob("003_ai_sentiment.py"))
+        assert len(sentiment_migrations) == 1, "Should have ai_sentiment migration"
 
         # Add auth service
         result = run_aegis_command(
@@ -84,12 +88,44 @@ class TestAddServiceMigrationGeneration:
         assert result.returncode == 0, f"Add-service failed: {result.stderr}"
 
         # Verify auth migration was added with correct revision
-        auth_migrations = list(versions_dir.glob("002_auth.py"))
-        assert len(auth_migrations) == 1, "Should have auth migration as 002"
+        auth_migrations = list(versions_dir.glob("004_auth.py"))
+        assert len(auth_migrations) == 1, "Should have auth migration as 004"
 
         # Verify revision chain
         auth_content = auth_migrations[0].read_text()
-        assert "down_revision = '001'" in auth_content, "Auth should point to ai"
+        assert "down_revision = '003'" in auth_content, (
+            "Auth should chain after ai_sentiment"
+        )
+
+
+class TestAddServiceSeedsAgents:
+    """``add-service ai[sqlite]`` must leave a seeded agent registry."""
+
+    @pytest.mark.slow
+    def test_add_ai_seeds_default_agent(self, project_factory: ProjectFactory) -> None:
+        import shutil
+        import sqlite3
+
+        project_path = project_factory("base_with_database")
+        # Cached venvs break when relocated; add-service re-syncs in place.
+        shutil.rmtree(project_path / ".venv", ignore_errors=True)
+
+        result = run_aegis_command(
+            "add-service",
+            "ai[sqlite]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+        assert result.returncode == 0, f"add-service failed: {result.stderr}"
+
+        db_path = project_path / "data" / "app.db"
+        assert db_path.exists(), "add-service should have created the database"
+        with sqlite3.connect(db_path) as conn:
+            agents = conn.execute("SELECT slug FROM agent").fetchall()
+            vendors = conn.execute("SELECT COUNT(*) FROM llm_vendor").fetchone()
+        assert ("assistant",) in agents, "default agent should be seeded"
+        assert vendors[0] > 0, "LLM catalog should be seeded"
 
 
 class TestAddServiceNoMigrationNeeded:

@@ -95,6 +95,31 @@ LANGUAGE_SEPARATORS: dict[str, list[str]] = {
     "json": CONFIG_SEPARATORS,
 }
 
+# Per-source chunking presets: strategy name -> (chunk_size, chunk_overlap).
+# ``knowledge_base_source.chunking_strategy`` selects one of these; the
+# chunker's language-aware separators apply within any preset.
+CHUNKING_STRATEGIES: dict[str, tuple[int, int]] = {
+    "paragraph": (2000, 400),  # default: prose and mixed documents
+    "sentence": (600, 100),  # fine-grained: FAQ / short-answer content
+    "fixed": (1000, 100),  # predictable windows for uniform content
+    "code": (1500, 200),  # source files; separators do the real work
+}
+
+
+def chunk_params_for_strategy(strategy: str) -> tuple[int, int]:
+    """Resolve a strategy name to (chunk_size, chunk_overlap).
+
+    Unknown names fall back to ``paragraph`` with a warning: a stale
+    source row must not break ingestion.
+    """
+    params = CHUNKING_STRATEGIES.get(strategy)
+    if params is None:
+        logger.warning(
+            "Unknown chunking strategy; using paragraph", strategy=strategy
+        )
+        return CHUNKING_STRATEGIES["paragraph"]
+    return params
+
 
 class DocumentChunker:
     """Splits documents into smaller chunks for indexing."""

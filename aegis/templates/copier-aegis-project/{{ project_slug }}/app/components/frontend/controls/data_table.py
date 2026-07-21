@@ -19,7 +19,7 @@ class DataTableColumn:
     """Column definition for DataTable."""
 
     header: str
-    width: int | None = None  # None = expand
+    width: int | None = None  # Relative flex weight (None = weight 1)
     alignment: Literal["left", "center", "right"] = "left"
     style: Literal["primary", "secondary", "body"] | None = "body"
 
@@ -76,8 +76,10 @@ class DataTableHeader(ft.Container):
         cells = [
             ft.Container(
                 content=SecondaryText(col.header, size=Theme.Typography.BODY_SMALL),
-                width=col.width,
-                expand=col.width is None,
+                # width is a proportional flex weight: columns split the
+                # full container width in the declared ratios, so tables
+                # always fill their space with no dead right-hand gap.
+                expand=col.width if col.width is not None else 1,
                 alignment=get_alignment(col.alignment),
             )
             for col in columns
@@ -116,8 +118,8 @@ class DataTableRow(ft.Container):
             cells.append(
                 ft.Container(
                     content=style_cell(value, col.style),
-                    width=col.width,
-                    expand=col.width is None,
+                    # width as proportional flex weight (see header cells).
+                    expand=col.width if col.width is not None else 1,
                     alignment=get_alignment(col.alignment),
                 )
             )

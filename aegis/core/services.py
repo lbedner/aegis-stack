@@ -14,12 +14,12 @@ from ..constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
-    OllamaMode,
     StorageBackends,
 )
 from ..i18n import t
 from .file_manifest import FileManifest
 from .migration_generator import (
+    AGENTS_MIGRATION,
     AI_MIGRATION,
     AUTH_MIGRATION,
     AUTH_RBAC_MIGRATION,
@@ -28,9 +28,11 @@ from .migration_generator import (
     FINANCE_AUTH_LINK_MIGRATION,
     FINANCE_MIGRATION,
     INSIGHTS_MIGRATION,
+    KNOWLEDGE_MIGRATION,
     ORG_MIGRATION,
     PAYMENT_AUTH_LINK_MIGRATION,
     PAYMENT_MIGRATION,
+    SENTIMENT_MIGRATION,
     VOICE_MIGRATION,
 )
 from .option_spec import OptionMode, OptionSpec
@@ -374,9 +376,11 @@ SERVICES: dict[str, ServiceSpec] = {
                     symbol="router",
                     alias="llm_router",
                     prefix="/api/v1",
+                    # Persistence only: the catalog is provider-agnostic,
+                    # and the CLI llm command + Cloud Catalog tab (which
+                    # call this API) ship on every DB-backed stack.
                     when=lambda opts: (
                         opts.get("ai_backend") != StorageBackends.MEMORY
-                        and opts.get("ollama_mode") != OllamaMode.NONE
                     ),
                 ),
                 RouterWiring(
@@ -403,7 +407,13 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         # R4-A: migrations declared on the spec.
-        migrations=[AI_MIGRATION, VOICE_MIGRATION],
+        migrations=[
+            AI_MIGRATION,
+            AGENTS_MIGRATION,
+            KNOWLEDGE_MIGRATION,
+            SENTIMENT_MIGRATION,
+            VOICE_MIGRATION,
+        ],
         # Bracket-syntax options: ai[framework, backend, providers..., flags...]
         # e.g. ai[langchain,sqlite,openai], ai[pydantic-ai,postgres,rag,voice]
         options=[
@@ -469,6 +479,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/api/llm",
                 "app/services/ai",
                 "app/cli/ai.py",
+                "app/cli/agents.py",
                 "app/cli/ai_rendering.py",
                 "app/cli/marko_terminal_renderer.py",
                 "app/cli/chat_completer.py",
@@ -484,12 +495,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_conversation_memory.py",
                 "tests/cli/test_chat_completer.py",
                 "tests/cli/test_llm_cli.py",
+                "tests/cli/test_agents_cli.py",
                 "tests/cli/test_slash_commands.py",
                 "tests/cli/test_status_line.py",
                 "tests/services/ai",
                 "app/components/frontend/dashboard/cards/ai_card.py",
                 "app/components/frontend/dashboard/modals/ai_modal.py",
                 "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
+                "app/components/frontend/dashboard/modals/agents_tab.py",
                 "app/components/frontend/dashboard/modals/llm_catalog_tab.py",
                 "tests/components/frontend/test_ai_analytics_utils.py",
                 "app/models/conversation.py",
@@ -937,6 +950,7 @@ SERVICES: dict[str, ServiceSpec] = {
         template_files=[
             "app/services/finance/",
             "app/components/backend/api/finance/",
+            "app/components/backend/startup/finance_webhook_tunnel.py",
             "app/components/frontend/dashboard/cards/finance_card.py",
             "app/components/frontend/dashboard/modals/finance_modal.py",
             "app/cli/finance.py",

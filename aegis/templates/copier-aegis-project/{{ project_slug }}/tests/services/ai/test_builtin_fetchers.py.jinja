@@ -1,0 +1,96 @@
+"""Tests for the framework's reference fetchers."""
+{% if ai_backend != "memory" %}
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+import app.services.ai.builtin_fetchers as builtin_fetchers_module
+from app.models.conversation import Conversation
+from app.services.ai.fetchers import FetchContext, registered_fetcher_names, run_fetcher
+
+
+@pytest.fixture
+async def session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncGenerator[AsyncSession]:
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    async with AsyncSession(engine) as session:
+
+        @asynccontextmanager
+        async def fake_session() -> AsyncGenerator[AsyncSession]:
+            yield session
+
+        monkeypatch.setattr(
+            builtin_fetchers_module, "get_async_session", fake_session
+        )
+        yield session
+    await engine.dispose()
+
+
+class TestRegistration:
+    def test_reference_fetchers_are_registered(self) -> None:
+        names = registered_fetcher_names()
+        assert "recent_conversations" in names
+        assert "user_profile" in names
+
+
+class TestRecentConversations:
+    async def test_returns_recent_titles_for_user(
+        self, session: AsyncSession
+    ) -> None:
+        session.add(Conversation(title="Meal planning", user_id="u1"))
+        session.add(Conversation(title="Workout schedule", user_id="u1"))
+        session.add(Conversation(title="Other user's chat", user_id="u2"))
+        await session.commit()
+
+        block = await run_fetcher(
+            "recent_conversations", FetchContext(user_id="u1")
+        )
+
+        assert block is not None
+        assert "Meal planning" in block
+        assert "Workout schedule" in block
+        assert "Other user's chat" not in block
+
+    async def test_days_back_filters_old_conversations(
+        self, session: AsyncSession
+    ) -> None:
+        old = Conversation(title="Ancient history", user_id="u1")
+        old.updated_at = datetime.now(UTC) - timedelta(days=30)
+        session.add(old)
+        session.add(Conversation(title="Fresh chat", user_id="u1"))
+        await session.commit()
+
+        block = await run_fetcher(
+            "recent_conversations", FetchContext(user_id="u1", days_back=7)
+        )
+
+        assert block is not None
+        assert "Fresh chat" in block
+        assert "Ancient history" not in block
+
+    async def test_no_conversations_yields_none(
+        self, session: AsyncSession
+    ) -> None:
+        block = await run_fetcher(
+            "recent_conversations", FetchContext(user_id="ghost")
+        )
+
+        assert block is None
+
+
+class TestUserProfileStub:
+    async def test_stub_returns_none(self, session: AsyncSession) -> None:
+        """The stub is a shape example for apps to replace; it emits nothing."""
+        assert (
+            await run_fetcher("user_profile", FetchContext(user_id="u1")) is None
+        )
+{% endif %}

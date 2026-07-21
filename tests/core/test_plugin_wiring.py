@@ -279,12 +279,12 @@ class TestInTreeWiringShape:
         modules = [r["module"] for r in result["wiring"]["routers"]]
         assert "app.components.backend.api.auth.oauth" in modules
 
-    def test_ai_llm_router_requires_persistence_and_ollama(self) -> None:
-        # The llm-router predicate reads ``ai_backend`` and ``ollama_mode``
-        # from the merged opts dict; those are project-level answer keys,
-        # not parsed plugin options. Round 8b's ``aegis add ai[sqlite]``
-        # will translate ``backend`` → ``ai_backend`` before serializing.
-        # For now the predicate is fed via ``project_answers``.
+    def test_ai_llm_router_requires_persistence_only(self) -> None:
+        # The llm-router predicate reads ``ai_backend`` from the merged
+        # opts dict. The catalog is provider-agnostic: the CLI ``llm``
+        # command and the Cloud Catalog dashboard tab ship on every
+        # persistence-backed stack, so the API they call must mount on
+        # exactly the same condition — Ollama plays no part.
         result = serialize_plugin_to_answer(
             SERVICES["ai"],
             project_answers={"ai_backend": "memory", "ollama_mode": "none"},
@@ -292,10 +292,10 @@ class TestInTreeWiringShape:
         modules = [r["module"] for r in result["wiring"]["routers"]]
         assert "app.components.backend.api.llm.router" not in modules
 
-        # sqlite + ollama=host → llm router mounts.
+        # sqlite without ollama → llm router still mounts.
         result = serialize_plugin_to_answer(
             SERVICES["ai"],
-            project_answers={"ai_backend": "sqlite", "ollama_mode": "host"},
+            project_answers={"ai_backend": "sqlite", "ollama_mode": "none"},
         )
         modules = [r["module"] for r in result["wiring"]["routers"]]
         assert "app.components.backend.api.llm.router" in modules

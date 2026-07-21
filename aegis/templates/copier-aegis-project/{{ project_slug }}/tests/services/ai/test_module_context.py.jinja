@@ -1,0 +1,301 @@
+"""Tests for memory-module context rendering (priority, budget, hybrid)."""
+{% if ai_backend != "memory" %}
+
+from collections.abc import AsyncGenerator, Generator
+from dataclasses import dataclass
+from unittest.mock import MagicMock
+
+import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai.fetchers import (
+    FetchContext,
+    register_fetcher,
+    registered_fetcher_names,
+    unregister_fetcher,
+)
+from app.services.ai.memory_modules import create_memory_module
+from app.services.ai.module_context import (
+    MemoryModuleContextProvider,
+    render_memory_modules,
+)
+
+
+@dataclass
+class _Deps:
+    user_id: str
+
+
+@pytest.fixture(autouse=True)
+def clean_fetchers() -> Generator[None]:
+    before = set(registered_fetcher_names())
+    yield
+    for name in set(registered_fetcher_names()) - before:
+        unregister_fetcher(name)
+
+
+@pytest.fixture
+async def session() -> AsyncGenerator[AsyncSession]:
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    async with AsyncSession(engine) as session:
+        yield session
+    await engine.dispose()
+
+
+class TestHybridRendering:
+    async def test_static_renders_before_live_data(
+        self, session: AsyncSession
+    ) -> None:
+        async def live(ctx: FetchContext) -> str | None:
+            """Live half."""
+            return f"LIVE DATA for {ctx.user_id}"
+
+        register_fetcher("live", live)
+        await create_memory_module(
+            slug="diet",
+            name="Diet",
+            prompt_content="STATIC RULES",
+            fetch_function="live",
+            session=session,
+        )
+
+        block = await render_memory_modules(
+            ["diet"], user_id="u1", session=session
+        )
+
+        assert block is not None
+        assert block.index("STATIC RULES") < block.index("LIVE DATA for u1")
+        assert '<module name="diet">' in block
+
+    async def test_days_back_flows_from_module_row(
+        self, session: AsyncSession
+    ) -> None:
+        seen: dict[str, int | None] = {}
+
+        async def live(ctx: FetchContext) -> str | None:
+            """Record days_back."""
+            seen["days_back"] = ctx.days_back
+            return "data"
+
+        register_fetcher("live", live)
+        await create_memory_module(
+            slug="orders",
+            name="Orders",
+            fetch_function="live",
+            supports_days_back=True,
+            default_days_back=14,
+            session=session,
+        )
+
+        await render_memory_modules(["orders"], user_id="u1", session=session)
+
+        assert seen["days_back"] == 14
+
+    async def test_priority_orders_modules(self, session: AsyncSession) -> None:
+        await create_memory_module(
+            slug="later",
+            name="Later",
+            prompt_content="SECOND",
+            priority=200,
+            session=session,
+        )
+        await create_memory_module(
+            slug="first",
+            name="First",
+            prompt_content="FIRST",
+            priority=1,
+            session=session,
+        )
+
+        block = await render_memory_modules(
+            ["later", "first"], user_id="u1", session=session
+        )
+
+        assert block is not None
+        assert block.index("FIRST") < block.index("SECOND")
+
+
+class TestTokenBudget:
+    async def test_over_budget_drops_lowest_priority_first(
+        self, session: AsyncSession
+    ) -> None:
+        await create_memory_module(
+            slug="core",
+            name="Core",
+            prompt_content="core rules",
+            priority=1,
+            token_estimate=100,
+            session=session,
+        )
+        await create_memory_module(
+            slug="extra",
+            name="Extra",
+            prompt_content="extra rules",
+            priority=50,
+            token_estimate=100,
+            session=session,
+        )
+        await create_memory_module(
+            slug="fluff",
+            name="Fluff",
+            prompt_content="fluff rules",
+            priority=99,
+            token_estimate=100,
+            session=session,
+        )
+
+        block = await render_memory_modules(
+            ["core", "extra", "fluff"],
+            user_id="u1",
+            token_budget=250,
+            session=session,
+        )
+
+        assert block is not None
+        assert "core rules" in block
+        assert "extra rules" in block
+        # Deterministic: the lowest-priority module is the one dropped.
+        assert "fluff rules" not in block
+
+    async def test_budget_counts_both_hybrid_halves(
+        self, session: AsyncSession
+    ) -> None:
+        """A hybrid's estimate covers static + dynamic, not just static."""
+
+        async def live(ctx: FetchContext) -> str | None:
+            """Emit a big dynamic half."""
+            return "x" * 400
+
+        register_fetcher("live", live)
+        # No explicit token_estimate: estimated from rendered content.
+        await create_memory_module(
+            slug="big-hybrid",
+            name="Big Hybrid",
+            prompt_content="y" * 400,
+            fetch_function="live",
+            priority=1,
+            session=session,
+        )
+        await create_memory_module(
+            slug="small",
+            name="Small",
+            prompt_content="z" * 40,
+            priority=50,
+            session=session,
+        )
+
+        # ~200 tokens of hybrid (800 chars) exceeds a 150-token budget even
+        # though the static half alone (100 tokens) would fit.
+        block = await render_memory_modules(
+            ["big-hybrid", "small"],
+            user_id="u1",
+            token_budget=150,
+            session=session,
+        )
+
+        assert block is not None
+        assert "zzz" in block
+        assert "yyy" not in block
+
+
+class TestDegradation:
+    async def test_unknown_module_slug_is_skipped(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import app.services.ai.module_context as module_context_module
+
+        warned = MagicMock()
+        monkeypatch.setattr(module_context_module.logger, "warning", warned)
+        await create_memory_module(
+            slug="real", name="Real", prompt_content="REAL", session=session
+        )
+
+        block = await render_memory_modules(
+            ["real", "ghost-module"], user_id="u1", session=session
+        )
+
+        assert block is not None
+        assert "REAL" in block
+        warned.assert_called_once()
+        assert warned.call_args.kwargs.get("module_slugs") == ["ghost-module"]
+
+    async def test_no_modules_renders_nothing(self, session: AsyncSession) -> None:
+        """Empty scope = byte-identical pre-port context (no block at all)."""
+        assert await render_memory_modules([], user_id="u1", session=session) is None
+
+    async def test_owned_session_is_shared_with_fetchers(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without a caller session, ONE session serves the whole render."""
+        from contextlib import asynccontextmanager
+
+        import app.services.ai.module_context as module_context_module
+
+        seen: list[object] = []
+
+        async def capture(ctx: FetchContext) -> str | None:
+            """Record the session each fetcher receives."""
+            seen.append(ctx.session)
+            return "data"
+
+        register_fetcher("capture", capture)
+        await create_memory_module(
+            slug="live-a", name="A", fetch_function="capture", session=session
+        )
+        await create_memory_module(
+            slug="live-b", name="B", fetch_function="capture", session=session
+        )
+
+        opened = {"count": 0}
+
+        @asynccontextmanager
+        async def fake_session() -> AsyncGenerator[AsyncSession]:
+            opened["count"] += 1
+            yield session
+
+        monkeypatch.setattr(module_context_module, "get_async_session", fake_session)
+
+        block = await render_memory_modules(["live-a", "live-b"], user_id="u1")
+
+        assert block is not None
+        assert opened["count"] == 1, "exactly one owned session per render"
+        assert seen == [session, session], "fetchers reuse the owned session"
+
+
+class TestProvider:
+    async def test_provider_builds_block_from_deps_user_id(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from contextlib import asynccontextmanager
+
+        import app.services.ai.module_context as module_context_module
+
+        await create_memory_module(
+            slug="rules", name="Rules", prompt_content="THE RULES", session=session
+        )
+
+        @asynccontextmanager
+        async def fake_session() -> AsyncGenerator[AsyncSession]:
+            yield session
+
+        monkeypatch.setattr(
+            module_context_module, "get_async_session", fake_session
+        )
+
+        provider = MemoryModuleContextProvider(("rules",))
+        block = await provider.build(_Deps(user_id="u1"))
+
+        assert block is not None
+        assert "THE RULES" in block
+
+    async def test_provider_without_user_id_contributes_nothing(
+        self, session: AsyncSession
+    ) -> None:
+        provider = MemoryModuleContextProvider(("rules",))
+
+        assert await provider.build(object()) is None
+{% endif %}

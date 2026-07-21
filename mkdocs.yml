@@ -100,6 +100,8 @@ nav:
     - AI Service:
       - Getting Started: services/ai/index.md
       - Illiana: services/ai/illiana.md
+      - Agents: services/ai/agents.md
+      - Memory Modules: services/ai/memory-modules.md
       - LLM Catalog: services/ai/llm-catalog.md
       - RAG: services/ai/rag.md
       - Cost Tracking: services/ai/cost-tracking.md

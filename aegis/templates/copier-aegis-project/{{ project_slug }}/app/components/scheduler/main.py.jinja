@@ -30,7 +30,7 @@ from app.services.system.backup import backup_database_job
 from app.services.system.backup import backup_database_job
 {% endif %}
 {% if include_ai and ai_backend != "memory" %}
-from app.services.ai.jobs import sync_llm_catalog_job
+from app.services.ai.jobs import analyze_sentiment_job, sync_llm_catalog_job
 {% endif %}
 {% if include_auth %}
 from app.services.auth.cleanup_jobs import cleanup_expired_refresh_tokens_job
@@ -214,6 +214,17 @@ def create_scheduler() -> AsyncIOScheduler:
         hours=6,
         id="llm_sync",
         name="LLM Catalog Sync",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        analyze_sentiment_job,
+        trigger="interval",
+        hours=1,
+        id="sentiment_analysis",
+        name="Conversation Sentiment Analysis",
         max_instances=1,
         coalesce=True,
         replace_existing=True,

@@ -1,0 +1,177 @@
+"""Tests for memory module CRUD (hybrid, column-driven)."""
+{% if ai_backend != "memory" %}
+
+from collections.abc import AsyncGenerator
+
+import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai.memory_modules import (
+    InvalidMemoryModuleError,
+    create_memory_module,
+    delete_memory_module,
+    get_memory_module,
+    list_memory_modules,
+    update_memory_module,
+)
+
+
+@pytest.fixture
+async def session() -> AsyncGenerator[AsyncSession]:
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    async with AsyncSession(engine) as session:
+        yield session
+    await engine.dispose()
+
+
+class TestHybridRoundTrip:
+    async def test_static_only_module(self, session: AsyncSession) -> None:
+        module = await create_memory_module(
+            slug="house-rules",
+            name="House Rules",
+            prompt_content="Always answer in metric units.",
+            session=session,
+        )
+
+        loaded = await get_memory_module(session, "house-rules")
+        assert loaded is not None
+        assert loaded.prompt_content == "Always answer in metric units."
+        assert loaded.fetch_function is None
+        # context_key defaults to the slug.
+        assert loaded.context_key == "house-rules"
+        assert module.id is not None
+
+    async def test_dynamic_only_module(self, session: AsyncSession) -> None:
+        await create_memory_module(
+            slug="recent-orders",
+            name="Recent Orders",
+            fetch_function="fetch_recent_orders",
+            supports_days_back=True,
+            default_days_back=7,
+            session=session,
+        )
+
+        loaded = await get_memory_module(session, "recent-orders")
+        assert loaded is not None
+        assert loaded.prompt_content is None
+        assert loaded.fetch_function == "fetch_recent_orders"
+        assert loaded.supports_days_back is True
+        assert loaded.default_days_back == 7
+
+    async def test_hybrid_module_keeps_both_columns(
+        self, session: AsyncSession
+    ) -> None:
+        """The hybrid design: static block AND live fetcher on one row."""
+        await create_memory_module(
+            slug="diet",
+            name="Diet Rules",
+            prompt_content="General dietary guidance applies.",
+            fetch_function="fetch_recent_meals",
+            session=session,
+        )
+
+        loaded = await get_memory_module(session, "diet")
+        assert loaded is not None
+        assert loaded.prompt_content == "General dietary guidance applies."
+        assert loaded.fetch_function == "fetch_recent_meals"
+
+
+class TestValidation:
+    async def test_empty_module_is_rejected(self, session: AsyncSession) -> None:
+        with pytest.raises(InvalidMemoryModuleError):
+            await create_memory_module(
+                slug="empty", name="Empty", session=session
+            )
+
+    async def test_update_cannot_empty_a_module(self, session: AsyncSession) -> None:
+        await create_memory_module(
+            slug="house-rules",
+            name="House Rules",
+            prompt_content="Metric units.",
+            session=session,
+        )
+
+        with pytest.raises(InvalidMemoryModuleError):
+            await update_memory_module(
+                "house-rules", prompt_content=None, session=session
+            )
+
+    async def test_duplicate_slug_is_rejected(self, session: AsyncSession) -> None:
+        await create_memory_module(
+            slug="house-rules",
+            name="House Rules",
+            prompt_content="Metric units.",
+            session=session,
+        )
+
+        with pytest.raises(InvalidMemoryModuleError, match="already exists"):
+            await create_memory_module(
+                slug="house-rules",
+                name="Duplicate",
+                prompt_content="x",
+                session=session,
+            )
+
+
+class TestCrud:
+    async def test_update_round_trips(self, session: AsyncSession) -> None:
+        await create_memory_module(
+            slug="house-rules",
+            name="House Rules",
+            prompt_content="Metric units.",
+            session=session,
+        )
+
+        updated = await update_memory_module(
+            "house-rules",
+            prompt_content="Imperial units.",
+            priority=5,
+            session=session,
+        )
+
+        assert updated.prompt_content == "Imperial units."
+        assert updated.priority == 5
+
+    async def test_list_orders_by_priority_and_filters_active(
+        self, session: AsyncSession
+    ) -> None:
+        await create_memory_module(
+            slug="low", name="Low", prompt_content="x", priority=200, session=session
+        )
+        await create_memory_module(
+            slug="high", name="High", prompt_content="x", priority=1, session=session
+        )
+        await create_memory_module(
+            slug="off",
+            name="Off",
+            prompt_content="x",
+            is_active=False,
+            session=session,
+        )
+
+        active = await list_memory_modules(session)
+        assert [m.slug for m in active] == ["high", "low"]
+
+        everything = await list_memory_modules(session, active_only=False)
+        assert {m.slug for m in everything} == {"high", "low", "off"}
+
+    async def test_delete_removes_module(self, session: AsyncSession) -> None:
+        await create_memory_module(
+            slug="house-rules",
+            name="House Rules",
+            prompt_content="x",
+            session=session,
+        )
+
+        await delete_memory_module("house-rules", session=session)
+
+        assert await get_memory_module(session, "house-rules") is None
+
+    async def test_delete_unknown_is_an_error(self, session: AsyncSession) -> None:
+        with pytest.raises(InvalidMemoryModuleError, match="not found"):
+            await delete_memory_module("ghost", session=session)
+{% endif %}

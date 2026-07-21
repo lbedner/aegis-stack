@@ -533,6 +533,18 @@ def add_service_command(
             if not migration_success:
                 brand.warn(t("add_service.migration_failed"))
 
+            # Seed the AI fixtures (LLM catalog + default agent) when the
+            # ai service just landed with a persistence backend; mirrors
+            # the init path so an added ai service starts with the same
+            # seeded registry a fresh project gets.
+            ai_added = any(
+                service_base_map[s] == AnswerKeys.SERVICE_AI for s in services_to_add
+            )
+            if migration_success and ai_added and ai_needs_migrations:
+                from ..core.post_gen_tasks import seed_ai_fixtures
+
+                seed_ai_fixtures(target_path)
+
         brand.success(f"\n{t('add_service.success')}")
 
         # Show project map with newly added services + auto-added components highlighted

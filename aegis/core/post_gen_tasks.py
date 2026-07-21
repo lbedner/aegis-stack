@@ -362,6 +362,43 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Remove LLM tracking models (only needed with persistence)
         # Keep app/services/ai/models/__init__.py - contains core types (AIProvider, ProviderConfig)
         remove_dir(project_path, "app/services/ai/models/llm")
+        # Agent registry models ride the same persistence gate (the memory
+        # backend resolves the default agent from code, not DB rows). The
+        # tools.py registry itself stays: it is DB-free and the code-config
+        # path still resolves tools through it.
+        remove_dir(project_path, "app/services/ai/models/agents")
+        remove_file(project_path, "tests/services/ai/test_agent_models.py")
+        # Per-user memory needs the agent_user_memory table + async DB.
+        remove_file(project_path, "app/services/ai/user_memory.py")
+        remove_file(project_path, "tests/services/ai/test_user_memory.py")
+        # Memory modules are DB rows (the memory_module table).
+        remove_file(project_path, "app/services/ai/memory_modules.py")
+        remove_file(project_path, "tests/services/ai/test_memory_modules.py")
+        # Reference fetchers query the conversation tables (removed above).
+        # The fetcher registry itself (fetchers.py) stays: it is DB-free.
+        remove_file(project_path, "app/services/ai/builtin_fetchers.py")
+        remove_file(project_path, "tests/services/ai/test_builtin_fetchers.py")
+        # Module context assembly reads memory_module rows.
+        remove_file(project_path, "app/services/ai/module_context.py")
+        remove_file(project_path, "tests/services/ai/test_module_context.py")
+        # Sentiment scoring reads/writes conversation + sentiment tables.
+        remove_file(project_path, "app/services/ai/sentiment.py")
+        remove_file(project_path, "app/services/ai/models/sentiment.py")
+        remove_file(project_path, "tests/services/ai/test_sentiment.py")
+        # Agent registry CLI inspects DB rows.
+        remove_file(project_path, "app/cli/agents.py")
+        remove_file(project_path, "tests/cli/test_agents_cli.py")
+        # Agent registry admin surface (API service + dashboard tab).
+        remove_file(project_path, "app/services/ai/agent_registry.py")
+        remove_file(
+            project_path,
+            "app/components/frontend/dashboard/modals/agents_tab.py",
+        )
+        remove_file(project_path, "tests/services/ai/test_agent_registry.py")
+        # KB metadata models are DB-backed; the rag service itself stays
+        # (Chroma is file-based and works without a database).
+        remove_file(project_path, "app/services/rag/models/knowledge.py")
+        remove_file(project_path, "tests/services/rag/test_knowledge_models.py")
         # chat_kit + usage_recording ledger the LLM catalog + conversation
         # tables removed above, so they only work with a persistent backend.
         remove_dir(project_path, "app/services/ai/chat_kit")
@@ -872,12 +909,13 @@ class DependencyInstallationError(Exception):
     pass
 
 
-def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> bool:
+def seed_ai_fixtures(project_path: Path, python_version: str | None = None) -> bool:
     """
-    Seed LLM fixtures (vendors, models, pricing) into the database.
+    Seed the AI fixtures into the database.
 
-    This runs the load_all_llm_fixtures function from the generated project
-    to populate the database with initial LLM data.
+    Runs the generated project's ``load_all_ai_fixtures``: the LLM catalog
+    (vendors, models, deployments, pricing) plus the agent registry's
+    default ``assistant`` row.
 
     Args:
         project_path: Path to the project directory
@@ -904,8 +942,8 @@ def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> 
                 "python",
                 "-c",
                 "from app.core.db import SessionLocal; "
-                "from app.services.ai.fixtures import load_all_llm_fixtures; "
-                "load_all_llm_fixtures(SessionLocal())",
+                "from app.services.ai.fixtures import load_all_ai_fixtures; "
+                "load_all_ai_fixtures(SessionLocal())",
             ]
         )
 
@@ -1082,7 +1120,7 @@ def run_post_generation_tasks(
         slug = project_slug or project_path.name
 
         # Always seed static fixtures first as baseline data
-        fixtures_loaded = seed_llm_fixtures(project_path, python_version)
+        fixtures_loaded = seed_ai_fixtures(project_path, python_version)
 
         if skip_llm_sync:
             brand.accent(t("postgen.llm_sync_skipped"))

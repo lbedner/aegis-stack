@@ -1,0 +1,110 @@
+"""Tests for the agent registry models and seed fixtures."""
+{% if ai_backend != "memory" %}
+
+from collections.abc import Generator
+
+import pytest
+from sqlmodel import Session, SQLModel, create_engine, select
+
+from app.services.ai.fixtures.agent_fixtures import (
+    DEFAULT_AGENT_SLUG,
+    load_agent_fixtures,
+)
+from app.services.ai.models import Agent, AgentTool, Tool
+from app.services.ai.prompts import get_default_system_prompt
+from app.services.ai.tools import register_tool, resolve_tools, unregister_tool
+
+
+@pytest.fixture
+def session() -> Generator[Session]:
+    """In-memory database session with the agent tables created."""
+    engine = create_engine("sqlite://")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+
+
+class TestAgentSeed:
+    """The default agent seed is present, correct, and idempotent."""
+
+    def test_seeds_default_agent(self, session: Session) -> None:
+        counts = load_agent_fixtures(session)
+
+        assert counts == {"agents": 1}
+        agent = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        assert agent.is_active
+        assert agent.system_prompt == get_default_system_prompt()
+        # None = "use the service's active model".
+        assert agent.model_id is None
+
+    def test_seed_is_idempotent(self, session: Session) -> None:
+        load_agent_fixtures(session)
+        counts = load_agent_fixtures(session)
+
+        assert counts == {"agents": 0}
+        agents = session.exec(select(Agent)).all()
+        assert len(agents) == 1
+
+    def test_seed_never_overwrites_edited_agent(self, session: Session) -> None:
+        load_agent_fixtures(session)
+        agent = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        agent.system_prompt = "Customized prompt"
+        session.add(agent)
+        session.commit()
+
+        load_agent_fixtures(session)
+
+        refreshed = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        assert refreshed.system_prompt == "Customized prompt"
+
+
+class TestAgentToolLink:
+    """Tools attach to agents through the agent_tool link table."""
+
+    def test_tool_attachment_round_trips(self, session: Session) -> None:
+        load_agent_fixtures(session)
+        agent = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        tool = Tool(name="save_memory", description="Persist a user fact")
+        session.add(tool)
+        session.commit()
+        session.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
+        session.commit()
+
+        session.refresh(agent)
+        assert [t.name for t in agent.tools] == ["save_memory"]
+
+    def test_attached_tool_resolves_to_registered_callable(
+        self, session: Session
+    ) -> None:
+        """DB attachment (agent_tool) + registry = the loop's tool list."""
+
+        def greet(name: str) -> str:
+            """Greet someone by name."""
+            return f"hi {name}"
+
+        register_tool("greet", greet)
+        try:
+            load_agent_fixtures(session)
+            agent = session.exec(
+                select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+            ).one()
+            tool = Tool(name="greet")
+            session.add(tool)
+            session.commit()
+            session.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
+            session.commit()
+
+            session.refresh(agent)
+            names = [t.name for t in agent.tools if t.is_active]
+            assert resolve_tools(names) == [greet]
+        finally:
+            unregister_tool("greet")
+{% endif %}

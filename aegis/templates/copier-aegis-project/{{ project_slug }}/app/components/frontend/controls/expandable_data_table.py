@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls.data_table import (
     DataTableColumn,
     get_alignment,
@@ -44,8 +45,10 @@ class ExpandableTableHeader(ft.Container):
         cells.extend(
             ft.Container(
                 content=SecondaryText(col.header, size=Theme.Typography.BODY_SMALL),
-                width=col.width,
-                expand=col.width is None,
+                # width is a proportional flex weight: columns split the
+                # full container width in the declared ratios, so tables
+                # always fill their space with no dead right-hand gap.
+                expand=col.width if col.width is not None else 1,
                 alignment=get_alignment(col.alignment),
             )
             for col in columns
@@ -82,8 +85,8 @@ class ExpandableTableRow(ft.Container):
             cells.append(
                 ft.Container(
                     content=style_cell(value, col.style),
-                    width=col.width,
-                    expand=col.width is None,
+                    # width as proportional flex weight (see header cells).
+                    expand=col.width if col.width is not None else 1,
                     alignment=get_alignment(col.alignment),
                 )
             )

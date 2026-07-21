@@ -1,0 +1,159 @@
+"""Tests for the agent registry CLI commands."""
+{% if ai_backend != "memory" %}
+
+from unittest.mock import patch
+
+from app.cli.main import app
+from app.services.ai.agent_loader import AgentConfig
+from app.services.ai.models.agents import Agent, MemoryModule, Tool
+from typer.testing import CliRunner
+
+runner = CliRunner()
+
+
+def _agent(**overrides: object) -> Agent:
+    data: dict[str, object] = {
+        "slug": "assistant",
+        "name": "Assistant",
+        "system_prompt": "You are helpful.",
+        "temperature": 0.7,
+        "max_tokens": 1000,
+    }
+    data.update(overrides)
+    return Agent(**data)  # type: ignore[arg-type]
+
+
+class TestAgentsList:
+    def test_help(self) -> None:
+        result = runner.invoke(app, ["agents", "--help"])
+        assert result.exit_code == 0
+
+    @patch("app.cli.agents._load_agents")
+    def test_lists_seeded_agents(self, mock_load) -> None:
+        support = _agent(slug="support", name="Support", model_id="gpt-4o")
+        support.tools = [Tool(name="lookup")]
+        assistant = _agent()
+        assistant.tools = []
+        mock_load.return_value = [assistant, support]
+
+        result = runner.invoke(app, ["agents", "list"])
+
+        assert result.exit_code == 0
+        assert "assistant" in result.stdout
+        assert "support" in result.stdout
+        assert "gpt-4o" in result.stdout
+
+    @patch("app.cli.agents._load_agents")
+    def test_empty_registry(self, mock_load) -> None:
+        mock_load.return_value = []
+
+        result = runner.invoke(app, ["agents", "list"])
+
+        assert result.exit_code == 0
+        assert "No agents" in result.stdout
+
+
+class TestAgentsShow:
+    @patch("app.cli.agents._load_agent")
+    def test_shows_agent_definition(self, mock_load) -> None:
+        agent = _agent(memory_modules=["diet"], knowledge_base_ids=["kb-food"])
+        agent.tools = [Tool(name="save_memory")]
+        mock_load.return_value = agent
+
+        result = runner.invoke(app, ["agents", "show", "assistant"])
+
+        assert result.exit_code == 0
+        assert "You are helpful." in result.stdout
+        assert "save_memory" in result.stdout
+        assert "diet" in result.stdout
+        assert "kb-food" in result.stdout
+
+    @patch("app.cli.agents._load_agent")
+    def test_unknown_slug_exits_nonzero(self, mock_load) -> None:
+        mock_load.return_value = None
+
+        result = runner.invoke(app, ["agents", "show", "ghost"])
+
+        assert result.exit_code == 1
+        assert "ghost" in result.stdout
+
+
+class TestAgentsTest:
+    @patch("app.cli.agents._run_test_turn")
+    def test_prints_model_reply(self, mock_turn) -> None:
+        config = AgentConfig(
+            slug="assistant",
+            name="Assistant",
+            system_prompt="You are helpful.",
+            model_id=None,
+            temperature=0.7,
+            max_tokens=1000,
+        )
+        mock_turn.return_value = (config, "PONG - online and ready.")
+
+        result = runner.invoke(app, ["agents", "test", "assistant"])
+
+        assert result.exit_code == 0
+        assert "PONG" in result.stdout
+
+    @patch("app.cli.agents._run_test_turn")
+    def test_provider_failure_exits_nonzero(self, mock_turn) -> None:
+        mock_turn.side_effect = RuntimeError("no provider")
+
+        result = runner.invoke(app, ["agents", "test", "assistant"])
+
+        assert result.exit_code == 1
+
+
+class TestMemoryModulesCli:
+    @patch("app.cli.agents._load_modules")
+    def test_lists_modules_with_kind(self, mock_load) -> None:
+        mock_load.return_value = [
+            MemoryModule(
+                slug="diet",
+                name="Diet",
+                context_key="diet",
+                prompt_content="rules",
+                fetch_function="fetch_meals",
+            ),
+            MemoryModule(
+                slug="static-only",
+                name="Static",
+                context_key="static-only",
+                prompt_content="rules",
+            ),
+        ]
+
+        result = runner.invoke(app, ["memory-modules", "list"])
+
+        assert result.exit_code == 0
+        assert "diet" in result.stdout
+        assert "hybrid" in result.stdout
+        assert "static" in result.stdout
+
+    @patch("app.cli.agents._load_modules")
+    def test_show_module(self, mock_load) -> None:
+        mock_load.return_value = [
+            MemoryModule(
+                slug="diet",
+                name="Diet",
+                context_key="diet",
+                prompt_content="THE DIET RULES",
+                fetch_function="fetch_meals",
+            )
+        ]
+
+        result = runner.invoke(app, ["memory-modules", "show", "diet"])
+
+        assert result.exit_code == 0
+        assert "THE DIET RULES" in result.stdout
+        assert "fetch_meals" in result.stdout
+
+    @patch("app.cli.agents._load_modules")
+    def test_show_unknown_module_exits_nonzero(self, mock_load) -> None:
+        mock_load.return_value = []
+
+        result = runner.invoke(app, ["memory-modules", "show", "ghost"])
+
+        assert result.exit_code == 1
+{% endif %}

@@ -6,7 +6,7 @@ chunking, indexing, and semantic search functionality.
 """
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -213,6 +213,46 @@ class RAGService:
             return results
         except Exception as e:
             raise SearchError(f"Failed to search: {e}") from e
+
+    async def search_scoped(
+        self,
+        query: str,
+        allowed_collections: Sequence[str],
+        top_k: int | None = None,
+        filter_metadata: dict[str, Any] | None = None,
+    ) -> list[SearchResult]:
+        """
+        Search across an agent's allowed collections, merged and ranked.
+
+        Each collection is searched independently; results are merged,
+        sorted by similarity score, and cut to top_k overall. A missing
+        or failing collection is skipped with a warning so a stale scope
+        entry degrades that one collection, never the whole request.
+
+        Args:
+            query: Search query text
+            allowed_collections: Collection names the caller may search
+            top_k: Number of results overall (default from config)
+            filter_metadata: Optional metadata filter
+
+        Returns:
+            list[SearchResult]: Ranked results from allowed collections
+        """
+        k = top_k or self.config.default_top_k
+        merged: list[SearchResult] = []
+        for collection_name in allowed_collections:
+            try:
+                merged.extend(
+                    await self.search(query, collection_name, k, filter_metadata)
+                )
+            except SearchError as e:
+                logger.warning(
+                    "rag.search_scoped.collection_skipped",
+                    collection=collection_name,
+                    error=str(e),
+                )
+        merged.sort(key=lambda r: r.score, reverse=True)
+        return merged[:k]
 
     async def refresh_index(
         self,

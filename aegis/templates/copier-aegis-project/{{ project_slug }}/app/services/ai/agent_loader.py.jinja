@@ -1,0 +1,231 @@
+"""Agent config loader - one runtime, two config sources.
+
+Every chat surface resolves an ``AgentConfig`` through ``resolve_agent``
+and hydrates the runtime from it. Where the config comes from depends on
+the storage backend:
+
+- Persistence backend (sqlite/postgres): the ``agent`` table row for the
+  slug, cached warm per process. A missing or inactive row falls back to
+  the code default, so a half-seeded database never bricks chat.
+- Memory backend: the code default, always. Same shape, same behavior,
+  no tables involved.
+
+CRUD paths that edit agent rows must call ``invalidate_agent_cache`` so
+the next request sees the change.
+"""
+
+{% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Any
+
+from pydantic_ai.settings import ModelSettings
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.services.ai.chat_kit import ContextProvider, ToolChatAgent
+from app.services.ai.models.agents import Agent
+from app.services.ai.module_context import MemoryModuleContextProvider
+from app.services.ai.prompts import get_default_system_prompt
+from app.services.ai.tools import resolve_tools
+from app.services.ai.usage_recording import record_usage
+{% elif ai_backend != "memory" %}
+from dataclasses import dataclass
+
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.services.ai.models.agents import Agent
+from app.services.ai.prompts import get_default_system_prompt
+{% else %}
+from dataclasses import dataclass
+
+from app.core.config import settings
+from app.core.log import logger
+from app.services.ai.prompts import get_default_system_prompt
+{% endif %}
+
+DEFAULT_AGENT_SLUG = "assistant"
+
+
+@dataclass(frozen=True)
+class AgentConfig:
+    """A resolved agent definition, source-agnostic.
+
+    ``model_id`` of ``None`` means "use the service's active model", so
+    the default agent tracks the project's configured provider/model.
+    """
+
+    slug: str
+    name: str
+    system_prompt: str
+    model_id: str | None
+    temperature: float
+    max_tokens: int
+    tool_names: tuple[str, ...] = ()
+    memory_modules: tuple[str, ...] = ()
+    knowledge_base_ids: tuple[str, ...] = ()
+
+
+def default_agent_config() -> AgentConfig:
+    """The in-code default agent - the memory-mode and fallback config.
+
+    Sampling parameters come from settings so a memory-backend project
+    keeps its env-driven behavior; the seeded DB row copies these same
+    values at generation time.
+    """
+    return AgentConfig(
+        slug=DEFAULT_AGENT_SLUG,
+        name="Assistant",
+        system_prompt=get_default_system_prompt(),
+        model_id=None,
+        temperature=settings.AI_TEMPERATURE,
+        max_tokens=settings.AI_MAX_TOKENS,
+    )
+{% if ai_backend != "memory" %}
+
+
+_cache: dict[str, AgentConfig] = {}
+
+
+def invalidate_agent_cache(slug: str | None = None) -> None:
+    """Drop cached config for one slug, or all when ``slug`` is None."""
+    if slug is None:
+        _cache.clear()
+    else:
+        _cache.pop(slug, None)
+
+
+def _to_config(row: Agent) -> AgentConfig:
+    return AgentConfig(
+        slug=row.slug,
+        name=row.name,
+        system_prompt=row.system_prompt,
+        model_id=row.model_id,
+        temperature=row.temperature,
+        max_tokens=row.max_tokens,
+        tool_names=tuple(t.name for t in row.tools if t.is_active),
+        memory_modules=tuple(row.memory_modules),
+        knowledge_base_ids=tuple(row.knowledge_base_ids),
+    )
+
+
+async def _fetch_agent(session: AsyncSession, slug: str) -> Agent | None:
+    stmt = (
+        select(Agent)
+        .where(Agent.slug == slug)
+        .options(selectinload(Agent.tools))  # type: ignore[arg-type]
+    )
+    result = await session.exec(stmt)
+    return result.first()
+
+
+async def resolve_agent(
+    slug: str = DEFAULT_AGENT_SLUG,
+    *,
+    session: AsyncSession | None = None,
+) -> AgentConfig:
+    """Resolve an agent config by slug: warm cache -> DB row -> fallback.
+
+    Only DB-sourced configs are cached; a fallback for a missing row is
+    returned uncached so a row seeded later wins the next resolve.
+    """
+    cached = _cache.get(slug)
+    if cached is not None:
+        return cached
+
+    if session is not None:
+        row = await _fetch_agent(session, slug)
+    else:
+        async with get_async_session() as owned_session:
+            row = await _fetch_agent(owned_session, slug)
+
+    if row is None or not row.is_active:
+        logger.warning(
+            "Agent not found or inactive; using code default",
+            agent_slug=slug,
+        )
+        return default_agent_config()
+
+    config = _to_config(row)
+    _cache[slug] = config
+    return config
+{% else %}
+
+
+def invalidate_agent_cache(slug: str | None = None) -> None:
+    """No-op on the memory backend: config always comes from code."""
+
+
+async def resolve_agent(
+    slug: str = DEFAULT_AGENT_SLUG,
+    *,
+    session: object | None = None,
+) -> AgentConfig:
+    """Memory backend: the code default is the only config source.
+
+    ``session`` is accepted (and ignored) so call sites are identical
+    across backends.
+    """
+    if slug != DEFAULT_AGENT_SLUG:
+        logger.warning(
+            "Memory backend has no agent registry; using code default",
+            agent_slug=slug,
+        )
+    return default_agent_config()
+{% endif %}
+{% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+
+
+def build_chat_agent(
+    config: AgentConfig,
+    *,
+    model: Any,
+    model_name: str,
+    deps_type: type[Any],
+    context_providers: Sequence[ContextProvider[Any]] = (),
+    module_token_budget: int | None = None,
+    tool_calls_limit: int = 4,
+    recorder: Callable[..., float] = record_usage,
+) -> ToolChatAgent[Any]:
+    """Hydrate a ``ToolChatAgent`` from a resolved agent config.
+
+    The config supplies the persona (``system_prompt``), sampling
+    settings, the DB-granted tool list (resolved through the tool
+    registry, unknown names skipped), and the memory-module scope (wired
+    in as a context provider when non-empty; deps must expose
+    ``user_id`` for module fetchers to see the user). The caller
+    supplies the runtime pieces the config doesn't know about (model
+    instance, deps type, extra context providers).
+    """
+    providers: list[ContextProvider[Any]] = list(context_providers)
+    if config.memory_modules:
+        providers.append(
+            MemoryModuleContextProvider(
+                config.memory_modules, token_budget=module_token_budget
+            )
+        )
+    return ToolChatAgent(
+        model=model,
+        model_name=model_name,
+        instructions=config.system_prompt,
+        deps_type=deps_type,
+        tools=resolve_tools(config.tool_names),
+        context_providers=providers,
+        model_settings=ModelSettings(
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+        ),
+        tool_calls_limit=tool_calls_limit,
+        action=f"chat:{config.slug}",
+        recorder=recorder,
+    )
+{% endif %}

@@ -3822,14 +3822,19 @@
 <p>The <strong>AI Service</strong> brings a complete AI platform to your Aegis Stack project: multi-provider chat with <strong>Illiana</strong> (your system-aware AI assistant), an <strong>LLM Catalog</strong> with ~2000 models, <strong>RAG</strong> for codebase-aware conversations, <strong>cost tracking</strong> with usage analytics, and optional <strong>voice</strong> (TTS/STT).</p>
 <p><a class="glightbox" href="../../images/aegis-ai-demo.gif" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="AI Service Demo" src="../../images/aegis-ai-demo.gif" /></a></p>
 <div class="admonition info">
-<p class="admonition-title">Start Chatting in 30 Seconds</p>
-<p>Generate a project with AI service and start chatting with Illiana immediately:</p>
+<p class="admonition-title">Chat Out of the Box</p>
+<p>Generate a project with the AI service and start chatting with Illiana right away:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uvx<span class="w"> </span>aegis-stack<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>ai
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>my-app
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>sync<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat<span class="w"> </span><span class="s2">&quot;Hello! What can you tell me about my system?&quot;</span>
 </span></code></pre></div>
-<p>No API key required with the PUBLIC provider - perfect for testing!</p>
+<p>No API key needed to start: the default PUBLIC provider (LLM7.io) serves
+free open-weight models anonymously (with tight rate limits). For premium
+models and higher limits, create a free account key at
+<a href="https://dash.llm7.io">dash.llm7.io</a> and set <code>LLM7_API_KEY</code> in your <code>.env</code>.
+A second keyless option, <code>AI_PROVIDER=pollinations</code>, works the same way -
+see <a href="providers/">Providers</a>.</p>
 <p><em>Requires <a href="https://docs.astral.sh/uv/getting-started/installation/">uv</a> installed. See <a href="../../installation/">Installation</a> for other options.</em></p>
 </div>
 <h2 id="what-you-get">What You Get</h2>

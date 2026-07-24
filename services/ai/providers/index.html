@@ -3890,7 +3890,7 @@
 <p>The AI service supports multiple providers through either <a href="https://ai.pydantic.dev/">Pydantic AI</a> or <a href="https://python.langchain.com/">LangChain</a> (see <a href="../engines/">Engines</a>), giving you flexibility to choose based on your needs: cost, speed, features, or specific model capabilities.</p>
 <div class="admonition tip">
 <p class="admonition-title">All Providers Work with Both Engines</p>
-<p>Whether you chose Pydantic AI or LangChain as your engine, all 7 providers are fully supported with identical configuration.</p>
+<p>Whether you chose Pydantic AI or LangChain as your engine, every provider below is fully supported with identical configuration.</p>
 </div>
 <p><strong>Quick comparison:</strong></p>
 <table>
@@ -3905,9 +3905,15 @@
 <tbody>
 <tr>
 <td><strong>PUBLIC</strong></td>
-<td>No</td>
+<td>Optional (anonymous tier)</td>
 <td>Basic</td>
-<td>Instant testing, no setup</td>
+<td>Instant testing, zero setup</td>
+</tr>
+<tr>
+<td><strong>Pollinations</strong></td>
+<td>Optional (anonymous tier)</td>
+<td>Basic</td>
+<td>Keyless fallback, open-weight models</td>
 </tr>
 <tr>
 <td><strong>Ollama</strong></td>
@@ -3955,36 +3961,69 @@
 </table>
 <div class="admonition tip">
 <p class="admonition-title">Recommendation</p>
-<p><strong>Start:</strong> PUBLIC (no API key, instant) → <strong>Develop:</strong> Google Gemini (free tier) → <strong>Production:</strong> Groq (very fast, low cost)</p>
+<p><strong>Start:</strong> PUBLIC (keyless anonymous tier) → <strong>Develop:</strong> Google Gemini (free tier) → <strong>Production:</strong> Groq (very fast, low cost)</p>
 </div>
 <h2 id="configuration">Configuration</h2>
 <p>All providers are configured through environment variables in your <code>.env</code> file:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Core AI Service Settings</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">AI_ENABLED</span><span class="o">=</span><span class="nb">true</span><span class="w">                    </span><span class="c1"># Enable/disable service</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>public<span class="w">                 </span><span class="c1"># Provider: openai, anthropic, google, groq, mistral, cohere, ollama, public</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>auto<span class="w">                      </span><span class="c1"># Model name (varies by provider, &quot;auto&quot; for PUBLIC)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>public<span class="w">                 </span><span class="c1"># Provider: openai, anthropic, google, groq, mistral, cohere, ollama, public, pollinations</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>auto<span class="w">                      </span><span class="c1"># Model name (varies by provider, &quot;auto&quot; for PUBLIC and Pollinations)</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nv">AI_TEMPERATURE</span><span class="o">=</span><span class="m">0</span>.7<span class="w">                 </span><span class="c1"># Response creativity (0.0-2.0)</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nv">AI_MAX_TOKENS</span><span class="o">=</span><span class="m">1000</span><span class="w">                 </span><span class="c1"># Maximum response length</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nv">AI_TIMEOUT_SECONDS</span><span class="o">=</span><span class="m">30</span>.0<span class="w">            </span><span class="c1"># Request timeout</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Provider API Keys (only needed for non-PUBLIC providers)</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-...<span class="w">              </span><span class="c1"># OpenAI API key</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-...<span class="w">       </span><span class="c1"># Anthropic API key</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span>...<span class="w">                 </span><span class="c1"># Google API key</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>gsk_...<span class="w">               </span><span class="c1"># Groq API key</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="nv">MISTRAL_API_KEY</span><span class="o">=</span>...<span class="w">                </span><span class="c1"># Mistral API key</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="nv">COHERE_API_KEY</span><span class="o">=</span>...<span class="w">                 </span><span class="c1"># Cohere API key</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Provider API Keys</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="nv">LLM7_API_KEY</span><span class="o">=</span>...<span class="w">                   </span><span class="c1"># Optional: unlocks LLM7 premium models (dash.llm7.io)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="nv">POLLINATIONS_API_KEY</span><span class="o">=</span>...<span class="w">           </span><span class="c1"># Optional: Pollinations account tier</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-...<span class="w">              </span><span class="c1"># OpenAI API key</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-...<span class="w">       </span><span class="c1"># Anthropic API key</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span>...<span class="w">                 </span><span class="c1"># Google API key</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>gsk_...<span class="w">               </span><span class="c1"># Groq API key</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="nv">MISTRAL_API_KEY</span><span class="o">=</span>...<span class="w">                </span><span class="c1"># Mistral API key</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="nv">COHERE_API_KEY</span><span class="o">=</span>...<span class="w">                 </span><span class="c1"># Cohere API key</span>
 </span></code></pre></div>
 <h2 id="provider-setup-guides">Provider Setup Guides</h2>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:7"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><input id="__tabbed_1_5" name="__tabbed_1" type="radio" /><input id="__tabbed_1_6" name="__tabbed_1" type="radio" /><input id="__tabbed_1_7" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">PUBLIC (Free)</label><label for="__tabbed_1_2">Groq (Production)</label><label for="__tabbed_1_3">Google Gemini (Free Tier)</label><label for="__tabbed_1_4">OpenAI</label><label for="__tabbed_1_5">Anthropic</label><label for="__tabbed_1_6">Mistral</label><label for="__tabbed_1_7">Cohere</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:8"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><input id="__tabbed_1_5" name="__tabbed_1" type="radio" /><input id="__tabbed_1_6" name="__tabbed_1" type="radio" /><input id="__tabbed_1_7" name="__tabbed_1" type="radio" /><input id="__tabbed_1_8" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">PUBLIC (Free)</label><label for="__tabbed_1_2">Pollinations (Free)</label><label for="__tabbed_1_3">Groq (Production)</label><label for="__tabbed_1_4">Google Gemini (Free Tier)</label><label for="__tabbed_1_5">OpenAI</label><label for="__tabbed_1_6">Anthropic</label><label for="__tabbed_1_7">Mistral</label><label for="__tabbed_1_8">Cohere</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<p><strong>No setup required!</strong> Works out of the box with zero configuration.</p>
-<p><strong>Setup:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Already configured by default - just start chatting</span>
+<p>Free access through LLM7.io. The anonymous tier works with <strong>no key at
+all</strong>: open-weight models (GPT-OSS, Codestral, ...) with strict per-IP
+rate limits. An optional free account key unlocks their premium models
+(GPT-5.x, Claude, billed per token) and higher limits.</p>
+<p><strong>Setup (anonymous):</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Nothing to configure - just start chatting</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat<span class="w"> </span><span class="s2">&quot;Hello! Can you help me?&quot;</span>
 </span></code></pre></div>
-<p><strong>Best for:</strong> Instant testing, demos, getting started without any setup</p>
+<p><strong>Setup (premium models):</strong></p>
+<ol>
+<li>Create a free account key at <a href="https://dash.llm7.io">dash.llm7.io</a></li>
+<li>Set it in your environment:</li>
+</ol>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># .env</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">LLM7_API_KEY</span><span class="o">=</span>your-key
+</span></code></pre></div>
+<p><code>AI_MODEL=auto</code> resolves against LLM7's live catalog and is tier-aware:
+keyless projects pick an anonymous-tier model, keyed projects a premium
+one - you never chase their model rotation.</p>
+<p><strong>Best for:</strong> Instant testing, demos, getting started with zero setup</p>
+</div>
+<div class="tabbed-block">
+<p>A second keyless option with an active community, served through an
+OpenAI-compatible API. The anonymous tier needs <strong>no key at all</strong>:
+open-weight models (GPT-OSS 20B) with per-IP rate limits and
+non-streaming responses.</p>
+<p><strong>Setup (anonymous):</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># .env</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>pollinations
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat<span class="w"> </span><span class="s2">&quot;Hello! Can you help me?&quot;</span>
+</span></code></pre></div>
+<p><code>AI_MODEL=auto</code> resolves against Pollinations' live catalog: keyless
+projects only pick anonymous-tier models. Anonymous requests must not
+carry a key; the service handles that automatically.</p>
+<p><strong>Best for:</strong> A drop-in keyless fallback when the PUBLIC provider is
+unavailable, or trying open-weight models with zero setup</p>
 </div>
 <div class="tabbed-block">
 <p>Blazing fast inference with very generous free tier.</p>
@@ -3994,9 +4033,9 @@
 <li>Create an API key (free tier available)</li>
 <li>Configure your environment:</li>
 </ol>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>groq
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span>gsk_your_key_here
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>llama-3.1-8b-instant<span class="w">  </span><span class="c1"># Fastest model</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>groq
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span>gsk_your_key_here
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>llama-3.1-8b-instant<span class="w">  </span><span class="c1"># Fastest model</span>
 </span></code></pre></div>
 <p><strong>Available Models:</strong> See <a href="https://console.groq.com/docs/models">Groq's model documentation</a> for the latest available models.</p>
 <p><strong>Best for:</strong> Production use (very fast, extremely low cost)</p>
@@ -4008,9 +4047,9 @@
 <li>Get free API key from <a href="https://aistudio.google.com/apikey">aistudio.google.com</a></li>
 <li>Configure your environment:</li>
 </ol>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>google
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span>your_key_here
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>gemini-2.0-flash-exp
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>google
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span>your_key_here
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>gemini-2.0-flash-exp
 </span></code></pre></div>
 <p><strong>Available Models:</strong> See <a href="https://ai.google.dev/gemini-api/docs/models/gemini">Google's model documentation</a> for the latest available models.</p>
 <p><strong>Best for:</strong> Development and prototyping within rate limits</p>
@@ -4023,9 +4062,9 @@
 <li>Add payment method (required for API access)</li>
 <li>Configure your environment:</li>
 </ol>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>openai
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-your_key_here
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>gpt-3.5-turbo
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>openai
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-your_key_here
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>gpt-3.5-turbo
 </span></code></pre></div>
 <p><strong>Available Models:</strong> See <a href="https://platform.openai.com/docs/models">OpenAI's model documentation</a> for the latest available models.</p>
 <p><strong>Best for:</strong> Production with familiar API, extensive ecosystem</p>
@@ -4038,9 +4077,9 @@
 <li>Add payment method</li>
 <li>Configure your environment:</li>
 </ol>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>anthropic
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-your_key_here
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>claude-3-5-sonnet-20241022
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>anthropic
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-your_key_here
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>claude-3-5-sonnet-20241022
 </span></code></pre></div>
 <p><strong>Available Models:</strong> See <a href="https://docs.anthropic.com/en/docs/models-overview">Anthropic's model documentation</a> for the latest available models.</p>
 <p><strong>Best for:</strong> High-quality responses, safety-critical applications</p>
@@ -4052,9 +4091,9 @@
 <li>Get API key from <a href="https://console.mistral.ai/">console.mistral.ai</a></li>
 <li>Configure your environment:</li>
 </ol>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>mistral
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MISTRAL_API_KEY</span><span class="o">=</span>your_key_here
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>mistral-small-latest
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>mistral
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MISTRAL_API_KEY</span><span class="o">=</span>your_key_here
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>mistral-small-latest
 </span></code></pre></div>
 <p><strong>Available Models:</strong> See <a href="https://docs.mistral.ai/getting-started/models/">Mistral's model documentation</a> for the latest available models.</p>
 <p><strong>Best for:</strong> Open-source preference, European compliance requirements</p>
@@ -4066,9 +4105,9 @@
 <li>Get API key from <a href="https://dashboard.cohere.com/">dashboard.cohere.com</a></li>
 <li>Configure your environment:</li>
 </ol>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>cohere
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">COHERE_API_KEY</span><span class="o">=</span>your_key_here
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>command-r-plus
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_PROVIDER</span><span class="o">=</span>cohere
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">COHERE_API_KEY</span><span class="o">=</span>your_key_here
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AI_MODEL</span><span class="o">=</span>command-r-plus
 </span></code></pre></div>
 <p><strong>Available Models:</strong> See <a href="https://docs.cohere.com/docs/models">Cohere's model documentation</a> for the latest available models.</p>
 <p><strong>Best for:</strong> Enterprise features, RAG applications</p>
@@ -4082,21 +4121,21 @@
 <li>Install Ollama from <a href="https://ollama.ai/">ollama.ai</a></li>
 <li>Pull a model:</li>
 </ol>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.1
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.1
 </span></code></pre></div>
 <ol>
 <li>Configure your environment:</li>
 </ol>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>ollama
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nv">AI_MODEL</span><span class="o">=</span>llama3.1
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>ollama
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nv">AI_MODEL</span><span class="o">=</span>llama3.1
 </span></code></pre></div>
 <h3 id="ollama-deployment-modes">Ollama Deployment Modes</h3>
 <p>Configure at project generation:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Host mode: Ollama runs on your machine (default)</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>ai
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Docker mode: Ollama runs in a Docker container</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="c1"># (select during aegis init interactive prompts)</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Host mode: Ollama runs on your machine (default)</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>ai
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Docker mode: Ollama runs in a Docker container</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="c1"># (select during aegis init interactive prompts)</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -4126,18 +4165,18 @@
 </table>
 <h3 id="switching-models-via-cli">Switching Models via CLI</h3>
 <p>With the LLM Catalog, you can discover and switch Ollama models:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Sync Ollama models into catalog</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span>ollama
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># List available Ollama models</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>my-app<span class="w"> </span>llm<span class="w"> </span>list<span class="w"> </span>--vendor<span class="w"> </span>ollama
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># Switch to an Ollama model</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>llama3.1
-</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>
-</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="c1"># Or use /model in interactive chat</span>
-</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat
-</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>&gt;<span class="w"> </span>/model<span class="w"> </span>llama3.1
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Sync Ollama models into catalog</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span>ollama
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># List available Ollama models</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>my-app<span class="w"> </span>llm<span class="w"> </span>list<span class="w"> </span>--vendor<span class="w"> </span>ollama
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="c1"># Switch to an Ollama model</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>llama3.1
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="c1"># Or use /model in interactive chat</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>&gt;<span class="w"> </span>/model<span class="w"> </span>llama3.1
 </span></code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Cost Tracking with Ollama</p>
@@ -4145,44 +4184,44 @@
 </div>
 <h2 id="switching-providers">Switching Providers</h2>
 <p>You can switch providers at any time by changing your <code>.env</code> file or using the CLI:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Switch from PUBLIC to Groq</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>groq
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your-key-here
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>llama-3.1-8b-instant
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Switch from PUBLIC to Groq</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>groq
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your-key-here
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>llama-3.1-8b-instant
 </span></code></pre></div>
 <h3 id="via-env">Via .env</h3>
 <p>Edit <code>.env</code> and restart:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>make<span class="w"> </span>stop<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>make<span class="w"> </span>serve
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>make<span class="w"> </span>stop<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>make<span class="w"> </span>serve
 </span></code></pre></div>
 <h3 id="via-cli-with-llm-catalog">Via CLI (with LLM Catalog)</h3>
 <p>Update <code>.env</code> from the catalog (takes effect on next CLI invocation or server restart):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Auto-detects provider from model name and updates .env</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>gpt-4o<span class="w">              </span><span class="c1"># → sets AI_PROVIDER=openai</span>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>claude-sonnet-4-20250514<span class="w">  </span><span class="c1"># → sets AI_PROVIDER=anthropic</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>llama3.1<span class="w">            </span><span class="c1"># → sets AI_PROVIDER=ollama</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Auto-detects provider from model name and updates .env</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>gpt-4o<span class="w">              </span><span class="c1"># → sets AI_PROVIDER=openai</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>claude-sonnet-4-20250514<span class="w">  </span><span class="c1"># → sets AI_PROVIDER=anthropic</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>llama3.1<span class="w">            </span><span class="c1"># → sets AI_PROVIDER=ollama</span>
 </span></code></pre></div>
 <p>Switch instantly within an interactive chat session (refreshes in-process, no restart needed):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>&gt;<span class="w"> </span>/model<span class="w"> </span>gpt-4o
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>✓<span class="w"> </span>Switched<span class="w"> </span>to<span class="w"> </span>OpenAI/gpt-4o
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>&gt;<span class="w"> </span>/model<span class="w"> </span>gpt-4o
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>✓<span class="w"> </span>Switched<span class="w"> </span>to<span class="w"> </span>OpenAI/gpt-4o
 </span></code></pre></div>
 <p><strong>Verify the switch:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>status
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>current
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>status
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>current
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="missing-api-key-error">"Missing API key" Error</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>❌<span class="w"> </span>Missing<span class="w"> </span>API<span class="w"> </span>key<span class="w"> </span><span class="k">for</span><span class="w"> </span>groq<span class="w"> </span>provider.<span class="w"> </span>Set<span class="w"> </span>GROQ_API_KEY<span class="w"> </span>environment<span class="w"> </span>variable.
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>❌<span class="w"> </span>Missing<span class="w"> </span>API<span class="w"> </span>key<span class="w"> </span><span class="k">for</span><span class="w"> </span>groq<span class="w"> </span>provider.<span class="w"> </span>Set<span class="w"> </span>GROQ_API_KEY<span class="w"> </span>environment<span class="w"> </span>variable.
 </span></code></pre></div>
 <p><strong>Solution:</strong> Add the API key to your <code>.env</code> file:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your-actual-key-here
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your-actual-key-here
 </span></code></pre></div>
 <h3 id="provider-not-available-error">"Provider not available" Error</h3>
 <p><strong>Check configuration:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>status
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>status
 </span></code></pre></div>
 <p><strong>Verify provider is installed:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>providers
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>providers
 </span></code></pre></div>
 <hr />
 <p><strong>Next Steps:</strong></p>

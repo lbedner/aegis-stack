@@ -618,6 +618,10 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Target Template:  {version}",
     "update.already_at_version": ("Project is already at the requested version"),
     "update.already_at_commit": "Project is already at the target commit",
+    "update.ahead_of_target": ("Project is newer than the target template version"),
+    "update.ahead_of_target_hint": (
+        "Nothing to update. Use --to-version to target a specific version."
+    ),
     "update.downgrade_blocked": "Downgrade not supported",
     "update.downgrade_reason": (
         "Copier does not support downgrading to older template versions."

@@ -87,11 +87,15 @@ dev = [
 ]
 docs = [
     "mkdocs>=1.5.0",
-    "mkdocs-material>=9.5.0",
+    # 9.7.7 relaxed its pymdown-extensions cap from ~=10.2 to >=10.2; older
+    # releases cannot resolve alongside pymdown-extensions 11.
+    "mkdocs-material>=9.7.7",
     "mkdocstrings[python]>=0.24.0",
     "mkdocs-gen-files>=0.5.0",
     "pygments>=2.20.0",
-    "pymdown-extensions>=10.21.3",
+    # 11.0.0 patches the b64 path traversal (GHSA-9xwg-3r6f-jcx2); every
+    # 10.x is affected.
+    "pymdown-extensions>=11.0.0",
     "mkdocs-mermaid2-plugin>=1.1.0",
     "mkdocs-glightbox>=0.3.0",
 ]

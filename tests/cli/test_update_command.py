@@ -5,6 +5,8 @@ Tests cover version detection, changelog generation, dry-run mode,
 and the full update workflow.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
@@ -1177,3 +1179,63 @@ class TestResolveRefToCommitRemote:
         monkeypatch.setattr(subprocess, "run", fake_run)
 
         assert copier_updater.resolve_ref_to_commit_remote("v0.8.0", "bad-url") is None
+
+
+class TestUpdateProjectAheadOfTarget:
+    """A project newer than the resolved target is not a user error.
+
+    ``aegis update`` with no ``--to-version`` targets the installed CLI's
+    version. A dev checkout generated from a commit ahead of that tag is
+    already up to date, so it must exit cleanly instead of reporting a
+    blocked downgrade. An explicitly requested downgrade still blocks.
+    """
+
+    @staticmethod
+    @contextmanager
+    def _ahead_of_target() -> Iterator[None]:
+        """Force the 'project is ahead of target' topology."""
+        with (
+            patch(
+                "aegis.commands.update.get_current_template_commit",
+                return_value="f" * 40,
+            ),
+            patch(
+                "aegis.commands.update.resolve_ref_to_commit",
+                return_value="6" * 40,
+            ),
+            patch("aegis.commands.update.is_version_downgrade", return_value=True),
+        ):
+            yield
+
+    def test_implicit_target_behind_project_exits_cleanly(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        project_path = project_factory("base")
+
+        with self._ahead_of_target():
+            result = run_aegis_command(
+                "update", "--project-path", str(project_path), "--yes"
+            )
+
+        output = strip_ansi_codes(result.stdout + result.stderr).lower()
+        assert result.returncode == 0, output
+        assert "downgrade not supported" not in output
+
+    def test_explicit_downgrade_is_still_blocked(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        project_path = project_factory("base")
+
+        with self._ahead_of_target():
+            result = run_aegis_command(
+                "update",
+                "--project-path",
+                str(project_path),
+                "--to-version",
+                "0.9.0",
+                "--yes",
+            )
+
+        output = strip_ansi_codes(result.stdout + result.stderr).lower()
+        assert result.returncode == 1, output
+        assert "downgrade not supported" in output

@@ -472,6 +472,8 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   目标模板：{version}",
     "update.already_at_version": "项目已是目标版本",
     "update.already_at_commit": "项目已是目标提交",
+    "update.ahead_of_target": ("项目版本高于目标模板版本"),
+    "update.ahead_of_target_hint": ("无需更新。如需指定版本，请使用 --to-version。"),
     "update.downgrade_blocked": "不支持降级",
     "update.downgrade_reason": "Copier 不支持降级到旧版本模板。",
     "update.changelog": "变更日志：",

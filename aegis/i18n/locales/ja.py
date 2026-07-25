@@ -594,6 +594,12 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   目標テンプレート：  {version}",
     "update.already_at_version": "プロジェクトは既に指定バージョンです",
     "update.already_at_commit": "プロジェクトは既に目標コミットです",
+    "update.ahead_of_target": (
+        "プロジェクトはターゲットのテンプレートバージョンより新しいです"
+    ),
+    "update.ahead_of_target_hint": (
+        "更新はありません。特定のバージョンを指定するには --to-version を使用してください。"
+    ),
     "update.downgrade_blocked": "ダウングレード非対応",
     "update.downgrade_reason": (
         "Copier は古いテンプレートバージョンへのダウングレードに対応していません。"

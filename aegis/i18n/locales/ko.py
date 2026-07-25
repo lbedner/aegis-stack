@@ -575,6 +575,10 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   대상 템플릿:  {version}",
     "update.already_at_version": "프로젝트가 이미 요청한 버전입니다",
     "update.already_at_commit": "프로젝트가 이미 대상 커밋에 있습니다",
+    "update.ahead_of_target": ("프로젝트가 대상 템플릿 버전보다 최신입니다"),
+    "update.ahead_of_target_hint": (
+        "업데이트할 항목이 없습니다. 특정 버전을 지정하려면 --to-version 옵션을 사용하세요."
+    ),
     "update.downgrade_blocked": "다운그레이드 불가",
     "update.downgrade_reason": (
         "Copier는 이전 템플릿 버전으로의 다운그레이드를 지원하지 않습니다."

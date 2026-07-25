@@ -582,6 +582,10 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Целевой шаблон:   {version}",
     "update.already_at_version": "Проект уже на запрашиваемой версии",
     "update.already_at_commit": "Проект уже на целевом коммите",
+    "update.ahead_of_target": ("Проект новее целевой версии шаблона"),
+    "update.ahead_of_target_hint": (
+        "Обновлять нечего. Используйте --to-version, чтобы выбрать конкретную версию."
+    ),
     "update.downgrade_blocked": "Понижение версии не поддерживается",
     "update.downgrade_reason": (
         "Copier не поддерживает откат к более ранним версиям шаблона."

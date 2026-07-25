@@ -608,6 +608,10 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Ziel-Template:      {version}",
     "update.already_at_version": "Projekt ist bereits auf der angeforderten Version",
     "update.already_at_commit": "Projekt ist bereits auf dem Ziel-Commit",
+    "update.ahead_of_target": ("Projekt ist neuer als die Ziel-Template-Version"),
+    "update.ahead_of_target_hint": (
+        "Nichts zu aktualisieren. Mit --to-version eine bestimmte Version wählen."
+    ),
     "update.downgrade_blocked": "Downgrade nicht unterstützt",
     "update.downgrade_reason": (
         "Copier unterstützt kein Downgrade auf ältere Template-Versionen."

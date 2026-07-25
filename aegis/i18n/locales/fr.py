@@ -610,6 +610,12 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Modèle cible :    {version}",
     "update.already_at_version": "Le projet est déjà à la version demandée",
     "update.already_at_commit": "Le projet est déjà au commit cible",
+    "update.ahead_of_target": (
+        "Le projet est plus récent que la version de modèle cible"
+    ),
+    "update.ahead_of_target_hint": (
+        "Rien à mettre à jour. Utilisez --to-version pour cibler une version précise."
+    ),
     "update.downgrade_blocked": "Rétrogradation non supportée",
     "update.downgrade_reason": (
         "Copier ne supporte pas la rétrogradation vers des versions antérieures du modèle."

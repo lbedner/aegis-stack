@@ -376,6 +376,18 @@ def update_command(
         if target_commit and is_version_downgrade(
             current_commit, target_commit, template_root
         ):
+            # No --to-version means "match the installed CLI". A project
+            # generated from a newer commit (a dev checkout ahead of the
+            # release tag) is already up to date, not a failed downgrade.
+            # Only an explicitly requested downgrade is an error.
+            if not to_version:
+                typer.echo("")
+                brand.success(t("update.ahead_of_target"))
+                typer.echo(t("update.current_commit", commit=current_commit[:8]))
+                typer.echo(t("update.target_commit", commit=target_commit[:8]))
+                typer.echo(f"   {t('update.ahead_of_target_hint')}")
+                return
+
             typer.echo("")
             brand.error(t("update.downgrade_blocked"), err=True)
             typer.echo(t("update.current_commit", commit=current_commit[:8]), err=True)

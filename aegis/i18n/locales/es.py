@@ -610,6 +610,12 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Plantilla destino: {version}",
     "update.already_at_version": "Proyecto ya está en la versión solicitada",
     "update.already_at_commit": "Proyecto ya está en el commit destino",
+    "update.ahead_of_target": (
+        "El proyecto es más reciente que la versión de plantilla de destino"
+    ),
+    "update.ahead_of_target_hint": (
+        "Nada que actualizar. Usa --to-version para elegir una versión concreta."
+    ),
     "update.downgrade_blocked": "Degradación no soportada",
     "update.downgrade_reason": (
         "Copier no soporta degradación a versiones anteriores de plantilla."

@@ -17,13 +17,17 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.models import (
     FinanceAccount,
     FinanceBalanceSnapshot,
+    FinanceHolding,
     FinanceNetWorthSnapshot,
+    FinanceTrade,
+    FinanceTransaction,
     FinanceValuation,
 )
 
@@ -36,7 +40,10 @@ def _today() -> date:
 
 
 def _balance_points(
-    account: FinanceAccount, valuations: list[FinanceValuation]
+    account: FinanceAccount,
+    valuations: list[FinanceValuation],
+    activity: list[tuple[date, int]] | None = None,
+    investment: list[tuple[date, int, str]] | None = None,
 ) -> list[tuple[date, int, str]]:
     """Ordered ``(date, value, source)`` points defining an account's balance.
 
@@ -48,15 +55,93 @@ def _balance_points(
     """
     if valuations:
         return [(v.as_of_date, v.value, "manual") for v in valuations]
-    if account.current_balance is not None:
+    # "Authoritative" is subtle: accounts are CREATED with
+    # ``current_balance=0``, so a bare zero only counts as a real balance
+    # when ``balance_as_of`` says a write actually happened. Trusting the
+    # zero is what made every CSV-imported account contribute $0 to the
+    # series while the accounts page showed its true register balance -
+    # the chart and the headline number disagreed by design.
+    authoritative = account.current_balance is not None and (
+        account.current_balance != 0 or account.balance_as_of is not None
+    )
+    if authoritative:
         as_of = (
             account.balance_as_of.date()
             if account.balance_as_of is not None
             else _today()
         )
         source = "manual" if account.is_manual else "sync"
-        return [(as_of, account.current_balance, source)]
+        anchor = (as_of, account.current_balance, source)
+        # A reconstructed history feeds the days BEFORE the synced balance;
+        # the synced figure itself always wins on its own date, since it is
+        # measured rather than derived.
+        if investment:
+            return [p for p in investment if p[0] < as_of] + [anchor]
+        return [anchor]
+    # Fall back to the running register balance, the same figure the
+    # accounts page falls back to. Opening balance is assumed zero, so
+    # this tracks CHANGE faithfully even when the absolute level is only
+    # as good as the imported history.
+    if activity:
+        running = 0
+        points: list[tuple[date, int, str]] = []
+        for day, delta in activity:
+            running += delta
+            # "computed" is the existing vocabulary for a derived balance
+            # (the source check constraint allows sync/provider/computed/
+            # carried_forward/manual) - a register sum is precisely that,
+            # so this needs no migration.
+            points.append((day, running, "computed"))
+        return points
     return []
+
+
+def _investment_points(
+    account: FinanceAccount,
+    holdings: list[tuple[int, int]],
+    trades: list[tuple[date, int, int, int, int]],
+) -> list[tuple[date, int, str]]:
+    """Value history for a single-security investment account, from trades.
+
+    A brokerage sync gives ONE point-in-time balance, so a year of chart
+    shows a flat nothing and then a cliff on the day it synced. The trades
+    carry unit prices at their own dates, and quantity is exactly
+    recoverable by undoing each trade backwards from today's holding - so
+    value at trade date ``t`` is ``quantity_after(t) x price(t)``.
+
+    Deliberately limited to accounts holding exactly ONE security. With
+    several, the value on a given day needs every security's price on that
+    day, and a trade only prices the one it touched; guessing the rest
+    would look precise and be fiction.
+
+    ``trades`` is ``(date, security_id, quantity_e8, price, price_scale)``
+    ascending, already filtered to priced rows.
+    """
+    if len(holdings) != 1 or not trades:
+        return []
+    security_id, current_quantity = holdings[0]
+    priced = [t for t in trades if t[1] == security_id and (t[3] or 0) > 0]
+    if not priced:
+        return []
+
+    # Walk backwards from today's holding, undoing each trade's quantity.
+    quantity_after: dict[date, int] = {}
+    running = current_quantity
+    for trade_date, _sec, quantity_e8, _price, _scale in reversed(priced):
+        quantity_after[trade_date] = running
+        running -= quantity_e8 or 0
+
+    from app.services.finance.finance_service import market_value_cents
+
+    points: list[tuple[date, int, str]] = []
+    for trade_date, _sec, _quantity_e8, price, price_scale in priced:
+        quantity = quantity_after.get(trade_date, 0)
+        if quantity <= 0:
+            continue
+        points.append(
+            (trade_date, market_value_cents(quantity, price, price_scale), "computed")
+        )
+    return points
 
 
 def _apply_balance_snapshot(
@@ -144,14 +229,11 @@ async def recompute_snapshots(
     if window_start > today:
         return 0
     days = [
-        window_start + timedelta(days=i)
-        for i in range((today - window_start).days + 1)
+        window_start + timedelta(days=i) for i in range((today - window_start).days + 1)
     ]
 
     # 1) Accounts in scope.
-    account_query = select(FinanceAccount).where(
-        FinanceAccount.deleted_at.is_(None)
-    )
+    account_query = select(FinanceAccount).where(FinanceAccount.deleted_at.is_(None))
     if owner_user_id is not None:
         account_query = account_query.where(
             FinanceAccount.owner_user_id == owner_user_id
@@ -168,13 +250,77 @@ async def recompute_snapshots(
         await db.exec(
             select(FinanceValuation)
             .where(FinanceValuation.account_id.in_(account_ids))
-            .order_by(
-                FinanceValuation.account_id, FinanceValuation.as_of_date
-            )
+            .order_by(FinanceValuation.account_id, FinanceValuation.as_of_date)
         )
     ).all()
     for valuation in valuation_rows:
         valuations_by_account[valuation.account_id].append(valuation)
+
+    # 2b) Daily transaction deltas per account, for the register fallback.
+    #     One grouped query, ascending, so the running total is a scan.
+    activity_by_account: dict[int, list[tuple[date, int]]] = defaultdict(list)
+    activity_rows = (
+        await db.exec(
+            select(
+                FinanceTransaction.account_id,
+                FinanceTransaction.date_,
+                func.sum(FinanceTransaction.amount),
+            )
+            .where(
+                FinanceTransaction.account_id.in_(account_ids),
+                FinanceTransaction.deleted_at.is_(None),
+                FinanceTransaction.dedup_status != "duplicate",
+            )
+            .group_by(FinanceTransaction.account_id, FinanceTransaction.date_)
+            .order_by(FinanceTransaction.account_id, FinanceTransaction.date_)
+        )
+    ).all()
+    for account_id, txn_date, delta in activity_rows:
+        activity_by_account[account_id].append((txn_date, int(delta or 0)))
+
+    # 2c) Holdings + priced trades, for reconstructing an investment
+    #     account's value on the days before its single synced balance.
+    holdings_by_account: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for security_id, account_id, quantity_e8 in (
+        await db.exec(
+            select(
+                FinanceHolding.security_id,
+                FinanceHolding.account_id,
+                FinanceHolding.quantity_e8,
+            ).where(FinanceHolding.account_id.in_(account_ids))
+        )
+    ).all():
+        holdings_by_account[account_id].append((security_id, int(quantity_e8 or 0)))
+
+    trades_by_account: dict[int, list[tuple[date, int, int, int, int]]] = defaultdict(
+        list
+    )
+    for account_id, trade_date, security_id, quantity_e8, price, price_scale in (
+        await db.exec(
+            select(
+                FinanceTrade.account_id,
+                FinanceTrade.trade_date,
+                FinanceTrade.security_id,
+                FinanceTrade.quantity_e8,
+                FinanceTrade.price,
+                FinanceTrade.price_scale,
+            )
+            .where(
+                FinanceTrade.account_id.in_(account_ids),
+                FinanceTrade.security_id.is_not(None),
+            )
+            .order_by(FinanceTrade.account_id, FinanceTrade.trade_date)
+        )
+    ).all():
+        trades_by_account[account_id].append(
+            (
+                trade_date,
+                security_id,
+                int(quantity_e8 or 0),
+                int(price or 0),
+                int(price_scale or 0),
+            )
+        )
 
     # 3) Every existing balance snapshot in the window, keyed for in-memory
     #    upsert (was one existence query per account per day).
@@ -194,7 +340,16 @@ async def recompute_snapshots(
     per_day: dict[date, list[int]] = defaultdict(lambda: [0, 0])  # [assets, liab]
 
     for account in accounts:
-        points = _balance_points(account, valuations_by_account.get(account.id, []))
+        points = _balance_points(
+            account,
+            valuations_by_account.get(account.id, []),
+            activity_by_account.get(account.id),
+            _investment_points(
+                account,
+                holdings_by_account.get(account.id, []),
+                trades_by_account.get(account.id, []),
+            ),
+        )
         if not points:
             continue
         index = 0
@@ -204,7 +359,27 @@ async def recompute_snapshots(
                 current = points[index]
                 index += 1
             if current is None:
-                continue  # account has no known balance yet on this day
+                # Before the first known point. Carrying the EARLIEST value
+                # backwards is estimated, but it is the least-wrong
+                # estimate available: treating the account as $0 until its
+                # first sync drew a cliff that read as a sudden windfall.
+                # Flagged estimated so the row says so.
+                first_date, first_value, _first_source = points[0]
+                _apply_balance_snapshot(
+                    db,
+                    existing_balance,
+                    account=account,
+                    balance_date=day,
+                    balance=first_value,
+                    source="carried_forward",
+                    is_estimated=True,
+                    owner_user_id=owner_user_id,
+                )
+                if account.classification == "asset":
+                    per_day[day][0] += first_value
+                elif account.classification == "liability":
+                    per_day[day][1] += abs(first_value)
+                continue
             point_date, value, native_source = current
             is_exact = point_date == day
             _apply_balance_snapshot(
@@ -220,7 +395,12 @@ async def recompute_snapshots(
             if account.classification == "asset":
                 per_day[day][0] += value
             elif account.classification == "liability":
-                per_day[day][1] += value
+                # ``net_worth = assets - liabilities``, so this column is a
+                # magnitude OWED, always positive. A register-derived card
+                # balance is negative (spending), and adding it raw flipped
+                # the subtraction into an addition - net worth came out too
+                # high by exactly twice the debt.
+                per_day[day][1] += abs(value)
 
     # 4) Existing net-worth snapshots for the window in one query (was one
     #    existence query per day).
@@ -264,9 +444,64 @@ async def get_net_worth_series(
     owner_user_id: int | None = None,
     days: int = 90,
     currency: str = _DEFAULT_CURRENCY,
+    account_ids: list[int] | None = None,
 ) -> list[FinanceNetWorthSnapshot]:
-    """The net-worth snapshot series (oldest first) — one indexed range scan."""
+    """The net-worth snapshot series (oldest first) — one indexed range scan.
+
+    With ``account_ids`` the series is summed live from the per-account
+    balance snapshots instead of the materialized owner-level rows, so a
+    filtered Overview can chart just the accounts in view. The join back to
+    ``finance_account`` keeps the owner scope authoritative: an id from
+    another owner contributes nothing.
+    """
     since = _today() - timedelta(days=max(days, 1) - 1)
+    if account_ids is not None:
+        rows = (
+            await db.exec(
+                select(
+                    FinanceBalanceSnapshot.balance_date,
+                    FinanceAccount.classification,
+                    func.sum(FinanceBalanceSnapshot.balance),
+                )
+                .join(
+                    FinanceAccount,
+                    FinanceAccount.id == FinanceBalanceSnapshot.account_id,
+                )
+                .where(
+                    FinanceBalanceSnapshot.account_id.in_(account_ids),
+                    FinanceBalanceSnapshot.balance_date >= since,
+                    FinanceAccount.deleted_at.is_(None),
+                    FinanceAccount.owner_user_id.is_(None)
+                    if owner_user_id is None
+                    else FinanceAccount.owner_user_id == owner_user_id,
+                )
+                .group_by(
+                    FinanceBalanceSnapshot.balance_date,
+                    FinanceAccount.classification,
+                )
+                .order_by(FinanceBalanceSnapshot.balance_date)
+            )
+        ).all()
+        per_day: dict[date, list[int]] = {}
+        for balance_date, classification, total in rows:
+            bucket = per_day.setdefault(balance_date, [0, 0])
+            if classification == "liability":
+                bucket[1] += abs(int(total or 0))
+            else:
+                bucket[0] += int(total or 0)
+        # Transient rows, shaped like the materialized ones; never persisted.
+        return [
+            FinanceNetWorthSnapshot(
+                owner_user_id=owner_user_id,
+                as_of_date=day,
+                total_assets_amount=assets,
+                total_liabilities_amount=liabilities,
+                net_worth_amount=assets - liabilities,
+                currency=currency,
+            )
+            for day, (assets, liabilities) in sorted(per_day.items())
+        ]
+
     query = select(FinanceNetWorthSnapshot).where(
         FinanceNetWorthSnapshot.as_of_date >= since,
         FinanceNetWorthSnapshot.currency == currency,
@@ -274,8 +509,6 @@ async def get_net_worth_series(
     if owner_user_id is None:
         query = query.where(FinanceNetWorthSnapshot.owner_user_id.is_(None))
     else:
-        query = query.where(
-            FinanceNetWorthSnapshot.owner_user_id == owner_user_id
-        )
+        query = query.where(FinanceNetWorthSnapshot.owner_user_id == owner_user_id)
     query = query.order_by(FinanceNetWorthSnapshot.as_of_date)
     return list((await db.exec(query)).all())

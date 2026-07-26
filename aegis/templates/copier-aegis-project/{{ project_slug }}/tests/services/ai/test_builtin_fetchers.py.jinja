@@ -6,33 +6,28 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-import app.services.ai.builtin_fetchers as builtin_fetchers_module
 from app.models.conversation import Conversation
+import app.services.ai.builtin_fetchers as builtin_fetchers_module
 from app.services.ai.fetchers import FetchContext, registered_fetcher_names, run_fetcher
 
 
 @pytest.fixture
-async def session(
+def session(
+    async_db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
-) -> AsyncGenerator[AsyncSession]:
-    engine = create_async_engine("sqlite+aiosqlite://")
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    async with AsyncSession(engine) as session:
+) -> AsyncSession:
+    """The root conftest's transactional async session (rolled back per
+    test), also patched in as the module's session factory. A bare local
+    engine cannot create this project's schema-qualified tables."""
 
-        @asynccontextmanager
-        async def fake_session() -> AsyncGenerator[AsyncSession]:
-            yield session
+    @asynccontextmanager
+    async def fake_session() -> AsyncGenerator[AsyncSession]:
+        yield async_db_session
 
-        monkeypatch.setattr(
-            builtin_fetchers_module, "get_async_session", fake_session
-        )
-        yield session
-    await engine.dispose()
+    monkeypatch.setattr(builtin_fetchers_module, "get_async_session", fake_session)
+    return async_db_session
 
 
 class TestRegistration:

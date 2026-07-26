@@ -594,3 +594,140 @@ class TestAPIClient:
         await client.aclose()
 
         client._client.aclose.assert_awaited_once()
+
+
+class TestPerRequestTimeout:
+    """Long-running endpoints (the finance file import) need more than the
+    client-wide 10s without loosening every other call's budget."""
+
+    @pytest.mark.asyncio
+    async def test_multipart_timeout_override_reaches_httpx(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            return_value=_mock_response(200, {"ok": True})
+        )
+
+        await client.post_multipart(
+            "/api/v1/finance/import",
+            files={"file": ("a.qif", b"x", "application/octet-stream")},
+            timeout=300.0,
+        )
+
+        assert client._client.request.call_args.kwargs["timeout"] == 300.0
+
+    @pytest.mark.asyncio
+    async def test_without_override_the_client_default_applies(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            return_value=_mock_response(200, {"ok": True})
+        )
+
+        await client.get("/api/test")
+
+        # No per-request timeout kwarg: the AsyncClient's own default rules.
+        assert "timeout" not in client._client.request.call_args.kwargs
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_reports_the_effective_budget(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import httpx
+
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            side_effect=httpx.TimeoutException("timeout")
+        )
+
+        await client.post_multipart(
+            "/api/v1/finance/import",
+            files={"file": ("a.qif", b"x", "application/octet-stream")},
+            timeout=300.0,
+        )
+
+        assert client.last_error is not None
+        assert "300" in client.last_error
+        assert "10" not in client.last_error.split("300")[0]
+
+
+class TestLastError:
+    """``last_error`` keeps the real failure reason for UI surfaces.
+
+    The client's contract is "None on error, details in the log" - which
+    leaves the UI unable to say WHAT failed. ``last_error`` carries the
+    same detail the log line gets, for the caller that just got None.
+    """
+
+    @pytest.mark.asyncio
+    async def test_success_clears_last_error(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            return_value=_mock_response(200, {"ok": True})
+        )
+        client.last_error = "stale failure from a previous call"
+
+        await client.get("/api/test")
+
+        assert client.last_error is None
+
+    @pytest.mark.asyncio
+    async def test_timeout_records_endpoint_and_budget(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import httpx
+
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            side_effect=httpx.TimeoutException("timeout")
+        )
+
+        await client.post("/api/v1/finance/import")
+
+        assert client.last_error is not None
+        assert "timed out" in client.last_error
+        assert "/api/v1/finance/import" in client.last_error
+        assert "10" in client.last_error  # the default timeout budget
+
+    @pytest.mark.asyncio
+    async def test_http_error_records_status_and_response_detail(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import httpx
+
+        client = make_client()
+        response = _mock_response(
+            422, {"detail": "QIF import requires a target account_id."}
+        )
+        response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                "422", request=MagicMock(), response=response
+            )
+        )
+        client._client.request = AsyncMock(return_value=response)  # type: ignore[method-assign]
+
+        await client.post("/api/v1/finance/import")
+
+        assert client.last_error is not None
+        assert "422" in client.last_error
+        assert "QIF import requires a target account_id." in client.last_error
+
+    @pytest.mark.asyncio
+    async def test_connect_error_records_last_error(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import httpx
+
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            side_effect=httpx.ConnectError("refused")
+        )
+
+        await client.get("/api/test")
+
+        assert client.last_error is not None
+        assert "connect" in client.last_error.lower()

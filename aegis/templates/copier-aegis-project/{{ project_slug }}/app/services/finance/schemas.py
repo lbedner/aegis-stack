@@ -8,7 +8,7 @@ Money fields are integer minor units (cents); the frontend formats them.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -70,6 +70,11 @@ class AccountResponse(BaseModel):
     account_type: str
     classification: str
     current_balance: int | None
+    # When a real balance write last happened (provider sync, statement
+    # import, valuation). Accounts are created with ``current_balance=0``,
+    # so a bare zero WITHOUT this stamp means "never set", and the UI
+    # falls back to the register sum instead of rendering $0.00.
+    balance_as_of: datetime | None = None
     # Balance derived from the sum of imported transactions (the register
     # balance Quicken shows). Useful when no valuation/statement balance was
     # set. Falls back to 0 when there are no transactions.
@@ -94,15 +99,14 @@ class AccountResponse(BaseModel):
             account_type=row.account_type,
             classification=row.classification,
             current_balance=row.current_balance,
+            balance_as_of=row.balance_as_of,
             activity_balance=activity_balance,
             currency=row.currency,
             is_manual=row.is_manual,
             institution_id=row.institution_id,
             connection_id=row.connection_id,
             liability=(
-                LiabilitySummary.from_row(liability)
-                if liability is not None
-                else None
+                LiabilitySummary.from_row(liability) if liability is not None else None
             ),
         )
 
@@ -167,7 +171,18 @@ class TransactionResponse(BaseModel):
     source: str
     external_id: str | None = None
     category_id: int | None = None
+    # Resolved name for ``category_id``, filled by the list endpoint so a
+    # register can show the category without a lookup per row.
+    category: str | None = None
     category_source: str = "unset"
+    # The assigned payee (FinanceMerchant) and its resolved name - same
+    # id + filled-by-the-list-endpoint shape as category above. None means
+    # no payee assigned yet, and the register falls back to showing the raw
+    # descriptor.
+    merchant_id: int | None = None
+    merchant: str | None = None
+    # Base64 PNG for the payee's brand icon (merchant_icon.py).
+    icon_b64: str | None = None
     pfc_primary: str | None = None
     pfc_detailed: str | None = None
     memo: str | None = None
@@ -198,6 +213,7 @@ class TransactionResponse(BaseModel):
             external_id=row.external_id,
             category_id=row.category_id,
             category_source=row.category_source,
+            merchant_id=row.merchant_id,
             pfc_primary=row.pfc_primary,
             pfc_detailed=row.pfc_detailed,
             memo=row.memo,
@@ -242,6 +258,9 @@ class FinanceStatusSummary(BaseModel):
     account_count: int
     connection_count: int
     new_insight_count: int = 0
+    # Whether this build shipped the analyst agent, so the dashboard can hide
+    # the Notes tab rather than offer a surface that cannot be filled.
+    analyst_enabled: bool = False
     currency: str
 
 
@@ -317,6 +336,8 @@ class ImportResultResponse(BaseModel):
     rows_updated: int
     rows_duplicate: int
     rows_error: int
+    # Not posted money (scheduled / future-dated): recorded, never ledgered.
+    rows_skipped: int = 0
 
 
 class ImportBatchSummary(BaseModel):
@@ -416,6 +437,34 @@ class TransactionCreate(BaseModel):
     date: date
     name: str | None = None
     category_id: int | None = None
+
+
+class TransactionCategorize(BaseModel):
+    category_id: int
+
+
+class CategorySuggestion(BaseModel):
+    """A payee-precedent category guess for one still-uncategorized
+    transaction - a preview, not a write. The caller decides whether to
+    apply it (via the ordinary categorize endpoint)."""
+
+    transaction_id: int
+    category_id: int
+    category_name: str
+
+
+class CategorySuggestionListResponse(BaseModel):
+    items: list[CategorySuggestion]
+    skipped: int
+
+
+class SuggestCategoriesRequest(BaseModel):
+    """POST body for /transactions/auto-categorize. Omitted or empty
+    ``transaction_ids`` sweeps the full uncategorized backlog, unchanged
+    from before this existed; a non-empty list scopes the sweep to a
+    caller-chosen subset (e.g. a checkbox selection)."""
+
+    transaction_ids: list[int] | None = None
 
 
 class ValuationCreateRequest(BaseModel):
@@ -592,9 +641,7 @@ class TransferResponse(BaseModel):
             from_transaction=(
                 TransactionResponse.from_row(from_txn) if from_txn else None
             ),
-            to_transaction=(
-                TransactionResponse.from_row(to_txn) if to_txn else None
-            ),
+            to_transaction=(TransactionResponse.from_row(to_txn) if to_txn else None),
         )
 
 
@@ -624,14 +671,44 @@ class RecurringStreamResponse(BaseModel):
     amount_is_variable: bool
     currency: str
     next_expected_date: date | None
+    last_date: date | None  # last transaction actually matched to this stream
     occurrence_count: int
     status: str
     confidence: int | None
     is_subscription: bool
     is_muted: bool
+    is_user_confirmed: bool
+    source: str  # "derived" (detector) | "provider" | "user" (hand-entered)
+    expected_amount: int | None  # cents; set for declared bills/income
+    # Display names, resolved by the list endpoint in one query each; None
+    # on single-row responses (create/update), where the UI reloads the list.
+    account_name: str | None = None
+    category_name: str | None = None
+    # The category set ON THE BILL, if any - distinct from category_name,
+    # which falls back to the one inferred from its transactions. The edit
+    # dialog needs the id to prefill its dropdown, and needs it empty when
+    # the shown name is only an inference.
+    category_id: int | None = None
+    # Also list-endpoint-only (same reasoning as above): a favicon guess
+    # (merchant_icon.py) and the "fresh"/"overdue"/"stale" recency read
+    # (categorize.insights.stream_staleness) - both need context (today,
+    # the lookback floor) the single-row create/update/mute endpoints have
+    # no reason to compute for a response the UI immediately discards.
+    # Base64 PNG, inlined by the list endpoint - see merchant_icon.py
+    # for why the bytes travel rather than a URL.
+    icon_b64: str | None = None
+    staleness: str = "fresh"
 
     @classmethod
-    def from_row(cls, row: FinanceRecurringStream) -> RecurringStreamResponse:
+    def from_row(
+        cls,
+        row: FinanceRecurringStream,
+        *,
+        account_name: str | None = None,
+        category_name: str | None = None,
+        icon_b64: str | None = None,
+        staleness: str = "fresh",
+    ) -> RecurringStreamResponse:
         return cls(
             id=row.id,
             account_id=row.account_id,
@@ -643,18 +720,382 @@ class RecurringStreamResponse(BaseModel):
             amount_is_variable=row.amount_is_variable,
             currency=row.currency,
             next_expected_date=row.next_expected_date,
+            last_date=row.last_date,
             occurrence_count=row.occurrence_count,
             status=row.status,
             confidence=row.confidence,
             is_subscription=row.is_subscription,
             is_muted=row.is_muted,
+            is_user_confirmed=row.is_user_confirmed,
+            source=row.source,
+            expected_amount=row.expected_amount,
+            category_id=row.category_id,
+            account_name=account_name,
+            category_name=category_name,
+            icon_b64=icon_b64,
+            staleness=staleness,
         )
+
+
+class RecurringStreamCreate(BaseModel):
+    """A hand-entered bill (outflow) or income (inflow) stream."""
+
+    name: str
+    direction: Literal["inflow", "outflow"]
+    frequency: Literal[
+        "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "annually"
+    ]
+    expected_amount: int  # cents (magnitude)
+    next_expected_date: date
+    account_id: int | None = None
+    is_subscription: bool = False
+
+
+class RecurringStreamUpdate(BaseModel):
+    """Edits to a stream's declared facts; omitted fields stay as they are."""
+
+    name: str | None = None
+    frequency: (
+        Literal[
+            "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "annually"
+        ]
+        | None
+    ) = None
+    expected_amount: int | None = None  # cents (magnitude)
+    next_expected_date: date | None = None
+    # Stated about the BILL and stops there - its transactions keep the
+    # categories they have (see FinanceService.update_recurring).
+    category_id: int | None = None
+    # Which account it is paid from. A hand-entered bill can be created
+    # without one, and then it cannot reach the forecast at all.
+    account_id: int | None = None
+
+
+class RecurringCategorize(BaseModel):
+    """Set one category across several bills at once."""
+
+    stream_ids: list[int]
+    category_id: int
 
 
 class RecurringListResponse(BaseModel):
     items: list[RecurringStreamResponse]
     total: int
     monthly_cost: int  # cents — monthly-equivalent of recurring outflows
+
+
+class PayeeTotal(BaseModel):
+    """One payee's outflow over a window (positive magnitude)."""
+
+    payee: str
+    amount: int  # cents, positive
+    transaction_count: int
+
+
+class PayeeListResponse(BaseModel):
+    items: list[PayeeTotal]
+    total: int
+
+
+class CashflowMonth(BaseModel):
+    """One month of income vs spend, both positive magnitudes."""
+
+    month: str  # YYYY-MM
+    income: int  # cents
+    expense: int  # cents, positive
+    net: int  # cents, signed
+
+
+class CashflowResponse(BaseModel):
+    items: list[CashflowMonth]
+    total: int
+
+
+class CategoryUsageResponse(BaseModel):
+    """A category plus how it is actually used, for the Categories tab."""
+
+    id: int
+    name: str  # flattened "Parent:Child" path as the import produced it
+    classification: str  # expense | income | transfer
+    is_system: bool
+    transaction_count: int
+    total: int  # signed cents (negative = net outflow)
+    last_used: date | None = None
+
+
+class CategoryListResponse(BaseModel):
+    items: list[CategoryUsageResponse]
+    total: int
+
+
+class CategoryOption(BaseModel):
+    """id + name only, for a picker - no usage aggregation."""
+
+    id: int
+    name: str
+
+
+class CategoryOptionListResponse(BaseModel):
+    items: list[CategoryOption]
+
+
+class MerchantResponse(BaseModel):
+    """A payee: the stable identity behind a raw bank descriptor.
+
+    The usage fields are how the payee directory shows weight rather than
+    a bare list of names - which payee is worth correcting depends on how
+    much money runs through it. They default to zero so the assign picker,
+    which asks for the same list, is unaffected.
+    """
+
+    id: int
+    name: str
+    website_url: str | None = None
+    logo_url: str | None = None
+    default_category_id: int | None = None
+    transaction_count: int = 0
+    total_amount: int = 0
+    last_date: date | None = None
+    # Resolved brand icon, so the directory can SHOW the logo it exists to
+    # let you correct. Same base64 inlining the register uses.
+    icon_b64: str | None = None
+
+
+class MerchantListResponse(BaseModel):
+    items: list[MerchantResponse]
+    total: int
+
+
+class MerchantCreate(BaseModel):
+    name: str
+    # Optional real address ("aegis-stack.io") - used for the
+    # brand icon instead of guessing <name>.com.
+    website_url: str | None = None
+
+
+class MerchantUpdate(BaseModel):
+    """A partial edit of a payee.
+
+    Every field is optional AND nullable, which are different things here:
+    omitting ``website_url`` leaves it alone, sending ``""`` clears it.
+    The route passes only what the client actually set
+    (``exclude_unset``), so a patch that fixes an address cannot blank the
+    default category by saying nothing about it.
+    """
+
+    name: str | None = None
+    website_url: str | None = None
+    default_category_id: int | None = None
+
+
+class MerchantMerge(BaseModel):
+    """Fold ``source_ids`` into the payee in the path. Losers are soft
+    deleted; their transactions and bills repoint to the survivor."""
+
+    source_ids: list[int]
+
+
+class MerchantAssign(BaseModel):
+    """``merchant_id=None`` clears the payee off the given transactions.
+
+    ``category_id``, when given, also files those transactions under that
+    category AND remembers it on the payee (``default_category_id``) - the
+    moment you name a payee is the moment you know what it is, and a payee
+    that carries its own category is what stops the categorizer guessing
+    at the same descriptor forever.
+    """
+
+    transaction_ids: list[int]
+    merchant_id: int | None = None
+    category_id: int | None = None
+
+
+class DeclareRecurring(BaseModel):
+    """Mark the selected transactions as a recurring bill or income.
+
+    Cadence, amount, direction and next date are all measured from the
+    transactions themselves, the same way detection measures them, so
+    there is nothing here for the caller to get wrong or for the two paths
+    to disagree about. ``names`` is the one exception, because a bill's
+    NAME cannot be measured: it is keyed by ``RecurringPlanGroup.key`` from
+    the preview, and anything left out keeps the name the preview proposed.
+    """
+
+    transaction_ids: list[int]
+    names: dict[str, str] = Field(default_factory=dict)
+    # Category for the bills this creates, keyed the same way as ``names``.
+    # Set on the STREAM only - the transactions rolling into it keep
+    # whatever categories they already carry.
+    categories: dict[str, int] = Field(default_factory=dict)
+    # What the bill actually costs, keyed like ``names``. Stating it pins
+    # the stream fixed-amount, beating a median taken over whatever the
+    # sweep rounded up.
+    amounts: dict[str, int] = Field(default_factory=dict)
+    # Rows unticked in the preview. They stay out of the bill AND stay out
+    # of it afterwards: a confirmed bill owns its membership, so detection
+    # will not quietly re-add them on its next pass.
+    exclude_transaction_ids: list[int] = Field(default_factory=list)
+
+
+class RecurringPlanMember(BaseModel):
+    """One transaction that would roll up into a planned bill."""
+
+    id: int
+    date: str
+    name: str
+    amount: int
+
+
+class RecurringPlanEntry(BaseModel):
+    """One bill the selection would produce. Everything the confirm step
+    needs to show what is about to happen before it happens."""
+
+    key: str
+    name: str
+    account_id: int
+    account_name: str | None = None
+    direction: str
+    frequency: str
+    average_amount: int
+    last_amount: int
+    first_date: str | None = None
+    last_date: str | None = None
+    next_expected_date: str | None = None
+    amount_is_variable: bool = False
+    # ``occurrence_count`` is the roll-up; ``selected_count`` is what the
+    # user actually ticked. Showing both is the point of the preview.
+    occurrence_count: int
+    selected_count: int
+    # Median of the rows actually ticked - what the Amount field prefills
+    # with, since it is the only figure the user can vouch for.
+    selected_amount: int = 0
+    # Streams already describing this bill that would fold into it.
+    absorbs: list[str] = Field(default_factory=list)
+    # True when this becomes a SECOND bill for a payee that already has a
+    # confirmed one on this account (Anthropic: a subscription and API
+    # usage), rather than being merged into it.
+    creates_new_bill: bool = False
+    existing_bill_name: str | None = None
+    members: list[RecurringPlanMember] = Field(default_factory=list)
+
+
+class RecurringPlanResponse(BaseModel):
+    items: list[RecurringPlanEntry]
+    total_transactions: int = 0
+
+
+class MerchantCategorySummary(BaseModel):
+    """What categories a payee's transactions currently use - the basis
+    for pre-filling the "also set category" offer, and for saying out loud
+    when a payee's own history disagrees with itself."""
+
+    merchant_id: int
+    default_category_id: int | None = None
+    # Most-used category across this payee's transactions (None when it has
+    # none categorized yet), plus how lopsided that is.
+    dominant_category_id: int | None = None
+    dominant_category_name: str | None = None
+    dominant_count: int = 0
+    total: int = 0
+    distinct_categories: int = 0
+
+
+class PayeeGroup(BaseModel):
+    """Payee-less transactions sharing one descriptor key - the unit the
+    No-payee queue is actually worked in."""
+
+    key: str
+    suggested_name: str
+    count: int
+    sample: str
+    total_amount: int
+
+
+class PayeeGroupListResponse(BaseModel):
+    """``items`` is a page (biggest groups first); the totals describe the
+    whole backlog behind it, so the UI can say what the page leaves out."""
+
+    items: list[PayeeGroup]
+    total: int  # distinct groups overall, NOT len(items)
+    total_transactions: int = 0
+
+
+class PayeeGroupAssign(BaseModel):
+    """Name one or more groups at once. ``merchant_id`` attaches an
+    existing payee; ``name`` creates (or reuses) one by name.
+
+    ``keys`` is a LIST because one brand routinely splits across many
+    groups - the descriptor carries a store, a city and a transaction id,
+    so "DOORDASH*CROWN FRIEDSAN...", "BT*DD *DOORDASH MCDOSAN..." and
+    "VENMO *DOORDASH XXX-XXX-4430" land in 48 separate groups for a
+    single payee. Naming them one dialog at a time is 48 decisions for
+    one fact, so the caller selects the whole set and sends it together.
+    """
+
+    keys: list[str]
+    merchant_id: int | None = None
+    name: str | None = None
+    website_url: str | None = None
+    category_id: int | None = None
+
+
+class SimilarTransaction(BaseModel):
+    """One payee-less lookalike, for the "also apply to N similar" offer -
+    a suggestion the user confirms, never applied on its own."""
+
+    id: int
+    date: date
+    name: str
+    amount: int
+
+
+class SimilarTransactionListResponse(BaseModel):
+    items: list[SimilarTransaction]
+    total: int
+
+
+class BudgetSuggestion(BaseModel):
+    """A budget line your own spending already implies."""
+
+    category_id: int
+    category_name: str | None = None
+    suggested_amount: int  # cents/month, the MEDIAN of complete months
+    months_seen: int
+    spread: float  # biggest month over smallest - the confidence signal
+
+
+class BudgetSuggestionListResponse(BaseModel):
+    items: list[BudgetSuggestion]
+    total: int
+
+
+class ProjectionPoint(BaseModel):
+    """One scheduled occurrence in the projected-balance walk.
+
+    Either a recurring stream or a budget drawdown - the everyday spending
+    nobody bills you for. A budget point has no ``stream_id``.
+    """
+
+    date: date
+    stream_id: int | None = None
+    name: str
+    direction: str  # inflow | outflow
+    amount: int  # signed cents (+income, -bill)
+    balance: int  # projected running balance after this occurrence, cents
+    account: str | None = None  # account name, when the stream is account-bound
+    category: str | None = None  # category name, when the stream carries one
+
+
+class ProjectionResponse(BaseModel):
+    """Today's cash balance walked forward through scheduled bills/income."""
+
+    as_of: date
+    horizon_days: int
+    start_balance: int  # cents
+    upcoming_total: int  # signed cents — net of everything in the window
+    end_balance: int  # cents
+    points: list[ProjectionPoint]
+    total: int
 
 
 class InsightResponse(BaseModel):
@@ -670,6 +1111,9 @@ class InsightResponse(BaseModel):
     related_transaction_id: int | None
     related_category_id: int | None
     status: str
+    # Analyst notes record which model wrote them here; rule findings leave it
+    # empty. The Notes tab shows it so a re-tuned model is visible in the UI.
+    metadata: dict[str, Any] = {}
 
     @classmethod
     def from_row(cls, row: FinanceInsight) -> InsightResponse:
@@ -684,6 +1128,7 @@ class InsightResponse(BaseModel):
             related_transaction_id=row.related_transaction_id,
             related_category_id=row.related_category_id,
             status=row.status,
+            metadata=row.metadata_ or {},
         )
 
 
@@ -771,3 +1216,86 @@ class SnapTradeConnectResponse(BaseModel):
 
     redirect_uri: str
     connection_id: int
+
+
+# -- Budget -------------------------------------------------------------
+
+
+class BudgetLineUpsert(BaseModel):
+    """POST body for /budget/lines - exactly one of category_id/payee_key."""
+
+    category_id: int | None = None
+    payee_key: str | None = None
+    payee_label: str | None = None
+    allocated_amount: int
+    rollover_enabled: bool = False
+
+
+class BudgetLineResponse(BaseModel):
+    """A Flexible line is a chosen limit: ``status`` reads spend against
+    ``allocated_amount``. A Fixed/Non-monthly line is a detected bill
+    shown for context, not a limit anyone set - ``allocated_amount`` is
+    just what it typically costs, ``status`` reads ``variance_amount``
+    (this period's actual vs. last period's) instead, and never goes
+    ``critical`` - a bill can't be "over budget" on itself."""
+
+    id: int
+    category_id: int | None
+    category_name: str | None
+    payee_key: str | None
+    payee_label: str | None
+    allocated_amount: int
+    spent_amount: int
+    status: Literal["good", "warn", "critical"]
+    # Fixed/Non-monthly only: this period's actual vs. last period's
+    # (signed cents); None for Flexible lines and for a bill with no
+    # prior-period data yet.
+    variance_amount: int | None = None
+
+
+class BudgetBucketResponse(BaseModel):
+    """One of the three Budget-tab sections."""
+
+    name: Literal["fixed", "non_monthly", "flexible"]
+    total_allocated: int
+    total_spent: int
+    lines: list[BudgetLineResponse]
+
+
+class BudgetStatsResponse(BaseModel):
+    """The Budget tab's 4-cell summary strip."""
+
+    flexible_spent: int
+    flexible_allocated: int
+    days_left_in_period: int
+    flexible_count: int
+    on_track_count: int
+    over_budget_count: int
+    over_budget_labels: list[str]
+    fixed_total: int
+    fixed_count: int
+
+
+class BudgetSummaryResponse(BaseModel):
+    period_month: int  # YYYYMM
+    buckets: list[BudgetBucketResponse]
+    stats: BudgetStatsResponse
+
+
+class GoalParseRequest(BaseModel):
+    text: str
+
+
+class GoalParseResponse(BaseModel):
+    """A deterministic, substring+regex reading of a natural-language goal
+    ("I wanna cut back on Starbucks") - a preview, not a write. The caller
+    decides whether to apply it (via POST /budget/lines)."""
+
+    matched: bool
+    target_type: Literal["category", "payee"] | None = None
+    category_id: int | None = None
+    payee_key: str | None = None
+    payee_label: str | None = None
+    baseline_monthly: int | None = None
+    suggested_limit: int | None = None
+    message: str

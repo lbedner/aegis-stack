@@ -12,7 +12,7 @@ Every AI request is automatically tracked, tokens consumed, cost calculated, and
     aegis init my-app --services "ai[postgres]"
     ```
 
-    With the default in-memory backend, the `/ai/usage/stats` endpoint is not available and usage is not persisted.
+    With the default in-memory backend, the `/api/v1/ai/usage/stats` endpoint is not available and usage is not persisted.
 
 ## What You Get
 
@@ -58,7 +58,7 @@ Request
 
 ## API Endpoint
 
-### GET `/ai/usage/stats`
+### GET `/api/v1/ai/usage/stats`
 
 Returns aggregated usage statistics.
 
@@ -113,16 +113,16 @@ All aggregations are performed at the SQL level (`GROUP BY`, `SUM`, `COUNT`, `AV
 
     ```bash
     # All-time totals
-    curl http://localhost:8000/ai/usage/stats | jq
+    curl http://localhost:8000/api/v1/ai/usage/stats | jq
 
     # Filter by user
-    curl "http://localhost:8000/ai/usage/stats?user_id=alice" | jq
+    curl "http://localhost:8000/api/v1/ai/usage/stats?user_id=alice" | jq
 
     # Last 7 days
-    curl "http://localhost:8000/ai/usage/stats?start_time=2024-01-08T00:00:00Z" | jq
+    curl "http://localhost:8000/api/v1/ai/usage/stats?start_time=2024-01-08T00:00:00Z" | jq
 
     # Show last 25 requests
-    curl "http://localhost:8000/ai/usage/stats?recent_limit=25" | jq
+    curl "http://localhost:8000/api/v1/ai/usage/stats?recent_limit=25" | jq
     ```
 
 === "Python"
@@ -132,7 +132,7 @@ All aggregations are performed at the SQL level (`GROUP BY`, `SUM`, `COUNT`, `AV
     from datetime import datetime, timedelta, timezone
 
     # All-time stats
-    response = httpx.get("http://localhost:8000/ai/usage/stats")
+    response = httpx.get("http://localhost:8000/api/v1/ai/usage/stats")
     stats = response.json()
     print(f"Total cost: ${stats['total_cost']:.4f}")
     print(f"Total requests: {stats['total_requests']}")
@@ -148,7 +148,7 @@ All aggregations are performed at the SQL level (`GROUP BY`, `SUM`, `COUNT`, `AV
     yesterday = now - timedelta(days=1)
 
     response = httpx.get(
-        "http://localhost:8000/ai/usage/stats",
+        "http://localhost:8000/api/v1/ai/usage/stats",
         params={
             "user_id": "alice",
             "start_time": yesterday.isoformat(),

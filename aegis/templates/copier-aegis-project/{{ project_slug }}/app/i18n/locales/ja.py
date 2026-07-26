@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "入力価格：",
     "llm.output_price_label": "出力価格：",
     "llm.model_not_in_catalog": "モデルがカタログに見つかりません。'llm sync' を実行してください。",
+    "llm.source_label": "ソース:",
+    "llm.source_override": "保存された選択(.env を上書き。'llm reset' で解除)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env の既定:",
+    "llm.help_reset": "保存されたモデルの上書きを削除し、.env が再びモデルを決定するようにします。",
+    "llm.reset_done": "上書きを解除しました。アクティブモデルは .env から取得されます: {model}",
+    "llm.reset_none": "上書きは保存されていません。アクティブモデルはすでに .env から取得されています: {model}",
     # 切り替え
     "llm.switching_model": "{model_id} に切り替え中",
     # 情報
@@ -1127,6 +1134,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "ユーザーのロールを変更（例：管理者に昇格）。",
     "auth.opt_promote_email": "更新対象ユーザーのメールアドレス",
     "auth.opt_promote_role": "割り当てる新しいロール（user、moderator、admin）",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "ブログ記事とタグの確認・管理",
     "blog.help_status": "ブログ記事の件数と最近の活動を表示",

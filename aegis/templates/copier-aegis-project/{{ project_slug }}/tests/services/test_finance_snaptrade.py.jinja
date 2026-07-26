@@ -172,9 +172,7 @@ def _client() -> FakeSnapTradeClient:
 
 
 async def _connect_and_complete(db: AsyncSession, client: FakeSnapTradeClient):
-    await connection_service.start_snaptrade_connect(
-        db, owner_user_id=1, client=client
-    )
+    await connection_service.start_snaptrade_connect(db, owner_user_id=1, client=client)
     return await connection_service.complete_snaptrade_connect(
         db, owner_user_id=1, client=client
     )
@@ -403,14 +401,16 @@ class TestSnapTradeConnect:
     async def test_personal_key_connect_skips_registration(
         self, async_db_session: AsyncSession
     ) -> None:
-        """Personal (PERS-) keys have no registerUser: the key IS the user, so
-        connect must not register and must sign data calls with an empty
-        userId/userSecret pair (verified against SnapTrade's API)."""
+        """Personal (PERS-) keys have no registerUser AND no connection
+        portal (the login endpoint rejects them - verified against
+        SnapTrade's API): brokerages are linked in SnapTrade's own
+        dashboard, so connect returns an EMPTY url and the frontend goes
+        straight to adopting whatever authorizations exist."""
         client = FakeSnapTradeClient(is_personal=True)
         connection, url = await connection_service.start_snaptrade_connect(
             async_db_session, owner_user_id=1, client=client
         )
-        assert url.startswith("https://")
+        assert url == ""  # no portal for personal keys
         assert client.registered == []  # never calls registerUser
         assert connection.provider == "snaptrade"
         assert connection.status == "loading"

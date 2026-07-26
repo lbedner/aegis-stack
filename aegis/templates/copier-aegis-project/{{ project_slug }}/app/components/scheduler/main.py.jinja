@@ -49,6 +49,9 @@ from app.services.insights.jobs import collect_plausible_job
 {% if include_finance %}
 from app.services.finance.jobs import finance_recompute_snapshots_job
 {% endif %}
+{% if include_finance and include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+from app.services.finance.jobs import finance_analyst_note_job
+{% endif %}
 {% if include_finance and (finance_plaid or finance_snaptrade) %}
 from app.services.finance.jobs import finance_sync_connections_job
 {% endif %}
@@ -146,6 +149,33 @@ def _cleanup_stale_jobs() -> None:
 {% endif %}
 
 
+{%- if include_ai and ai_backend in ("sqlite", "postgres") %}
+async def _apply_active_model() -> None:
+    """Replay the stored active-model selection into this process's settings.
+
+    Mirrors the backend's ``llm_active_model`` startup hook. A missing table
+    (migrations not yet run) must not stop the scheduler from booting: without
+    an override the .env default is already correct.
+    """
+    from app.core.config import settings
+    from app.core.db import get_async_session
+    from app.services.ai import active_model
+
+    try:
+        async with get_async_session() as session:
+            applied = await active_model.load_into_settings(session, settings)
+    except Exception:
+        logger.exception("Could not load the active LLM selection")
+        return
+    if applied:
+        logger.info(
+            "Active LLM selection applied: %s (%s)",
+            settings.AI_MODEL,
+            settings.AI_PROVIDER,
+        )
+
+
+{% endif %}
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the scheduler with all jobs."""
 {% if scheduler_backend != "memory" %}
@@ -328,6 +358,21 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 {% endif %}
+{% if include_finance and include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+    # Half an hour behind the rules pass, so the note is written from tonight's
+    # findings rather than last night's.
+    scheduler.add_job(
+        finance_analyst_note_job,
+        trigger="cron",
+        hour=2,
+        minute=30,
+        id="finance_analyst_note",
+        name="Finance: Write Analyst Note",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+{% endif %}
 {% if include_finance and (finance_plaid or finance_snaptrade) %}
     # Keep linked banks fresh: pull new transactions/balances a few times a day
     # so the register isn't stale between logins (webhooks handle the real-time
@@ -363,6 +408,15 @@ async def run_scheduler() -> None:
     """Main scheduler runner with lifecycle management."""
 
     logger.info("Starting {{ project_name }} Scheduler")
+{%- if include_ai and ai_backend in ("sqlite", "postgres") %}
+
+    # The active model is a database row, and startup hooks are a backend
+    # concern this process never runs. Without replaying the selection here,
+    # the scheduler would keep answering on whatever .env said while the
+    # webserver used the model you actually picked - so a nightly AI job and
+    # the dashboard would quietly disagree about which model is in use.
+    await _apply_active_model()
+{%- endif %}
 
     scheduler = create_scheduler()
 {%- if scheduler_backend != "memory" %}

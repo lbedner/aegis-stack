@@ -11,12 +11,15 @@ import re
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     DataTable,
     DataTableColumn,
     H3Text,
     SecondaryText,
 )
+from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.snack_bar import SuccessSnackBar
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_number
 
@@ -276,17 +279,104 @@ class FeaturedModelsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
+class ActiveModelSection(ft.Container):
+    """The model the app is currently using, and where that choice came from.
+
+    Reads from ``/api/v1/llm/current``, which reports the resolved runtime
+    configuration rather than what is written in ``.env`` - switching from a
+    row below takes effect immediately, so this is what the next request will
+    actually use.
+
+    Provenance is the point: a stored selection silently shadows ``.env``
+    across every rebuild and restart, which reads as "the app is stuck" to
+    anyone editing ``.env``. So the row says which source is in charge, and
+    an override carries a reset button that hands control back to ``.env``.
+    """
+
+    def __init__(
+        self,
+        current: dict[str, Any],
+        page: ft.Page | None = None,
+        on_reset: Any = None,
+    ) -> None:
+        super().__init__()
+        self._page = page
+        self._on_reset = on_reset
+
+        model = str(current.get("model") or "-")
+        provider = str(current.get("provider") or "-")
+        context = current.get("context_window")
+        source = current.get("source")
+        env_model = current.get("env_model")
+
+        facts: list[ft.Control] = [
+            SecondaryText("Active model", size=12),
+            ft.Text(model, size=16, weight=ft.FontWeight.W_600),
+            SecondaryText(f"via {provider}", size=12),
+        ]
+        if context:
+            facts.append(SecondaryText(_format_context(int(context)), size=12))
+        if source == "override":
+            note = "set from the dashboard"
+            if env_model and env_model != model:
+                note += f" · .env has {env_model}"
+            facts.append(SecondaryText(note, size=12))
+        elif source == "env":
+            facts.append(SecondaryText("from .env", size=12))
+
+        controls: list[ft.Control] = [*facts, ft.Container(expand=True)]
+        if source == "override" and page is not None:
+            controls.append(
+                PulseButton(
+                    on_click_callable=self._reset,
+                    text="Reset to .env",
+                    variant="muted",
+                    compact=True,
+                )
+            )
+
+        self.content = ft.Row(
+            controls,
+            spacing=Theme.Spacing.MD,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        self.padding = ft.padding.symmetric(
+            horizontal=Theme.Spacing.MD, vertical=Theme.Spacing.SM
+        )
+        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE)
+        self.border = ft.border.all(1, ft.Colors.OUTLINE)
+        self.border_radius = Theme.Components.CARD_RADIUS
+
+    async def _reset(self) -> None:
+        """Drop the override; the app answers from .env again."""
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self._page).api_client
+        result = await api.delete("/api/v1/llm/current")
+        if isinstance(result, dict):
+            SuccessSnackBar(
+                f"Override cleared. Active model: {result.get('model')}."
+            ).launch(self._page)
+        if self._on_reset is not None:
+            await self._on_reset()
+
+
 class ModelSearchSection(ft.Container):
     """Model search with filters and results table."""
 
     def __init__(
-        self, vendors: list[str], modalities: list[str], page: ft.Page
+        self,
+        vendors: list[str],
+        modalities: list[str],
+        page: ft.Page,
+        on_switched: Any = None,
     ) -> None:
         super().__init__()
 
         self.page = page
         self._vendors = vendors
         self._modalities = modalities
+        self._on_switched = on_switched
 
         # Search input
         self._search_input = ft.TextField(
@@ -445,6 +535,33 @@ class ModelSearchSection(ft.Container):
             self._loading.visible = False
             self._show_status(f"Error: {e!s}")
 
+    def _use_handler(self, model_id: str) -> Any:
+        """A click handler bound to one model id."""
+
+        async def _handler(_e: ft.ControlEvent) -> None:
+            await self._switch_to(model_id)
+
+        return _handler
+
+    async def _switch_to(self, model_id: str) -> None:
+        """Make ``model_id`` the active model, then refresh what is shown."""
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        response = await api.post("/api/v1/llm/current", json={"model_id": model_id})
+        if not isinstance(response, dict) or not response.get("success"):
+            message = "Could not switch model"
+            if isinstance(response, dict) and response.get("message"):
+                message = str(response["message"])
+            self._show_status(message)
+            self.update()
+            return
+
+        self._show_status(str(response.get("message") or f"Now using {model_id}"))
+        self.update()
+        if self._on_switched is not None:
+            await self._on_switched()
+
     def _display_results(self, models: list[dict[str, Any]]) -> None:
         # Define columns
         columns = [
@@ -453,6 +570,7 @@ class ModelSearchSection(ft.Container):
             DataTableColumn("Context", width=70, alignment="right"),
             DataTableColumn("In $/M", width=70, alignment="right"),
             DataTableColumn("Out $/M", width=70, alignment="right"),
+            DataTableColumn("", width=44, alignment="center"),
         ]
 
         # Build row data
@@ -477,6 +595,12 @@ class ModelSearchSection(ft.Container):
                     SecondaryText(_format_context(context), size=12),
                     SecondaryText(_format_price(input_price), size=12),
                     SecondaryText(_format_price(output_price), size=12),
+                    ft.IconButton(
+                        icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
+                        icon_size=18,
+                        tooltip=f"Use {model_id}",
+                        on_click=self._use_handler(model_id),
+                    ),
                 ]
             )
 
@@ -539,6 +663,7 @@ class LLMCatalogTab(ft.Container):
             api.get("/api/v1/llm/status"),
             api.get("/api/v1/llm/vendors"),
             api.get("/api/v1/llm/modalities"),
+            api.get("/api/v1/llm/current"),
             *[
                 api.get(
                     "/api/v1/llm/models",
@@ -549,19 +674,20 @@ class LLMCatalogTab(ft.Container):
             return_exceptions=True,
         )
 
-        stats_resp, vendors_resp, modalities_resp = results[:3]
-        featured_responses = results[3:]
+        stats_resp, vendors_resp, modalities_resp, current_resp = results[:4]
+        featured_responses = results[4:]
 
         stats = stats_resp if isinstance(stats_resp, dict) else {}
         vendors = vendors_resp if isinstance(vendors_resp, list) else []
         modalities = modalities_resp if isinstance(modalities_resp, list) else []
+        current = current_resp if isinstance(current_resp, dict) else {}
 
         featured_models: dict[str, list[dict[str, Any]]] = {}
         for i, vendor in enumerate(FEATURED_VENDORS):
             resp = featured_responses[i]
             featured_models[vendor] = resp if isinstance(resp, list) else []
 
-        self._render_content(stats, vendors, modalities, featured_models)
+        self._render_content(stats, vendors, modalities, featured_models, current)
 
     def _render_content(
         self,
@@ -569,6 +695,7 @@ class LLMCatalogTab(ft.Container):
         vendors: list[dict[str, Any]],
         modalities: list[dict[str, Any]],
         featured_models: dict[str, list[dict[str, Any]]],
+        current: dict[str, Any],
     ) -> None:
         """Render the content sections with loaded data."""
         # Extract vendor/modality names for dropdowns
@@ -591,8 +718,14 @@ class LLMCatalogTab(ft.Container):
 
         self._content_column.controls = [
             refresh_row,
+            ActiveModelSection(current, page=self.page, on_reset=self._load_data),
             CatalogStatsSection(stats),
-            ModelSearchSection(vendor_names, modality_names, self.page),
+            ModelSearchSection(
+                vendor_names,
+                modality_names,
+                self.page,
+                on_switched=self._load_data,
+            ),
             ft.Divider(height=20, color=ft.Colors.OUTLINE),
             FeaturedModelsSection(featured_models),
         ]

@@ -28,6 +28,7 @@ from app.components.frontend.controls.buttons import (
 )
 from app.components.frontend.controls.form_fields import FormDropdown, FormTextField
 from app.components.frontend.controls.table import TableCellText, TableNameText
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
 from app.services.payment.constants import RefundReason
@@ -1069,9 +1070,8 @@ class PaymentDetailDialog(BaseDetailPopup):
         metadata = component_data.metadata or {}
         subtitle = metadata.get("provider_display_name", "Stripe")
 
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=[
                 ft.Tab(text="Overview", content=OverviewTab(component_data, page)),
                 ft.Tab(
@@ -1096,9 +1096,6 @@ class PaymentDetailDialog(BaseDetailPopup):
                 ),
             ],
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         super().__init__(

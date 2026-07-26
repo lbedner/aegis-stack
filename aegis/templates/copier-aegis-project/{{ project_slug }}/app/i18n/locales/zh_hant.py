@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "輸入費用：",
     "llm.output_price_label": "輸出費用：",
     "llm.model_not_in_catalog": "目錄中未找到該模型，請運行 'llm sync' 導入數據。",
+    "llm.source_label": "來源:",
+    "llm.source_override": "已儲存的選擇(覆寫 .env;用 'llm reset' 清除)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env 預設值:",
+    "llm.help_reset": "移除已儲存的模型覆寫,讓 .env 重新決定模型。",
+    "llm.reset_done": "已清除覆寫。目前作用中的模型來自 .env:{model}",
+    "llm.reset_none": "未儲存任何覆寫。目前作用中的模型已來自 .env:{model}",
     # 切換模型
     "llm.switching_model": "正在切換到 {model_id}",
     # 模型訊息
@@ -1123,6 +1130,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "變更使用者角色（例如提升為 admin）。",
     "auth.opt_promote_email": "要更新的使用者電子郵件",
     "auth.opt_promote_role": "要指派的新角色（user、moderator、admin）",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "檢視及管理部落格文章與標籤",
     "blog.help_status": "顯示部落格文章數量與最近活動",

@@ -58,7 +58,9 @@ class TestTransferDetection:
             name="PAYMENT RECEIVED",
         )
 
-        result = await detect_transfers(async_db_session, owner_user_id=1)
+        result = await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 6, 10)
+        )
         assert result.auto_paired == 1
         assert result.suggested == 0
 
@@ -95,7 +97,9 @@ class TestTransferDetection:
             name="ONLINE TRANSFER",
         )
 
-        result = await detect_transfers(async_db_session, owner_user_id=1)
+        result = await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 6, 10)
+        )
         assert result.suggested == 1
         assert result.auto_paired == 0
         # NEVER hidden below the auto threshold.
@@ -130,7 +134,9 @@ class TestTransferDetection:
             owner_user_id=1,
             name="ONLINE TRANSFER",
         )
-        await detect_transfers(async_db_session, owner_user_id=1)
+        await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 6, 10)
+        )
         transfer = (await async_db_session.exec(select(FinanceTransfer))).one()
 
         rejected = await svc.reject_transfer(transfer.id, owner_user_id=1)
@@ -138,7 +144,9 @@ class TestTransferDetection:
         assert out.is_transfer is False and out.excluded_from_reports is False
 
         # Re-running must NOT re-suggest the rejected pair.
-        result = await detect_transfers(async_db_session, owner_user_id=1)
+        result = await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 6, 10)
+        )
         assert result.suggested == 0
         transfers = (await async_db_session.exec(select(FinanceTransfer))).all()
         assert len(transfers) == 1  # still just the rejected row
@@ -163,9 +171,47 @@ class TestTransferDetection:
             owner_user_id=1,
             name="COFFEE REFUND",
         )
-        result = await detect_transfers(async_db_session, owner_user_id=1)
+        result = await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 6, 10)
+        )
         assert result.auto_paired == 0
         assert result.suggested == 0
+
+    @pytest.mark.asyncio
+    async def test_old_history_outside_the_lookback_is_left_alone(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A decade-deep import must not bury Review under ancient pairs;
+        only activity inside the configured lookback window is considered."""
+        svc = FinanceService(async_db_session)
+        checking = await _account(svc, "Checking", "checking", "asset")
+        savings = await _account(svc, "Savings", "savings", "asset")
+        await svc.create_transaction(
+            account_id=checking.id,
+            amount=-50000,
+            txn_date=date(2020, 3, 1),
+            owner_user_id=1,
+            name="ONLINE TRANSFER",
+        )
+        await svc.create_transaction(
+            account_id=savings.id,
+            amount=50000,
+            txn_date=date(2020, 3, 2),
+            owner_user_id=1,
+            name="ONLINE TRANSFER",
+        )
+
+        result = await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 27)
+        )
+        assert result.auto_paired == 0
+        assert result.suggested == 0
+
+        # The escape hatch: 0 disables the window and processes full history.
+        result = await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 27), lookback_days=0
+        )
+        assert result.suggested == 1
 
     @pytest.mark.asyncio
     async def test_one_sided_stays_visible(
@@ -180,7 +226,9 @@ class TestTransferDetection:
             owner_user_id=1,
             name="AMEX EPAYMENT",
         )
-        result = await detect_transfers(async_db_session, owner_user_id=1)
+        result = await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 6, 10)
+        )
         assert result.auto_paired == 0
         assert result.suggested == 0
         assert out.is_transfer is False

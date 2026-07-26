@@ -21,6 +21,7 @@ from app.components.frontend.controls.form_fields import (
     FormSecretField,
     FormTextField,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import reload_settings
 from app.services.system.env_config import EnvConfigService
@@ -767,14 +768,10 @@ class CommsDetailDialog(BaseDetailPopup):
         ]
 
         # Create tabbed interface
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=tabs_list,
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         # Initialize base popup with tabs

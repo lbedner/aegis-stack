@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "입력 가격:",
     "llm.output_price_label": "출력 가격:",
     "llm.model_not_in_catalog": "카탈로그에서 모델을 찾을 수 없습니다. 'llm sync'를 실행하여 카탈로그를 채우세요.",
+    "llm.source_label": "소스:",
+    "llm.source_override": "저장된 선택 (.env보다 우선, 'llm reset'으로 해제)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env 기본값:",
+    "llm.help_reset": "저장된 모델 오버라이드를 제거하여 .env가 다시 모델을 결정하게 합니다.",
+    "llm.reset_done": "오버라이드를 해제했습니다. 활성 모델은 이제 .env에서 가져옵니다: {model}",
+    "llm.reset_none": "저장된 오버라이드가 없습니다. 활성 모델은 이미 .env에서 가져옵니다: {model}",
     # Use
     "llm.switching_model": "{model_id}(으)로 전환 중",
     # Info
@@ -1126,6 +1133,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "사용자의 역할 변경 (예: 관리자로 승격).",
     "auth.opt_promote_email": "업데이트할 사용자의 이메일",
     "auth.opt_promote_role": "새로 부여할 역할 (user, moderator, admin)",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "블로그 게시물과 태그 확인 및 관리",
     "blog.help_status": "블로그 게시물 개수와 최근 활동 표시",

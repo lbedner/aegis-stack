@@ -55,6 +55,12 @@ class APIClient:
         self.base_url = base_url or f"http://localhost:{settings.PORT}"
         self.timeout = timeout
         self.on_unauthorized = on_unauthorized
+        # Human-readable reason for the most recent failed request, None
+        # after a success. The request methods return None on ANY error
+        # (details go to the log), which leaves UI callers unable to say
+        # what failed - this carries the same detail to the surface that
+        # just got None back (e.g. the loading overlay's error panel).
+        self.last_error: str | None = None
         # Re-entry guard. If ``on_unauthorized`` itself triggers another
         # 401 (the canonical case: ``sign_out`` calls ``/auth/logout``,
         # which 401s when the cookie is already stale — which is exactly
@@ -89,10 +95,18 @@ class APIClient:
         return await self._request("GET", endpoint, params=params)
 
     async def post(
-        self, endpoint: str, json: dict[str, Any] | None = None
+        self,
+        endpoint: str,
+        json: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> dict | list | None:
-        """POST request with a JSON body. Returns parsed JSON or None on error."""
-        return await self._request("POST", endpoint, json=json)
+        """POST request with a JSON body. Returns parsed JSON or None on error.
+
+        ``timeout`` overrides the client-wide budget for this one call (for
+        endpoints that do real work inline, e.g. the analyst note waits on a
+        local model).
+        """
+        return await self._request("POST", endpoint, json=json, timeout=timeout)
 
     async def post_form(
         self, endpoint: str, data: dict[str, str]
@@ -111,6 +125,7 @@ class APIClient:
         endpoint: str,
         files: dict[str, tuple[str, bytes, str]],
         params: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> dict | list | None:
         """
         POST a ``multipart/form-data`` body.
@@ -121,8 +136,15 @@ class APIClient:
         handled the same as the JSON-bodied methods. ``Content-Type`` is
         **not** set manually — httpx infers ``multipart/form-data;
         boundary=…`` from ``files=``.
+
+        ``timeout`` overrides the client-wide budget for this one call:
+        uploads that trigger server-side processing (the finance file
+        import runs its reconciliation rules inline) legitimately outlive
+        the 10s default.
         """
-        return await self._request("POST", endpoint, files=files, params=params)
+        return await self._request(
+            "POST", endpoint, files=files, params=params, timeout=timeout
+        )
 
     async def put(
         self, endpoint: str, json: dict[str, Any] | None = None
@@ -272,6 +294,7 @@ class APIClient:
         json: dict[str, Any] | None = None,
         form_data: dict[str, str] | None = None,
         files: dict[str, tuple[str, bytes, str]] | None = None,
+        timeout: float | None = None,
         _retry_on_401: bool = True,
     ) -> dict | list | None:
         url = f"{self.base_url}{endpoint}"
@@ -280,6 +303,9 @@ class APIClient:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
         # NOTE: do NOT set Content-Type for ``files=`` — httpx generates
         # the multipart boundary itself. Setting it here would clobber it.
+        # Per-request timeout only when asked: ``timeout=None`` at the httpx
+        # layer means "no timeout at all", which is never what a UI wants.
+        extra: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
         try:
             response = await self._client.request(
                 method,
@@ -289,14 +315,23 @@ class APIClient:
                 data=form_data,
                 files=files,
                 headers=headers,
+                **extra,
             )
             response.raise_for_status()
+            self.last_error = None
             if response.status_code == 204:
                 return None
             return response.json()
         except httpx.TimeoutException:
+            budget = timeout if timeout is not None else self.timeout
+            self.last_error = f"{method} {endpoint} timed out after {budget:g}s"
             logger.error("api_client.timeout", url=url, method=method)
         except httpx.HTTPStatusError as e:
+            detail = self._response_detail(e.response)
+            self.last_error = (
+                f"{method} {endpoint} failed with HTTP {e.response.status_code}"
+                + (f": {detail}" if detail else "")
+            )
             if e.response.status_code == 401:
                 # Refresh-on-401: silently mint a new access token and
                 # retry the original request once. Skip when this call
@@ -315,6 +350,7 @@ class APIClient:
                         json=json,
                         form_data=form_data,
                         files=files,
+                        timeout=timeout,
                         _retry_on_401=False,
                     )
                 await self._emit_unauthorized()
@@ -325,10 +361,28 @@ class APIClient:
                 status_code=e.response.status_code,
             )
         except httpx.ConnectError:
+            self.last_error = f"Could not connect to the API ({method} {endpoint})"
             logger.error("api_client.connect_error", url=url, method=method)
         except Exception as e:
+            self.last_error = f"{method} {endpoint} failed: {e}"
             logger.error("api_client.error", url=url, method=method, error=str(e))
         return None
+
+    @staticmethod
+    def _response_detail(response: httpx.Response) -> str:
+        """Best-effort human-readable detail from an error response body.
+
+        FastAPI puts the real message in ``{"detail": ...}``; anything else
+        falls back to a truncated body, or empty when unreadable.
+        """
+        try:
+            payload = response.json()
+            if isinstance(payload, dict) and payload.get("detail"):
+                return str(payload["detail"])
+        except Exception:
+            pass
+        text = getattr(response, "text", "")
+        return text[:300] if isinstance(text, str) else ""
 
 
 def get_api_client() -> APIClient:

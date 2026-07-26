@@ -1,11 +1,9 @@
 """Tests for the agent config loader (DB source, fallback, cache)."""
 {% if ai_backend != "memory" %}
 
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import Generator
 
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.agent_loader import (
@@ -27,14 +25,11 @@ def clean_cache() -> Generator[None]:
 
 
 @pytest.fixture
-async def session() -> AsyncGenerator[AsyncSession]:
-    """In-memory async database session with the agent tables created."""
-    engine = create_async_engine("sqlite+aiosqlite://")
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    async with AsyncSession(engine) as session:
-        yield session
-    await engine.dispose()
+def session(async_db_session: AsyncSession) -> AsyncSession:
+    """The root conftest's transactional async session (rolled back per
+    test). A bare local engine cannot create this project's schema-qualified
+    tables (finance, scheduler, ...)."""
+    return async_db_session
 
 
 async def _add_agent(session: AsyncSession, **overrides: object) -> Agent:

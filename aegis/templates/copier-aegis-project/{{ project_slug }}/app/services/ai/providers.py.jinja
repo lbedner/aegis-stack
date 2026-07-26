@@ -151,6 +151,60 @@ def _model_settings(config: Any) -> ModelSettings:
     return ModelSettings(**kwargs)
 
 
+def _ollama_model(config: AIServiceConfig, settings: Any) -> Any:
+    """The model for a local Ollama server, over its OpenAI-compatible API.
+
+    ``AsyncOpenAI``, ``OpenAIChatModel`` and ``OpenAIProvider`` are read off
+    this module (not imported locally) so tests can patch them here.
+    """
+    openai_client = AsyncOpenAI(
+        api_key="ollama",  # Ollama needs no auth; the client demands something
+        base_url=f"{settings.ollama_base_url_effective}/v1",
+    )
+    return OpenAIChatModel(
+        model_name=config.model,
+        provider=OpenAIProvider(openai_client=openai_client),
+    )
+
+
+def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
+    """A bare model instance for ``config``, plus the model name it resolved to.
+
+    ``get_agent`` wraps a whole ``Agent`` around this one. Callers that bring
+    their own agent - chat_kit's ``ToolChatAgent``, headless jobs - need only
+    the model, and have no way to reach one otherwise.
+
+    Raises ``ProviderError`` for providers whose construction is not a plain
+    model instance (the keyless public endpoints build their own clients); use
+    ``get_agent`` for those.
+    """
+    if config.provider == AIProvider.OLLAMA:
+        return _ollama_model(config, settings), config.model
+    if config.provider in (AIProvider.PUBLIC, AIProvider.POLLINATIONS):
+        raise ProviderError(
+            f"model_for() does not support the {config.provider.value} provider; "
+            "it builds its own client. Use get_agent() instead."
+        )
+
+    provider_config = config.get_provider_config(settings)
+    if not provider_config.api_key:
+        raise ProviderError(
+            f"No API key configured for {config.provider}. "
+            f"Set {_get_env_var_name(config.provider)} environment variable. "
+            f"For free usage without API keys, try the keyless 'public' or "
+            f"'pollinations' providers, or Groq: https://console.groq.com/keys"
+        )
+    # PydanticAI 1.0+ reads credentials from the environment, not kwargs.
+    _set_provider_env_var(config.provider, provider_config.api_key)
+
+    model_kwargs: dict[str, Any] = {"model_name": config.model}
+    if config.provider == AIProvider.MISTRAL:
+        model_kwargs["base_url"] = "https://api.mistral.ai/v1"
+    elif config.provider == AIProvider.COHERE:
+        model_kwargs["base_url"] = "https://api.cohere.ai/v1"
+    return _get_model_class(config.provider)(**model_kwargs), config.model
+
+
 def get_agent(
     config: AIServiceConfig,
     settings: Any,
@@ -187,38 +241,9 @@ def get_agent(
         if config.provider == AIProvider.OLLAMA:
             return _create_ollama_agent(config, settings, system_prompt_override)
 
-        # Check if we have API key for this provider
-        provider_config = config.get_provider_config(settings)
-
-        if not provider_config.api_key:
-            raise ProviderError(
-                f"No API key configured for {config.provider}. "
-                f"Set {_get_env_var_name(config.provider)} environment variable. "
-                f"For free usage without API keys, try the keyless 'public' or "
-                f"'pollinations' providers, or Groq: https://console.groq.com/keys"
-            )
-
-        # Set environment variable for PydanticAI 1.0+ (they expect env vars)
-        _set_provider_env_var(config.provider, provider_config.api_key)
-
-        # Get model class for provider (with lazy loading)
-        model_class = _get_model_class(config.provider)
-
-        # For PydanticAI 1.0+, NO api_key parameter - just model_name
-        model_kwargs = {"model_name": config.model}
-
-        # Add provider-specific configuration
-        if config.provider == AIProvider.MISTRAL:
-            model_kwargs["base_url"] = "https://api.mistral.ai/v1"
-        elif config.provider == AIProvider.COHERE:
-            model_kwargs["base_url"] = "https://api.cohere.ai/v1"
-        elif config.provider == AIProvider.OLLAMA:
-            # Ollama uses OpenAI-compatible API at /v1 endpoint
-            base_url = settings.ollama_base_url_effective
-            model_kwargs["base_url"] = f"{base_url}/v1"
-
-        # Create model instance (PydanticAI 1.0+ style)
-        model = model_class(**model_kwargs)
+        # Key check, env-var handoff, and model construction all live in
+        # ``model_for`` so agent-building and model-only callers cannot drift.
+        model, _ = model_for(config, settings)
 
         # Determine system prompt
         system_prompt = system_prompt_override or (
@@ -459,23 +484,8 @@ def _create_ollama_agent(
         settings: Application settings for base URL
         system_prompt_override: Optional custom system prompt (for RAG mode)
     """
-    # ``AsyncOpenAI``, ``OpenAIChatModel``, ``OpenAIProvider`` are
-    # imported at module level so tests can patch them on this module
-    # directly (``@patch("app.services.ai.providers.AsyncOpenAI")``).
     try:
-        # Get Ollama base URL from settings (effective URL for
-    # Docker/local auto-detection)
-        base_url = settings.ollama_base_url_effective
-
-        # Create OpenAI client pointing to Ollama's OpenAI-compatible endpoint
-        openai_client = AsyncOpenAI(
-            api_key="ollama",  # Ollama doesn't need auth but client requires something
-            base_url=f"{base_url}/v1",
-        )
-
-        # Create provider and model
-        provider = OpenAIProvider(openai_client=openai_client)
-        model = OpenAIChatModel(model_name=config.model, provider=provider)
+        model = _ollama_model(config, settings)
 
         # Determine system prompt
         system_prompt = system_prompt_override or (

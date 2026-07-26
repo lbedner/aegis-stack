@@ -1,12 +1,10 @@
 """Shared fixtures for AI service tests."""
 
-from collections.abc import Generator
 from unittest.mock import MagicMock
 {% if ai_backend != "memory" %}
 from datetime import UTC, datetime
 
-from sqlalchemy import Engine
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 {% endif %}
 
 import pytest
@@ -98,24 +96,12 @@ def paid_provider_with_key_settings(mock_ai_settings):
 
 
 # Database fixtures for LLM usage tracking tests
-
-
-@pytest.fixture
-def db_engine() -> Generator[Engine, None, None]:
-    """Create an in-memory SQLite database engine for testing."""
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    SQLModel.metadata.create_all(engine)
-    yield engine
-    SQLModel.metadata.drop_all(engine)
-    engine.dispose()
-
-
-@pytest.fixture
-def db_session(db_engine: Engine) -> Generator[Session, None, None]:
-    """Create a database session for testing."""
-    with Session(db_engine) as session:
-        yield session
-        session.rollback()
+#
+# ``db_session`` deliberately comes from the root conftest: its engine attaches
+# an in-memory database for every non-default schema the project's models
+# declare (SQLite has no schemas), which a bare ``create_engine`` cannot do. A
+# local engine here would fail ``create_all`` outright on any stack whose other
+# services put tables in their own schema.
 
 
 @pytest.fixture

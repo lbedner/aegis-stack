@@ -29,6 +29,7 @@ module unconditionally.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -78,10 +79,21 @@ class SnapTradeClient:
                 "SNAPTRADE_CLIENT_ID / SNAPTRADE_CONSUMER_KEY are not configured.",
             )
         if self._client is None:
-            from snaptrade_client import SnapTrade
+            from snaptrade_client import SnapTrade, SnapTradeAuth
 
+            # The auth MODE matters: the plain-kwargs constructor configures
+            # no request signing for PERS- keys and every call comes back
+            # 401 "credentials were not provided". Personal keys need the
+            # SDK's ``personalApiKey`` mode; partner keys the commercial one.
+            build_auth = (
+                SnapTradeAuth.personal_api_key
+                if self.is_personal
+                else SnapTradeAuth.commercial_api_key
+            )
             self._client = SnapTrade(
-                client_id=self._client_id, consumer_key=self._consumer_key
+                auth=build_auth(
+                    consumer_key=self._consumer_key, client_id=self._client_id
+                )
             )
         return self._client
 
@@ -89,7 +101,11 @@ class SnapTradeClient:
         from snaptrade_client.exceptions import ApiException
 
         try:
-            return _body(await method(**kwargs))
+            # SYNC SDK methods in a worker thread, not the ``a``-prefixed
+            # async variants: this SDK release's async response handling
+            # calls ``supports_chunked_reads()`` on an aiohttp response,
+            # which has no such method, and crashes after a successful call.
+            return _body(await asyncio.to_thread(lambda: method(**kwargs)))
         except ApiException as exc:
             # Prefer SnapTrade's numeric body code (e.g. 1010 "user already
             # exists") over the bare HTTP status: callers gate recovery
@@ -115,7 +131,7 @@ class SnapTradeClient:
                 "personal_key", "registerUser is not available for personal keys."
             )
         body = await self._call(
-            self._sdk().authentication.aregister_snap_trade_user, user_id=user_id
+            self._sdk().authentication.register_snap_trade_user, user_id=user_id
         )
         secret = body.get("userSecret") or body.get("user_secret")
         if not secret:
@@ -126,7 +142,7 @@ class SnapTradeClient:
         """Delete a SnapTrade user (removes all its authorizations). Used to
         recover when a user exists but its secret was lost."""
         await self._call(
-            self._sdk().authentication.adelete_snap_trade_user, user_id=user_id
+            self._sdk().authentication.delete_snap_trade_user, user_id=user_id
         )
 
     async def login_url(
@@ -145,7 +161,7 @@ class SnapTradeClient:
         if custom_redirect:
             kwargs["custom_redirect"] = custom_redirect
         body = await self._call(
-            self._sdk().authentication.alogin_snap_trade_user, **kwargs
+            self._sdk().authentication.login_snap_trade_user, **kwargs
         )
         url = body.get("redirectURI") or body.get("redirect_uri")
         if not url:
@@ -159,7 +175,7 @@ class SnapTradeClient:
     ) -> list[dict[str, Any]]:
         """Every brokerage authorization (completed connection) for the user."""
         body = await self._call(
-            self._sdk().connections.alist_brokerage_authorizations,
+            self._sdk().connections.list_brokerage_authorizations,
             user_id=user_id,
             user_secret=user_secret,
         )
@@ -170,7 +186,7 @@ class SnapTradeClient:
     ) -> None:
         """Revoke one brokerage authorization at SnapTrade."""
         await self._call(
-            self._sdk().connections.aremove_brokerage_authorization,
+            self._sdk().connections.remove_brokerage_authorization,
             user_id=user_id,
             user_secret=user_secret,
             authorization_id=authorization_id,
@@ -184,7 +200,7 @@ class SnapTradeClient:
         """All brokerage accounts across the user's authorizations (each row
         carries ``brokerage_authorization`` to scope it to a connection)."""
         body = await self._call(
-            self._sdk().account_information.alist_user_accounts,
+            self._sdk().account_information.list_user_accounts,
             user_id=user_id,
             user_secret=user_secret,
         )
@@ -195,7 +211,7 @@ class SnapTradeClient:
     ) -> list[dict[str, Any]]:
         """Current positions for one account."""
         body = await self._call(
-            self._sdk().account_information.aget_user_account_positions,
+            self._sdk().account_information.get_user_account_positions,
             user_id=user_id,
             user_secret=user_secret,
             account_id=account_id,
@@ -216,7 +232,7 @@ class SnapTradeClient:
         """One page of account activities (trades, dividends, cash movements)
         in a date window. Returns ``{"data": [...], "pagination": {...}}``."""
         body = await self._call(
-            self._sdk().account_information.aget_account_activities,
+            self._sdk().account_information.get_account_activities,
             account_id=account_id,
             user_id=user_id,
             user_secret=user_secret,

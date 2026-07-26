@@ -6,7 +6,9 @@ conversation statistics, usage metrics, and analytics.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import SecondaryText, Tag
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
@@ -41,6 +43,15 @@ try:
 except ImportError:
     LLMCatalogTab = None  # type: ignore[misc, assignment]
     _HAS_LLM_CATALOG = False
+
+# Memory Modules tab - context blocks agents opt into (requires DB backend)
+try:
+    from .memory_modules_tab import MemoryModulesTab
+
+    _HAS_MEMORY_MODULES = True
+except ImportError:
+    MemoryModulesTab = None  # type: ignore[misc, assignment]
+    _HAS_MEMORY_MODULES = False
 
 # Agents tab - agent registry management (requires database backend)
 try:
@@ -243,6 +254,11 @@ class AIDetailDialog(BaseDetailPopup):
         if _HAS_AGENTS and AgentsTab is not None:
             tabs_list.append(ft.Tab(text="Agents", content=AgentsTab()))
 
+        # Add Memory Modules tab, right after Agents: an agent's definition
+        # names the modules it uses, so the two are read together.
+        if _HAS_MEMORY_MODULES and MemoryModulesTab is not None:
+            tabs_list.append(ft.Tab(text="Memory", content=MemoryModulesTab()))
+
         # Add RAG tab only if RAG service is enabled
         if _HAS_RAG and RAGTab is not None:
             tabs_list.append(ft.Tab(text="RAG", content=RAGTab()))
@@ -252,14 +268,10 @@ class AIDetailDialog(BaseDetailPopup):
             tabs_list.append(ft.Tab(text="Voice", content=VoiceSettingsTab()))
 
         # Create tabbed interface
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=tabs_list,
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         # Initialize base popup with tabs (non-scrollable - tabs handle

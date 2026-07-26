@@ -55,7 +55,7 @@ def mock_usage_stats() -> dict[str, Any]:
 
 
 class TestUsageStatsEndpoint:
-    """Tests for /ai/usage/stats endpoint."""
+    """Tests for /api/v1/ai/usage/stats endpoint."""
 
     def test_get_usage_stats_success(
         self, client: TestClient, mock_usage_stats: dict[str, Any]
@@ -65,7 +65,7 @@ class TestUsageStatsEndpoint:
             "app.components.backend.api.ai.router.ai_service.get_usage_stats",
             return_value=mock_usage_stats,
         ):
-            response = client.get("/ai/usage/stats")
+            response = client.get("/api/v1/ai/usage/stats")
 
         assert response.status_code == 200
         data = response.json()
@@ -83,7 +83,7 @@ class TestUsageStatsEndpoint:
             return_value=mock_usage_stats,
         ) as mock_get:
             response = client.get(
-                "/ai/usage/stats",
+                "/api/v1/ai/usage/stats",
                 params={
                     "user_id": "test-user",
                     "recent_limit": 5,
@@ -102,7 +102,7 @@ class TestUsageStatsEndpoint:
             "app.components.backend.api.ai.router.ai_service.get_usage_stats",
             side_effect=Exception("Database error"),
         ):
-            response = client.get("/ai/usage/stats")
+            response = client.get("/api/v1/ai/usage/stats")
 
         assert response.status_code == 500
         assert "Failed to get usage stats" in response.json()["detail"]
@@ -115,7 +115,7 @@ class TestUsageStatsEndpoint:
             "app.components.backend.api.ai.router.ai_service.get_usage_stats",
             return_value=mock_usage_stats,
         ):
-            response = client.get("/ai/usage/stats")
+            response = client.get("/api/v1/ai/usage/stats")
 
         assert response.status_code == 200
         data = response.json()
@@ -157,7 +157,7 @@ class TestUsageStatsEndpoint:
             "app.components.backend.api.ai.router.ai_service.get_usage_stats",
             return_value=empty_stats,
         ):
-            response = client.get("/ai/usage/stats")
+            response = client.get("/api/v1/ai/usage/stats")
 
         assert response.status_code == 200
         data = response.json()

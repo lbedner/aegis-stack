@@ -11,6 +11,7 @@ from app.components.frontend.controls import (
     H3Text,
     SecondaryText,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
@@ -461,17 +462,13 @@ class IngressDetailDialog(BaseDetailPopup):
         subtitle = f"Traefik {version}" if version else "Traefik"
 
         # Build tabs
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=[
                 ft.Tab(text="Overview", content=OverviewTab(component_data, page)),
                 ft.Tab(text="Routers", content=RoutersTab(component_data, page)),
             ],
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         # Initialize base popup with tabs

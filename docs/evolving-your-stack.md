@@ -251,7 +251,7 @@ aegis add-service ai --project-path ./mvp-api
 **Added:**
 
 - `app/services/ai/` - PydanticAI integration with multiple providers
-- `app/components/backend/api/ai/` - AI API endpoints (chat, streaming)
+- `app/components/backend/api/v1/ai/` - AI API endpoints (chat, streaming)
 - `app/cli/ai.py` - Interactive CLI chat interface with markdown rendering
 - AI provider support (OpenAI, Anthropic, Google Gemini, Groq)
 - Conversation persistence and memory management
@@ -274,7 +274,7 @@ mvp-api ai chat
 # Hello! Can you explain webhooks?
 
 # Test via API
-curl -X POST http://localhost:8000/api/ai/chat \
+curl -X POST http://localhost:8000/api/v1/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Explain webhooks", "stream": false}'
 ```
@@ -282,7 +282,7 @@ curl -X POST http://localhost:8000/api/ai/chat \
 ### Combining Services: AI + Auth
 
 ```python
-# app/components/backend/api/ai/router.py
+# app/components/backend/api/v1/ai/router.py
 
 from fastapi import APIRouter, Depends
 from app.components.backend.api.deps import get_current_active_user
@@ -291,7 +291,7 @@ from app.services.ai import get_ai_response
 
 router = APIRouter()
 
-@router.post("/ai/chat")
+@router.post("/api/v1/ai/chat")
 async def chat(
     message: str,
     current_user: User = Depends(get_current_active_user)  # Require auth

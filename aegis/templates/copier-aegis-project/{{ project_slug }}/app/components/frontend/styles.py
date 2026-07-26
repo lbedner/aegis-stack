@@ -92,6 +92,22 @@ class FontConfig:
     """Typography configuration for consistent text styling."""
 
     FAMILY_PRIMARY: str = "Roboto"
+    # Figures only: money, counts, percentages, axis ticks.
+    #
+    # Roboto's digits are proportional, so a "1" is narrower than a "0" and a
+    # right-aligned column of amounts shifts as the digits change. A tabular
+    # (monospaced) face gives every digit the same advance width, which is
+    # what makes a column of numbers sit still and read as a column.
+    #
+    # Flet 0.28 exposes only ``font_family`` on Text, with no access to the
+    # OpenType ``tnum`` feature, so tabular figures have to come from the
+    # typeface itself rather than from a font-feature setting. ``monospace``
+    # resolves to the platform's default fixed-width face with no bundled
+    # asset and no network. To pin a specific typeface instead, drop the file
+    # in ``assets/fonts/`` and register it on the page with
+    # ``page.fonts = {"Aegis Numeric": "/fonts/<file>.ttf"}``, then set this
+    # to that name.
+    FAMILY_NUMERIC: str = "monospace"
     SIZE_PRIMARY: int = 16
     SIZE_SECONDARY: int = 14
     SIZE_TERTIARY: int = 12

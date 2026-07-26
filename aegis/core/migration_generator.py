@@ -384,6 +384,28 @@ AI_MIGRATION = ServiceMigrationSpec(
             ],
             foreign_keys=[ForeignKeySpec(["llm_vendor_id"], "llm_vendor", ["id"])],
         ),
+        # Active model selection - standalone singleton row. Mirrors
+        # app/services/ai/models/llm/llm_active_selection.py; both sources
+        # must change together.
+        TableSpec(
+            name="llm_active_selection",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # Nullable owner from day one: NULL is the install-wide
+                # default, and carrying the column means per-user selection is
+                # later a code change, not a migration on a shipped table. The
+                # FK to ``user`` is added by the auth link migration when the
+                # auth service is present (see _build_finance_auth_link).
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("model_id", "sa.String()", nullable=False),
+                ColumnSpec("provider", "sa.String()", nullable=True),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_llm_active_selection_owner_user_id", ["owner_user_id"]),
+                IndexSpec("ix_llm_active_selection_model_id", ["model_id"]),
+            ],
+        ),
         # LLM Deployment - depends on llm_vendor and large_language_model
         TableSpec(
             name="llm_deployment",
@@ -3023,8 +3045,12 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
                 ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
                 ColumnSpec("budget_id", "sa.Integer()", nullable=False),
-                # NULL category = the budget's overall line.
+                # NULL category + NULL payee_key = the budget's overall
+                # line. A line targets a category OR a payee ("Starbucks"),
+                # never both — enforced by ck_finance_budgetcat_target.
                 ColumnSpec("category_id", "sa.Integer()", nullable=True),
+                ColumnSpec("payee_key", "sa.String(96)", nullable=True),
+                ColumnSpec("payee_label", "sa.String(191)", nullable=True),
                 ColumnSpec("period_month", "sa.Integer()", nullable=True),
                 ColumnSpec(
                     "allocated_amount", "sa.BigInteger()", nullable=False, default="0"
@@ -3050,10 +3076,32 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 IndexSpec("ix_finance_budgetcat_budget", ["budget_id"]),
                 IndexSpec("ix_finance_budgetcat_category", ["category_id"]),
                 IndexSpec("ix_finance_budgetcat_month", ["period_month"]),
+                # One partial unique index per target shape — a plain
+                # 3-column unique never deduped payee/overall rows (SQL
+                # NULL semantics: NULL is never equal to NULL).
                 IndexSpec(
-                    "uq_finance_budgetcat",
+                    "uq_finance_budgetcat_category",
                     ["budget_id", "category_id", "period_month"],
                     unique=True,
+                    where="category_id IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_budgetcat_payee",
+                    ["budget_id", "payee_key", "period_month"],
+                    unique=True,
+                    where="payee_key IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_budgetcat_overall",
+                    ["budget_id", "period_month"],
+                    unique=True,
+                    where="category_id IS NULL AND payee_key IS NULL",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_budgetcat_target",
+                    "category_id IS NULL OR payee_key IS NULL",
                 ),
             ],
             foreign_keys=[

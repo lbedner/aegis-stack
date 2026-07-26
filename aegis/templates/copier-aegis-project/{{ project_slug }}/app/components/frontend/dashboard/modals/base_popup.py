@@ -10,6 +10,9 @@ Pattern inspired by ee-toolset's mobile sidebar overlay implementation.
 
 import flet as ft
 
+from app.components.frontend.controls.text import H3Text
+from app.components.frontend.theme import AegisTheme as Theme
+
 
 class BasePopup(ft.Container):
     """
@@ -153,3 +156,71 @@ class BasePopup(ft.Container):
         self.hide()
         if e.page:
             e.page.update()
+
+
+class OverlayStyledDialog(BasePopup):
+    """``StyledAlertDialog``'s exact visual chrome (bordered panel, title,
+    body, right-aligned actions) - backed by ``BasePopup``'s Container/
+    Stack + ``page.overlay`` mechanism instead of a real ``ft.AlertDialog``.
+
+    Use this instead of ``StyledAlertDialog`` specifically when the
+    dialog's own body hosts a ``page.overlay``-based popup of its own
+    (this app's custom ``Dropdown`` control, controls/dropdown.py) - a
+    real ``ft.AlertDialog`` renders through Flutter's Navigator/dialog
+    route, a separate layer that always paints above ordinary page
+    content INCLUDING ``page.overlay`` Stack children, regardless of
+    append order. A ``Dropdown`` nested inside a real ``AlertDialog``
+    therefore opens BEHIND the dialog instead of above it - confirmed
+    live: the account-filter panel inside the Uncategorized dialog
+    (``OverviewTab._open_uncategorized``) rendered behind the dialog
+    instead of on top of it. Everything here - this dialog AND any
+    ``Dropdown`` it hosts - lives in the SAME ``page.overlay`` Stack, so
+    plain append-order z-ordering applies and nested Dropdown popups
+    paint correctly on top, the same way ``OverviewTab``'s own account
+    filter already works (nested in ``FinanceDetailDialog``, itself a
+    ``BasePopup``, not an ``AlertDialog``).
+
+    Caller owns the ``page.overlay.append`` + ``page.update()`` on first
+    build (this control isn't auto-attached to the page the way
+    ``page.open()`` handles an ``AlertDialog``) - then ``show()``/
+    ``hide()`` for every open/close after that, same as any other
+    ``BasePopup``.
+    """
+
+    def __init__(
+        self,
+        page: ft.Page,
+        *,
+        title: str,
+        body: ft.Control,
+        actions: list[ft.Control],
+        width: int = 360,
+    ) -> None:
+        panel = ft.Column(
+            [
+                H3Text(title),
+                body,
+                ft.Row(
+                    actions,
+                    alignment=ft.MainAxisAlignment.END,
+                    spacing=Theme.Spacing.SM,
+                ),
+            ],
+            spacing=Theme.Spacing.MD,
+            tight=True,
+        )
+        super().__init__(
+            page=page,
+            content=panel,
+            width=width,
+            padding=20,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border=ft.border.all(1, ft.Colors.OUTLINE),
+            border_radius=Theme.Components.CARD_RADIUS,
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=20,
+                color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                offset=ft.Offset(0, 4),
+            ),
+        )

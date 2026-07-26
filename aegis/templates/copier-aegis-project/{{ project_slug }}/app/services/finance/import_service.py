@@ -9,6 +9,12 @@ inserts new transactions while counting duplicates. Writes but does not commit
 ``finance_import_batch`` / ``_row`` carry a NOT-NULL ``owner_user_id``; in
 standalone (no-auth) mode the owner is ``None``, so it's coerced to the ``0``
 sentinel for those two tables (transactions stay nullable).
+
+Matching runs three lanes, most authoritative first: a provider id
+(LANE 1), a content hash (LANE 2), and finally (account, date, amount)
+(LANE 3), which absorbs an EDIT made in the source app - a renamed payee
+or re-categorized charge updates the existing row instead of landing as
+a second copy of the same money.
 """
 
 from __future__ import annotations
@@ -16,6 +22,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, datetime
 import hashlib
+from typing import Any
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -31,6 +38,7 @@ from app.services.finance.models import (
     FinanceImportBatch,
     FinanceImportBatchRow,
     FinanceTransaction,
+    FinanceTransactionTag,
 )
 
 
@@ -71,7 +79,15 @@ _ACCOUNT_KIND_RULES: tuple[tuple[tuple[str, ...], str, str], ...] = (
     (("readi cash", "line of credit", " loc ", "loc "), "loan", "liability"),
     (("loan",), "loan", "liability"),
     (
-        ("amex", "american express", "visa", "mastercard", "discover", "card", "credit"),
+        (
+            "amex",
+            "american express",
+            "visa",
+            "mastercard",
+            "discover",
+            "card",
+            "credit",
+        ),
         "credit_card",
         "liability",
     ),
@@ -198,10 +214,27 @@ async def ingest_transactions(
 
     service = FinanceService(db)
 
+    # A row the source flags as scheduled, or one dated in the future, is
+    # money that has not moved. Two signals because neither alone is
+    # enough: Quicken's "Overdue" scheduled rows are dated in the PAST, and
+    # a source with no scheduled column can still carry future rows.
+    #
+    # These rows are held out of EVERY pass below, not just the insert.
+    # Letting them into the hash grouping would shift the within-day
+    # ordinals of real transactions, changing their content hashes and
+    # breaking idempotency for the whole file - a re-import would then
+    # duplicate rows it had already stored.
+    today = _utcnow().date()
+
+    def _is_scheduled(txn: ParsedTransaction) -> bool:
+        return txn.is_scheduled or (txn.date is not None and txn.date > today)
+
+    postable = [txn for txn in parsed if not _is_scheduled(txn)]
+
     # Resolve each distinct account key once (single default, OFX ACCTID, or a
     # multi-account CSV's per-row account name) instead of once per row.
     account_by_key: dict[str | None, int | None] = {}
-    for txn in parsed:
+    for txn in postable:
         if txn.account_key not in account_by_key:
             account_by_key[txn.account_key] = await _resolve_account(
                 db,
@@ -211,16 +244,14 @@ async def ingest_transactions(
                 default_account_id=default_account_id,
                 auto_create=auto_create_accounts,
             )
-    touched_account_ids = {
-        aid for aid in account_by_key.values() if aid is not None
-    }
+    touched_account_ids = {aid for aid in account_by_key.values() if aid is not None}
 
     # LANE-2 (id-less CSV/QIF) rows need a content hash keyed on the ROW's
     # resolved account, so hash per account group — this makes within-day
     # ordinals per-account and supports multi-account files. A no-op for LANE-1
     # rows that already carry an external_id.
     hash_groups: dict[int, list[ParsedTransaction]] = defaultdict(list)
-    for txn in parsed:
+    for txn in postable:
         resolved = account_by_key.get(txn.account_key)
         if resolved is not None:
             hash_groups[resolved].append(txn)
@@ -233,6 +264,14 @@ async def ingest_transactions(
     # import_hash)`` — mirroring ``FinanceService.find_transaction``.
     lane1: dict[tuple[int, str, str], int] = {}
     lane2: dict[tuple[int, str], int] = {}
+    # LANE 3 (edit-tolerant): (account, date, signed amount) -> existing ids.
+    # The content hash covers payee/memo/check, so editing any of them in
+    # the source app makes a re-export look like a NEW transaction and the
+    # ledger grows a duplicate. Money and date are what a transaction IS;
+    # payee, memo, and category are what it's LABELLED. So a row that misses
+    # both exact lanes but lands unambiguously on this key is the same
+    # transaction, edited - it updates in place.
+    core_existing: dict[tuple[int, object, int], list[int]] = defaultdict(list)
     if touched_account_ids:
         dedup_rows = (
             await db.exec(
@@ -242,17 +281,20 @@ async def ingest_transactions(
                     FinanceTransaction.external_id,
                     FinanceTransaction.import_hash,
                     FinanceTransaction.id,
+                    FinanceTransaction.date_,
+                    FinanceTransaction.amount,
                 ).where(
                     FinanceTransaction.account_id.in_(touched_account_ids),
                     FinanceTransaction.deleted_at.is_(None),
                 )
             )
         ).all()
-        for acc_id, src, ext_id, imp_hash, txn_id in dedup_rows:
+        for acc_id, src, ext_id, imp_hash, txn_id, txn_date, amount in dedup_rows:
             if ext_id is not None:
                 lane1[(acc_id, src, ext_id)] = txn_id
             if imp_hash is not None:
                 lane2[(acc_id, imp_hash)] = txn_id
+            core_existing[(acc_id, txn_date, amount)].append(txn_id)
 
     def _duplicate_id(account_id: int, txn: ParsedTransaction) -> int | None:
         """In-memory two-lane dedup match (mirrors find_transaction)."""
@@ -262,17 +304,162 @@ async def ingest_transactions(
             return lane2.get((account_id, txn.import_hash))
         return None
 
-    # Memoize category-alias resolution: an import typically repeats a small
-    # set of category strings across many rows.
+    # An existing row already claimed as an exact duplicate is NOT an edit
+    # candidate, and neither side of a lane-3 match may be ambiguous: the
+    # (account, date, amount) group must hold exactly one unmatched row on
+    # each side. Anything else is left to insert - guessing which of two
+    # same-day, same-amount charges was renamed would silently merge two
+    # real transactions, which is worse than the duplicate it avoids.
+    claimed_existing: set[int] = set()
+    core_incoming: dict[tuple[int, object, int], int] = defaultdict(int)
+    for candidate in postable:
+        candidate_account = account_by_key.get(candidate.account_key)
+        if candidate_account is None:
+            continue
+        matched = _duplicate_id(candidate_account, candidate)
+        if matched is not None:
+            claimed_existing.add(matched)
+            continue
+        if candidate.external_id is None:
+            core_incoming[(candidate_account, candidate.date, candidate.amount)] += 1
+
+    def _edit_target(account_id: int, txn: ParsedTransaction) -> int | None:
+        """The existing transaction this row is an edit OF, or None.
+
+        Only ever id-LESS rows (CSV/QIF). When a source issues ids, the id
+        is the identity: a bank re-issuing FITID F006 as F007 on the same
+        day for the same amount means a second real transaction, not a
+        renamed one, and merging them would lose money from the ledger.
+        """
+        if txn.external_id is not None:
+            return None
+        key = (account_id, txn.date, txn.amount)
+        if core_incoming.get(key, 0) != 1:
+            return None
+        candidates = [
+            txn_id
+            for txn_id in core_existing.get(key, ())
+            if txn_id not in claimed_existing
+        ]
+        return candidates[0] if len(candidates) == 1 else None
+
+    # Memoize category resolution: an import typically repeats a small set of
+    # category strings across many rows.
     category_cache: dict[str | None, int | None] = {}
 
     async def _category_for(hint: str | None) -> int | None:
         if hint not in category_cache:
-            category_cache[hint] = await service.resolve_category_alias(hint)
+            category_id = await service.resolve_category_alias(hint)
+            if category_id is None and hint:
+                # Unknown category names are the USER'S OWN curation (e.g. a
+                # Quicken tree like "Bills & Utilities:Streaming"); dropping
+                # them silently discards it. Create category + alias instead.
+                category = await service.get_or_create_category_from_hint(hint)
+                category_id = category.id if category is not None else None
+            category_cache[hint] = category_id
         return category_cache[hint]
 
-    inserted = duplicate = error = 0
+    # Memoize tag rows the same way (Quicken tags repeat heavily).
+    tag_cache: dict[str, int] = {}
+
+    async def _tag_ids_for(raw: str | None) -> list[int]:
+        if not raw:
+            return []
+        ids: list[int] = []
+        for part in raw.split(","):
+            tag_name = part.strip()
+            if not tag_name:
+                continue
+            if tag_name not in tag_cache:
+                tag = await service.get_or_create_tag(
+                    tag_name, owner_user_id=owner_user_id
+                )
+                tag_cache[tag_name] = tag.id
+            ids.append(tag_cache[tag_name])
+        return ids
+
+    async def _apply_edit(existing_id: int, txn: ParsedTransaction) -> str:
+        """Overwrite an existing row's LABELS from the incoming record.
+
+        The source app is treated as the record of truth, so incoming
+        values win. Date and amount are the match key and never change
+        here. Returns a human-readable summary of what changed - stored
+        on the batch row so an edit is auditable (and reversible by hand)
+        rather than a silent overwrite.
+        """
+        existing = await db.get(FinanceTransaction, existing_id)
+        if existing is None:
+            return ""
+        changes: list[str] = []
+        category_id = await _category_for(txn.category_hint)
+        fields: list[tuple[str, Any]] = [
+            ("name", txn.name),
+            ("original_description", txn.original_description),
+            ("memo", txn.memo),
+            ("check_number", txn.check_number),
+            ("category_id", category_id),
+        ]
+        for field, incoming in fields:
+            current = getattr(existing, field)
+            # A source that simply stopped carrying a field must not blank
+            # out data already held locally.
+            if incoming is None or incoming == current:
+                continue
+            changes.append(f"{field}: {current!r} -> {incoming!r}")
+            setattr(existing, field, incoming)
+        if category_id is not None and existing.category_source == "unset":
+            existing.category_source = "rule"
+        # The content hash is derived from the fields just overwritten, so
+        # it must be restamped - otherwise the NEXT import sees an unknown
+        # hash and re-enters this same path forever.
+        if txn.import_hash is not None:
+            existing.import_hash = txn.import_hash
+            existing.within_day_ordinal = txn.within_day_ordinal
+            lane2[(existing.account_id, txn.import_hash)] = existing_id
+
+        tag_ids = await _tag_ids_for(txn.tags)
+        if tag_ids:
+            current_tags = (
+                await db.exec(
+                    select(FinanceTransactionTag).where(
+                        FinanceTransactionTag.transaction_id == existing_id
+                    )
+                )
+            ).all()
+            if {t.tag_id for t in current_tags} != set(tag_ids):
+                for link in current_tags:
+                    await db.delete(link)
+                for tag_id in tag_ids:
+                    db.add(
+                        FinanceTransactionTag(transaction_id=existing_id, tag_id=tag_id)
+                    )
+                changes.append("tags updated")
+        if changes:
+            existing.updated_at = _utcnow()
+            db.add(existing)
+        return "; ".join(changes)
+
+    inserted = updated = duplicate = error = skipped = 0
     for row_number, txn in enumerate(parsed, start=1):
+        # Checked before account resolution: a scheduled row must not create
+        # an account either.
+        if _is_scheduled(txn):
+            skipped += 1
+            db.add(
+                FinanceImportBatchRow(
+                    import_batch_id=batch.id,
+                    owner_user_id=batch_owner,
+                    row_number=row_number,
+                    parsed_status="skipped",
+                    reason=(
+                        "scheduled: not yet posted. It imports normally once "
+                        "the payment actually clears."
+                    ),
+                    content_hash=txn.import_hash,
+                    fitid=txn.external_id,
+                )
+            )
+            continue
         account_id = account_by_key.get(txn.account_key)
         if account_id is None:
             error += 1
@@ -300,6 +487,26 @@ async def ingest_transactions(
                     row_number=row_number,
                     parsed_status="duplicate",
                     matched_transaction_id=existing_id,
+                    content_hash=txn.import_hash,
+                    fitid=txn.external_id,
+                )
+            )
+            continue
+
+        edit_target = _edit_target(account_id, txn)
+        if edit_target is not None:
+            summary = await _apply_edit(edit_target, txn)
+            claimed_existing.add(edit_target)
+            updated += 1
+            db.add(
+                FinanceImportBatchRow(
+                    import_batch_id=batch.id,
+                    owner_user_id=batch_owner,
+                    account_id=account_id,
+                    row_number=row_number,
+                    parsed_status="updated",
+                    matched_transaction_id=edit_target,
+                    reason=summary or "no field changed",
                     content_hash=txn.import_hash,
                     fitid=txn.external_id,
                 )
@@ -337,6 +544,8 @@ async def ingest_transactions(
                 memo=split.memo,
                 sort_order=sort_order,
             )
+        for tag_id in await _tag_ids_for(txn.tags):
+            db.add(FinanceTransactionTag(transaction_id=created.id, tag_id=tag_id))
         # Register the new row in the dedup maps so a later identical row in
         # the same file is still caught as a duplicate.
         if txn.external_id is not None:
@@ -361,9 +570,12 @@ async def ingest_transactions(
     # column), set the target account's ``current_balance`` from the latest
     # row — so net worth reflects the import without a separate valuation.
     if default_account_id is not None:
+        # ``postable`` only: a scheduled row's running balance is a
+        # PROJECTED figure, and taking it as the account's real balance
+        # would book money that has not moved.
         balanced = [
             (txn.date, i, txn.running_balance)
-            for i, txn in enumerate(parsed)
+            for i, txn in enumerate(postable)
             if txn.running_balance is not None
         ]
         if balanced:
@@ -378,6 +590,10 @@ async def ingest_transactions(
                 db.add(account)
 
     batch.rows_inserted = inserted
+    batch.rows_updated = updated
+    # No rows_skipped column on the batch: the skipped rows are recorded
+    # individually with parsed_status="skipped" and a reason, so the count
+    # stays queryable without a migration.
     batch.rows_duplicate = duplicate
     batch.rows_error = error
     batch.status = "committed"
@@ -388,23 +604,32 @@ async def ingest_transactions(
     # Reconcile the freshly imported rows: pair internal transfers (so a
     # card payment doesn't double-count as spend), detect recurring streams,
     # and generate "wasting money" insights.
-    if inserted:
+    # An edit can re-categorize a charge or rename a payee, which changes
+    # what the rules see - so reconcile after updates too, not only inserts.
+    if inserted or updated:
         from app.services.finance.categorize import (
             detect_recurring,
             detect_transfers,
             generate_insights,
+            promote_curated_streams,
         )
 
         await detect_transfers(db, owner_user_id=owner_user_id)
         await detect_recurring(db, owner_user_id=owner_user_id)
+        # Before the insight rules: a stream the user's own categorization
+        # marks as a bill must pass the missed-payment commitment gate on
+        # this very pass, not the next one.
+        await promote_curated_streams(db, owner_user_id=owner_user_id)
         await generate_insights(db, owner_user_id=owner_user_id)
 
     return ImportResult(
         batch_id=batch.id,
         rows_total=len(parsed),
         rows_inserted=inserted,
+        rows_updated=updated,
         rows_duplicate=duplicate,
         rows_error=error,
+        rows_skipped=skipped,
     )
 
 
@@ -462,14 +687,10 @@ async def import_csv(
             header, [p.name for p in profiles], batch_id=failed.id
         )
 
-    parsed = csv_profiles.parse_csv(
-        file_bytes, profile, header_index=header_index
-    )
+    parsed = csv_profiles.parse_csv(file_bytes, profile, header_index=header_index)
     multi_account = "account" in profile.column_mapping.values()
     if not multi_account and account_id is None:
-        raise ValueError(
-            "CSV import requires a target account_id for this layout."
-        )
+        raise ValueError("CSV import requires a target account_id for this layout.")
     return await ingest_transactions(
         db,
         owner_user_id=owner_user_id,

@@ -35,6 +35,7 @@ from .text import (
     H3Text,
     LabelText,
     MetricText,
+    NumericText,
     PrimaryText,
     SecondaryText,
     SuccessText,
@@ -44,6 +45,7 @@ from .text import (
 
 __all__ = [
     # Legacy controls (refactored to use theme)
+    "NumericText",
     "PrimaryText",
     "SecondaryText",
     "TitleText",

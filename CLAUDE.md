@@ -76,6 +76,14 @@ non-Python files, or when the LSP is unavailable.
 The Makefile documents the rest (per-component template tests, the full stack
 matrix, release targets).
 
+## Generated-app CLI commands (template + my-app)
+
+New `@app.command` handlers in `app/cli/` are `async def` with plain `await` -
+NEVER `asyncio.run` inside a command. The harness in `app/cli/main.py`
+(`standalone_mode=False` + `iscoroutine` + one `asyncio.run`) owns the loop.
+Legacy commands in the same files still wrap with `asyncio.run`; do not copy
+them. Exemplars: `cli/insights.py:collect`, `cli/security.py:rotate_encryption_key`.
+
 ## Skills index
 
 Procedures load on demand from `.claude/skills/<name>/SKILL.md` when the task

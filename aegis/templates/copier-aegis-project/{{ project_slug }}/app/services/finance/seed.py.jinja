@@ -29,8 +29,13 @@ CSV_IMPORT_PROFILES = [
         "name": "Chase Credit Card",
         "source_format": "csv",
         "header_signature": [
-            "Transaction Date", "Post Date", "Description",
-            "Category", "Type", "Amount", "Memo",
+            "Transaction Date",
+            "Post Date",
+            "Description",
+            "Category",
+            "Type",
+            "Amount",
+            "Memo",
         ],
         "column_mapping": {
             "Transaction Date": "date",
@@ -46,8 +51,13 @@ CSV_IMPORT_PROFILES = [
         "name": "Chase Checking",
         "source_format": "csv",
         "header_signature": [
-            "Details", "Posting Date", "Description", "Amount",
-            "Type", "Balance", "Check or Slip #",
+            "Details",
+            "Posting Date",
+            "Description",
+            "Amount",
+            "Type",
+            "Balance",
+            "Check or Slip #",
         ],
         "column_mapping": {
             "Posting Date": "date",
@@ -76,8 +86,16 @@ CSV_IMPORT_PROFILES = [
         "name": "Quicken Mac Register",
         "source_format": "csv",
         "header_signature": [
-            "", "Scheduled", "Split", "Date", "Check #",
-            "Payee", "Category", "Tags", "Amount", "Balance",
+            "",
+            "Scheduled",
+            "Split",
+            "Date",
+            "Check #",
+            "Payee",
+            "Category",
+            "Tags",
+            "Amount",
+            "Balance",
         ],
         "column_mapping": {
             "Date": "date",
@@ -86,6 +104,7 @@ CSV_IMPORT_PROFILES = [
             "Balance": "balance",
             "Check #": "check_number",
             "Category": "category",
+            "Scheduled": "scheduled",
         },
         "date_format": "%m/%d/%Y",
         "amount_sign_convention": "outflow_negative",
@@ -98,15 +117,25 @@ CSV_IMPORT_PROFILES = [
         "name": "Quicken All Transactions",
         "source_format": "csv",
         "header_signature": [
-            "", "Split", "Date", "Payee/Security",
-            "Category", "Tags", "Amount", "Account",
+            "",
+            "Split",
+            "Date",
+            "Payee/Security",
+            "Category",
+            "Tags",
+            "Amount",
+            "Account",
         ],
         "column_mapping": {
             "Date": "date",
             "Payee/Security": "name",
             "Amount": "amount",
             "Category": "category",
+            "Tags": "tags",
             "Account": "account",
+            # Present only when the user includes scheduled bills in the
+            # export; mapped so those rows are recognized, never posted.
+            "Scheduled": "scheduled",
         },
         "date_format": "%m/%d/%Y",
         "amount_sign_convention": "outflow_negative",
@@ -118,9 +147,7 @@ def seed_finance_tables(session: Session) -> None:
     """Create default currencies + CSV import profiles if absent."""
     for currency in DEFAULT_CURRENCIES:
         existing = session.exec(
-            select(FinanceCurrency).where(
-                FinanceCurrency.code == currency["code"]
-            )
+            select(FinanceCurrency).where(FinanceCurrency.code == currency["code"])
         ).first()
         if existing is None:
             session.add(FinanceCurrency(**currency))

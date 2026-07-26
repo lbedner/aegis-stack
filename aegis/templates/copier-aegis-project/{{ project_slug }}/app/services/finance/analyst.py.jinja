@@ -1,0 +1,975 @@
+{% if include_ai and ai_backend != "memory" %}"""The finance analyst agent: a local model that narrates, never decides.
+
+Anomaly detection is deterministic and lives in ``categorize/insights.py``.
+This module supplies the other half: a factual snapshot of an owner's finances,
+and the agent definition that turns that snapshot into a short daily note.
+
+The split is the whole design. Rules decide what is unusual; the model only
+puts it into words. Every figure the agent can write is one this module already
+computed, so a wrong answer is a badly worded answer rather than a fabricated
+alert. That is what makes a small local model safe to point at real money.
+
+Two pieces ship here:
+
+- ``finance_snapshot`` - a memory-module fetcher, registered at import time.
+  A ``memory_module`` row names it, the ``finance-analyst`` agent opts into
+  that module, and the context renderer runs it per turn.
+- The fixtures that create both rows.
+
+``aegis init`` seeds these through ``load_all_ai_fixtures``. A project that
+added the AI service later has empty registry tables and can seed them in
+place with the same call the generator makes::
+
+    uv run python -c "from app.core.db import SessionLocal; \
+from app.services.ai.fixtures import load_all_ai_fixtures; \
+load_all_ai_fixtures(SessionLocal())"
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+import statistics
+from typing import Any
+
+from pydantic import BaseModel, Field
+from sqlmodel import Session, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.services.ai.fetchers import FetchContext, register_fetcher
+from app.services.ai.models.agents import Agent, MemoryModule
+from app.services.finance import networth_service
+from app.services.finance.categorize.insights import (
+    card_apr_bps,
+    create_insight_if_new,
+    format_apr,
+    format_usd,
+    month_key,
+    monthly_category_spend,
+)
+from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
+from app.services.finance.finance_service import FinanceService
+from app.services.finance.models import (
+    FinanceCategory,
+    FinanceInsight,
+    FinanceNetWorthSnapshot,
+)
+
+__all__ = [
+    "ANALYST_AGENT_SLUG",
+    "ANALYST_NOTE_INSIGHT_TYPE",
+    "SNAPSHOT_MODULE_SLUG",
+    "ReportFacts",
+    "SectionCommentary",
+    "build_finance_snapshot",
+    "build_report_facts",
+    "finance_snapshot",
+    "load_finance_agent_fixtures",
+    "render_report",
+]
+
+ANALYST_AGENT_SLUG = "finance-analyst"
+SNAPSHOT_MODULE_SLUG = "finance_snapshot"
+ANALYST_SURFACE = "finance-analyst"
+
+# A standalone (no-auth) install has NULL-owner finance rows, while insights
+# and streams use the 0 sentinel. Agent deps carry a string user id, so that
+# same sentinel is what stands in for "the only user".
+STANDALONE_USER_ID = "0"
+
+# Sampling: low temperature because the job is faithful restatement, not
+# invention. The token ceiling covers a full sectioned report (~300 words is
+# ~400 tokens) with headroom for a reasoning model that spends output tokens
+# thinking before it writes the report anyone sees.
+ANALYST_TEMPERATURE = 0.2
+ANALYST_MAX_TOKENS = 2_000
+SNAPSHOT_TOKEN_ESTIMATE = 1_200
+
+_NET_WORTH_WINDOW_DAYS = 90
+_UPCOMING_DAYS = 14
+_TOP_CATEGORIES = 6
+_ACCOUNT_PAGE_SIZE = 200
+_RECENT_TRANSACTIONS = 10
+_TOP_HOLDINGS = 5
+_CASHFLOW_MONTHS = 6
+_PROJECTION_DAYS = 60
+_SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2}
+# A historical import can leave hundreds of open findings at once. Listing
+# them all outgrows the model's context window, and Ollama truncates from
+# the FRONT - discarding the system prompt first, after which the model has
+# no idea it is a finance analyst. Show the most severe few; summarize the
+# rest as a count so the note can still say "and much more needs review".
+MAX_ANOMALY_LINES = 20
+
+ANALYST_SYSTEM_PROMPT = """\
+You are a personal finance analyst. Each day the application builds a report \
+whose layout and figures are computed by code; your job is ONLY the \
+commentary that accompanies each section. You receive the day's finance \
+context and return one entry per field:
+
+- headline: a short paragraph on what needs attention first. Anything under \
+OPEN ANOMALIES was flagged by the application's own checks and always leads. \
+On a quiet day, say so plainly in two sentences.
+- cash_and_bills, credit, spending, investments: one to three sentences of \
+judgment for that area. Return an empty string when the area has nothing \
+worth saying - the application omits the section's commentary line.
+
+Follow these rules exactly:
+
+- Use only figures that appear in the context. Never calculate, estimate, \
+convert, or invent a number. Prefer saying what a figure means over \
+repeating it; the report already shows the numbers beside your words.
+- Address the reader as "you". Plain prose only: no headings, no bullets, \
+no markdown, no emoji, no sign-off - the application owns the layout.
+- Do not recite the context back. Never inventory balances, holdings, or \
+upcoming payments; mention one only when it explains a finding or a risk, \
+like a minimum payment your cash cannot cover or a card near its limit.
+- The CASH PROJECTION figures are the application's own forecast. A \
+projected drop below zero always deserves a sentence.
+- Keep each field under 60 words.
+"""
+
+
+def user_id_for(owner_user_id: int | None) -> str:
+    """The agent-facing user id for a finance owner."""
+    return STANDALONE_USER_ID if owner_user_id is None else str(owner_user_id)
+
+
+def owner_user_id_for(user_id: str) -> int | None:
+    """Map an agent's user id back to a finance owner.
+
+    Raises ``ValueError`` on anything unparseable rather than falling back to
+    the standalone owner: silently widening the scope would hand one user's
+    ledger to another in a multi-user install.
+    """
+    if user_id == STANDALONE_USER_ID:
+        return None
+    return int(user_id)
+
+
+def _at_or_before(
+    series: list[FinanceNetWorthSnapshot], cutoff: date
+) -> FinanceNetWorthSnapshot | None:
+    """The most recent snapshot on or before ``cutoff`` (series is oldest first)."""
+    for snapshot in reversed(series):
+        if snapshot.as_of_date <= cutoff:
+            return snapshot
+    return None
+
+
+def _signed(cents: int) -> str:
+    """Money with an explicit direction, for deltas the model must not compute."""
+    return f"{'+' if cents >= 0 else '-'}{format_usd(cents)}"
+
+
+def _amount(cents: int) -> str:
+    """Money that may legitimately be negative (a projected balance)."""
+    return f"-{format_usd(cents)}" if cents < 0 else format_usd(cents)
+
+
+def _accounts_section(accounts: list[Any]) -> str:
+    lines = [f"ACCOUNTS ({len(accounts)})"]
+    for account in accounts:
+        balance = format_usd(account.current_balance or 0)
+        owed = " owed" if account.classification == "liability" else ""
+        lines.append(
+            f"- {account.name} ({account.account_type}, "
+            f"{account.classification}): {balance}{owed}"
+        )
+    return "\n".join(lines)
+
+
+async def _net_worth_section(
+    db: AsyncSession, *, owner_user_id: int | None, today: date
+) -> str | None:
+    series = await networth_service.get_net_worth_series(
+        db, owner_user_id=owner_user_id, days=_NET_WORTH_WINDOW_DAYS
+    )
+    if not series:
+        return None
+    latest = series[-1]
+    lines = [
+        "NET WORTH",
+        f"- today ({latest.as_of_date}): {format_usd(latest.net_worth_amount)} "
+        f"(assets {format_usd(latest.total_assets_amount)}, "
+        f"liabilities {format_usd(latest.total_liabilities_amount)})",
+    ]
+    for label, days in (("30 days ago", 30), ("90 days ago", 90)):
+        past = _at_or_before(series, today - timedelta(days=days))
+        if past is None or past.as_of_date == latest.as_of_date:
+            continue
+        change = latest.net_worth_amount - past.net_worth_amount
+        lines.append(
+            f"- {label} ({past.as_of_date}): "
+            f"{format_usd(past.net_worth_amount)}, change {_signed(change)}"
+        )
+    return "\n".join(lines)
+
+
+async def _liability_lines(service: FinanceService, accounts: list[Any]) -> list[str]:
+    """One pre-rendered line per credit/loan account that has real detail.
+
+    APR, minimum payment, due date, and limit are what turn "you owe money"
+    into "this card needs attention". The checks in ``categorize/insights.py``
+    read the same fields through the same helpers, so alerts, the snapshot,
+    and the rendered report always quote the same figures. Accounts with
+    nothing beyond their balance are skipped - ACCOUNTS already covers them.
+    """
+    liabilities = [a for a in accounts if a.classification == "liability"]
+    if not liabilities:
+        return []
+    details = await service.liability_details([a.id for a in liabilities])
+    lines: list[str] = []
+    for account in liabilities:
+        detail = details.get(account.id)
+        if detail is None and not account.credit_limit:
+            continue
+        parts = [f"{format_usd(account.current_balance or 0)} owed"]
+        if account.credit_limit:
+            balance = abs(account.current_balance or 0)
+            pct = int(round(balance / account.credit_limit * 100))
+            parts.append(f"limit {format_usd(account.credit_limit)} ({pct}% used)")
+        if detail is not None:
+            apr = card_apr_bps(detail)
+            if apr is not None:
+                parts.append(f"APR {format_apr(apr)}")
+            if detail.minimum_payment_amount:
+                due = (
+                    f" due {detail.next_payment_due_date}"
+                    if detail.next_payment_due_date
+                    else ""
+                )
+                parts.append(
+                    f"minimum payment {format_usd(detail.minimum_payment_amount)}{due}"
+                )
+            if detail.is_overdue:
+                parts.append("PAST DUE")
+        lines.append(f"- {account.name} ({account.account_type}): " + ", ".join(parts))
+    return lines
+
+
+async def _liabilities_section(
+    service: FinanceService, accounts: list[Any]
+) -> str | None:
+    """Credit cards and loans with the detail the ACCOUNTS list cannot show."""
+    lines = await _liability_lines(service, accounts)
+    if not lines:
+        return None
+    return "\n".join(["CREDIT CARDS & LOANS", *lines])
+
+
+async def _portfolio_section(
+    service: FinanceService, *, owner_user_id: int | None
+) -> str | None:
+    """Current investment positions, largest first, pre-valued in cents."""
+    holdings = await service.list_current_holdings(owner_user_id=owner_user_id)
+    if not holdings:
+        return None
+    total = sum(value for _holding, _security, value in holdings)
+    lines = [f"PORTFOLIO ({format_usd(total)} across {len(holdings)} positions)"]
+    for holding, security, value in holdings[:_TOP_HOLDINGS]:
+        if security is None:
+            label = f"security {holding.security_id}"
+        elif security.ticker and security.name:
+            label = f"{security.ticker} ({security.name})"
+        else:
+            label = (
+                security.ticker or security.name or f"security {holding.security_id}"
+            )
+        lines.append(f"- {label}: {format_usd(value)}")
+    remainder = len(holdings) - _TOP_HOLDINGS
+    if remainder > 0:
+        lines.append(f"- plus {remainder} smaller positions")
+    return "\n".join(lines)
+
+
+async def _cashflow_section(
+    service: FinanceService, *, owner_user_id: int | None, today: date
+) -> str | None:
+    """Income against spend per month, with the net pre-signed."""
+    months = await service.monthly_cashflow(
+        owner_user_id=owner_user_id, months=_CASHFLOW_MONTHS, today=today
+    )
+    if not any(row["income"] or row["expense"] for row in months):
+        return None
+    current = month_key(today)
+    lines = ["CASHFLOW BY MONTH"]
+    for row in months:
+        suffix = " (month to date)" if row["month"] == current else ""
+        lines.append(
+            f"- {row['month']}: income {format_usd(row['income'])}, "
+            f"spend {format_usd(row['expense'])}, net {_signed(row['net'])}{suffix}"
+        )
+    return "\n".join(lines)
+
+
+async def _transactions_section(
+    service: FinanceService,
+    accounts: list[Any],
+    *,
+    owner_user_id: int | None,
+) -> str | None:
+    """The last few ledger entries, newest first.
+
+    Deliberately shallow: enough for the note to anchor "that large charge"
+    to a name and a date, not a register dump.
+    """
+    txns, total = await service.list_transactions(
+        owner_user_id=owner_user_id, page_size=_RECENT_TRANSACTIONS
+    )
+    if not txns:
+        return None
+    names = {account.id: account.name for account in accounts}
+    lines = [f"RECENT TRANSACTIONS (latest {len(txns)} of {total})"]
+    for txn in txns:
+        account_name = names.get(txn.account_id, "unknown account")
+        lines.append(
+            f"- {txn.date_}: {txn.name or 'unnamed'} {_signed(txn.amount)} "
+            f"({account_name})"
+        )
+    return "\n".join(lines)
+
+
+async def _projection_section(
+    service: FinanceService, *, owner_user_id: int | None, today: date
+) -> str | None:
+    """The cash forecast, pre-walked so the model never does date math.
+
+    The same projection the Forecast surface and the cash-runway rule use;
+    all three always agree about when the money runs out.
+    """
+    projection = await service.project_balances(
+        owner_user_id=owner_user_id, days=_PROJECTION_DAYS, today=today
+    )
+    if not projection.points:
+        return None
+    low = min(projection.points, key=lambda point: point.balance)
+    end = projection.points[-1]
+    lines = [
+        f"CASH PROJECTION (NEXT {_PROJECTION_DAYS} DAYS)",
+        f"- cash on hand today: {_amount(projection.start_balance)}",
+        f"- after scheduled bills and income, projected balance on "
+        f"{end.date}: {_amount(end.balance)}",
+        f"- lowest projected point: {_amount(low.balance)} on {low.date} "
+        f"(after {low.name})",
+    ]
+    crossing = next((p for p in projection.points if p.balance < 0), None)
+    if crossing is not None and projection.start_balance >= 0:
+        lines.append(
+            f"- balance first goes below zero on {crossing.date} "
+            f"({crossing.name}, {_signed(crossing.amount)})"
+        )
+    return "\n".join(lines)
+
+
+async def _ranked_spending(
+    db: AsyncSession, *, owner_user_id: int | None, today: date, limit: int
+) -> list[tuple[str, int, int | None]]:
+    """Top categories this month as ``(name, spent, typical)``, largest first.
+
+    The same buckets the overspend rule uses, so a category the rule did not
+    flag still shows the reader why it did not.
+    """
+    by_category = await monthly_category_spend(
+        db, owner_user_id=owner_user_id, today=today
+    )
+    current = month_key(today)
+
+    ranked: list[tuple[int, int, int | None]] = []
+    for category_id, months in by_category.items():
+        this_month = months.get(current, 0)
+        if this_month <= 0:
+            continue
+        prior = [spend for key, spend in months.items() if key != current]
+        typical = int(statistics.median(prior)) if prior else None
+        ranked.append((this_month, category_id, typical))
+    ranked.sort(reverse=True)
+    ranked = ranked[:limit]
+
+    names = await _category_names(db, [category_id for _, category_id, _ in ranked])
+    return [
+        (names.get(category_id, f"category {category_id}"), this_month, typical)
+        for this_month, category_id, typical in ranked
+    ]
+
+
+async def _spending_section(
+    db: AsyncSession, *, owner_user_id: int | None, today: date
+) -> str | None:
+    """This month's category spend beside its own recent norm."""
+    ranked = await _ranked_spending(
+        db, owner_user_id=owner_user_id, today=today, limit=_TOP_CATEGORIES
+    )
+    if not ranked:
+        return None
+    lines = [f"SPENDING THIS MONTH ({month_key(today)})"]
+    for name, this_month, typical in ranked:
+        if typical is None:
+            lines.append(f"- {name}: {format_usd(this_month)} (no earlier months)")
+        else:
+            lines.append(
+                f"- {name}: {format_usd(this_month)}, typical {format_usd(typical)}"
+            )
+    return "\n".join(lines)
+
+
+async def _category_names(db: AsyncSession, ids: list[int]) -> dict[int, str]:
+    """Names for the ranked categories in one query."""
+    if not ids:
+        return {}
+    rows = (
+        await db.exec(select(FinanceCategory).where(FinanceCategory.id.in_(ids)))
+    ).all()
+    return {row.id: row.name for row in rows}
+
+
+async def _anomalies_section(
+    service: FinanceService, *, owner_user_id: int | None
+) -> str:
+    """The deterministic findings. The one section that drives the note."""
+    insights = await service.list_insights(owner_user_id=owner_user_id, status="new")
+    flagged = [i for i in insights if i.insight_type != ANALYST_NOTE_INSIGHT_TYPE]
+    if not flagged:
+        return "OPEN ANOMALIES (0)\n- none; the checks found nothing this run"
+    flagged.sort(key=lambda i: _SEVERITY_ORDER.get(i.severity, 3))
+    shown = flagged[:MAX_ANOMALY_LINES]
+    lines = [f"OPEN ANOMALIES ({len(flagged)})"]
+    for insight in shown:
+        body = f" {insight.body}" if insight.body else ""
+        lines.append(f"- [{insight.severity}] {insight.title}.{body}")
+    remainder = len(flagged) - len(shown)
+    if remainder:
+        lines.append(
+            f"- plus {remainder} more open findings not listed here "
+            "(the most severe are above)"
+        )
+    return "\n".join(lines)
+
+
+async def _upcoming_section(
+    service: FinanceService, *, owner_user_id: int | None, today: date
+) -> str | None:
+    streams = await service.list_recurring(owner_user_id=owner_user_id)
+    horizon = today + timedelta(days=_UPCOMING_DAYS)
+    upcoming = [
+        stream
+        for stream in streams
+        if stream.next_expected_date is not None
+        and today <= stream.next_expected_date <= horizon
+    ]
+    if not upcoming:
+        return None
+    lines = [f"EXPECTED IN THE NEXT {_UPCOMING_DAYS} DAYS"]
+    for stream in upcoming:
+        amount = stream.expected_amount or stream.average_amount or 0
+        direction = 1 if stream.direction == "inflow" else -1
+        lines.append(
+            f"- {stream.name}: {_signed(direction * abs(amount))} "
+            f"on {stream.next_expected_date}"
+        )
+    return "\n".join(lines)
+
+
+class SectionCommentary(BaseModel):
+    """The model's entire contribution to the report: prose, never figures.
+
+    The report layout and every number in it are computed by code; the model
+    fills these fields and nothing else. A wrong number in the report is
+    therefore always a facts bug with one place to fix, never a hallucination
+    to argue with.
+    """
+
+    headline: str = Field(
+        description=(
+            "Short paragraph on what needs attention first; OPEN ANOMALIES "
+            "lead. Two plain sentences on a quiet day."
+        )
+    )
+    cash_and_bills: str = Field(
+        default="", description="1-3 sentences on cash and upcoming bills."
+    )
+    credit: str = Field(
+        default="", description="1-3 sentences on credit cards and loans."
+    )
+    spending: str = Field(
+        default="", description="1-3 sentences on this month's spending."
+    )
+    investments: str = Field(
+        default="", description="1-3 sentences on investments and net worth."
+    )
+
+
+@dataclass(frozen=True)
+class ReportFacts:
+    """Code-owned figures for the report skeleton, all pre-formatted upstream.
+
+    Everything here comes from the same service reads the snapshot uses, so
+    the context the model saw and the numbers the reader sees can never
+    disagree.
+    """
+
+    net_worth: int | None = None
+    net_worth_change_30d: int | None = None
+    cash_today: int | None = None
+    projection_end: tuple[date, int] | None = None
+    projection_low: tuple[date, int] | None = None
+    first_negative: tuple[date, str] | None = None
+    credit_lines: list[str] = field(default_factory=list)
+    spending: list[tuple[str, int, int | None]] = field(default_factory=list)
+    portfolio_total: int | None = None
+    positions: int = 0
+    open_critical: int = 0
+    open_warning: int = 0
+
+
+_REPORT_SPENDING_LINES = 3
+# A spending line earns its place by MOVING, not by being big: a fixed bill
+# that lands exactly on its median (rent, a mortgage) is the definition of
+# unremarkable, and "spent $2,553.23, typical $2,553.23" is a report line
+# that says nothing. Floor + ratio, so tiny wobbles on tiny categories and
+# rounding drift on huge ones both stay out.
+_SPENDING_MOVER_FLOOR = 5_000  # cents; a move smaller than this never shows
+_SPENDING_MOVER_RATIO = 0.10  # and it must be >= 10% of the category's norm
+_SPENDING_RANK_POOL = 100  # categories considered before the mover filter
+
+
+def _spending_movers(
+    ranked: list[tuple[str, int, int | None]],
+    *,
+    limit: int = _REPORT_SPENDING_LINES,
+) -> list[tuple[str, int, int | None]]:
+    """The categories whose month actually moved, biggest move first.
+
+    A category with no prior months is a move by definition - its whole
+    amount is new spend - but still has to clear the floor.
+    """
+    movers: list[tuple[int, str, int, int | None]] = []
+    for name, this_month, typical in ranked:
+        if typical is None:
+            if this_month >= _SPENDING_MOVER_FLOOR:
+                movers.append((this_month, name, this_month, typical))
+            continue
+        delta = abs(this_month - typical)
+        if delta < _SPENDING_MOVER_FLOOR:
+            continue
+        if typical > 0 and delta / typical < _SPENDING_MOVER_RATIO:
+            continue
+        movers.append((delta, name, this_month, typical))
+    movers.sort(key=lambda mover: mover[0], reverse=True)
+    return [
+        (name, this_month, typical)
+        for _delta, name, this_month, typical in movers[:limit]
+    ]
+
+
+async def build_report_facts(
+    db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
+) -> ReportFacts:
+    """Assemble the skeleton's figures from the deterministic services."""
+    today = today or date.today()
+    service = FinanceService(db)
+    accounts, _ = await service.list_accounts(
+        owner_user_id=owner_user_id, page_size=_ACCOUNT_PAGE_SIZE
+    )
+    account_list = list(accounts)
+
+    net_worth = None
+    change_30d = None
+    series = await networth_service.get_net_worth_series(
+        db, owner_user_id=owner_user_id, days=_NET_WORTH_WINDOW_DAYS
+    )
+    if series:
+        latest = series[-1]
+        net_worth = latest.net_worth_amount
+        past = _at_or_before(series, today - timedelta(days=30))
+        if past is not None and past.as_of_date != latest.as_of_date:
+            change_30d = latest.net_worth_amount - past.net_worth_amount
+
+    projection = await service.project_balances(
+        owner_user_id=owner_user_id, days=_PROJECTION_DAYS, today=today
+    )
+    cash_today = projection.start_balance if account_list else None
+    projection_end = None
+    projection_low = None
+    first_negative = None
+    if projection.points:
+        end = projection.points[-1]
+        low = min(projection.points, key=lambda point: point.balance)
+        projection_end = (end.date, end.balance)
+        projection_low = (low.date, low.balance)
+        crossing = next((p for p in projection.points if p.balance < 0), None)
+        if crossing is not None and projection.start_balance >= 0:
+            first_negative = (crossing.date, crossing.name)
+
+    holdings = await service.list_current_holdings(owner_user_id=owner_user_id)
+    portfolio_total = (
+        sum(value for _holding, _security, value in holdings) if holdings else None
+    )
+
+    insights = await service.list_insights(owner_user_id=owner_user_id, status="new")
+    flagged = [i for i in insights if i.insight_type != ANALYST_NOTE_INSIGHT_TYPE]
+
+    return ReportFacts(
+        net_worth=net_worth,
+        net_worth_change_30d=change_30d,
+        cash_today=cash_today,
+        projection_end=projection_end,
+        projection_low=projection_low,
+        first_negative=first_negative,
+        credit_lines=await _liability_lines(service, account_list),
+        spending=_spending_movers(
+            await _ranked_spending(
+                db,
+                owner_user_id=owner_user_id,
+                today=today,
+                limit=_SPENDING_RANK_POOL,
+            )
+        ),
+        portfolio_total=portfolio_total,
+        positions=len(holdings),
+        open_critical=sum(1 for i in flagged if i.severity == "critical"),
+        open_warning=sum(1 for i in flagged if i.severity == "warning"),
+    )
+
+
+def render_report(facts: ReportFacts, commentary: SectionCommentary) -> str:
+    """The formulaic report: fixed sections, code-owned numbers, model prose.
+
+    Deliberately identical in shape every day so the reader learns where to
+    look. A section renders only when its figures exist; the model's
+    commentary rides under the figures and can never replace them.
+    """
+    blocks: list[str] = [commentary.headline.strip()]
+
+    def block(label: str, fact_lines: list[str], prose: str) -> None:
+        if not fact_lines:
+            return
+        chunk = "\n".join([f"**{label}**", *fact_lines])
+        if prose.strip():
+            chunk += "\n\n" + prose.strip()
+        blocks.append(chunk)
+
+    cash_lines: list[str] = []
+    if facts.cash_today is not None and facts.projection_end is not None:
+        end_date, end_balance = facts.projection_end
+        parts = [
+            f"cash on hand {_amount(facts.cash_today)}",
+            f"projected {_amount(end_balance)} by {end_date}",
+        ]
+        if facts.projection_low is not None:
+            low_date, low_balance = facts.projection_low
+            parts.append(f"lowest {_amount(low_balance)} on {low_date}")
+        cash_lines.append("- " + " · ".join(parts))
+        if facts.first_negative is not None:
+            negative_date, name = facts.first_negative
+            cash_lines.append(f"- goes below zero on {negative_date} ({name})")
+    block("Cash and bills", cash_lines, commentary.cash_and_bills)
+
+    block("Credit cards and loans", facts.credit_lines, commentary.credit)
+
+    spending_lines = []
+    for name, this_month, typical in facts.spending:
+        typical_text = (
+            f", typical {format_usd(typical)}"
+            if typical is not None
+            else " (no earlier months)"
+        )
+        spending_lines.append(f"- {name}: {format_usd(this_month)}{typical_text}")
+    block("Spending", spending_lines, commentary.spending)
+
+    invest_lines: list[str] = []
+    if facts.net_worth is not None:
+        change = (
+            f" ({_signed(facts.net_worth_change_30d)} vs 30 days ago)"
+            if facts.net_worth_change_30d is not None
+            else ""
+        )
+        parts = [f"net worth {_amount(facts.net_worth)}{change}"]
+        if facts.portfolio_total is not None:
+            parts.append(
+                f"portfolio {format_usd(facts.portfolio_total)} "
+                f"across {facts.positions} positions"
+            )
+        invest_lines.append("- " + " · ".join(parts))
+    block("Investments and net worth", invest_lines, commentary.investments)
+
+    blocks.append(
+        f"Open findings: {facts.open_critical} critical · {facts.open_warning} warning"
+    )
+    return "\n\n".join(blocks)
+
+
+async def build_finance_snapshot(
+    db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
+) -> str | None:
+    """Everything the analyst is allowed to know, as labeled plain text.
+
+    ``None`` when the owner has no accounts: there is nothing to narrate, and a
+    model handed an empty context will happily narrate anyway.
+    """
+    today = today or date.today()
+    service = FinanceService(db)
+    accounts, _ = await service.list_accounts(
+        owner_user_id=owner_user_id, page_size=_ACCOUNT_PAGE_SIZE
+    )
+    if not accounts:
+        return None
+
+    account_list = list(accounts)
+    sections = [
+        _accounts_section(account_list),
+        await _net_worth_section(db, owner_user_id=owner_user_id, today=today),
+        await _liabilities_section(service, account_list),
+        await _portfolio_section(service, owner_user_id=owner_user_id),
+        await _cashflow_section(service, owner_user_id=owner_user_id, today=today),
+        await _spending_section(db, owner_user_id=owner_user_id, today=today),
+        await _transactions_section(service, account_list, owner_user_id=owner_user_id),
+        await _anomalies_section(service, owner_user_id=owner_user_id),
+        await _projection_section(service, owner_user_id=owner_user_id, today=today),
+        await _upcoming_section(service, owner_user_id=owner_user_id, today=today),
+    ]
+    return "\n\n".join(section for section in sections if section)
+
+
+async def finance_snapshot(ctx: FetchContext) -> str | None:
+    """Memory-module fetcher: the owner's finances as prompt context."""
+    try:
+        owner_user_id = owner_user_id_for(ctx.user_id)
+    except ValueError:
+        logger.warning(
+            "Finance snapshot skipped: unusable user id", user_id=ctx.user_id
+        )
+        return None
+    if ctx.session is not None:
+        return await build_finance_snapshot(ctx.session, owner_user_id=owner_user_id)
+    async with get_async_session() as session:
+        return await build_finance_snapshot(session, owner_user_id=owner_user_id)
+
+
+register_fetcher(
+    SNAPSHOT_MODULE_SLUG,
+    finance_snapshot,
+    description=(
+        "Accounts, net-worth trend, card/loan detail, portfolio, cashflow, "
+        "spending vs norm, recent transactions, open anomalies, cash forecast."
+    ),
+)
+
+
+def snapshot_module_definition() -> dict[str, Any]:
+    """The seed row for the snapshot memory module."""
+    return {
+        "slug": SNAPSHOT_MODULE_SLUG,
+        "name": "Finance snapshot",
+        "description": (
+            "Balances, net-worth trend, credit card and loan detail, portfolio "
+            "positions, monthly cashflow, category spend against its norm, "
+            "recent transactions, open anomalies, the cash forecast, and what "
+            "is due next."
+        ),
+        "category": "finance",
+        "prompt_content": None,
+        "fetch_function": SNAPSHOT_MODULE_SLUG,
+        "context_key": SNAPSHOT_MODULE_SLUG,
+        "priority": 10,
+        "token_estimate": SNAPSHOT_TOKEN_ESTIMATE,
+        "is_active": True,
+    }
+
+
+def analyst_agent_definition() -> dict[str, Any]:
+    """The seed row for the finance analyst agent.
+
+    ``model_id`` is None so the agent follows whatever model the AI service is
+    configured with. Point it at one pulled Ollama tag by setting that column.
+    """
+    return {
+        "slug": ANALYST_AGENT_SLUG,
+        "name": "Finance Analyst",
+        "description": "Writes the daily finance note from detected findings",
+        "category": "finance",
+        "model_id": None,
+        "system_prompt": ANALYST_SYSTEM_PROMPT,
+        "temperature": ANALYST_TEMPERATURE,
+        "max_tokens": ANALYST_MAX_TOKENS,
+        "memory_modules": [SNAPSHOT_MODULE_SLUG],
+        "knowledge_base_ids": [],
+        "is_active": True,
+    }
+
+
+def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
+    """Seed the analyst agent and its memory module, skipping existing rows.
+
+    Idempotent, and never mutates a row that is already there: both are
+    editable from the dashboard, and a re-seed must not undo that.
+    """
+    counts = {"finance_agents": 0, "finance_memory_modules": 0}
+
+    module = snapshot_module_definition()
+    if (
+        session.exec(
+            select(MemoryModule).where(MemoryModule.slug == module["slug"])
+        ).first()
+        is None
+    ):
+        session.add(MemoryModule(**module))
+        counts["finance_memory_modules"] = 1
+        logger.info(f"Seeded memory module '{module['slug']}'")
+
+    agent = analyst_agent_definition()
+    if session.exec(select(Agent).where(Agent.slug == agent["slug"])).first() is None:
+        session.add(Agent(**agent))
+        counts["finance_agents"] = 1
+        logger.info(f"Seeded agent '{agent['slug']}'")
+
+    if any(counts.values()):
+        session.commit()
+    return counts
+{% if ai_framework == "pydantic-ai" %}
+
+
+def note_dedup_key(day: date) -> str:
+    """One note per owner per day, keyed so a re-run is a no-op."""
+    return f"note:{day:%Y%m%d}"
+
+
+async def existing_note(
+    db: AsyncSession, *, owner_user_id: int | None, today: date
+) -> FinanceInsight | None:
+    """Today's note for this owner, if one has already been written."""
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    return (
+        await db.exec(
+            select(FinanceInsight).where(
+                FinanceInsight.owner_user_id == store_owner,
+                FinanceInsight.dedup_key == note_dedup_key(today),
+            )
+        )
+    ).first()
+
+
+async def run_analyst_note(
+    db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
+) -> FinanceInsight | None:
+    """Write today's note for one owner. Writes; the caller commits.
+
+    Returns the note - the one just written, or the one already there. Returns
+    None when there is nothing to say (no accounts), nobody to say it (the
+    agent is not registered), or the model could not say it.
+
+    Deliberately total: a local model that is stopped, slow, or mid-pull is an
+    ordinary Tuesday, and it must cost the nightly job a log line rather than
+    the rest of its work. The check for an existing note happens before the
+    model is touched, so a re-run is free rather than merely idempotent.
+    """
+    today = today or date.today()
+    already = await existing_note(db, owner_user_id=owner_user_id, today=today)
+    if already is not None:
+        logger.info(
+            "Analyst note already written for today", owner_user_id=owner_user_id
+        )
+        return already
+
+    service = FinanceService(db)
+    accounts, _ = await service.list_accounts(owner_user_id=owner_user_id, page_size=1)
+    if not accounts:
+        logger.info(
+            "Analyst note skipped: owner has no accounts", owner_user_id=owner_user_id
+        )
+        return None
+
+    from pydantic_ai import Agent as PydanticAgent
+    from pydantic_ai.settings import ModelSettings
+
+    from app.core.config import settings
+    from app.services.ai.agent_loader import resolve_agent
+    from app.services.ai.config import AIServiceConfig
+    from app.services.ai.providers import model_for
+    from app.services.ai.usage_recording import extract_usage, record_usage
+
+    agent_config = await resolve_agent(ANALYST_AGENT_SLUG, session=db)
+    if agent_config.slug != ANALYST_AGENT_SLUG:
+        # resolve_agent falls back to the default agent when the row is missing
+        # or inactive, and the default agent has no idea what a ledger is.
+        logger.warning(
+            "Analyst note skipped: agent is not registered or is inactive",
+            agent_slug=ANALYST_AGENT_SLUG,
+        )
+        return None
+
+    service_config = AIServiceConfig.from_settings(settings)
+    update: dict[str, object] = {
+        "temperature": agent_config.temperature,
+        "max_tokens": agent_config.max_tokens,
+    }
+    if agent_config.model_id:
+        update["model"] = agent_config.model_id
+    service_config = service_config.model_copy(update=update)
+
+    snapshot = await build_finance_snapshot(
+        db, owner_user_id=owner_user_id, today=today
+    )
+    if snapshot is None:
+        return None
+    facts = await build_report_facts(db, owner_user_id=owner_user_id, today=today)
+
+    try:
+        model, model_name = model_for(service_config, settings)
+        # The model returns typed commentary, nothing else; the report's
+        # layout and every figure in it come from ``facts``. Structured
+        # output rides pydantic-ai's output tool, which local models handle
+        # through the same tool-calling path chat uses.
+        agent: PydanticAgent[None, SectionCommentary] = PydanticAgent(
+            model,
+            instructions=agent_config.system_prompt,
+            output_type=SectionCommentary,
+            model_settings=ModelSettings(
+                temperature=agent_config.temperature,
+                max_tokens=agent_config.max_tokens,
+            ),
+        )
+        result = await agent.run(snapshot)
+        commentary = result.output
+        record_usage(
+            action=f"chat:{ANALYST_SURFACE}",
+            model_name=model_name,
+            usage=extract_usage(result),
+            user_id=user_id_for(owner_user_id),
+        )
+    except Exception:
+        logger.exception(
+            "Analyst note skipped: could not run the agent",
+            owner_user_id=owner_user_id,
+        )
+        return None
+
+    if not commentary.headline.strip():
+        logger.warning(
+            "Analyst note skipped: the model returned no headline",
+            owner_user_id=owner_user_id,
+        )
+        return None
+
+    note = await create_insight_if_new(
+        db,
+        owner_user_id=0 if owner_user_id is None else owner_user_id,
+        insight_type=ANALYST_NOTE_INSIGHT_TYPE,
+        dedup_key=note_dedup_key(today),
+        severity="info",
+        title=f"Analyst note - {today.isoformat()}",
+        body=render_report(facts, commentary),
+    )
+    if note is None:  # written concurrently; the other one stands
+        return await existing_note(db, owner_user_id=owner_user_id, today=today)
+    note.metadata_ = {
+        "model_name": model_name,
+        "commentary": commentary.model_dump(),
+    }
+    db.add(note)
+    await db.flush()
+    return note
+{% endif %}
+{% endif %}

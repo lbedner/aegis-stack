@@ -3520,7 +3520,7 @@
   <span class="md-ellipsis">
     
   
-    Insights (Experimental)
+    Finance
   
 
     
@@ -3533,6 +3533,92 @@
         
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Finance
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../finance/analyst/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analyst Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Insights (Experimental)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3736,10 +3822,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_8" id="__nav_4_8_label" tabindex="0">
             
   
   
@@ -3757,8 +3843,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_7">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4618,8 +4704,8 @@
 </span></code></pre></div>
 <p><strong>Dashboard</strong>: the AI service modal has an Agents tab listing every agent with an active toggle and a detail view.</p>
 <p><strong>API</strong>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>GET<span class="w">   </span>/ai/agents<span class="w">          </span><span class="c1"># list definitions with tool/module grants</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>PATCH<span class="w"> </span>/ai/agents/<span class="o">{</span>slug<span class="o">}</span><span class="w">   </span><span class="c1"># {&quot;is_active&quot;: bool}</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>GET<span class="w">   </span>/api/v1/ai/agents<span class="w">          </span><span class="c1"># list definitions with tool/module grants</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>PATCH<span class="w"> </span>/api/v1/ai/agents/<span class="o">{</span>slug<span class="o">}</span><span class="w">   </span><span class="c1"># {&quot;is_active&quot;: bool}</span>
 </span></code></pre></div>
 <p>Edits through the API invalidate the loader's warm cache, so the next chat request sees the change immediately.</p>
 <h2 id="related-pages">Related Pages</h2>
@@ -4627,6 +4713,8 @@
 <li><a href="../memory-modules/">Memory Modules</a>: reusable context blocks agents opt into</li>
 <li><a href="../rag/">RAG</a>: the retrieval pipeline agents scope over</li>
 <li><a href="../cost-tracking/">Cost Tracking</a>: usage rows carry per-agent attribution (<code>chat:&lt;slug&gt;</code>)</li>
+<li><a href="../../finance/analyst/">Finance Analyst</a>: a service-owned agent, and a worked
+  example of a headless run driven by a scheduled job rather than a chat turn</li>
 </ul>
 
 

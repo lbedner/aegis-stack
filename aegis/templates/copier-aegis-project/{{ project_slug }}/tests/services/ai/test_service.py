@@ -160,8 +160,11 @@ class TestAIServiceConfigIntegration:
         # Config provider is an AIProvider enum
         assert isinstance(service.config.provider, AIProvider)
 
-        # Should be able to get string value with .value
-        assert service.config.provider.value == AIProvider.PUBLIC.value
+        # Should be able to get a string value with .value. Which provider the
+        # project is pointed at is deployment configuration, not a property of
+        # the code, so pinning one here would fail the moment anyone set
+        # AI_PROVIDER to something else.
+        assert service.config.provider.value in {p.value for p in AIProvider}
 
     def test_service_uses_config_correctly(self) -> None:
         """Test that service uses config values correctly."""

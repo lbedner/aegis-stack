@@ -1,12 +1,9 @@
 """Tests for agent registry admin operations (list, toggle, serialize)."""
 {% if ai_backend != "memory" %}
 
-from collections.abc import AsyncGenerator
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 import app.services.ai.agent_registry as agent_registry_module
@@ -22,13 +19,11 @@ from app.services.ai.models.agents import Agent, AgentTool, Tool
 
 
 @pytest.fixture
-async def session() -> AsyncGenerator[AsyncSession]:
-    engine = create_async_engine("sqlite+aiosqlite://")
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    async with AsyncSession(engine) as session:
-        yield session
-    await engine.dispose()
+def session(async_db_session: AsyncSession) -> AsyncSession:
+    """The root conftest's transactional async session (rolled back per
+    test). A bare local engine cannot create this project's schema-qualified
+    tables (finance, scheduler, ...)."""
+    return async_db_session
 
 
 async def _add_agent(session: AsyncSession, slug: str, **extra: object) -> Agent:

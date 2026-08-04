@@ -20,21 +20,20 @@ Writes but does not commit — the caller owns the transaction.
 
 from __future__ import annotations
 
-import hashlib
-import json
-import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+import hashlib
+import json
+import logging
 from typing import Any
 
+from cryptography.fernet import InvalidToken
 import httpx
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
-from cryptography.fernet import InvalidToken
 
 from app.core.encryption import decrypt_secret, encrypt_secret
 from app.services.finance.constants import Provider
@@ -458,36 +457,24 @@ async def _apply_liabilities(
                 owner_user_id=owner_user_id, account_id=account_id
             )
         detail.liability_type = "credit"
-        detail.last_statement_balance = _to_cents(
-            entry.get("last_statement_balance")
-        )
+        detail.last_statement_balance = _to_cents(entry.get("last_statement_balance"))
         raw_issue = entry.get("last_statement_issue_date")
         detail.last_statement_issue_date = (
             date.fromisoformat(raw_issue) if raw_issue else None
         )
         detail.last_payment_amount = _to_cents(entry.get("last_payment_amount"))
         raw_paid = entry.get("last_payment_date")
-        detail.last_payment_date = (
-            date.fromisoformat(raw_paid) if raw_paid else None
-        )
-        detail.minimum_payment_amount = _to_cents(
-            entry.get("minimum_payment_amount")
-        )
+        detail.last_payment_date = date.fromisoformat(raw_paid) if raw_paid else None
+        detail.minimum_payment_amount = _to_cents(entry.get("minimum_payment_amount"))
         raw_due = entry.get("next_payment_due_date")
-        detail.next_payment_due_date = (
-            date.fromisoformat(raw_due) if raw_due else None
-        )
+        detail.next_payment_due_date = date.fromisoformat(raw_due) if raw_due else None
         detail.is_overdue = entry.get("is_overdue")
         detail.aprs = [
             {
                 "apr_type": apr.get("apr_type"),
                 "apr_percentage_bps": _pct_to_bps(apr.get("apr_percentage")),
-                "balance_subject_to_apr": _to_cents(
-                    apr.get("balance_subject_to_apr")
-                ),
-                "interest_charge_amount": _to_cents(
-                    apr.get("interest_charge_amount")
-                ),
+                "balance_subject_to_apr": _to_cents(apr.get("balance_subject_to_apr")),
+                "interest_charge_amount": _to_cents(apr.get("interest_charge_amount")),
             }
             for apr in entry.get("aprs") or []
         ]
@@ -568,9 +555,7 @@ async def _upsert_securities(
 _INVESTMENT_LOOKBACK_DAYS = 730
 
 
-def _map_plaid_trade_type(
-    plaid_type: str, subtype: str | None, amount: float
-) -> str:
+def _map_plaid_trade_type(plaid_type: str, subtype: str | None, amount: float) -> str:
     """Map a Plaid (type, subtype, amount) to a normalized ``FinanceTrade.type``.
 
     Plaid's coarse ``type`` (buy/sell/cancel/cash/fee/transfer) is often too
@@ -727,9 +712,7 @@ async def sync_plaid_connection(
     # "Chase" rather than "Plaid · Sandbox".
     if not connection.label and item.get("institution_id"):
         try:
-            connection.label = await client.get_institution_name(
-                item["institution_id"]
-            )
+            connection.label = await client.get_institution_name(item["institution_id"])
         except PlaidError:
             pass
     account_by_plaid_id = await _upsert_accounts(db, service, connection, accounts)
@@ -1158,9 +1141,7 @@ async def sync_one_connection(
     the real failure. Returns None when the connection is missing, foreign,
     or not syncable (manual / portal-pending).
     """
-    connection = await get_connection(
-        db, connection_id, owner_user_id=owner_user_id
-    )
+    connection = await get_connection(db, connection_id, owner_user_id=owner_user_id)
     if connection is None:
         return None
     if connection.provider == Provider.PLAID:
@@ -1291,9 +1272,7 @@ async def process_plaid_webhook(
             error = payload.get("error") or {}
             error_code = error.get("error_code")
             connection.status = (
-                "login_required"
-                if error_code == "ITEM_LOGIN_REQUIRED"
-                else "error"
+                "login_required" if error_code == "ITEM_LOGIN_REQUIRED" else "error"
             )
             connection.needs_user_action = True
             connection.last_error_code = error_code
@@ -1313,9 +1292,7 @@ async def process_plaid_webhook(
         event.processed_at = _utcnow()
         return "processed"
 
-    result = await sync_plaid_connection(
-        db, connection, client=client or PlaidClient()
-    )
+    result = await sync_plaid_connection(db, connection, client=client or PlaidClient())
     event.status = "processed"
     event.processed_at = _utcnow()
     await _recompute_net_worth(db, connection.owner_user_id, [result])
@@ -1404,9 +1381,7 @@ async def relink_connection(
     token does not change in update mode; the next successful sync flips the
     connection back to healthy and clears ``needs_user_action``.
     """
-    connection = await get_connection(
-        db, connection_id, owner_user_id=owner_user_id
-    )
+    connection = await get_connection(db, connection_id, owner_user_id=owner_user_id)
     if (
         connection is None
         or connection.provider != Provider.PLAID
@@ -1571,6 +1546,13 @@ async def start_snaptrade_connect(
     )
     db.add(connection)
     await db.flush()
+    if client.is_personal:
+        # Personal keys have no partner connection portal (the login
+        # endpoint rejects them): brokerages are linked inside SnapTrade's
+        # own dashboard, and this app ADOPTS what exists. The empty URL
+        # tells the frontend to skip the portal tab and poll adoption
+        # immediately.
+        return connection, ""
     url = await client.login_url(
         user_id, user_secret, broker=broker, custom_redirect=custom_redirect
     )
@@ -1846,9 +1828,7 @@ async def sync_snaptrade_connection(
     connection.last_sync_attempt_at = _utcnow()
     if not connection.access_token_encrypted or not connection.provider_item_id:
         return result
-    user_id = (
-        "" if client.is_personal else _snaptrade_user_id(connection.owner_user_id)
-    )
+    user_id = "" if client.is_personal else _snaptrade_user_id(connection.owner_user_id)
     user_secret = decrypt_secret(
         connection.access_token_encrypted, context=_SNAPTRADE_SECRET_CONTEXT
     )

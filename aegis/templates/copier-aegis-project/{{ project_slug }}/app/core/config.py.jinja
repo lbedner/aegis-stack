@@ -443,6 +443,13 @@ class Settings(
 {% if include_finance %}
     # Finance Service Configuration
     FINANCE_DEFAULT_CURRENCY: str = "usd"
+    # How far back the reconciliation alerts look, in days. Transfer
+    # suggestions, fee alerts, and missed-bill checks only consider activity
+    # inside this window of today, so a deep historical import populates the
+    # ledger without burying Review/Insights under years of stale findings.
+    # 0 disables the window (full history). Rules with their own windows
+    # (recurring detection, overspend, large transactions) are unaffected.
+    FINANCE_RULES_LOOKBACK_DAYS: int = 31
     # Provider capabilities built into this stack. Credentials are set
     # separately in .env; these flags say which connect flows exist at all,
     # so the UI can offer them (and prompt for missing credentials) rather

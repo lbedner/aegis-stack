@@ -148,7 +148,7 @@ my-app llm use claude-sonnet-4-20250514
 make serve
 
 # Chat endpoint
-curl -X POST http://localhost:8000/ai/chat \
+curl -X POST http://localhost:8000/api/v1/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello from the API!"}'
 
@@ -156,7 +156,7 @@ curl -X POST http://localhost:8000/ai/chat \
 curl http://localhost:8000/llm/models?pattern=gpt-4
 
 # Check usage stats
-curl http://localhost:8000/ai/usage/stats
+curl http://localhost:8000/api/v1/ai/usage/stats
 ```
 
 ## Configuration

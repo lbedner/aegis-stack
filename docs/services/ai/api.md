@@ -14,7 +14,7 @@ http://localhost:8000/ai
 
 <div class="grid cards" markdown>
 
--   :material-message-text: **POST `/ai/chat`**
+-   :material-message-text: **POST `/api/v1/ai/chat`**
 
     ---
 
@@ -22,7 +22,7 @@ http://localhost:8000/ai
 
     [:octicons-arrow-right-24: Details](#post-aichat)
 
--   :material-broadcast: **POST `/ai/chat/stream`**
+-   :material-broadcast: **POST `/api/v1/ai/chat/stream`**
 
     ---
 
@@ -30,7 +30,7 @@ http://localhost:8000/ai
 
     [:octicons-arrow-right-24: Details](#post-aichatstream)
 
--   :material-format-list-bulleted: **GET `/ai/conversations`**
+-   :material-format-list-bulleted: **GET `/api/v1/ai/conversations`**
 
     ---
 
@@ -38,7 +38,7 @@ http://localhost:8000/ai
 
     [:octicons-arrow-right-24: Details](#get-aiconversations)
 
--   :material-message-reply-text: **GET `/ai/conversations/{id}`**
+-   :material-message-reply-text: **GET `/api/v1/ai/conversations/{id}`**
 
     ---
 
@@ -46,7 +46,7 @@ http://localhost:8000/ai
 
     [:octicons-arrow-right-24: Details](#get-aiconversationsconversation_id)
 
--   :material-heart-pulse: **GET `/ai/health`**
+-   :material-heart-pulse: **GET `/api/v1/ai/health`**
 
     ---
 
@@ -54,25 +54,25 @@ http://localhost:8000/ai
 
     [:octicons-arrow-right-24: Details](#get-aihealth)
 
--   :material-account-group: **GET `/ai/agents`**
+-   :material-account-group: **GET `/api/v1/ai/agents`**
 
     ---
 
     List agent definitions with tool and module grants
 
--   :material-pencil: **PATCH `/ai/agents/{slug}`**
+-   :material-pencil: **PATCH `/api/v1/ai/agents/{slug}`**
 
     ---
 
     Update an agent's editable fields
 
--   :material-chart-bar: **GET `/ai/usage/stats`**
+-   :material-chart-bar: **GET `/api/v1/ai/usage/stats`**
 
     ---
 
     Aggregated token usage and cost statistics
 
--   :material-emoticon-outline: **GET `/ai/sentiment/stats`**
+-   :material-emoticon-outline: **GET `/api/v1/ai/sentiment/stats`**
 
     ---
 
@@ -90,7 +90,7 @@ http://localhost:8000/ai
 
 ## Chat Endpoints
 
-### POST `/ai/chat`
+### POST `/api/v1/ai/chat`
 
 Send a chat message and receive AI response.
 
@@ -118,7 +118,7 @@ Send a chat message and receive AI response.
 === "cURL"
 
     ```bash
-    curl -X POST http://localhost:8000/ai/chat \
+    curl -X POST http://localhost:8000/api/v1/ai/chat \
       -H "Content-Type: application/json" \
       -d '{
         "message": "Explain FastAPI in one sentence",
@@ -132,7 +132,7 @@ Send a chat message and receive AI response.
     import httpx
 
     response = httpx.post(  # (1)!
-        "http://localhost:8000/ai/chat",
+        "http://localhost:8000/api/v1/ai/chat",
         json={
             "message": "What is async/await in Python?",  # (2)!
             "user_id": "my-user"  # (3)!
@@ -153,7 +153,7 @@ Send a chat message and receive AI response.
 === "JavaScript"
 
     ```javascript title="Fetch API Example"
-    const response = await fetch('http://localhost:8000/ai/chat', {
+    const response = await fetch('http://localhost:8000/api/v1/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -170,13 +170,13 @@ Send a chat message and receive AI response.
 
 ```bash
 # First message
-curl -X POST http://localhost:8000/ai/chat \
+curl -X POST http://localhost:8000/api/v1/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What is FastAPI?"}' \
   | jq -r '.conversation_id' > conv_id.txt
 
 # Follow-up message (maintains context)
-curl -X POST http://localhost:8000/ai/chat \
+curl -X POST http://localhost:8000/api/v1/ai/chat \
   -H "Content-Type: application/json" \
   -d "{
     \"message\": \"Can you show me an example?\",
@@ -184,13 +184,13 @@ curl -X POST http://localhost:8000/ai/chat \
   }"
 ```
 
-### POST `/ai/chat/stream`
+### POST `/api/v1/ai/chat/stream`
 
 Stream chat response with Server-Sent Events (SSE).
 
 **Request Body:**
 
-Same as `/ai/chat`:
+Same as `/api/v1/ai/chat`:
 
 ```json
 {
@@ -256,7 +256,7 @@ data: {"error": "AI service error", "detail": "error message"}
 === "cURL"
 
     ```bash
-    curl -X POST http://localhost:8000/ai/chat/stream \
+    curl -X POST http://localhost:8000/api/v1/ai/chat/stream \
       -H "Content-Type: application/json" \
       -d '{"message": "Write a Python hello world"}' \
       --no-buffer
@@ -266,7 +266,7 @@ data: {"error": "AI service error", "detail": "error message"}
 
     ```javascript title="SSE Streaming Client" hl_lines="10-13"
     const eventSource = new EventSource(  // (1)!
-      '/ai/chat/stream?' + new URLSearchParams({
+      '/api/v1/ai/chat/stream?' + new URLSearchParams({
         message: 'Explain async programming',
         user_id: 'web-user'
       })
@@ -311,7 +311,7 @@ data: {"error": "AI service error", "detail": "error message"}
     import httpx
     import json
 
-    url = "http://localhost:8000/ai/chat/stream"
+    url = "http://localhost:8000/api/v1/ai/chat/stream"
     data = {"message": "Explain decorators in Python", "user_id": "my-user"}
 
     with httpx.stream("POST", url, json=data) as response:  # (1)!
@@ -334,7 +334,7 @@ data: {"error": "AI service error", "detail": "error message"}
 
 ## Conversation Management
 
-### GET `/ai/conversations`
+### GET `/api/v1/ai/conversations`
 
 List conversations for a user.
 
@@ -364,13 +364,13 @@ List conversations for a user.
 
 ```bash
 # List conversations
-curl "http://localhost:8000/ai/conversations?user_id=my-user&limit=10"
+curl "http://localhost:8000/api/v1/ai/conversations?user_id=my-user&limit=10"
 
 # With Python
 import httpx
 
 response = httpx.get(
-    "http://localhost:8000/ai/conversations",
+    "http://localhost:8000/api/v1/ai/conversations",
     params={"user_id": "my-user", "limit": 10}
 )
 
@@ -379,7 +379,7 @@ for conv in conversations:
     print(f"{conv['id']}: {conv['title']} ({conv['message_count']} messages)")
 ```
 
-### GET `/ai/conversations/{conversation_id}`
+### GET `/api/v1/ai/conversations/{conversation_id}`
 
 Get a specific conversation with full message history.
 
@@ -430,19 +430,19 @@ Get a specific conversation with full message history.
 **Example:**
 
 ```bash
-curl "http://localhost:8000/ai/conversations/CONVERSATION_ID?user_id=my-user"
+curl "http://localhost:8000/api/v1/ai/conversations/CONVERSATION_ID?user_id=my-user"
 ```
 
 ## Agent Registry
 
 Requires a database backend (`ai[sqlite]` / `ai[postgres]`). See [Agents](agents.md).
 
-### GET `/ai/agents`
+### GET `/api/v1/ai/agents`
 
 List every agent definition, including tool and memory-module grants.
 
 ```bash
-curl http://localhost:8000/ai/agents
+curl http://localhost:8000/api/v1/ai/agents
 ```
 
 ```json
@@ -462,37 +462,37 @@ curl http://localhost:8000/ai/agents
 ]
 ```
 
-### PATCH `/ai/agents/{slug}`
+### PATCH `/api/v1/ai/agents/{slug}`
 
 Partial update of an agent's editable fields (`name`, `description`, `category`, `model_id`, `temperature`, `max_tokens`, `system_prompt`, `is_active`). The agent's cached configuration is invalidated, so the next chat request uses the new definition. Unknown slugs return 404; invalid values (temperature outside 0-2, empty prompt) return 400.
 
 ```bash
-curl -X PATCH http://localhost:8000/ai/agents/assistant \
+curl -X PATCH http://localhost:8000/api/v1/ai/agents/assistant \
   -H "Content-Type: application/json" \
   -d '{"temperature": 0.3, "is_active": true}'
 ```
 
 ## Analytics
 
-### GET `/ai/usage/stats`
+### GET `/api/v1/ai/usage/stats`
 
 Aggregated token usage and cost statistics, with optional `user_id`, `start_time`, `end_time`, and `recent_limit` query parameters.
 
 ```bash
-curl "http://localhost:8000/ai/usage/stats?recent_limit=10"
+curl "http://localhost:8000/api/v1/ai/usage/stats?recent_limit=10"
 ```
 
-### GET `/ai/sentiment/stats`
+### GET `/api/v1/ai/sentiment/stats`
 
 Sentiment and performance distributions, average score, and recent negative conversations. Zero-filled until the (off-by-default) scoring job runs; the `enabled` field reports whether `AI_SENTIMENT_ENABLED` is set.
 
 ```bash
-curl http://localhost:8000/ai/sentiment/stats
+curl http://localhost:8000/api/v1/ai/sentiment/stats
 ```
 
 ## Service Status
 
-### GET `/ai/health`
+### GET `/api/v1/ai/health`
 
 AI service health status and configuration.
 
@@ -520,7 +520,7 @@ AI service health status and configuration.
 **Example:**
 
 ```bash
-curl http://localhost:8000/ai/health | jq
+curl http://localhost:8000/api/v1/ai/health | jq
 ```
 
 ### GET `/ai/version`
@@ -556,7 +556,7 @@ Service version and feature information.
 **Example:**
 
 ```bash
-curl http://localhost:8000/ai/version | jq
+curl http://localhost:8000/api/v1/ai/version | jq
 ```
 
 ## Error Handling
@@ -620,7 +620,7 @@ curl http://localhost:8000/ai/version | jq
 
 ## Usage Analytics
 
-### GET `/ai/usage/stats`
+### GET `/api/v1/ai/usage/stats`
 
 !!! note
     Requires database backend (`ai[sqlite]` or `ai[postgres]`). Not available with in-memory backend.
@@ -674,13 +674,13 @@ Get usage statistics with token counts, costs, and model breakdown.
 
 ```bash
 # All-time stats
-curl http://localhost:8000/ai/usage/stats | jq
+curl http://localhost:8000/api/v1/ai/usage/stats | jq
 
 # Per-user stats
-curl "http://localhost:8000/ai/usage/stats?user_id=my-user"
+curl "http://localhost:8000/api/v1/ai/usage/stats?user_id=my-user"
 
 # Time-range query
-curl "http://localhost:8000/ai/usage/stats?start_time=2024-01-01T00:00:00Z&recent_limit=20"
+curl "http://localhost:8000/api/v1/ai/usage/stats?start_time=2024-01-01T00:00:00Z&recent_limit=20"
 ```
 
 ---

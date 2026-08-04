@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "Precio entrada:",
     "llm.output_price_label": "Precio salida:",
     "llm.model_not_in_catalog": "Modelo no encontrado en catálogo. Ejecuta 'llm sync' para poblar.",
+    "llm.source_label": "Fuente:",
+    "llm.source_override": "selección guardada (anula .env; 'llm reset' para borrarla)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": "Valor de .env:",
+    "llm.help_reset": "Elimina la anulación guardada del modelo para que .env vuelva a decidir.",
+    "llm.reset_done": "Anulación eliminada. El modelo activo ahora viene de .env: {model}",
+    "llm.reset_none": "No había anulación guardada. El modelo activo ya viene de .env: {model}",
     # Usar
     "llm.switching_model": "Cambiando a {model_id}",
     # Info
@@ -1127,6 +1134,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "Cambiar el rol de un usuario (p. ej., promover a admin).",
     "auth.opt_promote_email": "Correo electrónico del usuario que se va a actualizar",
     "auth.opt_promote_role": "Nuevo rol que asignar (user, moderator, admin)",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "Inspeccionar y administrar publicaciones y etiquetas del blog",
     "blog.help_status": "Mostrar el recuento de publicaciones del blog y la actividad reciente",

@@ -6,6 +6,12 @@ Reusable expand/collapse arrow indicator for expandable UI elements.
 
 import flet as ft
 
+# Fixed width for an expand-arrow gutter cell - shared by every table that
+# grows one (ExpandableDataTable, and DataTable's own expandable_content),
+# so both line their arrow columns up identically instead of picking their
+# own number.
+EXPAND_ICON_WIDTH = 24
+
 
 class ExpandArrow(ft.Icon):
     """

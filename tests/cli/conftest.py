@@ -125,6 +125,11 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "finance_with_database": ProjectTemplateSpec(
         components=("database", "scheduler"), services=("finance",)
     ),
+    # Finance + auth: owner-scoped finance, where the router's
+    # ``get_owner_user_id`` resolves through the authenticated user.
+    "finance_auth": ProjectTemplateSpec(
+        components=("database", "scheduler"), services=("auth", "finance")
+    ),
     "comms_only": ProjectTemplateSpec(services=("comms",)),
     # htmx web frontend. The Flet frontend is CORE and still present in both:
     # htmx is additive, so these stacks have two frontends.

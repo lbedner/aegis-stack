@@ -4,17 +4,16 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-import pytest
 from pydantic_ai.models.test import TestModel
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel, select
+import pytest
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-import app.services.ai.user_memory as user_memory_module
 from app.services.ai.chat_kit import ChatScope, DoneFrame, ToolChatAgent
 from app.services.ai.models.agents import AgentUserMemory
 from app.services.ai.tools import resolve_tools
+import app.services.ai.user_memory as user_memory_module
 from app.services.ai.user_memory import current_user_id
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 @dataclass
@@ -23,16 +22,14 @@ class _Deps:
 
 
 async def test_model_driven_save_memory_persists_a_fact(
+    async_db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine = create_async_engine("sqlite+aiosqlite://")
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-
+    # The root conftest's session: a bare local engine cannot create the
+    # project's schema-qualified tables (finance, scheduler, ...).
     @asynccontextmanager
     async def fake_session() -> AsyncGenerator[AsyncSession]:
-        async with AsyncSession(engine) as session:
-            yield session
+        yield async_db_session
 
     monkeypatch.setattr(user_memory_module, "get_async_session", fake_session)
 
@@ -62,12 +59,10 @@ async def test_model_driven_save_memory_persists_a_fact(
     assert isinstance(done, DoneFrame)
     assert done.tool_calls == 1
 
-    async with AsyncSession(engine) as session:
-        result = await session.exec(
-            select(AgentUserMemory).where(AgentUserMemory.user_id == "u7")
-        )
-        row = result.first()
-    await engine.dispose()
+    result = await async_db_session.exec(
+        select(AgentUserMemory).where(AgentUserMemory.user_id == "u7")
+    )
+    row = result.first()
 
     assert row is not None
     assert len(row.memory["structured_facts"]) == 1

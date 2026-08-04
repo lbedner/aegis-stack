@@ -13,6 +13,7 @@ import httpx
 from pydantic import BaseModel, computed_field
 
 from app.core.log import logger
+from app.services.ai.ollama_activity import get_ollama_activity
 
 # Default Ollama server URL for local development
 OLLAMA_DEFAULT_URL = "http://localhost:11434"
@@ -122,13 +123,22 @@ class OllamaClient:
 
     TIMEOUT = 2.0  # Local server responds in <100ms; 2s is generous
 
-    def __init__(self, base_url: str = OLLAMA_DEFAULT_URL) -> None:
+    def __init__(self, base_url: str | None = None) -> None:
         """Initialize the Ollama client.
 
         Args:
-            base_url: Base URL for Ollama server (default: OLLAMA_DEFAULT_URL)
+            base_url: Base URL for the Ollama server. Defaults to the
+                configured effective URL, which resolves ``localhost`` to
+                ``host.docker.internal`` when running in a container -
+                without it a containerized caller dials its own loopback and
+                concludes Ollama is not installed.
         """
-        self.base_url = base_url.rstrip("/")
+        from app.core.config import settings
+
+        resolved = base_url or getattr(
+            settings, "ollama_base_url_effective", OLLAMA_DEFAULT_URL
+        )
+        self.base_url = str(resolved).rstrip("/")
 
     async def fetch_version(self) -> str | None:
         """Fetch Ollama server version.
@@ -235,6 +245,7 @@ class OllamaClient:
                 )
                 response.raise_for_status()
                 logger.info(f"Successfully loaded model: {model_name}")
+                get_ollama_activity().record_loaded(model_name)
                 return True
         except httpx.ConnectError as e:
             logger.error(f"Cannot connect to Ollama at {self.base_url}: {e}")
@@ -272,6 +283,7 @@ class OllamaClient:
                 )
                 response.raise_for_status()
                 logger.info(f"Successfully unloaded model: {model_name}")
+                get_ollama_activity().record_unloaded(model_name)
                 return True
         except httpx.ConnectError as e:
             logger.error(f"Cannot connect to Ollama at {self.base_url}: {e}")

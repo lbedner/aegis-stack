@@ -13,17 +13,40 @@ from app.services.ai.llm_service import (
     CurrentLLMConfig,
     LLMListResult,
     ModalityListResult,
+    SetModelResult,
     VendorListResult,
+    clear_active_model,
     get_current_config,
     list_modalities,
     list_models,
     list_vendors,
+    set_active_model,
 )
 from fastapi import APIRouter, HTTPException, Query
+{%- if include_ai and include_auth %}
+from fastapi import Depends
+{%- endif %}
 from pydantic import BaseModel
 from sqlmodel import Session
+{% if include_ai and include_auth %}
+{%- if include_auth_rbac %}
+from app.services.auth.auth_service import require_role
+{%- else %}
+from app.services.auth.deps import get_current_active_user
+{%- endif %}
+{% endif %}
 
 router = APIRouter(prefix="/llm", tags=["llm"])
+{% if include_ai and include_auth %}
+# Switching the model rewrites runtime configuration, so it is not a read.
+# Auth-enabled stacks require a signed-in caller; standalone stacks have no
+# identity to check against and leave it open like the rest of the dashboard API.
+{%- if include_auth_rbac %}
+require_model_switch = require_role("admin")
+{%- else %}
+require_model_switch = get_current_active_user
+{%- endif %}
+{% endif %}
 
 
 # Response models
@@ -62,10 +85,55 @@ class CurrentConfigResponse(BaseModel):
     model: str
     temperature: float
     max_tokens: int
+    # Provenance: "override" when a stored dashboard/CLI selection shadows
+    # .env, "env" when .env is in charge. ``env_model`` is what a reset
+    # returns to.
+    source: str = "env"
+    override_updated_at: str | None = None
+    env_model: str | None = None
     context_window: int | None = None
     input_price: float | None = None
     output_price: float | None = None
     modalities: list[str] | None = None
+
+
+def _current_response(config: CurrentLLMConfig) -> CurrentConfigResponse:
+    """One construction path for every endpoint that reports the config."""
+    return CurrentConfigResponse(
+        provider=config.provider,
+        model=config.model,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        source=config.source,
+        override_updated_at=(
+            config.override_updated_at.isoformat()
+            if config.override_updated_at
+            else None
+        ),
+        env_model=config.env_model,
+        context_window=config.context_window,
+        input_price=config.input_price,
+        output_price=config.output_price,
+        modalities=config.modalities,
+    )
+
+
+class SetModelRequest(BaseModel):
+    """Request to switch the active model."""
+
+    model_id: str
+    force: bool = False
+
+
+class SetModelResponse(BaseModel):
+    """Result of switching the active model."""
+
+    success: bool
+    model_id: str
+    vendor: str | None = None
+    provider_updated: bool = False
+    message: str
+    current: CurrentConfigResponse | None = None
 
 
 class ModalityResponse(BaseModel):
@@ -180,16 +248,62 @@ async def get_current() -> CurrentConfigResponse:
     """
     try:
         config: CurrentLLMConfig = await get_current_config()
-        return CurrentConfigResponse(
-            provider=config.provider,
-            model=config.model,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
-            context_window=config.context_window,
-            input_price=config.input_price,
-            output_price=config.output_price,
-            modalities=config.modalities,
+        return _current_response(config)
+    except Exception as e:
+        raise HTTPException(
+            status_code=503, detail=f"Failed to get current config: {e}"
         )
+
+
+@router.post("/current", response_model=SetModelResponse)
+async def set_current(
+    body: SetModelRequest,
+{%- if include_ai and include_auth %}
+    _user: Any = Depends(require_model_switch),
+{%- endif %}
+) -> SetModelResponse:
+    """Switch the active LLM model.
+
+    Takes effect immediately: with a catalog database the choice is stored as
+    a row and applied to the running settings, so the next request uses it
+    without a restart.
+    """
+    result: SetModelResult = await set_active_model(body.model_id, force=body.force)
+    if not result.success:
+        raise HTTPException(status_code=404, detail=result.message)
+
+    current: CurrentConfigResponse | None = None
+    try:
+        current = _current_response(await get_current_config())
+    except Exception:
+        # The switch already succeeded; failing to read the enriched config
+        # back is not a reason to report failure to the caller.
+        current = None
+
+    return SetModelResponse(
+        success=result.success,
+        model_id=result.model_id,
+        vendor=result.vendor,
+        provider_updated=result.provider_updated,
+        message=result.message,
+        current=current,
+    )
+
+
+@router.delete("/current", response_model=CurrentConfigResponse)
+async def clear_current(
+{%- if include_ai and include_auth %}
+    _user: Any = Depends(require_model_switch),
+{%- endif %}
+) -> CurrentConfigResponse:
+    """Remove the stored model override; .env becomes the source again.
+
+    Idempotent: clearing when no override exists is a no-op that still
+    reports the (env-sourced) effective configuration.
+    """
+    await clear_active_model()
+    try:
+        return _current_response(await get_current_config())
     except Exception as e:
         raise HTTPException(
             status_code=503, detail=f"Failed to get current config: {e}"

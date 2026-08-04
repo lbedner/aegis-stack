@@ -131,6 +131,8 @@ nav:
       - API Reference: services/comms/api.md
       - CLI Commands: services/comms/cli.md
       - Examples: services/comms/examples.md
+    - Finance:
+      - Analyst Notes: services/finance/analyst.md
     - Insights (Experimental):
       - Getting Started: services/insights/index.md
       - Data Sources: services/insights/data-sources.md

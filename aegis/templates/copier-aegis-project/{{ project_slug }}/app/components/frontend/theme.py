@@ -64,6 +64,21 @@ class LightColorPalette:
     FOCUS_COLOR: str = "#2563eb"
 
 
+class _PopupMenuTheme(ft.PopupMenuTheme):
+    """Constructible ``PopupMenuTheme`` for flet 0.28.3.
+
+    Upstream's ``__post_init__`` was copy-pasted from ``SliderTheme`` and
+    references fields this class does not have (``thumb_size``,
+    ``year_2023``), so constructing the stock class always raises. This
+    override keeps the one line that belongs here - normalizing
+    ``mouse_cursor`` into the control-state dict the serializer expects.
+    """
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mouse_cursor, dict):
+            self.mouse_cursor = {ft.ControlState.DEFAULT: self.mouse_cursor}
+
+
 class AegisTheme:
     """
     Creates Material3 Theme objects for Aegis Stack.
@@ -243,6 +258,27 @@ class AegisTheme:
             use_material3=True,
         )
 
+        # Popup menus (kebab menus, the account filter) style from the THEME,
+        # not from the button that opened them - per-call styling never
+        # sticks, which is why they kept rendering as stock Material. This
+        # gives every popup the card treatment: card surface, no Material
+        # tint wash, the card corner radius, primary-face text.
+        theme.popup_menu_theme = _PopupMenuTheme(
+            color=DarkColorPalette.BG_SECONDARY,
+            surface_tint_color=ft.Colors.TRANSPARENT,
+            shape=ft.RoundedRectangleBorder(radius=12),
+            elevation=4,
+            text_style=ft.TextStyle(
+                font_family=FontConfig.FAMILY_PRIMARY,
+                size=13,
+                color=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
+            ),
+        )
+
+
+
+
+
         # Instant transitions
         theme.page_transitions = ft.PageTransitionsTheme(
             android=ft.PageTransitionTheme.NONE,
@@ -340,6 +376,21 @@ class AegisTheme:
             text_theme=text_theme,
             use_material3=True,
         )
+
+        # Mirrors the dark theme's popup treatment (see create_dark_theme).
+        theme.popup_menu_theme = _PopupMenuTheme(
+            color=LightColorPalette.BG_SECONDARY,
+            surface_tint_color=ft.Colors.TRANSPARENT,
+            shape=ft.RoundedRectangleBorder(radius=12),
+            elevation=4,
+            text_style=ft.TextStyle(
+                font_family=FontConfig.FAMILY_PRIMARY,
+                size=13,
+                color=LightColorPalette.TEXT_PRIMARY_DEFAULT,
+            ),
+        )
+
+
 
         # Instant transitions
         theme.page_transitions = ft.PageTransitionsTheme(

@@ -8,13 +8,18 @@ a check, a same-day/same-amount pair with distinct FITIDs, and a messy payee).
 from pathlib import Path
 
 import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.services.finance import import_service
 from app.services.finance.finance_service import FinanceService
-from app.services.finance.importers.base import compute_import_hash, normalize_payee
+from app.services.finance.importers.base import (
+    ParsedTransaction,
+    compute_import_hash,
+    normalize_payee,
+)
 from app.services.finance.importers.ofx import parse_ofx
 from app.services.finance.importers.qif import parse_qif
 from app.services.finance.models import FinanceAccount
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 _FIXTURES = Path(__file__).parent / "finance" / "fixtures"
 
@@ -120,6 +125,130 @@ class TestImportPipeline:
             owner_user_id=1, account_id=account.id
         )
         assert total == 6  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_edited_row_updates_in_place_instead_of_duplicating(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """An edit in the source app (payee/category/memo) must UPDATE the
+        existing transaction. The content hash covers those fields, so
+        without lane 3 a re-export lands the same money twice."""
+        account = await _account(async_db_session)
+        data = _qif()
+        first = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="qif",
+            file_name="q.qif",
+            file_bytes=data,
+            parsed=parse_qif(data, source="qif"),
+            default_account_id=account.id,
+        )
+        assert first.rows_inserted > 0
+
+        svc = FinanceService(async_db_session)
+        before, total_before = await svc.list_transactions(
+            owner_user_id=1, account_id=account.id
+        )
+        target = before[0]
+        original_amount, original_date = target.amount, target.date_
+
+        # Same money, renamed payee + new category: one edited row.
+        edited = ParsedTransaction(
+            date=original_date,
+            amount=original_amount,
+            name="RENAMED BY USER",
+            source="qif",
+            category_hint="Bills & Utilities:Water",
+            memo="edited memo",
+        )
+        result = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="qif",
+            file_name="q2.qif",
+            file_bytes=b"different bytes",
+            parsed=[edited],
+            default_account_id=account.id,
+        )
+        assert result.rows_updated == 1
+        assert result.rows_inserted == 0
+
+        after, total_after = await svc.list_transactions(
+            owner_user_id=1, account_id=account.id
+        )
+        assert total_after == total_before  # no second copy of the money
+        touched = next(t for t in after if t.id == target.id)
+        assert touched.name == "RENAMED BY USER"
+        assert touched.memo == "edited memo"
+        assert touched.category_id is not None
+        # The hash is restamped, so the NEXT import sees a plain duplicate.
+        again = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="qif",
+            file_name="q3.qif",
+            file_bytes=b"different bytes again",
+            parsed=[
+                ParsedTransaction(
+                    date=original_date,
+                    amount=original_amount,
+                    name="RENAMED BY USER",
+                    source="qif",
+                    category_hint="Bills & Utilities:Water",
+                    memo="edited memo",
+                )
+            ],
+            default_account_id=account.id,
+        )
+        assert again.rows_duplicate == 1
+        assert again.rows_updated == 0
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_same_day_same_amount_rows_are_not_merged(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Two same-day, same-amount charges are indistinguishable once a
+        payee is edited, so lane 3 must refuse to guess and insert."""
+        from datetime import date as date_cls
+
+        account = await _account(async_db_session)
+        twins = [
+            ParsedTransaction(
+                date=date_cls(2026, 7, 1),
+                amount=-4500,
+                name=f"Corner Bistro {n}",
+                source="qif",
+            )
+            for n in (1, 2)
+        ]
+        await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="qif",
+            file_name="t.qif",
+            file_bytes=b"twins",
+            parsed=twins,
+            default_account_id=account.id,
+        )
+        result = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="qif",
+            file_name="t2.qif",
+            file_bytes=b"twins edited",
+            parsed=[
+                ParsedTransaction(
+                    date=date_cls(2026, 7, 1),
+                    amount=-4500,
+                    name="Corner Bistro RENAMED",
+                    source="qif",
+                )
+            ],
+            default_account_id=account.id,
+        )
+        assert result.rows_updated == 0  # refuses to guess which twin
+        assert result.rows_inserted == 1
 
     @pytest.mark.asyncio
     async def test_overlapping_file_inserts_only_new_row(
@@ -234,15 +363,18 @@ class TestImportHashRecipe:
         every existing import, so this value must never change unintentionally."""
         from datetime import date
 
-        assert compute_import_hash(
-            account_id=42,
-            txn_date=date(2026, 7, 1),
-            amount_cents=-4599,
-            payee="Blue Bottle",
-            memo="coffee",
-            check_number=None,
-            within_day_ordinal=0,
-        ) == "a015a1bde36843f9d7c2cfee0bd4bea839500536cd58196d3153caec29b4f74d"
+        assert (
+            compute_import_hash(
+                account_id=42,
+                txn_date=date(2026, 7, 1),
+                amount_cents=-4599,
+                payee="Blue Bottle",
+                memo="coffee",
+                check_number=None,
+                within_day_ordinal=0,
+            )
+            == "a015a1bde36843f9d7c2cfee0bd4bea839500536cd58196d3153caec29b4f74d"
+        )
 
 
 class TestParseQif:
@@ -283,9 +415,7 @@ class TestParseQif:
 async def _seed_dining_alias(session: AsyncSession) -> int:
     from app.services.finance.models import FinanceCategory, FinanceCategoryAlias
 
-    category = FinanceCategory(
-        slug="dining", name="Dining", classification="expense"
-    )
+    category = FinanceCategory(slug="dining", name="Dining", classification="expense")
     session.add(category)
     await session.flush()
     session.add(
@@ -337,20 +467,20 @@ class TestQifImport:
         splits = (
             await async_db_session.exec(
                 select(FinanceTransactionSplit).where(
-                    FinanceTransactionSplit.parent_transaction_id
-                    == supermarket.id
+                    FinanceTransactionSplit.parent_transaction_id == supermarket.id
                 )
             )
         ).all()
         assert len(splits) == 3
         assert sum(s.amount for s in splits) == -10000
 
-        # alias-matched rows got the category; unmatched stay unset
-        dining = [
-            t for t in txns if t.name in ("Blue Bottle Coffee", "Gym Membership")
-        ]
+        # alias-matched rows got the seeded category; unknown hints now
+        # CREATE a category (the user's own curation is not droppable data).
+        dining = [t for t in txns if t.name in ("Blue Bottle Coffee", "Gym Membership")]
         assert all(t.category_id == category_id for t in dining)
-        assert next(t for t in txns if t.name == "Comcast").category_id is None
+        comcast = next(t for t in txns if t.name == "Comcast")
+        assert comcast.category_id is not None
+        assert comcast.category_id != category_id  # its own "Utilities" category
 
     @pytest.mark.asyncio
     async def test_reimport_same_file_zero_new(
@@ -395,8 +525,7 @@ class TestQifImport:
         )
         # Same 8 rows + 2 new ones, different bytes -> hash dedup, not sha.
         extended = data + (
-            b"D07/09/2026\nT-15.00\nPNew Cafe\n^\n"
-            b"D07/10/2026\nT-20.00\nPNew Store\n^\n"
+            b"D07/09/2026\nT-15.00\nPNew Cafe\n^\nD07/10/2026\nT-20.00\nPNew Store\n^\n"
         )
         result = await import_service.ingest_transactions(
             async_db_session,
@@ -459,8 +588,7 @@ class TestCsvProfiles:
         profile, index = csv_profiles.detect_profile(data, _profiles())
         assert profile is not None and profile.name == "Chase Credit Card"
         by_name = {
-            p.name: p
-            for p in csv_profiles.parse_csv(data, profile, header_index=index)
+            p.name: p for p in csv_profiles.parse_csv(data, profile, header_index=index)
         }
         assert by_name["WHOLE FOODS MKT"].amount == -4500  # purchase negative
         assert by_name["ONLINE PAYMENT THANK YOU"].amount == 50000  # payment +
@@ -506,6 +634,34 @@ class TestCsvProfiles:
         assert {p.account_key for p in parsed} == {"CHECKING", "AMEX CARD"}
         checking = [p for p in parsed if p.account_key == "CHECKING"]
         assert any(p.amount == 500000 for p in checking)  # +5,000.00 payroll
+
+    def test_detects_a_layout_that_gained_a_vendor_column(self) -> None:
+        """Quicken added a leading "Scheduled" column to the All
+        Transactions report. Detection matched on exact column count, so
+        one added column rejected the entire file. Parsing addresses
+        columns by name, so extras were always harmless - detection now
+        accepts a row that carries the full signature plus extras."""
+        from app.services.finance.importers import csv_profiles
+
+        data = _csv("sample_quicken_all_scheduled.csv")
+        profile, index = csv_profiles.detect_profile(data, _profiles())
+        assert profile is not None and profile.name == "Quicken All Transactions"
+        parsed = csv_profiles.parse_csv(data, profile, header_index=index)
+        assert len(parsed) == 4
+        by_name = {p.name: p for p in parsed}
+        # Columns after the inserted one still land in the right fields.
+        assert by_name["Employer Payroll"].amount == 500000
+        assert by_name["Whole Foods"].account_key == "CHECKING"
+        assert by_name["Portasoft"].amount == -3893
+
+    def test_exact_match_wins_over_a_looser_one(self) -> None:
+        """A file whose header exactly matches one profile must not be
+        claimed by another whose signature merely fits inside it."""
+        from app.services.finance.importers import csv_profiles
+
+        data = _csv("sample_quicken_all.csv")
+        profile, _ = csv_profiles.detect_profile(data, list(reversed(_profiles())))
+        assert profile is not None and profile.name == "Quicken All Transactions"
 
 
 class TestInferAccountKind:
@@ -572,6 +728,130 @@ class TestCsvImport:
         assert any(t.amount == -12050 for t in txns)  # the AMEX charge
 
     @pytest.mark.asyncio
+    async def test_scheduled_rows_are_recorded_but_never_ledgered(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Quicken can export SCHEDULED bills alongside posted ones. They are
+        money that has not moved, so they must not reach the ledger - they
+        would shift balances and double-count against the projection, which
+        already walks the same bills forward from recurring streams.
+
+        Both signals matter: an "Overdue" scheduled row is dated in the
+        PAST, so a future-date rule alone would let it through."""
+        from sqlmodel import select
+
+        from app.services.finance.models import FinanceImportBatchRow
+
+        await _seed_csv_profiles(async_db_session)
+        result = await import_service.import_csv(
+            async_db_session,
+            owner_user_id=1,
+            file_name="all_scheduled.csv",
+            file_bytes=_csv("sample_quicken_all_scheduled.csv"),
+        )
+        # 2 posted rows in; the "Scheduled" (future) and "Overdue" (PAST
+        # dated) rows are both held out.
+        assert result.rows_inserted == 2
+        assert result.rows_skipped == 2
+
+        svc = FinanceService(async_db_session)
+        txns, total = await svc.list_transactions(owner_user_id=1)
+        assert total == 2
+        names = {t.name for t in txns}
+        assert "Portasoft" not in names  # scheduled, future-dated
+        assert "Verizon Wireless" not in names  # scheduled, PAST-dated
+
+        # Skipped rows are recorded, not silently dropped.
+        rows = (
+            await async_db_session.exec(
+                select(FinanceImportBatchRow).where(
+                    FinanceImportBatchRow.import_batch_id == result.batch_id,
+                    FinanceImportBatchRow.parsed_status == "skipped",
+                )
+            )
+        ).all()
+        assert len(rows) == 2
+        assert all("scheduled" in (r.reason or "") for r in rows)
+
+    @pytest.mark.asyncio
+    async def test_scheduled_rows_do_not_shift_real_rows_hashes(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Held-out rows must be out of the HASH grouping too. If they
+        shaped the within-day ordinals, real rows would hash differently
+        with and without them, and a later import would duplicate them."""
+        from datetime import date as date_cls
+        from datetime import timedelta
+
+        account = await _account(async_db_session)
+        posted = ParsedTransaction(
+            date=date_cls(2026, 7, 1),
+            amount=-4500,
+            name="Corner Bistro",
+            source="csv",
+        )
+        scheduled_twin = ParsedTransaction(
+            date=date_cls(2026, 7, 1),
+            amount=-4500,
+            name="Corner Bistro",
+            source="csv",
+            is_scheduled=True,
+        )
+        first = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="csv",
+            file_name="a.csv",
+            file_bytes=b"with scheduled twin",
+            parsed=[posted, scheduled_twin],
+            default_account_id=account.id,
+        )
+        assert first.rows_inserted == 1
+        assert first.rows_skipped == 1
+
+        # The same posted row again, this time with no scheduled sibling:
+        # it must hash identically and read as a duplicate.
+        second = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="csv",
+            file_name="b.csv",
+            file_bytes=b"without scheduled twin",
+            parsed=[
+                ParsedTransaction(
+                    date=date_cls(2026, 7, 1),
+                    amount=-4500,
+                    name="Corner Bistro",
+                    source="csv",
+                )
+            ],
+            default_account_id=account.id,
+        )
+        assert second.rows_duplicate == 1
+        assert second.rows_inserted == 0
+
+        # A future-dated row is held out even with no "scheduled" flag, for
+        # sources that carry no such column.
+        third = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="csv",
+            file_name="c.csv",
+            file_bytes=b"future row",
+            parsed=[
+                ParsedTransaction(
+                    date=date_cls.today() + timedelta(days=30),
+                    amount=-1000,
+                    name="Next month rent",
+                    source="csv",
+                )
+            ],
+            default_account_id=account.id,
+        )
+        assert third.rows_skipped == 1
+        assert third.rows_inserted == 0
+
+    @pytest.mark.asyncio
     async def test_import_sets_current_balance_from_running_balance(
         self, async_db_session: AsyncSession
     ) -> None:
@@ -593,11 +873,11 @@ class TestCsvImport:
             account.id, owner_user_id=1
         )
         assert refreshed is not None
-        # Latest date is 8/3/2026 (City Water), balance 5,925.35 — not file
+        # Latest date is 7/3/2026 (City Water), balance 5,925.35 — not file
         # order (the 8/1 rows come first) and not the largest balance.
         assert refreshed.current_balance == 592535
         assert refreshed.balance_as_of is not None
-        assert refreshed.balance_as_of.date() == date(2026, 8, 3)
+        assert refreshed.balance_as_of.date() == date(2026, 7, 3)
 
     @pytest.mark.asyncio
     async def test_multi_account_csv_auto_creates_and_routes(
@@ -691,9 +971,7 @@ class TestCsvImport:
             )
         failed = (
             await async_db_session.exec(
-                select(FinanceImportBatch).where(
-                    FinanceImportBatch.status == "failed"
-                )
+                select(FinanceImportBatch).where(FinanceImportBatch.status == "failed")
             )
         ).all()
         assert failed and failed[0].rows_total == 0
@@ -703,9 +981,7 @@ class TestCsvImport:
         assert total == 0  # nothing written on an unknown layout
 
     @pytest.mark.asyncio
-    async def test_reimport_zero_dupes(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_reimport_zero_dupes(self, async_db_session: AsyncSession) -> None:
         account = await _account(async_db_session)
         await _seed_csv_profiles(async_db_session)
         data = _csv("sample_chase_checking.csv")

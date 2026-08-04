@@ -1,0 +1,41 @@
+"""Apply the stored active-model override at startup.
+
+The model in use is a database row, not an ``.env`` value, so that switching
+from the Cloud Catalog tab or from ``llm use`` takes effect without a restart.
+This hook replays that choice into the live settings as each process boots,
+so a restart keeps the selection and the scheduler/worker agree with the
+webserver.
+
+``.env`` remains the bootstrap default: it is what a fresh install runs on
+until something writes an override.
+"""
+{% if include_ai and ai_backend in ("sqlite", "postgres") %}
+
+from typing import Any
+
+from app.core.log import logger
+
+
+async def startup_hook() -> Any:
+    """Load the stored model selection into the running settings."""
+    from app.core.config import settings
+    from app.core.db import get_async_session
+    from app.services.ai import active_model
+
+    try:
+        async with get_async_session() as session:
+            applied = await active_model.load_into_settings(session, settings)
+    except Exception:
+        # A missing table (migrations not yet run) must not stop the app from
+        # booting: without an override the .env default is already correct.
+        logger.exception("Could not load the active LLM selection")
+        return None
+
+    if applied:
+        logger.info(
+            "Active LLM selection applied: %s (%s)",
+            settings.AI_MODEL,
+            settings.AI_PROVIDER,
+        )
+    return None
+{% endif %}

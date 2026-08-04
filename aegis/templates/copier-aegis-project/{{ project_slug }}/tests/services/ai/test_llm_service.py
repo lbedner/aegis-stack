@@ -1,11 +1,14 @@
 """Tests for LLM service business logic."""
 
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import Engine
+from sqlmodel import Session
+
 from app.services.ai.llm_service import (
     get_current_config,
     get_model_info,
@@ -22,8 +25,6 @@ from app.services.ai.models.llm import (
     LLMVendor,
     Modality,
 )
-from sqlalchemy import Engine
-from sqlmodel import Session, SQLModel, create_engine
 
 # =============================================================================
 # Fixtures
@@ -31,21 +32,22 @@ from sqlmodel import Session, SQLModel, create_engine
 
 
 @pytest.fixture
-def llm_db_engine() -> Generator[Engine]:
-    """Create an in-memory SQLite database engine for LLM service tests."""
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    SQLModel.metadata.create_all(engine)
-    yield engine
-    SQLModel.metadata.drop_all(engine)
-    engine.dispose()
+def llm_db_engine(engine: Engine) -> Engine:
+    """The root conftest's schema-attached engine.
+
+    A bare local ``create_engine`` cannot ``create_all`` this project's
+    metadata: the root conftest imports every service's models, so tables
+    live in named schemas (finance, scheduler, ...) that only the shared
+    engine attaches in-memory databases for.
+    """
+    return engine
 
 
 @pytest.fixture
-def llm_session(llm_db_engine: Engine) -> Generator[Session]:
-    """Create a database session for LLM service tests."""
-    with Session(llm_db_engine) as session:
-        yield session
-        session.rollback()
+def llm_session(db_session: Session) -> Session:
+    """The root conftest's transactional session (rolled back per test),
+    riding the same connection as ``llm_db_engine``."""
+    return db_session
 
 
 @pytest.fixture

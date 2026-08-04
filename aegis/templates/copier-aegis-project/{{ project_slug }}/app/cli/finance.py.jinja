@@ -12,6 +12,7 @@ from typing import Any
 import typer
 
 from app.cli import theme
+from app.i18n import lazy_t, t
 
 app = typer.Typer(help="Finance service commands.")
 accounts_app = typer.Typer(help="Manage manual finance accounts.")
@@ -173,6 +174,86 @@ async def _recompute_snapshots(days: int) -> None:
     )
 
 
+@app.command("seed-demo", help=lazy_t("finance.help_seed_demo"))
+def seed_demo(
+    owner_user_id: int | None = _OWNER_OPT,
+    reset: bool = typer.Option(
+        False, "--reset", help=lazy_t("finance.opt_seed_demo_reset")
+    ),
+    clear: bool = typer.Option(
+        False, "--clear", help=lazy_t("finance.opt_seed_demo_clear")
+    ),
+    months: int = typer.Option(
+        8, "--months", min=1, max=24, help=lazy_t("finance.opt_seed_demo_months")
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help=lazy_t("finance.opt_seed_demo_yes")
+    ),
+) -> None:
+    if clear:
+        asyncio.run(_clear_demo(owner_user_id))
+        return
+    asyncio.run(_seed_demo(owner_user_id, reset, months, yes))
+
+
+async def _clear_demo(owner_user_id: int | None) -> None:
+    from app.core.db import get_async_session
+    from app.services.finance import demo_seed
+
+    async with get_async_session() as session:
+        removed = await demo_seed.clear_demo(session, owner_user_id=owner_user_id)
+        await session.commit()
+    if not removed:
+        console.print(t("finance.seed_demo_nothing_to_clear"))
+        return
+    console.print(t("finance.seed_demo_cleared", accounts=removed))
+
+
+async def _seed_demo(
+    owner_user_id: int | None, reset: bool, months: int, yes: bool
+) -> None:
+    from app.core.db import get_async_session
+    from app.services.finance import demo_seed
+
+    async with get_async_session() as session:
+        if not yes:
+            foreign = await demo_seed.count_foreign_accounts(
+                session, owner_user_id=owner_user_id
+            )
+            if foreign and not typer.confirm(
+                t("finance.seed_demo_confirm_existing", accounts=foreign)
+            ):
+                console.print(t("finance.seed_demo_aborted"))
+                raise typer.Exit(code=1)
+        result = await demo_seed.seed_demo(
+            session, owner_user_id=owner_user_id, reset=reset, months=months
+        )
+        await session.commit()
+
+    if result.skipped:
+        console.print(t("finance.seed_demo_skipped"))
+        return
+    console.print(f"[green]{t('finance.seed_demo_done')}[/]")
+    console.print(
+        t(
+            "finance.seed_demo_counts_ledger",
+            accounts=result.accounts,
+            transactions=result.transactions,
+            imported=result.imported_rows,
+            splits=result.splits,
+        )
+    )
+    console.print(
+        t(
+            "finance.seed_demo_counts_derived",
+            transfers=result.transfers,
+            recurring=result.recurring,
+            trades=result.trades,
+            days=result.net_worth_days,
+        )
+    )
+
+
 @app.command("import")
 def import_file(
     path: str = typer.Argument(..., help="Path to an OFX/QFX/QIF/CSV file."),
@@ -216,7 +297,9 @@ async def _import_file(
     table.add_column("Count", justify="right")
     table.add_row("Total rows", str(result.rows_total))
     table.add_row("Inserted", str(result.rows_inserted))
+    table.add_row("Updated", str(result.rows_updated))
     table.add_row("Duplicate", str(result.rows_duplicate))
+    table.add_row("Skipped (scheduled)", str(result.rows_skipped))
     table.add_row("Errors", str(result.rows_error))
     table.add_row("Batch ID", str(result.batch_id))
     console.print(table)

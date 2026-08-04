@@ -1,6 +1,6 @@
 """Shared formatting utilities for display across CLI and frontend."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def format_number(num: int) -> str:
@@ -24,9 +24,29 @@ def format_percentage(pct: float) -> str:
     return f"{pct:.1f}%"
 
 
-def format_relative_time(
-    iso_str: str | None, *, now: datetime | None = None
-) -> str:
+def format_date(value: object) -> str:
+    """An ISO date (or ``date``) as "Aug 19, 2026". Blank stays blank.
+
+    Anything unparseable is returned as-is rather than swallowed: a
+    surprising string on screen is a better failure than a silently empty
+    cell, and it points at the real bug instead of hiding it.
+    """
+    from datetime import date as _date
+    from datetime import datetime as _datetime
+
+    if value is None or value == "":
+        return ""
+    if isinstance(value, _datetime):
+        value = value.date()
+    if not isinstance(value, _date):
+        try:
+            value = _date.fromisoformat(str(value)[:10])
+        except ValueError:
+            return str(value)
+    return f"{value.strftime('%b')} {value.day}, {value.year}"
+
+
+def format_relative_time(iso_str: str | None, *, now: datetime | None = None) -> str:
     """Format an ISO timestamp as a relative duration ("3 minutes ago").
 
     Returns ``"—"`` for empty input. Sub-minute durations render as
@@ -47,8 +67,8 @@ def format_relative_time(
         ts = iso_str.replace("Z", "+00:00") if "Z" in iso_str else iso_str
         dt = datetime.fromisoformat(ts)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        now_dt = now if now is not None else datetime.now(timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
+        now_dt = now if now is not None else datetime.now(UTC)
         seconds = (now_dt - dt).total_seconds()
         if seconds < 60:
             return "just now"

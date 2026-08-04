@@ -11,7 +11,11 @@ from sqlmodel import select
 
 from app.core.db import get_async_session
 from app.services.finance import networth_service
-from app.services.finance.categorize import detect_recurring, generate_insights
+from app.services.finance.categorize import (
+    detect_recurring,
+    generate_insights,
+    promote_curated_streams,
+)
 from app.services.finance.models import FinanceAccount, FinanceConnection
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,7 @@ async def finance_recompute_snapshots_job() -> None:
             days_written = 0
             for owner_user_id in owners:
                 await detect_recurring(session, owner_user_id=owner_user_id)
+                await promote_curated_streams(session, owner_user_id=owner_user_id)
                 await generate_insights(session, owner_user_id=owner_user_id)
                 days_written += await networth_service.recompute_snapshots(
                     session, owner_user_id=owner_user_id
@@ -48,6 +53,42 @@ async def finance_recompute_snapshots_job() -> None:
         )
     except Exception:
         logger.exception("Finance snapshot recompute failed")
+{%- if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+
+
+async def finance_analyst_note_job() -> None:
+    """Nightly, after the rules: one plain-language note per owner.
+
+    Runs behind the recompute job on purpose - the note is written from the
+    findings that pass produced, so it has to see tonight's, not last night's.
+    Each owner is isolated: one owner's model failure must not cost the others
+    their note. ``run_analyst_note`` already absorbs its own errors, so this
+    only has to guard the session.
+    """
+    from app.services.finance.analyst import run_analyst_note
+
+    try:
+        async with get_async_session() as session:
+            owners = (
+                await session.exec(
+                    select(FinanceAccount.owner_user_id)
+                    .where(FinanceAccount.deleted_at.is_(None))
+                    .distinct()
+                )
+            ).all()
+            written = 0
+            for owner_user_id in owners:
+                note = await run_analyst_note(session, owner_user_id=owner_user_id)
+                written += 1 if note is not None else 0
+            await session.commit()
+        logger.info(
+            "Finance: analyst notes ready for %d of %d owner(s)",
+            written,
+            len(owners),
+        )
+    except Exception:
+        logger.exception("Finance analyst note run failed")
+{%- endif %}
 {%- if finance_plaid or finance_snaptrade %}
 
 

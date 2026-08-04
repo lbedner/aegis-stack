@@ -25,6 +25,7 @@ from app.components.frontend.controls.snack_bar import (
     SuccessSnackBar,
     WarningSnackBar,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -1425,9 +1426,8 @@ class BlogDetailDialog(BaseDetailPopup):
             if e.control.selected_index == 3:
                 page.run_task(editor_tab.refresh_post_list)
 
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=[
                 ft.Tab(text="Overview", content=overview_tab),
                 ft.Tab(text="Posts", content=posts_tab),
@@ -1435,9 +1435,6 @@ class BlogDetailDialog(BaseDetailPopup):
                 ft.Tab(text="Editor", content=editor_tab),
             ],
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
             on_change=_on_tab_change,
         )
 

@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "输入费用：",
     "llm.output_price_label": "输出费用：",
     "llm.model_not_in_catalog": "目录中未找到该模型，请运行 'llm sync' 导入数据。",
+    "llm.source_label": "来源:",
+    "llm.source_override": "已保存的选择(覆盖 .env;用 'llm reset' 清除)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env 默认值:",
+    "llm.help_reset": "移除已保存的模型覆盖,让 .env 重新决定模型。",
+    "llm.reset_done": "已清除覆盖。当前活动模型来自 .env:{model}",
+    "llm.reset_none": "未保存任何覆盖。当前活动模型已来自 .env:{model}",
     # 切换模型
     "llm.switching_model": "正在切换到 {model_id}",
     # 模型信息
@@ -1157,6 +1164,40 @@ MESSAGES: dict[str, str] = {
     "payment.could_not_archive_price": "无法归档 {id}：{error}",
     "payment.could_not_archive_product": "无法归档 {id}：{error}",
     "payment.fixture_cleanup_aborted": "测试数据清理已中止：{error}",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog (placeholders, translator PR will localise) ──
     "blog.help": "Inspect and manage blog posts and tags",
     "blog.help_status": "Show blog post counts and latest activity",

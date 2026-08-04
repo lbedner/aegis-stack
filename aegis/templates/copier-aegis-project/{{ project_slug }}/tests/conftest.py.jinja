@@ -461,6 +461,19 @@ async def auth_headers(admin_user) -> dict[str, str]:
 
     token = create_access_token(data={"sub": admin_user.email})
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+async def acting_owner_user_id(admin_user) -> int | None:
+    """Owner id that ``authenticated_client`` requests resolve to.
+
+    Seed owner-scoped rows (finance accounts, transactions, ...) with
+    this id so rows written straight through a service are visible to
+    the API reads that assert on them. Pairs with
+    ``authenticated_client``, and renders as ``None`` in stacks without
+    the auth service, where those rows are unscoped.
+    """
+    return admin_user.id
 {% elif include_auth %}
 
 
@@ -488,6 +501,19 @@ async def auth_headers(auth_user) -> dict[str, str]:
 
     token = create_access_token(data={"sub": auth_user.email})
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+async def acting_owner_user_id(auth_user) -> int | None:
+    """Owner id that ``authenticated_client`` requests resolve to.
+
+    Seed owner-scoped rows (finance accounts, transactions, ...) with
+    this id so rows written straight through a service are visible to
+    the API reads that assert on them. Pairs with
+    ``authenticated_client``, and renders as ``None`` in stacks without
+    the auth service, where those rows are unscoped.
+    """
+    return auth_user.id
 {% else %}
 
 
@@ -499,5 +525,15 @@ def auth_headers() -> dict[str, str]:
     ``auth_headers`` and get ``{}`` here; the endpoints aren't gated.
     """
     return {}
+
+
+@pytest.fixture
+def acting_owner_user_id() -> int | None:
+    """No auth service, so owner-scoped rows carry no owner.
+
+    The auth-stack counterpart returns the authenticated user's id; here
+    ``None`` keeps seed helpers written once and correct in both stacks.
+    """
+    return None
 {% endif %}
 

@@ -1,8 +1,10 @@
 """Memory module model."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlmodel import Field, SQLModel
+
+from .timestamps import utcnow_naive
 
 
 class MemoryModule(SQLModel, table=True):
@@ -32,5 +34,5 @@ class MemoryModule(SQLModel, table=True):
     priority: int = Field(default=100)
     token_estimate: int = Field(default=0)
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=utcnow_naive)
+    updated_at: datetime = Field(default_factory=utcnow_naive)

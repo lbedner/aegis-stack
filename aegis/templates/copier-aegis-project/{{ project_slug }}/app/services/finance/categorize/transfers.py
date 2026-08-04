@@ -24,6 +24,7 @@ as suggestions.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 import re
 
 from sqlalchemy.exc import IntegrityError
@@ -93,14 +94,28 @@ def _score(
 
 
 async def detect_transfers(
-    db: AsyncSession, *, owner_user_id: int | None
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    today: date | None = None,
+    lookback_days: int | None = None,
 ) -> TransferDetectionResult:
     """Pair internal transfers among the owner's recent, unpaired transactions.
 
     Idempotent: transactions already tied to a transfer (any status) are
     excluded, so re-running after each sync/import doesn't duplicate work or
     re-suggest a rejected pairing.
+
+    Only transactions dated within ``lookback_days`` of ``today`` are
+    considered (``settings.FINANCE_RULES_LOOKBACK_DAYS`` when not given;
+    0 disables the window). A deep historical import accumulates coincidental
+    amount matches by the hundreds, and every one of them lands in Review.
     """
+    from app.core.config import settings
+
+    today = today or date.today()
+    if lookback_days is None:
+        lookback_days = settings.FINANCE_RULES_LOOKBACK_DAYS
     result = TransferDetectionResult()
 
     acct_filters = [
@@ -132,6 +147,10 @@ async def detect_transfers(
         FinanceTransaction.account_id.in_(list(account_type.keys())),
         _owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
     ]
+    if lookback_days:
+        txn_filters.append(
+            FinanceTransaction.date_ >= today - timedelta(days=lookback_days)
+        )
     txns = (await db.exec(select(FinanceTransaction).where(*txn_filters))).all()
     candidates = [t for t in txns if t.id not in paired_ids]
 

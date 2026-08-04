@@ -9,8 +9,33 @@ from typing import Any
 
 import flet as ft
 
+from ..styles import FontConfig
 from ..theme import AegisTheme as Theme
 from ..theme import DarkColorPalette
+
+
+class NumericText(ft.Text):  # type: ignore[misc]
+    """Text for figures: money, counts, percentages, axis ticks.
+
+    Uses the tabular face from ``FontConfig.FAMILY_NUMERIC`` so every digit
+    takes the same width. In a proportional face a right-aligned column of
+    amounts shifts sideways as the digits change, which is the thing that
+    makes a table of money feel subtly unsettled.
+
+    Takes the same keyword arguments as ``ft.Text``; pass ``size``, ``weight``,
+    and ``color`` to match whatever it sits beside.
+    """
+
+    def __init__(self, value: str, **kwargs: Any) -> None:
+        defaults = {
+            "font_family": FontConfig.FAMILY_NUMERIC,
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_REGULAR,
+            "color": DarkColorPalette.TEXT_PRIMARY_DEFAULT,
+            "selectable": True,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, **defaults)
 
 
 class PrimaryText(ft.Text):  # type: ignore[misc]
@@ -100,22 +125,21 @@ class ConfirmationText(ft.Text):  # type: ignore[misc]
         super().__init__(value=value, opacity=opacity, **defaults)
 
 
-class MetricText(ft.Text):  # type: ignore[misc]
+class MetricText(NumericText):  # type: ignore[misc]
     """
     Specialized text for displaying metrics and numerical values.
 
-    Uses bold weight and primary color for emphasis on data points.
+    ``NumericText`` at emphasis weight: the tabular figures come from the
+    parent, this only sets the size and weight a headline number wants.
     """
 
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         defaults = {
-            "font_family": "Roboto",
             "size": Theme.Typography.BODY_LARGE,
             "weight": Theme.Typography.WEIGHT_BOLD,
-            "selectable": True,
         }
         defaults.update(kwargs)
-        super().__init__(value=value, opacity=opacity, **defaults)
+        super().__init__(value, opacity=opacity, **defaults)
 
 
 class LabelText(ft.Text):  # type: ignore[misc]

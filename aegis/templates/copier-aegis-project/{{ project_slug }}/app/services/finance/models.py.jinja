@@ -1616,12 +1616,43 @@ class FinanceBudgetCategory(SQLModel, table=True):
         Index("ix_finance_budgetcat_budget", "budget_id"),
         Index("ix_finance_budgetcat_category", "category_id"),
         Index("ix_finance_budgetcat_month", "period_month"),
+        # A NULL column in a composite unique index never collides with
+        # another NULL - three partial indexes, one per target shape,
+        # instead of one 4-column index that would silently allow
+        # duplicate payee/overall rows.
         Index(
-            "uq_finance_budgetcat",
+            "uq_finance_budgetcat_category",
             "budget_id",
             "category_id",
             "period_month",
             unique=True,
+            sqlite_where=Column("category_id").isnot(None),
+            postgresql_where=Column("category_id").isnot(None),
+        ),
+        Index(
+            "uq_finance_budgetcat_payee",
+            "budget_id",
+            "payee_key",
+            "period_month",
+            unique=True,
+            sqlite_where=Column("payee_key").isnot(None),
+            postgresql_where=Column("payee_key").isnot(None),
+        ),
+        Index(
+            "uq_finance_budgetcat_overall",
+            "budget_id",
+            "period_month",
+            unique=True,
+            sqlite_where=(
+                Column("category_id").is_(None) & Column("payee_key").is_(None)
+            ),
+            postgresql_where=(
+                Column("category_id").is_(None) & Column("payee_key").is_(None)
+            ),
+        ),
+        CheckConstraint(
+            "category_id IS NULL OR payee_key IS NULL",
+            name="ck_finance_budgetcat_target",
         ),
         {"schema": _SCHEMA},
     )
@@ -1629,10 +1660,15 @@ class FinanceBudgetCategory(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field()
     budget_id: int = Field(foreign_key=f"{_FK}finance_budget.id")
-    # NULL category = the budget's overall line.
+    # NULL category + NULL payee_key = the budget's overall line.
     category_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_category.id"
     )
+    # First-4-normalized-token payee grouping key (see
+    # ``transaction_payee_key`` in finance_service.py) - a payee-scoped
+    # target ("Starbucks") when category_id is NULL.
+    payee_key: str | None = Field(default=None, max_length=96)
+    payee_label: str | None = Field(default=None, max_length=191)
     period_month: int | None = Field(default=None)
     allocated_amount: int = _bigint("allocated_amount", nullable=False, default=0)
     goal_amount: int | None = _bigint("goal_amount")

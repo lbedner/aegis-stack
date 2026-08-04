@@ -8,7 +8,6 @@ invariant enforced here: a module must have at least one of the two,
 since an empty module can never contribute context.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlmodel import select
@@ -16,6 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
 from app.services.ai.models.agents import MemoryModule
+from app.services.ai.models.agents.timestamps import utcnow_naive
 
 
 class InvalidMemoryModuleError(ValueError):
@@ -123,7 +123,7 @@ async def update_memory_module(
 
     for field, value in changes.items():
         setattr(module, field, value)
-    module.updated_at = datetime.now(UTC)
+    module.updated_at = utcnow_naive()
     session.add(module)
     await session.commit()
     await session.refresh(module)
@@ -139,3 +139,25 @@ async def delete_memory_module(slug: str, *, session: AsyncSession) -> None:
     await session.delete(module)
     await session.commit()
     logger.info("Deleted memory module", module_slug=slug)
+
+
+def serialize_memory_module(module: MemoryModule) -> dict[str, Any]:
+    """API/UI shape for one module row.
+
+    Mirrors ``agent_registry.serialize_agent``: the dashboard and the API read
+    the same dict, so a field added here shows up in both.
+    """
+    return {
+        "slug": module.slug,
+        "name": module.name,
+        "description": module.description,
+        "category": module.category,
+        "prompt_content": module.prompt_content,
+        "fetch_function": module.fetch_function,
+        "context_key": module.context_key,
+        "supports_days_back": module.supports_days_back,
+        "default_days_back": module.default_days_back,
+        "priority": module.priority,
+        "token_estimate": module.token_estimate,
+        "is_active": module.is_active,
+    }

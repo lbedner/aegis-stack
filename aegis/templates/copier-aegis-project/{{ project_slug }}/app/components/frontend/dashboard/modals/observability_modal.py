@@ -17,6 +17,7 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableDataTable,
     ExpandableRow,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
@@ -622,9 +623,8 @@ class ObservabilityDetailDialog(BaseDetailPopup):
             f"Slowest Spans ({spans_count})" if spans_count > 0 else "Slowest Spans"
         )
 
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=[
                 ft.Tab(
                     text="Overview",
@@ -644,9 +644,6 @@ class ObservabilityDetailDialog(BaseDetailPopup):
                 ),
             ],
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         super().__init__(

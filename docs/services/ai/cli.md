@@ -503,7 +503,7 @@ Indexed Files: code
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━┩
 │ app/services/ai/service.py            │ 45     │
 │ app/services/auth/service.py          │ 23     │
-│ app/components/backend/api/ai/router… │ 12     │
+│ app/components/backend/api/v1/ai/router… │ 12     │
 └───────────────────────────────────────┴────────┘
 
 Total: 87 files, 1,523 chunks

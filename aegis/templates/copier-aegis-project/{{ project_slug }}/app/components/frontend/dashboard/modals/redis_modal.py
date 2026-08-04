@@ -14,6 +14,7 @@ from app.components.frontend.controls import (
     H3Text,
     SecondaryText,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -615,9 +616,8 @@ class RedisDetailDialog(BaseDetailPopup):
         metadata = component_data.metadata or {}
 
         # Build tabs
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=[
                 ft.Tab(text="Overview", content=OverviewTab(component_data, page)),
                 ft.Tab(
@@ -628,9 +628,6 @@ class RedisDetailDialog(BaseDetailPopup):
                 ),
             ],
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         # Initialize base popup with tabs

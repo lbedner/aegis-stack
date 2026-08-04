@@ -119,8 +119,8 @@ my-app memory-modules list      # the module catalog
 **API**:
 
 ```bash
-GET   /ai/agents          # list definitions with tool/module grants
-PATCH /ai/agents/{slug}   # {"is_active": bool}
+GET   /api/v1/ai/agents          # list definitions with tool/module grants
+PATCH /api/v1/ai/agents/{slug}   # {"is_active": bool}
 ```
 
 Edits through the API invalidate the loader's warm cache, so the next chat request sees the change immediately.
@@ -130,3 +130,5 @@ Edits through the API invalidate the loader's warm cache, so the next chat reque
 - [Memory Modules](memory-modules.md): reusable context blocks agents opt into
 - [RAG](rag.md): the retrieval pipeline agents scope over
 - [Cost Tracking](cost-tracking.md): usage rows carry per-agent attribution (`chat:<slug>`)
+- [Finance Analyst](../finance/analyst.md): a service-owned agent, and a worked
+  example of a headless run driven by a scheduled job rather than a chat turn

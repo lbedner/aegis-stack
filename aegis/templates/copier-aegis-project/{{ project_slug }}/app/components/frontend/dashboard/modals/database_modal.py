@@ -11,6 +11,7 @@ Displays comprehensive database information in a tabbed interface:
 from datetime import datetime
 
 import flet as ft
+
 from app.components.frontend.controls import (
     DataTable,
     DataTableColumn,
@@ -19,6 +20,7 @@ from app.components.frontend.controls import (
     TableCellText,
     TableNameText,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title, get_database_subtitle
@@ -627,9 +629,8 @@ class DatabaseDetailDialog(BaseDetailPopup):
         subtitle = get_database_subtitle(metadata)
 
         # Build tabs
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=[
                 ft.Tab(text="Overview", content=OverviewTab(database_component, page)),
                 ft.Tab(text="Schema", content=SchemaTab(database_component, page)),
@@ -639,9 +640,6 @@ class DatabaseDetailDialog(BaseDetailPopup):
                 ft.Tab(text="Settings", content=SettingsTab(database_component, page)),
             ],
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         # Initialize base popup with tabs

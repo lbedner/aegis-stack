@@ -24,6 +24,7 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableDataTable,
     ExpandableRow,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -1099,7 +1100,9 @@ class TrafficTab(ft.Container):
                 ft.Container(
                     content=ft.Row(
                         [
-                            ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.WHITE),
+                            ft.Icon(
+                                ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.WHITE
+                            ),
                             BodyText(
                                 f"One source is dominating: {dominant.get('ip')} "
                                 f"- {pct}% of traffic "
@@ -1213,9 +1216,8 @@ class BackendDetailDialog(BaseDetailPopup):
             with _span("overseer.modal.backend.traffic_tab"):
                 traffic_tab = TrafficTab(backend_component)
 
-            tabs = ft.Tabs(
+            tabs = PulseTabs(
                 selected_index=0,
-                animation_duration=200,
                 tabs=[
                     ft.Tab(text="Overview", content=overview_tab),
                     ft.Tab(text="Routes", content=routes_tab),
@@ -1225,9 +1227,6 @@ class BackendDetailDialog(BaseDetailPopup):
                     ft.Tab(text="Load Tests", content=load_tests_tab),
                 ],
                 expand=True,
-                label_color=ft.Colors.ON_SURFACE,
-                unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-                indicator_color=ft.Colors.ON_SURFACE_VARIANT,
             )
 
         # Initialize base popup with tabs

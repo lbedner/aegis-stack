@@ -28,9 +28,20 @@ PANELS = [
 
 class TestEveryPanelListens:
     def test_each_panel_registers_a_filter_listener(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_panel import (
+            FinancePanel,
+        )
+
         missing = []
         for module, name in PANELS:
-            source = inspect.getsource(getattr(module, name))
+            cls = getattr(module, name)
+            # A FinancePanel registers in the base __init__ - enforced by
+            # inheritance now, which is exactly what this guard wanted:
+            # the per-panel copies it used to grep for were the drift
+            # risk (see test_finance_panel_lifecycle).
+            if issubclass(cls, FinancePanel):
+                continue
+            source = inspect.getsource(cls)
             if "register_filter_listener(" not in source:
                 missing.append(name)
         assert missing == [], f"these ignore the global filter: {missing}"

@@ -303,6 +303,84 @@ async def _import_file(
     table.add_row("Errors", str(result.rows_error))
     table.add_row("Batch ID", str(result.batch_id))
     console.print(table)
+
+
+_INVESTMENT_PROFILES = ("optum",)
+
+
+@app.command("import-investments")
+def import_investments(
+    path: str = typer.Argument(..., help="Path to a custodian activity export."),
+    account_id: int = typer.Option(
+        ..., "--account-id", "-a", help="Target brokerage account."
+    ),
+    profile: str = typer.Option(
+        "optum", "--profile", "-p", help=f"One of: {', '.join(_INVESTMENT_PROFILES)}."
+    ),
+    ticker: list[str] = typer.Option(
+        [],
+        "--ticker",
+        help="NAME=SYMBOL, repeatable. Maps a fund name to its ticker; "
+        "unmapped funds get a placeholder MANUAL: ticker.",
+    ),
+    owner_user_id: int | None = _OWNER_OPT,
+) -> None:
+    """Import a custodian's investment-activity ledger (trades, dividends,
+    fees) into a brokerage account. Unlike ``import``, this writes
+    ``FinanceTrade``/``FinanceHolding`` rows, not cash transactions."""
+    asyncio.run(_import_investments(path, account_id, profile, ticker, owner_user_id))
+
+
+async def _import_investments(
+    path: str,
+    account_id: int,
+    profile: str,
+    ticker_pairs: list[str],
+    owner_user_id: int | None,
+) -> None:
+    from pathlib import Path
+
+    from rich.table import Table
+
+    from app.core.db import get_async_session
+    from app.services.finance.investments.loader import import_investment_activities
+    from app.services.finance.investments.optum import parse_optum_settled_transactions
+
+    if profile != "optum":
+        console.print(f"[red]Unknown profile:[/] {profile!r}. Known: optum.")
+        raise typer.Exit(code=1)
+    tickers: dict[str, str] = {}
+    for pair in ticker_pairs:
+        name, _, symbol = pair.partition("=")
+        tickers[name.strip()] = symbol.strip()
+
+    file_path = Path(path)
+    text = file_path.read_text()
+    try:
+        activities = parse_optum_settled_transactions(text)
+    except ValueError as exc:
+        console.print(f"[red]Parse failed:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    async with get_async_session() as session:
+        result = await import_investment_activities(
+            session,
+            owner_user_id=owner_user_id,
+            account_id=account_id,
+            activities=activities,
+            security_tickers=tickers,
+        )
+        await session.commit()
+
+    table = Table(title=f"Imported {file_path.name}")
+    table.add_column("Result")
+    table.add_column("Count", justify="right")
+    table.add_row("Activities parsed", str(len(activities)))
+    table.add_row("Trades inserted", str(result.trades_inserted))
+    table.add_row("Trades updated", str(result.trades_updated))
+    table.add_row("Securities created", str(result.securities_created))
+    table.add_row("Securities matched", str(result.securities_matched))
+    console.print(table)
 {%- if finance_plaid or finance_snaptrade %}
 
 

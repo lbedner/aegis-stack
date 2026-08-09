@@ -25,6 +25,7 @@ from typing import Any
 import flet as ft
 import httpx
 
+from app.components.frontend.controls.busy_bar import busy_bar
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.text import BodyText, SecondaryText
 from app.components.frontend.styles import ColorPalette, PulseColors
@@ -73,13 +74,20 @@ class LoadingOverlay(ft.Container):
     def show(self, label: str) -> None:
         """Show the busy state and block the page until hide() or fail()."""
         self._label.value = label
-        self._panel.content = ft.Row(
+        # Label above, bar beneath it spanning the panel: the bar is the
+        # operation, not an ornament sitting next to its name. Every
+        # blocking overlay in the app renders through here, so this is the
+        # one place the busy affordance is chosen.
+        # tight, or the Column stretches to all available height and the
+        # panel renders as a viewport-tall box with the label pinned at
+        # the top (confirmed live). The error panel below already knows.
+        self._panel.content = ft.Column(
             [
-                ft.ProgressRing(width=22, height=22, stroke_width=2.5),
-                ft.Container(content=self._label, expand=True),
+                self._label,
+                busy_bar(),
             ],
             spacing=16,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
         )
         self._raise_to_top()
         self.visible = True

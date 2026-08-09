@@ -907,9 +907,21 @@ class TestCsvImport:
             owner_user_id=1, account_id=by_name["AMEX CARD"].id
         )
         assert checking_total == 2
-        # 3 incl. the two identical $45 rows — per-account within-day ordinals
-        # keep them distinct rather than colliding as one duplicate.
-        assert amex_total == 3
+        # 2 visible: the two identical $45 rows (per-account within-day
+        # ordinals keep them distinct rather than colliding as one
+        # duplicate). The $200 "Amex Payment" row is categorized Transfer,
+        # so the reconcile pass flags it and the register hides it by
+        # default, the same as a paired leg - it is money moving between
+        # accounts, not card spend.
+        assert amex_total == 2
+        all_rows, amex_all = await svc.list_transactions(
+            owner_user_id=1,
+            account_id=by_name["AMEX CARD"].id,
+            include_transfers=True,
+        )
+        assert amex_all == 3
+        flagged = [t for t in all_rows if t.is_transfer]
+        assert [t.name for t in flagged] == ["Amex Payment"]
         # Type/classification inferred from the name: a card is a liability,
         # a "CHECKING" account is a checking asset.
         assert by_name["AMEX CARD"].classification == "liability"
@@ -1000,3 +1012,454 @@ class TestCsvImport:
             account_id=account.id,
         )
         assert second.rows_inserted == 0
+
+
+# ---------------------------------------------------------------------------
+# Pre-commit preview + user-category guard — FIN-33
+# ---------------------------------------------------------------------------
+
+
+def _qif_edited(extra_row: bool = False) -> bytes:
+    """``sample_quicken.qif`` with the Blue Bottle row edited in the source
+    app (renamed payee, re-categorized) — an unambiguous LANE-3 update on
+    re-import — plus, optionally, one genuinely new row."""
+    data = _qif().replace(b"PBlue Bottle Coffee", b"PBlue Bottle Cafe")
+    data = data.replace(b"Mmorning\nLDining", b"Mmorning\nLCoffee Shops")
+    assert b"PBlue Bottle Cafe" in data and b"LCoffee Shops" in data
+    if extra_row:
+        data += b"D07/20/2026\nT-15.00\nPNew Bakery\nLDining\n^\n"
+    return data
+
+
+class TestImportPreviewAndCategoryGuard:
+    """FIN-33: a preview is the commit's own plan, and the commit never
+    overwrites a category the user set by hand."""
+
+    async def _baseline(
+        self, session: AsyncSession
+    ) -> tuple[FinanceAccount, int | None]:
+        account = await _account(session)
+        first = await import_service.import_file(
+            session,
+            owner_user_id=1,
+            file_name="q.qif",
+            file_bytes=_qif(),
+            account_id=account.id,
+        )
+        assert first.rows_inserted == 8
+        return account, first.batch_id
+
+    async def _blue_bottle(self, session: AsyncSession):
+        from sqlmodel import select as sql_select
+
+        from app.services.finance.models import FinanceTransaction
+
+        return (
+            await session.exec(
+                sql_select(FinanceTransaction).where(
+                    FinanceTransaction.name == "Blue Bottle Coffee"
+                )
+            )
+        ).first()
+
+    @pytest.mark.asyncio
+    async def test_user_set_category_survives_lane3_edit(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from sqlmodel import select as sql_select
+
+        from app.services.finance.models import FinanceImportBatchRow
+
+        account, _ = await self._baseline(async_db_session)
+        svc = FinanceService(async_db_session)
+        target = await self._blue_bottle(async_db_session)
+        assert target is not None
+        user_category = await svc.get_or_create_category_from_hint("Coffee Fund")
+        target.category_id = user_category.id
+        target.category_source = "user"
+        async_db_session.add(target)
+        await async_db_session.flush()
+
+        edited = _qif_edited()
+        # The preview flags the decision before anything is written...
+        preview = await import_service.preview_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="q2.qif",
+            file_bytes=edited,
+            account_id=account.id,
+        )
+        planned = [row for row in preview.rows if row.status == "updated"]
+        assert len(planned) == 1
+        assert planned[0].category_action == "kept"
+        assert target.category_id == user_category.id  # preview wrote nothing
+
+        # ...and the commit honours the same plan.
+        result = await import_service.import_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="q2.qif",
+            file_bytes=edited,
+            account_id=account.id,
+        )
+        assert result.rows_updated == 1
+        assert target.name == "Blue Bottle Cafe"  # labels still update
+        assert target.category_id == user_category.id  # the category does not
+        assert target.category_source == "user"
+        reason = (
+            await async_db_session.exec(
+                sql_select(FinanceImportBatchRow.reason).where(
+                    FinanceImportBatchRow.import_batch_id == result.batch_id,
+                    FinanceImportBatchRow.parsed_status == "updated",
+                )
+            )
+        ).first()
+        assert import_service.CATEGORY_KEPT_NOTE in (reason or "")
+
+    @pytest.mark.asyncio
+    async def test_rule_set_category_still_updates(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        account, _ = await self._baseline(async_db_session)
+        target = await self._blue_bottle(async_db_session)
+        assert target is not None
+        assert target.category_source == "rule"  # came from the import hint
+        category_before = target.category_id
+
+        result = await import_service.import_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="q2.qif",
+            file_bytes=_qif_edited(),
+            account_id=account.id,
+        )
+        assert result.rows_updated == 1
+        assert target.category_id != category_before  # Coffee Shops now
+        assert target.category_source == "rule"
+
+    @pytest.mark.asyncio
+    async def test_preview_counts_match_commit_and_write_nothing(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from sqlmodel import select as sql_select
+
+        from app.services.finance.models import (
+            FinanceCategory,
+            FinanceImportBatch,
+            FinanceTransaction,
+        )
+
+        account, _ = await self._baseline(async_db_session)
+        edited = _qif_edited(extra_row=True)
+
+        async def _row_counts() -> tuple[int, int, int, int]:
+            async def _count(model) -> int:
+                return len((await async_db_session.exec(sql_select(model))).all())
+
+            return (
+                await _count(FinanceImportBatch),
+                await _count(FinanceTransaction),
+                await _count(FinanceCategory),
+                await _count(FinanceAccount),
+            )
+
+        before = await _row_counts()
+        preview = await import_service.preview_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="q2.qif",
+            file_bytes=edited,
+            account_id=account.id,
+        )
+        assert await _row_counts() == before  # a preview is a pure read
+        assert preview.new_category_hints == ["Coffee Shops"]
+
+        result = await import_service.import_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="q2.qif",
+            file_bytes=edited,
+            account_id=account.id,
+        )
+        assert result.rows_inserted == 1 and result.rows_updated == 1
+        assert (
+            preview.count("inserted"),
+            preview.count("updated"),
+            preview.count("duplicate"),
+            preview.count("skipped"),
+            preview.count("error"),
+        ) == (
+            result.rows_inserted,
+            result.rows_updated,
+            result.rows_duplicate,
+            result.rows_skipped,
+            result.rows_error,
+        )
+
+    @pytest.mark.asyncio
+    async def test_preview_of_identical_file_short_circuits(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        account, batch_id = await self._baseline(async_db_session)
+        preview = await import_service.preview_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="q.qif",
+            file_bytes=_qif(),
+            account_id=account.id,
+        )
+        assert preview.identical_batch_id == batch_id
+        assert preview.rows == []
+        assert preview.rows_total == 8
+
+    @pytest.mark.asyncio
+    async def test_preview_multi_account_csv_creates_no_accounts(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from sqlmodel import select as sql_select
+
+        await _seed_csv_profiles(async_db_session)
+        data = _csv("sample_quicken_all.csv")
+        preview = await import_service.preview_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="all.csv",
+            file_bytes=data,
+        )
+        assert preview.new_accounts  # the file names accounts we don't have
+        assert all(row.account_id is None or row.account_id < 0 for row in preview.rows)
+        accounts = (await async_db_session.exec(sql_select(FinanceAccount))).all()
+        assert accounts == []  # naming an account is not creating one
+
+
+class TestDoubleSubmitLandsOnTheFirstBatch:
+    """Two submissions of the same bytes in flight at once (a double-click
+    on Import): the early identical-file check can MISS - the first run's
+    commit isn't visible yet - and the loser then crashed the whole job on
+    ``uq_finance_importbatch_file`` (confirmed live). The batch insert now
+    falls back to the winner instead of raising."""
+
+    @pytest.mark.asyncio
+    async def test_the_racing_loser_returns_the_winners_batch(
+        self, async_db_session: AsyncSession, monkeypatch
+    ) -> None:
+        from datetime import date as date_cls
+
+        service = FinanceService(async_db_session)
+        account = await service.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        parsed = [
+            ParsedTransaction(
+                date=date_cls(2026, 8, 1),
+                amount=-5_000,
+                source="csv",
+                name="Coffee",
+                account_key=None,
+            )
+        ]
+        first = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="csv",
+            file_name="export.csv",
+            file_bytes=b"same-bytes",
+            parsed=parsed,
+            default_account_id=account.id,
+        )
+        assert first.rows_inserted == 1
+
+        # Simulate the race window: the second run's early check misses
+        # (as if the first commit weren't visible yet), so it walks into
+        # the unique constraint - and must land on the winner, not raise.
+        real = import_service._prior_batch
+        calls = {"n": 0}
+
+        async def miss_once(db, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None
+            return await real(db, **kwargs)
+
+        monkeypatch.setattr(import_service, "_prior_batch", miss_once)
+
+        second = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="csv",
+            file_name="export.csv",
+            file_bytes=b"same-bytes",
+            parsed=parsed,
+            default_account_id=account.id,
+        )
+
+        assert second.batch_id == first.batch_id
+        assert second.rows_inserted == 0
+        assert second.rows_duplicate == second.rows_total
+        # And nothing was double-written.
+        _rows, total = await service.list_transactions(owner_user_id=1)
+        assert total == 1
+
+
+class TestDeletedTransactionStaysDeleted:
+    """Deleting a transaction is a standing decision too: re-importing the
+    same file must not resurrect the row. Same class of trap as the
+    removed-account guard above - both dedup lanes are partial indexes on
+    ``deleted_at IS NULL``, so without this the exact same row re-inserts
+    as "new"."""
+
+    @pytest.mark.asyncio
+    async def test_a_deleted_row_replans_as_ignored(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from datetime import date as date_cls
+
+        service = FinanceService(async_db_session)
+        account = await service.create_manual_account(
+            owner_user_id=1,
+            name="TOTAL CHECKING",
+            account_type="checking",
+            classification="asset",
+        )
+        parsed = [
+            ParsedTransaction(
+                date=date_cls(2026, 8, 1),
+                amount=-5_000,
+                source="csv",
+                name="Coffee",
+                account_key="TOTAL CHECKING",
+            ),
+            ParsedTransaction(
+                date=date_cls(2026, 8, 2),
+                amount=-70_000,
+                source="csv",
+                name="Car payment",
+                account_key="TOTAL CHECKING",
+            ),
+        ]
+        first = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="csv",
+            file_name="first.csv",
+            file_bytes=b"first-pass-bytes",
+            parsed=parsed,
+            auto_create_accounts=True,
+        )
+        assert first.rows_inserted == 2
+
+        rows, _total = await service.list_transactions(owner_user_id=1)
+        coffee = next(r for r in rows if r.name == "Coffee")
+        await service.soft_delete_transactions([coffee.id], owner_user_id=1)
+
+        plan = await import_service.plan_transactions(
+            async_db_session,
+            owner_user_id=1,
+            parsed=parsed,
+            auto_create_accounts=True,
+        )
+
+        ignored = [
+            r for r in plan.rows if r.status == "skipped" and r.reason is not None
+        ]
+        assert len(ignored) == 1
+        assert "deleted" in (ignored[0].reason or "")
+        assert plan.count("duplicate") == 1  # the untouched row still dedups
+        assert plan.count("inserted") == 0
+
+        # And the commit executes the same verdict: nothing comes back.
+        result = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="csv",
+            file_name="second.csv",
+            file_bytes=b"second-pass-bytes",
+            parsed=parsed,
+            auto_create_accounts=True,
+        )
+        assert result.rows_inserted == 0
+        assert result.rows_ignored == 1
+        _rows, total = await service.list_transactions(owner_user_id=1)
+        assert total == 1
+        assert account.id is not None
+
+
+class TestRemovedAccountStaysRemoved:
+    """Deleting an account is a standing decision: a later import of the
+    same file must not resurrect it. Its rows plan (and ingest) as
+    ignored - visibly counted, never written, and the account is not
+    re-minted."""
+
+    @pytest.mark.asyncio
+    async def test_rows_for_a_removed_account_are_ignored(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        keep = await service.create_manual_account(
+            owner_user_id=1,
+            name="TOTAL CHECKING",
+            account_type="checking",
+            classification="asset",
+        )
+        audi = await service.create_manual_account(
+            owner_user_id=1,
+            name="X017 AUDI A6",
+            account_type="loan",
+            classification="liability",
+        )
+        await service.soft_delete_account(audi.id, owner_user_id=1)
+
+        from datetime import date as date_cls
+
+        parsed = [
+            ParsedTransaction(
+                date=date_cls(2026, 8, 1),
+                amount=-5_000,
+                source="csv",
+                name="Coffee",
+                account_key="TOTAL CHECKING",
+            ),
+            ParsedTransaction(
+                date=date_cls(2026, 8, 2),
+                amount=-70_000,
+                source="csv",
+                name="Car payment",
+                account_key="X017 AUDI A6",
+            ),
+        ]
+        plan = await import_service.plan_transactions(
+            async_db_session,
+            owner_user_id=1,
+            parsed=parsed,
+            auto_create_accounts=True,
+        )
+        # The removed account is neither resurrected nor re-minted...
+        assert "X017 AUDI A6" not in plan.new_accounts
+        assert plan.removed_accounts == ["X017 AUDI A6"]
+        assert plan.count("inserted") == 1
+        ignored = [
+            r
+            for r in plan.rows
+            if r.status == "skipped" and r.account_key == "X017 AUDI A6"
+        ]
+        assert len(ignored) == 1
+        assert "removed" in (ignored[0].reason or "")
+
+        # ...and ingest executes the same verdict.
+        result = await import_service.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="csv",
+            file_name="requick.csv",
+            file_bytes=b"requick-test-bytes",
+            parsed=parsed,
+            auto_create_accounts=True,
+        )
+        assert result.rows_inserted == 1
+        assert result.rows_ignored == 1
+        accounts, total = await service.list_accounts(owner_user_id=1)
+        assert [a.name for a in accounts] == ["TOTAL CHECKING"]
+        assert keep.id is not None

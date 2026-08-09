@@ -5,6 +5,7 @@ Modern tag UI control based on ee-toolset design.
 """
 
 import flet as ft
+
 from app.components.frontend.styles import FontConfig
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatusType
@@ -17,19 +18,27 @@ class Tag(ft.Container):
     Features bordered design with colored text and border, sized for compact display.
     """
 
-    def __init__(self, text: str, color: str = ft.Colors.AMBER) -> None:
+    def __init__(
+        self, text: str, color: str = ft.Colors.AMBER, *, compact: bool = False
+    ) -> None:
+        # Compact is for dense table cells: tighter padding and a smaller
+        # face, so the pill hugs a short word instead of overflowing it.
         super().__init__(
             border=ft.border.all(1, color),
             border_radius=ft.border_radius.all(5),
-            padding=ft.Padding(7.5, 2.5, 7.5, 2.5),
+            padding=ft.Padding(5, 1, 5, 1)
+            if compact
+            else ft.Padding(7.5, 2.5, 7.5, 2.5),
             alignment=ft.alignment.center,
             content=ft.Text(
                 text,
                 weight=ft.FontWeight.W_700,
                 color=color,
                 font_family=FontConfig.FAMILY_PRIMARY,
-                size=FontConfig.SIZE_TERTIARY,
+                size=10 if compact else FontConfig.SIZE_TERTIARY,
                 text_align=ft.TextAlign.CENTER,
+                no_wrap=True,
+                overflow=ft.TextOverflow.ELLIPSIS,
             ),
         )
 

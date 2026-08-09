@@ -34,7 +34,9 @@ from app.components.frontend.controls.buttons import (
     PULSE_BUTTON_COMPACT_HEIGHT,
     PULSE_BUTTON_COMPACT_PADDING,
     PULSE_BUTTON_COMPACT_RADIUS,
+    PulseButton,
 )
+from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.dropdown import Dropdown
 from app.components.frontend.controls.form_fields import FormTextField
 from app.components.frontend.controls.text import SecondaryText
@@ -55,6 +57,32 @@ _COUNT_LABEL_HEIGHT = 20
 # scroll=AUTO Column still needs a real fixed-height box to actually
 # scroll within instead of overflowing past it.
 _ROWS_HEIGHT = _PANEL_MAX_HEIGHT - (2 * 8 + _COUNT_LABEL_HEIGHT + 36 + 1 + 3 * 8)
+
+
+def _filter_options(
+    options: list[tuple[str, str]], query: str
+) -> list[tuple[str, str]]:
+    """Case-insensitive substring filter over (key, label) options."""
+    q = query.strip().casefold()
+    return [(k, t) for k, t in options if q in t.casefold()] if q else options
+
+
+def _option_row(
+    label: str, on_click: Callable[[ft.ControlEvent], None], color: str
+) -> ft.Container:
+    """One pickable row. XS padding, not SM: these lists can run to
+    hundreds of entries (267 categories in testing) and search only
+    narrows so far before the first character is typed - a denser row
+    shows more per screenful without scrolling."""
+    return ft.Container(
+        content=ft.Text(label, size=13, color=color),
+        on_click=on_click,
+        ink=True,
+        border_radius=Theme.Components.BUTTON_RADIUS,
+        padding=ft.padding.symmetric(
+            vertical=Theme.Spacing.XS, horizontal=Theme.Spacing.MD
+        ),
+    )
 
 
 class SearchPickerButton(Dropdown):
@@ -156,29 +184,12 @@ class SearchPickerButton(Dropdown):
         self._render_rows(e.control.value or "")
 
     def _row(self, label: str, on_click: Callable[[ft.ControlEvent], None], color: str):
-        # XS, not SM: these lists can run to hundreds of entries (267
-        # categories in testing) and search only narrows so far before the
-        # first character is typed - a denser row shows more per screenful
-        # without scrolling, which is most of the point of the popup over
-        # the old cramped inline field.
-        return ft.Container(
-            content=ft.Text(label, size=13, color=color),
-            on_click=on_click,
-            ink=True,
-            border_radius=Theme.Components.BUTTON_RADIUS,
-            padding=ft.padding.symmetric(
-                vertical=Theme.Spacing.XS, horizontal=Theme.Spacing.MD
-            ),
-        )
+        return _option_row(label, on_click, color)
 
     def _render_rows(self, query: str) -> None:
         typed = query.strip()
         q = typed.casefold()
-        matches = (
-            [(k, t) for k, t in self._options if q in t.casefold()]
-            if q
-            else self._options
-        )
+        matches = _filter_options(self._options, query)
         rows: list[ft.Control] = []
         if (
             self._on_create is not None
@@ -243,18 +254,33 @@ class SearchPickerButton(Dropdown):
 
 
 class CategoryPickerButton(SearchPickerButton):
-    """Pick an existing category. No create affordance: the taxonomy is
-    seeded and managed on its own tab, and inventing categories inline is
-    how a category list turns into 400 near-duplicates."""
+    """Pick a category, and optionally name one that does not exist yet.
+
+    Creating inline was withheld for a long time on the grounds that
+    "inventing categories inline is how a category list turns into 400
+    near-duplicates". That risk is real, but it is answered where it
+    belongs: the resolver behind ``on_create`` is get-or-CREATE keyed on
+    a normalized slug, so "kids: activities" lands ON "Kids:Activities"
+    rather than beside it, and a third path segment folds back to two.
+    The picker also hides the create row entirely once the typed text
+    matches something, so the common near-miss never gets offered.
+
+    ``on_create`` is OPT-IN: a caller with nowhere to save a new category
+    passes nothing and the affordance does not appear.
+    """
 
     def __init__(
         self,
         *,
         categories: list[tuple[str, str]],
         on_pick: Callable[[list[int], str], None],
+        on_create: Callable[[list[int], str], None] | None = None,
     ) -> None:
         super().__init__(
-            options=categories, on_pick=on_pick, hint="Search categories"
+            options=categories,
+            on_pick=on_pick,
+            on_create=on_create,
+            hint="Search categories",
         )
 
     def update_categories(self, categories: list[tuple[str, str]]) -> None:
@@ -283,6 +309,33 @@ class MerchantPickerButton(SearchPickerButton):
 
     def update_merchants(self, merchants: list[tuple[str, str]]) -> None:
         self.update_options(merchants)
+
+
+class TagPickerButton(SearchPickerButton):
+    """Pick (or invent) the tag to put on the selected transactions.
+
+    Creating inline is the whole feature: a "flag" is not a built-in bit
+    but whatever tag the user names in the moment ("Flagged", "Check with
+    Sarah", "Tax 2026"), and the resolver behind both pick and create is
+    the same get-or-create keyed on a normalized name - so picking an
+    existing tag and typing its near-miss land on the same row."""
+
+    def __init__(
+        self,
+        *,
+        tags: list[tuple[str, str]],
+        on_pick: Callable[[list[int], str], None],
+        on_create: Callable[[list[int], str], None],
+    ) -> None:
+        super().__init__(
+            options=tags,
+            on_pick=on_pick,
+            on_create=on_create,
+            hint="Search or name a tag",
+        )
+
+    def update_tags(self, tags: list[tuple[str, str]]) -> None:
+        self.update_options(tags)
 
 
 def picker_trigger_cell(
@@ -334,7 +387,7 @@ def picker_trigger_cell(
 
 
 class BulkActionTrigger(ft.Container):
-    """"<Label> (N)" chip: hidden while nothing's selected, opens the
+    """ "<Label> (N)" chip: hidden while nothing's selected, opens the
     caller's shared picker for the CURRENT selection on tap. One class for
     every table that supports select-many-then-act (categorize on
     Uncategorized and the register, assign-payee on the register), so the
@@ -351,13 +404,17 @@ class BulkActionTrigger(ft.Container):
     # button's look, taken FROM the button's own style rather than re-picked
     # by eye - including the hover states, which a Container has to drive
     # itself since it has no ControlState machinery.
-    _STYLE = styles.PULSE_BUTTON_TEAL_STYLE
+    _STYLES = {
+        "teal": styles.PULSE_BUTTON_TEAL_STYLE,
+        # Destructive verbs (Dismiss, Delete) read red, matching
+        # PulseButton's own "stop" variant.
+        "stop": styles.PULSE_BUTTON_STOP_STYLE,
+    }
 
-    @classmethod
-    def _state(cls, prop: str, state: ft.ControlState) -> Any:
+    def _state(self, prop: str, state: ft.ControlState) -> Any:
         """One entry of the shared button style (its per-state props are
         ``{ControlState: value}`` maps; a few are plain values)."""
-        value = getattr(cls._STYLE, prop)
+        value = getattr(self._style, prop)
         return value[state] if isinstance(value, dict) else value
 
     def __init__(
@@ -366,8 +423,10 @@ class BulkActionTrigger(ft.Container):
         *,
         label: str = "Categorize",
         tooltip: str = "Set the category for every checked row at once",
+        variant: str = "teal",
     ) -> None:
         self._text = label
+        self._style = self._STYLES[variant]
         self._idle_bg = self._state("bgcolor", ft.ControlState.DEFAULT)
         self._hover_bg = self._state("bgcolor", ft.ControlState.HOVERED)
         self._idle_fg = self._state("color", ft.ControlState.DEFAULT)
@@ -408,3 +467,163 @@ class BulkActionTrigger(ft.Container):
         self.visible = bool(count)
         if self.page:
             self.update()
+
+
+class CategoryPickerField(ft.Container):
+    """FormDropdown-shaped category field that opens the searchable list
+    in a NESTED dialog.
+
+    A flat ``ft.Dropdown`` stops working at a few hundred categories - no
+    search, one endless scroll (confirmed live from the Make recurring
+    dialog). The obvious replacement - anchoring ``CategoryPickerButton``'s
+    floating panel from the field - cannot work where this field lives:
+    an open ``AlertDialog`` sits on its own route ABOVE everything in
+    ``page.overlay``, so the panel rendered underneath the form dialog
+    (confirmed live too, peeking out below it). Dialog routes stack in
+    open order, so the search panel opens as a small second dialog
+    instead; picking (or Cancel) drops back to the form.
+
+    Drop-in for the ``FormDropdown`` call sites it replaces: ``value``
+    holds the picked key as a string, ``""`` meaning the empty choice
+    (``empty_label``, e.g. "Infer from transactions").
+    """
+
+    _ROWS_HEIGHT = 400  # explicit, so the inner scroll column actually scrolls
+
+    def __init__(
+        self,
+        *,
+        categories: list[tuple[str, str]],
+        label: str = "Category",
+        value: str = "",
+        width: int | None = None,
+        empty_label: str = "Infer from transactions",
+    ) -> None:
+        super().__init__()
+        self.width = width
+        self._label = label
+        self._options: list[tuple[str, str]] = [("", empty_label), *categories]
+        self._labels: dict[str, str] = dict(self._options)
+        self._value = value if value in self._labels else ""
+        self._display = ft.Text(
+            self._labels[self._value],
+            size=13,
+            color=(Theme.Colors.TEXT_SECONDARY if not self._value else None),
+            overflow=ft.TextOverflow.ELLIPSIS,
+            max_lines=1,
+            expand=True,
+        )
+        trigger = ft.Container(
+            content=ft.Row(
+                [
+                    self._display,
+                    ft.Icon(
+                        ft.Icons.ARROW_DROP_DOWN,
+                        size=20,
+                        color=ft.Colors.OUTLINE,
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
+            border_radius=Theme.Components.INPUT_RADIUS,
+            bgcolor=ft.Colors.SURFACE,
+            padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            ink=True,
+            on_click=self._open,
+        )
+        from app.components.frontend.controls.form_fields import _build_label
+
+        self.content = ft.Column(
+            [_build_label(label, "default"), ft.Container(height=4), trigger],
+            spacing=0,
+            tight=True,
+        )
+
+    def _open(self, _e: ft.ControlEvent) -> None:
+        if self.page is None:
+            return
+        page = self.page
+        rows_column = ft.Column(spacing=0, tight=True, scroll=ft.ScrollMode.AUTO)
+        dialog: StyledAlertDialog | None = None
+
+        def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            page.update()
+
+        def _pick(key: str) -> None:
+            self.value = key
+            _close()
+
+        def _render(query: str) -> None:
+            matches = _filter_options(self._options, query)
+            rows: list[ft.Control] = [
+                _option_row(text, lambda _e, k=key: _pick(k), ft.Colors.ON_SURFACE)
+                for key, text in matches
+            ]
+            if not rows:
+                rows = [
+                    ft.Container(
+                        content=ft.Text(
+                            "No matches",
+                            size=13,
+                            color=Theme.Colors.TEXT_SECONDARY,
+                        ),
+                        padding=ft.padding.symmetric(
+                            vertical=Theme.Spacing.SM, horizontal=Theme.Spacing.MD
+                        ),
+                    )
+                ]
+            rows_column.controls = rows
+            if rows_column.page is not None:
+                rows_column.update()
+
+        search = FormTextField(
+            label="",
+            hint="Search categories",
+            show_label=False,
+            compact=True,
+            autofocus=True,
+            on_change=lambda e: _render(e.control.value or ""),
+        )
+        _render("")
+
+        async def _cancel() -> None:
+            _close()
+
+        dialog = StyledAlertDialog(
+            title=self._label,
+            body=ft.Column(
+                [
+                    search,
+                    ft.Divider(height=1, color=Theme.Colors.BORDER_SUBTLE),
+                    ft.Container(content=rows_column, height=self._ROWS_HEIGHT),
+                ],
+                spacing=Theme.Spacing.SM,
+                tight=True,
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_cancel,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                )
+            ],
+            width=420,
+        )
+        page.open(dialog)
+
+    @property
+    def value(self) -> str:
+        return self._value
+
+    @value.setter
+    def value(self, new_value: str) -> None:
+        self._value = new_value if new_value in self._labels else ""
+        self._display.value = self._labels[self._value]
+        self._display.color = Theme.Colors.TEXT_SECONDARY if not self._value else None
+        if self.page:
+            self._display.update()

@@ -46,7 +46,28 @@ def format_date(value: object) -> str:
     return f"{value.strftime('%b')} {value.day}, {value.year}"
 
 
-def format_relative_time(iso_str: str | None, *, now: datetime | None = None) -> str:
+def _coarse_age(seconds: float) -> str:
+    """Days / months / years for durations past the sub-day branches.
+
+    Rounds to the NEAREST unit rather than truncating: six calendar
+    months is 181 days, and ``int(181 / 30.44)`` is 5, so truncation
+    reports a gap a whole month shorter than the one a calendar shows.
+    Each unit still floors at 1, so a duration that reached this branch
+    never reports as zero of anything.
+    """
+    days = int(seconds / 86400)
+    if days < 30:
+        return f"{days} day{'s' if days != 1 else ''} ago"
+    if days < 365:
+        months = max(1, round(days / 30.44))
+        return f"{months} month{'s' if months != 1 else ''} ago"
+    years = max(1, round(days / 365.25))
+    return f"{years} year{'s' if years != 1 else ''} ago"
+
+
+def format_relative_time(
+    iso_str: str | None, *, now: datetime | None = None, coarse: bool = False
+) -> str:
     """Format an ISO timestamp as a relative duration ("3 minutes ago").
 
     Returns ``"—"`` for empty input. Sub-minute durations render as
@@ -54,6 +75,11 @@ def format_relative_time(iso_str: str | None, *, now: datetime | None = None) ->
     absolute format (``"%b %d %H:%M"``). On parse failure the raw input
     is returned so the value stays debuggable in the UI rather than
     silently disappearing.
+
+    ``coarse`` keeps counting in days, months and years past that point
+    instead, for ages that are naturally measured in months (when a model
+    was pulled, say) where an absolute timestamp answers a question
+    nobody asked. Off by default, so existing callers are unaffected.
 
     Tolerates missing timezone (assumed UTC) and a trailing ``Z`` (which
     Python's ``fromisoformat`` rejects pre-3.11).
@@ -78,6 +104,8 @@ def format_relative_time(iso_str: str | None, *, now: datetime | None = None) ->
         if seconds < 86400:
             hours = int(seconds / 3600)
             return f"{hours} hour{'s' if hours != 1 else ''} ago"
+        if coarse:
+            return _coarse_age(seconds)
         return dt.strftime("%b %d %H:%M")
     except (ValueError, TypeError, IndexError):
         return str(iso_str)

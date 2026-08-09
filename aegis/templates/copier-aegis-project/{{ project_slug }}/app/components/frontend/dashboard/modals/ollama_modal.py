@@ -8,6 +8,7 @@ running models, VRAM usage, installed models, and server configuration.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -21,10 +22,16 @@ from app.components.frontend.controls import (
     Tag,
 )
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.data_table import DataTable, DataTableColumn
+from app.components.frontend.controls.data_table import (
+    CELL_ELLIPSIS_KWARGS,
+    PICKER_GUTTER_WIDTH,
+    DataTable,
+    DataTableColumn,
+)
 from app.components.frontend.controls.table import TableNameText
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.formatting import format_relative_time as format_relative_iso
 from app.core.log import logger
 from app.services.ai.ollama_activity import get_ollama_activity
 from app.services.system.models import ComponentStatus
@@ -32,6 +39,7 @@ from app.services.system.models import ComponentStatus
 from ..activity_feed import format_relative_time
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
+from .modal_constants import ModalLayout
 from .modal_sections import MetricCard
 
 # Statistics section layout
@@ -43,24 +51,118 @@ STAT_LABEL_WIDTH = 200
 POLL_INTERVAL_SECONDS = 10.0
 
 # Model table column widths
-COL_WIDTH_MODEL_NAME = 180
-COL_WIDTH_PARAMS = 60
+COL_WIDTH_MODEL_NAME = 170
+COL_WIDTH_ID = 100
+COL_WIDTH_PARAMS = 56
 COL_WIDTH_QUANT = 50
-COL_WIDTH_SIZE = 65
-COL_WIDTH_VRAM = 65
-COL_WIDTH_STATUS = 80
-COL_WIDTH_ACTIVE = 70
+COL_WIDTH_CONTEXT = 60
+# Wide enough for the longest header ("Thinking") plus its sort chevron.
+COL_WIDTH_CAPABILITY = 74
+COL_WIDTH_SIZE = 58
+# Holds "11 minutes ago" on one line.
+COL_WIDTH_MODIFIED = 116
+COL_WIDTH_VRAM = 56
+COL_WIDTH_STATUS = 78
+COL_WIDTH_ACTIVE = 66
 
-# Model table columns for DataTable
+
+@dataclass(frozen=True)
+class Capability:
+    """One Ollama capability flag, and the column that reports it.
+
+    ``key`` is the string Ollama puts in ``capabilities``. Driving both
+    the column list and the row cells off this one table is what stops a
+    capability from ending up with a column and no cell, or the reverse.
+    """
+
+    key: str
+    header: str
+    visible: bool = True
+
+
+# ``completion`` is deliberately absent: every generative model carries
+# it, so a column of "Yes" costs real width and separates nothing.
+# ``tools`` leads because it gates agent use at all - a model that cannot
+# call a tool cannot drive an agent, whatever its prose is like.
+# ``embedding`` ships hidden: no chat model has it, but a pulled
+# embedding model would, and a hidden column costs no width.
+CAPABILITIES = [
+    Capability("tools", "Tools"),
+    Capability("vision", "Vision"),
+    Capability("thinking", "Thinking"),
+    Capability("insert", "Insert"),
+    Capability("embedding", "Embed", visible=False),
+]
+
+# Model table columns for DataTable.
+#
+# Ordered to read as a sentence: what it is (Model, ID), how big it is
+# (Params, Quant, Context, Size), what it can do (one column per
+# capability), when it arrived (Modified), and what it is doing right now
+# (VRAM, Status, Active).
 MODEL_COLUMNS = [
-    DataTableColumn("Model", width=COL_WIDTH_MODEL_NAME, style="body"),
+    DataTableColumn("Model", width=COL_WIDTH_MODEL_NAME, style="body", hideable=False),
+    DataTableColumn("ID", width=COL_WIDTH_ID, style="secondary"),
     DataTableColumn("Params", width=COL_WIDTH_PARAMS, style="secondary"),
     DataTableColumn("Quant", width=COL_WIDTH_QUANT, style="secondary"),
+    DataTableColumn(
+        "Context", width=COL_WIDTH_CONTEXT, alignment="right", style="secondary"
+    ),
+    *(
+        DataTableColumn(
+            cap.header,
+            width=COL_WIDTH_CAPABILITY,
+            style="secondary",
+            visible=cap.visible,
+        )
+        for cap in CAPABILITIES
+    ),
     DataTableColumn("Size", width=COL_WIDTH_SIZE, alignment="right", style="secondary"),
+    DataTableColumn("Modified", width=COL_WIDTH_MODIFIED, style="secondary"),
     DataTableColumn("VRAM", width=COL_WIDTH_VRAM, alignment="right", style="secondary"),
-    DataTableColumn("Status", width=COL_WIDTH_STATUS),
-    DataTableColumn("Active", width=COL_WIDTH_ACTIVE),
+    DataTableColumn("Status", width=COL_WIDTH_STATUS, sortable=False),
+    DataTableColumn("Active", width=COL_WIDTH_ACTIVE, sortable=False),
 ]
+
+
+def table_width(columns: list[DataTableColumn]) -> int:
+    """What the DataTable actually occupies, chrome included.
+
+    Columns and the gutters between them are the obvious part. The two
+    that got missed on the first cut, and pushed the last column out past
+    the table's own right border: the table spends ``Spacing.MD`` of
+    padding on EACH side of every row, and the column-picker button takes
+    a whole trailing gutter that is not a column.
+
+    Hidden-by-default columns are excluded - they are one picker click
+    away and must not widen the modal for anyone who never clicks.
+    """
+    shown = [c for c in columns if c.visible]
+    return (
+        sum(c.width or 0 for c in shown)
+        + Theme.Spacing.MD * (len(shown) - 1)
+        + Theme.Spacing.MD * 2
+        + PICKER_GUTTER_WIDTH
+        + Theme.Spacing.MD
+    )
+
+
+# Every column is fixed-width, so the table's own width is knowable and
+# the modal can be sized to hold it. A column left to flex among fixed
+# siblings renders at ZERO width once the row overflows rather than
+# wrapping - invisible to a control-tree test, so the arithmetic is the
+# guard (see test_ollama_model_table.py).
+MODEL_TABLE_WIDTH = table_width(MODEL_COLUMNS)
+
+# What the dialog must be opened at to hold that table: the section and
+# tab padding either side, plus the dialog's own content padding, which
+# is spent INSIDE the declared width rather than around it.
+MODELS_MODAL_WIDTH = (
+    MODEL_TABLE_WIDTH
+    + Theme.Spacing.MD * 2
+    + Theme.Spacing.SM * 2
+    + ModalLayout.CONTENT_PADDING * 2
+)
 
 # Activity table columns for DataTable
 ACTIVITY_COLUMNS = [
@@ -83,6 +185,9 @@ ACTIVITY_EVENT_COLORS = {
     "evicted": Theme.Colors.TEXT_SECONDARY,
 }
 
+# Digest characters shown, matching `ollama list`.
+MODEL_ID_LENGTH = 12
+
 
 def format_quantization(quant: str) -> str:
     """Convert quantization level to human-readable format.
@@ -99,6 +204,86 @@ def format_quantization(quant: str) -> str:
         if bit_num.isdigit():
             return f"{bit_num}-bit"
     return quant
+
+
+def model_cell(text: str, *, numeric: bool = False) -> ft.Text:
+    """One Models-table cell, styled the way ``style_cell`` styles a
+    plain value.
+
+    This table passes BUILT controls (it needs per-cell colours and a
+    sort key on Modified), which means ``style_cell`` hands them straight
+    through and applies none of its treatment. Reapplying it here is what
+    keeps this table looking like every other one: BODY size, and single
+    line with an ellipsis rather than wrapping into a second row.
+
+    ``numeric`` picks the tabular face so right-aligned figures line up.
+    """
+    cls = NumericText if numeric else SecondaryText
+    return cls(
+        text,
+        size=Theme.Typography.BODY,
+        color=Theme.Colors.TEXT_SECONDARY,
+        **CELL_ELLIPSIS_KWARGS,
+    )
+
+
+def format_model_id(digest: str) -> str:
+    """Short digest, the same 12 characters ``ollama list`` prints.
+
+    The full sha256 is 64 characters and would dominate the row; the
+    leading 12 are what Ollama itself considers enough to identify a
+    build, and they are what the user sees in the terminal.
+    """
+    if not digest:
+        return "—"
+    return digest[:MODEL_ID_LENGTH]
+
+
+def format_context_length(tokens: int) -> str:
+    """Context window in K, because 262144 is a number you have to stop
+    and divide before it means anything.
+
+    Keeps one decimal only when rounding would lie (1536 -> 1.5K, not
+    2K); stays in raw tokens below 1K.
+    """
+    if tokens <= 0:
+        return "—"
+    if tokens < 1024:
+        return str(tokens)
+    k = tokens / 1024
+    return f"{k:.0f}K" if abs(k - round(k)) < 0.05 else f"{k:.1f}K"
+
+
+def capability_cell(present: bool) -> ft.Text:
+    """One capability column's cell: plain "Yes" or "No".
+
+    Plain words rather than an icon or a dash, because sorting is what
+    stands in for filtering here and it only groups cleanly when the two
+    values are stable text. A blank for absent would also be ambiguous -
+    it would read as "Ollama did not say" rather than "no".
+
+    Monochrome-first: the present one takes primary ink and the absent
+    one recedes, instead of spending a hue on a boolean.
+    """
+    return SecondaryText(
+        "Yes" if present else "No",
+        size=Theme.Typography.BODY,
+        color=Theme.Colors.TEXT_PRIMARY if present else Theme.Colors.TEXT_SECONDARY,
+        **CELL_ELLIPSIS_KWARGS,
+    )
+
+
+def build_modified_cell(modified_at: str) -> SecondaryText:
+    """When this model was pulled, shown relatively and sorted absolutely.
+
+    Displays "6 months ago" (what ``ollama list`` shows) but stamps the
+    ISO timestamp into ``.data``, which ``DataTable`` reads ahead of the
+    display text precisely so a humanized date still sorts by real time
+    rather than alphabetically.
+    """
+    cell = model_cell(format_relative_iso(modified_at, coarse=True))
+    cell.data = modified_at
+    return cell
 
 
 class UseModelControl(ft.Container):
@@ -507,6 +692,11 @@ class ModelsSection(ft.Container):
                 show_row_borders=True,
                 empty_message="No models installed",
                 pinned_last_rows=1 if total_vram_gb > 0 else 0,
+                # Eleven columns is a lot to carry for someone who only
+                # wants to see what is warm. The picker is the existing
+                # escape hatch every other table here uses, rather than a
+                # second bespoke density control.
+                column_picker=True,
             )
 
             self.content = ft.Column([table], spacing=0)
@@ -577,38 +767,32 @@ class ModelsSection(ft.Container):
             details = model.get("details", {})
             parameter_size = details.get("parameter_size", "—")
             quantization = details.get("quantization_level", "—")
+            context_length = details.get("context_length", 0)
+            capabilities = model.get("capabilities", []) or []
 
-            # Apply opacity for cold models
-            opacity = 1.0 if is_warm else 0.5
-
-            # Build styled text controls with opacity
-            name_text = TableNameText(model_name)
-            name_text.opacity = opacity
-
-            params_text = NumericText(
-                parameter_size if parameter_size else "—",
-                color=Theme.Colors.TEXT_SECONDARY,
+            # No cold-model dimming. Painting every cold row at half
+            # opacity meant that with nothing loaded - the normal state -
+            # the whole table rendered washed out and read as a rendering
+            # fault rather than as information. Warm/cold is already
+            # carried by the VRAM figure and the Load/Unload button.
+            name_text = TableNameText(model_name, **CELL_ELLIPSIS_KWARGS)
+            params_text = model_cell(parameter_size or "—", numeric=True)
+            quant_text = model_cell(format_quantization(quantization))
+            # Tabular face: the short digest is a fixed-width token and
+            # reads as one only if the glyphs line up.
+            id_text = model_cell(format_model_id(model.get("digest", "")), numeric=True)
+            context_text = model_cell(
+                format_context_length(context_length), numeric=True
             )
-            params_text.opacity = opacity
-
-            quant_text = SecondaryText(
-                format_quantization(quantization),
-            )
-            quant_text.opacity = opacity
-
-            size_text = NumericText(
-                f"{size_gb:.1f}G",
-                color=Theme.Colors.TEXT_SECONDARY,
-            )
-            size_text.opacity = opacity
+            cap_cells = [
+                capability_cell(cap.key in capabilities) for cap in CAPABILITIES
+            ]
+            modified_text = build_modified_cell(model.get("modified_at", ""))
+            size_text = model_cell(f"{size_gb:.1f}G", numeric=True)
 
             # VRAM: show value for warm, dash for cold
             vram_display = f"{vram_gb:.1f}G" if is_warm and vram_gb is not None else "—"
-            vram_text = NumericText(
-                vram_display,
-                color=Theme.Colors.TEXT_SECONDARY,
-            )
-            vram_text.opacity = opacity
+            vram_text = model_cell(vram_display, numeric=True)
 
             # Status: Unload button for warm models, Load button for cold
             if is_warm:
@@ -629,9 +813,13 @@ class ModelsSection(ft.Container):
             rows.append(
                 [
                     name_text,
+                    id_text,
                     params_text,
                     quant_text,
+                    context_text,
+                    *cap_cells,
                     size_text,
+                    modified_text,
                     vram_text,
                     status_control,
                     UseModelControl(
@@ -655,13 +843,18 @@ class ModelsSection(ft.Container):
                 weight=Theme.Typography.WEIGHT_BOLD,
                 color=Theme.Colors.TEXT_SECONDARY,
             )
-            # Empty cells for alignment (Params, Quant, Size columns)
+            # Empty cells for alignment; only the VRAM column carries a
+            # total, since it is the one figure that sums across rows.
             rows.append(
                 [
                     total_label,
+                    SecondaryText(""),  # ID
                     SecondaryText(""),  # Params
                     SecondaryText(""),  # Quant
+                    SecondaryText(""),  # Context
+                    *(SecondaryText("") for _ in CAPABILITIES),
                     SecondaryText(""),  # Size
+                    SecondaryText(""),  # Modified
                     total_value,  # VRAM
                     SecondaryText(""),  # Status
                     SecondaryText(""),  # Active
@@ -891,7 +1084,10 @@ class OllamaDetailDialog(BaseDetailPopup):
             subtitle_text=subtitle,
             sections=[self._tabs],
             scrollable=False,
-            width=700,
+            # Sized to the Models table, the widest thing the dialog
+            # holds - see MODEL_TABLE_WIDTH for why that is a computed
+            # value rather than a number picked by eye.
+            width=MODELS_MODAL_WIDTH,
             height=550,
             status_detail=get_status_detail(component_data),
         )

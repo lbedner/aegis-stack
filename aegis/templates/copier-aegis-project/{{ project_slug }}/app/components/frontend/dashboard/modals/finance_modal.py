@@ -24,6 +24,7 @@ from uuid import uuid4
 import flet as ft
 
 from app.components.frontend.controls import (
+    ActionDropdown,
     ActionMenu,
     ActionMenuItem,
     ConfirmDialog,
@@ -31,23 +32,33 @@ from app.components.frontend.controls import (
     DataTableColumn,
     ExpandArrow,
     H3Text,
+    LabelText,
+    MenuAction,
     NumericText,
     PrimaryText,
     SecondaryText,
     SectionCard,
+    StatusDot,
     StatusTag,
     Tag,
+    ThemedSwitch,
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.debounce import Debouncer
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.dropdown import Dropdown
-from app.components.frontend.controls.form_fields import FormDropdown, FormTextField
+from app.components.frontend.controls.form_fields import (
+    FormDateField,
+    FormDropdown,
+    FormTextField,
+)
 from app.components.frontend.controls.loading_overlay import LoadingOverlay
 from app.components.frontend.controls.pickers import (
     BulkActionTrigger,
     CategoryPickerButton,
+    CategoryPickerField,
     MerchantPickerButton,
+    TagPickerButton,
     picker_trigger_cell,
 )
 from app.components.frontend.controls.provider_icon import ProviderIcon
@@ -59,17 +70,22 @@ from app.components.frontend.controls.record_detail import (
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.table import TableCellText, TableNameText
 from app.components.frontend.controls.tabs import PulseTabs
-from app.components.frontend.styles import PulseColors
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
 from app.core.constants import dashboard_upload_dir
 from app.core.formatting import format_date
+from app.services.finance.constants import (
+    CADENCES,
+    ONE_TIME_FREQUENCY,
+    ONE_TIME_LABEL,
+)
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from app.services.system.ui import get_component_title
 
-from ..cards.card_utils import create_progress_indicator, get_status_detail
+from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .base_popup import OverlayStyledDialog
+from .finance_panel import FinancePanel
 from .modal_sections import (
     PIE_CHART_TAIL_COLOR,
     BarChartCard,
@@ -79,6 +95,7 @@ from .modal_sections import (
     EmptyStatePlaceholder,
     LineChartCard,
     LineSeries,
+    MetricCard,
     PieChartCard,
     RankedBar,
     RankedBarCard,
@@ -91,6 +108,11 @@ from .modal_sections import (
 )
 
 _SIDEBAR_WIDTH = 320
+# Named rows in the import review's detail sections before the tail folds
+# into a count. A Quicken tree can carry hundreds of new categories, and a
+# dialog that scrolls for a page stops being read at all.
+_PREVIEW_DETAIL_CAP = 10
+_PREVIEW_DETAIL_HEIGHT = 260
 # One height for every Overview card, so the row has a single baseline.
 _OVERVIEW_CARD_HEIGHT = 320
 # Named slices in the spending donut (and rows in the list under it) before
@@ -374,7 +396,7 @@ def _fold_cashflow(months: list[dict]) -> list[dict]:
     return list(folded.values())
 
 
-def _amount_cell(cents: int) -> ft.Control:
+def _amount_cell(cents: int, *, excluded: bool = False) -> ft.Control:
     """Right-aligned money in the numeric face.
 
     A ledger is mostly spending, so an outflow is the ASSUMPTION and gets
@@ -384,10 +406,17 @@ def _amount_cell(cents: int) -> ft.Control:
     Note this is the opposite rule from a BALANCE (see
     ``headline_stat_color``): a negative transaction is a normal Tuesday,
     a negative balance is being overdrawn.
+
+    ``excluded`` (a row flagged out of reports - an issuer adjustment
+    pair, a user exclusion) takes the money colour AWAY instead of adding
+    a marker: an amount in muted ink says "does not participate" exactly
+    where the eye scans, without spending a new element on it. A dot
+    would collide with the status-dot vocabulary used elsewhere. The
+    expand pane's "Excluded from reports" field carries the why.
     """
     return NumericText(
         _usd(cents),
-        color=ledger_amount_color(cents),
+        color=Theme.Colors.TEXT_SECONDARY if excluded else ledger_amount_color(cents),
         size=Theme.Typography.BODY_SMALL,
         weight=ft.FontWeight.W_500,
         text_align=ft.TextAlign.RIGHT,
@@ -535,20 +564,171 @@ def transaction_detail_sections(
 _TRANSACTION_COLLAPSED_SECTIONS = frozenset({"Import & reconciliation"})
 
 
-def _transaction_expanded_content(txn: dict) -> ft.Control:
+def transaction_tag_chips(
+    tags: list[dict],
+    *,
+    on_tap: Callable[[dict], None] | None = None,
+    on_remove: Callable[[dict], None] | None = None,
+    remove_tooltip: str = "Remove this tag",
+    cap: int | None = None,
+    compact: bool = False,
+) -> list[ft.Control]:
+    """A transaction's tags as house ``Tag`` chips.
+
+    ``on_tap`` makes each chip a filter trigger (click a flag to see
+    everything wearing it); ``on_remove`` pairs each chip with an ``x``
+    (the row-expand detail is where a tag comes off); ``cap`` folds the
+    tail into a "+n" so a register row stays one line."""
+    shown = tags if cap is None else tags[:cap]
+    chips: list[ft.Control] = []
+    for tag in shown:
+        chip: ft.Control = Tag(
+            tag.get("name", ""),
+            color=tag.get("color") or Theme.Colors.ACCENT,
+            compact=compact,
+        )
+        if on_tap is not None:
+            chip = ft.Container(
+                content=chip,
+                on_click=lambda _e, t=tag: on_tap(t),
+                tooltip=f"Show everything tagged {tag.get('name', '')}",
+            )
+        if on_remove is not None:
+            chip = ft.Row(
+                [
+                    chip,
+                    ft.IconButton(
+                        icon=ft.Icons.CLOSE,
+                        icon_size=14,
+                        icon_color=Theme.Colors.TEXT_SECONDARY,
+                        tooltip=remove_tooltip,
+                        on_click=lambda _e, t=tag: on_remove(t),
+                        style=ft.ButtonStyle(padding=0),
+                        width=24,
+                        height=24,
+                    ),
+                ],
+                spacing=0,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        chips.append(chip)
+    if cap is not None and len(tags) > cap:
+        chips.append(
+            SecondaryText(f"+{len(tags) - cap}", size=Theme.Typography.CAPTION)
+        )
+    return chips
+
+
+async def fetch_tag_options(api) -> list[tuple[str, str]]:
+    """The tag directory as picker options - keyed by NAME, not id: the
+    attach endpoint is get-or-create by name, which is what lets a
+    picker's pick and create share one handler."""
+    data = await api.get("/api/v1/finance/tags")
+    items = data if isinstance(data, list) else []
+    return [(t["name"], t["name"]) for t in items]
+
+
+async def post_tag(page: ft.Page, transaction_ids: list[int], name: str) -> bool:
+    """Attach one tag to the given transactions and toast the outcome.
+
+    The one POST every tagging surface goes through (the register and
+    both Review work queues); returns whether it landed so the caller
+    knows to reload."""
+    from app.components.frontend.state.session_state import get_session_state
+
+    api = get_session_state(page).api_client
+    result = await api.post(
+        "/api/v1/finance/transactions/tags",
+        json={"transaction_ids": transaction_ids, "name": name},
+    )
+    if not isinstance(result, dict) or "id" not in result:
+        ErrorSnackBar("Could not apply that tag.").launch(page)
+        return False
+    count = len(transaction_ids)
+    SuccessSnackBar(
+        f"Tagged {count} transaction{'s' if count != 1 else ''} {result['name']}."
+    ).launch(page)
+    return True
+
+
+def _transaction_expanded_content(
+    txn: dict, on_remove_tag: Callable[[dict, dict], None] | None = None
+) -> ft.Control:
     """A transaction's inline row-expand content: the supplementary field
     sections only, no hero - unlike a modal (which starts from nothing),
     this renders directly under a row whose own cells already show payee/
     date/category/amount, so repeating those here would just be heavier
-    for no new information."""
-    return ft.Column(
-        build_field_blocks(
-            transaction_detail_sections(txn),
-            collapsed_sections=_TRANSACTION_COLLAPSED_SECTIONS,
-        ),
-        spacing=Theme.Spacing.XS,
-        tight=True,
+    for no new information.
+
+    ``on_remove_tag(txn, tag)``, when given and the row wears tags, adds a
+    Tags block whose chips each carry the remove ``x`` - taking a flag OFF
+    happens here, next to everything else about the row."""
+    blocks = build_field_blocks(
+        transaction_detail_sections(txn),
+        collapsed_sections=_TRANSACTION_COLLAPSED_SECTIONS,
     )
+    tags = txn.get("tags") or []
+    if tags and on_remove_tag is not None:
+        blocks.append(
+            ft.Row(
+                [
+                    SecondaryText("Tags", size=Theme.Typography.BODY_SMALL),
+                    *transaction_tag_chips(
+                        tags, on_remove=lambda t, _txn=txn: on_remove_tag(_txn, t)
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                wrap=True,
+            )
+        )
+    return ft.Column(blocks, spacing=Theme.Spacing.XS, tight=True)
+
+
+# One register fetch. Load more widens by another page of this.
+_REGISTER_PAGE_SIZE = 100
+
+
+def trades_within_page(
+    trades: list[dict],
+    *,
+    oldest_txn_date: str | None,
+    page_complete: bool,
+) -> list[dict]:
+    """The trades allowed into the merged register right now.
+
+    Two lanes feed the register - paginated transactions, unpaginated
+    trades - and merging them naively rendered trades far past the
+    transaction page's edge: below the oldest fetched transaction the
+    list became nothing but IRA trades, which read as "Chase and AMEX
+    just stop after a certain date" (confirmed live). A lane may never
+    show deeper than the other reaches; trades past the edge wait for
+    Load more to extend it. A complete transaction lane (or a stack with
+    no transactions at all) has no edge to respect.
+    """
+    if page_complete or oldest_txn_date is None:
+        return trades
+    return [t for t in trades if str(t.get("trade_date", "")) >= oldest_txn_date]
+
+
+def register_count_label(
+    shown: int | None, total: int, *, noun: str = "transactions"
+) -> str:
+    """The register's count line, honest about the page edge.
+
+    "685 transactions" over a table rendering the newest 100 read as data
+    loss - a mid-July row was "just not there at all" (confirmed live).
+    A truncated view says "Showing 100 of 685" instead; the Load-more
+    trigger rides beside this label in the header, because a bottom
+    footer was tried first and permanently cost the table one row's
+    height in a modal with none to spare.
+    """
+    if shown is not None and shown < total:
+        return f"Showing {shown:,} of {total:,} {noun}"
+    if noun == "transactions":
+        return f"{total:,} transaction{'s' if total != 1 else ''}"
+    return f"{total:,} {noun}"
 
 
 def register_columns(all_accounts: bool) -> list[DataTableColumn]:
@@ -576,9 +756,769 @@ def register_columns(all_accounts: bool) -> list[DataTableColumn]:
         ),
         DataTableColumn("Payee", hideable=False),
         DataTableColumn("Category", width=_TXN_CATEGORY_COLUMN_WIDTH),
+        DataTableColumn("Tags", width=150),
         DataTableColumn("Source", width=90, visible=False),
         DataTableColumn("Amount", width=150, alignment="right"),
     ]
+
+
+def equation_rows(stats: dict[str, Any]) -> list[dict[str, Any]]:
+    """The month verdict as its own arithmetic, line by line - built from
+    the SAME stats dict the strip renders, so the popup and the cells can
+    never disagree. Zero terms stay out (a fresh install's equation is
+    three lines, not six)."""
+    rows: list[dict[str, Any]] = [
+        {"label": "Income", "value": stats.get("income_total", 0), "caption": None},
+        {"label": "Bills", "value": -stats.get("fixed_total", 0), "caption": None},
+        {
+            "label": "Budgets",
+            "value": -stats.get("flexible_allocated", 0),
+            "caption": None,
+        },
+    ]
+    for label, key in (
+        ("Goals", "goals_total"),
+        ("Envelopes", "envelopes_total"),
+        ("Everything else", "everything_else"),
+    ):
+        if stats.get(key, 0):
+            rows.append({"label": label, "value": -stats[key], "caption": None})
+    rows.append(
+        {"label": "This month", "value": stats.get("month_net", 0), "caption": None}
+    )
+    return rows
+
+
+def stat_detail_panel(
+    title: str, rows: list[dict[str, Any]], *, footer: str | None = None
+) -> ft.Column:
+    """The body of a header cell's click-through popup: dense label/value
+    rows (money right-aligned), an optional muted footer naming the
+    window. One builder for all five cells - they differ only in rows."""
+    children: list[ft.Control] = [
+        SecondaryText(title.upper(), size=Theme.Typography.CAPTION),
+    ]
+    for row in rows:
+        value = int(row.get("value", 0))
+        amount = _usd(abs(value)) if value >= 0 else f"-{_usd(-value)}"
+        label_bits: list[ft.Control] = [
+            ft.Container(
+                content=SecondaryText(
+                    str(row.get("label", "")),
+                    size=Theme.Typography.BODY_SMALL,
+                    color=ft.Colors.ON_SURFACE,
+                    no_wrap=True,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                ),
+                expand=True,
+            ),
+        ]
+        caption = row.get("caption")
+        if caption:
+            label_bits.append(
+                SecondaryText(str(caption), size=Theme.Typography.CAPTION)
+            )
+        label_bits.append(
+            NumericText(
+                amount,
+                size=Theme.Typography.BODY_SMALL,
+                color=Theme.Colors.ERROR if value < 0 else ft.Colors.ON_SURFACE,
+            )
+        )
+        children.append(
+            ft.Row(
+                label_bits,
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        )
+    if footer:
+        children.append(SecondaryText(footer, size=Theme.Typography.CAPTION))
+    return ft.Column(
+        children,
+        spacing=Theme.Spacing.XS,
+        tight=True,
+        scroll=ft.ScrollMode.AUTO,
+    )
+
+
+class StatDetailPopup(Dropdown):
+    """One anchored popup for every header cell - the "locked" hover the
+    strip needed: click a cell, the panel opens at the tap and stays
+    until a click elsewhere dismisses it (the account filter's own
+    mechanics, reused). No visible trigger; every open comes through
+    ``open_at`` positioned at the caller's event."""
+
+    def __init__(self) -> None:
+        self._slot = ft.Container()
+        super().__init__(
+            trigger=ft.Container(width=0, height=0),
+            panel=self._slot,
+            trigger_width=200,
+            min_width=300,
+            max_width=340,
+            max_height=380,
+        )
+
+    def open_at(
+        self,
+        e: ft.ControlEvent,
+        title: str,
+        rows: list[dict[str, Any]],
+        *,
+        footer: str | None = None,
+    ) -> None:
+        self._slot.content = stat_detail_panel(title, rows, footer=footer)
+        self.close()
+        self._toggle(e)  # type: ignore[arg-type]
+
+
+def budget_suggestion_caption(pick: dict[str, Any]) -> str:
+    """The evidence line under a budget suggestion.
+
+    Says the thing the gate actually measured: how many of the six months
+    had spend, and how many of those did not look like the others. The
+    row used to print an "Nx swing", which stopped meaning anything when
+    the steadiness test changed - it read a field that no longer existed
+    and rendered "0.0x swing" on every suggestion, a default wearing the
+    clothes of a measurement.
+
+    An absent count says nothing rather than zero, for the same reason.
+    """
+    caption = f"{pick.get('months_seen', 0)} of 6 months"
+    unusual = pick.get("unusual_months")
+    if unusual is None:
+        return caption
+    if unusual == 0:
+        return f"{caption}  ·  every month alike"
+    plural = "s" if unusual != 1 else ""
+    return f"{caption}  ·  {unusual} month{plural} stood out"
+
+
+def _preview_date_range(start: object, end: object) -> str:
+    """The span an import covers, short enough to sit on ONE line.
+
+    A metric card's caption is ~175px wide, and the house
+    ``format_date`` twice over ("Jul 29, 2026 to Aug 6, 2026") does not
+    fit - it wraps, which makes that card taller than the two beside it
+    and leaves the row with a ragged bottom edge. Repeating the year is
+    what it can afford to lose: a same-year range drops both (the file
+    name carries it), a range that crosses one keeps both, because that
+    is exactly when the year is the surprising part.
+    """
+    left, right = format_date(start), format_date(end)
+    if not right or left == right:
+        return left or right
+    if left[-4:].isdigit() and left[-4:] == right[-4:]:
+        left = left[:-6]
+    return f"{left} to {right}"
+
+
+def _preview_metric(
+    label: str, count: int, caption: str, accent: str, tooltip: str
+) -> MetricCard:
+    """One outcome of an import, as the house metric card.
+
+    NO icon, though ``MetricCard`` takes one: nothing else in the
+    dashboard passes it, and a glyph beside the label reads as a
+    different component rather than as emphasis. The label already says
+    which of the three this is.
+
+    A zero keeps the muted colour: nothing happened, so nothing should
+    catch the eye. ``MetricCard`` leaves its number untinted by design
+    (``color`` only ever tints the icon, so here it is inert), and a live
+    count claims the colour back through ``set_value`` - three cards is
+    few enough that a tinted number still means something, which is the
+    condition that rule was written against.
+    """
+    live = count > 0
+    color = accent if live else Theme.Colors.TEXT_SECONDARY
+    card = MetricCard(
+        label=label,
+        value=f"{count:,}",
+        color=color,
+        prev_value=caption,
+        tooltip=tooltip,
+    )
+    card.set_value(f"{count:,}", color)
+    return card
+
+
+def _preview_dot(text: str, live: bool, accent: str, tooltip: str) -> StatusDot:
+    """An import outcome that does NOT touch the ledger, as a status dot.
+
+    The house dot rather than a bordered chip: a chip's outline gives it a
+    box of its own, which is the chrome the metric cards above use to say
+    "this lands in your ledger". These do not. A zero keeps its dot and
+    goes muted, so the row holds its shape either way.
+    """
+    return StatusDot(text, accent if live else Theme.Colors.TEXT_SECONDARY, tooltip)
+
+
+def _import_count_controls(
+    counts: dict[str, Any],
+    *,
+    headings: tuple[tuple[str, str], tuple[str, str], tuple[str, str]],
+) -> tuple[ft.Row, ft.Row]:
+    """(the three cards, the row of dots) for one set of import counts.
+
+    Shared by the review dialog and the completion summary. They show the
+    SAME five numbers, before and after, and a reader compares the two
+    screens - so they are one layout wearing two sets of labels, not two
+    layouts that drift into disagreeing about what a count means.
+
+    ``headings`` supplies (label, caption) for add / update / duplicate,
+    which is the whole difference between them: the review says what will
+    happen, the summary says what did.
+    """
+    inserted = counts.get("rows_inserted", 0)
+    updated = counts.get("rows_updated", 0)
+    duplicate = counts.get("rows_duplicate", 0)
+    skipped = counts.get("rows_skipped", 0)
+    errors = counts.get("rows_error", 0)
+    (add_label, add_note), (edit_label, edit_note), (have_label, have_note) = headings
+
+    metrics = ft.Row(
+        [
+            _preview_metric(
+                add_label,
+                inserted,
+                add_note,
+                Theme.Colors.SUCCESS,
+                "New transactions this file carries that your ledger does not.",
+            ),
+            _preview_metric(
+                edit_label,
+                updated,
+                edit_note,
+                Theme.Colors.WARNING,
+                "Edited in your source app; changed in place, not duplicated.",
+            ),
+            _preview_metric(
+                have_label,
+                duplicate,
+                have_note,
+                Theme.Colors.TEXT_SECONDARY,
+                "Matches a transaction already stored, so it is skipped.",
+            ),
+        ],
+        spacing=Theme.Spacing.MD,
+    )
+
+    ignored = counts.get("rows_ignored", 0)
+    dots: list[ft.Control] = [
+        _preview_dot(
+            f"{skipped:,} scheduled",
+            bool(skipped),
+            Theme.Colors.WARNING,
+            "Not yet posted. Each one imports on its own once the payment clears.",
+        ),
+        *(
+            [
+                _preview_dot(
+                    f"{ignored:,} from removed accounts",
+                    True,
+                    Theme.Colors.TEXT_SECONDARY,
+                    "You removed these accounts, so their rows stay out. "
+                    "Re-add the account to opt back in.",
+                )
+            ]
+            if ignored
+            else []
+        ),
+        _preview_dot(
+            f"{errors:,} {'error' if errors == 1 else 'errors'}",
+            bool(errors),
+            Theme.Colors.ERROR,
+            "Rows that could not be placed in an account.",
+        ),
+    ]
+    kept = counts.get("category_kept_count", 0)
+    if kept:
+        # A dot too: three asides in one row read as one kind of thing,
+        # and this is the same kind - something the import did NOT do to
+        # the ledger.
+        dots.append(
+            _preview_dot(
+                f"{kept:,} {'category' if kept == 1 else 'categories'} kept",
+                True,
+                Theme.Colors.SUCCESS,
+                "You set these by hand, so the import leaves them as you set them.",
+            )
+        )
+    return metrics, ft.Row(dots, spacing=Theme.Spacing.MD, wrap=True)
+
+
+def _import_footnote(text: str) -> ft.Control:
+    """The muted closing line all three import dialogs end on.
+
+    The note EXPANDS. A Row hands its children unbounded width, so a note
+    long enough to need a second line runs off the panel mid-sentence
+    instead of wrapping inside it. START, not CENTER: centred against a
+    two-line note the icon floats into the gap between the lines.
+    """
+    return ft.Row(
+        [
+            ft.Icon(ft.Icons.INFO_OUTLINE, size=14, color=Theme.Colors.TEXT_SECONDARY),
+            ft.Container(
+                content=SecondaryText(text, size=Theme.Typography.BODY_SMALL),
+                expand=True,
+            ),
+        ],
+        spacing=6,
+        vertical_alignment=ft.CrossAxisAlignment.START,
+    )
+
+
+def import_identical_body(preview: dict[str, Any], file_name: str) -> ft.Column:
+    """The body for a file that was already imported, byte for byte.
+
+    The third state of the same dialog, so it keeps the family's shape:
+    the same subtitle line, the same dot vocabulary, the same closing
+    note. It stays SMALL because it is a dead end - one button, nothing
+    to decide - and gets no metric cards, since a row of zeroes wearing
+    the chrome that means "this reaches your ledger" says the opposite of
+    what happened.
+
+    The reason carries the message, not the count. "0 changes" on its own
+    reads as a failed import; what the reader needs is that this exact
+    file already went in.
+    """
+    return ft.Column(
+        [
+            SecondaryText(
+                f"{preview.get('rows_total', 0):,} rows read from {file_name}",
+                size=Theme.Typography.BODY_SMALL,
+            ),
+            ft.Row(
+                [
+                    _preview_dot(
+                        "0 changes",
+                        False,
+                        Theme.Colors.TEXT_SECONDARY,
+                        "Every row in this file is already in your ledger.",
+                    ),
+                    _preview_dot(
+                        "identical file",
+                        False,
+                        Theme.Colors.TEXT_SECONDARY,
+                        "Matched by content hash, so a rename would not fool it.",
+                    ),
+                ],
+                spacing=Theme.Spacing.MD,
+                wrap=True,
+            ),
+            # Short: the dots above already carry "identical" and "no
+            # changes", so this only has to say WHY, once.
+            _import_footnote(
+                "Nothing has been written. You already imported this exact file."
+            ),
+        ],
+        spacing=Theme.Spacing.MD,
+        tight=True,
+    )
+
+
+def import_summary_body(result: dict[str, Any]) -> ft.Column:
+    """The body of the "Import complete" dialog: what the run just did.
+
+    Deliberately the review dialog's own layout in the past tense. This
+    opens seconds after that one closed, showing the same five numbers,
+    and the reader's question is "did it do what it said" - which is a
+    comparison, and only works if the two screens are shaped alike.
+    """
+    metrics, dots = _import_count_controls(
+        result,
+        headings=(
+            ("Added", "Now in your ledger"),
+            ("Updated", "Changed in place"),
+            ("Already had", "Left alone"),
+        ),
+    )
+    return ft.Column(
+        [
+            SecondaryText(
+                f"{result.get('rows_total', 0):,} rows read from the file",
+                size=Theme.Typography.BODY_SMALL,
+            ),
+            metrics,
+            dots,
+        ],
+        spacing=Theme.Spacing.MD,
+        tight=True,
+    )
+
+
+# The sentinel option key for "create a new account" in the investment
+# import's target picker. A string because FormDropdown keys are strings;
+# real accounts ride as str(id).
+_NEW_ACCOUNT_KEY = "new"
+
+
+def investment_target_options(
+    accounts: list[dict[str, Any]], selected_id: int | None
+) -> tuple[list[tuple[str, str]], str]:
+    """(options, default key) for the investment import's account picker.
+
+    Only investment-typed accounts are offered - aiming a trade ledger at
+    a checking account is never right - plus a create-new entry, so the
+    picker is never a dead end on a fresh project with no brokerage
+    accounts at all. The default follows the sidebar selection only when
+    that selection is itself an investment account; otherwise it lands on
+    create-new rather than guessing.
+    """
+    options = [
+        (str(a["id"]), str(a.get("name", "")))
+        for a in accounts
+        if a.get("account_type") in _INVESTMENT_TYPES and a.get("id") is not None
+    ]
+    options.append((_NEW_ACCOUNT_KEY, "Create a new account..."))
+    default = _NEW_ACCOUNT_KEY
+    if selected_id is not None and any(k == str(selected_id) for k, _ in options):
+        default = str(selected_id)
+    return options, default
+
+
+def _suggested_account_name(file_name: str) -> str:
+    """A starting name for a to-be-created account, from the file name.
+
+    The ledger itself never names its account, so the file name is the
+    only hint there is. Cleaned (extension off, separators to spaces,
+    title-cased) purely as a prefill - the field stays editable.
+    """
+    stem = file_name.rsplit(".", 1)[0]
+    cleaned = " ".join(stem.replace("-", " ").replace("_", " ").split())
+    return cleaned.title() if cleaned else "Investment Account"
+
+
+def investment_import_preview_body(preview: dict[str, Any]) -> ft.Column:
+    """What a parsed ledger replays to: row count, date range, ending
+    position and value per security, and the total. The dialog's facts
+    section - the account choice below it is made looking at these.
+
+    Values are at each security's last LEDGER price (the same mark the
+    import will store), which the header names so a months-stale figure
+    isn't mistaken for a live quote. Name in primary ink, value as the
+    right-aligned figure; the share count is the supporting detail
+    between them, so it wears the secondary colour.
+    """
+    positions = preview.get("positions") or []
+    rows: list[ft.Control] = [
+        ft.Row(
+            [
+                PrimaryText(str(p.get("name", "")), size=Theme.Typography.BODY_SMALL),
+                ft.Container(expand=True),
+                NumericText(
+                    f"{p.get('shares', 0):,.3f} shares",
+                    size=Theme.Typography.BODY_SMALL,
+                    color=Theme.Colors.TEXT_SECONDARY,
+                ),
+                ft.Container(width=Theme.Spacing.MD),
+                NumericText(
+                    _usd(p.get("value", 0)),
+                    size=Theme.Typography.BODY_SMALL,
+                ),
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        for p in positions
+        if p.get("shares")  # exchanged-away share classes replay to zero
+    ]
+    first = format_date(preview.get("first_date"))
+    last = format_date(preview.get("last_date"))
+    # The total closes the column the values ran down, where a reader's
+    # eye lands after scanning the rows - in the accent teal, since it is
+    # the one number the whole section exists to answer.
+    total_row = ft.Row(
+        [
+            SecondaryText(
+                "Total at the ledger's last prices", size=Theme.Typography.BODY_SMALL
+            ),
+            ft.Container(expand=True),
+            NumericText(
+                _usd(preview.get("total_value", 0)),
+                size=Theme.Typography.BODY_SMALL,
+                color=Theme.Colors.ACCENT,
+                weight=ft.FontWeight.W_600,
+            ),
+        ],
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+    return ft.Column(
+        [
+            SecondaryText(
+                f"{preview.get('activities_parsed', 0):,} activities, "
+                f"{first} to {last}",
+                size=Theme.Typography.BODY_SMALL,
+            ),
+            ft.Container(height=Theme.Spacing.XS),
+            *rows,
+            ft.Divider(height=1, color=Theme.Colors.BORDER_SUBTLE),
+            total_row,
+        ],
+        spacing=Theme.Spacing.XS,
+        tight=True,
+    )
+
+
+def investment_import_summary_body(result: dict[str, Any]) -> ft.Column:
+    """The body of an investment-ledger "Import complete" dialog.
+
+    A lighter cousin of ``import_summary_body``: a ledger import has no
+    scheduled/error/skipped rows in the register's sense, so it earns two
+    cards, not three, rather than forcing the register's exact vocabulary
+    onto a shape that doesn't carry it.
+    """
+    inserted = result.get("trades_inserted", 0)
+    updated = result.get("trades_updated", 0)
+    created = result.get("securities_created", 0)
+    metrics = ft.Row(
+        [
+            _preview_metric(
+                "Trades added",
+                inserted,
+                "Now in your ledger",
+                Theme.Colors.SUCCESS,
+                "New activity this file carries that your ledger does not.",
+            ),
+            _preview_metric(
+                "Trades updated",
+                updated,
+                "Changed in place",
+                Theme.Colors.WARNING,
+                "Matched an existing row and replaced it.",
+            ),
+            _preview_metric(
+                "Securities added",
+                created,
+                "New to the catalog",
+                Theme.Colors.TEXT_SECONDARY,
+                "Funds this account hadn't held before.",
+            ),
+        ],
+        spacing=Theme.Spacing.MD,
+    )
+    return ft.Column(
+        [
+            SecondaryText(
+                f"{result.get('activities_parsed', 0):,} rows read from the file",
+                size=Theme.Typography.BODY_SMALL,
+            ),
+            metrics,
+        ],
+        spacing=Theme.Spacing.MD,
+        tight=True,
+    )
+
+
+def _preview_tag_row(kind: str, name: str, color: str) -> ft.Control:
+    """One named thing in a preview section: a kind tag beside its name."""
+    return ft.Row(
+        [Tag(kind, color=color), SecondaryText(name, no_wrap=True)],
+        spacing=Theme.Spacing.SM,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+
+def _preview_creates(preview: dict[str, Any]) -> list[ft.Control]:
+    """Rows naming what a commit would MINT, not just count.
+
+    An import that quietly invents an account is the surprise this dialog
+    exists to head off, so each one is named. Categories are capped: a
+    Quicken tree can carry hundreds, and a dialog that scrolls for a page
+    stops being read at all.
+    """
+    rows: list[ft.Control] = []
+    rows.extend(
+        _preview_tag_row("Account", name, Theme.Colors.WARNING)
+        for name in preview.get("new_accounts") or []
+    )
+    categories = preview.get("new_categories") or []
+    rows.extend(
+        _preview_tag_row("Category", name, Theme.Colors.TEXT_SECONDARY)
+        for name in categories[:_PREVIEW_DETAIL_CAP]
+    )
+    if len(categories) > _PREVIEW_DETAIL_CAP:
+        rows.append(
+            SecondaryText(
+                f"and {len(categories) - _PREVIEW_DETAIL_CAP:,} more categories",
+                size=Theme.Typography.BODY_SMALL,
+            )
+        )
+    return rows
+
+
+def _preview_edits(preview: dict[str, Any]) -> list[ft.Control]:
+    """One row per in-place update: when, how much, what changed.
+
+    An edit is the only outcome here that rewrites something already
+    stored, so it is spelled out field by field rather than counted - a
+    number alone gives no way to tell a payee tidy-up from a
+    re-categorization you did not ask for.
+    """
+    edits = preview.get("edits") or []
+    rows: list[ft.Control] = []
+    for edit in edits[:_PREVIEW_DETAIL_CAP]:
+        rows.append(
+            ft.Row(
+                [
+                    ft.Container(
+                        content=SecondaryText(
+                            format_date(edit.get("date")),
+                            size=Theme.Typography.BODY_SMALL,
+                        ),
+                        width=90,
+                    ),
+                    ft.Container(
+                        content=NumericText(
+                            _usd(abs(edit.get("amount", 0))),
+                            size=Theme.Typography.BODY_SMALL,
+                        ),
+                        width=80,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                PrimaryText(
+                                    edit.get("name") or "transaction",
+                                    size=Theme.Typography.BODY_SMALL,
+                                    no_wrap=True,
+                                ),
+                                SecondaryText(
+                                    "; ".join(edit.get("changes") or []),
+                                    size=Theme.Typography.CAPTION,
+                                ),
+                            ],
+                            spacing=0,
+                            tight=True,
+                        ),
+                        expand=True,
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        )
+    if len(edits) > _PREVIEW_DETAIL_CAP:
+        rows.append(
+            SecondaryText(
+                f"and {len(edits) - _PREVIEW_DETAIL_CAP:,} more updates",
+                size=Theme.Typography.BODY_SMALL,
+            )
+        )
+    return rows
+
+
+def import_preview_body(preview: dict[str, Any], file_name: str) -> ft.Column:
+    """The body of the import review dialog: what a commit would do.
+
+    Built as house controls rather than a column of sentences, because the
+    shape carries the meaning. The three outcomes that CHANGE the ledger
+    are metric cards; the two that do not (scheduled, errors) are chips,
+    so a skipped row can never be read as an incoming one. The per-account
+    split is the ranked-bar card, which answers "where does this land"
+    with a glance instead of a list to be added up by eye.
+
+    Pure and module-level so the coverage property - every count the
+    preview carries reaches the screen - can be asserted directly.
+    """
+    added_note = "New transactions"
+    if preview.get("rows_inserted", 0) and preview.get("insert_date_start"):
+        added_note = _preview_date_range(
+            preview.get("insert_date_start"), preview.get("insert_date_end")
+        )
+    metrics, dot_row = _import_count_controls(
+        preview,
+        headings=(
+            ("To add", added_note),
+            ("To update", "Changed in place"),
+            ("Already have", "Left alone"),
+        ),
+    )
+
+    sections: list[ft.Control] = []
+    by_account = preview.get("inserts_by_account") or {}
+    # One bar is not a ranking, it is "To add" restated.
+    if len(by_account) > 1:
+        sections.append(
+            RankedBarCard(
+                title="Where the new rows land",
+                rows=[
+                    RankedBar(label=name, value=float(count), display=f"{count:,}")
+                    for name, count in sorted(
+                        by_account.items(), key=lambda item: -item[1]
+                    )
+                ],
+            )
+        )
+    creates = _preview_creates(preview)
+    if creates:
+        sections.append(
+            SectionCard(
+                title="Also creates",
+                body=ft.Column(creates, spacing=Theme.Spacing.XS, tight=True),
+                body_padding=Theme.Spacing.MD,
+            )
+        )
+    removed = preview.get("removed_accounts") or []
+    if removed:
+        sections.append(
+            SectionCard(
+                title="Staying out",
+                body=ft.Column(
+                    [
+                        SecondaryText(
+                            "You removed these accounts, so their rows are "
+                            "ignored. Re-add an account to import into it "
+                            "again.",
+                            size=Theme.Typography.BODY_SMALL,
+                        ),
+                        *(
+                            _preview_tag_row(
+                                "Account", name, Theme.Colors.TEXT_SECONDARY
+                            )
+                            for name in removed
+                        ),
+                    ],
+                    spacing=Theme.Spacing.XS,
+                    tight=True,
+                ),
+                body_padding=Theme.Spacing.MD,
+            )
+        )
+    edits = _preview_edits(preview)
+    if edits:
+        sections.append(
+            SectionCard(
+                title="Updated in place",
+                body=ft.Column(edits, spacing=Theme.Spacing.XS, tight=True),
+                body_padding=Theme.Spacing.MD,
+            )
+        )
+
+    children: list[ft.Control] = [
+        SecondaryText(
+            f"{preview.get('rows_total', 0):,} rows read from {file_name}",
+            size=Theme.Typography.BODY_SMALL,
+        ),
+        metrics,
+        dot_row,
+    ]
+    if sections:
+        children.append(
+            ft.Container(
+                content=ft.Column(
+                    sections,
+                    spacing=Theme.Spacing.SM,
+                    tight=True,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                height=_PREVIEW_DETAIL_HEIGHT,
+            )
+        )
+    children.append(_import_footnote("Nothing has been written yet."))
+    return ft.Column(children, spacing=Theme.Spacing.MD, tight=True)
 
 
 def transaction_table(
@@ -632,7 +1572,12 @@ def transaction_table(
         ]
         if show_category:
             cells.append(TableCellText(txn.get("category") or "Uncategorized"))
-        cells.append(_amount_cell(txn.get("amount", 0)))
+        cells.append(
+            _amount_cell(
+                txn.get("amount", 0),
+                excluded=bool(txn.get("excluded_from_reports")),
+            )
+        )
         rows.append(cells)
 
     def _expand(idx: int, _items: list = items) -> ft.Control:
@@ -692,44 +1637,40 @@ def trade_detail_sections(
     ]
 
 
-def _connect_menu(items: list[ft.PopupMenuItem]) -> ft.PopupMenuButton:
-    """Compact "Connect" pill gathering the provider connect actions.
+def _import_menu(
+    on_transactions: Callable[[ft.ControlEvent], None],
+    on_investments: Callable[[ft.ControlEvent], None],
+) -> ActionDropdown:
+    """Compact "Import" pill: an explicit choice of file kind instead of
+    guessing it from whichever account happens to be selected.
 
-    One menu instead of one button per provider: the sidebar is too narrow
-    for a button row, and new providers become menu items rather than
-    overflow. Styled to sit beside a compact teal ``PulseButton`` (same
-    accent recipe: translucent teal fill, 1px teal border, 28px line box).
+    The guess broke down as soon as a second file shape existed - a
+    brokerage account selected by habit while importing a bank statement
+    (or vice versa) would silently route to the wrong parser. Each item
+    also names what it accepts, so the format is known before a file is
+    even picked rather than discovered from a rejected upload.
     """
-    teal = PulseColors.TEAL
-    return ft.PopupMenuButton(
-        tooltip="Connect an institution",
-        content=ft.Container(
-            content=ft.Row(
-                [
-                    PrimaryText(
-                        "Connect",
-                        size=Theme.Typography.BODY_SMALL,
-                        color=PulseColors.TEXT,
-                        weight=ft.FontWeight.W_500,
-                    ),
-                    ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=18, color=PulseColors.TEXT),
-                ],
-                spacing=2,
-                tight=True,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    return ActionDropdown(
+        "Import",
+        [
+            MenuAction(
+                "Transactions",
+                ft.Icons.RECEIPT_LONG,
+                on_transactions,
+                caption="OFX, QFX, QIF, CSV",
             ),
-            height=28,
-            padding=ft.padding.only(left=10, right=4),
-            bgcolor=ft.Colors.with_opacity(0.10, teal),
-            border=ft.border.all(1, teal),
-            border_radius=6,
-            alignment=ft.alignment.center,
-        ),
-        items=items,
+            MenuAction(
+                "Investments",
+                ft.Icons.SHOW_CHART,
+                on_investments,
+                caption="Optum HSA activity (CSV, TSV)",
+            ),
+        ],
+        tooltip="Import a file",
     )
 
 
-def _build_connect_menu(on_bank, on_brokerage) -> ft.PopupMenuButton | None:
+def _build_connect_menu(on_bank, on_brokerage) -> ActionDropdown | None:
     """The provider Connect menu, shared by the Accounts sidebar and the
     Connections tab header.
 
@@ -738,16 +1679,18 @@ def _build_connect_menu(on_bank, on_brokerage) -> ft.PopupMenuButton | None:
     credentials are set: hiding the menu on a fresh project with an empty
     ``.env`` made the feature's front door invisible. Missing credentials
     fail helpfully at click time instead (see the connect flows)."""
-    items: list[ft.PopupMenuItem] = []
+    actions: list[MenuAction] = []
     if settings.FINANCE_PLAID:
-        items.append(
-            ActionMenuItem("Connect a bank", ft.Icons.ACCOUNT_BALANCE_OUTLINED, on_bank)
+        actions.append(
+            MenuAction("Connect a bank", ft.Icons.ACCOUNT_BALANCE_OUTLINED, on_bank)
         )
     if settings.FINANCE_SNAPTRADE:
-        items.append(
-            ActionMenuItem("Connect a brokerage", ft.Icons.SHOW_CHART, on_brokerage)
+        actions.append(
+            MenuAction("Connect a brokerage", ft.Icons.SHOW_CHART, on_brokerage)
         )
-    return _connect_menu(items) if items else None
+    if not actions:
+        return None
+    return ActionDropdown("Connect", actions, tooltip="Connect an institution")
 
 
 async def _connect_bank_flow(
@@ -838,7 +1781,13 @@ class AccountsSidebar(ft.Container):
     """Grouped, clickable account list. Calls ``on_select(account | None)`` with
     the full account dict (``None`` for the "All Accounts" row)."""
 
-    def __init__(self, page: ft.Page, on_select, on_import=None) -> None:
+    def __init__(
+        self,
+        page: ft.Page,
+        on_select,
+        on_import_transactions=None,
+        on_import_investments=None,
+    ) -> None:
         super().__init__()
         self.page = page
         self._on_select = on_select
@@ -870,14 +1819,16 @@ class AccountsSidebar(ft.Container):
             actions.append(connect)
         # File import lives with the other account-level actions; the
         # import itself targets whichever account is selected in this list.
-        if on_import is not None:
-            import_button = PulseButton(
-                on_click_callable=on_import,
-                text="Import",
-                compact=True,
+        # A dropdown, not a single button: the file kind (register vs.
+        # investment ledger) is an explicit pick, not guessed from the
+        # selection - see _import_menu's docstring for why that broke.
+        if on_import_transactions is not None and on_import_investments is not None:
+            actions.append(
+                _import_menu(
+                    lambda e: e.page.run_task(on_import_transactions),
+                    lambda e: e.page.run_task(on_import_investments),
+                )
             )
-            import_button.tooltip = "Import an OFX, QFX, QIF, or CSV file"
-            actions.append(import_button)
         # No "ACCOUNTS" heading: the tab is already named Accounts, so the
         # header is just the action row, refresh pushed to the far edge.
         actions.append(ft.Container(expand=True))
@@ -984,13 +1935,22 @@ class AccountsSidebar(ft.Container):
         else:
             name.expand = True
             left = name
-        # Individual account rows read in the primary text color; the teal /
-        # red signal is reserved for TOTALS (group subtotals + the bold
-        # All Accounts row), so the sidebar isn't a wall of accent color.
+        # Individual account rows read in the primary text color - teal is
+        # reserved for TOTALS (group subtotals + the bold All Accounts
+        # row), so the sidebar isn't a wall of accent. RED is not: an
+        # overdrawn checking account is trouble at any level, and a plain
+        # white "-$222.56" read as ordinary (headline_stat_color's rule -
+        # colour the number in trouble, never every healthy one).
+        if bold:
+            balance_color = _balance_color(balance)
+        elif balance is not None and balance < 0:
+            balance_color = Theme.Colors.ERROR
+        else:
+            balance_color = Theme.Colors.TEXT_PRIMARY
         bal = NumericText(
             _usd(balance) if balance is not None else "",
             size=Theme.Typography.BODY_SMALL,
-            color=_balance_color(balance) if bold else Theme.Colors.TEXT_PRIMARY,
+            color=balance_color,
         )
         row = ft.Container(
             content=ft.Row([left, bal], spacing=Theme.Spacing.MD),
@@ -1177,10 +2137,12 @@ class AccountsSidebar(ft.Container):
         await _connect_brokerage_flow(self.page, self.reload)
 
 
-def _account_detail_header(account: dict, *, on_rename, on_remove) -> ft.Control:
+def _account_detail_header(
+    account: dict, *, on_rename, on_remove, on_reconcile
+) -> ft.Control:
     """The header shown above an account's register: name, type, balance, and a
-    Manage menu (Rename always; Remove for manual accounts only — provider
-    accounts are owned by the bank connection)."""
+    Manage menu (Rename and Reconcile always; Remove for manual accounts only —
+    provider accounts are owned by the bank connection)."""
     balance = _account_display_balance(account)
     is_manual = account.get("is_manual", False)
     classification = (account.get("classification") or "asset").title()
@@ -1189,6 +2151,7 @@ def _account_detail_header(account: dict, *, on_rename, on_remove) -> ft.Control
 
     menu_items = [
         ft.PopupMenuItem(text="Rename", on_click=lambda _e: on_rename(account)),
+        ft.PopupMenuItem(text="Reconcile", on_click=lambda _e: on_reconcile(account)),
     ]
     if is_manual:
         menu_items.append(
@@ -1196,6 +2159,10 @@ def _account_detail_header(account: dict, *, on_rename, on_remove) -> ft.Control
         )
     manage = ft.PopupMenuButton(
         icon=ft.Icons.MORE_VERT,
+        # Explicit: without it the icon inherits the theme primary (teal),
+        # and accent means "act on me" - a quiet overflow trigger isn't that.
+        # Same ink as ActionMenu's kebab and every other muted icon button.
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
         tooltip="Manage account",
         items=menu_items,
     )
@@ -1230,7 +2197,7 @@ def _account_detail_header(account: dict, *, on_rename, on_remove) -> ft.Control
     right = NumericText(
         _usd(balance),
         size=Theme.Typography.H2,
-        color=Theme.Colors.TEXT_PRIMARY,
+        color=headline_stat_color(balance),
         weight=ft.FontWeight.W_700,
     )
     return ft.Container(
@@ -1271,6 +2238,14 @@ class TransactionsPanel(ft.Container):
             register_filter_listener(self._on_account_filter_change)
         self._account: dict | None = None
         self._query = ""
+        # Grows by a page each "Load more" (see _load_more) - accumulate
+        # rather than paginate, so the merged trades lane stays coherent.
+        self._register_page_size = _REGISTER_PAGE_SIZE
+        # The register's one DataTable, fed via set_rows so the scroll
+        # position survives every edit-triggered reload; rebuilt only
+        # when the column set changes (account <-> All Accounts).
+        self._register_table: DataTable | None = None
+        self._register_scope: bool | None = None
         self._reload_accounts = None  # set by the owner; reloads the sidebar
         # no_wrap on both: these sit in the flex slot of a Row full of
         # fixed-width controls, so if that Row is ever over-subscribed
@@ -1292,6 +2267,16 @@ class TransactionsPanel(ft.Container):
             no_wrap=True,
             overflow=ft.TextOverflow.ELLIPSIS,
         )
+        # Beside the count, not under the table: a footer permanently
+        # costs one row's height, and the count line is the chrome that
+        # already tells this story ("Showing 100 of 685").
+        self._load_more_link = PulseButton(
+            on_click_callable=self._load_more,
+            text="Load more",
+            variant="muted",
+            compact=True,
+        )
+        self._load_more_link.visible = False
         self._debounce = Debouncer(page)
         self._search = FormTextField(
             label="Search payee",
@@ -1330,6 +2315,10 @@ class TransactionsPanel(ft.Container):
         # Server-side name of the upload in flight (uuid-prefixed); None
         # when no import is running. Doubles as the re-entry guard.
         self._pending_upload: str | None = None
+        # Which Import menu item opened the picker; read by _finish_import
+        # to route to the investment lane instead of the register
+        # preview/commit flow.
+        self._import_is_investment = False
         # Account-detail header (visible only when a specific account is chosen).
         self._detail = ft.Container(visible=False)
         self._body = ft.Container(expand=True)
@@ -1351,7 +2340,9 @@ class TransactionsPanel(ft.Container):
         # does not change while the modal is open.
         self._account_names: dict[int, str] = {}
         self._category_picker = CategoryPickerButton(
-            categories=self._categories, on_pick=self._pick_category
+            categories=self._categories,
+            on_pick=self._pick_category,
+            on_create=self._create_category,
         )
         # The payee picker is what makes a bill survive a descriptor
         # change - see FinanceService's "payees (merchants)" section and
@@ -1362,6 +2353,20 @@ class TransactionsPanel(ft.Container):
             on_create=self._create_merchant,
         )
         self._selection_label = SecondaryText("", visible=False)
+        # The active tag filter (a tag dict), set by clicking a row's chip.
+        # It narrows within whatever account/range/search is already on
+        # screen, and clears from the chip beside the subtitle.
+        self._tag_filter: dict | None = None
+        self._tag_filter_chip = ft.Container(visible=False)
+        self._tags: list[tuple[str, str]] = []
+        # Pick and create land on the SAME handler: the server's attach is
+        # get-or-create by name, so "choose Flagged" and "type Flagged"
+        # are one operation with two spellings.
+        self._tag_picker = TagPickerButton(
+            tags=self._tags,
+            on_pick=self._apply_tag,
+            on_create=self._apply_tag,
+        )
         self._bulk_categorize_trigger = BulkActionTrigger(
             on_tap=self._open_bulk_categorize
         )
@@ -1378,6 +2383,24 @@ class TransactionsPanel(ft.Container):
                 "and fold any duplicate of it into one"
             ),
         )
+        self._bulk_tag_trigger = BulkActionTrigger(
+            on_tap=self._open_bulk_tag,
+            label="Tag",
+            tooltip=(
+                "Put a tag on every checked row - flag things to follow "
+                "up on, group a trip, mark tax items"
+            ),
+        )
+        self._bulk_delete_trigger = BulkActionTrigger(
+            on_tap=self._open_bulk_delete,
+            label="Delete",
+            variant="stop",
+            tooltip=(
+                "Delete every checked row from the ledger. Deleted rows "
+                "stay deleted - re-importing the same file will not bring "
+                "them back"
+            ),
+        )
         # The selection controls live on their OWN row, appearing only
         # when something is checked. They were in the header row, which
         # already carried the title, seven range chips and the search box:
@@ -1385,15 +2408,20 @@ class TransactionsPanel(ft.Container):
         # is the only flexible child there, so the moment three more chips
         # appeared it was squeezed to a few pixels and wrapped one
         # character per line down the side of the page.
-        self._selection_row = ft.Row(
-            [
-                self._selection_label,
-                self._bulk_payee_trigger,
-                self._bulk_categorize_trigger,
-                self._bulk_recurring_trigger,
-            ],
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=Theme.Spacing.MD,
+        self._selection_row = ft.Container(
+            content=ft.Row(
+                [
+                    self._selection_label,
+                    self._bulk_payee_trigger,
+                    self._bulk_categorize_trigger,
+                    self._bulk_recurring_trigger,
+                    self._bulk_tag_trigger,
+                    self._bulk_delete_trigger,
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=Theme.Spacing.MD,
+            ),
+            padding=ft.padding.symmetric(vertical=Theme.Spacing.SM),
             visible=False,
         )
         self.content = ft.Column(
@@ -1402,7 +2430,20 @@ class TransactionsPanel(ft.Container):
                 ft.Row(
                     [
                         ft.Column(
-                            [self._title, self._subtitle], spacing=2, expand=True
+                            [
+                                self._title,
+                                ft.Row(
+                                    [
+                                        self._subtitle,
+                                        self._tag_filter_chip,
+                                        self._load_more_link,
+                                    ],
+                                    spacing=Theme.Spacing.SM,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                            ],
+                            spacing=2,
+                            expand=True,
                         ),
                         self._range,
                         self._search,
@@ -1417,6 +2458,7 @@ class TransactionsPanel(ft.Container):
                 # see SearchPickerButton's docstring.
                 self._category_picker,
                 self._merchant_picker,
+                self._tag_picker,
             ],
             spacing=0,
             expand=True,
@@ -1435,7 +2477,10 @@ class TransactionsPanel(ft.Container):
         self._detail.visible = is_account
         self._detail.content = (
             _account_detail_header(
-                account, on_rename=self._open_rename, on_remove=self._open_remove
+                account,
+                on_rename=self._open_rename,
+                on_remove=self._open_remove,
+                on_reconcile=self._open_reconcile,
             )
             if is_account
             else None
@@ -1453,7 +2498,11 @@ class TransactionsPanel(ft.Container):
         self.page.run_task(self._load_holdings if is_investment else self._load)
 
     def _set_subtitle(
-        self, count: int, shown_sum: int | None = None, filtered: bool = False
+        self,
+        count: int,
+        shown_sum: int | None = None,
+        filtered: bool = False,
+        shown: int | None = None,
     ) -> None:
         """The register's summary line.
 
@@ -1466,13 +2515,13 @@ class TransactionsPanel(ft.Container):
         gives the matched rows their OWN total and renames the balance to
         say whose it is.
         """
-        parts = [f"{count:,} transaction{'s' if count != 1 else ''}"]
+        parts = [register_count_label(shown, count)]
         if self._account is None:
             self._subtitle.value = "  ·  ".join(parts)
         else:
             balance = _account_display_balance(self._account)
             if filtered:
-                parts = [f"{count:,} matching"]
+                parts = [register_count_label(shown, count, noun="matching")]
                 # Only when the page holds every match - a partial page
                 # would total a slice while looking like the whole.
                 if shown_sum is not None:
@@ -1481,6 +2530,9 @@ class TransactionsPanel(ft.Container):
             else:
                 parts.append(f"Register balance {_usd(balance)}")
             self._subtitle.value = "  ·  ".join(parts)
+        self._load_more_link.visible = shown is not None and shown < count
+        if self._load_more_link.page is not None:
+            self._load_more_link.update()
         if self._subtitle.page is not None:
             self._subtitle.update()
 
@@ -1512,23 +2564,42 @@ class TransactionsPanel(ft.Container):
         )
         self.page.run_task(self._load_holdings if is_investment else self._load)
 
-    # -- File import (OFX/QFX/QIF/CSV) ------------------------------------
+    # -- File import (OFX/QFX/QIF/CSV, or a custodian ledger for a
+    #    brokerage account) --------------------------------------------
 
-    async def open_import_picker(self) -> None:
-        """Open the browser file dialog for a transaction-file import.
+    async def open_transactions_import_picker(self) -> None:
+        """Open the browser file dialog for a register (bank/card) import.
 
-        Public: triggered by the sidebar's "Import file" button. The import
-        targets the currently selected account; OFX/QFX can also route
-        themselves from ``All Accounts`` because the file names its own
-        account.
+        Public: the sidebar's Import menu, "Transactions" item.
         """
+        await self._open_import_picker(investments=False)
+
+    async def open_investments_import_picker(self) -> None:
+        """Open the browser file dialog for an investment-ledger import.
+
+        Public: the sidebar's Import menu, "Investments" item. No
+        preconditions: the target account is chosen (or created) in the
+        review dialog AFTER the file is parsed, the same order the
+        register import works in - file first, decisions second.
+        """
+        await self._open_import_picker(investments=True)
+
+    async def _open_import_picker(self, *, investments: bool) -> None:
         if self._pending_upload is not None:
             return  # an import is already in flight
-        self._file_picker.pick_files(
-            dialog_title="Import transactions",
-            allow_multiple=False,
-            allowed_extensions=["ofx", "qfx", "qif", "csv"],
-        )
+        self._import_is_investment = investments
+        if investments:
+            self._file_picker.pick_files(
+                dialog_title="Import investment activity",
+                allow_multiple=False,
+                allowed_extensions=["csv", "tsv", "txt"],
+            )
+        else:
+            self._file_picker.pick_files(
+                dialog_title="Import transactions",
+                allow_multiple=False,
+                allowed_extensions=["ofx", "qfx", "qif", "csv"],
+            )
 
     def _on_import_picked(self, event: ft.FilePickerResultEvent) -> None:
         if not event.files:
@@ -1536,7 +2607,11 @@ class TransactionsPanel(ft.Container):
         picked = event.files[0]
         name = picked.name or "upload"
         extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-        if extension == "qif" and self._account is None:
+        if (
+            extension == "qif"
+            and self._account is None
+            and not self._import_is_investment
+        ):
             # QIF carries no account info; fail before the round trip with
             # an instruction instead of a server 400 the client cannot read.
             ErrorSnackBar(
@@ -1600,7 +2675,206 @@ class TransactionsPanel(ft.Container):
             upload_path.unlink(missing_ok=True)
 
         original_name = pending.split("-", 1)[1]
-        overlay.update_label(f"Importing {original_name}...")
+        if self._import_is_investment:
+            await self._finish_investment_import(data, original_name)
+            return
+
+        # Classify first, commit second. The preview endpoint runs the SAME
+        # plan the import executes, so the review dialog shows exactly what
+        # pressing Import will do - and until then nothing is written.
+        overlay.update_label(f"Checking {original_name}...")
+        params: dict[str, object] = {}
+        if self._account is not None:
+            params["account_id"] = self._account["id"]
+        api = get_session_state(self.page).api_client
+        preview = await api.post_multipart(
+            "/api/v1/finance/import/preview",
+            files={"file": (original_name, data, "application/octet-stream")},
+            params=params,
+        )
+        if not isinstance(preview, dict):
+            # Show the real reason (HTTP status + detail body), not a
+            # guess - that is the whole point of the overlay.
+            overlay.fail(
+                api.last_error or "Import failed for an unknown reason.",
+                title="Import failed",
+            )
+            return
+        overlay.hide()
+        await self._show_import_preview(preview, data, original_name)
+
+    async def _finish_investment_import(self, data: bytes, original_name: str) -> None:
+        """Parse-preview the ledger, then open the review dialog where the
+        target account is chosen (or created). Mirrors the register
+        import's order - classify first, commit second - so nothing is
+        written until the dialog's Import button."""
+        from app.components.frontend.state.session_state import get_session_state
+
+        overlay = LoadingOverlay.of(self.page)
+        overlay.update_label(f"Checking {original_name}...")
+        api = get_session_state(self.page).api_client
+        preview = await api.post_multipart(
+            "/api/v1/finance/import-investments/preview",
+            files={"file": (original_name, data, "application/octet-stream")},
+        )
+        if not isinstance(preview, dict):
+            overlay.fail(
+                api.last_error or "Import failed for an unknown reason.",
+                title="Import failed",
+            )
+            return
+        accounts = await api.get("/api/v1/finance/accounts")
+        account_rows = accounts.get("items", []) if isinstance(accounts, dict) else []
+        overlay.hide()
+        await self._show_investment_import_review(
+            preview, account_rows, data, original_name
+        )
+
+    async def _show_investment_import_review(
+        self,
+        preview: dict,
+        accounts: list[dict],
+        data: bytes,
+        original_name: str,
+    ) -> None:
+        """The pre-commit review: what the ledger replays to, and where it
+        goes - an existing investment account, or one created on the spot
+        (the same courtesy OFX ingest extends to unknown accounts)."""
+        selected_id = self._account.get("id") if self._account is not None else None
+        options, default = investment_target_options(accounts, selected_id)
+        name_field = FormTextField(
+            label="New account name",
+            value=_suggested_account_name(original_name),
+        )
+        name_host = ft.Container(
+            content=name_field, visible=default == _NEW_ACCOUNT_KEY
+        )
+
+        def _target_changed(event: ft.ControlEvent) -> None:
+            name_host.visible = event.control.value == _NEW_ACCOUNT_KEY
+            if name_host.page is not None:
+                name_host.update()
+
+        target_dd = FormDropdown(
+            label="Into account",
+            options=options,
+            value=default,
+            on_change=_target_changed,
+        )
+        dialog: StyledAlertDialog | None = None
+
+        async def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        async def _commit() -> None:
+            choice = target_dd.value or _NEW_ACCOUNT_KEY
+            params: dict[str, object] = {}
+            if choice == _NEW_ACCOUNT_KEY:
+                name = (name_field.value or "").strip()
+                if not name:
+                    name_field.set_error("Name the new account.")
+                    return
+                params["account_name"] = name
+            else:
+                params["account_id"] = int(choice)
+            await _close()
+            await self._run_investment_import(data, original_name, params)
+
+        dialog = StyledAlertDialog(
+            title=f"Import {original_name}",
+            body=ft.Column(
+                [
+                    investment_import_preview_body(preview),
+                    ft.Container(height=Theme.Spacing.SM),
+                    target_dd,
+                    name_host,
+                ],
+                spacing=Theme.Spacing.SM,
+                tight=True,
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_close,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=_commit,
+                    text="Import",
+                    variant="teal",
+                    compact=True,
+                ),
+            ],
+            width=560,
+        )
+        self.page.open(dialog)
+
+    async def _run_investment_import(
+        self, data: bytes, original_name: str, params: dict[str, object]
+    ) -> None:
+        """Commit a reviewed ledger. Synchronous, no background job - a
+        few hundred rows loads in well under a second, unlike a
+        multi-year bank statement."""
+        from app.components.frontend.state.session_state import get_session_state
+
+        overlay = LoadingOverlay.of(self.page)
+        overlay.show(f"Importing {original_name}...")
+        api = get_session_state(self.page).api_client
+        response = await api.post_multipart(
+            "/api/v1/finance/import-investments",
+            files={"file": (original_name, data, "application/octet-stream")},
+            params=params,
+        )
+        if not isinstance(response, dict):
+            overlay.fail(
+                api.last_error or "Import failed for an unknown reason.",
+                title="Import failed",
+            )
+            return
+        overlay.hide()
+        await self._show_investment_import_summary(response)
+
+        # The target may be a freshly minted account: refresh the sidebar
+        # onto it, and this panel's own view if it's the one showing.
+        target_id = response.get("account_id")
+        if self._account is not None and self._account.get("id") == target_id:
+            await self._load_holdings()
+        if self._reload_accounts is not None:
+            await self._reload_accounts(target_id)
+
+    async def _show_investment_import_summary(self, response: dict) -> None:
+        """Modal breakdown of an investment-ledger import; dismissed by OK."""
+        dialog: StyledAlertDialog | None = None
+
+        async def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        dialog = StyledAlertDialog(
+            title="Import complete",
+            body=investment_import_summary_body(response),
+            actions=[
+                PulseButton(
+                    on_click_callable=_close,
+                    text="OK",
+                    variant="teal",
+                    compact=True,
+                )
+            ],
+            width=500,
+        )
+        self.page.open(dialog)
+
+    async def _run_import(self, data: bytes, original_name: str) -> None:
+        """Commit a previewed file: the background import job path."""
+        from app.components.frontend.state.session_state import get_session_state
+
+        overlay = LoadingOverlay.of(self.page)
+        overlay.show(f"Importing {original_name}...")
         params: dict[str, object] = {"background": "true"}
         if self._account is not None:
             params["account_id"] = self._account["id"]
@@ -1617,8 +2891,6 @@ class TransactionsPanel(ft.Container):
             params=params,
         )
         if not isinstance(started, dict) or "job_id" not in started:
-            # Show the real reason (HTTP status + detail body), not a
-            # guess - that is the whole point of the overlay.
             overlay.fail(
                 api.last_error or "Import failed for an unknown reason.",
                 title="Import failed",
@@ -1641,67 +2913,76 @@ class TransactionsPanel(ft.Container):
             account_id = self._account["id"] if self._account is not None else None
             await self._reload_accounts(account_id)
 
+    async def _show_import_preview(
+        self, preview: dict, data: bytes, original_name: str
+    ) -> None:
+        """The pre-commit review: what this file will do, before it does it.
+
+        Import commits the very bytes just previewed (the batch dedup ties
+        the two requests together by file hash); Cancel writes nothing.
+        """
+        dialog: StyledAlertDialog | None = None
+
+        async def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        if preview.get("identical_batch_id") is not None:
+            dialog = StyledAlertDialog(
+                title="Nothing to import",
+                body=import_identical_body(preview, original_name),
+                actions=[
+                    PulseButton(
+                        on_click_callable=_close,
+                        text="OK",
+                        variant="teal",
+                        compact=True,
+                    )
+                ],
+                width=520,
+            )
+            self.page.open(dialog)
+            return
+
+        inserted = preview.get("rows_inserted", 0)
+        updated = preview.get("rows_updated", 0)
+        body = import_preview_body(preview, original_name)
+
+        async def _confirm() -> None:
+            await _close()
+            await self._run_import(data, original_name)
+
+        changes = inserted + updated
+        plural_changes = "s" if changes != 1 else ""
+        import_label = (
+            f"Import {changes:,} change{plural_changes}" if changes else "Import"
+        )
+        dialog = StyledAlertDialog(
+            title="Review import",
+            body=body,
+            actions=[
+                PulseButton(
+                    on_click_callable=_close,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=_confirm,
+                    text=import_label,
+                    variant="teal",
+                    compact=True,
+                ),
+            ],
+            # Three metric cards need the room; 640 squeezed "Already have"
+            # onto two lines.
+            width=700,
+        )
+        self.page.open(dialog)
+
     async def _show_import_summary(self, response: dict) -> None:
         """Modal breakdown of an import; dismissed by OK."""
-        inserted = response.get("rows_inserted", 0)
-        updated = response.get("rows_updated", 0)
-        duplicate = response.get("rows_duplicate", 0)
-        skipped = response.get("rows_skipped", 0)
-        errors = response.get("rows_error", 0)
-        total = response.get("rows_total", 0)
-
-        # Every line is shown even at zero: a reader learns what the import
-        # DOES from the ones that stayed empty, and a missing line would
-        # read as a missing check.
-        lines: list[tuple[str, int, str, str]] = [
-            ("Added", inserted, Theme.Colors.SUCCESS, "New transactions"),
-            (
-                "Updated",
-                updated,
-                Theme.Colors.SUCCESS if updated else Theme.Colors.TEXT_SECONDARY,
-                "Edited in your source app; changed in place, not duplicated",
-            ),
-            (
-                "Already had",
-                duplicate,
-                Theme.Colors.TEXT_SECONDARY,
-                "Matched a transaction already stored, so skipped",
-            ),
-            (
-                "Scheduled",
-                skipped,
-                Theme.Colors.WARNING if skipped else Theme.Colors.TEXT_SECONDARY,
-                "Not yet posted. Imports on its own once the payment clears",
-            ),
-            (
-                "Errors",
-                errors,
-                Theme.Colors.ERROR if errors else Theme.Colors.TEXT_SECONDARY,
-                "Rows that could not be placed in an account",
-            ),
-        ]
-        rows: list[ft.Control] = [
-            ft.Row(
-                [
-                    ft.Container(content=SecondaryText(label), width=110),
-                    ft.Container(
-                        content=NumericText(
-                            f"{count:,}", color=color, weight=ft.FontWeight.W_600
-                        ),
-                        width=70,
-                        alignment=ft.alignment.center_right,
-                    ),
-                    ft.Container(
-                        content=SecondaryText(note, size=Theme.Typography.BODY_SMALL),
-                        expand=True,
-                    ),
-                ],
-                spacing=Theme.Spacing.MD,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            )
-            for label, count, color, note in lines
-        ]
-
         dialog: StyledAlertDialog | None = None
 
         async def _close() -> None:
@@ -1711,15 +2992,7 @@ class TransactionsPanel(ft.Container):
 
         dialog = StyledAlertDialog(
             title="Import complete",
-            body=ft.Column(
-                [
-                    SecondaryText(f"{total:,} rows read from the file"),
-                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                    *rows,
-                ],
-                spacing=Theme.Spacing.SM,
-                tight=True,
-            ),
+            body=import_summary_body(response),
             actions=[
                 PulseButton(
                     on_click_callable=_close,
@@ -1728,7 +3001,9 @@ class TransactionsPanel(ft.Container):
                     compact=True,
                 )
             ],
-            width=520,
+            # Matches the review dialog it echoes: same three cards, so
+            # the same room, so the two screens line up.
+            width=700,
         )
         self.page.open(dialog)
 
@@ -1760,6 +3035,7 @@ class TransactionsPanel(ft.Container):
             ]
             self._category_picker.update_categories(self._categories)
         await self._reload_merchants(api)
+        await self._reload_tags(api)
         if not self._account_names:
             accounts = await api.get(
                 "/api/v1/finance/accounts", params={"page_size": 200}
@@ -1770,14 +3046,30 @@ class TransactionsPanel(ft.Container):
                     accounts.get("items", []) if isinstance(accounts, dict) else []
                 )
             }
-        params: dict[str, object] = {"page_size": 100}
+        params: dict[str, object] = {"page_size": self._register_page_size}
         from_date = self._range_from()
         if from_date is not None:
             params["from"] = from_date.isoformat()
         if self._account is not None:
             params["account_id"] = self._account["id"]
+        else:
+            # The account picker scopes All Accounts too. It never did -
+            # the fetch carried no account scope at all, so "2 of 15
+            # accounts" changed nothing here and a checked account's rows
+            # could still sit past the page edge (confirmed live). An
+            # explicit empty selection means literally nothing, same as
+            # every other consumer of AccountFilter.params().
+            if self._account_filter.is_empty:
+                self._body.content = EmptyStatePlaceholder(
+                    message="No accounts selected."
+                )
+                self._refresh()
+                return
+            params.update(self._account_filter.params())
         if self._query:
             params["q"] = self._query
+        if self._tag_filter is not None:
+            params["tag_id"] = self._tag_filter["id"]
         data = await api.get("/api/v1/finance/transactions", params=params)
         if not self._debounce.is_current(sequence):
             return  # a newer keystroke already owns the register
@@ -1789,7 +3081,11 @@ class TransactionsPanel(ft.Container):
         # otherwise render an empty register.
         trades: list[dict] = []
         if self._account is None:
-            activity = await api.get("/api/v1/finance/trades")
+            # Same scope as the transactions fetch - without it every
+            # brokerage's trades rode along whatever the picker said.
+            activity = await api.get(
+                "/api/v1/finance/trades", params=self._account_filter.params()
+            )
             trades = activity.get("items", []) if isinstance(activity, dict) else []
             if from_date is not None:
                 cutoff = from_date.isoformat()
@@ -1798,6 +3094,14 @@ class TransactionsPanel(ft.Container):
                 q = self._query.lower()
                 trades = [t for t in trades if q in (t.get("name") or "").lower()]
             total += len(trades)
+            # Hold trades below the transaction page's edge for Load more
+            # (see trades_within_page) - they still COUNT above, so the
+            # subtitle's "of" covers both lanes in full.
+            trades = trades_within_page(
+                trades,
+                oldest_txn_date=str(items[-1].get("date")) if items else None,
+                page_complete=len(items) >= total - len(trades),
+            )
 
         # Trades ride along only in All Accounts, which has no register
         # balance line to contradict - so the matched total is computed
@@ -1806,7 +3110,12 @@ class TransactionsPanel(ft.Container):
         shown_sum: int | None = None
         if filtered and self._account is not None and len(items) == total:
             shown_sum = sum(int(i.get("amount") or 0) for i in items)
-        self._set_subtitle(total, shown_sum=shown_sum, filtered=filtered)
+        self._set_subtitle(
+            total,
+            shown_sum=shown_sum,
+            filtered=filtered,
+            shown=len(items) + len(trades),
+        )
         if not items and not trades:
             self._body.content = EmptyStatePlaceholder(
                 message="No transactions for this account."
@@ -1857,9 +3166,7 @@ class TransactionsPanel(ft.Container):
                 ft.Row(
                     [
                         ProviderIcon(payee or raw, record.get("icon_b64")),
-                        ft.Container(
-                            content=TableNameText(payee or raw), expand=True
-                        ),
+                        ft.Container(content=TableNameText(payee or raw), expand=True),
                     ],
                     spacing=Theme.Spacing.SM,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1887,6 +3194,24 @@ class TransactionsPanel(ft.Container):
                 )
             ]
 
+        def _tags_cell(record: dict) -> ft.Control:
+            tags = record.get("tags") or []
+            if not tags:
+                cell = ft.Container(content=TableCellText(""))
+                cell.data = ""
+                return cell
+            cell = ft.Row(
+                transaction_tag_chips(
+                    tags, on_tap=self._filter_by_tag, cap=2, compact=True
+                ),
+                spacing=Theme.Spacing.XS,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+            # A Row has no .value, so the Tags column would silently stop
+            # sorting without this (same note as the payee cell).
+            cell.data = ", ".join(t.get("name", "") for t in tags)
+            return cell
+
         def _row(kind: str, record: dict) -> list[ft.Control]:
             if kind == "trade":
                 return [
@@ -1898,6 +3223,7 @@ class TransactionsPanel(ft.Container):
                     # Trades are not categorized - they are position moves,
                     # not spending.
                     TableCellText("\u2014"),
+                    _tags_cell(record),
                     TableCellText(_trade_type_label(record.get("type")).lower()),
                     _amount_cell(record.get("amount", 0)),
                 ]
@@ -1906,8 +3232,12 @@ class TransactionsPanel(ft.Container):
                 *_account_cell(record),
                 _payee_cell(record),
                 _category_cell(record),
+                _tags_cell(record),
                 TableCellText(record.get("source", "")),
-                _amount_cell(record.get("amount", 0)),
+                _amount_cell(
+                    record.get("amount", 0),
+                    excluded=bool(record.get("excluded_from_reports")),
+                ),
             ]
 
         rows = [_row(kind, record) for kind, record in merged]
@@ -1916,7 +3246,7 @@ class TransactionsPanel(ft.Container):
             kind, record = _merged[index]
             if kind == "trade":
                 return _trade_expanded_content(record)
-            return _transaction_expanded_content(record)
+            return _transaction_expanded_content(record, on_remove_tag=self._remove_tag)
 
         def _on_selection_change(indices: set[int], _merged: list = merged) -> None:
             # Trades select like anything else, but they carry no payee or
@@ -1945,19 +3275,41 @@ class TransactionsPanel(ft.Container):
         # panel (header + search stay pinned above): only visible rows render,
         # which is what keeps a 400-row register from freezing the modal.
         # Hover a row for a summary; click it to expand its detail inline.
-        self._body.content = DataTable(
-            columns=columns,
-            rows=rows,
-            row_padding=6,
-            item_extent=_DENSE_ROW_HEIGHT,
-            empty_message="No transactions",
-            expandable_content=_expand,
-            selectable=True,
-            on_selection_change=_on_selection_change,
-            column_picker=True,
-            expand=True,
-        )
+        # ONE table for the register's lifetime (per column set): an edit
+        # reloads the DATA, and rebuilding the table with it snapped the
+        # scroll back to the top on every categorize (the whole reason
+        # DataTable.set_rows exists). The closures above capture this
+        # load's rows, so they ride along with the data they describe.
+        if self._register_table is not None and self._register_scope == all_accounts:
+            self._register_table.set_rows(
+                rows,
+                expandable_content=_expand,
+                on_selection_change=_on_selection_change,
+            )
+        else:
+            self._register_table = DataTable(
+                columns=columns,
+                rows=rows,
+                row_padding=6,
+                item_extent=_DENSE_ROW_HEIGHT,
+                empty_message="No transactions",
+                expandable_content=_expand,
+                selectable=True,
+                on_selection_change=_on_selection_change,
+                column_picker=True,
+                expand=True,
+            )
+            self._register_scope = all_accounts
+        if self._body.content is not self._register_table:
+            self._body.content = self._register_table
         self._refresh()
+
+    async def _load_more(self) -> None:
+        """Widen the page and refetch - the register accumulates rather
+        than paginates, so sort order and the merged trades lane stay
+        coherent with one code path."""
+        self._register_page_size += _REGISTER_PAGE_SIZE
+        await self._load()
 
     def _update_selection_label(self) -> None:
         count = len(self._selected_txn_ids)
@@ -1986,6 +3338,8 @@ class TransactionsPanel(ft.Container):
         self._bulk_categorize_trigger.set_count(count)
         self._bulk_payee_trigger.set_count(count)
         self._bulk_recurring_trigger.set_count(count)
+        self._bulk_tag_trigger.set_count(count)
+        self._bulk_delete_trigger.set_count(count)
         # The row reserves no height when empty, so the table does not
         # shift down by a blank strip while nothing is selected.
         self._selection_row.visible = bool(count or trades)
@@ -2013,6 +3367,109 @@ class TransactionsPanel(ft.Container):
         if self._selected_txn_ids and self.page is not None:
             self.page.run_task(self._preview_recurring, list(self._selected_txn_ids))
 
+    # -- tags ------------------------------------------------------------
+
+    def _open_bulk_tag(self, e: ft.ControlEvent) -> None:
+        if self._selected_txn_ids:
+            self._tag_picker.open_for(list(self._selected_txn_ids), e)
+
+    def _open_bulk_delete(self, _e: ft.ControlEvent) -> None:
+        if not self._selected_txn_ids or self.page is None:
+            return
+        ids = list(self._selected_txn_ids)
+        count = len(ids)
+        ConfirmDialog(
+            self.page,
+            title=f"Delete {count} transaction{'s' if count != 1 else ''}?",
+            message=(
+                f"{count} row{'s' if count != 1 else ''} totalling "
+                f"{_usd(self._selected_amount)} will leave the register, "
+                "budgets, and projections. Re-importing the same file "
+                "will not bring them back."
+            ),
+            confirm_text="Delete",
+            destructive=True,
+            on_confirm=lambda: self._delete_transactions(ids),
+        ).show()
+
+    async def _delete_transactions(self, transaction_ids: list[int]) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        result = await api.post(
+            "/api/v1/finance/transactions/delete",
+            json={"transaction_ids": transaction_ids},
+        )
+        deleted = result.get("deleted", 0) if isinstance(result, dict) else 0
+        if not deleted:
+            ErrorSnackBar("Could not delete those transactions.").launch(self.page)
+            return
+        SuccessSnackBar(
+            f"Deleted {deleted} transaction{'s' if deleted != 1 else ''}."
+        ).launch(self.page)
+        self._selected_txn_ids.clear()
+        self._selected_amount = 0
+        await self._load()
+
+    async def _reload_tags(self, api) -> None:
+        self._tags = await fetch_tag_options(api)
+        self._tag_picker.update_tags(self._tags)
+
+    def _apply_tag(self, transaction_ids: list[int], name: str) -> None:
+        """TagPickerButton's on_pick AND on_create - same server verb."""
+        if not name.strip() or not transaction_ids or self.page is None:
+            return
+        self.page.run_task(self._apply_tag_async, transaction_ids, name.strip())
+
+    async def _apply_tag_async(self, transaction_ids: list[int], name: str) -> None:
+        if await post_tag(self.page, transaction_ids, name):
+            await self._load()
+
+    def _filter_by_tag(self, tag: dict) -> None:
+        """A row chip was clicked: narrow the register to that tag."""
+        if self.page is None:
+            return
+        self._tag_filter = tag
+        self._render_tag_filter_chip()
+        self.page.run_task(self._load)
+
+    def _clear_tag_filter(self, _e: ft.ControlEvent) -> None:
+        if self.page is None:
+            return
+        self._tag_filter = None
+        self._render_tag_filter_chip()
+        self.page.run_task(self._load)
+
+    def _render_tag_filter_chip(self) -> None:
+        """The active-filter chip beside the subtitle - the register never
+        silently narrows; whatever is filtering it is on screen with an x."""
+        active = self._tag_filter
+        self._tag_filter_chip.visible = active is not None
+        self._tag_filter_chip.content = (
+            transaction_tag_chips(
+                [active],
+                on_remove=lambda _t: self._clear_tag_filter(None),
+                remove_tooltip="Stop filtering by this tag",
+            )[0]
+            if active is not None
+            else None
+        )
+        if self._tag_filter_chip.page is not None:
+            self._tag_filter_chip.update()
+
+    def _remove_tag(self, txn: dict, tag: dict) -> None:
+        """The expanded row's chip x - detach one tag from one row."""
+        if self.page is None:
+            return
+        self.page.run_task(self._remove_tag_async, txn, tag)
+
+    async def _remove_tag_async(self, txn: dict, tag: dict) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        await api.delete(f"/api/v1/finance/transactions/{txn['id']}/tags/{tag['id']}")
+        await self._load()
+
     async def _preview_recurring(self, transaction_ids: list[int]) -> None:
         """Ask the server what this would do, then show it.
 
@@ -2031,8 +3488,7 @@ class TransactionsPanel(ft.Container):
         groups = plan.get("items", []) if isinstance(plan, dict) else []
         if not groups:
             ErrorSnackBar(
-                "Nothing to make recurring. Transfers and pending rows "
-                "cannot be bills."
+                "Nothing to make recurring. Transfers and pending rows cannot be bills."
             ).launch(self.page)
             return
         self._open_recurring_dialog(transaction_ids, groups)
@@ -2042,7 +3498,8 @@ class TransactionsPanel(ft.Container):
     ) -> None:
         name_fields: dict[str, FormTextField] = {}
         amount_fields: dict[str, FormTextField] = {}
-        category_fields: dict[str, FormDropdown] = {}
+        category_fields: dict[str, CategoryPickerField] = {}
+        frequency_fields: dict[str, FormDropdown] = {}
         # Rows unticked in the member tables, accumulated across groups.
         # Starts empty: everything the sweep found is in the bill until
         # the user says otherwise.
@@ -2053,10 +3510,13 @@ class TransactionsPanel(ft.Container):
             members = group.get("members", [])
             rolled = group.get("occurrence_count", 0)
             picked = group.get("selected_count", 0)
+            # 320 + 140 + 260 + two MD gaps fits inside the 820 dialog's
+            # padded content; the old 360/140/300 row clipped its last
+            # field at the dialog edge.
             field = FormTextField(
                 label="Bill name",
                 value=group.get("name", ""),
-                width=360,
+                width=320,
             )
             name_fields[key] = field
             # Prefilled from what you TICKED, not the sweep's median: one
@@ -2071,13 +3531,31 @@ class TransactionsPanel(ft.Container):
             amount_fields[key] = amount_field
             # The bill's category, set at the same time as its name. On
             # the STREAM only - the transactions rolling in keep theirs.
-            category_dd = FormDropdown(
-                label="Category",
-                options=[("", "Infer from transactions"), *self._categories],
-                value="",
-                width=300,
+            category_dd = CategoryPickerField(
+                categories=self._categories,
+                width=260,
             )
             category_fields[key] = category_dd
+            # The cadence, because measuring it only works for the six
+            # canonical gaps detection knows. A semiannual premium is not
+            # one of them: it measures as "irregular", which the forecast
+            # cannot step, so the bill never reaches the projection at all.
+            #
+            # The default KEEPS whatever was measured (empty value, sent as
+            # nothing), because ``FormDropdown`` falls back to its first
+            # option otherwise - silently declaring a yearly premium weekly
+            # is a worse failure than leaving it as it was.
+            measured = group.get("frequency", "")
+            keep_label = _frequency_label(measured)
+            if measured not in _FREQUENCY_LABELS:
+                keep_label += " (will not forecast)"
+            frequency_dd = FormDropdown(
+                label="Frequency",
+                options=[("", keep_label), *_FREQUENCY_LABELS.items()],
+                value="",
+                width=200,
+            )
+            frequency_fields[key] = frequency_dd
             # What the cadence maths concluded, in the same line as the
             # roll-up count: those two together are the claim being made.
             facts = [
@@ -2092,10 +3570,15 @@ class TransactionsPanel(ft.Container):
                 facts.append(f"next {format_date(group['next_expected_date'])}")
             if group.get("account_name"):
                 facts.append(str(group["account_name"]))
+            # Wraps: four fields do not fit the 820 panel's padded width,
+            # so name/amount/frequency take the first line and category
+            # the second rather than the last field clipping at the edge.
             sections.append(
                 ft.Row(
-                    [field, amount_field, category_dd],
+                    [field, amount_field, frequency_dd, category_dd],
                     spacing=Theme.Spacing.MD,
+                    run_spacing=Theme.Spacing.SM,
+                    wrap=True,
                     vertical_alignment=ft.CrossAxisAlignment.END,
                 )
             )
@@ -2125,9 +3608,8 @@ class TransactionsPanel(ft.Container):
             sections.append(
                 SecondaryText("Untick anything that is not part of this bill.")
             )
-            def _on_member_toggle(
-                indices: set[int], _members: list = members
-            ) -> None:
+
+            def _on_member_toggle(indices: set[int], _members: list = members) -> None:
                 # Inverted on purpose: the table reports what is CHECKED,
                 # and this dialog cares about what is not.
                 for position, member in enumerate(_members):
@@ -2157,7 +3639,10 @@ class TransactionsPanel(ft.Container):
                     row_padding=6,
                     item_extent=_DENSE_ROW_HEIGHT,
                     scroll_height=_group_table_height(
-                        len(members), getattr(self.page, "height", None)
+                        len(members),
+                        getattr(self.page, "height", None),
+                        tables=len(groups),
+                        table_chrome=_DECLARE_GROUP_CHROME,
                     ),
                     selectable=True,
                     selected_indices=list(range(len(members))),
@@ -2188,16 +3673,39 @@ class TransactionsPanel(ft.Container):
                 for key, control in amount_fields.items()
                 if (cents := _parse_dollars(control.value or "")) > 0
             }
+            # Empty means "keep what was measured", so it is not sent.
+            cadences = {
+                key: control.value
+                for key, control in frequency_fields.items()
+                if control.value
+            }
             dialog.open = False
             self.page.update()
             await self._declare_recurring(
-                transaction_ids, names, sorted(excluded), picked, stated
+                transaction_ids, names, sorted(excluded), picked, stated, cadences
             )
 
         total = sum(g.get("occurrence_count", 0) for g in groups)
         dialog = StyledAlertDialog(
             title="Make recurring" if len(groups) == 1 else "Make recurring bills",
-            body=ft.Column(sections, spacing=Theme.Spacing.SM, tight=True),
+            body=ft.Container(
+                content=ft.Column(
+                    sections,
+                    spacing=Theme.Spacing.SM,
+                    tight=True,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                height=_declare_body_height(
+                    len(groups),
+                    _group_table_height(
+                        max((len(g.get("members") or []) for g in groups), default=0),
+                        getattr(self.page, "height", None),
+                        tables=len(groups),
+                        table_chrome=_DECLARE_GROUP_CHROME,
+                    ),
+                    getattr(self.page, "height", None),
+                ),
+            ),
             actions=[
                 PulseButton(
                     on_click_callable=_close,
@@ -2223,6 +3731,7 @@ class TransactionsPanel(ft.Container):
         exclude_transaction_ids: list[int] | None = None,
         categories: dict[str, int] | None = None,
         amounts: dict[str, int] | None = None,
+        frequencies: dict[str, str] | None = None,
     ) -> None:
         from app.components.frontend.state.session_state import get_session_state
 
@@ -2235,6 +3744,7 @@ class TransactionsPanel(ft.Container):
                 "exclude_transaction_ids": exclude_transaction_ids or [],
                 "categories": categories or {},
                 "amounts": amounts or {},
+                "frequencies": frequencies or {},
             },
         )
         if not isinstance(result, dict):
@@ -2245,8 +3755,7 @@ class TransactionsPanel(ft.Container):
         reconciled = result.get("reconciled", 0)
         if not streams:
             ErrorSnackBar(
-                "Nothing to make recurring. Transfers and pending rows "
-                "cannot be bills."
+                "Nothing to make recurring. Transfers and pending rows cannot be bills."
             ).launch(self.page)
             return
         message = (
@@ -2256,8 +3765,7 @@ class TransactionsPanel(ft.Container):
         )
         if reconciled:
             message += (
-                f" Folded in {reconciled} duplicate"
-                f"{'s' if reconciled != 1 else ''}."
+                f" Folded in {reconciled} duplicate{'s' if reconciled != 1 else ''}."
             )
         SuccessSnackBar(message).launch(self.page)
         self._selected_txn_ids.clear()
@@ -2272,6 +3780,31 @@ class TransactionsPanel(ft.Container):
         if not category_key or not transaction_ids or self.page is None:
             return
         self.page.run_task(self._apply_category, transaction_ids, int(category_key))
+
+    def _create_category(self, transaction_ids: list[int], name: str) -> None:
+        """CategoryPickerButton's on_create contract: name a category that
+        does not exist, then use it on the rows that needed it."""
+        if not name.strip() or not transaction_ids or self.page is None:
+            return
+        self.page.run_task(self._create_and_apply, transaction_ids, name)
+
+    async def _create_and_apply(self, transaction_ids: list[int], name: str) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        created = await create_category(api, name)
+        if created is None:
+            ErrorSnackBar("Could not create that category.").launch(self.page)
+            return
+        key, stored = created
+        # Straight into the list so the picker has it without a reload,
+        # and re-sorted because the picker shows them in order.
+        if key not in {k for k, _ in self._categories}:
+            self._categories = sorted(
+                [*self._categories, (key, stored)], key=lambda c: c[1].casefold()
+            )
+            self._category_picker.update_categories(self._categories)
+        await self._apply_category(transaction_ids, int(key))
 
     async def _apply_category(
         self, transaction_ids: list[int], category_id: int
@@ -2645,7 +4178,17 @@ class TransactionsPanel(ft.Container):
             ]
             holding_rows = [
                 [
-                    TableNameText(holding.get("ticker") or "?"),
+                    ft.Row(
+                        [
+                            ProviderIcon(
+                                holding.get("name") or holding.get("ticker") or "?",
+                                holding.get("icon_b64"),
+                            ),
+                            TableNameText(holding.get("ticker") or "?"),
+                        ],
+                        spacing=Theme.Spacing.SM,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
                     TableCellText(holding.get("name") or ""),
                     TableCellText(_qty(holding.get("quantity"))),
                     TableCellText(_usd(holding.get("price"))),
@@ -2758,6 +4301,170 @@ class TransactionsPanel(ft.Container):
         )
         self.page.open(dialog)
 
+    def _open_reconcile(self, account: dict) -> None:
+        """FIN-37: reconcile the register to a bank statement.
+
+        Two presses of one button: the first computes the register-vs-
+        statement difference (a pure read) and shows it; the second - with
+        the same inputs - applies it as one transfer-flagged adjustment
+        that never counts as spending. Changing either input drops back
+        to the compute step.
+        """
+        from datetime import date as date_cls
+
+        date_field = FormDateField(
+            label="As of date", value=date_cls.today().isoformat(), width=380
+        )
+        balance_field = FormTextField(
+            label="Actual balance ($)",
+            hint="What the account really held on that date",
+            width=380,
+        )
+        summary = ft.Column([], spacing=Theme.Spacing.XS, tight=True)
+        state: dict[str, Any] = {"previewed": None}
+
+        def _set_confirm(label: str) -> None:
+            # PulseButton renders its label from a content Text built at
+            # construction - repaint that, not just the stored attr.
+            confirm.text = label
+            confirm.content.value = label
+            if confirm.page is not None:
+                confirm.update()
+
+        def _cents() -> int | None:
+            raw = (balance_field.value or "").replace("$", "").replace(",", "")
+            raw = raw.strip()
+            if not raw:
+                return None
+            try:
+                return round(float(raw) * 100)
+            except ValueError:
+                return None
+
+        async def _cancel() -> None:
+            dialog.open = False
+            self.page.update()
+
+        async def _submit() -> None:
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
+
+            cents = _cents()
+            if cents is None or not date_field.value:
+                ErrorSnackBar(
+                    "Enter the date and the balance the account really had."
+                ).launch(self.page)
+                return
+            api = get_session_state(self.page).api_client
+            payload = {
+                "statement_date": date_field.value,
+                "statement_balance": cents,
+            }
+            if state["previewed"] != (date_field.value, cents):
+                result = await api.post(
+                    f"/api/v1/finance/accounts/{account['id']}/reconcile",
+                    json={**payload, "preview": True},
+                )
+                if not isinstance(result, dict):
+                    ErrorSnackBar(
+                        api.last_error or "Could not compute the difference."
+                    ).launch(self.page)
+                    return
+                state["previewed"] = (date_field.value, cents)
+                delta = result.get("delta", 0)
+                sign = "+" if delta > 0 else "-"
+                when = format_date(result.get("statement_date"))
+                lines: list[ft.Control] = [
+                    SecondaryText(
+                        f"The app shows (through {when}): "
+                        f"{_usd(result.get('register_balance', 0))}"
+                    ),
+                    SecondaryText(f"You say it was: {_usd(cents)}"),
+                ]
+                if delta == 0:
+                    lines.append(
+                        SecondaryText(
+                            "They already match - nothing to fix.",
+                            color=Theme.Colors.SUCCESS,
+                        )
+                    )
+                    _set_confirm("Mark reconciled")
+                else:
+                    lines.append(
+                        SecondaryText(
+                            f"The fix: a {sign}{_usd(abs(delta))} adjustment",
+                            color=Theme.Colors.WARNING,
+                        )
+                    )
+                    lines.append(
+                        SecondaryText(
+                            (
+                                f"Posting records {_usd(cents)} as this "
+                                f"account's value on {when} - it has no "
+                                "transactions to adjust."
+                            )
+                            if result.get("route") == "valuation"
+                            else (
+                                f"Posting adds one 'Balance adjustment' "
+                                f"transaction dated {when}, bringing the "
+                                f"account to {_usd(cents)}. It never counts "
+                                "as spending."
+                            ),
+                            size=Theme.Typography.BODY_SMALL,
+                        )
+                    )
+                    _set_confirm("Post adjustment")
+                summary.controls = lines
+                if summary.page is not None:
+                    summary.update()
+                return
+
+            result = await api.post(
+                f"/api/v1/finance/accounts/{account['id']}/reconcile",
+                json=payload,
+            )
+            if not isinstance(result, dict):
+                ErrorSnackBar(
+                    api.last_error or "Could not reconcile the account."
+                ).launch(self.page)
+                return
+            dialog.open = False
+            self.page.update()
+            SuccessSnackBar(
+                f"{account.get('name', 'Account')} reconciled through "
+                f"{format_date(result.get('reconciled_through'))}."
+            ).launch(self.page)
+            await self._load()
+            if self._reload_accounts is not None:
+                await self._reload_accounts(account["id"])
+
+        confirm = PulseButton(
+            on_click_callable=_submit,
+            text="Check",
+            variant="teal",
+            compact=True,
+        )
+        dialog = StyledAlertDialog(
+            title="Reconcile account",
+            body=ft.Column(
+                [date_field, balance_field, summary],
+                spacing=Theme.Spacing.MD,
+                tight=True,
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_cancel,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                confirm,
+            ],
+            width=440,
+        )
+        self.page.open(dialog)
+
     def _open_remove(self, account: dict) -> None:
         ConfirmDialog(
             page=self.page,
@@ -2807,11 +4514,24 @@ class AccountsTab(ft.Container):
         super().__init__()
         self.expand = True
         panel = TransactionsPanel(page, account_filter, register_filter_listener)
+        # Composite, not a FinancePanel: it has no _load of its own.
+        # A dialog-level revisit still has to reach the register it
+        # hosts, or edits made on other tabs (a payee named in
+        # Review) go stale here silently - the same drift class the
+        # base exists to kill.
+        self._panel = panel
         sidebar = AccountsSidebar(
-            page, on_select=panel.select, on_import=panel.open_import_picker
+            page,
+            on_select=panel.select,
+            on_import_transactions=panel.open_transactions_import_picker,
+            on_import_investments=panel.open_investments_import_picker,
         )
         panel.set_reload_hook(sidebar.reload)
         self.content = ft.Row([sidebar, panel], spacing=0, expand=True)
+
+    def refresh_on_revisit(self) -> None:
+        if self._panel.page:
+            self._panel.page.run_task(self._panel._load)
 
 
 def _list_card(
@@ -3059,7 +4779,7 @@ class AccountFilterButton(Dropdown):
         )
 
 
-class OverviewTab(ft.Container):
+class OverviewTab(FinancePanel):
     """Net-worth summary: assets, liabilities, net worth, a per-group breakdown,
     and spending by category. No sidebar — this is the landing view."""
 
@@ -3069,19 +4789,9 @@ class OverviewTab(ft.Container):
         account_filter: AccountFilter | None = None,
         register_filter_listener: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
-        super().__init__()
-        self.page = page
+        super().__init__(page, account_filter, register_filter_listener)
         self.expand = True
         self.padding = ft.padding.all(Theme.Spacing.LG)
-        # The account filter BUTTON is dialog-owned now (FinanceDetailDialog,
-        # shown once above the tab strip) - this tab only reads the shared
-        # AccountFilter state (.allows()/.params()/.is_empty) and registers
-        # its own reload as a listener, so a change made via that one
-        # button still refreshes this tab whether or not it's the one
-        # currently on screen (see FinanceDetailDialog._filter_listeners).
-        self._account_filter = account_filter or AccountFilter()
-        if register_filter_listener is not None:
-            register_filter_listener(self._on_account_filter_change)
         self._body = ft.Column(
             spacing=Theme.Spacing.LG, scroll=ft.ScrollMode.AUTO, expand=True
         )
@@ -3168,19 +4878,9 @@ class OverviewTab(ft.Container):
             expand=True,
         )
 
-    def did_mount(self) -> None:
-        # Load once the tab is on the page, so page is set and update() paints.
-        if self.page:
-            self.page.run_task(self._load)
-
     def _on_range(self, days: int) -> None:
         self._days = days
-        if self.page:
-            self.page.run_task(self._load)
-
-    def _on_account_filter_change(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
+        self._reload()
 
     def _on_pie_slice_click(self, index: int) -> None:
         if index >= len(self._pie_slice_categories) or not self.page:
@@ -3196,9 +4896,7 @@ class OverviewTab(ft.Container):
 
         self.page.run_task(_open)
 
-    async def _open_category_drilldown(
-        self, categories: list[str], label: str
-    ) -> None:
+    async def _open_category_drilldown(self, categories: list[str], label: str) -> None:
         """The transactions behind one pie slice - same DataTable + inline
         row-expand flow the Accounts register uses (TransactionsPanel._load).
         Built fresh per click rather than cached: unlike
@@ -3511,7 +5209,9 @@ class OverviewTab(ft.Container):
                 }
                 for item in top_spend
             ]
-            self._pie_slice_categories = [[item.get("category", "")] for item in top_spend]
+            self._pie_slice_categories = [
+                [item.get("category", "")] for item in top_spend
+            ]
             if tail:
                 slices.append(
                     {
@@ -3826,7 +5526,7 @@ def _plaid_sandbox_card(page: ft.Page) -> ConnectionCard:
     )
 
 
-class ConnectionsTab(ft.Container):
+class ConnectionsTab(FinancePanel):
     """See every account and how it's connected, and disconnect at any time.
 
     One card per provider connection (its accounts nested inside, with a
@@ -3834,8 +5534,7 @@ class ConnectionsTab(ft.Container):
     no connection."""
 
     def __init__(self, page: ft.Page) -> None:
-        super().__init__()
-        self.page = page
+        super().__init__(page)
         self.expand = True
         self.padding = ft.padding.all(Theme.Spacing.LG)
         self._body = ft.Column(
@@ -3857,10 +5556,6 @@ class ConnectionsTab(ft.Container):
             spacing=Theme.Spacing.MD,
             expand=True,
         )
-
-    def did_mount(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
 
     async def _connect_bank(self) -> None:
         await _connect_bank_flow(self.page, self._load)
@@ -4024,7 +5719,7 @@ class ConnectionsTab(ft.Container):
         await self._load()
 
 
-class ReviewTab(ft.Container):
+class ReviewTab(FinancePanel):
     """Three sub-tabs of things waiting on a decision, not one screen.
 
     - Uncategorized: the same work queue as the Overview card's dialog
@@ -4059,9 +5754,7 @@ class ReviewTab(ft.Container):
         account_filter: AccountFilter | None = None,
         register_filter_listener: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
-        super().__init__()
-        self.page = page
-        self.expand = True
+        super().__init__(page, account_filter, register_filter_listener, expand=True)
         # No padding here - it belongs on each sub-tab's own content, same
         # as SettingsTab (its wrapper carries none; ConnectionsTab and
         # CategoriesTab each pad themselves). Padding on this outer
@@ -4117,10 +5810,6 @@ class ReviewTab(ft.Container):
             ],
             expand=True,
         )
-
-    def did_mount(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
 
     async def _load(self) -> None:
         from app.components.frontend.state.session_state import get_session_state
@@ -4361,30 +6050,32 @@ _NO_PAYEE_PAGE_SIZE = 500
 # The cadences a bill can BE SET TO. Doubles as the "Repeats" dropdown's
 # option list (finance_recurring_tab.py), which is why the two labels
 # below are deliberately not in it.
-_FREQUENCY_LABELS = {
-    "weekly": "Weekly",
-    "biweekly": "Every 2 weeks",
-    "semi_monthly": "Twice a month",
-    "monthly": "Monthly",
-    "quarterly": "Quarterly",
-    "annually": "Yearly",
+# Menu text for every cadence, derived from the one table so the dropdown
+# can never offer something create/update would reject.
+_FREQUENCY_LABELS = {key: cadence.label for key, cadence in CADENCES.items()}
+# What the Add/edit BILL dialogs offer: the cadences plus "One time" -
+# a dated debt ("pay Bob back on the 15th") is a bill, not a rhythm, so
+# it is statable here but never appears in cadence-only surfaces
+# (detection, the declare-from-transactions dropdown).
+BILL_FREQUENCY_OPTIONS = {
+    **_FREQUENCY_LABELS,
+    ONE_TIME_FREQUENCY: ONE_TIME_LABEL,
 }
-# Cadences a DECLARED bill can land on that detection never produces and
+# Frequencies a stream can carry that detection never produces and
 # nobody would pick from a menu: "irregular" is a real measured gap that
 # matches no canonical cadence, "unknown" is a bill with only one
 # transaction so far and therefore no gap to measure at all.
 _DECLARED_FREQUENCY_LABELS = {
     "irregular": "Irregular",
     "unknown": "Not enough history yet",
+    ONE_TIME_FREQUENCY: ONE_TIME_LABEL,
 }
 
 
 def _frequency_label(value: str) -> str:
     """Display text for a cadence, falling back to the raw value."""
     return (
-        _FREQUENCY_LABELS.get(value)
-        or _DECLARED_FREQUENCY_LABELS.get(value)
-        or value
+        _FREQUENCY_LABELS.get(value) or _DECLARED_FREQUENCY_LABELS.get(value) or value
     )
 
 
@@ -4399,11 +6090,30 @@ def _frequency_label(value: str) -> str:
 #   Column spacing MD, title->body and body->actions        2*16
 #   title (H3, 18px)                                          30
 #   action row (compact PulseButton, 28 + slack)              36
+#   AlertDialog's inset margin, top + bottom                   48
+_DIALOG_FIXED_CHROME = 186
+
+# One table's surroundings in "Name this payee": a single lead line, a
+# single form row, and the table's own border.
+#
 #   lead line + the spacings around it and the spacer         52
 #   the form row (label + field)                              80
 #   DataTable's own border/padding outside ``scroll_height``   30
-#   AlertDialog's inset margin, top + bottom                   48
-_GROUP_DIALOG_CHROME = 348
+_GROUP_TABLE_CHROME = 162
+
+# One GROUP's surroundings in "Make recurring", which is a different
+# shape: it repeats a form row, a stack of lead lines, and a whole table
+# for every group. Reusing the single-table number here under-counted the
+# lead lines and, with more than one group, handed each table the entire
+# window.
+#
+#   the form row (name + amount + category)                   80
+#   four lead lines (facts, roll-up, separate-bill, untick)  4*32
+#   DataTable's own border/padding outside ``scroll_height``   30
+_DECLARE_GROUP_CHROME = 238
+
+# What "Name this payee" needs for everything that is not its table.
+_GROUP_DIALOG_CHROME = _DIALOG_FIXED_CHROME + _GROUP_TABLE_CHROME
 # Floor, for a window too short to honour any of this.
 _GROUP_TABLE_MIN_HEIGHT = 200
 
@@ -4431,7 +6141,33 @@ def _group_rows(groups: list[dict]) -> list[list[ft.Control]]:
     ]
 
 
-def _group_table_height(row_count: int, page_height: float | None) -> int:
+def _declare_body_height(
+    groups: int, table_height: int, page_height: float | None
+) -> int:
+    """Height for the Make recurring body, so the actions cannot clip.
+
+    ``_group_table_height`` sizes each table against an ESTIMATE of the
+    chrome around it, and an estimate can be wrong: too many lead lines,
+    a window shorter than one group block, more groups than the window
+    can seat at any size. Bounding the body means none of that reaches
+    the action row - the worst case is a scrollbar, not a dialog you
+    cannot finish.
+
+    Sized to the content when the content fits, so the common case shows
+    whole with no scrollbar at all.
+    """
+    content = groups * (table_height + _DECLARE_GROUP_CHROME)
+    available = int((page_height or 900) - _DIALOG_FIXED_CHROME)
+    return max(0, min(content, available))
+
+
+def _group_table_height(
+    row_count: int,
+    page_height: float | None,
+    *,
+    tables: int = 1,
+    table_chrome: int = _GROUP_TABLE_CHROME,
+) -> int:
     """Fit the table to its rows, bounded only by the actual window.
 
     ``DataTable`` has no intrinsic height - it virtualizes against an
@@ -4441,16 +6177,41 @@ def _group_table_height(row_count: int, page_height: float | None) -> int:
     the form fields fall off the bottom on a short one. So the ceiling is
     whatever the window has left after the dialog's chrome, and the table
     takes the smaller of that and what its rows actually need.
+
+    ``tables`` is how many of these the dialog stacks, and each one SHARES
+    the window rather than claiming it: "Make recurring" repeats a whole
+    group block per bill. ``table_chrome`` is what one block costs around
+    its table, which differs per dialog - passing the wrong one is how the
+    action row got clipped.
     """
     header_and_padding = 56
     wanted = row_count * _DENSE_ROW_HEIGHT + header_and_padding
-    available = int((page_height or 900) - _GROUP_DIALOG_CHROME)
+    fixed = int((page_height or 900) - _DIALOG_FIXED_CHROME)
+    available = fixed // max(1, tables) - table_chrome
     # ``available`` is the hard ceiling in every branch, the floor
     # included: a floor that outranked it would clip the action row again
     # on a short window, which is the failure this whole function exists
     # to prevent. On a window that cannot even seat the floor, a cramped
     # table beats an unfinishable dialog.
     return max(0, min(max(_GROUP_TABLE_MIN_HEIGHT, wanted), available))
+
+
+async def create_category(api, name: str) -> tuple[str, str] | None:
+    """POST a new category and return its ``(id, name)`` for a picker.
+
+    The endpoint is get-or-create, so a spacing or case variant of an
+    existing category comes back as that category rather than a second
+    one - which is what makes offering this inline safe at all. The name
+    returned is the one that was STORED, which may differ from what was
+    typed (a third path segment folds back to two), so callers should
+    show this rather than the input.
+
+    ``None`` on failure, matching APIClient's "never raises" contract.
+    """
+    created = await api.post("/api/v1/finance/categories", json={"name": name})
+    if not isinstance(created, dict) or not created.get("id"):
+        return None
+    return str(created["id"]), str(created.get("name") or name)
 
 
 async def apply_category_picks(api, picks: list[tuple[int, int]]) -> list[int]:
@@ -4474,7 +6235,7 @@ async def apply_category_picks(api, picks: list[tuple[int, int]]) -> list[int]:
     return saved
 
 
-class NoPayeePanel(ft.Container):
+class NoPayeePanel(FinancePanel):
     """A work queue for transactions nobody has named a payee for.
 
     Deliberately leaner than ``UncategorizedPanel``: there is no
@@ -4496,8 +6257,7 @@ class NoPayeePanel(ft.Container):
         account_filter: AccountFilter | None = None,
         register_filter_listener: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
-        super().__init__()
-        self.page = page
+        super().__init__(page, account_filter, register_filter_listener)
         self._items: list[dict] = []
         # Server-reported total, which is NOT len(self._items): this queue
         # starts in the tens of thousands on a real import, so the table
@@ -4521,9 +6281,6 @@ class NoPayeePanel(ft.Container):
         self._group_txn_total = 0
         self._query = ""
         self._debounce = Debouncer(page)
-        self._account_filter = account_filter or AccountFilter()
-        if register_filter_listener is not None:
-            register_filter_listener(self._on_filter_change)
         self._header = SecondaryText("Loading…")
         self._body = ft.Container()
         self._search = FormTextField(
@@ -4544,6 +6301,17 @@ class NoPayeePanel(ft.Container):
             on_tap=self._open_bulk,
             label="Set payee",
             tooltip="Assign the same payee to every checked row at once",
+        )
+        self._tags: list[tuple[str, str]] = []
+        self._tag_picker = TagPickerButton(
+            tags=self._tags,
+            on_pick=self._apply_tag,
+            on_create=self._apply_tag,
+        )
+        self._bulk_tag_trigger = BulkActionTrigger(
+            on_tap=self._open_bulk_tag,
+            label="Tag",
+            tooltip="Put a tag on every checked row at once",
         )
         self._mode_button = PulseButton(
             on_click_callable=self._toggle_mode,
@@ -4579,6 +6347,7 @@ class NoPayeePanel(ft.Container):
                         ),
                         self._selection_label,
                         self._bulk_trigger,
+                        self._bulk_tag_trigger,
                         self._mode_button,
                     ],
                     spacing=Theme.Spacing.SM,
@@ -4586,20 +6355,19 @@ class NoPayeePanel(ft.Container):
                 ),
                 self._body,
                 self._merchant_picker,
+                self._tag_picker,
             ],
             spacing=Theme.Spacing.MD,
             tight=True,
         )
 
-    def did_mount(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
-
     def refresh(self) -> None:
         if self.page:
             self.page.run_task(self._load)
 
-    def _on_filter_change(self) -> None:
+    def _on_account_filter_change(self) -> None:
+        # Debounced override: a rapid filter toggle must coalesce
+        # into one refetch of a queue this large.
         self._debounce.run_now(self._load)
 
     def _on_search_change(self, event: ft.ControlEvent) -> None:
@@ -4621,6 +6389,8 @@ class NoPayeePanel(ft.Container):
         items = merchants.get("items", []) if isinstance(merchants, dict) else []
         self._merchants = [(str(m["id"]), m["name"]) for m in items]
         self._merchant_picker.update_merchants(self._merchants)
+        self._tags = await fetch_tag_options(api)
+        self._tag_picker.update_tags(self._tags)
         if not self._account_names:
             accounts = await api.get(
                 "/api/v1/finance/accounts", params={"page_size": 200}
@@ -4649,7 +6419,9 @@ class NoPayeePanel(ft.Container):
                 if isinstance(data, dict)
                 else len(self._items)
             )
-            groups = await api.get("/api/v1/finance/payee-groups", params={"limit": 300})
+            groups = await api.get(
+                "/api/v1/finance/payee-groups", params={"limit": 300}
+            )
             self._groups = groups.get("items", []) if isinstance(groups, dict) else []
             # Totals for the WHOLE backlog, not this page - the header used
             # to report len(self._groups), which is just the limit above.
@@ -4803,10 +6575,7 @@ class NoPayeePanel(ft.Container):
         if not self._groups:
             return "Every transaction has a payee."
         total_groups = self._group_total or len(self._groups)
-        line = (
-            f"{self._group_txn_total:,} with no payee, in "
-            f"{total_groups:,} groups."
-        )
+        line = f"{self._group_txn_total:,} with no payee, in {total_groups:,} groups."
         if shown < total_groups:
             line += f" Showing {shown:,}, settling {covered:,}."
         else:
@@ -5004,6 +6773,22 @@ class NoPayeePanel(ft.Container):
         if self._selection_label.page:
             self._selection_label.update()
         self._bulk_trigger.set_count(count)
+        self._bulk_tag_trigger.set_count(count if self._mode == "rows" else 0)
+
+    def _open_bulk_tag(self, e: ft.ControlEvent) -> None:
+        # Rows mode only: a group selection is descriptor KEYS, not
+        # transaction ids, and the tag endpoint speaks ids.
+        if self._mode == "rows" and self._selected:
+            self._tag_picker.open_for(list(self._selected), e)
+
+    def _apply_tag(self, transaction_ids: list[int], name: str) -> None:
+        if not name.strip() or not transaction_ids or self.page is None:
+            return
+        self.page.run_task(self._apply_tag_async, transaction_ids, name.strip())
+
+    async def _apply_tag_async(self, transaction_ids: list[int], name: str) -> None:
+        if await post_tag(self.page, transaction_ids, name):
+            await self._load()
 
     def _open_bulk(self, e: ft.ControlEvent) -> None:
         if self._mode == "rows":
@@ -5014,9 +6799,7 @@ class NoPayeePanel(ft.Container):
         # settle thousands of transactions in one click, and the dialog is
         # where naming a NEW payee (with an optional website for the logo)
         # lives. Same reasoning as the single-group row click.
-        selected = [
-            g for g in self._groups if g.get("key", "") in self._selected_keys
-        ]
+        selected = [g for g in self._groups if g.get("key", "") in self._selected_keys]
         if selected:
             self._open_group_dialog(selected)
 
@@ -5060,7 +6843,7 @@ class NoPayeePanel(ft.Container):
             self._set_busy(False)
 
 
-class UncategorizedPanel(ft.Container):
+class UncategorizedPanel(FinancePanel):
     """A work queue for uncategorized transactions, not a report. Two
     consumers share this one class rather than duplicating it: the
     Overview card's dialog (``OverviewTab._open_uncategorized``, fixed
@@ -5130,8 +6913,7 @@ class UncategorizedPanel(ft.Container):
         account_filter: AccountFilter | None = None,
         register_filter_listener: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
-        super().__init__()
-        self.page = page
+        super().__init__(page, account_filter, register_filter_listener)
         # Fixed width for the Overview card's dialog (StyledAlertDialog has
         # no viewport-relative sizing of its own); width=None for embedding
         # directly in a tab (ReviewTab), which already gives it the column's
@@ -5181,11 +6963,27 @@ class UncategorizedPanel(ft.Container):
         # instance opened via open_for(), not one CategoryPickerButton
         # built per row.
         self._category_picker = CategoryPickerButton(
-            categories=self._categories, on_pick=self._pick_category
+            categories=self._categories,
+            on_pick=self._pick_category,
+            on_create=self._create_category,
         )
         self._selection_label = SecondaryText("", visible=False)
         self._bulk_categorize_trigger = BulkActionTrigger(
             on_tap=self._open_bulk_categorize
+        )
+        self._tags: list[tuple[str, str]] = []
+        self._tag_picker = TagPickerButton(
+            tags=self._tags,
+            on_pick=self._apply_tag,
+            on_create=self._apply_tag,
+        )
+        # Applies immediately, unlike the category picks this queue
+        # stages behind Save - a tag is an annotation, not a
+        # classification you might want to review as a batch.
+        self._bulk_tag_trigger = BulkActionTrigger(
+            on_tap=self._open_bulk_tag,
+            label="Tag",
+            tooltip="Put a tag on every checked row at once",
         )
         self._header = SecondaryText("Loading…")
         self._body = ft.Container()
@@ -5237,10 +7035,11 @@ class UncategorizedPanel(ft.Container):
                 on_change=self._on_account_filter_change,
                 account_filter=account_filter,
             )
+            # Standalone: the button owns the filter, replacing the
+            # base's default. Embedded (listener given), the base
+            # already adopted the shared filter and registered the
+            # reload.
             self._account_filter = self._account_filter_button.filter
-        else:
-            self._account_filter = account_filter or AccountFilter()
-            register_filter_listener(self._on_account_filter_change)
         # Indeterminate (value=None -> looping, not a fake percentage - the
         # sweep is one request/response, there's no real progress fraction
         # to report) - shown only while Auto-categorize is in flight. Same
@@ -5290,6 +7089,7 @@ class UncategorizedPanel(ft.Container):
                         ),
                         self._selection_label,
                         self._bulk_categorize_trigger,
+                        self._bulk_tag_trigger,
                         PulseButton(
                             on_click_callable=self._auto_categorize,
                             text="Auto-categorize",
@@ -5318,14 +7118,11 @@ class UncategorizedPanel(ft.Container):
                 # its own docstring. Has to sit somewhere in the tree for
                 # its did_mount to fire and register into page.overlay.
                 self._category_picker,
+                self._tag_picker,
             ],
             spacing=Theme.Spacing.MD,
             tight=True,
         )
-
-    def did_mount(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
 
     def refresh(self) -> None:
         """Public reload for a caller that keeps its own reference to a
@@ -5392,6 +7189,8 @@ class UncategorizedPanel(ft.Container):
                 if str(c.get("name", "")).lower() not in UNCATEGORIZED_CATEGORY_NAMES
             ]
             self._category_picker.update_categories(self._categories)
+        self._tags = await fetch_tag_options(api)
+        self._tag_picker.update_tags(self._tags)
 
         if not self._account_names:
             acct_data = await api.get(
@@ -5538,10 +7337,24 @@ class UncategorizedPanel(ft.Container):
         if self._selection_label.page:
             self._selection_label.update()
         self._bulk_categorize_trigger.set_count(count)
+        self._bulk_tag_trigger.set_count(count)
 
     def _open_bulk_categorize(self, e: ft.ControlEvent) -> None:
         if self._selected:
             self._category_picker.open_for(list(self._selected), e)
+
+    def _open_bulk_tag(self, e: ft.ControlEvent) -> None:
+        if self._selected:
+            self._tag_picker.open_for(list(self._selected), e)
+
+    def _apply_tag(self, transaction_ids: list[int], name: str) -> None:
+        if not name.strip() or not transaction_ids or self.page is None:
+            return
+        self.page.run_task(self._apply_tag_async, transaction_ids, name.strip())
+
+    async def _apply_tag_async(self, transaction_ids: list[int], name: str) -> None:
+        if await post_tag(self.page, transaction_ids, name):
+            await self._load()
 
     def _row(self, txn: dict) -> list[ft.Control]:
         name = txn.get("name") or txn.get("merchant_name") or "(no description)"
@@ -5691,6 +7504,31 @@ class UncategorizedPanel(ft.Container):
             self._suggested.pop(transaction_id, None)
             self._refresh_category_cell(transaction_id)
 
+    def _create_category(self, transaction_ids: list[int], name: str) -> None:
+        """Name a category, then STAGE it on the rows - this panel saves
+        on its own Save button, and creating one must not quietly become
+        the exception that writes immediately."""
+        if not name.strip() or not transaction_ids or self.page is None:
+            return
+        self.page.run_task(self._create_and_stage, transaction_ids, name)
+
+    async def _create_and_stage(self, transaction_ids: list[int], name: str) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        created = await create_category(api, name)
+        if created is None:
+            ErrorSnackBar("Could not create that category.").launch(self.page)
+            return
+        key, stored = created
+        if key not in {k for k, _ in self._categories}:
+            self._categories = sorted(
+                [*self._categories, (key, stored)], key=lambda c: c[1].casefold()
+            )
+            self._category_picker.update_categories(self._categories)
+        self._pick_category(transaction_ids, key)
+        self.page.update()
+
     def _clear_pending(self, transaction_id: int) -> None:
         self._pending.pop(transaction_id, None)
         self._refresh_category_cell(transaction_id)
@@ -5795,45 +7633,519 @@ def _budget_status_color(status: str) -> str:
     }.get(status, Theme.Colors.SUCCESS)
 
 
-def _budget_progress_row(label: str, allocated: int, spent: int, status: str) -> ft.Control:
-    """One budget line's progress bar + figures.
+def dollars_to_cents(raw: str | None) -> int | None:
+    """ "$1,200.50" / "3,000" / " 12 " -> cents; junk -> None."""
+    text = (raw or "").replace("$", "").replace(",", "").strip()
+    if not text:
+        return None
+    try:
+        return round(float(text) * 100)
+    except ValueError:
+        return None
 
-    Reuses ``create_progress_indicator`` (card_utils.py) - the same control
-    every other dashboard card's progress bar uses - clamped to 100% so its
-    ``ft.ProgressBar`` never overflows. A line that's actually over budget
-    additionally gets a slim red bar underneath, its width scaled to how
-    far past the limit it is (capped visually at 50 points over, so a wildly
-    blown budget doesn't stretch the row) - Flet's ``ProgressBar`` has no
-    native over-100% concept, so this is flex-weighted ``Row`` segments
-    rather than literal pixel-overlay math.
+
+def goal_amounts_line(goal: dict[str, Any]) -> str:
+    """ "$1,200.00 of $3,000.00" - saved against the dream's number."""
+    return f"{_usd(goal.get('balance', 0))} of {_usd(goal.get('target_amount', 0))}"
+
+
+def goal_eta_caption(goal: dict[str, Any]) -> str:
+    """The card's one-line verdict. Reached/Paused speak for themselves;
+    an active goal shows its monthly ask and where that rate lands -
+    "at this rate: never" spelled out, exactly as the API's null ETA
+    means it ('s contract: nobody downstream recomputes the math).
+    """
+    if goal.get("status") == "reached" or (goal.get("progress") or 0) >= 1:
+        return "Reached"
+    if goal.get("status") == "paused":
+        return "Paused"
+    monthly = f"{_usd(goal.get('monthly_need', 0))}/mo"
+    kind = goal.get("contribution_kind", "fixed")
+    if kind == "percent_income":
+        pct = (goal.get("contribution_pct_bps") or 0) / 100
+        pct_text = f"{pct:g}"
+        monthly = f"{monthly} ({pct_text}% of income)"
+    elif kind == "surplus":
+        monthly = f"{monthly} (surplus)"
+    eta = goal.get("eta")
+    if not eta:
+        return f"{monthly} · at this rate: never"
+    return f"{monthly} · lands {format_date(eta)}"
+
+
+def contribution_preview(kind: str, raw_value: str, *, income_total: int) -> str:
+    """The dialog's live one-liner naming the BASE a rule evaluates
+    against - "10% of $8,200.00/mo = $820.00/mo". The support question a
+    percent rule generates is always "10% of WHAT", so the answer is on
+    screen before saving. Empty for fixed (the field already IS the
+    answer)."""
+    if kind == "surplus":
+        return (
+            "Sweeps whatever the month has left after bills, budgets, and higher goals."
+        )
+    if kind != "percent_income":
+        return ""
+    text = (raw_value or "").replace("%", "").strip()
+    try:
+        pct = float(text)
+    except ValueError:
+        return "Enter a percent, e.g. 10"
+    if income_total <= 0:
+        return (
+            f"{pct:g}% of no confirmed income = $0.00/mo - confirm a paycheck "
+            "under Bills & Income first."
+        )
+    monthly = round(income_total * pct / 100)
+    return f"{pct:g}% of {_usd(income_total)}/mo = {_usd(monthly)}/mo"
+
+
+def savings_goal_card(
+    goal: dict[str, Any],
+    *,
+    on_contribute: Callable[[], Awaitable[None] | None],
+    on_toggle_pause: Callable[[], Awaitable[None] | None],
+    on_edit: Callable[[], Awaitable[None] | None],
+    on_remove: Callable[[], Awaitable[None] | None],
+) -> ft.Control:
+    """One goal on the budget-line geometry, deliberately: name over a 4px
+    strip with the percent top-right and "$saved of $target" under it -
+    the Goals tab should read like a sibling of the Limits tab, not a
+    different app. The goal-specific facts ride a fourth line (the ETA
+    caption and the pause verb); everything else is the limits' own
+    recipe, colours included. The card body clicks through to the editor,
+    the same way a limit's bar opens its dial."""
+    paused = goal.get("status") == "paused"
+    progress = min(1.0, max(0.0, float(goal.get("progress") or 0)))
+    bar_color = Theme.Colors.TEXT_SECONDARY if paused else _budget_status_color("good")
+    body = ft.Column(
+        [
+            ft.Row(
+                [
+                    ft.Container(
+                        content=ft.Row(
+                            [
+                                TableNameText(str(goal.get("name", ""))),
+                                *(
+                                    [Tag("linked", color=Theme.Colors.TEXT_SECONDARY)]
+                                    if goal.get("funding") == "linked"
+                                    else []
+                                ),
+                            ],
+                            spacing=Theme.Spacing.SM,
+                            tight=True,
+                        ),
+                        expand=True,
+                    ),
+                    NumericText(
+                        f"{progress * 100:.0f}%",
+                        size=Theme.Typography.BODY_SMALL,
+                        color=Theme.Colors.TEXT_SECONDARY,
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            ft.ProgressBar(
+                value=progress,
+                height=4,
+                color=bar_color,
+                bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.ON_SURFACE),
+                border_radius=2,
+            ),
+            ft.Row(
+                [
+                    SecondaryText(
+                        goal_amounts_line(goal), size=Theme.Typography.BODY_SMALL
+                    ),
+                    ft.Container(expand=True),
+                    SecondaryText(
+                        goal_eta_caption(goal), size=Theme.Typography.BODY_SMALL
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        ],
+        spacing=Theme.Spacing.XS,
+        tight=True,
+    )
+    return ft.Row(
+        [
+            ft.Container(
+                content=body,
+                expand=True,
+                on_click=lambda _e: on_edit(),
+                tooltip="Edit this goal",
+            ),
+            PulseButton(
+                on_click_callable=on_toggle_pause,
+                text="Resume" if paused else "Pause",
+                variant="muted",
+                compact=True,
+            ),
+            ActionMenu(
+                [
+                    ActionMenuItem(
+                        "Add money", ft.Icons.ADD, lambda _e: on_contribute()
+                    ),
+                    ft.PopupMenuItem(),
+                    ActionMenuItem(
+                        "Remove",
+                        ft.Icons.DELETE_OUTLINE,
+                        lambda _e: on_remove(),
+                        destructive=True,
+                    ),
+                ]
+            ),
+        ],
+        spacing=Theme.Spacing.SM,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+
+def envelope_card(
+    envelope: dict[str, Any],
+    *,
+    on_spend: Callable[[], Awaitable[None] | None],
+    on_credit: Callable[[], Awaitable[None] | None],
+    on_edit: Callable[[], Awaitable[None] | None],
+    on_remove: Callable[[], Awaitable[None] | None],
+) -> ft.Control:
+    """One envelope on the budget-family row geometry: name left, the
+    BALANCE as the right-aligned figure (negative reads in error red -
+    borrowed against next month is a fact worth seeing), the standing
+    credit as a caption when it books itself. Spend is the primary verb -
+    an allowance exists to be drawn down."""
+    balance = envelope.get("balance", 0)
+    caption = ""
+    if envelope.get("auto_credit") and envelope.get("monthly_credit"):
+        per = "wk" if envelope.get("cadence") == "weekly" else "mo"
+        caption = f"+{_usd(envelope['monthly_credit'])}/{per}"
+    body = ft.Column(
+        [
+            ft.Row(
+                [
+                    ft.Container(
+                        content=TableNameText(str(envelope.get("name", ""))),
+                        expand=True,
+                    ),
+                    NumericText(
+                        _usd(balance),
+                        size=Theme.Typography.BODY_LARGE,
+                        color=(Theme.Colors.ERROR if balance < 0 else None),
+                        weight=ft.FontWeight.W_600,
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            SecondaryText(caption, size=Theme.Typography.BODY_SMALL)
+            if caption
+            else ft.Container(),
+        ],
+        spacing=Theme.Spacing.XS,
+        tight=True,
+    )
+    return ft.Row(
+        [
+            ft.Container(
+                content=body,
+                expand=True,
+                on_click=lambda _e: on_edit(),
+                tooltip="Edit this envelope",
+            ),
+            PulseButton(
+                on_click_callable=on_spend,
+                text="Spend",
+                variant="muted",
+                compact=True,
+            ),
+            ActionMenu(
+                [
+                    ActionMenuItem("Add money", ft.Icons.ADD, lambda _e: on_credit()),
+                    ft.PopupMenuItem(),
+                    ActionMenuItem(
+                        "Remove",
+                        ft.Icons.DELETE_OUTLINE,
+                        lambda _e: on_remove(),
+                        destructive=True,
+                    ),
+                ]
+            ),
+        ],
+        spacing=Theme.Spacing.SM,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+
+def close_gap_row_copy(trim: dict[str, Any]) -> tuple[str, str, str]:
+    """(title, signed delta, sub-line) for one Close-the-gap row.
+
+    Two kinds, one shape: a goal pause RECOVERS its ask (positive, teal
+    territory), a budget cut takes (negative, warning). The sub-line says
+    what actually happens - a pause is not a deletion.
+    """
+    if trim.get("kind") == "pause_goal":
+        return (
+            f"Pause {trim.get('label', 'Goal')}",
+            f"+{_usd(trim.get('recovered', 0))}",
+            "on hold until you resume it",
+        )
+    return (
+        str(trim.get("label", "")),
+        f"-{_usd(trim.get('cut', 0))}",
+        f"{_usd(trim.get('allocated_amount', 0))} -> "
+        f"{_usd(trim.get('suggested_amount', 0))}",
+    )
+
+
+def linkable_account_options(accounts: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """(id, name) choices for "link an existing account": real, visible
+    asset accounts only. A debt is not a dream, and goals don't nest."""
+    return [
+        (str(a["id"]), str(a.get("name", "")))
+        for a in accounts
+        if a.get("classification") == "asset"
+        and a.get("account_type") != "goal"
+        and not a.get("is_hidden")
+        and a.get("id") is not None
+    ]
+
+
+def budget_stats_cells(
+    stats: dict[str, Any],
+) -> list[tuple[str, str, str, str | None]]:
+    """(label, value, caption, color) for the Budget header strip.
+
+    Four figures answer the tab's actual question - "do these settings
+    clear the month": what comes in, what the bills take, what the
+    budgets take, and the signed remainder. The old strip led with
+    flexible-spending percentages and an "On track" count; that is
+    process, and it lives on the line bars themselves now.
+
+    Colour only for the number in trouble (headline_stat_color's rule):
+    a negative month is red, a healthy one wears no accent at all.
+    """
+    net = stats.get("month_net", 0)
+    residual = stats.get("trim_residual", 0)
+    if net >= 0:
+        verdict = f"+{_usd(net)}"
+        verdict_caption = "Left over at these settings"
+        # The verdict cell colours in both directions - red when short,
+        # accent teal when clear. It's the month's answer, not decoration.
+        verdict_color = Theme.Colors.ACCENT
+    else:
+        verdict = _usd(net)
+        verdict_caption = (
+            f"Short this month · {stats.get('days_left_in_period', 0)} days left"
+        )
+        if residual > 0:
+            verdict_caption = (
+                f"Short this month · {_usd(residual)} of it is bills, not budgets"
+            )
+        verdict_color = Theme.Colors.ERROR
+    return [
+        (
+            "Income",
+            _usd(stats.get("income_total", 0)),
+            f"{stats.get('income_count', 0)} confirmed source"
+            f"{'s' if stats.get('income_count', 0) != 1 else ''} / month",
+            None,
+        ),
+        (
+            "Bills",
+            _usd(stats.get("fixed_total", 0)),
+            f"{stats.get('fixed_count', 0)} bills / month",
+            None,
+        ),
+        (
+            "Budgets",
+            _usd(stats.get("flexible_allocated", 0)),
+            f"{_usd(stats.get('flexible_spent', 0))} spent so far · "
+            f"{stats.get('flexible_count', 0)} limits"
+            + (
+                # Goals ride this cell as a caption, not a fifth cell -
+                # the strip is already width-tight at four.
+                f" · + {_usd(goals_total)} to goals"
+                if (goals_total := stats.get("goals_total", 0)) > 0
+                else ""
+            ),
+            None,
+        ),
+        # The sixth term earns a CELL, not a caption: when discovered it
+        # was bigger than the budgets figure, and the verdict is a lie
+        # without it. Absent entirely at zero - a fresh install keeps
+        # the four-cell strip.
+        *(
+            [
+                (
+                    "Everything else",
+                    _usd(everything_else),
+                    "observed · not in bills or limits",
+                    None,
+                )
+            ]
+            if (everything_else := stats.get("everything_else", 0)) > 0
+            else []
+        ),
+        ("This month", verdict, verdict_caption, verdict_color),
+    ]
+
+
+_MONTH_NAMES = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+
+
+def outlook_month_label(period_month: int) -> str:
+    """YYYYMM -> "October 2026"."""
+    return f"{_MONTH_NAMES[period_month % 100 - 1]} {period_month // 100}"
+
+
+def outlook_stats_cells(
+    entry: dict[str, Any],
+) -> list[tuple[str, str, str, str | None]]:
+    """The header's four cells for a FUTURE month: same shape, but bills
+    at face value on their real cadence - the month the annual premium
+    lands looks like that month. The verdict cell is titled with the
+    month itself, so a paged header can never be mistaken for today's."""
+    net = entry.get("month_net", 0)
+    goals = entry.get("goals", 0)
+    envelopes = entry.get("envelopes", 0)
+    budgets_caption = "standing limits"
+    extras = []
+    if goals > 0:
+        extras.append(f"+ {_usd(goals)} to goals")
+    if envelopes > 0:
+        extras.append(f"+ {_usd(envelopes)} to envelopes")
+    if extras:
+        budgets_caption += " · " + " · ".join(extras)
+    return [
+        ("Income", _usd(entry.get("income_due", 0)), "due that month", None),
+        (
+            "Bills",
+            _usd(entry.get("bills_due", 0)),
+            "landing that month, face value",
+            None,
+        ),
+        ("Budgets", _usd(entry.get("budgets", 0)), budgets_caption, None),
+        *(
+            [
+                (
+                    "Everything else",
+                    _usd(everything_else),
+                    "observed · not in bills or limits",
+                    None,
+                )
+            ]
+            if (everything_else := entry.get("everything_else", 0)) > 0
+            else []
+        ),
+        (
+            outlook_month_label(entry.get("period_month", 0)),
+            f"+{_usd(net)}" if net >= 0 else _usd(net),
+            f"at these settings · ends around {_usd(entry.get('end_balance', 0))}",
+            Theme.Colors.ACCENT if net >= 0 else Theme.Colors.ERROR,
+        ),
+    ]
+
+
+def outlook_chip(entry: dict[str, Any]) -> tuple[str, str]:
+    """(label, color) for one month's chip: the projected cash it ENDS
+    with ("Oct $1,240"), compounded from today's real balance - the
+    LEVEL, not the rate. Red means literally out of money that month,
+    which is the only red a bank balance understands."""
+    balance = entry.get("end_balance", 0)
+    month = _MONTH_NAMES[entry.get("period_month", 0) % 100 - 1][:3]
+    dollars = round(balance / 100)
+    label = f"{month} {'-' if balance < 0 else ''}${abs(dollars):,}"
+    return label, Theme.Colors.ERROR if balance < 0 else Theme.Colors.TEXT_SECONDARY
+
+
+def budget_lines_grid(rows: list[ft.Control]) -> ft.ResponsiveRow:
+    """Budget lines as a flowing grid, three per row when there is room.
+
+    Full-width stacking gave a dozen lines a page of scrolling for no
+    information - each line is a label, a small bar and two numbers.
+    12-grid columns: 4 on a large window (three per row), 6 on a middling
+    one (two), 12 when cramped - the narrow case degrades to exactly the
+    old one-per-row layout rather than crushing the bars.
+    """
+    return ft.ResponsiveRow(
+        [ft.Container(content=row, col={"sm": 12, "md": 6, "lg": 4}) for row in rows],
+        spacing=Theme.Spacing.MD,
+        run_spacing=Theme.Spacing.SM,
+    )
+
+
+def compact_budget_row(
+    label: str, allocated: int, spent: int, status: str
+) -> ft.Control:
+    """One flexible budget line, on the trim rows' geometry.
+
+    The previous row stacked label / 8px bar / a 16px-bold percent line -
+    three storeys per limit, so a dozen limits filled the screen while
+    "Close the gap" fit twelve rows in four lines. Same shape as a trim
+    row now: name over the figures on the left, one right-aligned percent,
+    and the bar slimmed to a 4px strip between them.
+
+    The bar clamps at 100% (Flet's ``ProgressBar`` has no over-100
+    concept) but the PERCENT never lies: an overrun reads "129%", in
+    error red. Monochrome-first everywhere else - a healthy line's
+    percent carries no accent at all.
     """
     color = _budget_status_color(status)
     pct = (spent / allocated * 100) if allocated > 0 else (100.0 if spent > 0 else 0.0)
-    clamped = min(pct, 100.0)
-    details = f"{_usd(spent)} of {_usd(allocated)}"
-    indicator = create_progress_indicator(label, clamped, details, color)
-    if pct <= 100.0:
-        return indicator
-    over_weight = max(round(min(pct - 100.0, 50.0)), 1)
-    overflow_bar = ft.Container(
-        content=ft.Row(
-            [
-                ft.Container(expand=100),
-                ft.Container(
-                    bgcolor=Theme.Colors.ERROR,
-                    height=5,
-                    border_radius=3,
-                    expand=over_weight,
-                ),
-            ],
-            spacing=2,
-        ),
-        padding=ft.padding.symmetric(horizontal=12),
+    pct_color = (
+        Theme.Colors.ERROR
+        if status == "critical"
+        else Theme.Colors.WARNING
+        if status == "warn"
+        else Theme.Colors.TEXT_SECONDARY
     )
-    return ft.Column([indicator, overflow_bar], spacing=2, tight=True)
+    return ft.Column(
+        [
+            ft.Row(
+                [
+                    ft.Container(content=TableNameText(label), expand=True),
+                    NumericText(
+                        f"{pct:.0f}%",
+                        size=Theme.Typography.BODY_SMALL,
+                        color=pct_color,
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            ft.ProgressBar(
+                value=min(pct, 100.0) / 100.0,
+                height=4,
+                color=color,
+                bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.ON_SURFACE),
+                border_radius=2,
+            ),
+            SecondaryText(
+                f"{_usd(spent)} of {_usd(allocated)}",
+                size=Theme.Typography.BODY_SMALL,
+            ),
+        ],
+        spacing=Theme.Spacing.XS,
+        tight=True,
+    )
 
 
-class BudgetPanel(ft.Container):
+class BudgetPanel(FinancePanel):
     """Budget tab: a natural-language goal box, a 4-cell stats strip, then
     three sections.
 
@@ -5854,17 +8166,29 @@ class BudgetPanel(ft.Container):
     suggest-then-apply.
     """
 
-    def __init__(self, page: ft.Page) -> None:
-        super().__init__(expand=True)
-        self.page = page
+    def __init__(
+        self,
+        page: ft.Page,
+        account_filter: AccountFilter | None = None,
+        register_filter_listener: Callable[[Callable[[], None]], None] | None = None,
+    ) -> None:
+        super().__init__(page, account_filter, register_filter_listener, expand=True)
         self._categories: list[tuple[str, str]] = []
         self._summary: dict[str, Any] | None = None
+        # One shared popup for all five cells (see StatDetailPopup), and
+        # one fetch of the per-row details behind it - cleared per load
+        # so it always matches what the cells show.
+        self._stat_detail = StatDetailPopup()
+        self._stat_details: dict[str, Any] | None = None
         self._goal_suggestion: dict[str, Any] | None = None
         # Bills are CONTEXT here, not the budget - and there are 76 of
         # them. Shown by default they bury the handful of limits you
         # actually set, which is the only part of this page you act on.
         self._show_commitments = False
         self._suggestions: list[dict[str, Any]] = []
+        self._dismissed_suggestions: list[dict[str, Any]] = []
+        self._show_dismissed = False
+        self._suggestion_selection: set[int] = set()
 
         self._goal_field = FormTextField(
             label="",
@@ -5909,24 +8233,62 @@ class BudgetPanel(ft.Container):
         # scrolled - two nested scrollbars fighting over the wheel. Each
         # tab now owns exactly one.
         self._subtab_index = 0
+        self._goals: list[dict[str, Any]] = []
+        self._envelopes: list[dict[str, Any]] = []
+        self._outlook: list[dict[str, Any]] = []
+        self._outlook_index = 0
         self._budget_tabs = PulseTabs(
-            tabs=[ft.Tab(text="Limits"), ft.Tab(text="Suggested")],
+            tabs=[
+                ft.Tab(text="Limits"),
+                ft.Tab(text="Suggested"),
+                ft.Tab(text="Goals"),
+                ft.Tab(text="Envelopes"),
+            ],
             selected_index=0,
             expand=False,
             on_change=self._on_subtab_change,
         )
         self._body = ft.Container(expand=True)
+        # The explanatory sentence rides an info icon instead of its own
+        # line, and the month pager shares the title's row - together
+        # that returns two rows of height to the tab's actual content.
+        self._pager_slot = ft.Container()
         self.content = ft.Column(
-            [self._stats, self._budget_tabs, self._body],
-            spacing=Theme.Spacing.LG,
+            [
+                ft.Row(
+                    [
+                        H3Text("Does the month work?"),
+                        ft.Icon(
+                            ft.Icons.INFO_OUTLINE,
+                            size=16,
+                            color=Theme.Colors.TEXT_SECONDARY,
+                            tooltip=(
+                                "Your plan checked against how you actually "
+                                "spend, and where that leaves your balance "
+                                "in the months ahead"
+                            ),
+                        ),
+                        ft.Container(expand=True),
+                        self._pager_slot,
+                    ],
+                    spacing=Theme.Spacing.SM,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                self._stats,
+                self._budget_tabs,
+                self._body,
+                self._stat_detail,
+            ],
+            spacing=Theme.Spacing.MD,
             expand=True,
         )
 
     def _on_subtab_change(self, event: ft.ControlEvent) -> None:
         self._subtab_index = int(event.control.selected_index or 0)
+        # Paint the cached data instantly, then refetch behind it - the
+        # suggestions and commitment totals both react to what the other
+        # tabs just did.
         self._render()
-
-    def did_mount(self) -> None:
         if self.page:
             self.page.run_task(self._load)
 
@@ -5943,10 +8305,42 @@ class BudgetPanel(ft.Container):
                 for c in cat_items
                 if str(c.get("name", "")).lower() not in UNCATEGORIZED_CATEGORY_NAMES
             ]
-        data = await api.get("/api/v1/finance/budget/summary")
+        # An explicit empty selection ("Remove all") means literally nothing,
+        # not "no filter" - AccountFilter.params() is never called in this
+        # state (see its own docstring), so the fetch is skipped outright,
+        # same as OverviewTab's own charts and UncategorizedPanel do.
+        data: dict[str, Any] = (
+            {"buckets": [], "stats": {}, "trims": []}
+            if self._account_filter.is_empty
+            else await api.get(
+                "/api/v1/finance/budget/summary", params=self._account_filter.params()
+            )
+        )
         self._summary = data if isinstance(data, dict) else None
+        self._stat_details = None
+        goals = await api.get("/api/v1/finance/goals")
+        self._goals = goals.get("items", []) if isinstance(goals, dict) else []
+        envelopes = await api.get("/api/v1/finance/envelopes")
+        self._envelopes = (
+            envelopes.get("items", []) if isinstance(envelopes, dict) else []
+        )
+        outlook = (
+            {"items": []}
+            if self._account_filter.is_empty
+            else await api.get(
+                "/api/v1/finance/budget/outlook",
+                params={"months": 6, **self._account_filter.params()},
+            )
+        )
+        self._outlook = outlook.get("items", []) if isinstance(outlook, dict) else []
         picks = await api.get("/api/v1/finance/budget/suggestions")
         self._suggestions = picks.get("items", []) if isinstance(picks, dict) else []
+        self._dismissed_suggestions = (
+            picks.get("dismissed", []) if isinstance(picks, dict) else []
+        )
+        # A reload rebuilds the table unchecked; stale indices must not
+        # survive into the fresh one.
+        self._suggestion_selection = set()
         self._render()
 
     def _render(self) -> None:
@@ -5957,6 +8351,7 @@ class BudgetPanel(ft.Container):
             return
         buckets = {b["name"]: b for b in self._summary.get("buckets", [])}
         self._stats.content = self._stats_strip(self._summary.get("stats", {}))
+        self._pager_slot.content = self._month_pager()
         # Your budget first. The commitment sections are collapsed behind
         # one line so the page opens on what you set, not on 76 bills that
         # Bills & Income already owns.
@@ -5969,10 +8364,34 @@ class BudgetPanel(ft.Container):
             self._budget_tabs.tabs[1].text = label
             if self._budget_tabs.page:
                 self._budget_tabs.update()
+        goals_label = f"Goals ({len(self._goals)})" if self._goals else "Goals"
+        if self._budget_tabs.tabs[2].text != goals_label:
+            self._budget_tabs.tabs[2].text = goals_label
+            if self._budget_tabs.page:
+                self._budget_tabs.update()
+        envelopes_label = (
+            f"Envelopes ({len(self._envelopes)})" if self._envelopes else "Envelopes"
+        )
+        if self._budget_tabs.tabs[3].text != envelopes_label:
+            self._budget_tabs.tabs[3].text = envelopes_label
+            if self._budget_tabs.page:
+                self._budget_tabs.update()
+        if self._subtab_index == 3:
+            self._body.content = self._envelopes_section()
+            if self.page:
+                self.update()
+            return
+        if self._subtab_index == 2:
+            self._body.content = self._goals_section()
+            if self.page:
+                self.update()
+            return
         if self._subtab_index == 1:
+            # Dismissals keep the section alive even with zero live
+            # suggestions - restoring one has to happen somewhere.
             self._body.content = (
                 self._suggestions_section()
-                if self._suggestions
+                if self._suggestions or self._dismissed_suggestions
                 else EmptyStatePlaceholder(
                     message="Nothing to suggest - your steady spending is "
                     "covered by bills or budgeted already."
@@ -5982,6 +8401,9 @@ class BudgetPanel(ft.Container):
                 self.update()
             return
         children: list[ft.Control] = []
+        trims = self._summary.get("trims") or []
+        if trims:
+            children.append(self._trims_section(trims))
         children.append(self._flexible_section(buckets.get("flexible")))
         children.append(self._commitments_toggle(buckets))
         if self._show_commitments:
@@ -6014,71 +8436,203 @@ class BudgetPanel(ft.Container):
     # -- stats strip -----------------------------------------------------
 
     def _stats_strip(self, stats: dict[str, Any]) -> ft.Control:
-        spent = stats.get("flexible_spent", 0)
-        allocated = stats.get("flexible_allocated", 0)
-        pct = round(spent / allocated * 100) if allocated else 0
-        spent_color = (
-            Theme.Colors.ERROR
-            if pct >= 100
-            else Theme.Colors.WARNING
-            if pct >= 80
-            else None
-        )
-        over_count = stats.get("over_budget_count", 0)
-        over_labels = stats.get("over_budget_labels", [])
-        cells = [
-            self._stat_cell(
-                "Flexible spending",
-                f"{_usd(spent)} / {_usd(allocated)}" if allocated else _usd(spent),
-                f"{pct}% used · {stats.get('days_left_in_period', 0)} days left "
-                "in cycle"
-                if allocated
-                else "No limits set yet",
-                spent_color,
-            ),
-            self._stat_cell(
-                "On track",
-                str(stats.get("on_track_count", 0)),
-                f"of {stats.get('flexible_count', 0)} categories under limit",
-            ),
-            self._stat_cell(
-                "Over budget",
-                str(over_count),
-                ", ".join(over_labels) if over_labels else "None right now",
-                Theme.Colors.ERROR if over_count else None,
-            ),
-            self._stat_cell(
-                "Fixed this month",
-                _usd(stats.get("fixed_total", 0)),
-                f"from {stats.get('fixed_count', 0)} detected bills",
-            ),
-        ]
+        # Paged past "this month", the four cells recompute for that
+        # future month (bills at face value on their real cadence);
+        # index 0 keeps the classic monthly-equivalent header.
+        if self._outlook_index > 0 and self._outlook_index < len(self._outlook):
+            rows = outlook_stats_cells(self._outlook[self._outlook_index])
+            # Future months carry no per-row backup yet, so the cells
+            # stay plain there.
+            cells = [
+                self._stat_cell(label, value, caption, color)
+                for label, value, caption, color in rows
+            ]
+        else:
+            rows = budget_stats_cells(stats)
+            cells = [
+                self._stat_cell(
+                    label,
+                    value,
+                    caption,
+                    color,
+                    on_tap=lambda e, k=label: self._open_stat_detail(k, e),
+                )
+                for label, value, caption, color in rows
+            ]
         return ft.Container(
             content=ft.Row(cells, spacing=Theme.Spacing.LG),
             border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=Theme.Components.CARD_RADIUS,
             bgcolor=ft.Colors.SURFACE,
             padding=ft.padding.symmetric(
-                horizontal=Theme.Spacing.LG, vertical=Theme.Spacing.MD
+                horizontal=Theme.Spacing.LG, vertical=Theme.Spacing.SM
             ),
         )
 
+    def _open_stat_detail(self, key: str, e: ft.ControlEvent) -> None:
+        if self.page is not None:
+            self.page.run_task(self._open_stat_detail_async, key, e)
+
+    async def _open_stat_detail_async(self, key: str, e: ft.ControlEvent) -> None:
+        """Rows for whichever cell was clicked. The verdict and Budgets
+        build from the summary already on screen (zero fetch, cannot
+        disagree with the strip); Income/Bills/Everything else come from
+        one cached /budget/stat-details fetch."""
+        stats = (self._summary or {}).get("stats", {})
+        if key == "This month":
+            self._stat_detail.open_at(
+                e, "The month, line by line", equation_rows(stats)
+            )
+            return
+        if key == "Budgets":
+            buckets = {b["name"]: b for b in (self._summary or {}).get("buckets", [])}
+            rows = [
+                {
+                    "label": line.get("category_name")
+                    or line.get("payee_label")
+                    or "Overall",
+                    "value": line.get("allocated_amount", 0),
+                    "caption": f"{_usd(line.get('spent_amount', 0))} spent",
+                }
+                for line in buckets.get("flexible", {}).get("lines", [])
+            ]
+            rows.sort(key=lambda r: -r["value"])
+            self._stat_detail.open_at(e, "Limits you've set", rows)
+            return
+        if self._stat_details is None:
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
+
+            api = get_session_state(self.page).api_client
+            data = await api.get(
+                "/api/v1/finance/budget/stat-details",
+                params=self._account_filter.params(),
+            )
+            if not isinstance(data, dict):
+                return
+            self._stat_details = data
+        details = self._stat_details
+        if key == "Income":
+            self._stat_detail.open_at(e, "Confirmed income", details["income"])
+        elif key == "Bills":
+            self._stat_detail.open_at(
+                e,
+                "Bills, monthly equivalent",
+                details["bills"],
+                footer="Non-monthly bills shown at their monthly share",
+            )
+        elif key == "Everything else":
+            self._stat_detail.open_at(
+                e,
+                "Everything else",
+                details["everything_else"],
+                footer=(
+                    f"{details.get('window', '')} - observed spending "
+                    "no bill or limit covers"
+                ),
+            )
+
+    def _month_pager(self) -> ft.Control:
+        """The months ahead as one row: arrows page the header, the chips
+        name each month's verdict - the October that breaks even is
+        visible without going looking for it."""
+        if not self._outlook:
+            return ft.Container()
+
+        def _page(delta: int) -> None:
+            self._outlook_index = max(
+                0, min(len(self._outlook) - 1, self._outlook_index + delta)
+            )
+            self._render()
+
+        def _jump(index: int) -> None:
+            self._outlook_index = index
+            self._render()
+
+        chips: list[ft.Control] = []
+        for i, entry in enumerate(self._outlook):
+            if i == 0:
+                label = f"Now ${round(entry.get('start_balance', 0) / 100):,}"
+                color = Theme.Colors.TEXT_SECONDARY
+            else:
+                label, color = outlook_chip(entry)
+            selected = i == self._outlook_index
+            chips.append(
+                ft.Container(
+                    content=SecondaryText(
+                        label,
+                        size=Theme.Typography.BODY_SMALL,
+                        color=color,
+                        weight=ft.FontWeight.W_600 if selected else None,
+                    ),
+                    padding=ft.padding.symmetric(horizontal=8, vertical=3),
+                    border_radius=Theme.Components.BUTTON_RADIUS,
+                    border=ft.border.all(
+                        1,
+                        Theme.Colors.ACCENT if selected else Theme.Colors.BORDER_SUBTLE,
+                    ),
+                    on_click=lambda _e, i=i: _jump(i),
+                    ink=True,
+                )
+            )
+        return ft.Row(
+            [
+                ft.IconButton(
+                    icon=ft.Icons.CHEVRON_LEFT,
+                    icon_size=16,
+                    icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                    tooltip="Previous month",
+                    on_click=lambda _e: _page(-1),
+                ),
+                *chips,
+                ft.IconButton(
+                    icon=ft.Icons.CHEVRON_RIGHT,
+                    icon_size=16,
+                    icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                    tooltip="Next month",
+                    on_click=lambda _e: _page(1),
+                ),
+            ],
+            spacing=Theme.Spacing.XS,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            wrap=True,
+        )
+
     def _stat_cell(
-        self, label: str, value: str, caption: str, color: str | None = None
+        self,
+        label: str,
+        value: str,
+        caption: str,
+        color: str | None = None,
+        on_tap: Callable[[ft.ControlEvent], None] | None = None,
     ) -> ft.Control:
-        return ft.Column(
+        cell = ft.Column(
             [
                 SecondaryText(label.upper(), size=Theme.Typography.CAPTION),
                 NumericText(
                     value,
-                    size=26,
+                    size=22,
                     weight=Theme.Typography.WEIGHT_BOLD,
                     color=color or Theme.Colors.TEXT_PRIMARY,
                 ),
                 SecondaryText(caption, size=Theme.Typography.BODY_SMALL),
             ],
-            spacing=4,
+            spacing=2,
+        )
+        if on_tap is None:
+            cell.expand = True
+            return cell
+        # on_tap_down, not on_click: the popup anchors at the tap's own
+        # coordinates (the same mechanics every picker trigger uses).
+        return ft.Container(
+            content=cell,
             expand=True,
+            ink=True,
+            border_radius=Theme.Components.BUTTON_RADIUS,
+            on_tap_down=on_tap,
+            on_click=lambda _e: None,
+            tooltip="Click for the breakdown",
         )
 
     def _suggestions_section(self) -> ft.Control:
@@ -6086,78 +8640,214 @@ class BudgetPanel(ft.Container):
         five. Knowing what your budget is ABOUT means seeing the $20 gym
         alongside the $1,399 groceries; the tail is where the surprises
         live, and hiding it would just be another number nobody chose.
+
+        Rows use the house select-many pattern (checkboxes + bulk verbs),
+        so accepting or declining a batch is one gesture - and a declined
+        suggestion stays declined across months until restored here.
         """
         total = sum(p.get("suggested_amount", 0) for p in self._suggestions)
 
-        def _accept(pick: dict[str, Any]):
-            async def _run() -> None:
-                await self._accept_suggestions([pick])
-
-            return _run
-
         async def _accept_all() -> None:
             await self._accept_suggestions(list(self._suggestions))
+
+        def _checked_picks() -> list[dict[str, Any]]:
+            return [
+                self._suggestions[i]
+                for i in sorted(self._suggestion_selection)
+                if i < len(self._suggestions)
+            ]
+
+        async def _use_checked() -> None:
+            picks = _checked_picks()
+            if picks:
+                await self._accept_suggestions(picks)
+
+        async def _dismiss_checked() -> None:
+            picks = _checked_picks()
+            if picks:
+                await self._dismiss_suggestions(
+                    [p["category_id"] for p in picks if p.get("category_id")]
+                )
+
+        use_checked = BulkActionTrigger(
+            on_tap=lambda e: e.page.run_task(_use_checked),
+            label="Use",
+            tooltip="Add every checked suggestion as a budget line",
+        )
+        dismiss_checked = BulkActionTrigger(
+            on_tap=lambda e: e.page.run_task(_dismiss_checked),
+            label="Dismiss",
+            tooltip=(
+                "Hide every checked suggestion. It stays hidden across "
+                "months until restored below"
+            ),
+            variant="stop",
+        )
+
+        def _on_selection_change(indices: set[int]) -> None:
+            self._suggestion_selection = set(indices)
+            use_checked.set_count(len(indices))
+            dismiss_checked.set_count(len(indices))
 
         rows = [
             [
                 TableNameText(p.get("category_name") or "Uncategorized"),
                 NumericText(_usd(p.get("suggested_amount", 0))),
-                SecondaryText(
-                    f"{p.get('months_seen', 0)} of 6 months  ·  "
-                    # The confidence signal, in plain terms: how far the
-                    # biggest month ran over the smallest.
-                    f"{p.get('spread', 0):.1f}x swing"
-                ),
-                PulseButton(
-                    on_click_callable=_accept(p), text="Use it", compact=True
-                ),
+                SecondaryText(budget_suggestion_caption(p)),
             ]
             for p in self._suggestions
         ]
-        return SectionCard(
-            title="Suggested from your spending",
-            body=ft.Column(
+        children: list[ft.Control] = []
+        if self._suggestions:
+            children.append(
+                DataTable(
+                    columns=[
+                        DataTableColumn("Category", hideable=False),
+                        DataTableColumn("Per month", width=120, alignment="right"),
+                        DataTableColumn("Based on", width=220, style="secondary"),
+                    ],
+                    rows=rows,
+                    row_padding=6,
+                    item_extent=_DENSE_ROW_HEIGHT,
+                    # The table IS the tab: it fills the panel and is
+                    # the only thing that scrolls - the nested
+                    # table-inside-scrolling-page arrangement fought
+                    # over the wheel.
+                    expand=True,
+                    selectable=True,
+                    on_selection_change=_on_selection_change,
+                )
+            )
+        children.extend(self._dismissed_suggestion_rows())
+        # No SectionCard: the DataTable already draws its own card, and a
+        # card around a card read as a table within a table. One bare
+        # action strip above it - summary left, every verb right - at a
+        # FIXED height, so the bulk chips appearing on first check don't
+        # jump the table down.
+        summary = (
+            f"{len(self._suggestions)} categories, {_usd(total)}/month · "
+            "median of the last 6 complete months, skipping transfers "
+            "and anything a bill already covers"
+            if self._suggestions
+            else "Nothing to suggest. Dismissed suggestions are below."
+        )
+        strip = ft.Container(
+            content=ft.Row(
                 [
-                    SecondaryText(
-                        f"{len(self._suggestions)} categories, "
-                        f"{_usd(total)}/month. Median of the last 6 complete "
-                        "months, skipping transfers and anything a bill "
-                        "already covers."
-                    ),
-                    DataTable(
-                        columns=[
-                            DataTableColumn("Category", hideable=False),
-                            DataTableColumn(
-                                "Per month", width=120, alignment="right"
-                            ),
-                            DataTableColumn("Based on", width=220, style="secondary"),
-                            DataTableColumn("", width=110),
-                        ],
-                        rows=rows,
-                        row_padding=6,
-                        item_extent=_DENSE_ROW_HEIGHT,
-                        # The table IS the tab: it fills the panel and is
-                        # the only thing that scrolls - the nested
-                        # table-inside-scrolling-page arrangement fought
-                        # over the wheel.
-                        expand=True,
-                    ),
-                    ft.Row(
+                    ft.Container(content=SecondaryText(summary), expand=True),
+                    dismiss_checked,
+                    use_checked,
+                    *(
                         [
-                            ft.Container(expand=True),
                             PulseButton(
                                 on_click_callable=_accept_all,
                                 text=f"Use all {len(self._suggestions)}",
                                 compact=True,
-                            ),
+                            )
                         ]
+                        if self._suggestions
+                        else []
                     ),
                 ],
                 spacing=Theme.Spacing.MD,
-                expand=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
+            height=44,
+        )
+        return ft.Column(
+            [strip, *children],
+            spacing=Theme.Spacing.SM,
             expand=True,
         )
+
+    def _dismissed_suggestion_rows(self) -> list[ft.Control]:
+        """The "N dismissed · Show" affordance and, when open, the list of
+        declined suggestions with a Restore per row - reversibility
+        without DB surgery."""
+        if not self._dismissed_suggestions:
+            return []
+        count = len(self._dismissed_suggestions)
+
+        def _toggle(_e: ft.ControlEvent) -> None:
+            self._show_dismissed = not self._show_dismissed
+            self._render()
+
+        def _restore(category_id: int):
+            async def _run() -> None:
+                await self._restore_suggestions([category_id])
+
+            return _run
+
+        word = "Hide" if self._show_dismissed else "Show"
+        controls: list[ft.Control] = [
+            ft.Container(
+                content=SecondaryText(
+                    f"{count} dismissed  ·  {word}",
+                    size=Theme.Typography.BODY_SMALL,
+                ),
+                on_click=_toggle,
+                ink=True,
+                border_radius=Theme.Components.BUTTON_RADIUS,
+                padding=ft.padding.symmetric(horizontal=8, vertical=4),
+            )
+        ]
+        if self._show_dismissed:
+            controls.extend(
+                ft.Row(
+                    [
+                        ft.Container(
+                            content=SecondaryText(
+                                d.get("category_name") or "Uncategorized"
+                            ),
+                            expand=True,
+                        ),
+                        PulseButton(
+                            on_click_callable=_restore(d.get("category_id")),
+                            text="Restore",
+                            variant="muted",
+                            compact=True,
+                        ),
+                    ],
+                    spacing=Theme.Spacing.MD,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+                for d in self._dismissed_suggestions
+            )
+        return controls
+
+    async def _dismiss_suggestions(self, category_ids: list[int]) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        result = await api.post(
+            "/api/v1/finance/budget/suggestions/dismiss",
+            json={"category_ids": category_ids},
+        )
+        if not isinstance(result, dict):
+            ErrorSnackBar(
+                api.last_error or "Could not dismiss those suggestions."
+            ).launch(self.page)
+            return
+        count = len(category_ids)
+        SuccessSnackBar(
+            f"Dismissed {count} suggestion{'s' if count != 1 else ''}."
+        ).launch(self.page)
+        await self._load()
+
+    async def _restore_suggestions(self, category_ids: list[int]) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        result = await api.post(
+            "/api/v1/finance/budget/suggestions/restore",
+            json={"category_ids": category_ids},
+        )
+        if not isinstance(result, dict):
+            ErrorSnackBar(
+                api.last_error or "Could not restore that suggestion."
+            ).launch(self.page)
+            return
+        await self._load()
 
     async def _accept_suggestions(self, picks: list[dict[str, Any]]) -> None:
         from app.components.frontend.state.session_state import get_session_state
@@ -6248,15 +8938,9 @@ class BudgetPanel(ft.Container):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
         if not lines:
-            body: ft.Control = SecondaryText(
-                f"No {title.lower()} bills detected yet."
-            )
+            body: ft.Control = SecondaryText(f"No {title.lower()} bills detected yet.")
         else:
-            body = ft.Column(
-                [self._commitment_row(line) for line in lines],
-                spacing=Theme.Spacing.SM,
-                tight=True,
-            )
+            body = budget_lines_grid([self._commitment_row(line) for line in lines])
         return SectionCard(
             title=header,
             body=body,
@@ -6309,11 +8993,7 @@ class BudgetPanel(ft.Container):
                 "“+ Add a limit” below, for a specific category or payee."
             )
         else:
-            body = ft.Column(
-                [self._line_row(line) for line in lines],
-                spacing=Theme.Spacing.MD,
-                tight=True,
-            )
+            body = budget_lines_grid([self._line_row(line) for line in lines])
         return SectionCard(
             title=header,
             body=ft.Column(
@@ -6326,15 +9006,24 @@ class BudgetPanel(ft.Container):
 
     def _line_row(self, line: dict[str, Any]) -> ft.Control:
         label = line.get("category_name") or line.get("payee_label") or "Overall"
-        progress = _budget_progress_row(
+        progress = compact_budget_row(
             label,
             line.get("allocated_amount", 0),
             line.get("spent_amount", 0),
             line.get("status", "good"),
         )
+        # The bar itself opens the editor: a limit you cannot change
+        # without deleting and re-adding it is not a dial, and tuning
+        # one and watching the month react is the whole loop this tab
+        # is for.
         return ft.Row(
             [
-                ft.Container(content=progress, expand=True),
+                ft.Container(
+                    content=progress,
+                    expand=True,
+                    on_click=lambda _e, row=line: self._open_edit_limit(row),
+                    tooltip="Change this limit",
+                ),
                 ft.IconButton(
                     icon=ft.Icons.CLOSE,
                     icon_size=14,
@@ -6347,6 +9036,818 @@ class BudgetPanel(ft.Container):
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
+
+    def _open_edit_limit(self, line: dict[str, Any]) -> None:
+        """Change one limit's amount. Everything else about the line -
+        its category or payee - is what identifies it, so the dialog
+        edits the single number that is a decision."""
+        label = line.get("category_name") or line.get("payee_label") or "Overall"
+        amount = FormTextField(
+            label="Monthly limit ($)",
+            value=f"{line.get('allocated_amount', 0) / 100:.2f}",
+            width=200,
+        )
+        dialog: StyledAlertDialog | None = None
+
+        async def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        async def _save() -> None:
+            cents = _parse_dollars(amount.value or "")
+            if cents <= 0:
+                ErrorSnackBar("Give the limit an amount.").launch(self.page)
+                return
+            await _close()
+            await self._save_limit(line, cents)
+
+        spent = line.get("spent_amount", 0)
+        dialog = StyledAlertDialog(
+            title=f"Limit for {label}",
+            body=ft.Column(
+                [
+                    amount,
+                    SecondaryText(
+                        f"{_usd(spent)} already spent this month",
+                        size=Theme.Typography.BODY_SMALL,
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                tight=True,
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_close,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=_save,
+                    text="Save",
+                    variant="teal",
+                    compact=True,
+                ),
+            ],
+            width=380,
+        )
+        self.page.open(dialog)
+
+    async def _save_limit(self, line: dict[str, Any], cents: int) -> None:
+        """Upsert the line at a new amount, then reload so the header's
+        verdict re-answers on the spot."""
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        result = await api.post(
+            "/api/v1/finance/budget/lines",
+            json={
+                "category_id": line.get("category_id"),
+                "payee_key": line.get("payee_key"),
+                "payee_label": line.get("payee_label"),
+                "allocated_amount": cents,
+            },
+        )
+        if not isinstance(result, dict):
+            ErrorSnackBar("Could not save that limit.").launch(self.page)
+            return
+        await self._load()
+
+    # -- Envelopes sub-tab ---------------------------------------------
+
+    def _envelopes_section(self) -> ft.Control:
+        new_button = PulseButton(
+            on_click_callable=lambda: self._open_envelope_editor(None),
+            text="New envelope",
+            variant="teal",
+            compact=True,
+        )
+        if not self._envelopes:
+            return ft.Column(
+                [
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                PrimaryText("No envelopes yet."),
+                                SecondaryText(
+                                    "A running balance inside your real cash - "
+                                    "an allowance, a repairs pot. Credit it, "
+                                    "spend it down, watch it carry."
+                                ),
+                                ft.Container(height=Theme.Spacing.SM),
+                                new_button,
+                            ],
+                            spacing=Theme.Spacing.XS,
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            tight=True,
+                        ),
+                        alignment=ft.alignment.center,
+                        padding=Theme.Spacing.XL,
+                    )
+                ],
+                expand=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+            )
+        cards = [
+            envelope_card(
+                env,
+                on_spend=(lambda e=env: self._open_envelope_move(e, spend=True)),
+                on_credit=(lambda e=env: self._open_envelope_move(e, spend=False)),
+                on_edit=(lambda e=env: self._open_envelope_editor(e)),
+                on_remove=(lambda e=env: self._confirm_remove_envelope(e)),
+            )
+            for env in self._envelopes
+        ]
+        return ft.Column(
+            [
+                ft.Row([ft.Container(expand=True), new_button]),
+                budget_lines_grid(cards),
+            ],
+            spacing=Theme.Spacing.MD,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+
+    def _open_envelope_move(self, envelope: dict[str, Any], *, spend: bool) -> None:
+        """Spend from / add to an envelope: one amount, one optional note
+        (the note is the history the kid reads later)."""
+        verb = "Spend from" if spend else "Add to"
+        amount_field = FormTextField(label="Amount ($)", width=320)
+        note_field = FormTextField(
+            label="Note (optional)", hint="Roblox, mowing the lawn...", width=320
+        )
+        dialog: StyledAlertDialog | None = None
+
+        async def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        async def _save() -> None:
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
+
+            cents = dollars_to_cents(amount_field.value)
+            if cents is None or cents <= 0:
+                amount_field.set_error("Enter a dollar amount.")
+                return
+            api = get_session_state(self.page).api_client
+            action = "spend" if spend else "credit"
+            result = await api.post(
+                f"/api/v1/finance/envelopes/{envelope['account_id']}/{action}",
+                json={
+                    "amount": cents,
+                    "note": (note_field.value or "").strip() or None,
+                },
+            )
+            if not isinstance(result, dict):
+                ErrorSnackBar(api.last_error or "Could not save that.").launch(
+                    self.page
+                )
+                return
+            await _close()
+            await self._load()
+
+        dialog = StyledAlertDialog(
+            title=f"{verb} {envelope.get('name', 'envelope')}",
+            body=ft.Column(
+                [amount_field, note_field], spacing=Theme.Spacing.SM, tight=True
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_close,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=_save,
+                    text="Spend" if spend else "Add",
+                    variant="teal",
+                    compact=True,
+                ),
+            ],
+            width=400,
+        )
+        self.page.open(dialog)
+
+    def _open_envelope_editor(self, envelope: dict[str, Any] | None) -> None:
+        creating = envelope is None
+        name_field = FormTextField(
+            label="Name", value="" if creating else str(envelope.get("name", ""))
+        )
+        credit_field = FormTextField(
+            label="Credit amount ($, optional)",
+            value=(
+                ""
+                if creating or not envelope.get("monthly_credit")
+                else f"{envelope['monthly_credit'] / 100:.2f}"
+            ),
+        )
+        cadence_dd = FormDropdown(
+            label="How often?",
+            options=[("weekly", "Weekly"), ("monthly", "Monthly")],
+            value=(envelope or {}).get("cadence", "monthly"),
+        )
+        seed_field = FormTextField(
+            label="Starting balance ($, optional)",
+            hint="Money it begins with",
+        )
+        auto_switch = ThemedSwitch(
+            value=bool((envelope or {}).get("auto_credit")),
+            scale=0.8,
+        )
+        dialog: StyledAlertDialog | None = None
+
+        async def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        async def _save() -> None:
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
+
+            api = get_session_state(self.page).api_client
+            credit = dollars_to_cents(credit_field.value)
+            if creating:
+                name = (name_field.value or "").strip()
+                if not name:
+                    name_field.set_error("Name the envelope.")
+                    return
+                cadence = cadence_dd.value or "monthly"
+                result = await api.post(
+                    "/api/v1/finance/envelopes",
+                    json={
+                        "name": name,
+                        "monthly_credit": credit,
+                        "cadence": cadence,
+                        "starting_balance": dollars_to_cents(seed_field.value) or 0,
+                    },
+                )
+                if isinstance(result, dict) and auto_switch.value:
+                    result = await api.patch(
+                        f"/api/v1/finance/envelopes/{result['account_id']}",
+                        json={
+                            "monthly_credit": credit,
+                            "auto_credit": True,
+                            "cadence": cadence,
+                        },
+                    )
+            else:
+                result = await api.patch(
+                    f"/api/v1/finance/envelopes/{envelope['account_id']}",
+                    json={
+                        "monthly_credit": credit,
+                        "auto_credit": bool(auto_switch.value),
+                        "cadence": cadence_dd.value or "monthly",
+                    },
+                )
+            if not isinstance(result, dict):
+                ErrorSnackBar(api.last_error or "Could not save that.").launch(
+                    self.page
+                )
+                return
+            await _close()
+            await self._load()
+
+        dialog = StyledAlertDialog(
+            title="New envelope" if creating else f"Edit {envelope.get('name', '')}",
+            body=ft.Column(
+                [
+                    name_field,
+                    *([seed_field] if creating else []),
+                    credit_field,
+                    cadence_dd,
+                    ft.Row(
+                        [auto_switch, LabelText("Credit it automatically")],
+                        spacing=Theme.Spacing.SM,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                tight=True,
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_close,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=_save,
+                    text="Create" if creating else "Save",
+                    variant="teal",
+                    compact=True,
+                ),
+            ],
+            width=420,
+        )
+        self.page.open(dialog)
+
+    def _confirm_remove_envelope(self, envelope: dict[str, Any]) -> None:
+        ConfirmDialog(
+            page=self.page,
+            title="Remove envelope",
+            message=(
+                f"Remove {envelope.get('name', 'this envelope')}? Its balance "
+                "record goes with it."
+            ),
+            confirm_text="Remove",
+            destructive=True,
+            on_confirm=lambda: self._remove_envelope(envelope),
+        ).show()
+
+    async def _remove_envelope(self, envelope: dict[str, Any]) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        await api.delete(f"/api/v1/finance/envelopes/{envelope['account_id']}")
+        await self._load()
+
+    # -- Goals sub-tab -----------------------
+
+    def _goals_section(self) -> ft.Control:
+        """Goal cards on the budget-lines grid, or the dreams empty state."""
+        new_button = PulseButton(
+            on_click_callable=lambda: self._open_goal_editor(None),
+            text="New goal",
+            variant="teal",
+            compact=True,
+        )
+        if not self._goals:
+            return ft.Column(
+                [
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                PrimaryText("No goals yet."),
+                                SecondaryText(
+                                    "Name a dream, give it a number, and the "
+                                    "month starts saving toward it."
+                                ),
+                                ft.Container(height=Theme.Spacing.SM),
+                                new_button,
+                            ],
+                            spacing=Theme.Spacing.XS,
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            tight=True,
+                        ),
+                        alignment=ft.alignment.center,
+                        padding=Theme.Spacing.XL,
+                    )
+                ],
+                expand=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+            )
+        cards = [
+            savings_goal_card(
+                goal,
+                on_contribute=(lambda g=goal: self._open_goal_contribute(g)),
+                on_toggle_pause=(lambda g=goal: self._toggle_goal_pause(g)),
+                on_edit=(lambda g=goal: self._open_goal_editor(g)),
+                on_remove=(lambda g=goal: self._confirm_remove_goal(g)),
+            )
+            for goal in self._goals
+        ]
+        return ft.Column(
+            [
+                ft.Row([ft.Container(expand=True), new_button]),
+                budget_lines_grid(cards),
+            ],
+            spacing=Theme.Spacing.MD,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+
+    async def _toggle_goal_pause(self, goal: dict[str, Any]) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        status = "active" if goal.get("status") == "paused" else "paused"
+        result = await api.patch(
+            f"/api/v1/finance/goals/{goal['account_id']}", json={"status": status}
+        )
+        if not isinstance(result, dict):
+            ErrorSnackBar(api.last_error or "Could not update the goal.").launch(
+                self.page
+            )
+            return
+        await self._load()
+
+    def _confirm_remove_goal(self, goal: dict[str, Any]) -> None:
+        linked = goal.get("funding") == "linked"
+        ConfirmDialog(
+            page=self.page,
+            title="Remove goal",
+            message=(
+                f"Stop tracking {goal.get('name', 'this goal')} as a goal? "
+                + (
+                    "The account itself stays, untouched."
+                    if linked
+                    else "Its saved-so-far record goes with it."
+                )
+            ),
+            confirm_text="Remove",
+            destructive=True,
+            on_confirm=lambda: self._remove_goal(goal),
+        ).show()
+
+    async def _remove_goal(self, goal: dict[str, Any]) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        await api.delete(f"/api/v1/finance/goals/{goal['account_id']}")
+        await self._load()
+
+    def _open_goal_contribute(self, goal: dict[str, Any]) -> None:
+        """add money to a virtual goal; linked goals point at
+        transfers (their contributions book themselves)."""
+        if goal.get("funding") == "linked":
+            ErrorSnackBar(
+                "Linked goals count their own transfers - move money to "
+                f"{goal.get('name', 'the account')} and it books itself."
+            ).launch(self.page)
+            return
+        amount_field = FormTextField(label="Amount ($)", width=320)
+        dialog: StyledAlertDialog | None = None
+
+        async def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        async def _save() -> None:
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
+
+            cents = dollars_to_cents(amount_field.value)
+            if cents is None or cents <= 0:
+                amount_field.set_error("Enter a dollar amount.")
+                return
+            api = get_session_state(self.page).api_client
+            result = await api.post(
+                f"/api/v1/finance/goals/{goal['account_id']}/contribute",
+                json={"amount": cents},
+            )
+            if not isinstance(result, dict):
+                ErrorSnackBar(api.last_error or "Could not add that.").launch(self.page)
+                return
+            await _close()
+            await self._load()
+
+        dialog = StyledAlertDialog(
+            title=f"Add to {goal.get('name', 'goal')}",
+            body=ft.Column([amount_field], tight=True),
+            actions=[
+                PulseButton(
+                    on_click_callable=_close,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=_save,
+                    text="Add",
+                    variant="teal",
+                    compact=True,
+                ),
+            ],
+            width=400,
+        )
+        self.page.open(dialog)
+
+    def _open_goal_editor(self, goal: dict[str, Any] | None) -> None:
+        """create (virtual by default, or link an existing account)
+        or edit targets. All existing form controls."""
+        creating = goal is None
+        name_field = FormTextField(
+            label="Name", value="" if creating else str(goal.get("name", ""))
+        )
+        target_field = FormTextField(
+            label="Target ($)",
+            value="" if creating else f"{goal['target_amount'] / 100:.2f}",
+        )
+        date_field = FormDateField(
+            label="Target date (optional)",
+            value=(goal or {}).get("target_date") or "",
+        )
+        monthly_field = FormTextField(
+            label="Monthly amount ($, optional)",
+            value=(
+                ""
+                if creating or not goal.get("monthly_contribution")
+                else f"{goal['monthly_contribution'] / 100:.2f}"
+            ),
+        )
+        income_total = (self._summary or {}).get("stats", {}).get("income_total", 0)
+        preview = SecondaryText("", size=Theme.Typography.BODY_SMALL)
+
+        def _percent_typed(event: ft.ControlEvent) -> None:
+            preview.value = contribution_preview(
+                "percent_income",
+                getattr(event.control, "value", "") or "",
+                income_total=income_total,
+            )
+            if preview.page is not None:
+                preview.update()
+
+        percent_field = FormTextField(
+            label="Percent of income (%)",
+            value=(
+                ""
+                if creating or not goal.get("contribution_pct_bps")
+                else f"{goal['contribution_pct_bps'] / 100:g}"
+            ),
+            on_change=_percent_typed,
+        )
+        monthly_host = ft.Container(content=monthly_field)
+        percent_host = ft.Container(content=percent_field, visible=False)
+        current_kind = (goal or {}).get("contribution_kind", "fixed")
+
+        def _paint_rule(kind: str) -> None:
+            monthly_host.visible = kind == "fixed"
+            percent_host.visible = kind == "percent_income"
+            preview.value = contribution_preview(
+                kind, percent_field.value, income_total=income_total
+            )
+            for control in (monthly_host, percent_host, preview):
+                if control.page is not None:
+                    control.update()
+
+        def _rule_changed(event: ft.ControlEvent) -> None:
+            _paint_rule(event.control.value or "fixed")
+
+        rule_dd = FormDropdown(
+            label="Contribute how?",
+            options=[
+                ("fixed", "Fixed amount"),
+                ("percent_income", "% of income"),
+                ("surplus", "Whatever's left each month"),
+            ],
+            value=current_kind,
+            on_change=_rule_changed,
+        )
+        monthly_host.visible = current_kind == "fixed"
+        percent_host.visible = current_kind == "percent_income"
+        preview.value = contribution_preview(
+            current_kind, percent_field.value, income_total=income_total
+        )
+        # Label as its own control beside the switch, not ft.Switch's
+        # built-in label: the built-in renders Material's small caption
+        # next to a 0.5-scaled knob and the whole row reads miniature.
+        # LabelText is the same widget the field labels above it use, and
+        # 0.8 is the scale the voice tab's dialog switches settled on.
+        auto_switch = ThemedSwitch(
+            value=bool((goal or {}).get("auto_contribute")),
+            scale=0.8,
+        )
+        # Only virtual goals auto-book - a linked goal's real transfers
+        # are its bookings. Hidden, not disabled: an inert switch invites
+        # a support question the row can't answer.
+        auto_host = ft.Container(
+            content=ft.Row(
+                [auto_switch, LabelText("Book it automatically on the 1st")],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            visible=creating or (goal or {}).get("funding") != "linked",
+        )
+        # Funding picker only at creation - a goal doesn't change species.
+        link_dd: FormDropdown | None = None
+        link_host = ft.Container(visible=False)
+        name_host = ft.Container(content=name_field)
+        dialog: StyledAlertDialog | None = None
+
+        async def _close() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        async def _save() -> None:
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
+
+            target = dollars_to_cents(target_field.value)
+            if target is None or target <= 0:
+                target_field.set_error("Every dream needs a number.")
+                return
+            kind = rule_dd.value or "fixed"
+            monthly = dollars_to_cents(monthly_field.value)
+            payload: dict[str, Any] = {
+                "target_amount": target,
+                "target_date": date_field.value or None,
+                "monthly_contribution": monthly if kind == "fixed" else None,
+                "contribution_kind": kind,
+            }
+            if kind == "percent_income":
+                raw_pct = (percent_field.value or "").replace("%", "").strip()
+                try:
+                    bps = round(float(raw_pct) * 100)
+                except ValueError:
+                    bps = 0
+                if not 0 < bps <= 10_000:
+                    percent_field.set_error("A percent between 0 and 100.")
+                    return
+                payload["contribution_pct_bps"] = bps
+            payload["auto_contribute"] = bool(auto_switch.value)
+            api = get_session_state(self.page).api_client
+            if creating:
+                choice = link_dd.value if link_dd is not None else "virtual"
+                if choice == "virtual":
+                    name = (name_field.value or "").strip()
+                    if not name:
+                        name_field.set_error("Name the goal.")
+                        return
+                    payload["name"] = name
+                else:
+                    payload["account_id"] = int(choice)
+                    payload["auto_contribute"] = False
+                result = await api.post("/api/v1/finance/goals", json=payload)
+            else:
+                result = await api.patch(
+                    f"/api/v1/finance/goals/{goal['account_id']}", json=payload
+                )
+            if not isinstance(result, dict):
+                ErrorSnackBar(api.last_error or "Could not save the goal.").launch(
+                    self.page
+                )
+                return
+            await _close()
+            await self._load()
+
+        dialog = StyledAlertDialog(
+            title="New goal" if creating else f"Edit {goal.get('name', 'goal')}",
+            body=ft.Column(
+                [
+                    link_host,
+                    name_host,
+                    target_field,
+                    date_field,
+                    rule_dd,
+                    monthly_host,
+                    percent_host,
+                    preview,
+                    auto_host,
+                ],
+                spacing=Theme.Spacing.SM,
+                tight=True,
+                scroll=ft.ScrollMode.AUTO,
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_close,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=_save,
+                    text="Create" if creating else "Save",
+                    variant="teal",
+                    compact=True,
+                ),
+            ],
+            width=460,
+        )
+
+        def _install(dd: FormDropdown) -> None:
+            nonlocal link_dd
+            link_dd = dd
+
+        self.page.open(dialog)
+        if creating and self.page:
+            self.page.run_task(
+                self._offer_linkable_accounts,
+                link_host,
+                name_host,
+                auto_host,
+                _install,
+            )
+
+    async def _offer_linkable_accounts(
+        self,
+        link_host: ft.Container,
+        name_host: ft.Container,
+        auto_host: ft.Container,
+        install: Callable[[FormDropdown], None],
+    ) -> None:
+        """Fetch accounts and, when any are linkable, add the funding
+        picker to the open create dialog. Fetched on open, not at tab
+        build - the list must be current, and most opens never link."""
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        data = await api.get("/api/v1/finance/accounts")
+        accounts = data.get("items", []) if isinstance(data, dict) else []
+        options = linkable_account_options(accounts)
+        if not options:
+            return
+
+        def _mode_changed(event: ft.ControlEvent) -> None:
+            virtual = event.control.value == "virtual"
+            name_host.visible = virtual
+            auto_host.visible = virtual
+            for control in (name_host, auto_host):
+                if control.page is not None:
+                    control.update()
+
+        dd = FormDropdown(
+            label="Fund it how?",
+            options=[("virtual", "Save toward it here (virtual)")]
+            + [(key, f"Track {label}") for key, label in options],
+            value="virtual",
+            on_change=_mode_changed,
+        )
+        install(dd)
+        link_host.content = dd
+        link_host.visible = True
+        if link_host.page is not None:
+            link_host.update()
+
+    def _trims_section(self, trims: list[dict[str, Any]]) -> ft.Control:
+        """The month is short - here is what closes it.
+
+        Deterministic, computed server-side (``plan_budget_trims``): cuts
+        distribute proportionally to each line's slack above what it has
+        already spent, so no suggestion asks for money that is gone.
+        Each row applies on its own; nothing is written until one is.
+        """
+
+        def row(trim: dict[str, Any]) -> ft.Row:
+            title, delta, sub = close_gap_row_copy(trim)
+            is_pause = trim.get("kind") == "pause_goal"
+            return ft.Row(
+                [
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                TableNameText(title),
+                                SecondaryText(sub, size=Theme.Typography.BODY_SMALL),
+                            ],
+                            spacing=0,
+                            tight=True,
+                        ),
+                        expand=True,
+                    ),
+                    NumericText(
+                        delta,
+                        size=Theme.Typography.BODY_SMALL,
+                        # Recovered money reads calm, taken money warns.
+                        color=(
+                            Theme.Colors.SUCCESS if is_pause else Theme.Colors.WARNING
+                        ),
+                    ),
+                    PulseButton(
+                        on_click_callable=(lambda t=trim: self._apply_trim(t)),
+                        text="Apply",
+                        variant="muted",
+                        compact=True,
+                    ),
+                ],
+                spacing=Theme.Spacing.MD,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+
+        # Server order is already goals-first (plan_budget_trims tier 1).
+        rows = [row(trim) for trim in trims]
+        total = sum(t.get("cut") or t.get("recovered", 0) for t in trims)
+        return SectionCard(
+            title=ft.Row(
+                [
+                    H3Text("Close the gap"),
+                    SecondaryText(
+                        f"Free up {_usd(total)} across {len(trims)} "
+                        f"row{'s' if len(trims) != 1 else ''} to break even"
+                    ),
+                ],
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            body=budget_lines_grid(rows),
+            body_padding=Theme.Spacing.MD,
+        )
+
+    async def _apply_trim(self, trim: dict[str, Any]) -> None:
+        if trim.get("kind") == "pause_goal":
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
+
+            api = get_session_state(self.page).api_client
+            await api.patch(
+                f"/api/v1/finance/goals/{trim['account_id']}",
+                json={"status": "paused"},
+            )
+            await self._load()
+            return
+        await self._save_limit(trim, trim["suggested_amount"])
 
     async def _delete_line(self, line_id: int) -> None:
         from app.components.frontend.state.session_state import get_session_state
@@ -6535,13 +10036,16 @@ class _LazyTabContent(ft.Container):
         self._factory = factory
         self._built = False
 
-    def ensure_built(self) -> None:
+    def ensure_built(self) -> bool:
+        """Build on first visit. Returns True when the tab was ALREADY
+        built - a revisit, where a panel's data may have gone stale."""
         if self._built:
-            return
+            return True
         self._built = True
         self.content = self._factory()
         if self.page is not None:
             self.update()
+        return False
 
 
 class FinanceDetailDialog(BaseDetailPopup):
@@ -6575,7 +10079,27 @@ class FinanceDetailDialog(BaseDetailPopup):
         # button left the other's dots/trigger label stale until its next
         # unrelated reload (confirmed live, on the Review tab). One button
         # can't drift from itself.
-        self._account_filter = AccountFilter()
+        #
+        # ADOPTED from the process-level view-state store, not constructed:
+        # this dialog is cached on ``page.data`` and dies with the Flet
+        # session (a page reload; every hot-reload in dev), and a filter
+        # that silently resets to "All accounts" makes the same screen
+        # tell a different story than it told a minute ago - confirmed
+        # live, on the projection's sign. The store hands every recreation
+        # the SAME AccountFilter instance, so mutations carry forward.
+        from app.components.frontend.state.finance_view_state import (
+            SOLO_OWNER_KEY,
+            finance_view_state,
+        )
+        from app.components.frontend.state.session_state import get_session_state
+
+        user = getattr(get_session_state(page), "current_user", None)
+        owner_key = (
+            str(user["id"])
+            if isinstance(user, dict) and user.get("id") is not None
+            else SOLO_OWNER_KEY
+        )
+        self._account_filter = finance_view_state(owner_key=owner_key).account_filter
         self._account_items: list[dict] = []
         # Called after every filter change, in registration order, so a
         # tab reloads even while it's not the one currently on screen -
@@ -6626,7 +10150,13 @@ class FinanceDetailDialog(BaseDetailPopup):
                 ),
                 None,
             ),
-            ("Budget", lambda: BudgetPanel(page), None),
+            (
+                "Budget",
+                lambda: BudgetPanel(
+                    page, self._account_filter, self.register_filter_listener
+                ),
+                None,
+            ),
             (
                 "Review",
                 lambda: ReviewTab(
@@ -6649,13 +10179,25 @@ class FinanceDetailDialog(BaseDetailPopup):
         self._lazy_contents = [_LazyTabContent(factory) for _, factory, _ in factories]
         tab_list = [
             ft.Tab(text=name or None, icon=icon, content=content)
-            for (name, _, icon), content in zip(factories, self._lazy_contents)
+            for (name, _, icon), content in zip(
+                factories, self._lazy_contents, strict=False
+            )
         ]
 
         def _on_tab_change(event: ft.ControlEvent) -> None:
             index = int(event.control.selected_index or 0)
             if 0 <= index < len(self._lazy_contents):
-                self._lazy_contents[index].ensure_built()
+                lazy = self._lazy_contents[index]
+                if lazy.ensure_built():
+                    # A revisit. Panels fetch once in did_mount, so a
+                    # change made on ANOTHER tab (confirming a bill that
+                    # should suppress a budget suggestion) went stale
+                    # silently until the modal was reopened. A panel that
+                    # opts in refetches; its data is a cheap read, so no
+                    # visible "refresh" chrome is needed.
+                    refresh = getattr(lazy.content, "refresh_on_revisit", None)
+                    if callable(refresh):
+                        refresh()
 
         tabs = PulseTabs(
             selected_index=0,

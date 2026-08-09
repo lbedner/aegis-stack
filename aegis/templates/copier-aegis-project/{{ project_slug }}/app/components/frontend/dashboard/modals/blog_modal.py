@@ -317,6 +317,7 @@ class PostsTab(ft.Container):
                             [
                                 ft.PopupMenuButton(
                                     icon=ft.Icons.DOWNLOAD,
+                                    icon_color=ft.Colors.ON_SURFACE_VARIANT,
                                     tooltip="Export posts",
                                     items=[
                                         ft.PopupMenuItem(

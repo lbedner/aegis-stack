@@ -52,7 +52,11 @@ def get_status_colors(component_data: ComponentStatus) -> tuple[str, str, str]:
     elif status == ComponentStatusType.WARNING:
         return (Theme.Colors.WARNING, ft.Colors.SURFACE, Theme.Colors.WARNING)
     else:  # UNHEALTHY
-        return (Theme.Colors.ERROR, ft.Colors.SURFACE, Theme.Colors.ERROR)
+        return (
+            Theme.Colors.ERROR,
+            ft.Colors.with_opacity(0.25, Theme.Colors.ERROR),
+            Theme.Colors.ERROR,
+        )
 
 
 def get_status_color(status: str) -> str:
@@ -156,6 +160,8 @@ def get_status_detail(component_data: ComponentStatus) -> str | None:
                             msg = sub_sub.message or sub_sub.status.value
                             issues.append(f"{sub_name}: {msg}")
                 else:
+                    # Show the message directly - e.g. Pydantic ValidationError
+                    # text - falling back to the bare status level.
                     msg = sub.message or sub.status.value
                     issues.append(f"{name}: {msg}")
         if issues:
@@ -164,7 +170,7 @@ def get_status_detail(component_data: ComponentStatus) -> str | None:
 
     # Fallback: extract detail after colon if present
     message = component_data.message
-    if message:
+    if message and not message.startswith("Failed"):
         if ": " in message:
             return message.split(": ", 1)[1]
         return message

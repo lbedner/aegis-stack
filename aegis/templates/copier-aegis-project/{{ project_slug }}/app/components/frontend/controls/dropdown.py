@@ -91,7 +91,8 @@ class Dropdown(ft.Container):
         width_multiplier: float = 2.2,
         min_width: int = 240,
         max_width: int = 420,
-        max_height: int = 480,
+        max_height: int | None = 480,
+        trigger_padding: ft.Padding | None = None,
     ) -> None:
         if align not in ("left", "right"):
             raise ValueError("align must be 'left' or 'right'")
@@ -111,8 +112,16 @@ class Dropdown(ft.Container):
             on_tap_down=self._toggle,
             ink=True,
             border_radius=Theme.Components.BUTTON_RADIUS,
-            padding=ft.padding.symmetric(
-                vertical=Theme.Spacing.XS, horizontal=Theme.Spacing.SM
+            # A bare trigger (icon + label) needs this padding to become a
+            # tap target; one that already carries its own chrome (a
+            # bordered pill) must pass ``ft.padding.all(0)`` instead, or
+            # the frame's padding inflates the pill's own box.
+            padding=(
+                ft.padding.symmetric(
+                    vertical=Theme.Spacing.XS, horizontal=Theme.Spacing.SM
+                )
+                if trigger_padding is None
+                else trigger_padding
             ),
         )
         super().__init__(content=self._trigger_box)
@@ -166,6 +175,16 @@ class Dropdown(ft.Container):
         # to call page.update() before this control's first open.
         self.page.update()
 
+    def will_unmount(self) -> None:
+        # A Dropdown built fresh per dialog open (CategoryPickerField)
+        # would otherwise strand one overlay layer per open forever -
+        # ``page.overlay`` never forgets on its own. Resetting the flag
+        # lets a remount re-append cleanly.
+        if self._mounted_overlay and self.page is not None:
+            if self._overlay_layer in self.page.overlay:
+                self.page.overlay.remove(self._overlay_layer)
+            self._mounted_overlay = False
+
     def set_trigger(self, trigger: ft.Control) -> None:
         self._trigger_box.content = trigger
         if self.page is not None:
@@ -218,6 +237,10 @@ class Dropdown(ft.Container):
             min(self._max_width, int(self._trigger_width * self._width_multiplier)),
         )
         self._panel_frame.width = width
+        # ``None`` = hug the content: a fixed height is right for a long
+        # scrolling list (it caps the panel and lets the list scroll
+        # inside), but it would strand a short, fixed menu of two or
+        # three actions inside a half-empty box.
         self._panel_frame.height = self._max_height
         self._panel_frame.top = trigger_top + self._trigger_height + self._anchor_gap
         if self._align == "right":

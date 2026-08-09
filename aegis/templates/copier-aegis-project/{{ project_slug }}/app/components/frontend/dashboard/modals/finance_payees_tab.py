@@ -38,6 +38,8 @@ from app.components.frontend.dashboard.modals.modal_sections import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_date
 
+from .finance_panel import FinancePanel
+
 _MERCHANTS_URL = "/api/v1/finance/merchants"
 _TRANSACTIONS_URL = "/api/v1/finance/transactions"
 # One page of a payee's ledger. Target alone runs to 1,015 rows here, and
@@ -53,7 +55,7 @@ def _usd(cents: int | None) -> str:
     return f"{sign}${abs(value) / 100:,.2f}"
 
 
-class PayeesTab(ft.Container):
+class PayeesTab(FinancePanel):
     """Every payee, with the weight behind it, editable in place."""
 
     def __init__(
@@ -62,15 +64,10 @@ class PayeesTab(ft.Container):
         account_filter: Any = None,
         register_filter_listener: Any = None,
     ) -> None:
-        super().__init__()
-        self.page = page
+        super().__init__(page, account_filter, register_filter_listener)
         # Payees are not per-account, but their WEIGHT is: narrowing to a
         # card should show what that card pays, not the global totals.
-        from .finance_modal import AccountFilter
 
-        self._account_filter = account_filter or AccountFilter()
-        if register_filter_listener is not None:
-            register_filter_listener(self._on_account_filter_change)
         self.expand = True
         self.padding = ft.padding.all(Theme.Spacing.LG)
         self._items: list[dict] = []
@@ -83,7 +80,9 @@ class PayeesTab(ft.Container):
         self._selected_ids: set[int] = set()
         self._body = ft.Container(expand=True)
         self._stats = ft.Row(
-            [], spacing=Theme.Spacing.LG, vertical_alignment=ft.CrossAxisAlignment.CENTER
+            [],
+            spacing=Theme.Spacing.LG,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
         self._merge_button = PulseButton(
             on_click_callable=self._open_merge,
@@ -126,16 +125,12 @@ class PayeesTab(ft.Container):
         )
 
     def did_mount(self) -> None:
-        # visible=False as a constructor kwarg is inert on this button
-        # family (BaseElevatedButton discards **kwargs), so the initial
-        # hide has to be an assignment.
+        # Override with a prelude: visible=False as a constructor
+        # kwarg is inert on this button family (BaseElevatedButton
+        # discards **kwargs), so the initial hide has to be an
+        # assignment - then the base's mount fetch runs as usual.
         self._merge_button.visible = False
-        if self.page:
-            self.page.run_task(self._load)
-
-    def _on_account_filter_change(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
+        super().did_mount()
 
     def _on_search(self, event: ft.ControlEvent) -> None:
         # No debounce: this filters a list already in memory, so there is
@@ -269,9 +264,7 @@ class PayeesTab(ft.Container):
                             variant="muted",
                             compact=True,
                         ),
-                        ProviderIcon(
-                            payee.get("name") or "?", payee.get("icon_b64")
-                        ),
+                        ProviderIcon(payee.get("name") or "?", payee.get("icon_b64")),
                         H3Text(payee.get("name") or ""),
                         SecondaryText(counted),
                         ft.Container(expand=True),
@@ -361,9 +354,7 @@ class PayeesTab(ft.Container):
                 [
                     ft.Row(
                         [
-                            ProviderIcon(
-                                m.get("name") or "?", m.get("icon_b64")
-                            ),
+                            ProviderIcon(m.get("name") or "?", m.get("icon_b64")),
                             ft.Container(
                                 content=TableNameText(m.get("name") or ""),
                                 expand=True,

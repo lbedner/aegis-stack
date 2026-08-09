@@ -7,6 +7,9 @@ class ModalLayout:
     DEFAULT_WIDTH = 1100
     DEFAULT_HEIGHT = 700
     SECTION_DIVIDER_HEIGHT = 20
+    # Spent INSIDE the declared modal width, so content sized to fill a
+    # modal has this much less room than the width suggests.
+    CONTENT_PADDING = 20
 
 
 class ModalSections:

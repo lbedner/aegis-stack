@@ -38,6 +38,9 @@ class DataTableColumn:
     visible: bool = True
 
 
+# Distinguishes "not passed" from an explicit None in set_rows.
+_UNSET: Any = object()
+
 # Cell texts that mean "no value" - they sort after everything real.
 _BLANK_CELL_TEXTS = frozenset({"", "—", "-", "–"})
 
@@ -112,7 +115,17 @@ def get_alignment(alignment: str) -> ft.Alignment:
     return ft.alignment.center_left
 
 
-_ELLIPSIS_KWARGS = {
+# Public, because a caller that passes an already-built control skips
+# ``style_cell`` entirely and has to apply these itself to match. Without
+# them the control WRAPS while every plain-value cell beside it ellipses,
+# which shows up as one table row growing to two lines.
+# The column-picker button occupies a whole trailing gutter that is not
+# a column. A caller sizing a container to fit the table has to add it,
+# so it is public rather than buried in the class.
+PICKER_GUTTER_WIDTH = 28
+
+
+CELL_ELLIPSIS_KWARGS = {
     "max_lines": 1,
     "overflow": ft.TextOverflow.ELLIPSIS,
     "no_wrap": True,
@@ -140,10 +153,41 @@ def style_cell(value: Any, style: str | None) -> ft.Control:
 
     text = str(value)
     if style == "primary":
-        return PrimaryText(text, size=Theme.Typography.BODY, **_ELLIPSIS_KWARGS)
+        return PrimaryText(text, size=Theme.Typography.BODY, **CELL_ELLIPSIS_KWARGS)
     elif style == "secondary":
-        return SecondaryText(text, size=Theme.Typography.BODY, **_ELLIPSIS_KWARGS)
-    return BodyText(text, **_ELLIPSIS_KWARGS)
+        return SecondaryText(text, size=Theme.Typography.BODY, **CELL_ELLIPSIS_KWARGS)
+    return BodyText(text, **CELL_ELLIPSIS_KWARGS)
+
+
+# Native (Flutter) tooltips on table CELLS follow the pointer and pop up
+# over neighbouring rows, which turns scrolling a long register into a
+# game of whack-a-tooltip (user-reported). Cells are stripped of them by
+# default; flip this to restore every cell tooltip product-wide. Chrome
+# OUTSIDE the rows (the column picker, toolbar buttons) keeps its
+# tooltips - those sit still under the pointer.
+CELL_TOOLTIPS_ENABLED = False
+
+
+def _clear_tooltips(control: ft.Control, depth: int = 0) -> None:
+    """Blank ``tooltip`` on a cell control and its children.
+
+    Bounded recursion: cell content is shallow (a Row of texts and
+    buttons at most). ``default_tooltip`` is PulseButton's stash for
+    re-applying the tooltip on enable/disable toggles - blank it too or
+    the tooltip resurrects the first time a row button flips state.
+    """
+    if depth > 4:
+        return
+    if getattr(control, "tooltip", None) is not None:
+        control.tooltip = None
+    if getattr(control, "default_tooltip", None) is not None:
+        control.default_tooltip = None
+    child = getattr(control, "content", None)
+    if isinstance(child, ft.Control):
+        _clear_tooltips(child, depth + 1)
+    for item in getattr(control, "controls", None) or []:
+        if isinstance(item, ft.Control):
+            _clear_tooltips(item, depth + 1)
 
 
 def build_cell(column: DataTableColumn, content: ft.Control) -> ft.Container:
@@ -160,6 +204,8 @@ def build_cell(column: DataTableColumn, content: ft.Control) -> ft.Container:
     line. Both tables have shipped that bug; this helper exists so a fix
     lands in one place.
     """
+    if not CELL_TOOLTIPS_ENABLED:
+        _clear_tooltips(content)
     return ft.Container(
         content=content,
         width=column.width,
@@ -249,8 +295,10 @@ class DataTableRow(ft.Container):
         on_click: Callable[[ft.ControlEvent], None] | None = None,
         leading: ft.Control | None = None,
         leading_arrow: ft.Control | None = None,
+        on_hover_change: Callable[["DataTableRow", bool], None] | None = None,
     ) -> None:
         super().__init__()
+        self._on_hover_change = on_hover_change
 
         cells: list[ft.Control] = []
         if leading_arrow is not None:
@@ -287,7 +335,15 @@ class DataTableRow(ft.Container):
         # self.animate = ft.Animation(150, ft.AnimationCurve.EASE_OUT)
 
     def _on_hover(self, e: ft.ControlEvent) -> None:
-        """Handle hover state change."""
+        """Handle hover state change.
+
+        The tint is cleared by the EXIT event in the normal case - but a
+        virtualized row that scrolls out from under the pointer unmounts
+        before that event fires, so the tint would stick in this row's
+        state and ride back in on remount. ``on_hover_change`` is the
+        table-level correction: the owner clears the previous holder on
+        every enter, so at most one row ever wears the tint.
+        """
         hovered = e.data == "true"
         if hovered:
             e.control.bgcolor = ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)
@@ -298,8 +354,19 @@ class DataTableRow(ft.Container):
             # while its action runs must not be hidden again on pointer-out.
             if getattr(control, "reveal_on_hover", False):
                 set_revealed(control, hovered)
+        if self._on_hover_change is not None:
+            self._on_hover_change(self, hovered)
         if e.control.page:  # Guard: only update if control is on page
             e.control.update()
+
+    def clear_hover(self) -> None:
+        """Reset the hover tint from outside - the stuck-state cure."""
+        self.bgcolor = self._default_bgcolor
+        for control in self._hover_revealed:
+            if getattr(control, "reveal_on_hover", False):
+                set_revealed(control, False)
+        if self.page:
+            self.update()
 
 
 class DataTable(ft.Container):
@@ -455,13 +522,74 @@ class DataTable(ft.Container):
         self._row_arrows: dict[int, ExpandArrow] = {}
         self._expand_widgets: dict[int, ft.Container] = {}
         self._data_content: ft.Control | None = None
+        # The invariant that makes hover self-healing: at most one row
+        # wears the tint, enforced on every pointer-enter rather than
+        # trusting exit events a virtualized unmount can swallow.
+        self._hovered_row: DataTableRow | None = None
+        # The mounted skeleton, built ONCE. Scroll position lives in the
+        # Flutter element behind the ListView, and replacing ANY ancestor
+        # remounts the subtree and forgets it - so ``_render()`` only ever
+        # swaps these hosts' contents, and the ListView itself is created
+        # once and mutated thereafter. ``_toggle_expand`` proved the
+        # mechanism; this makes it the rule.
+        self._header_host = ft.Container()
+        self._data_host = ft.Container(expand=expand)
+        self._listview: ft.ListView | None = None
 
         self.bgcolor = ft.Colors.SURFACE
         self.border_radius = Theme.Components.CARD_RADIUS
         self.border = ft.border.all(1, ft.Colors.OUTLINE)
         if expand:
             self.expand = True
+        self.content = ft.Column(
+            [self._header_host, self._data_host],
+            spacing=0,
+            expand=self._expand_table,
+        )
         self._render()
+
+    def set_rows(
+        self,
+        rows: list[list[Any]],
+        *,
+        row_bgcolors: Any = _UNSET,
+        expandable_content: Any = _UNSET,
+        on_selection_change: Any = _UNSET,
+        on_row_click: Any = _UNSET,
+        selected_indices: set[int] | None = None,
+    ) -> None:
+        """Feed the table new data IN PLACE of a rebuild.
+
+        The whole point is what it does not do: the mounted ListView (and
+        everything above it) survives, so the reader's scroll position
+        survives the update. Constructing a fresh DataTable per data load
+        - the register's old edit loop - snapped every categorize back to
+        the top of the table.
+
+        The sort choice persists across new data (a sorted table must not
+        silently unsort because a row was edited). Selection and expanded
+        rows reset by default - the old row indices point at the old data
+        - but ``selected_indices`` can seed a carried selection, and the
+        callback keywords let a caller whose closures capture the fetched
+        rows hand over fresh ones. Omitted keywords keep what the table
+        already has.
+        """
+        self._rows = rows
+        if row_bgcolors is not _UNSET:
+            self._row_bgcolors = row_bgcolors
+        if expandable_content is not _UNSET:
+            self._expandable_content = expandable_content
+        if on_selection_change is not _UNSET:
+            self._on_selection_change = on_selection_change
+        if on_row_click is not _UNSET:
+            self._on_row_click = on_row_click
+        self._selected = set(selected_indices) if selected_indices else set()
+        self._expanded.clear()
+        self._expand_cache.clear()
+        self._expand_widgets = {}
+        self._render()
+        if self.page is not None:
+            self.update()
 
     # -- sorting -----------------------------------------------------------
 
@@ -552,9 +680,9 @@ class DataTable(ft.Container):
             self._selected.discard(idx)
         if self._select_all_checkbox is not None:
             total = len(self._selectable_set())
-            self._select_all_checkbox.value = bool(total) and len(
-                self._selected
-            ) >= total
+            self._select_all_checkbox.value = (
+                bool(total) and len(self._selected) >= total
+            )
             if self._select_all_checkbox.page:
                 self._select_all_checkbox.update()
         self._emit_selection()
@@ -604,7 +732,12 @@ class DataTable(ft.Container):
         arrow = self._row_arrows.get(idx)
         data_content = self._data_content
         controls = getattr(data_content, "controls", None)
-        if row_control is None or arrow is None or data_content is None or controls is None:
+        if (
+            row_control is None
+            or arrow is None
+            or data_content is None
+            or controls is None
+        ):
             # Not on the currently-rendered controls (shouldn't normally
             # happen for a click that just fired from one of them) - fall
             # back to a full rebuild rather than silently no-op.
@@ -621,7 +754,6 @@ class DataTable(ft.Container):
         except ValueError:
             return
 
-        was_empty = not self._expanded
         if idx in self._expanded:
             self._expanded.discard(idx)
             arrow.set_expanded(False)
@@ -638,20 +770,30 @@ class DataTable(ft.Container):
             widget = self._build_expand_widget(idx)
             self._expand_widgets[idx] = widget
             controls.insert(pos + 1, widget)
-        is_empty = not self._expanded
 
-        # Same item_extent tradeoff _render() already documents - only
-        # actually changes anything on the empty<->non-empty transition.
-        if (
-            was_empty != is_empty
-            and isinstance(data_content, ft.ListView)
-            and self._item_extent is not None
-        ):
-            data_content.item_extent = self._item_extent if is_empty else None
+        # NO item_extent flip here, ever. The old empty<->non-empty flip
+        # swapped Flutter's sliver type and re-anchored the viewport ~ten
+        # rows off at depth; correcting with scroll_to was worse still -
+        # ensure-visible aligns every ANCESTOR scrollable, so the whole
+        # tab jerked sideways as if being re-selected (confirmed live,
+        # both). Expandable tables never put the extent on the sliver at
+        # all now - each ROW carries the fixed height instead, so there
+        # is no mode to switch. See _render for where the height
+        # actually lives.
 
         if self.page is not None:
             arrow.update()
             data_content.update()
+
+    def _note_row_hover(self, row: DataTableRow, hovered: bool) -> None:
+        """Keep at most one row tinted (see _hovered_row)."""
+        if hovered:
+            previous = self._hovered_row
+            if previous is not None and previous is not row:
+                previous.clear_hover()
+            self._hovered_row = row
+        elif self._hovered_row is row:
+            self._hovered_row = None
 
     def deselect_all(self) -> None:
         """Clear the current selection in place - the public half of
@@ -731,7 +873,7 @@ class DataTable(ft.Container):
 
     # Width of the column-picker gutter (header icon + per-row spacer,
     # so the flexible columns line up between header and body).
-    _PICKER_WIDTH = 28
+    _PICKER_WIDTH = PICKER_GUTTER_WIDTH
 
     def _visible_indices(self) -> list[int]:
         return [i for i, shown in enumerate(self._col_visible) if shown]
@@ -803,6 +945,9 @@ class DataTable(ft.Container):
 
     def _render(self) -> None:
         header = self._build_header()
+        # Every row control is about to be rebuilt; a held hover ref
+        # would point at a control no longer shown.
+        self._hovered_row = None
 
         if not self._rows:
             from app.components.frontend.dashboard.modals.modal_sections import (
@@ -853,7 +998,9 @@ class DataTable(ft.Container):
                     checkbox if isinstance(checkbox, SelectionCheckbox) else None
                 )
                 expandable = self._expandable_content is not None
-                arrow = ExpandArrow(expanded=idx in self._expanded) if expandable else None
+                arrow = (
+                    ExpandArrow(expanded=idx in self._expanded) if expandable else None
+                )
                 row_control = DataTableRow(
                     columns=row_columns,
                     row_data=row_data,
@@ -862,6 +1009,7 @@ class DataTable(ft.Container):
                     show_border=self._show_row_borders,
                     leading=leading_cell,
                     leading_arrow=arrow,
+                    on_hover_change=self._note_row_hover,
                     on_click=(
                         (lambda _e, i=idx: self._toggle_expand(i))
                         if expandable
@@ -872,6 +1020,11 @@ class DataTable(ft.Container):
                         )
                     ),
                 )
+                row_control.key = f"dtr-{idx}"
+                if self._expandable_content is not None and self._item_extent:
+                    # The fixed height lives on the ROW here, not the
+                    # sliver - see the item_extent comment below.
+                    row_control.height = self._item_extent
                 data_rows.append(row_control)
                 if expandable:
                     self._row_controls[idx] = row_control
@@ -906,25 +1059,31 @@ class DataTable(ft.Container):
             # item_extent exists to skip, but only for as long as a row
             # is actually open - a transient, human-paced state, not the
             # bulk-scroll case item_extent optimizes for.
-            item_extent = self._item_extent if not self._expanded else None
-            if self._scroll_height:
-                data_content = ft.ListView(
-                    controls=data_rows,
-                    spacing=0,
-                    height=self._scroll_height,
-                    item_extent=item_extent,
-                )
-            elif self._expand_table:
-                data_content = ft.ListView(
-                    controls=data_rows,
-                    spacing=0,
-                    expand=True,
-                    item_extent=item_extent,
-                )
+            # The sliver-level extent is reserved for tables that can
+            # NEVER hold a taller-than-a-row item: with expandable rows
+            # the panel would be clipped, and toggling the extent off
+            # while a panel is open swaps the sliver type and re-anchors
+            # the scroll (the ten-rows-up jump). Expandable tables put
+            # the fixed height on each row instead - same cheap layout,
+            # one sliver mode for the ListView's whole life.
+            item_extent = (
+                self._item_extent if self._expandable_content is None else None
+            )
+            if self._scroll_height or self._expand_table:
+                lv = self._listview
+                if lv is None:
+                    lv = ft.ListView(spacing=0)
+                    if self._scroll_height:
+                        lv.height = self._scroll_height
+                    else:
+                        lv.expand = True
+                    self._listview = lv
+                lv.item_extent = item_extent
+                lv.controls = data_rows
+                data_content = lv
             else:
                 data_content = ft.Column(data_rows, spacing=0)
 
         self._data_content = data_content
-        self.content = ft.Column(
-            [header, data_content], spacing=0, expand=self._expand_table
-        )
+        self._header_host.content = header
+        self._data_host.content = data_content

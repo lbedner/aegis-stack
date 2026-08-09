@@ -14,11 +14,25 @@ at all.
 from datetime import date, timedelta
 
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.categorize import detect_recurring
 from app.services.finance.categorize.recurring import _frequency_for, _rhythm_ratio
 from app.services.finance.finance_service import FinanceService
+from app.services.finance.models import FinanceRecurringStream
+
+
+async def _live_streams(db: AsyncSession) -> list[FinanceRecurringStream]:
+    return list(
+        (
+            await db.exec(
+                select(FinanceRecurringStream).where(
+                    FinanceRecurringStream.deleted_at.is_(None)
+                )
+            )
+        ).all()
+    )
 
 
 async def _account(svc: FinanceService):
@@ -419,3 +433,383 @@ class TestInflowsOnLiabilityAccounts:
         )
 
         assert result.detected == 1
+
+
+class TestTwoMonthAndSixMonthRhythms:
+    """Cadences the forecast could always step but detection could not name.
+
+    ``_FREQUENCY_STEPS`` has handled bimonthly and semiannual from the
+    start, and the projection walks a stream by stepping its frequency.
+    ``_CADENCES`` did not list either, so a six-month insurance premium
+    measured as "irregular" - and an irregular stream cannot be stepped,
+    so it never reached the forecast at all. A real bill, correctly
+    detected as recurring, simply absent from the balance line.
+
+    Measured against the live ledger before making the change: 67 of the
+    68 affected day-gaps move from "no cadence" to a real one, ZERO
+    existing streams reclassify, and six real bills start being found.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_two_month_rhythm_is_detected(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        # Ending near ``today``: a rhythm that stopped two years ago is
+        # correctly retired by the gone-quiet gate, which is a different
+        # rule and not what this test is about.
+        last = date(2026, 7, 15)
+        await _spend(
+            svc,
+            account.id,
+            sorted(last - timedelta(days=60 * i) for i in range(6)),
+            name="Royal Carting",
+        )
+
+        await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 8)
+        )
+
+        streams = await _live_streams(async_db_session)
+        assert [s.frequency for s in streams] == ["bimonthly"]
+
+    @pytest.mark.asyncio
+    async def test_a_six_month_rhythm_is_detected(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Geico: February and August, every year."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        days = [
+            date(2024, 2, 25),
+            date(2024, 8, 25),
+            date(2025, 2, 25),
+            date(2025, 8, 25),
+            date(2026, 2, 25),
+        ]
+        await _spend(svc, account.id, days, cents=-200_000, name="Geico")
+
+        await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 8)
+        )
+
+        streams = await _live_streams(async_db_session)
+        assert [s.frequency for s in streams] == ["semi_annually"]
+
+    @pytest.mark.asyncio
+    async def test_a_detected_six_month_bill_reaches_the_forecast(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The point of naming the cadence at all."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        days = [
+            date(2024, 2, 25),
+            date(2024, 8, 25),
+            date(2025, 2, 25),
+            date(2025, 8, 25),
+            date(2026, 2, 25),
+        ]
+        await _spend(svc, account.id, days, cents=-200_000, name="Geico")
+        await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 8)
+        )
+        stream = (await _live_streams(async_db_session))[0]
+        stream.is_user_confirmed = True
+        async_db_session.add(stream)
+        await async_db_session.flush()
+
+        result = await svc.project_balances(
+            owner_user_id=1, days=250, today=date(2026, 8, 8)
+        )
+
+        assert any(p.name == "Geico" for p in result.points)
+
+
+class TestTheNewCadenceBands:
+    def test_two_months_and_six_months_now_have_a_name(self) -> None:
+        assert _frequency_for(60) == "bimonthly"
+        assert _frequency_for(180) == "semi_annually"
+        assert _frequency_for(181) == "semi_annually"
+
+    def test_the_existing_cadences_are_untouched(self) -> None:
+        """The whole change is additive. Anything that had a name keeps
+        it - verified against every stream in the live ledger before
+        shipping, but pinned here so it stays true."""
+        for gap, expected in (
+            (7, "weekly"),
+            (14, "biweekly"),
+            (15, "biweekly"),
+            (18, "semi_monthly"),
+            (30, "monthly"),
+            (31, "monthly"),
+            (90, "quarterly"),
+            (365, "annually"),
+        ):
+            assert _frequency_for(gap) == expected
+
+    def test_semi_monthly_is_all_but_unreachable(self) -> None:
+        """A pre-existing quirk, pinned because it is surprising and
+        because it is NOT what this change did.
+
+        Biweekly (14) spans 11.2-16.8 and is checked first, so it swallows
+        semi-monthly's own 15. Only a 17-18 day median ever lands on
+        ``semi_monthly``, which is not what twice-a-month billing looks
+        like. Fixing it means re-keying existing biweekly streams, which
+        is a different change with real blast radius - unlike adding a
+        band where none existed.
+        """
+        assert _frequency_for(15) == "biweekly"
+        assert _frequency_for(18) == "semi_monthly"
+
+    def test_a_gap_between_the_new_bands_is_still_nameless(self) -> None:
+        """Adding cadences must not turn the ladder into a catch-all.
+        Stewart's 430-day median has to stay unnamed."""
+        assert _frequency_for(430) is None
+        assert _frequency_for(120) is None
+        assert _frequency_for(250) is None
+
+    def test_the_contested_boundary_goes_to_the_closer_cadence(self) -> None:
+        """72 days is where bimonthly's upper edge meets quarterly's
+        lower one - the single gap in the whole range whose meaning
+        changes. It resolves to bimonthly, which is also the arithmetic
+        answer: 12 days from 60, 18 from 90.
+        """
+        assert _frequency_for(72) == "bimonthly"
+        assert _frequency_for(73) == "quarterly"
+
+
+class TestExcludedRowsFeedNoDetection:
+    """Excluded rows are bookkeeping, not economic activity.
+
+    Nine issuer-adjustment legs recur near-monthly with a steady
+    descriptor - exactly the shape detection hunts for - and once they
+    carry an assigned payee they group WITH that payee's real rows.
+    Without this gate, labeling an adjustment pair "American Express"
+    would feed phantom rows into Amex's stream detection.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_rhythmic_excluded_descriptor_is_never_a_bill(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        days = [date(2026, m, 16) for m in range(1, 7)]
+        rows = await _spend(
+            svc, account.id, days, cents=-3_080, name="DR ADJ REDIST CADV PRIN"
+        )
+        for row in rows:
+            row.excluded_from_reports = True
+            async_db_session.add(row)
+        await async_db_session.flush()
+
+        await detect_recurring(async_db_session, owner_user_id=1)
+
+        assert await _live_streams(async_db_session) == []
+
+    @pytest.mark.asyncio
+    async def test_normal_rows_still_detect(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The gate must remove exactly the excluded rows, nothing else."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        days = [date(2026, m, 16) for m in range(1, 7)]
+        await _spend(svc, account.id, days, cents=-3_080, name="NETFLIX")
+
+        await detect_recurring(async_db_session, owner_user_id=1)
+
+        assert len(await _live_streams(async_db_session)) == 1
+
+
+class TestPaymentLegsAreDetectable:
+    """A credit-card payment is a transfer, but it is a PAYMENT first.
+
+    Transfer legs are excluded from detection, so the biggest single cash
+    outflow of the month - the card autopay - could never form a stream:
+    nothing to confirm, nothing for the cash forecast to walk, and a
+    projected runway optimistic by ~$1,800 every month (confirmed live,
+    Amex autopay). The outflow leg of a transfer INTO a liability is
+    admitted now; ordinary transfer noise stays out.
+    """
+
+    async def _liability(self, svc, name="Amex"):
+        return await svc.create_manual_account(
+            name=name, account_type="credit_card",
+            classification="liability", owner_user_id=1,
+        )
+
+    async def _payment_pairs(self, svc, checking, card, months, cents=180_111):
+        for m in months:
+            await svc.create_transaction(
+                account_id=checking.id, amount=-cents,
+                txn_date=date(2026, m, 13), owner_user_id=1,
+                name="AMERICAN EXPRESS ACH PMT",
+            )
+            await svc.create_transaction(
+                account_id=card.id, amount=cents,
+                txn_date=date(2026, m, 13), owner_user_id=1,
+                name="AUTOPAY PAYMENT - THANK YOU",
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_card_autopay_forms_a_stream_on_the_cash_side(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.categorize import detect_transfers
+
+        svc = FinanceService(async_db_session)
+        checking = await _account(svc)
+        card = await self._liability(svc)
+        await self._payment_pairs(svc, checking, card, range(1, 7))
+        await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 1), lookback_days=0
+        )
+
+        await detect_recurring(async_db_session, owner_user_id=1)
+
+        streams = await _live_streams(async_db_session)
+        payment = [s for s in streams if s.account_id == checking.id]
+        assert len(payment) == 1
+        assert payment[0].direction == "outflow"
+        # The card-side inflow leg must not form its own mirror stream.
+        assert not [s for s in streams if s.account_id == card.id]
+
+    @pytest.mark.asyncio
+    async def test_an_asset_to_asset_transfer_still_forms_no_stream(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Moving money to savings every month is not a payment; letting
+        it through re-creates the five-figure fiction the transfer
+        exclusion exists to prevent."""
+        from app.services.finance.categorize import detect_transfers
+
+        svc = FinanceService(async_db_session)
+        checking = await _account(svc)
+        savings = await svc.create_manual_account(
+            name="Savings", account_type="savings",
+            classification="asset", owner_user_id=1,
+        )
+        for m in range(1, 7):
+            await svc.create_transaction(
+                account_id=checking.id, amount=-50_000,
+                txn_date=date(2026, m, 1), owner_user_id=1,
+                name="TRANSFER TO SAVINGS",
+            )
+            await svc.create_transaction(
+                account_id=savings.id, amount=50_000,
+                txn_date=date(2026, m, 1), owner_user_id=1,
+                name="TRANSFER FROM CHECKING",
+            )
+        await detect_transfers(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 1), lookback_days=0
+        )
+
+        await detect_recurring(async_db_session, owner_user_id=1)
+
+        assert await _live_streams(async_db_session) == []
+
+
+class TestPaymentStreamsReachTheForecast:
+    """The whole point of admitting payment legs: the cash walk charges
+    the autopay. Confirm stays the one door in - the detector's average
+    is poisoned by one-off paydowns (a real $21,250 sat among $1,800s),
+    and pinning the expected amount at confirm time is what makes the
+    projection honest rather than merely populated.
+    """
+
+    async def _payment_stream(self, svc, db):
+        from app.services.finance.categorize import detect_recurring, detect_transfers
+
+        checking = await _account(svc)
+        card = await svc.create_manual_account(
+            name="Amex", account_type="credit_card",
+            classification="liability", owner_user_id=1,
+        )
+        for m in range(1, 7):
+            await svc.create_transaction(
+                account_id=checking.id, amount=-180_111,
+                txn_date=date(2026, m, 13), owner_user_id=1,
+                name="AMERICAN EXPRESS ACH PMT",
+            )
+            await svc.create_transaction(
+                account_id=card.id, amount=180_111,
+                txn_date=date(2026, m, 13), owner_user_id=1,
+                name="AUTOPAY PAYMENT - THANK YOU",
+            )
+        await detect_transfers(db, owner_user_id=1, today=date(2026, 7, 1), lookback_days=0)
+        await detect_recurring(db, owner_user_id=1)
+        streams = await _live_streams(db)
+        assert len(streams) == 1
+        return streams[0], checking
+
+    @pytest.mark.asyncio
+    async def test_the_classifier_knows_a_payment_stream(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        stream, _checking = await self._payment_stream(svc, async_db_session)
+
+        payments = await svc.payment_stream_ids([stream.id])
+
+        assert payments == {stream.id}
+
+    @pytest.mark.asyncio
+    async def test_a_confirmed_payment_walks_the_cash_projection(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        stream, _checking = await self._payment_stream(svc, async_db_session)
+        await svc.confirm_recurring(stream.id, owner_user_id=1)
+        stream.expected_amount = 180_111
+        stream.next_expected_date = date(2026, 7, 13)
+        async_db_session.add(stream)
+        await async_db_session.flush()
+
+        projection = await svc.project_balances(
+            owner_user_id=1, today=date(2026, 7, 1), days=30
+        )
+
+        names = [point.name for point in projection.points]
+        assert any("AMERICAN EXPRESS" in n.upper() for n in names)
+
+    @pytest.mark.asyncio
+    async def test_an_unconfirmed_payment_stays_out_of_the_projection(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The $21,250 problem: an unpinned detector average must not
+        walk the forecast just because the stream now exists."""
+        svc = FinanceService(async_db_session)
+        stream, _checking = await self._payment_stream(svc, async_db_session)
+        stream.next_expected_date = date(2026, 7, 13)
+        async_db_session.add(stream)
+        await async_db_session.flush()
+
+        projection = await svc.project_balances(
+            owner_user_id=1, today=date(2026, 7, 1), days=30
+        )
+
+        assert projection.points == []
+
+    @pytest.mark.asyncio
+    async def test_a_confirmed_payment_never_inflates_the_bills_total(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The other half of "payment first, transfer second": the cash
+        walk charges it, but the Bills cell and month verdict must not -
+        every dollar of it was already counted at the card swipes, and
+        adding the payment double-counts the whole statement."""
+        svc = FinanceService(async_db_session)
+        stream, _checking = await self._payment_stream(svc, async_db_session)
+        await svc.confirm_recurring(stream.id, owner_user_id=1)
+        stream.expected_amount = 180_111
+        stream.next_expected_date = date(2026, 7, 13)
+        async_db_session.add(stream)
+        await async_db_session.flush()
+
+        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+
+        assert stats["fixed_total"] == 0
+        assert stats["fixed_count"] == 0

@@ -5,6 +5,7 @@ from app.services.finance.categorize.insights import (
     commitment_rollup,
     generate_insights,
     is_commitment,
+    is_paused,
     stream_staleness,
 )
 from app.services.finance.categorize.promote import promote_curated_streams
@@ -33,6 +34,7 @@ __all__ = [
     "detect_transfers",
     "generate_insights",
     "is_commitment",
+    "is_paused",
     "plan_recurring",
     "promote_curated_streams",
     "stream_staleness",

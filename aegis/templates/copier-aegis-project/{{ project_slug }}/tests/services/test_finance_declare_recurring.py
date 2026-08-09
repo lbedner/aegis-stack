@@ -13,7 +13,11 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize import declare_recurring, detect_recurring
+from app.services.finance.categorize import (
+    declare_recurring,
+    detect_recurring,
+    plan_recurring,
+)
 from app.services.finance.finance_service import FinanceService
 from app.services.finance.models import FinanceRecurringStream, FinanceTransaction
 
@@ -77,11 +81,16 @@ class TestDeclareRecurring:
     async def test_a_cadence_matching_nothing_is_irregular_not_refused(
         self, async_db_session: AsyncSession
     ) -> None:
-        """Gaps of ~50 days match no canonical cadence, so detection
-        declines outright. Declaring keeps the real median instead."""
+        """Gaps of ~120 days match no canonical cadence, so detection
+        declines outright. Declaring keeps the real median instead.
+
+        This used to use ~50 days, which stopped matching nothing once
+        ``bimonthly`` joined the ladder: 50 is 10 days off a 60-day
+        cadence, well inside the tolerance. 120 sits in the real gap,
+        between quarterly's ceiling and semiannual's floor."""
         svc = FinanceService(async_db_session)
         account = await _account(svc)
-        days = [date(2026, 1, 5), date(2026, 2, 24), date(2026, 4, 15)]
+        days = [date(2026, 1, 5), date(2026, 5, 5), date(2026, 9, 2)]
         txns = [await _txn(svc, account.id, "ODD BILL", d, -4_200) for d in days]
 
         assert (await detect_recurring(async_db_session, owner_user_id=1)).detected == 0
@@ -93,7 +102,7 @@ class TestDeclareRecurring:
         assert result.streams == 1
         stream = (await _live_streams(async_db_session))[0]
         assert stream.frequency == "irregular"
-        assert stream.next_expected_date == date(2026, 6, 4)  # +50d median
+        assert stream.next_expected_date == date(2026, 12, 31)  # +120d median
 
     @pytest.mark.asyncio
     async def test_a_single_transaction_has_no_cadence_to_measure(
@@ -793,3 +802,194 @@ class TestDeclaredAmount:
 
         stream = (await _live_streams(async_db_session))[0]
         assert stream.expected_amount is None
+
+
+class TestDeclaringACadence:
+    """The user states the cadence, because measuring it cannot always work.
+
+    Detection now knows eight canonical gaps, semiannual included, so the
+    case that first forced this - an insurance premium every February and
+    August - is found on its own. Plenty is still unmeasurable: a bill on
+    a 120-day cycle matches nothing, and an unmatched cadence is stored as
+    "irregular", which the forecast cannot STEP. So the bill is correctly
+    recognised as recurring and still never appears in the balance line.
+
+    Stating the cadence is what puts it there.
+    """
+
+    async def _irregular(self, svc, db):
+        """A real rhythm on a cycle no canonical band covers."""
+        account = await _account(svc)
+        rows = [
+            await _txn(svc, account.id, "Odd Bill", day, -200_000)
+            for day in (
+                date(2025, 1, 5),
+                date(2025, 5, 5),
+                date(2025, 9, 2),
+                date(2025, 12, 31),
+            )
+        ]
+        return account, [r.id for r in rows]
+
+    @pytest.mark.asyncio
+    async def test_the_measured_cadence_is_irregular(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The premise: 120 days matches no band, so this is what the
+        override exists for."""
+        svc = FinanceService(async_db_session)
+        _account_row, ids = await self._irregular(svc, async_db_session)
+
+        await declare_recurring(async_db_session, ids, owner_user_id=1)
+
+        streams = await _live_streams(async_db_session)
+        assert streams[0].frequency == "irregular"
+
+    @pytest.mark.asyncio
+    async def test_a_semiannual_rhythm_no_longer_needs_the_override(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Geico, the bill that forced this feature, is now measured
+        correctly on its own - so the override is a fallback rather than
+        the only route into the forecast."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        rows = [
+            await _txn(svc, account.id, "Geico", day, -200_000)
+            for day in (
+                date(2024, 2, 25),
+                date(2024, 8, 25),
+                date(2025, 2, 25),
+                date(2025, 8, 25),
+            )
+        ]
+
+        await declare_recurring(async_db_session, [r.id for r in rows], owner_user_id=1)
+
+        streams = await _live_streams(async_db_session)
+        assert streams[0].frequency == "semi_annually"
+
+    @pytest.mark.asyncio
+    async def test_a_stated_cadence_wins_over_the_measured_one(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        _account_row, ids = await self._irregular(svc, async_db_session)
+
+        plan = await plan_recurring(async_db_session, ids, owner_user_id=1)
+        await declare_recurring(
+            async_db_session,
+            ids,
+            owner_user_id=1,
+            frequencies={plan[0].key: "quarterly"},
+        )
+
+        streams = await _live_streams(async_db_session)
+        assert streams[0].frequency == "quarterly"
+
+    @pytest.mark.asyncio
+    async def test_the_next_date_follows_the_stated_cadence(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Stating the cadence and leaving the next date where the median
+        put it would contradict the instruction on the very next line."""
+        svc = FinanceService(async_db_session)
+        _account_row, ids = await self._irregular(svc, async_db_session)
+
+        plan = await plan_recurring(async_db_session, ids, owner_user_id=1)
+        await declare_recurring(
+            async_db_session,
+            ids,
+            owner_user_id=1,
+            frequencies={plan[0].key: "quarterly"},
+        )
+
+        streams = await _live_streams(async_db_session)
+        # Last occurrence 2025-12-31, stepped a quarter, not a 120d median.
+        assert streams[0].next_expected_date == date(2026, 3, 31)
+
+    @pytest.mark.asyncio
+    async def test_a_stated_cadence_reaches_the_forecast(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The whole point. An irregular bill cannot be stepped, so it
+        never lands in the projection; a stated one does."""
+        svc = FinanceService(async_db_session)
+        _account_row, ids = await self._irregular(svc, async_db_session)
+        plan = await plan_recurring(async_db_session, ids, owner_user_id=1)
+        await declare_recurring(
+            async_db_session,
+            ids,
+            owner_user_id=1,
+            frequencies={plan[0].key: "quarterly"},
+            amounts={plan[0].key: 200_000},
+        )
+
+        result = await svc.project_balances(
+            owner_user_id=1, days=200, today=date(2026, 1, 1)
+        )
+
+        assert any(p.name == "Odd Bill" for p in result.points)
+
+    @pytest.mark.asyncio
+    async def test_a_cadence_the_forecast_cannot_step_is_refused(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Accepting a label nothing can step would put the bill right
+        back where it started, only now looking deliberate."""
+        svc = FinanceService(async_db_session)
+        _account_row, ids = await self._irregular(svc, async_db_session)
+        plan = await plan_recurring(async_db_session, ids, owner_user_id=1)
+
+        await declare_recurring(
+            async_db_session,
+            ids,
+            owner_user_id=1,
+            frequencies={plan[0].key: "whenever"},
+        )
+
+        streams = await _live_streams(async_db_session)
+        assert streams[0].frequency == "irregular"
+
+    @pytest.mark.asyncio
+    async def test_no_override_still_measures(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        rows = [
+            await _txn(svc, account.id, "Netflix", date(2026, m, 6), -1_599)
+            for m in (4, 5, 6)
+        ]
+
+        await declare_recurring(async_db_session, [r.id for r in rows], owner_user_id=1)
+
+        streams = await _live_streams(async_db_session)
+        assert streams[0].frequency == "monthly"
+
+
+class TestTheMenuMatchesTheEngine:
+    """Every cadence the user can pick has to be one the forecast can
+    step. Offering one it cannot is how a bill becomes invisible while
+    looking correctly configured, which is the failure this whole feature
+    exists to fix - so it must not be reintroduced by the menu itself.
+    """
+
+    def test_every_offered_cadence_can_be_stepped(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_modal import (
+            _FREQUENCY_LABELS,
+        )
+        from app.services.finance.finance_service import _FREQUENCY_STEPS
+
+        assert set(_FREQUENCY_LABELS) <= set(_FREQUENCY_STEPS)
+
+    def test_every_steppable_cadence_can_be_picked(self) -> None:
+        """The other direction, and the actual bug: the forecast could
+        step semiannual and bimonthly long before anything let a user say
+        so."""
+        from app.components.frontend.dashboard.modals.finance_modal import (
+            _FREQUENCY_LABELS,
+        )
+        from app.services.finance.finance_service import _FREQUENCY_STEPS
+
+        assert set(_FREQUENCY_STEPS) <= set(_FREQUENCY_LABELS)

@@ -5,7 +5,9 @@ Provides common fixtures and configuration for all tests.
 """
 
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator
 
@@ -35,6 +37,27 @@ from app.services.payment.models import (  # noqa: F401
 {%- if include_blog %}
 # Import blog models to register them with SQLModel metadata
 from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F401
+{% endif %}
+{%- if include_ai %}
+# Import AI models to register them with SQLModel metadata. The agents and
+# llm subpackages each import every model module they own, so these two
+# names pull in the whole set.
+from app.services.ai.models.agents import (  # noqa: F401
+    Agent,
+    AgentTool,
+    AgentUserMemory,
+    MemoryModule,
+    Tool,
+)
+from app.services.ai.models.llm import (  # noqa: F401
+    LargeLanguageModel,
+    LLMActiveSelection,
+    LLMDeployment,
+    LLMModality,
+    LLMPrice,
+    LLMUsage,
+    LLMVendor,
+)
 {% endif %}
 {%- if include_finance %}
 # Import finance models to register them with SQLModel metadata
@@ -204,6 +227,86 @@ def db_session(engine: Engine) -> Generator[Session, None, None]:
     session.close()
     transaction.rollback()
     connection.close()
+
+
+@pytest.fixture(scope="session")
+async def app_owned_engine():
+    """A database for sessions the APP opens for itself.
+
+    Deliberately not ``async_engine``: that one is wrapped in a per-test
+    transaction which is rolled back, and app-owned sessions commit. Put
+    both on one connection and they fight over the same transaction.
+
+    File-backed, not ``:memory:``. TestClient runs the app in its OWN
+    event loop on a separate thread, so app-owned sessions reach this
+    engine from a different thread than the one that built it. Every new
+    connection to ``:memory:`` is a BRAND NEW EMPTY database, so a
+    reconnect there loses every table - which surfaces much later as
+    "no such table: agent", and only in long runs, because a short one
+    never reconnects. A file is the same database from any thread.
+    """
+    tmp_dir = Path(tempfile.mkdtemp(prefix="aegis-app-owned-db-"))
+    schema_names = {
+        table.schema for table in SQLModel.metadata.tables.values() if table.schema
+    }
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_dir / 'app_owned.sqlite'}",
+        echo=False,
+        connect_args={"check_same_thread": False},
+    )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def attach_schemas(dbapi_connection: Any, connection_record: Any) -> None:
+        dbapi_connection.isolation_level = None
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        # Files here too, for the same reason the main database is one.
+        for schema_name in schema_names:
+            cursor.execute(
+                f"ATTACH DATABASE '{tmp_dir / (schema_name + '.sqlite')}' "
+                f"AS {schema_name}"
+            )
+        cursor.close()
+
+    @event.listens_for(engine.sync_engine, "begin")
+    def emit_begin(conn: Any) -> None:
+        conn.exec_driver_sql("BEGIN")
+
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+    yield engine
+
+    await engine.dispose()
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _no_production_database(app_owned_engine, monkeypatch):
+    """Keep app-owned sessions off the real database.
+
+    ``get_async_session()`` reads a module-level ``AsyncSessionLocal``.
+    Overriding the FastAPI dependency does not touch it, so every caller
+    that opens its own session - startup hooks, background tasks,
+    ``resolve_agent()`` inside a chat - was talking to the database in
+    ``DATABASE_URL`` while the suite ran.
+
+    Two consequences. Tests read and write live data. And the production
+    engine POOLS asyncpg connections, which pytest then hands to a fresh
+    event loop each test; using a connection from a loop that did not
+    create it raises "another operation is in progress" - failing tests
+    that never touched the database themselves, only in a full run, and
+    never in isolation.
+    """
+    import app.core.db as db_module
+
+    monkeypatch.setattr(
+        db_module,
+        "AsyncSessionLocal",
+        async_sessionmaker(
+            app_owned_engine, class_=AsyncSession, expire_on_commit=False
+        ),
+    )
 
 
 @pytest.fixture(scope="session")

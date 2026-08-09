@@ -46,6 +46,7 @@ def build_error_detail_block(message: str) -> ft.Container:
         border=ft.border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
     )
 
+
 _PILL_WIDTH = 80
 _PILL_HEIGHT = 28
 _PILL_SELECTED_OPACITY = 0.15
@@ -236,6 +237,7 @@ class PaginatedHistorySection(ft.Container):
 
         self._refresh_btn = ft.IconButton(
             icon=ft.Icons.REFRESH,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
             icon_size=16,
             tooltip="Refresh",
             on_click=self._on_refresh,
@@ -246,6 +248,7 @@ class PaginatedHistorySection(ft.Container):
         self._page_info = SecondaryText("", size=12)
         self._prev_btn = ft.IconButton(
             icon=ft.Icons.CHEVRON_LEFT,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
             icon_size=16,
             tooltip="Previous",
             on_click=self._on_prev,
@@ -253,6 +256,7 @@ class PaginatedHistorySection(ft.Container):
         )
         self._next_btn = ft.IconButton(
             icon=ft.Icons.CHEVRON_RIGHT,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
             icon_size=16,
             tooltip="Next",
             on_click=self._on_next,

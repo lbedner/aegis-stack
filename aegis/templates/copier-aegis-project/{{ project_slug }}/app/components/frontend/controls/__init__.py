@@ -1,6 +1,7 @@
 """Frontend UI controls for styled components."""
 
-from .action_menu import ActionMenu, ActionMenuItem
+from .action_menu import ActionDropdown, ActionMenu, ActionMenuItem, MenuAction
+from .busy_bar import busy_bar
 from .buttons import ConfirmDialog
 from .data_table import DataTable, DataTableColumn
 from .expand_arrow import ExpandArrow
@@ -15,7 +16,7 @@ from .method_badge import METHOD_COLORS, MethodBadge
 from .section_card import SectionCard
 from .service_card import ServiceCard
 from .severity_filter import SeverityFilter
-from .status_dot import status_dot
+from .status_dot import StatusDot, status_dot
 from .switch import ThemedSwitch
 from .table import (
     TableCellText,
@@ -82,8 +83,10 @@ __all__ = [
     # Dialog controls
     "ConfirmDialog",
     # Action menu controls
+    "ActionDropdown",
     "ActionMenu",
     "ActionMenuItem",
+    "MenuAction",
     # Arrow controls
     "ExpandArrow",
     # Form controls
@@ -94,6 +97,8 @@ __all__ = [
     # Filter controls
     "SeverityFilter",
     # Status indicators
+    "busy_bar",
     "status_dot",
+    "StatusDot",
     "ThemedSwitch",
 ]

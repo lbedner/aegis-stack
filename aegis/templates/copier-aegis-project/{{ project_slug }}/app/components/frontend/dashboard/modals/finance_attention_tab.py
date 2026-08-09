@@ -31,12 +31,16 @@ from app.components.frontend.controls import (
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.snack_bar import SuccessSnackBar
 from app.components.frontend.controls.table import TableCellText, TableNameText
+from app.components.frontend.dashboard.modals.finance_panel import (
+    FinancePanel,
+)
 from app.components.frontend.dashboard.modals.modal_sections import date_cell
 from app.components.frontend.theme import AegisTheme as Theme
 
 from .modal_sections import EmptyStatePlaceholder
 
 NOTE_INSIGHT_TYPE = "analyst_note"
+
 _INSIGHTS_URL = "/api/v1/finance/insights"
 _RECURRING_URL = "/api/v1/finance/recurring"
 _RUN_URL = "/api/v1/finance/analyst/run"
@@ -82,13 +86,11 @@ def _note_body(body: str) -> ft.Control:
     )
 
 
-class AttentionTab(ft.Container):
+class AttentionTab(FinancePanel):
     """Analyst narration over the rule findings it was written from."""
 
     def __init__(self, page: ft.Page, *, with_notes: bool = True) -> None:
-        super().__init__()
-        self.page = page
-        self.expand = True
+        super().__init__(page, expand=True)
         self.padding = ft.padding.all(Theme.Spacing.LG)
         self._with_notes = with_notes
 
@@ -123,10 +125,6 @@ class AttentionTab(ft.Container):
             spacing=0,
             expand=True,
         )
-
-    def did_mount(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
 
     async def _load(self) -> None:
         from app.components.frontend.state.session_state import get_session_state

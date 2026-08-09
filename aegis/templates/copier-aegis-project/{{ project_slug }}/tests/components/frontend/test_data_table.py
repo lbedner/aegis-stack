@@ -201,7 +201,7 @@ class TestHoverRevealedCells:
 
 def _rendered_first_cells(table: DataTable) -> list[str]:
     """First-column text of each rendered row, in display order."""
-    body = table.content.controls[1]
+    body = table.content.controls[1].content
     texts = []
     for row in body.controls:
         cell = row.content.controls[0]
@@ -244,7 +244,7 @@ class TestSortableColumns:
         clicked: list[int] = []
         table = self._table(on_row_click=clicked.append)
         table._on_sort(0)  # display order: apple(1), banana(0), cherry(2)
-        body = table.content.controls[1]
+        body = table.content.controls[1].content
         body.controls[0].on_click(None)  # topmost displayed row
         assert clicked == [1]  # "apple" was original row 1
 
@@ -264,10 +264,10 @@ class TestSortableColumns:
         rows = [["a", "$1.00", "Checking"]]
         table = DataTable(columns=columns, rows=rows, column_picker=True)
         # ships with Account hidden: Name + Amount cells + picker gutter
-        body = table.content.controls[1]
+        body = table.content.controls[1].content
         assert len(body.controls[0].content.controls) == 3
         table._toggle_column(2)
-        assert len(table.content.controls[1].controls[0].content.controls) == 4
+        assert len(table.content.controls[1].content.controls[0].content.controls) == 4
         # non-hideable Name is not offered in the menu
         menu = table._picker_cell().content
         assert [item.text for item in menu.items] == ["Amount", "Account"]
@@ -362,7 +362,8 @@ class TestSortAffordance:
     """Sortability must be visible before the first click."""
 
     def _headers(self, table: DataTable) -> list[ft.Container]:
-        return list(table.content.controls[0].content.controls)
+        # .content twice: the skeleton's header HOST, then the header.
+        return list(table.content.controls[0].content.content.controls)
 
     def _interactive(self, table: DataTable, index: int = 0) -> ft.Container:
         """The tight clickable label+glyph container inside a header cell."""
@@ -434,7 +435,7 @@ class TestPerRowSelectability:
 
     def test_an_unselectable_row_gets_no_checkbox(self) -> None:
         table = self._table([True, False, True])
-        body = table.content.controls[1]
+        body = table.content.controls[1].content
         boxes = [
             row.content.controls[0].content.__class__.__name__
             if hasattr(row.content.controls[0], "content")
@@ -476,3 +477,219 @@ class TestPerRowSelectability:
         )
         table._toggle_all(True)
         assert seen[-1] == {0, 1}
+
+
+class TestTheTableKeepsItsScrollContainer:
+    """New data mutates the mounted ListView; it never replaces it.
+
+    Scroll position lives in the Flutter element behind the ListView, so
+    the ONLY way to keep it is to keep the instance. Every edit in the
+    register used to build a brand-new DataTable (and every sort built a
+    new ListView inside this one), which is why any update snapped the
+    view back to the top. ``_toggle_expand`` already mutates in place for
+    exactly this reason - these tests make that the rule, not the
+    exception.
+    """
+
+    def _table(self, rows=None, **kwargs):
+        return DataTable(
+            columns=COLUMNS,
+            rows=rows if rows is not None else [VALUES, ["A", "B", "$2.00"]],
+            expand=True,
+            **kwargs,
+        )
+
+    def test_set_rows_keeps_the_same_listview(self) -> None:
+        table = self._table()
+        lv = table._data_content
+        assert isinstance(lv, ft.ListView)
+
+        table.set_rows([["X", "Y", "$9.00"]])
+
+        assert table._data_content is lv
+        assert len(lv.controls) == 1
+
+    def test_a_resort_keeps_the_same_listview(self) -> None:
+        table = self._table()
+        lv = table._data_content
+
+        table._on_sort(0)
+
+        assert table._data_content is lv
+
+    def test_a_column_toggle_keeps_the_same_listview(self) -> None:
+        table = self._table(column_picker=True)
+        lv = table._data_content
+
+        table._toggle_column(1)
+
+        assert table._data_content is lv
+
+    def test_the_root_content_is_never_replaced(self) -> None:
+        """The ListView surviving is not enough on its own: replacing any
+        ancestor remounts the subtree and Flutter forgets the offset. The
+        skeleton is built once and only its hosts' contents change."""
+        table = self._table()
+        root = table.content
+
+        table.set_rows([["X", "Y", "$9.00"]])
+        table._on_sort(0)
+
+        assert table.content is root
+
+    def test_sort_choice_survives_new_data(self) -> None:
+        """The user sorted by a column; an edit refreshing the rows must
+        not silently unsort the table."""
+        table = self._table(rows=[["b", "x", "$1.00"], ["a", "y", "$2.00"]])
+        table._on_sort(0)  # ascending by first column
+
+        table.set_rows([["d", "x", "$1.00"], ["c", "y", "$2.00"]])
+
+        first_cell = _cells(table._data_content.controls[0])[0]
+        text = first_cell.content
+        assert getattr(text, "value", None) == "c"
+
+    def test_empty_and_back_recovers(self) -> None:
+        table = self._table()
+        table.set_rows([])
+        # placeholder shown, no crash
+        assert not isinstance(table._data_content, ft.ListView)
+
+        table.set_rows([VALUES])
+
+        assert isinstance(table._data_content, ft.ListView)
+        assert len(table._data_content.controls) == 1
+
+    def test_set_rows_clears_selection_by_default(self) -> None:
+        table = self._table(selectable=True)
+        table._selected = {0}
+
+        table.set_rows([["X", "Y", "$9.00"]])
+
+        assert table._selected == set()
+
+    def test_set_rows_can_seed_a_carried_selection(self) -> None:
+        table = self._table(selectable=True)
+
+        table.set_rows([VALUES, ["A", "B", "$2.00"]], selected_indices={1})
+
+        assert table._selected == {1}
+
+    def test_set_rows_can_swap_the_expand_builder(self) -> None:
+        """The register's expand pane closes over the fetched rows, so a
+        data refresh must be able to hand the table the new closure - and
+        stale expand panels must not survive into the new data."""
+        table = self._table(expandable_content=lambda i: ft.Text("old"))
+        table._expand_cache[0] = ft.Text("cached")
+        table._expanded.add(0)
+
+        new_builder = lambda i: ft.Text("new")  # noqa: E731
+        table.set_rows([VALUES], expandable_content=new_builder)
+
+        assert table._expandable_content is new_builder
+        assert table._expand_cache == {}
+        assert table._expanded == set()
+
+
+class TestExpandNeverChangesScrollMode:
+    """An expandable table must never flip the ListView's item_extent.
+
+    The flip (fixed extent while collapsed, none while a panel is open)
+    swaps Flutter's sliver type, and at scroll depth the swap re-anchors
+    the viewport ~ten rows off. Correcting it with scroll_to was worse:
+    ensure-visible aligns EVERY ancestor scrollable, so the whole tab
+    jerked horizontally (confirmed live, both). The fix removes the
+    cause: expandable tables carry the fixed height on each ROW and the
+    ListView stays in one sliver mode for its whole life. Tables without
+    expandable rows keep the true item_extent fast path - they can never
+    flip.
+    """
+
+    def _table(self, expandable=True):
+        return DataTable(
+            columns=COLUMNS,
+            rows=[[f"r{i}", "x", "$1.00"] for i in range(6)],
+            expand=True,
+            item_extent=40,
+            expandable_content=(lambda i: ft.Text("detail")) if expandable else None,
+        )
+
+    def test_an_expandable_table_never_sets_a_sliver_extent(self) -> None:
+        table = self._table()
+        assert table._data_content.item_extent is None
+
+    def test_its_rows_carry_the_fixed_height_instead(self) -> None:
+        table = self._table()
+        assert all(c.height == 40 for c in table._data_content.controls)
+
+    def test_expanding_and_collapsing_leave_the_mode_alone(self) -> None:
+        table = self._table()
+        table._toggle_expand(2)
+        assert table._data_content.item_extent is None
+        table._toggle_expand(2)
+        assert table._data_content.item_extent is None
+
+    def test_the_panel_itself_is_not_height_capped(self) -> None:
+        """The whole reason the extent could not stay on the sliver: the
+        expansion panel is taller than a row and must not be clipped."""
+        table = self._table()
+        table._toggle_expand(2)
+        panel = table._expand_widgets[2]
+        assert panel.height is None
+
+    def test_a_plain_table_keeps_the_analytic_fast_path(self) -> None:
+        table = self._table(expandable=False)
+        assert table._data_content.item_extent == 40
+
+
+class TestOneHoverAtATime:
+    """The hover tint self-heals instead of trusting exit events.
+
+    The tint is Python state cleared by pointer-EXIT - but a virtualized
+    row that scrolls out from under the pointer unmounts before its exit
+    event fires, so the tint sticks and rides back in with the row
+    (confirmed live: four rows wearing it at once). The table now owns
+    the invariant: entering any row clears the previous holder.
+    """
+
+    def _table(self):
+        return DataTable(
+            columns=COLUMNS,
+            rows=[[f"r{i}", "x", "$1.00"] for i in range(4)],
+            expand=True,
+        )
+
+    def _hover(self, row, hovered):
+        from types import SimpleNamespace
+
+        row._on_hover(SimpleNamespace(control=row, data="true" if hovered else "false"))
+
+    def test_entering_a_row_clears_the_stuck_one(self) -> None:
+        table = self._table()
+        first, second = table._data_content.controls[0], table._data_content.controls[1]
+
+        self._hover(first, True)  # ...and the exit event never arrives
+        tinted = first.bgcolor
+        self._hover(second, True)
+
+        assert first.bgcolor == first._default_bgcolor
+        assert second.bgcolor == tinted
+
+    def test_a_normal_exit_still_works(self) -> None:
+        table = self._table()
+        first = table._data_content.controls[0]
+
+        self._hover(first, True)
+        self._hover(first, False)
+
+        assert first.bgcolor == first._default_bgcolor
+
+    def test_new_data_forgets_the_hovered_row(self) -> None:
+        """set_rows swaps every row control; holding a reference to a
+        dead one must not clear tints on rows no longer shown."""
+        table = self._table()
+        self._hover(table._data_content.controls[0], True)
+
+        table.set_rows([["X", "x", "$1.00"]])
+
+        assert table._hovered_row is None

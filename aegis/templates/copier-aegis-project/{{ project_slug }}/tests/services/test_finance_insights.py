@@ -1549,3 +1549,109 @@ class TestSubscriptionCreep:
         )
 
         assert await _insights_of(async_db_session, "subscription_creep") == []
+
+
+class TestOverspendOnPace:
+    """"More than usual" has to mean "more than usual BY NOW".
+
+    The rule compared a part-finished month against whole prior months, so
+    it could barely fire until the month was nearly over - by which point
+    the money is spent and the warning is a post-mortem. Prior months are
+    now measured to the same day of the month.
+    """
+
+    async def _dining(self, db):
+        category = FinanceCategory(
+            owner_user_id=1, name="Dining", slug="dining", classification="expense"
+        )
+        db.add(category)
+        await db.flush()
+        return category
+
+    async def _overspend_rows(self, db):
+        return (
+            await db.exec(
+                select(FinanceInsight).where(
+                    FinanceInsight.insight_type == "overspend_category"
+                )
+            )
+        ).all()
+
+    @pytest.mark.asyncio
+    async def test_it_catches_a_month_going_wrong_while_it_can_still_matter(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """$100 by the 20th in a normal month, $250 this time. Against whole
+        prior months ($300) this never crossed 1.5x and the reader heard
+        nothing."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        category = await self._dining(async_db_session)
+        for month in (4, 5, 6):
+            await _txn(
+                svc, account.id, -10000, date(2026, month, 5), "DINING",
+                category_id=category.id,
+            )
+            await _txn(
+                svc, account.id, -20000, date(2026, month, 25), "DINING",
+                category_id=category.id,
+            )
+        await _txn(
+            svc, account.id, -25000, date(2026, 7, 5), "DINING",
+            category_id=category.id,
+        )
+
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
+
+        assert len(await self._overspend_rows(async_db_session)) == 1
+
+    @pytest.mark.asyncio
+    async def test_the_first_days_of_a_month_are_not_judged(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A baseline measured over three days is mostly noise, and one
+        early grocery run would read as a spending emergency."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        category = await self._dining(async_db_session)
+        for month in (4, 5, 6):
+            await _txn(
+                svc, account.id, -10000, date(2026, month, 2), "DINING",
+                category_id=category.id,
+            )
+        await _txn(
+            svc, account.id, -90000, date(2026, 7, 1), "DINING",
+            category_id=category.id,
+        )
+
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 3)
+        )
+
+        assert await self._overspend_rows(async_db_session) == []
+
+    @pytest.mark.asyncio
+    async def test_a_baseline_too_small_to_multiply_is_ignored(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Ratios against a few dollars are arithmetic, not information."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        category = await self._dining(async_db_session)
+        for month in (4, 5, 6):
+            await _txn(
+                svc, account.id, -300, date(2026, month, 5), "DINING",
+                category_id=category.id,
+            )
+        await _txn(
+            svc, account.id, -4000, date(2026, 7, 5), "DINING",
+            category_id=category.id,
+        )
+
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
+
+        assert await self._overspend_rows(async_db_session) == []

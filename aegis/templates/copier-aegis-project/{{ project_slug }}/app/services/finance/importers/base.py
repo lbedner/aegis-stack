@@ -195,3 +195,6 @@ class ImportResult:
     # Rows the source carried but that are not posted money (scheduled /
     # future-dated). Recorded on the batch, never put in the ledger.
     rows_skipped: int = 0
+    # Rows belonging to an account the user REMOVED - deleting an account
+    # is a standing decision, and a re-import must not resurrect it.
+    rows_ignored: int = 0

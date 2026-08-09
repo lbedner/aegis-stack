@@ -122,7 +122,7 @@ class BaseDetailPopup(BasePopup):
         # Wrap in container with padding
         content_container = ft.Container(
             content=modal_content,
-            padding=20,
+            padding=ModalLayout.CONTENT_PADDING,
             width=width,
             height=height,
         )

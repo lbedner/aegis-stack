@@ -1889,7 +1889,20 @@ async def check_ollama_health() -> ComponentStatus:
             for m in server_status.running_models
         ]
         installed_models_info = [
-            m.model_dump(include={"name", "size_gb", "details"})
+            m.model_dump(
+                include={
+                    "name",
+                    "size_gb",
+                    "details",
+                    # What `ollama list` prints and the table could not show:
+                    # the digest tells two pulls of one tag apart, and the
+                    # timestamp is how you spot a model that has gone stale.
+                    "digest",
+                    "modified_at",
+                    "capabilities",
+                },
+                mode="json",
+            )
             for m in server_status.installed_models
         ]
 

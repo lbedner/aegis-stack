@@ -28,6 +28,7 @@ from app.components.frontend.controls import (
     NumericText,
     PrimaryText,
     SecondaryText,
+    StatusDot,
     Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
@@ -939,6 +940,12 @@ class LineSeries:
     stroke_width: int = 2
     tooltips: list[str] | None = None
     show_in_legend: bool = True
+    # Polarity split: colour the stroke ``color`` above this y and
+    # ``split_below_color`` below it (hard stop, no blend), with the fill
+    # tinting the area between the line and the split on each side. One
+    # series, so tooltips and hover are untouched. ``None`` = plain line.
+    split_y: float | None = None
+    split_below_color: str = "#EF4444"  # ChartColors.ERROR - self-contained
     highlighted_indices: frozenset[int] = field(default_factory=frozenset)
     highlight_color: str = (
         "#F59E0B"  # ChartColors.AMBER - keep dataclass self-contained
@@ -994,9 +1001,7 @@ def row_matches(query: str, values: Iterable[object]) -> bool:
     return any(needle in str(value).casefold() for value in values if value is not None)
 
 
-def date_cell(
-    value: object, control: type[ft.Text] | None = None
-) -> ft.Control:
+def date_cell(value: object, control: type[ft.Text] | None = None) -> ft.Control:
     """A human-readable date cell that still sorts chronologically.
 
     DataTable sorts on a cell's text (controls/data_table.py), so a
@@ -1016,28 +1021,17 @@ def date_cell(
     return cell
 
 
-def status_dot(label: str, color: str, tooltip: str) -> ft.Control:
-    """Status as the house dot recipe (the modal header's "Healthy" dot):
-    an 8px circle + colored label, no pill background. The tooltip carries
-    what the state actually MEANS - "Detected" is a question the detector
-    is asking, and a bare word does not say so. Shared by Bills & Income's
-    stream rows and the Budget tab's Fixed/Non-monthly rows."""
-    return ft.Container(
-        content=ft.Row(
-            [
-                ft.Container(width=8, height=8, bgcolor=color, border_radius=4),
-                ft.Text(
-                    label,
-                    color=color,
-                    size=Theme.Typography.BODY_SMALL,
-                    weight=ft.FontWeight.W_500,
-                ),
-            ],
-            spacing=6,
-            tight=True,
-        ),
-        tooltip=tooltip,
-    )
+def status_dot(label: str, color: str, tooltip: str) -> StatusDot:
+    """Status as the house dot: a circle + colored label, no pill
+    background. The tooltip carries what the state actually MEANS -
+    "Detected" is a question the detector is asking, and a bare word does
+    not say so.
+
+    Kept as a name the finance tabs already call; the recipe itself lives
+    in ``controls.StatusDot`` so a surface can reach for the control
+    directly.
+    """
+    return StatusDot(label, color, tooltip)
 
 
 @dataclass
@@ -1340,6 +1334,20 @@ def ledger_amount_color(cents: int) -> str:
     return Theme.Colors.SUCCESS if cents > 0 else Theme.Colors.TEXT_PRIMARY
 
 
+def diverging_stop(*, floor: float, ceiling: float, split: float) -> float:
+    """How far DOWN the plot (0=top, 1=bottom) a split line sits.
+
+    The fraction feeds a vertical gradient's hard stop, so the stroke
+    changes colour exactly where it crosses ``split``. Clamped results
+    carry meaning: >= 1 means the whole range is above the split (no
+    gradient needed), <= 0 means all of it is below.
+    """
+    span = ceiling - floor
+    if span <= 0:
+        return 1.0
+    return (ceiling - split) / span
+
+
 def chart_floor(values: list[float]) -> float:
     """A y-axis floor that lets a trend read as a trend.
 
@@ -1426,7 +1434,13 @@ class LineChartCard(ft.Container):
     ) -> None:
         super().__init__()
 
-        chart_data: list[ft.LineChartData] = [self._make_series(s) for s in series]
+        # The y-ceiling every series shares: fl_chart's auto max is the
+        # data max, and the diverging split needs the same number to place
+        # its gradient stop.
+        ceiling = max((y for s in series for _x, y in s.points), default=0.0)
+        chart_data: list[ft.LineChartData] = [
+            self._make_series(s, floor=min_y, ceiling=ceiling) for s in series
+        ]
 
         # Event-annotation overlay. When the parent tab passes a list of
         # event labels per x-position, we render a transparent series at
@@ -1567,7 +1581,9 @@ class LineChartCard(ft.Container):
         self.border_radius = Theme.Components.CARD_RADIUS
 
     @staticmethod
-    def _make_series(s: LineSeries) -> ft.LineChartData:
+    def _make_series(
+        s: LineSeries, *, floor: float = 0.0, ceiling: float = 0.0
+    ) -> ft.LineChartData:
         """Build a `LineChartData` with the project's standard line
         styling - curved, radius-3 circle points, rounded stroke caps -
         plus an optional 15%-opacity below-line fill.
@@ -1614,6 +1630,25 @@ class LineChartCard(ft.Container):
             "stroke_width": s.stroke_width,
             "color": s.color,
         }
+        # Polarity split: a hard-stop vertical gradient on the stroke at
+        # the split's fraction of the y-range, so the line is one colour
+        # above it and another below - one series, tooltips intact. A
+        # window entirely on one side degrades to the plain line (the 7d
+        # view of a healthy week must look exactly like it always has).
+        split_fraction = None
+        if s.split_y is not None:
+            fraction = diverging_stop(floor=floor, ceiling=ceiling, split=s.split_y)
+            if fraction <= 0.0:
+                kwargs["color"] = s.split_below_color
+            elif fraction < 1.0:
+                split_fraction = fraction
+                kwargs.pop("color")
+                kwargs["gradient"] = ft.LinearGradient(
+                    begin=ft.alignment.top_center,
+                    end=ft.alignment.bottom_center,
+                    colors=[s.color, s.color, s.split_below_color, s.split_below_color],
+                    stops=[0.0, fraction, fraction, 1.0],
+                )
         # Visible-line styling only applies when the series actually
         # draws a stroke. For annotation overlays (stroke_width=0) this
         # block is intentionally skipped - they're invisible tooltip
@@ -1625,7 +1660,19 @@ class LineChartCard(ft.Container):
             kwargs["point"] = ChartPoint.dot(
                 s.color if s.fill else ft.Colors.ON_SURFACE
             )
-            if s.fill:
+            if s.fill and split_fraction is not None:
+                # Two-sided fill meeting at the split: below-line down to
+                # the split tints the positive area, above-line up to the
+                # split tints the negative one - so the tint always sits
+                # between the line and the axis, the area that IS the
+                # money.
+                kwargs["below_line_bgcolor"] = ft.Colors.with_opacity(0.15, s.color)
+                kwargs["below_line_cutoff_y"] = s.split_y
+                kwargs["above_line_bgcolor"] = ft.Colors.with_opacity(
+                    0.15, s.split_below_color
+                )
+                kwargs["above_line_cutoff_y"] = s.split_y
+            elif s.fill:
                 kwargs["below_line_bgcolor"] = ft.Colors.with_opacity(0.15, s.color)
         return ft.LineChartData(**kwargs)
 

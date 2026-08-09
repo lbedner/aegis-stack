@@ -62,13 +62,49 @@ def domain_from_website(website_url: str | None) -> str | None:
     raw = (website_url or "").strip()
     if not raw:
         return None
-    host = raw.split("//", 1)[-1]          # drop any scheme
-    host = host.split("/", 1)[0]           # drop any path
+    host = raw.split("//", 1)[-1]  # drop any scheme
+    host = host.split("/", 1)[0]  # drop any path
     host = host.split("?", 1)[0].strip().lower()
     if host.startswith("www."):
         host = host[4:]
     # A bare host has a dot and no spaces; anything else was not a domain.
     return host if ("." in host and " " not in host and len(host) > 3) else None
+
+
+# A fund's FULL name never guesses to a usable domain the way
+# ``merchant_icon_domain`` guesses a payee's - "Vanguard Total Intl Stk Idx
+# I" squashed whole is "vanguardtotalintlstkidxi.com", nothing. But the
+# ISSUER does, and it's reliably the name's first word ("Vanguard", "Schwab",
+# "Fidelity", "iShares", ...), the same generic one-word-guess idea, just
+# scoped to where a fund name actually keeps its brand instead of squashing
+# the whole descriptive string. Explicit overrides exist only for the
+# issuers whose real domain the first word gets wrong (a multi-word name, or
+# a sub-brand trading under its parent's site).
+_FUND_FAMILY_OVERRIDES: tuple[tuple[str, str], ...] = (
+    ("spdr", "ssga.com"),  # SPDR funds are issued by State Street
+    ("state street", "ssga.com"),
+    ("t. rowe price", "troweprice.com"),
+    ("t rowe price", "troweprice.com"),
+    ("american funds", "americanfunds.com"),
+    ("dodge & cox", "dodgeandcox.com"),
+)
+
+
+def fund_family_domain(security_name: str | None) -> str | None:
+    """The issuing fund family's domain - checked overrides first (the
+    handful of issuers a first-word guess gets wrong), otherwise the
+    generic guess: ``<first word>.com``. AUTHORITATIVE either way, the same
+    role ``domain_from_website`` plays for a payee - a fund's descriptive
+    suffix ("Total Intl Stk Idx I") is never worth guessing past the brand.
+    """
+    lowered = (security_name or "").lower()
+    for needle, domain in _FUND_FAMILY_OVERRIDES:
+        if needle in lowered:
+            return domain
+    first_word = lowered.split()[0].strip(".,&") if lowered.split() else ""
+    if len(first_word) < _MIN_DOMAIN_LENGTH:
+        return None
+    return f"{first_word}.com"
 
 
 def merchant_icon_domain(payee_name: str | None) -> str | None:
@@ -128,17 +164,13 @@ async def _fetch_many(domains: list[str]) -> None:
                 response = await client.get(
                     UPSTREAM, params={"sz": 64, "domain": domain}
                 )
-                payload = (
-                    response.content if response.status_code == 200 else b""
-                )
+                payload = response.content if response.status_code == 200 else b""
             except Exception:
                 # Includes having no network at all. An icon is never
                 # worth failing the page it decorates.
                 payload = b""
         if len(_CACHE) < _CACHE_MAX:
-            _CACHE[domain] = (
-                base64.b64encode(payload).decode() if payload else None
-            )
+            _CACHE[domain] = base64.b64encode(payload).decode() if payload else None
 
     try:
         async with httpx.AsyncClient(

@@ -90,6 +90,11 @@ def serialize_plugin_to_answer(
         # data the plugin ships unconditionally.
         "pyproject_deps": list(spec.pyproject_deps),
         "docker_services": list(spec.docker_services),
+        # CLI verb. When set, ``app/cli/main.py``'s plugin loop registers
+        # ``app/cli/<cli_name>.py`` so ``<project> <cli_name> ...`` works
+        # the same way the in-tree auth/llm subcommands do. Always present
+        # (``None`` when unset) so templates can test it directly.
+        "cli_name": spec.cli_name,
         "wiring": _serialize_wiring(spec.wiring, opts, spec.name),
     }
 

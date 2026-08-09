@@ -39,12 +39,39 @@ class ComponentNames:
     ]
 
 
+class ServiceNames:
+    """Migration-registry names for in-tree services.
+
+    These key ``MIGRATION_SPECS`` and drive the spec-variant resolution in
+    ``aegis.core.migration_generator._resolve_spec`` (per-user insights,
+    schema-qualified finance). Distinct from ``ServiceType``, which
+    classifies a service rather than naming its migration.
+    """
+
+    INSIGHTS = "insights"
+    FINANCE = "finance"
+    FINANCE_AUTH_LINK = "finance_auth_link"
+
+
 class StorageBackends:
     """Storage backend options used by scheduler and database."""
 
     MEMORY = "memory"
     SQLITE = "sqlite"
     POSTGRES = "postgres"
+
+
+class DatabaseSchemas:
+    """Postgres schema names owned by in-tree services and components.
+
+    Schemas are a Postgres feature: SQLite has no equivalent, so
+    ``_resolve_spec`` strips a spec's schema for any non-Postgres engine
+    and the same declaration renders correctly on both.
+    """
+
+    PUBLIC = "public"
+    FINANCE = "finance"
+    SCHEDULER = "scheduler"
 
 
 class PostgresProviders:

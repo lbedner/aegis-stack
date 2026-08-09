@@ -23,7 +23,13 @@ from typing import Any
 
 from jinja2 import Environment, Template, TemplateNotFound
 
-from ..constants import AnswerKeys, AuthLevels, StorageBackends
+from ..constants import (
+    AnswerKeys,
+    AuthLevels,
+    DatabaseSchemas,
+    ServiceNames,
+    StorageBackends,
+)
 
 
 @dataclass
@@ -3596,7 +3602,8 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
 
 
 # Postgres schema finance tables live in (dropped on SQLite, which has none).
-FINANCE_SCHEMA = "finance"
+# Kept as a module-level alias for readability at the table-builder call sites.
+FINANCE_SCHEMA = DatabaseSchemas.FINANCE
 
 # Every finance table with an ``owner_user_id`` column. The auth-link migration
 # adds an FK from each to ``user.id`` when the auth service is present. Grows as
@@ -4174,6 +4181,20 @@ def _render_migration(
     )
 
 
+def _is_postgres(context: dict[str, Any] | None) -> bool:
+    """Whether the generation context targets a Postgres database.
+
+    Schemas are the only Postgres-specific rendering decision the generator
+    makes, and every caller asks the same question, so it lives here rather
+    than being re-derived. A ``None`` context carries no engine information
+    and is not treated as Postgres.
+    """
+    if context is None:
+        return False
+    engine = context.get(AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE)
+    return engine == StorageBackends.POSTGRES
+
+
 def _resolve_spec(
     service_name: str,
     context: dict[str, Any] | None,
@@ -4184,32 +4205,48 @@ def _resolve_spec(
     per-user mode (``insights_per_user=true``). Both render to a single
     ``00X_insights.py`` migration file; only the shape changes. Other
     services pass through to the static spec unchanged.
+
+    Schemas are resolved last and generically: a spec that declares one
+    keeps it on Postgres and loses it on every other engine. That applies
+    to in-tree services, components, and third-party plugins alike, so a
+    plugin declaring ``MigrationSpec(schema=...)`` renders valid SQL on a
+    SQLite project without naming itself here.
+
+    A ``None`` context means "engine unknown" and renders the spec exactly
+    as declared; callers that know the project's engine should pass it.
     """
     migration_specs = _get_migration_specs()
     if service_name not in migration_specs:
         return None
 
-    if service_name == "insights" and context is not None:
+    if service_name == ServiceNames.INSIGHTS and context is not None:
         flag = context.get(AnswerKeys.INSIGHTS_PER_USER)
         per_user = flag == "yes" or flag is True
         if per_user:
             return _build_insights_migration(per_user=True)
 
-    # Finance tables live in a dedicated Postgres ``finance`` schema; SQLite has
-    # no schemas, so there they stay unqualified. Resolve the schema-qualified
-    # variant only for a Postgres target.
-    if service_name in ("finance", "finance_auth_link") and context is not None:
-        engine = context.get(AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE)
-        if engine == StorageBackends.POSTGRES:
-            if service_name == "finance":
-                return replace(migration_specs["finance"], schema=FINANCE_SCHEMA)
-            # user lives in the default (public) schema, finance_connection in
-            # the finance schema — cross-schema FK.
-            return _build_finance_auth_link(
-                schema=FINANCE_SCHEMA, user_ref_schema="public"
+    # Finance's owner FK crosses from the finance schema to ``public.user``,
+    # so the Postgres shape is a different spec, not just a schema override.
+    if service_name in (
+        ServiceNames.FINANCE,
+        ServiceNames.FINANCE_AUTH_LINK,
+    ) and _is_postgres(context):
+        if service_name == ServiceNames.FINANCE:
+            return replace(
+                migration_specs[ServiceNames.FINANCE], schema=DatabaseSchemas.FINANCE
             )
+        return _build_finance_auth_link(
+            schema=DatabaseSchemas.FINANCE, user_ref_schema=DatabaseSchemas.PUBLIC
+        )
 
-    return migration_specs[service_name]
+    spec = migration_specs[service_name]
+
+    # Engines without schema support drop the qualifier entirely; the tables
+    # still get created, just in the single unscoped namespace.
+    if spec.schema is not None and context is not None and not _is_postgres(context):
+        return replace(spec, schema=None)
+
+    return spec
 
 
 def generate_migration(

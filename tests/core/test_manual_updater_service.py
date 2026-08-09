@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
+from aegis.constants import AnswerKeys, StorageBackends
 from aegis.core.manual_updater import ManualUpdater, UpdateResult
 
 COPIER_ANSWERS = """\
@@ -82,11 +83,49 @@ class TestAddServiceMigrationFlow:
         add_component_mock.assert_called_once_with("auth", None, run_post_gen=False)
         # Service has no alembic dir on a fresh fixture — bootstrap fires.
         bootstrap_mock.assert_called_once()
-        # Migration not yet present → generated.
-        generate_mock.assert_called_once_with(fake_project, "auth")
+        # Migration not yet present → generated, with the project's answers
+        # as context so engine-specific rendering (schemas) resolves.
+        generate_mock.assert_called_once_with(fake_project, "auth", updater.answers)
         run_mig_mock.assert_called_once_with(fake_project, include_migrations=True)
         # Default run_post_gen=True drives the trailing sync/format pass.
         run_post_gen_mock.assert_called_once()
+
+    def test_migration_generation_receives_project_engine(
+        self, fake_project: Path
+    ) -> None:
+        """The generator drops a declared Postgres schema on engines that
+        have none, which it can only do if it knows the project's engine.
+        So the project's answers ride along as generation context.
+
+        Without this, a plugin declaring ``MigrationSpec(schema=...)`` emits
+        ``CREATE SCHEMA`` into a SQLite project's migration.
+        """
+        (fake_project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS + f"{AnswerKeys.DATABASE_ENGINE}: {StorageBackends.SQLITE}\n"
+        )
+        updater = _make_updater(fake_project)
+        component_result = UpdateResult(component="crawler", success=True)
+
+        with (
+            patch.object(updater, "add_component", return_value=component_result),
+            patch.object(updater, "run_post_generation_tasks"),
+            patch(
+                "aegis.core.migration_generator.MIGRATION_SPECS",
+                {"crawler": object()},
+            ),
+            patch("aegis.core.migration_generator.bootstrap_alembic"),
+            patch(
+                "aegis.core.migration_generator.service_has_migration",
+                return_value=False,
+            ),
+            patch("aegis.core.migration_generator.generate_migration") as generate_mock,
+            patch("aegis.core.post_gen_tasks.run_migrations"),
+        ):
+            updater.add_service("crawler")
+
+        generate_mock.assert_called_once()
+        context = generate_mock.call_args.args[2]
+        assert context[AnswerKeys.DATABASE_ENGINE] == StorageBackends.SQLITE
 
     def test_service_without_migrations_skips_migration_pipeline(
         self, fake_project: Path

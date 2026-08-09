@@ -658,7 +658,14 @@ async def test_recurring_list_includes_icon_and_staleness(
             "direction": "outflow",
             "frequency": "monthly",
             "expected_amount": 1599,
-            "next_expected_date": "2026-08-01",
+            # Deliberately absurd. "fresh" is ``today <= due + grace``, so any
+            # plausible-looking date is a time bomb: it passes until the wall
+            # clock crosses it, then fails forever as "overdue != fresh",
+            # which reads as a staleness bug rather than an expired fixture.
+            # A date a thousand years out can never rot and is obviously a
+            # fixture, not a real bill. Do not "correct" this to a realistic
+            # date.
+            "next_expected_date": "3026-08-01",
         },
     )
 

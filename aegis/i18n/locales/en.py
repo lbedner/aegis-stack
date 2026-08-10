@@ -1085,6 +1085,11 @@ MESSAGES: dict[str, str] = {
         "pip-installed; run `pip install aegis-plugin-{name}` first."
     ),
     "plugins.update_already_at": "{name} (already at {version})",
+    "plugins.local_changes_replaced": (
+        "Replaced {count} locally-modified file(s) owned by '{name}'. "
+        "Plugin files are re-rendered on install; your previous versions "
+        "were saved to {path}"
+    ),
     "plugins.update_forcing": ("Forcing update despite version mismatch: {error}"),
     "plugins.update_progress": "Updating plugin: {name} ({old} → {new})",
     "plugins.update_confirm_apply": "Apply update to '{name}'?",

@@ -79,7 +79,15 @@ class TestDivergedSharedFilesPreserved:
 
 
 class TestPristineSharedFilesStillRegenerate:
-    """The guard must not block regeneration of untouched shared files."""
+    """The guard must not block regeneration of untouched shared files.
+
+    Both tests pass a genuinely different answers dict (``include_redis``
+    flips) rather than ``updater.answers`` unchanged — a no-op self-diff
+    means the operation touches nothing (BASE == OURS for every file), so
+    it correctly reports nothing regenerated. That's not what these tests
+    are checking; they need a real change to CONFIG_FILE's content to
+    verify the pristine-file path still regenerates it.
+    """
 
     def test_pristine_shared_file_is_regenerated(
         self, project_factory: ProjectFactory
@@ -87,7 +95,9 @@ class TestPristineSharedFilesStillRegenerate:
         project = project_factory("base_with_auth_service")
         updater = ManualUpdater(project)
 
-        updated, _, need_merge = updater._regenerate_shared_files(updater.answers)
+        updated, _, need_merge = updater._regenerate_shared_files(
+            {**updater.answers, "include_redis": True}
+        )
 
         assert CONFIG_FILE in updated
         assert CONFIG_FILE not in need_merge
@@ -121,7 +131,9 @@ class TestPristineSharedFilesStillRegenerate:
         )
 
         updater = ManualUpdater(project)
-        updated, _, need_merge = updater._regenerate_shared_files(updater.answers)
+        updated, _, need_merge = updater._regenerate_shared_files(
+            {**updater.answers, "include_redis": True}
+        )
 
         assert CONFIG_FILE in updated, (
             "formatting-only changes were misdetected as divergence"

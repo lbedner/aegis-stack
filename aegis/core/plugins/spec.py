@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from ..file_manifest import FileManifest
@@ -264,6 +265,40 @@ class PluginSpec:
     # Injection-point hooks (round 7) — see PluginWiring above for the
     # declarative shapes consumed by template rendering and the composer.
     wiring: PluginWiring = field(default_factory=PluginWiring)
+
+    # Post-render transform (RD-06, aegis-stack#921). Called with
+    # ``(project_path, answers)`` once this plugin's files are on disk —
+    # by ``post_gen_tasks.cleanup_components`` at init and by
+    # ``ManualUpdater.add_component`` on the add path, so both produce
+    # identical trees.
+    #
+    # The escape hatch for transforms that are not expressible as
+    # declarative data. Everything a plugin contributes should be a file
+    # list, a wiring entry, or an option — those compose, are
+    # introspectable, and survive the render-diff engine. A *rename* is
+    # the known exception: worker ships every backend's implementation
+    # side by side (``pools_arq.py`` / ``pools_dramatiq.py`` /
+    # ``pools_taskiq.py``) and selecting one means renaming it onto the
+    # canonical ``pools.py`` and deleting the rest. No file list can say
+    # that, and the render diff has no vocabulary for renames.
+    #
+    # Prefer declarative fields; reach for this only when the operation
+    # genuinely isn't one. Hooks are invisible to the ownership
+    # derivation (``get_all_owned_paths``) and to the engine, so a hook
+    # that creates files outside the spec's ``FileManifest`` will confuse
+    # both — keep transforms confined to paths the manifest already
+    # claims.
+    post_render: Callable[[Path, dict[str, Any]], None] | None = None
+
+    # Answer keys to revert when this plugin is removed (RD-06). Keys that
+    # only mean something while the plugin is installed — scheduler's
+    # ``scheduler_backend`` / ``scheduler_with_persistence`` are the
+    # in-tree case — would otherwise linger at their old values and leak
+    # into later renders. Applied by
+    # ``ManualUpdater._apply_removal_answer_resets``; empty for the
+    # majority of specs, whose ``include_<name>`` flag is the only state
+    # they own.
+    reset_answers_on_remove: dict[str, Any] = field(default_factory=dict)
 
     # Plugin metadata
     version: str = "0.0.0"

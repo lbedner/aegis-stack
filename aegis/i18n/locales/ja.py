@@ -985,6 +985,11 @@ MESSAGES: dict[str, str] = {
     "plugins.update_use_list_hint": "`aegis plugins list` で利用可能なプラグインを確認し、`aegis add <name>` でインストールしてください。",
     "plugins.update_not_pip_installed": "プラグイン「{name}」はプロジェクトの _plugins リストに含まれていますが、pip でインストールされていません。先に `pip install aegis-plugin-{name}` を実行してください。",
     "plugins.update_already_at": "{name}（すでに {version}）",
+    "plugins.local_changes_replaced": (
+        "Replaced {count} locally-modified file(s) owned by '{name}'. "
+        "Plugin files are re-rendered on install; your previous versions "
+        "were saved to {path}"
+    ),
     "plugins.update_forcing": "バージョン不一致を無視して強制更新：{error}",
     "plugins.update_progress": "プラグインを更新中：{name}（{old} → {new}）",
     "plugins.update_confirm_apply": "「{name}」に更新を適用しますか？",

@@ -1,80 +1,67 @@
-"""Regression tests for issue #870 — stale warn-only Dockerfiles."""
+"""Regression tests for issue #870 — stale warn-only Dockerfiles.
+
+Rewritten for aegis-stack#919 (RD-04): the render-diff engine has no
+patchable ``SHARED_TEMPLATE_FILES`` dict, and its ``ManualUpdater`` needs a
+real ``jinja_env``/``template_path`` (set up in ``__init__``, which the old
+version of these tests bypassed via ``ManualUpdater.__new__``). These now
+run against a real generated project and the real ``Dockerfile.jinja``,
+whose ``{#- aegis: warn-if-diverged -#}`` annotation (aegis-stack#917) is
+what encodes the policy the old tests hand-patched into a dict.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from aegis.core import manual_updater
 from aegis.core.manual_updater import ManualUpdater
+from tests.cli.conftest import ProjectFactory
+
+pytestmark = pytest.mark.xdist_group("generated_stacks")
 
 
-@pytest.mark.parametrize(
-    ("before", "after", "expected"),
-    [(False, True, "css-build"), (True, False, "FROM python")],
-)
-def test_htmx_change_regenerates_pristine_warn_only_dockerfile(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    before: bool,
-    after: bool,
-    expected: str,
-) -> None:
-    dockerfile = tmp_path / "Dockerfile"
-    renders = {
-        False: "FROM python:3.13\n",
-        True: "FROM node:22-alpine AS css-build\nFROM python:3.13\n",
-    }
-    dockerfile.write_text(renders[before])
-    updater = ManualUpdater.__new__(ManualUpdater)
-    updater.project_path = tmp_path
-    updater.answers = {"include_htmx": before}
-    monkeypatch.setattr(
-        updater,
-        "_render_template_file",
-        lambda _template, answers: renders[answers["include_htmx"]],
-    )
-    monkeypatch.setattr(
-        manual_updater,
-        "SHARED_TEMPLATE_FILES",
-        {"Dockerfile": {"overwrite": False, "backup": False, "warn": True}},
-    )
+class TestPristineDockerfileRegeneratesOnHtmxChange:
+    def test_htmx_off_to_on(self, project_factory: ProjectFactory) -> None:
+        project = project_factory("base")  # include_htmx: False, pristine
+        updater = ManualUpdater(project)
 
-    updated, _, need_merge = updater._regenerate_shared_files({"include_htmx": after})
+        updated, _, need_merge = updater._regenerate_shared_files(
+            {**updater.answers, "include_htmx": True}
+        )
 
-    assert expected in dockerfile.read_text()
-    assert dockerfile.read_text() == renders[after]
-    assert "Dockerfile" in updated
-    assert "Dockerfile" not in need_merge
+        assert "Dockerfile" in updated
+        assert "Dockerfile" not in need_merge
+        assert "css-build" in (project / "Dockerfile").read_text()
+
+    def test_htmx_on_to_off(self, project_factory: ProjectFactory) -> None:
+        project = project_factory("base_htmx")  # include_htmx: True, pristine
+        updater = ManualUpdater(project)
+
+        updated, _, need_merge = updater._regenerate_shared_files(
+            {**updater.answers, "include_htmx": False}
+        )
+
+        assert "Dockerfile" in updated
+        assert "Dockerfile" not in need_merge
+        content = (project / "Dockerfile").read_text()
+        assert "FROM python" in content
+        assert "css-build" not in content
 
 
 def test_htmx_change_preserves_custom_dockerfile(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    project_factory: ProjectFactory,
 ) -> None:
-    dockerfile = tmp_path / "Dockerfile"
-    dockerfile.write_text("FROM python:3.13\nRUN custom-build-step\n")
+    """The Dockerfile only partly owns its content (issue #870's htmx
+    css-build stage); a hand-edited copy must never be merged — merging
+    could mangle custom build steps the template can't reproduce."""
+    project = project_factory("base")
+    dockerfile = project / "Dockerfile"
+    dockerfile.write_text(dockerfile.read_text() + "\nRUN custom-build-step\n")
     before = dockerfile.read_text()
-    updater = ManualUpdater.__new__(ManualUpdater)
-    updater.project_path = tmp_path
-    updater.answers = {"include_htmx": False}
-    monkeypatch.setattr(
-        updater,
-        "_render_template_file",
-        lambda _template, answers: (
-            "FROM node:22-alpine AS css-build\nFROM python:3.13\n"
-            if answers["include_htmx"]
-            else "FROM python:3.13\n"
-        ),
-    )
-    monkeypatch.setattr(
-        manual_updater,
-        "SHARED_TEMPLATE_FILES",
-        {"Dockerfile": {"overwrite": False, "backup": False, "warn": True}},
-    )
 
-    updated, _, need_merge = updater._regenerate_shared_files({"include_htmx": True})
+    updater = ManualUpdater(project)
+    updated, _, need_merge = updater._regenerate_shared_files(
+        {**updater.answers, "include_htmx": True}
+    )
 
     assert dockerfile.read_text() == before
     assert "Dockerfile" not in updated

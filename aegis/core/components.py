@@ -7,10 +7,30 @@ used for project generation and validation.
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
+from ..constants import AnswerKeys, StorageBackends, WorkerBackends
 from .file_manifest import FileManifest
 from .migration_generator import SCHEDULER_MIGRATION
 from .plugins.spec import PluginKind, PluginSpec
+
+
+def _worker_backend_post_render(project_path: Path, answers: dict[str, Any]) -> None:
+    """Resolve worker backend variant files to their canonical names.
+
+    Adapter between the generic ``PluginSpec.post_render`` signature and
+    ``post_gen_tasks.cleanup_worker_backend_files``, which holds the real
+    rename/strip logic and is shared with the init path. Imported lazily:
+    ``post_gen_tasks`` imports from this module, so a top-level import
+    would close a cycle.
+    """
+    from .post_gen_tasks import cleanup_worker_backend_files
+
+    cleanup_worker_backend_files(
+        project_path,
+        str(answers.get(AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ)),
+    )
 
 
 class ComponentType(Enum):
@@ -143,6 +163,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/frontend/dashboard/modals/task_history_section.py",
             ],
         ),
+        # Pattern D: the templates ship every backend's implementation side
+        # by side (``pools_arq.py`` / ``pools_dramatiq.py`` /
+        # ``pools_taskiq.py``); choosing one means renaming it onto the
+        # canonical name and deleting the rest. A rename is not expressible
+        # as a file list or a render diff, so it rides the post_render
+        # escape hatch — see PluginSpec.post_render (aegis-stack#921).
+        post_render=_worker_backend_post_render,
     ),
     "scheduler": ComponentSpec(
         name="scheduler",
@@ -163,6 +190,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
         # generated when scheduler_backend != memory — see
         # get_services_needing_migrations().
         migrations=[SCHEDULER_MIGRATION],
+        # Backend choice is meaningless without the scheduler; revert it on
+        # removal so a later re-add starts from the default rather than
+        # inheriting a stale postgres/sqlite selection (aegis-stack#921).
+        reset_answers_on_remove={
+            AnswerKeys.SCHEDULER_BACKEND: StorageBackends.MEMORY,
+            AnswerKeys.SCHEDULER_WITH_PERSISTENCE: False,
+        },
         files=FileManifest(
             primary=[
                 "app/entrypoints/scheduler.py",

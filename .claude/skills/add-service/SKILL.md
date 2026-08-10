@@ -216,12 +216,14 @@ i18n:
 
 Cross-cutting:
 
-- `aegis/config/shared_files.py`: only if the service introduces a **new**
-  shared file with `{% if include_<name> %}` conditionals (one not already in
-  `SHARED_TEMPLATE_FILES`). Editing an already-registered shared file (e.g.
-  `routing.py.jinja`, `component_health.py.jinja`, `cards/__init__.py.jinja`)
-  needs no new entry. `tests/cli/test_shared_files_completeness.py` fails
-  and names the missing file if a new one is forgotten.
+- Shared files need **no registration**. A shared file is any template path
+  no component/service `FileManifest` claims; `aegis add`/`remove` finds it
+  by rendering the tree at the old and new answers and diffing. Add
+  `{% if include_<name> %}` conditionals to `routing.py.jinja`,
+  `component_health.py.jinja`, `cards/__init__.py.jinja` — or to a brand-new
+  shared file — and it is handled automatically. There is no list to add it
+  to. `tests/core/test_shared_scope_completeness.py` fails, naming the file,
+  if a stack-dependent file somehow ends up handled by nothing.
 
 ## Procedure
 
@@ -295,13 +297,13 @@ Cross-cutting:
   only shows up when `tests/cli/test_add_service_importable.py` exercises
   the add path, which is why that test's `SERVICE_INVOCATIONS` list must
   include the new service.
-- Any file with `{% if include_<name> %}` conditionals that lives outside
-  the spec's `FileManifest` (e.g. a shared file edited in place, like
-  `routing.py.jinja`) must be registered in
-  `aegis/config/shared_files.py`'s `SHARED_TEMPLATE_FILES` or `ManualUpdater`
-  never regenerates it when the service is added/removed from an existing
-  project; `tests/cli/test_shared_files_completeness.py` names the missing
-  file if this is forgotten.
+- A file must be in **exactly one** place: either the spec's `FileManifest`
+  (the service owns it outright) or nowhere (it is shared, and the
+  render-diff engine handles it). Putting an owned file's path in a shared
+  file's conditionals, or vice versa, is the mistake to watch for — a file
+  the manifest claims is invisible to the engine by design, so a
+  `{% if include_<name> %}` block inside it will never be re-rendered on
+  add/remove of a *different* component.
 - SQLModel model definitions (in the service's `models.py`) and the
   `ServiceMigrationSpec`'s `TableSpec` entries in `migration_generator.py`
   are two independent sources of truth for the same table; changing one

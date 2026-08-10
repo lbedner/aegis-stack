@@ -1004,6 +1004,11 @@ MESSAGES: dict[str, str] = {
     "plugins.update_use_list_hint": "Usa `aegis plugins list` para ver los disponibles y `aegis add <name>` para instalarlos.",
     "plugins.update_not_pip_installed": "El plugin '{name}' figura en la lista _plugins del proyecto, pero no está instalado vía pip; ejecuta primero `pip install aegis-plugin-{name}`.",
     "plugins.update_already_at": "{name} (ya en {version})",
+    "plugins.local_changes_replaced": (
+        "Replaced {count} locally-modified file(s) owned by '{name}'. "
+        "Plugin files are re-rendered on install; your previous versions "
+        "were saved to {path}"
+    ),
     "plugins.update_forcing": "Forzando actualización pese a la incompatibilidad de versión: {error}",
     "plugins.update_progress": "Actualizando plugin: {name} ({old} → {new})",
     "plugins.update_confirm_apply": "¿Aplicar la actualización a '{name}'?",

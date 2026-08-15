@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.services.finance.constants import CadenceKey
+
 if TYPE_CHECKING:
     from app.services.finance.models import (
         FinanceAccount,
@@ -194,6 +196,8 @@ class TransactionResponse(BaseModel):
     is_transfer: bool = False
     excluded_from_reports: bool = False
     is_reversal: bool = False
+    # Filled by the list endpoint (batched), like ``category``/``merchant``.
+    tags: list[TagRef] = Field(default_factory=list)
 
     @classmethod
     def from_row(cls, row: FinanceTransaction) -> TransactionResponse:
@@ -338,6 +342,78 @@ class ImportResultResponse(BaseModel):
     rows_error: int
     # Not posted money (scheduled / future-dated): recorded, never ledgered.
     rows_skipped: int = 0
+    # Rows for accounts the user removed - never written, never resurrected.
+    rows_ignored: int = 0
+
+
+class ReconcileRequest(BaseModel):
+    """Reconcile an account to a statement (FIN-37).
+
+    ``preview=True`` computes the register-vs-statement delta without
+    writing anything; the commit call re-sends the same fields."""
+
+    statement_date: date
+    statement_balance: int  # signed cents, as the statement puts it
+    preview: bool = False
+
+
+class ReconcileResponse(BaseModel):
+    account_id: int
+    # 'adjustment' (transfer-flagged transaction absorbs the delta) or
+    # 'valuation' (no register: the statement posts as a valuation).
+    route: str
+    statement_date: date
+    statement_balance: int
+    register_balance: int
+    delta: int
+    applied: bool = False
+    adjustment_transaction_id: int | None = None
+    reconciled_through: date | None = None
+
+
+class ImportPreviewEdit(BaseModel):
+    """One transaction an import would update in place, with the exact
+    field changes — shown to the user BEFORE anything is written."""
+
+    transaction_id: int
+    date: date
+    amount: int
+    name: str | None = None
+    account: str | None = None
+    changes: list[str]
+    # The source app re-categorized this row but the user set the category
+    # by hand here, so the import keeps the user's choice.
+    category_kept: bool = False
+
+
+class ImportPreviewResponse(BaseModel):
+    """A dry-run classification of an import file: what a commit would do.
+
+    Produced from the same plan the commit executes, and writing nothing —
+    counts here match the subsequent ``ImportResultResponse`` exactly."""
+
+    file_name: str | None = None
+    rows_total: int
+    # Set when these exact bytes were already imported: re-importing is a
+    # no-op, so there is nothing to preview.
+    identical_batch_id: int | None = None
+    rows_inserted: int = 0
+    rows_updated: int = 0
+    rows_duplicate: int = 0
+    rows_error: int = 0
+    rows_skipped: int = 0
+    # Rows for accounts the user removed - never written, never resurrected.
+    rows_ignored: int = 0
+    insert_date_start: date | None = None
+    insert_date_end: date | None = None
+    # Account display name -> how many new transactions land there.
+    inserts_by_account: dict[str, int] = Field(default_factory=dict)
+    # Accounts / categories the commit would create.
+    new_accounts: list[str] = Field(default_factory=list)
+    removed_accounts: list[str] = Field(default_factory=list)
+    new_categories: list[str] = Field(default_factory=list)
+    edits: list[ImportPreviewEdit] = Field(default_factory=list)
+    category_kept_count: int = 0
 
 
 class ImportBatchSummary(BaseModel):
@@ -515,6 +591,7 @@ class HoldingResponse(BaseModel):
     cost_basis: int | None
     market_value: int  # cents
     currency: str
+    icon_b64: str | None = None  # set by the router; from_parts has no async access
 
     @classmethod
     def from_parts(
@@ -544,6 +621,159 @@ class HoldingListResponse(BaseModel):
     items: list[HoldingResponse]
     total: int
     portfolio_value: int  # cents
+
+
+class GoalCreate(BaseModel):
+    """POST /goals: a virtual goal by ``name``, or flag an existing real
+    account as a linked goal by ``account_id`` - exactly one of the two."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    account_id: int | None = None
+    target_amount: int = Field(gt=0)
+    target_date: date | None = None
+    monthly_contribution: int | None = Field(default=None, ge=0)
+    contribution_kind: Literal["fixed", "percent_income", "surplus"] = "fixed"
+    contribution_pct_bps: int | None = Field(default=None, gt=0, le=10_000)
+    priority: int = 100
+    auto_contribute: bool = False
+
+
+class GoalUpdate(BaseModel):
+    """PATCH /goals/{id} - only provided fields change."""
+
+    target_amount: int | None = Field(default=None, gt=0)
+    target_date: date | None = None
+    monthly_contribution: int | None = Field(default=None, ge=0)
+    status: Literal["active", "paused", "reached"] | None = None
+    auto_contribute: bool | None = None
+    contribution_kind: Literal["fixed", "percent_income", "surplus"] | None = None
+    contribution_pct_bps: int | None = Field(default=None, gt=0, le=10_000)
+    priority: int | None = None
+
+
+class GoalContribute(BaseModel):
+    amount: int = Field(gt=0)
+    when: date | None = None
+
+
+class GoalResponse(BaseModel):
+    """A goal with its derived trio precomputed server-side - clients and
+    the analyst render these, never recompute them."""
+
+    account_id: int
+    name: str
+    funding: Literal["virtual", "linked"]
+    status: str
+    target_amount: int
+    target_date: date | None
+    monthly_contribution: int | None
+    balance: int
+    progress: float
+    monthly_need: int
+    eta: date | None  # None renders as "never"
+    auto_contribute: bool
+    contribution_kind: str
+    contribution_pct_bps: int | None
+    priority: int
+
+
+class GoalListResponse(BaseModel):
+    items: list[GoalResponse]
+    total: int
+
+
+class BudgetMonthOutlook(BaseModel):
+    """One future month's header equation, bills at face value on their
+    real cadence - the month the annual premium lands looks like itself."""
+
+    period_month: int  # YYYYMM
+    income_due: int
+    bills_due: int
+    budgets: int
+    goals: int
+    envelopes: int
+    everything_else: int = 0
+    month_net: int
+    # The level under the rates: cash compounded from today's balance.
+    start_balance: int = 0
+    end_balance: int = 0
+
+
+class BudgetOutlookResponse(BaseModel):
+    items: list[BudgetMonthOutlook]
+    total: int
+
+
+class EnvelopeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    monthly_credit: int | None = Field(default=None, ge=0)
+    cadence: Literal["weekly", "monthly"] = "monthly"
+    starting_balance: int = Field(default=0, ge=0)
+
+
+class EnvelopeUpdate(BaseModel):
+    """Whole-state update: both fields, every time (an envelope has two)."""
+
+    monthly_credit: int | None = Field(default=None, ge=0)
+    auto_credit: bool = False
+    cadence: Literal["weekly", "monthly"] = "monthly"
+
+
+class EnvelopeMove(BaseModel):
+    """A credit or a spend - always positive; the endpoint carries the sign."""
+
+    amount: int = Field(gt=0)
+    note: str | None = Field(default=None, max_length=255)
+    when: date | None = None
+
+
+class EnvelopeResponse(BaseModel):
+    account_id: int
+    name: str
+    balance: int  # cents; may be negative (borrowed against next month)
+    monthly_credit: int | None
+    auto_credit: bool
+    cadence: str
+
+
+class EnvelopeListResponse(BaseModel):
+    items: list[EnvelopeResponse]
+    total: int
+
+
+class InvestmentImportPosition(BaseModel):
+    """One security's replayed ending position - what the ledger says you
+    hold once every row is applied. ``value`` is cents at the security's
+    LAST price seen in the ledger - the freshest mark the file itself can
+    honestly claim, not a live quote."""
+
+    name: str
+    shares: float
+    value: int
+
+
+class InvestmentImportPreviewResponse(BaseModel):
+    """Parse-only look at an activity ledger: what it carries and what it
+    replays to, before any account is chosen or anything is written."""
+
+    activities_parsed: int
+    first_date: date
+    last_date: date
+    total_value: int  # cents, sum of position values
+    positions: list[InvestmentImportPosition]
+
+
+class InvestmentImportResultResponse(BaseModel):
+    """Outcome of a custodian activity-ledger import (investments lane)."""
+
+    activities_parsed: int
+    trades_inserted: int
+    trades_updated: int
+    securities_created: int
+    securities_matched: int
+    account_id: int
+    account_name: str
+    account_created: bool
 
 
 class TradeResponse(BaseModel):
@@ -677,6 +907,16 @@ class RecurringStreamResponse(BaseModel):
     confidence: int | None
     is_subscription: bool
     is_muted: bool
+    # Paused while this date is ahead: out of the forecast, the Bills
+    # total, the verdict and every nag until then - and back by itself
+    # the day it passes. ``pause_note`` is the why, for the future
+    # reader who forgot.
+    paused_until: date | None = None
+    pause_note: str | None = None
+    # A card/loan payment stream: charged by the cash forecast, excluded
+    # from the Bills total (the swipes already counted), tagged in the UI
+    # so "it's a transfer" and "it's a payment" stop being a riddle.
+    is_payment: bool = False
     is_user_confirmed: bool
     source: str  # "derived" (detector) | "provider" | "user" (hand-entered)
     expected_amount: int | None  # cents; set for declared bills/income
@@ -708,6 +948,7 @@ class RecurringStreamResponse(BaseModel):
         category_name: str | None = None,
         icon_b64: str | None = None,
         staleness: str = "fresh",
+        is_payment: bool = False,
     ) -> RecurringStreamResponse:
         return cls(
             id=row.id,
@@ -726,6 +967,9 @@ class RecurringStreamResponse(BaseModel):
             confidence=row.confidence,
             is_subscription=row.is_subscription,
             is_muted=row.is_muted,
+            paused_until=row.paused_until,
+            pause_note=(row.metadata_ or {}).get("pause_note"),
+            is_payment=is_payment,
             is_user_confirmed=row.is_user_confirmed,
             source=row.source,
             expected_amount=row.expected_amount,
@@ -742,25 +986,31 @@ class RecurringStreamCreate(BaseModel):
 
     name: str
     direction: Literal["inflow", "outflow"]
-    frequency: Literal[
-        "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "annually"
-    ]
+    frequency: CadenceKey
     expected_amount: int  # cents (magnitude)
     next_expected_date: date
     account_id: int | None = None
     is_subscription: bool = False
 
 
+class RecurringAttach(BaseModel):
+    """Reconcile one transaction with the bill it paid."""
+
+    transaction_id: int
+
+
+class RecurringPause(BaseModel):
+    """Pause a stream until a date, with an optional why."""
+
+    until: date
+    note: str | None = Field(default=None, max_length=500)
+
+
 class RecurringStreamUpdate(BaseModel):
     """Edits to a stream's declared facts; omitted fields stay as they are."""
 
     name: str | None = None
-    frequency: (
-        Literal[
-            "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "annually"
-        ]
-        | None
-    ) = None
+    frequency: CadenceKey | None = None
     expected_amount: int | None = None  # cents (magnitude)
     next_expected_date: date | None = None
     # Stated about the BILL and stops there - its transactions keep the
@@ -839,6 +1089,18 @@ class CategoryOptionListResponse(BaseModel):
     items: list[CategoryOption]
 
 
+class CategoryCreate(BaseModel):
+    """A category typed by hand, in the house ``Parent:Child`` shape.
+
+    Resolved through the same get-or-create the importer uses, so a
+    spacing or case variant lands on the row that already exists rather
+    than beside it - which is the whole reason inline creation was
+    withheld from the picker for so long.
+    """
+
+    name: str = Field(min_length=1, max_length=128)
+
+
 class MerchantResponse(BaseModel):
     """A payee: the stable identity behind a raw bank descriptor.
 
@@ -895,6 +1157,35 @@ class MerchantMerge(BaseModel):
     source_ids: list[int]
 
 
+class TagRef(BaseModel):
+    """A tag as it rides a transaction row - identity plus display facts."""
+
+    id: int
+    name: str
+    color: str | None = None
+
+
+class TagResponse(TagRef):
+    """One row of the tag directory: the tag plus how many transactions
+    wear it."""
+
+    transaction_count: int = 0
+
+
+class TagAssign(BaseModel):
+    """Attach one tag (created on first use) to many transactions - the
+    bulk-selection verb, same shape as ``MerchantAssign``."""
+
+    transaction_ids: list[int]
+    name: str
+
+
+class TransactionDelete(BaseModel):
+    """Bulk soft-delete from the register's selection row."""
+
+    transaction_ids: list[int]
+
+
 class MerchantAssign(BaseModel):
     """``merchant_id=None`` clears the payee off the given transactions.
 
@@ -931,6 +1222,11 @@ class DeclareRecurring(BaseModel):
     # the stream fixed-amount, beating a median taken over whatever the
     # sweep rounded up.
     amounts: dict[str, int] = Field(default_factory=dict)
+    # The cadence, keyed like ``names``. Measuring it only works for the
+    # six canonical gaps detection knows: a semiannual premium measures as
+    # "irregular", which the forecast cannot step, so the bill never
+    # appears in it. A label the forecast cannot step is ignored.
+    frequencies: dict[str, str] = Field(default_factory=dict)
     # Rows unticked in the preview. They stay out of the bill AND stay out
     # of it afterwards: a confirmed bill owns its membership, so detection
     # will not quietly re-add them on its next pass.
@@ -1061,12 +1357,29 @@ class BudgetSuggestion(BaseModel):
     category_name: str | None = None
     suggested_amount: int  # cents/month, the MEDIAN of complete months
     months_seen: int
-    spread: float  # biggest month over smallest - the confidence signal
+    # Months out of the six that did not look like the others (outside
+    # +/-50% of the median). 0 is a category that never varies; more than
+    # one and it is not suggested at all.
+    unusual_months: int
+
+
+class DismissedBudgetSuggestion(BaseModel):
+    """A suggestion the user declined - excluded until restored."""
+
+    category_id: int
+    category_name: str | None = None
 
 
 class BudgetSuggestionListResponse(BaseModel):
     items: list[BudgetSuggestion]
     total: int
+    dismissed: list[DismissedBudgetSuggestion] = Field(default_factory=list)
+
+
+class BudgetSuggestionIds(BaseModel):
+    """Request body for dismissing or restoring suggestions."""
+
+    category_ids: list[int]
 
 
 class ProjectionPoint(BaseModel):
@@ -1274,12 +1587,74 @@ class BudgetStatsResponse(BaseModel):
     over_budget_labels: list[str]
     fixed_total: int
     fixed_count: int
+    # The month's bottom line: confirmed income minus confirmed bills
+    # minus budget allocations, monthly-equivalent throughout - the same
+    # gate and factors the forecast uses, so the two cannot disagree.
+    income_total: int = 0
+    income_count: int = 0
+    # Active goals' evaluated monthly ask - month_net subtracts it, and
+    # the Budgets cell captions it.
+    goals_total: int = 0
+    goals_count: int = 0
+    envelopes_total: int = 0
+    envelopes_count: int = 0
+    # Observed spending no bill and no limit covers (trailing 3-month
+    # average) - the term that keeps the verdict honest.
+    everything_else: int = 0
+    month_net: int = 0
+    # Deficit left over even after trimming every budget to its floor -
+    # the part of a negative month that belongs to bills or income.
+    trim_residual: int = 0
+
+
+class BudgetTrimResponse(BaseModel):
+    """One row of the close-the-gap plan, in either kind.
+
+    ``pause_goal`` rows carry account_id/recovered (pausing recovers the
+    goal's whole ask); ``cut_budget`` rows carry the line fields - the
+    floor is what the line already spent this period, and ``suggested``
+    never goes below it. Applying one is a status PATCH or the ordinary
+    line upsert respectively."""
+
+    kind: Literal["pause_goal", "cut_budget"] = "cut_budget"
+    label: str
+    # cut_budget fields
+    id: int | None = None
+    category_id: int | None = None
+    payee_key: str | None = None
+    allocated_amount: int | None = None
+    spent_amount: int | None = None
+    cut: int | None = None
+    suggested_amount: int | None = None
+    # pause_goal fields
+    account_id: int | None = None
+    recovered: int | None = None
 
 
 class BudgetSummaryResponse(BaseModel):
     period_month: int  # YYYYMM
     buckets: list[BudgetBucketResponse]
     stats: BudgetStatsResponse
+    # Present (non-empty) exactly when the month lands negative and the
+    # budgets have slack to give.
+    trims: list[BudgetTrimResponse] = Field(default_factory=list)
+
+
+class StatDetailRow(BaseModel):
+    """One row of a header cell's click-through detail."""
+
+    label: str
+    value: int  # cents
+    caption: str | None = None
+
+
+class BudgetStatDetailsResponse(BaseModel):
+    """Per-row backup for the Budget header's fetched cells."""
+
+    income: list[StatDetailRow]
+    bills: list[StatDetailRow]
+    everything_else: list[StatDetailRow]
+    window: str  # e.g. "May - Jul 2026 average"
 
 
 class GoalParseRequest(BaseModel):

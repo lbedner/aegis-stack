@@ -42,6 +42,16 @@ viable change, and verify it works.
 Before writing new code, look for existing logic used elsewhere; prefer a single
 shared function over duplicating it.
 
+### Don't narrate self-caught-and-fixed issues
+If a mistake (lint slip, wrong approach, even a real bug) is found and fully
+fixed within the same turn, before the user ever saw or acted on the bad
+outcome, fix it silently and say nothing about it - not in the summary, not
+as a closing "worth being straight about" aside. Severity does not matter;
+exposure does. Only report: issues that already reached a prior turn's
+output (the user saw/relied on the wrong thing), and anything still
+unverified that the user needs to check themselves. This is deliberate -
+the user wants minimal context, not a transparency log.
+
 ## Coding standards
 
 - Types are mandatory: every function fully annotated, including return types

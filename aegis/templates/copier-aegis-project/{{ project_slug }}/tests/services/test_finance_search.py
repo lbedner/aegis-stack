@@ -110,3 +110,87 @@ class TestTransactionSearch:
         await _fixture(svc, async_db_session)
         found, total = await svc.list_transactions(owner_user_id=1, query="zzzz")
         assert found == [] and total == 0
+
+
+class TestRegisterAccountScope:
+    """The All Accounts register honors the account picker.
+
+    It never did: the fetch passed no account scope at all, so "2 of 15
+    accounts" changed nothing - the register showed the newest rows of
+    EVERY account, and unchecked IRA trades rode in through a trades
+    fetch that could not be scoped either (confirmed live: AMEX checked,
+    its rows absent past the page edge; IRA trades present unchecked).
+    """
+
+    @pytest.mark.asyncio
+    async def test_transactions_narrow_to_the_selected_accounts(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        checking = await svc.create_manual_account(
+            name="Checking", account_type="checking",
+            classification="asset", owner_user_id=1,
+        )
+        amex = await svc.create_manual_account(
+            name="Amex", account_type="credit_card",
+            classification="liability", owner_user_id=1,
+        )
+        ira = await svc.create_manual_account(
+            name="IRA", account_type="brokerage",
+            classification="asset", owner_user_id=1,
+        )
+        for account, name in ((checking, "Coffee"), (amex, "Adj"), (ira, "Fund")):
+            await svc.create_transaction(
+                account_id=account.id, amount=-1_000,
+                txn_date=date(2026, 7, 17), owner_user_id=1, name=name,
+            )
+
+        items, total = await svc.list_transactions(
+            owner_user_id=1, account_ids=[checking.id, amex.id]
+        )
+
+        assert total == 2
+        assert {t.name for t in items} == {"Coffee", "Adj"}
+
+    @pytest.mark.asyncio
+    async def test_no_scope_still_means_everything(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        checking = await svc.create_manual_account(
+            name="Checking", account_type="checking",
+            classification="asset", owner_user_id=1,
+        )
+        await svc.create_transaction(
+            account_id=checking.id, amount=-1_000,
+            txn_date=date(2026, 7, 17), owner_user_id=1, name="Coffee",
+        )
+
+        _items, total = await svc.list_transactions(owner_user_id=1, account_ids=None)
+
+        assert total == 1
+
+    @pytest.mark.asyncio
+    async def test_trades_narrow_the_same_way(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        ira = await svc.create_manual_account(
+            name="IRA", account_type="brokerage",
+            classification="asset", owner_user_id=1,
+        )
+        roth = await svc.create_manual_account(
+            name="Roth", account_type="brokerage",
+            classification="asset", owner_user_id=1,
+        )
+        for account in (ira, roth):
+            await svc.upsert_trade(
+                account_id=account.id, owner_user_id=1,
+                trade_type="buy", trade_date=date(2026, 7, 10),
+                amount=-8_687, name="PERIODIC INVESTMENT",
+            )
+
+        trades = await svc.list_trades(owner_user_id=1, account_ids=[ira.id])
+
+        assert len(trades) == 1
+        assert trades[0].account_id == ira.id

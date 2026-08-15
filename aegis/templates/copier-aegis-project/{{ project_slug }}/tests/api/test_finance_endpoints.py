@@ -13,6 +13,8 @@ since the finance router resolves ``get_owner_user_id`` through
 those rows from the scoped reads.
 """
 
+from datetime import date
+
 from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -651,6 +653,8 @@ async def test_recurring_list_includes_icon_and_staleness(
     """Only the list endpoint (not the single-row create/update responses)
     has the context to compute a favicon guess and a staleness read per
     stream."""
+    from datetime import date, timedelta
+
     authenticated_client.post(
         "/api/v1/finance/recurring",
         json={
@@ -658,14 +662,12 @@ async def test_recurring_list_includes_icon_and_staleness(
             "direction": "outflow",
             "frequency": "monthly",
             "expected_amount": 1599,
-            # Deliberately absurd. "fresh" is ``today <= due + grace``, so any
-            # plausible-looking date is a time bomb: it passes until the wall
-            # clock crosses it, then fails forever as "overdue != fresh",
-            # which reads as a staleness bug rather than an expired fixture.
-            # A date a thousand years out can never rot and is obviously a
-            # fixture, not a real bill. Do not "correct" this to a realistic
-            # date.
-            "next_expected_date": "3026-08-01",
+            # RELATIVE to today, never a literal. Pinned to a date this
+            # test passes until that date arrives and then fails forever
+            # as "overdue != fresh", which reads as a staleness bug
+            # rather than an expired fixture. The property being
+            # asserted is "a date in the future" - so say that.
+            "next_expected_date": (date.today() + timedelta(days=14)).isoformat(),
         },
     )
 
@@ -1503,9 +1505,9 @@ async def test_budget_line_rejects_both_category_and_payee(
     authenticated_client: TestClient,
     async_db_session: AsyncSession,
 ) -> None:
-    groceries = await FinanceService(
-        async_db_session
-    ).get_or_create_category_from_hint("Food:Groceries")
+    groceries = await FinanceService(async_db_session).get_or_create_category_from_hint(
+        "Food:Groceries"
+    )
     await async_db_session.commit()
 
     response = authenticated_client.post(
@@ -1632,3 +1634,986 @@ async def test_payees_can_be_merged(
     ids = {m["id"] for m in listed["items"]}
     assert keep["id"] in ids
     assert drop["id"] not in ids
+
+
+class TestTags:
+    """Tags as the user-defined flag: attach in bulk, see them on the
+    register payload, click one to filter, detach one row at a time."""
+
+    async def _two_transactions(
+        self, session: AsyncSession, owner: int | None
+    ) -> list[int]:
+        from datetime import date as date_cls
+
+        svc = FinanceService(session)
+        account = await svc.create_manual_account(
+            owner_user_id=owner,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        ids = []
+        for day in (1, 2):
+            txn = await svc.create_transaction(
+                account_id=account.id,
+                amount=-1_000 * day,
+                txn_date=date_cls(2026, 8, day),
+                owner_user_id=owner,
+                name=f"Purchase {day}",
+            )
+            ids.append(txn.id)
+        await session.commit()
+        return ids
+
+    @pytest.mark.asyncio
+    async def test_tagging_then_reading_back_the_directory(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        ids = await self._two_transactions(async_db_session, acting_owner_user_id)
+
+        tagged = authenticated_client.post(
+            "/api/v1/finance/transactions/tags",
+            json={"transaction_ids": ids, "name": "Flagged"},
+        )
+
+        assert tagged.status_code == 200
+        tag = tagged.json()
+        assert tag["name"] == "Flagged"
+
+        listed = authenticated_client.get("/api/v1/finance/tags").json()
+        assert [(t["name"], t["transaction_count"]) for t in listed] == [("Flagged", 2)]
+
+    @pytest.mark.asyncio
+    async def test_the_register_carries_tags_and_filters_by_one(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        ids = await self._two_transactions(async_db_session, acting_owner_user_id)
+        tag = authenticated_client.post(
+            "/api/v1/finance/transactions/tags",
+            json={"transaction_ids": ids[:1], "name": "Flagged"},
+        ).json()
+
+        rows = authenticated_client.get("/api/v1/finance/transactions").json()
+        by_id = {r["id"]: r for r in rows["items"]}
+        assert [t["name"] for t in by_id[ids[0]]["tags"]] == ["Flagged"]
+        assert by_id[ids[1]]["tags"] == []
+
+        filtered = authenticated_client.get(
+            "/api/v1/finance/transactions", params={"tag_id": tag["id"]}
+        ).json()
+        assert filtered["total"] == 1
+        assert filtered["items"][0]["id"] == ids[0]
+
+    @pytest.mark.asyncio
+    async def test_untagging_one_row_leaves_the_rest(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        ids = await self._two_transactions(async_db_session, acting_owner_user_id)
+        tag = authenticated_client.post(
+            "/api/v1/finance/transactions/tags",
+            json={"transaction_ids": ids, "name": "Flagged"},
+        ).json()
+
+        removed = authenticated_client.delete(
+            f"/api/v1/finance/transactions/{ids[0]}/tags/{tag['id']}"
+        )
+
+        assert removed.status_code == 200
+        assert removed.json() == {"removed": 1}
+        listed = authenticated_client.get("/api/v1/finance/tags").json()
+        assert [(t["name"], t["transaction_count"]) for t in listed] == [("Flagged", 1)]
+
+
+class TestDeleteTransactions:
+    """POST /transactions/delete - bulk soft delete from the register."""
+
+    @pytest.mark.asyncio
+    async def test_deleting_removes_rows_from_the_register(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        from datetime import date as date_cls
+
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        ids = []
+        for day in (1, 2, 3):
+            txn = await svc.create_transaction(
+                account_id=account.id,
+                amount=-1_000 * day,
+                txn_date=date_cls(2026, 8, day),
+                owner_user_id=acting_owner_user_id,
+                name=f"Purchase {day}",
+            )
+            ids.append(txn.id)
+        await async_db_session.commit()
+
+        response = authenticated_client.post(
+            "/api/v1/finance/transactions/delete",
+            json={"transaction_ids": ids[:2]},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"deleted": 2}
+        listed = authenticated_client.get("/api/v1/finance/transactions").json()
+        assert listed["total"] == 1
+        assert listed["items"][0]["id"] == ids[2]
+
+    @pytest.mark.asyncio
+    async def test_deleting_nothing_real_reports_zero(
+        self,
+        authenticated_client: TestClient,
+    ) -> None:
+        response = authenticated_client.post(
+            "/api/v1/finance/transactions/delete",
+            json={"transaction_ids": [999999]},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"deleted": 0}
+
+
+@pytest.mark.asyncio
+async def test_import_preview_is_a_pure_read_then_commit_matches(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """FIN-33: POST /import/preview classifies without writing; the commit
+    then reports the same counts."""
+    account_id = await _checking_account(async_db_session, acting_owner_user_id)
+    data = (_FIXTURES / "sample_quicken.qif").read_bytes()
+    files = {"file": ("sample_quicken.qif", data, "text/plain")}
+    preview = authenticated_client.post(
+        "/api/v1/finance/import/preview",
+        files=files,
+        params={"account_id": account_id},
+    )
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["identical_batch_id"] is None
+    assert body["rows_inserted"] == 8
+    assert body["rows_updated"] == body["rows_error"] == 0
+    assert body["inserts_by_account"] == {"Chase Checking": 8}
+    assert body["insert_date_start"] == "2026-07-01"
+    assert body["insert_date_end"] == "2026-07-08"
+
+    # Nothing was written: no batch exists until the real import runs.
+    assert authenticated_client.get("/api/v1/finance/import/batches").json() == []
+
+    committed = authenticated_client.post(
+        "/api/v1/finance/import",
+        files={"file": ("sample_quicken.qif", data, "text/plain")},
+        params={"account_id": account_id},
+    )
+    assert committed.status_code == 200
+    assert committed.json()["rows_inserted"] == body["rows_inserted"]
+
+    # An identical-file preview now short-circuits instead of re-planning.
+    again = authenticated_client.post(
+        "/api/v1/finance/import/preview",
+        files={"file": ("sample_quicken.qif", data, "text/plain")},
+        params={"account_id": account_id},
+    )
+    assert again.status_code == 200
+    assert again.json()["identical_batch_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_preview_splits_out_rows_for_removed_accounts(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """Deleting an account is a standing decision: a re-import preview
+    reports its rows as ignored (named, counted) instead of offering to
+    recreate the account."""
+    service = FinanceService(async_db_session)
+    amex = await service.create_manual_account(
+        owner_user_id=acting_owner_user_id,
+        name="AMEX CARD",
+        account_type="credit_card",
+        classification="liability",
+    )
+    await service.soft_delete_account(amex.id, owner_user_id=acting_owner_user_id)
+
+    from app.services.finance.models import FinanceImportProfile
+    from app.services.finance.seed import CSV_IMPORT_PROFILES, DEFAULT_CURRENCIES
+
+    for currency in DEFAULT_CURRENCIES:
+        await service.get_or_create_currency(currency["code"])
+    for profile in CSV_IMPORT_PROFILES:
+        async_db_session.add(FinanceImportProfile(is_system=True, **profile))
+    await async_db_session.commit()
+
+    data = (_FIXTURES / "sample_quicken_all.csv").read_bytes()
+    preview = authenticated_client.post(
+        "/api/v1/finance/import/preview",
+        files={"file": ("sample_quicken_all.csv", data, "text/csv")},
+    )
+
+    assert preview.status_code == 200
+    body = preview.json()
+    # The three AMEX CARD rows are ignored - not skipped, not landing anywhere.
+    assert body["rows_ignored"] == 3
+    assert body["rows_skipped"] == 0
+    assert body["removed_accounts"] == ["AMEX CARD"]
+    assert body["new_accounts"] == ["CHECKING"]
+    assert "AMEX CARD" not in body["inserts_by_account"]
+    assert body["rows_inserted"] == 2
+
+
+@pytest.mark.asyncio
+async def test_creating_a_category_returns_it_for_immediate_use(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+) -> None:
+    """There was no way to make a category anywhere in the UI, so a
+    miscategorized batch could only be fixed by hand into a taxonomy that
+    did not have the right row in it."""
+    response = authenticated_client.post(
+        "/api/v1/finance/categories", json={"name": "Kids:Activities"}
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == "Kids:Activities"
+    assert body["id"]
+
+    options = authenticated_client.get("/api/v1/finance/categories/options").json()
+    assert "Kids:Activities" in {c["name"] for c in options["items"]}
+
+
+@pytest.mark.asyncio
+async def test_a_near_duplicate_returns_the_same_category(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+) -> None:
+    """The reason inline creation was withheld: "inventing categories
+    inline is how a category list turns into 400 near-duplicates".
+
+    It resolves by SLUG, so spacing and case collapse onto the row that
+    already exists. Get-or-create, not create.
+    """
+    first = authenticated_client.post(
+        "/api/v1/finance/categories", json={"name": "Kids:Activities"}
+    ).json()
+    again = authenticated_client.post(
+        "/api/v1/finance/categories", json={"name": "kids:  ACTIVITIES "}
+    ).json()
+
+    assert again["id"] == first["id"]
+    options = authenticated_client.get("/api/v1/finance/categories/options").json()
+    kids = [c for c in options["items"] if c["name"].lower().startswith("kids")]
+    assert len(kids) == 1
+
+
+@pytest.mark.asyncio
+async def test_payee_grade_depth_is_folded_back_to_two_levels(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+) -> None:
+    """The other half of the same guard, and the house convention every
+    existing category follows: a third segment is a merchant, not a
+    category."""
+    body = authenticated_client.post(
+        "/api/v1/finance/categories", json={"name": "Kids:Activities:Soccer Club"}
+    ).json()
+
+    assert body["name"] == "Kids:Activities"
+
+
+@pytest.mark.asyncio
+async def test_an_empty_name_is_refused(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+) -> None:
+    response = authenticated_client.post(
+        "/api/v1/finance/categories", json={"name": "   "}
+    )
+
+    assert response.status_code == 422
+
+
+async def _brokerage_account(session: AsyncSession, owner_user_id: int | None) -> int:
+    account = await FinanceService(session).create_manual_account(
+        owner_user_id=owner_user_id,
+        name="HSA Investments",
+        account_type="brokerage",
+        classification="asset",
+    )
+    await session.commit()
+    return account.id
+
+
+class TestImportInvestmentsPreview:
+    """Parse-only look at a ledger, before any account exists or is chosen."""
+
+    @pytest.mark.asyncio
+    async def test_preview_reports_positions_without_writing(
+        self, authenticated_client: TestClient
+    ) -> None:
+        data = (_FIXTURES / "optum_hsa_sample.tsv").read_bytes()
+        response = authenticated_client.post(
+            "/api/v1/finance/import-investments/preview",
+            files={"file": ("optum_hsa_sample.tsv", data, "text/tab-separated-values")},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["activities_parsed"] == 7
+        assert body["first_date"] == "2022-02-17"
+        assert body["last_date"] == "2024-12-13"
+        by_name = {p["name"]: p for p in body["positions"]}
+        assert by_name["Schwab Small Cap Index"]["shares"] == 55.85
+        # Value rides each position, at the security's LAST price seen in
+        # the ledger: 55.85 shares x $38.00 (the 12/13/2024 dividend row).
+        assert by_name["Schwab Small Cap Index"]["value"] == 212_230
+        # Exchanged-away share class replays to zero and stays visible -
+        # the preview shows the replay, not a prettied subset of it.
+        assert by_name["Vanguard Total Int Stk Idx Adm"]["shares"] == 0.0
+        assert by_name["Vanguard Total Int Stk Idx Adm"]["value"] == 0
+        # 14.000 shares x $115.00 exchange-in price.
+        assert by_name["Vanguard Total Intl Stk Idx I"]["value"] == 161_000
+        assert body["total_value"] == 212_230 + 161_000
+
+        # Nothing was written: no accounts sprang into being.
+        accounts = authenticated_client.get("/api/v1/finance/accounts")
+        assert accounts.json()["total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_unrecognized_activity_type_is_422(
+        self, authenticated_client: TestClient
+    ) -> None:
+        bogus = (
+            "Settled Transactions 01/01/2020 to 08/10/2026\n"
+            "Transaction Date\tDescription\tType\tUnits\tPrice\tTotal Amount\n"
+            "01/01/2024\tSome Fund\tMYSTERY MEAT\t1\t$1.00\t$1.00\n"
+        )
+        response = authenticated_client.post(
+            "/api/v1/finance/import-investments/preview",
+            files={"file": ("bogus.tsv", bogus.encode(), "text/tab-separated-values")},
+        )
+        assert response.status_code == 422
+
+
+class TestImportInvestments:
+    """The Import menu's investment lane: /import-investments commits into an
+    existing account, or creates one - the same courtesy OFX ingest extends."""
+
+    @pytest.mark.asyncio
+    async def test_imports_into_an_existing_account(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        account_id = await _brokerage_account(async_db_session, acting_owner_user_id)
+        data = (_FIXTURES / "optum_hsa_sample.tsv").read_bytes()
+        response = authenticated_client.post(
+            "/api/v1/finance/import-investments",
+            files={"file": ("optum_hsa_sample.tsv", data, "text/tab-separated-values")},
+            params={"account_id": account_id},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["activities_parsed"] == 7
+        assert body["trades_inserted"] == 7
+        assert body["securities_created"] == 3
+        assert body["account_id"] == account_id
+        assert body["account_created"] is False
+
+        holdings = authenticated_client.get(
+            f"/api/v1/finance/accounts/{account_id}/holdings"
+        )
+        assert holdings.status_code == 200
+        tickers = {h["ticker"] for h in holdings.json()["items"]}
+        # Admiral share class fully exchanged away -> not a current holding.
+        assert "Vanguard Total Int Stk Idx Adm" not in tickers
+
+    @pytest.mark.asyncio
+    async def test_creates_the_account_when_given_a_name(
+        self, authenticated_client: TestClient
+    ) -> None:
+        data = (_FIXTURES / "optum_hsa_sample.tsv").read_bytes()
+        response = authenticated_client.post(
+            "/api/v1/finance/import-investments",
+            files={"file": ("optum_hsa_sample.tsv", data, "text/tab-separated-values")},
+            params={"account_name": "HSA Investments"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["account_created"] is True
+        assert body["account_name"] == "HSA Investments"
+        assert body["trades_inserted"] == 7
+
+        accounts = authenticated_client.get("/api/v1/finance/accounts").json()
+        account = next(a for a in accounts["items"] if a["id"] == body["account_id"])
+        assert account["account_type"] == "brokerage"
+        assert account["classification"] == "asset"
+
+    @pytest.mark.asyncio
+    async def test_no_target_at_all_is_400(
+        self, authenticated_client: TestClient
+    ) -> None:
+        data = (_FIXTURES / "optum_hsa_sample.tsv").read_bytes()
+        response = authenticated_client.post(
+            "/api/v1/finance/import-investments",
+            files={"file": ("optum_hsa_sample.tsv", data, "text/tab-separated-values")},
+        )
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_unknown_account_is_404(
+        self, authenticated_client: TestClient
+    ) -> None:
+        data = (_FIXTURES / "optum_hsa_sample.tsv").read_bytes()
+        response = authenticated_client.post(
+            "/api/v1/finance/import-investments",
+            files={"file": ("optum_hsa_sample.tsv", data, "text/tab-separated-values")},
+            params={"account_id": 999999},
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_unknown_profile_is_400(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        account_id = await _brokerage_account(async_db_session, acting_owner_user_id)
+        data = (_FIXTURES / "optum_hsa_sample.tsv").read_bytes()
+        response = authenticated_client.post(
+            "/api/v1/finance/import-investments",
+            files={"file": ("optum_hsa_sample.tsv", data, "text/tab-separated-values")},
+            params={"account_id": account_id, "profile": "schwab"},
+        )
+        assert response.status_code == 400
+
+
+class TestGoals:
+    """GL-03: goals API on the account-as-goal shape (tracker #939)."""
+
+    @pytest.mark.asyncio
+    async def test_create_virtual_goal_round_trip(
+        self, authenticated_client: TestClient
+    ) -> None:
+        created = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Vacation",
+                "target_amount": 300_000,
+                "target_date": "2027-06-01",
+            },
+        )
+        assert created.status_code == 201
+        body = created.json()
+        assert body["funding"] == "virtual"
+        assert body["status"] == "active"
+        assert body["balance"] == 0
+        assert body["progress"] == 0.0
+        assert body["monthly_need"] > 0  # derived from the target date
+
+        listed = authenticated_client.get("/api/v1/finance/goals").json()
+        assert [g["name"] for g in listed["items"]] == ["Vacation"]
+        # The goal account stays out of the ordinary account list.
+        accounts = authenticated_client.get("/api/v1/finance/accounts").json()
+        assert accounts["total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_flag_an_existing_account_as_a_linked_goal(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        savings = await FinanceService(async_db_session).create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="CHASE SAVINGS",
+            account_type="savings",
+            classification="asset",
+            current_balance=65_900,
+        )
+        await async_db_session.commit()
+        created = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={"account_id": savings.id, "target_amount": 1_200_000},
+        )
+        assert created.status_code == 201
+        body = created.json()
+        assert body["funding"] == "linked"
+        assert body["balance"] == 65_900
+        assert body["name"] == "CHASE SAVINGS"
+
+        # Removing the goal unflags; the account survives, visible.
+        gone = authenticated_client.delete(f"/api/v1/finance/goals/{savings.id}")
+        assert gone.status_code == 204
+        assert authenticated_client.get("/api/v1/finance/goals").json()["total"] == 0
+        accounts = authenticated_client.get("/api/v1/finance/accounts").json()
+        assert [a["name"] for a in accounts["items"]] == ["CHASE SAVINGS"]
+
+    @pytest.mark.asyncio
+    async def test_update_and_status(self, authenticated_client: TestClient) -> None:
+        goal_id = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={"name": "Roof", "target_amount": 1_200_000},
+        ).json()["account_id"]
+        patched = authenticated_client.patch(
+            f"/api/v1/finance/goals/{goal_id}",
+            json={"status": "paused", "monthly_contribution": 20_000},
+        )
+        assert patched.status_code == 200
+        body = patched.json()
+        assert body["status"] == "paused"
+        assert body["monthly_contribution"] == 20_000
+        assert body["monthly_need"] == 0  # paused goals ask nothing
+
+        bad = authenticated_client.patch(
+            f"/api/v1/finance/goals/{goal_id}", json={"status": "vibing"}
+        )
+        assert bad.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_contribute_and_delete_virtual(
+        self, authenticated_client: TestClient
+    ) -> None:
+        goal_id = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Vacation",
+                "target_amount": 300_000,
+                "monthly_contribution": 25_000,
+            },
+        ).json()["account_id"]
+        contributed = authenticated_client.post(
+            f"/api/v1/finance/goals/{goal_id}/contribute",
+            json={"amount": 120_000},
+        )
+        assert contributed.status_code == 200
+        body = contributed.json()
+        assert body["balance"] == 120_000
+        assert body["progress"] == 0.4
+        assert body["eta"] is not None  # declared rate -> a real date
+
+        gone = authenticated_client.delete(f"/api/v1/finance/goals/{goal_id}")
+        assert gone.status_code == 204
+        assert authenticated_client.get("/api/v1/finance/goals").json()["total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_eta_is_never_without_any_rate(
+        self, authenticated_client: TestClient
+    ) -> None:
+        body = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={"name": "Someday", "target_amount": 500_000},
+        ).json()
+        assert body["eta"] is None
+
+    @pytest.mark.asyncio
+    async def test_contribute_to_linked_is_refused(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        savings = await FinanceService(async_db_session).create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="CHASE SAVINGS",
+            account_type="savings",
+            classification="asset",
+        )
+        await async_db_session.commit()
+        authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={"account_id": savings.id, "target_amount": 100_000},
+        )
+        refused = authenticated_client.post(
+            f"/api/v1/finance/goals/{savings.id}/contribute",
+            json={"amount": 5_000},
+        )
+        assert refused.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_unknown_goal_is_404(self, authenticated_client: TestClient) -> None:
+        assert (
+            authenticated_client.patch(
+                "/api/v1/finance/goals/999999", json={"status": "paused"}
+            ).status_code
+            == 404
+        )
+        assert (
+            authenticated_client.delete("/api/v1/finance/goals/999999").status_code
+            == 404
+        )
+
+    @pytest.mark.asyncio
+    async def test_auto_contribute_toggle_rides_patch(
+        self, authenticated_client: TestClient
+    ) -> None:
+        body = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Vacation",
+                "target_amount": 300_000,
+                "monthly_contribution": 25_000,
+            },
+        ).json()
+        assert body["auto_contribute"] is False  # opt-in, never assumed
+
+        toggled = authenticated_client.patch(
+            f"/api/v1/finance/goals/{body['account_id']}",
+            json={"auto_contribute": True},
+        ).json()
+        assert toggled["auto_contribute"] is True
+        # And it sticks without being resent.
+        listed = authenticated_client.get("/api/v1/finance/goals").json()
+        assert listed["items"][0]["auto_contribute"] is True
+
+    @pytest.mark.asyncio
+    async def test_percent_and_surplus_rules_ride_the_api(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        service = FinanceService(async_db_session)
+        account = await service.create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        await service.create_recurring_stream(
+            owner_user_id=acting_owner_user_id,
+            name="Paycheck",
+            direction="inflow",
+            frequency="monthly",
+            expected_amount=820_000,
+            next_expected_date=date(2026, 8, 15),
+            account_id=account.id,
+        )
+        await async_db_session.commit()
+
+        created = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Retire",
+                "target_amount": 10_000_000,
+                "contribution_kind": "percent_income",
+                "contribution_pct_bps": 1_000,
+            },
+        )
+        assert created.status_code == 201
+        body = created.json()
+        assert body["contribution_kind"] == "percent_income"
+        assert body["contribution_pct_bps"] == 1_000
+        assert body["monthly_need"] == 82_000  # evaluated, not declared
+        assert body["eta"] is not None  # the evaluated ask IS a rate
+
+        # A status-only PATCH must not flatten the rule back to fixed.
+        paused = authenticated_client.patch(
+            f"/api/v1/finance/goals/{body['account_id']}",
+            json={"status": "paused"},
+        ).json()
+        assert paused["contribution_kind"] == "percent_income"
+        assert paused["contribution_pct_bps"] == 1_000
+
+        surplus = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Snowball",
+                "target_amount": 500_000,
+                "contribution_kind": "surplus",
+            },
+        ).json()
+        assert surplus["contribution_kind"] == "surplus"
+        # Sole active goal: the sweep takes the whole surplus (capped at
+        # its remaining target).
+        assert surplus["monthly_need"] == 500_000
+
+    @pytest.mark.asyncio
+    async def test_percent_without_bps_is_422(
+        self, authenticated_client: TestClient
+    ) -> None:
+        response = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Bad",
+                "target_amount": 100_000,
+                "contribution_kind": "percent_income",
+            },
+        )
+        assert response.status_code in (400, 422)
+
+    @pytest.mark.asyncio
+    async def test_goals_figures_survive_the_summary_response_schema(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        """The service computed goals_total, the typed response dropped it,
+        and the header caption silently vanished while month_net (declared)
+        still moved - the worst kind of half-truth. Pin the wire format."""
+        service = FinanceService(async_db_session)
+        account = await service.create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        await service.create_recurring_stream(
+            owner_user_id=acting_owner_user_id,
+            name="Paycheck",
+            direction="inflow",
+            frequency="monthly",
+            expected_amount=1_000_000,
+            next_expected_date=date(2026, 8, 15),
+            account_id=account.id,
+        )
+        await async_db_session.commit()
+        authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Vacation",
+                "target_amount": 300_000,
+                "monthly_contribution": 27_273,
+            },
+        )
+        stats = authenticated_client.get("/api/v1/finance/budget/summary").json()[
+            "stats"
+        ]
+        assert stats["goals_total"] == 27_273
+        assert stats["goals_count"] == 1
+        assert stats["month_net"] == 1_000_000 - 27_273
+
+    @pytest.mark.asyncio
+    async def test_auto_contribute_can_ride_creation(
+        self, authenticated_client: TestClient
+    ) -> None:
+        body = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Vacation",
+                "target_amount": 300_000,
+                "monthly_contribution": 25_000,
+                "auto_contribute": True,
+            },
+        ).json()
+        assert body["auto_contribute"] is True
+
+
+class TestEnvelopes:
+    """Virtual sub-accounts: credit / spend / auto-credit over the wire."""
+
+    @pytest.mark.asyncio
+    async def test_full_life_of_an_allowance(
+        self, authenticated_client: TestClient
+    ) -> None:
+        created = authenticated_client.post(
+            "/api/v1/finance/envelopes",
+            json={"name": "Allowance", "monthly_credit": 4_000},
+        )
+        assert created.status_code == 201
+        body = created.json()
+        assert body["balance"] == 0
+        assert body["auto_credit"] is False
+
+        credited = authenticated_client.post(
+            f"/api/v1/finance/envelopes/{body['account_id']}/credit",
+            json={"amount": 4_000, "note": "August"},
+        ).json()
+        assert credited["balance"] == 4_000
+
+        spent = authenticated_client.post(
+            f"/api/v1/finance/envelopes/{body['account_id']}/spend",
+            json={"amount": 5_250, "note": "Roblox splurge"},
+        ).json()
+        assert spent["balance"] == -1_250  # negative survives the wire
+
+        listed = authenticated_client.get("/api/v1/finance/envelopes").json()
+        assert listed["total"] == 1
+        # Envelope accounts never leak into the ordinary account list.
+        assert authenticated_client.get("/api/v1/finance/accounts").json()["total"] == 0
+
+        gone = authenticated_client.delete(
+            f"/api/v1/finance/envelopes/{body['account_id']}"
+        )
+        assert gone.status_code == 204
+        assert (
+            authenticated_client.get("/api/v1/finance/envelopes").json()["total"] == 0
+        )
+
+    @pytest.mark.asyncio
+    async def test_patch_updates_credit_and_auto(
+        self, authenticated_client: TestClient
+    ) -> None:
+        body = authenticated_client.post(
+            "/api/v1/finance/envelopes", json={"name": "Allowance"}
+        ).json()
+        patched = authenticated_client.patch(
+            f"/api/v1/finance/envelopes/{body['account_id']}",
+            json={"monthly_credit": 4_000, "auto_credit": True},
+        ).json()
+        assert patched["monthly_credit"] == 4_000
+        assert patched["auto_credit"] is True
+
+    @pytest.mark.asyncio
+    async def test_unknown_envelope_is_404(
+        self, authenticated_client: TestClient
+    ) -> None:
+        for response in (
+            authenticated_client.post(
+                "/api/v1/finance/envelopes/999999/credit", json={"amount": 100}
+            ),
+            authenticated_client.delete("/api/v1/finance/envelopes/999999"),
+        ):
+            assert response.status_code == 404
+
+
+class TestBudgetStatDetails:
+    @pytest.mark.asyncio
+    async def test_details_back_the_header_cells(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        from datetime import date as date_cls
+
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        await svc.create_recurring_stream(
+            owner_user_id=acting_owner_user_id,
+            name="Paycheck",
+            direction="inflow",
+            frequency="monthly",
+            expected_amount=500_000,
+            next_expected_date=date_cls(2026, 9, 1),
+            account_id=account.id,
+        )
+        await svc.create_transaction(
+            account_id=account.id,
+            amount=-9_000,
+            txn_date=date_cls(2026, 7, 2),
+            owner_user_id=acting_owner_user_id,
+            name="Cash",
+        )
+        await async_db_session.commit()
+
+        response = authenticated_client.get("/api/v1/finance/budget/stat-details")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [(r["label"], r["value"]) for r in body["income"]] == [
+            ("Paycheck", 500_000)
+        ]
+        assert body["bills"] == []
+        assert body["everything_else"][0]["label"] == "Uncategorized"
+        assert "average" in body["window"]
+
+
+class TestBudgetOutlook:
+    @pytest.mark.asyncio
+    async def test_the_months_ride_the_wire(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        service = FinanceService(async_db_session)
+        account = await service.create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        await service.create_recurring_stream(
+            owner_user_id=acting_owner_user_id,
+            name="Paycheck",
+            direction="inflow",
+            frequency="monthly",
+            expected_amount=500_000,
+            next_expected_date=date(2026, 8, 15),
+            account_id=account.id,
+        )
+        await async_db_session.commit()
+
+        body = authenticated_client.get(
+            "/api/v1/finance/budget/outlook", params={"months": 4}
+        ).json()
+        assert body["total"] == 4
+        entry = body["items"][1]
+        for key in (
+            "period_month",
+            "income_due",
+            "bills_due",
+            "budgets",
+            "goals",
+            "envelopes",
+            "month_net",
+        ):
+            assert key in entry
+        assert entry["income_due"] == 500_000
+
+    @pytest.mark.asyncio
+    async def test_a_pause_goal_trim_survives_the_wire(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        """The pause tier never fired over the wire while months read
+        fictionally positive; the honest equation made it fire and the
+        typed trim response 500'd on the unfamiliar row. Pin both kinds."""
+        service = FinanceService(async_db_session)
+        account = await service.create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        await service.create_recurring_stream(
+            owner_user_id=acting_owner_user_id,
+            name="Rent",
+            direction="outflow",
+            frequency="monthly",
+            expected_amount=200_000,
+            next_expected_date=date(2026, 9, 1),
+            account_id=account.id,
+        )
+        await service.create_virtual_goal(
+            owner_user_id=acting_owner_user_id,
+            name="Vacation",
+            target_amount=300_000,
+            monthly_contribution=25_000,
+        )
+        await async_db_session.commit()
+
+        response = authenticated_client.get("/api/v1/finance/budget/summary")
+        assert response.status_code == 200
+        trims = response.json()["trims"]
+        assert any(t.get("kind") == "pause_goal" for t in trims)
+        pause = next(t for t in trims if t.get("kind") == "pause_goal")
+        assert pause["label"] == "Vacation"
+        assert pause["recovered"] == 25_000

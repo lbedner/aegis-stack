@@ -1697,6 +1697,123 @@ class TestFinanceBudgetCategory:
         with pytest.raises(IntegrityError):
             await async_db_session.flush()
 
+    @pytest.mark.asyncio
+    async def test_payee_target_coexists_with_category_target(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A category row and a payee row for the same budget/month are NOT
+        duplicates of each other - the old 3-column unique index (NULL
+        category_id on the payee row) would never have caught this anyway;
+        the partial indexes make the intent explicit instead of accidental."""
+        from app.services.finance.models import FinanceBudget, FinanceBudgetCategory
+
+        await _seed_currency(async_db_session, "usd")
+        cat = await _seed_category(async_db_session, slug="dining")
+        budget = FinanceBudget(
+            owner_user_id=1,
+            name="Monthly",
+            period="monthly",
+            start_date=date(2026, 7, 1),
+        )
+        async_db_session.add(budget)
+        await async_db_session.flush()
+        async_db_session.add(
+            FinanceBudgetCategory(
+                owner_user_id=1,
+                budget_id=budget.id,
+                category_id=cat.id,
+                period_month=202607,
+                allocated_amount=50_000,
+            )
+        )
+        async_db_session.add(
+            FinanceBudgetCategory(
+                owner_user_id=1,
+                budget_id=budget.id,
+                payee_key="starbucks",
+                payee_label="Starbucks",
+                period_month=202607,
+                allocated_amount=5_000,
+            )
+        )
+        await async_db_session.commit()
+        rows = (
+            await async_db_session.exec(
+                select(FinanceBudgetCategory).where(
+                    FinanceBudgetCategory.budget_id == budget.id
+                )
+            )
+        ).all()
+        assert len(rows) == 2
+
+    @pytest.mark.asyncio
+    async def test_payee_target_unique_per_month(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.models import FinanceBudget, FinanceBudgetCategory
+
+        await _seed_currency(async_db_session, "usd")
+        budget = FinanceBudget(
+            owner_user_id=1,
+            name="Monthly",
+            period="monthly",
+            start_date=date(2026, 7, 1),
+        )
+        async_db_session.add(budget)
+        await async_db_session.flush()
+        async_db_session.add(
+            FinanceBudgetCategory(
+                owner_user_id=1,
+                budget_id=budget.id,
+                payee_key="starbucks",
+                payee_label="Starbucks",
+                period_month=202607,
+                allocated_amount=5_000,
+            )
+        )
+        await async_db_session.flush()
+        async_db_session.add(
+            FinanceBudgetCategory(
+                owner_user_id=1,
+                budget_id=budget.id,
+                payee_key="starbucks",
+                payee_label="Starbucks",
+                period_month=202607,
+                allocated_amount=1,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await async_db_session.flush()
+
+    @pytest.mark.asyncio
+    async def test_target_check_rejects_both_category_and_payee(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.models import FinanceBudget, FinanceBudgetCategory
+
+        await _seed_currency(async_db_session, "usd")
+        cat = await _seed_category(async_db_session, slug="dining")
+        budget = FinanceBudget(
+            owner_user_id=1,
+            name="Monthly",
+            period="monthly",
+            start_date=date(2026, 7, 1),
+        )
+        async_db_session.add(budget)
+        await async_db_session.flush()
+        async_db_session.add(
+            FinanceBudgetCategory(
+                owner_user_id=1,
+                budget_id=budget.id,
+                category_id=cat.id,
+                payee_key="starbucks",
+                period_month=202607,
+                allocated_amount=5_000,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await async_db_session.flush()
+
 
 class TestFinanceSpendingBaseline:
     @pytest.mark.asyncio

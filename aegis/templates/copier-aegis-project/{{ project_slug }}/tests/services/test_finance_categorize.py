@@ -241,3 +241,68 @@ class TestSuggestCategories:
             joes_fresh.id,
             starbucks_fresh.id,
         }
+
+
+class TestExcludedRowsStayOutOfTheQueue:
+    """The Uncategorized queue is a work queue: rows waiting for a
+    category that will change some figure. A row flagged out of reports
+    can never change any figure, so putting it in the queue asks the user
+    to do work that cannot matter - nine issuer-adjustment legs sat there
+    nagging (confirmed live), and every future adjustment pair would
+    rejoin the queue on arrival.
+    """
+
+    @pytest.mark.asyncio
+    async def test_an_excluded_row_is_not_asked_about(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        card = await _account(svc, "Amex", "credit_card", "liability")
+        excluded = await svc.create_transaction(
+            account_id=card.id,
+            amount=23_171,
+            txn_date=date(2026, 7, 17),
+            owner_user_id=1,
+            name="Adj Redist Bal",
+        )
+        excluded.excluded_from_reports = True
+        async_db_session.add(excluded)
+        await svc.create_transaction(
+            account_id=card.id,
+            amount=-1_500,
+            txn_date=date(2026, 7, 18),
+            owner_user_id=1,
+            name="Coffee Cart",
+        )
+        await async_db_session.flush()
+
+        result = await svc.uncategorized_transactions(owner_user_id=1, limit=None)
+
+        names = [t.name for t in result["items"]]
+        assert "Coffee Cart" in names
+        assert "Adj Redist Bal" not in names
+        assert result["total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_transfer_legs_are_not_asked_about_either(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Same reasoning: a paired card-payment leg is excluded from
+        every figure, so categorizing it is busywork."""
+        svc = FinanceService(async_db_session)
+        checking = await _account(svc, "Checking", "checking", "asset")
+        leg = await svc.create_transaction(
+            account_id=checking.id,
+            amount=-190_000,
+            txn_date=date(2026, 7, 17),
+            owner_user_id=1,
+            name="AMEX EPAYMENT",
+        )
+        leg.is_transfer = True
+        leg.excluded_from_reports = True
+        async_db_session.add(leg)
+        await async_db_session.flush()
+
+        result = await svc.uncategorized_transactions(owner_user_id=1, limit=None)
+
+        assert result["total"] == 0

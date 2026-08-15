@@ -82,4 +82,4 @@ class TestBillDialogsUseIt:
     def test_no_typed_date_fields_remain(self) -> None:
         source = inspect.getsource(finance_recurring_tab)
         assert "YYYY-MM-DD" not in source
-        assert source.count("FormDateField(") == 2  # add + edit
+        assert source.count("FormDateField(") == 3  # add + edit + pause

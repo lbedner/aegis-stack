@@ -400,7 +400,7 @@ class FinanceAccount(SQLModel, table=True):
         CheckConstraint(
             "account_type IN ('checking', 'savings', 'credit_card', 'loan', "
             "'investment', 'brokerage', 'crypto', 'property', 'vehicle', "
-            "'cash', 'other_asset', 'other_liability')",
+            "'cash', 'goal', 'envelope', 'other_asset', 'other_liability')",
             name="ck_finance_account_type",
         ),
         CheckConstraint(
@@ -572,7 +572,7 @@ class FinanceValuation(SQLModel, table=True):
         ),
         CheckConstraint(
             "source IN ('manual', 'zillow', 'kbb', 'exchange_api', 'onchain', "
-            "'plaid', 'snaptrade', 'coingecko', 'reconciliation')",
+            "'plaid', 'snaptrade', 'coingecko', 'reconciliation', 'goal_auto', 'envelope_auto')",
             name="ck_finance_valuation_source",
         ),
         {"schema": _SCHEMA},
@@ -871,7 +871,7 @@ class FinanceTransfer(SQLModel, table=True):
         ),
         CheckConstraint(
             "match_method IN ('auto_amount_date', 'plaid_transfer', "
-            "'user_manual', 'rule')",
+            "'user_manual', 'rule', 'payment_history')",
             name="ck_finance_transfer_method",
         ),
         CheckConstraint(
@@ -1502,7 +1502,7 @@ class FinanceRecurringStream(SQLModel, table=True):
         CheckConstraint(
             "frequency IN ('weekly', 'biweekly', 'semi_monthly', 'monthly', "
             "'bimonthly', 'quarterly', 'semi_annually', 'annually', "
-            "'irregular', 'unknown')",
+            "'once', 'irregular', 'unknown')",
             name="ck_finance_recurring_frequency",
         ),
         CheckConstraint(
@@ -1554,6 +1554,14 @@ class FinanceRecurringStream(SQLModel, table=True):
     is_active: bool = Field(default=True)
     is_user_confirmed: bool = Field(default=False)
     is_muted: bool = Field(default=False)
+    # Paused while this date is in the future ("skip my investments for a
+    # few months"): a stated fact the rollup can trust, where a pushed
+    # next_expected_date is ambiguous - the monthly-equivalent math is
+    # deliberately date-blind and cannot tell "annual bill, due later"
+    # from "not paying this for a while". Lazy by design: nothing unsets
+    # it; the day it passes, every consumer's comparison flips on its own.
+    # Reserved - no consumer reads it yet.
+    paused_until: date | None = Field(default=None)
     service_type: str | None = Field(default=None)
     source: str = Field(max_length=12)
     deleted_at: datetime | None = Field(default=None)
@@ -2018,6 +2026,61 @@ class FinanceAttachment(SQLModel, table=True):
     deleted_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class FinanceAnalystSnapshot(SQLModel, table=True):
+    """One row per owner per day: the figures the analyst note was built from.
+
+    The note itself is a ``finance_insight`` row and its ``body`` is prose.
+    This is the same day's numbers kept in typed columns instead, so a later
+    note can ask what MOVED rather than only what is. Typed rather than a
+    JSON blob on the note because the interesting questions are ranged ones
+    ("has the runway slipped every week this month"), and a blob answers
+    only the one-step case.
+
+    Every money column is minor units (cents) and BigInteger, same as
+    everywhere else here. Written after the note succeeds, so a failed model
+    run leaves no snapshot and tomorrow simply diffs against the last good
+    day.
+    """
+
+    __tablename__ = "finance_analyst_snapshot"
+    __table_args__ = (
+        Index("ix_finance_analyst_snapshot_owner", "owner_user_id"),
+        Index("ix_finance_analyst_snapshot_day", "as_of_date"),
+        Index(
+            "uq_finance_analyst_snapshot_owner_day",
+            "owner_user_id",
+            "as_of_date",
+            unique=True,
+        ),
+        {"schema": _SCHEMA},
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_user_id: int = Field()
+    as_of_date: date = Field()
+
+    net_worth: int | None = _bigint("net_worth")
+    cash_today: int | None = _bigint("cash_today")
+    portfolio_total: int | None = _bigint("portfolio_total")
+    positions: int = Field(default=0)
+
+    # The forecast, split into the three figures worth trending: where it
+    # ends, how low it dips, and the date it first crosses zero - the last
+    # being the one a reader actually feels.
+    projection_end_date: date | None = Field(default=None)
+    projection_end_amount: int | None = _bigint("projection_end_amount")
+    projection_low_date: date | None = Field(default=None)
+    projection_low_amount: int | None = _bigint("projection_low_amount")
+    first_negative_date: date | None = Field(default=None)
+    first_negative_name: str | None = Field(default=None, max_length=255)
+
+    open_critical: int = Field(default=0)
+    open_warning: int = Field(default=0)
+    goals_total_saved: int | None = _bigint("goals_total_saved")
+
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class FinanceTransactionChangelog(SQLModel, table=True):

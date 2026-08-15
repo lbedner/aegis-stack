@@ -41,6 +41,13 @@ class TableCellText(ft.Text):  # type: ignore[misc]
 
     Used for displaying data values in table cells. Provides consistent
     sizing and coloring for tabular data.
+
+    Single-line by default: a table row has one fixed height (DataTable's
+    ``item_extent``), so a value too long for its column wraps to a
+    second line that gets clipped by that fixed height instead of
+    actually showing more - truncating with an ellipsis instead keeps
+    every row honestly the height it claims to be. Pass ``max_lines=None``
+    to opt back into wrapping for a cell that's meant to be tall.
     """
 
     def __init__(self, text: str, **kwargs: Any) -> None:
@@ -48,6 +55,9 @@ class TableCellText(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.BODY,
             "color": ft.Colors.ON_SURFACE,
+            "max_lines": 1,
+            "overflow": ft.TextOverflow.ELLIPSIS,
+            "no_wrap": True,
         }
         defaults.update(kwargs)
 
@@ -63,6 +73,8 @@ class TableNameText(ft.Text):  # type: ignore[misc]
 
     Used for displaying entity names (queues, tables, etc.) in table rows.
     Provides consistent styling for entity identifiers.
+
+    Single-line by default - see ``TableCellText`` for why.
     """
 
     def __init__(self, text: str, **kwargs: Any) -> None:
@@ -71,6 +83,9 @@ class TableNameText(ft.Text):  # type: ignore[misc]
             "weight": ft.FontWeight.W_400,
             "size": Theme.Typography.BODY,
             "color": ft.Colors.ON_SURFACE,
+            "max_lines": 1,
+            "overflow": ft.TextOverflow.ELLIPSIS,
+            "no_wrap": True,
         }
         defaults.update(kwargs)
 

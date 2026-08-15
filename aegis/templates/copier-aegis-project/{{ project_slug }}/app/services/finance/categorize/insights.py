@@ -38,7 +38,7 @@ from typing import TypedDict
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.constants import CASH_ACCOUNT_TYPES
+from app.services.finance.constants import CADENCES, CASH_ACCOUNT_TYPES
 from app.services.finance.models import (
     FinanceAccount,
     FinanceInsight,
@@ -50,6 +50,14 @@ from app.services.finance.models import (
 PRICE_HIKE_THRESHOLD = 1.10  # >10% over the stream's average
 OVERSPEND_MULTIPLE = 1.5  # > 1.5x the 3-month median
 OVERSPEND_MIN_HISTORY = 3  # need >= 3 prior full months
+# Comparing on pace shrinks the baseline, which is the point (the rule can
+# now fire while the month can still be steered) but also makes the early
+# days dangerous: three days of history is mostly noise, and one grocery
+# run against it reads as an emergency. Judge nothing until a quarter of
+# the month has passed, and never multiply a baseline too small to mean
+# anything.
+OVERSPEND_MIN_ELAPSED = 0.25
+OVERSPEND_MIN_BASELINE = 5_000  # cents
 _FEE_PFC = "BANK_FEES"
 _FEE_RE = re.compile(r"FEE|INTEREST CHARGE|FINANCE CHARGE", re.IGNORECASE)
 
@@ -80,7 +88,9 @@ SUBSCRIPTION_CREEP_MULTIPLE = 1.25  # x the prior-months median
 # missed_recurring: days past the expected date before a stream counts as
 # missed. Short cadences get a tighter window - a weekly charge four days late
 # is meaningful, a monthly one is not.
-_MISSED_GRACE_DAYS: dict[str, int] = {"weekly": 3, "biweekly": 3}
+_MISSED_GRACE_DAYS: dict[str, int] = {
+    key: cadence.grace_days for key, cadence in CADENCES.items()
+}
 _MISSED_GRACE_DEFAULT = 5
 # Only commitments are worth chasing. Detection happily finds a weekly cadence
 # in someone's coffee habit, and "you have not been to Starbucks" is not an
@@ -105,17 +115,10 @@ def is_commitment(stream: FinanceRecurringStream) -> bool:
     return stream.is_user_confirmed or stream.source == "user"
 
 
-# Frequency -> monthly-equivalent multiplier for the recurring-cost rollup.
-_MONTHLY_FACTOR = {
-    "weekly": 52 / 12,
-    "biweekly": 26 / 12,
-    "semi_monthly": 2.0,
-    "monthly": 1.0,
-    "bimonthly": 0.5,
-    "quarterly": 1 / 3,
-    "semi_annually": 1 / 6,
-    "annually": 1 / 12,
-}
+# Monthly-equivalent multiplier for the recurring-cost rollup, derived from
+# the cadence table so a bill cannot be weighed at one size here and
+# stepped at another by the forecast.
+_MONTHLY_FACTOR = {key: cadence.monthly_factor for key, cadence in CADENCES.items()}
 
 
 class CommitmentRollup(TypedDict):
@@ -124,7 +127,39 @@ class CommitmentRollup(TypedDict):
     non_monthly: list[FinanceRecurringStream]
 
 
-def commitment_rollup(streams: list[FinanceRecurringStream]) -> CommitmentRollup:
+def _not_paused_clause(today: date):
+    """SQL half of ``is_paused`` for the rules that filter in the query.
+
+    Kept adjacent to the Python predicate so the two cannot drift: a rule
+    firing about a paused bill is precisely the nag the pause exists to
+    silence.
+    """
+    return or_(
+        FinanceRecurringStream.paused_until.is_(None),
+        FinanceRecurringStream.paused_until <= today,
+    )
+
+
+def is_paused(stream: FinanceRecurringStream, today: date | None = None) -> bool:
+    """Paused while ``paused_until`` is ahead of today.
+
+    A stated fact, not an inference from a pushed date: "skip my
+    investments for a few months" without losing the bill. Lazy by
+    design - nothing ever un-sets it, so "until Nov 1" means active
+    again ON Nov 1 by pure comparison, and no scheduler job exists to
+    forget to run. One predicate for every consumer, because mute taught
+    us what per-surface treatment costs: a muted bill vanished from the
+    forecast but kept counting in the Bills total, and the two surfaces
+    disagreed by the whole bill.
+    """
+    if stream.paused_until is None:
+        return False
+    return (today or date.today()) < stream.paused_until
+
+
+def commitment_rollup(
+    streams: list[FinanceRecurringStream], today: date | None = None
+) -> CommitmentRollup:
     """Commitment outflows only (see ``is_commitment``), split by whether
     they hit monthly or less often - the same monthly-cost math `/recurring`
     already does, shared instead of duplicated so the Budget tab's
@@ -133,6 +168,12 @@ def commitment_rollup(streams: list[FinanceRecurringStream]) -> CommitmentRollup
     non_monthly: list[FinanceRecurringStream] = []
     total = 0.0
     for stream in streams:
+        # Muted and paused bills charge NOTHING here - the same silence
+        # the forecast already honors. Counting them (the original mute
+        # behavior) made the Bills cell and the Projected tab disagree
+        # by the whole bill.
+        if stream.is_muted or is_paused(stream, today):
+            continue
         if not (
             stream.direction == "outflow"
             and stream.average_amount
@@ -237,18 +278,46 @@ def live_account_ids(owner_user_id: int | None):
     )
 
 
+def _days_in_month(day: date) -> int:
+    """Days in ``day``'s own month."""
+    first_next = (day.replace(day=1) + timedelta(days=32)).replace(day=1)
+    return (first_next - day.replace(day=1)).days
+
+
+def month_is_complete(day: date) -> bool:
+    """Is ``day`` the last day of its own month?"""
+    return (day + timedelta(days=1)).month != day.month
+
+
+def pace_day(today: date) -> int | None:
+    """The day-of-month prior months should be measured to, or ``None``.
+
+    ``None`` on the last day of a month: there is nothing to pro-rate, and
+    truncating whole months would understate the norm instead.
+    """
+    return None if month_is_complete(today) else today.day
+
+
 async def monthly_category_spend(
     db: AsyncSession,
     *,
     owner_user_id: int | None,
     today: date,
     months_back: int = OVERSPEND_MIN_HISTORY,
+    through_day: int | None = None,
 ) -> dict[int, dict[str, int]]:
     """``{category_id: {"YYYY-MM": spend_cents}}`` over the trailing window.
 
     Transfer-excluded, categorized outflows only. Shared by the overspend rule
     and the analyst's snapshot so that "more than usual" means exactly the same
     thing wherever the product says it.
+
+    ``through_day`` counts only spend on or before that day of the month, in
+    every month including the current one. Without it a part-finished month is
+    weighed against whole prior months: on the 9th that is nine days against
+    thirty, which makes almost every category look cheap and makes the
+    overspend rule almost unable to fire until the month is over. Pass
+    ``pace_day(today)``.
     """
     rows = (
         await db.exec(
@@ -267,6 +336,8 @@ async def monthly_category_spend(
 
     by_category: dict[int, dict[str, int]] = {}
     for txn in rows:
+        if through_day is not None and txn.date_.day > through_day:
+            continue
         months = by_category.setdefault(txn.category_id, {})
         key = month_key(txn.date_)
         months[key] = months.get(key, 0) + abs(txn.amount)
@@ -301,7 +372,7 @@ async def generate_insights(
 
     live_accounts = live_account_ids(owner_user_id)
 
-    result.created += await _price_hikes(db, store_owner)
+    result.created += await _price_hikes(db, store_owner, today)
     result.created += await _fees(db, owner_user_id, store_owner, live_accounts, floor)
     result.created += await _overspend(db, owner_user_id, store_owner, today)
     result.created += await _large_transactions(
@@ -365,7 +436,7 @@ async def create_insight_if_new(
     return insight
 
 
-async def _price_hikes(db: AsyncSession, store_owner: int) -> int:
+async def _price_hikes(db: AsyncSession, store_owner: int, today: date) -> int:
     """A fixed-amount recurring stream now costs more than its average."""
     streams = (
         await db.exec(
@@ -374,6 +445,7 @@ async def _price_hikes(db: AsyncSession, store_owner: int) -> int:
                 FinanceRecurringStream.deleted_at.is_(None),
                 FinanceRecurringStream.status == "mature",
                 FinanceRecurringStream.is_muted.is_(False),
+                _not_paused_clause(today),
                 FinanceRecurringStream.amount_is_variable.is_(False),
                 FinanceRecurringStream.direction == "outflow",
             )
@@ -450,9 +522,21 @@ async def _overspend(
     store_owner: int,
     today: date,
 ) -> int:
-    """This month's category spend is > 1.5x the prior-3-month median."""
-    by_cat = await monthly_category_spend(db, owner_user_id=owner_user_id, today=today)
+    """This month's category spend is > 1.5x the prior-3-month median.
+
+    Measured ON PACE: prior months are counted only to the same day of the
+    month, so a part-finished month is not weighed against whole ones. The
+    old comparison could barely clear 1.5x before the month was nearly
+    over, which made the warning a post-mortem rather than something a
+    reader could still act on.
+    """
+    through = pace_day(today)
+    by_cat = await monthly_category_spend(
+        db, owner_user_id=owner_user_id, today=today, through_day=through
+    )
     current_key = month_key(today)
+    days_in_month = _days_in_month(today)
+    elapsed = 1.0 if through is None else through / days_in_month
 
     created = 0
     for category_id, months in by_cat.items():
@@ -460,8 +544,12 @@ async def _overspend(
         prior = [amount for key, amount in months.items() if key != current_key]
         if current <= 0 or len(prior) < OVERSPEND_MIN_HISTORY:
             continue  # not enough history -> skip silently
+        if elapsed < OVERSPEND_MIN_ELAPSED:
+            continue  # too early in the month to judge it
         median_prior = statistics.median(prior)
-        if median_prior <= 0 or current <= median_prior * OVERSPEND_MULTIPLE:
+        if median_prior < OVERSPEND_MIN_BASELINE:
+            continue  # a ratio against pocket change is arithmetic, not news
+        if current <= median_prior * OVERSPEND_MULTIPLE:
             continue
         if await create_insight_if_new(
             db,
@@ -471,8 +559,13 @@ async def _overspend(
             severity="warning",
             title=f"Spending up this month ({format_usd(current)})",
             body=(
-                f"This month is {format_usd(current)} vs a typical {format_usd(int(median_prior))} "
-                "for this category."
+                f"This month is {format_usd(current)} vs a typical "
+                f"{format_usd(int(median_prior))}"
+                + (
+                    f" by day {through} for this category."
+                    if through is not None
+                    else " for this category."
+                )
             ),
             detected_amount=current,
             related_category_id=category_id,
@@ -588,6 +681,7 @@ async def _missed_recurring(
                 FinanceRecurringStream.status == "mature",
                 FinanceRecurringStream.is_active.is_(True),
                 FinanceRecurringStream.is_muted.is_(False),
+                _not_paused_clause(today),
                 FinanceRecurringStream.next_expected_date.is_not(None),
                 or_(
                     FinanceRecurringStream.account_id.is_(None),
@@ -933,6 +1027,7 @@ async def _subscription_creep(
                     FinanceRecurringStream.direction == "outflow",
                     FinanceRecurringStream.is_subscription.is_(True),
                     FinanceRecurringStream.is_muted.is_(False),
+                    _not_paused_clause(today),
                 )
             )
         ).all()

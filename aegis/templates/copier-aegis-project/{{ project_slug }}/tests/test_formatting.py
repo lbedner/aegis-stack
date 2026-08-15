@@ -7,11 +7,11 @@ trivial to test directly; their behavior is already covered transitively
 by the CLI and dashboard tests that consume them.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.formatting import format_relative_time
 
-NOW = datetime(2026, 5, 19, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 5, 19, 12, 0, 0, tzinfo=UTC)
 
 
 class TestFormatRelativeTime:
@@ -47,6 +47,40 @@ class TestFormatRelativeTime:
         assert "15" in result
         assert "08:30" in result
 
+    def test_coarse_keeps_counting_past_a_day(self):
+        """Opt-in mode for ages measured in months, not minutes.
+
+        An installed model is typically months old, and "Jan 21 02:54"
+        answers a question nobody asked - ``ollama list`` says "6 months
+        ago" because that is the readable unit at that distance. Default
+        behaviour is untouched so no existing caller shifts.
+        """
+        assert format_relative_time(
+            "2026-05-16T12:00:00+00:00", now=NOW, coarse=True
+        ) == ("3 days ago")
+        assert format_relative_time(
+            "2026-05-18T12:00:00+00:00", now=NOW, coarse=True
+        ) == ("1 day ago")
+
+    def test_coarse_reads_in_months_then_years(self):
+        assert format_relative_time(
+            "2025-11-19T12:00:00+00:00", now=NOW, coarse=True
+        ) == ("6 months ago")
+        assert format_relative_time(
+            "2024-05-19T12:00:00+00:00", now=NOW, coarse=True
+        ) == ("2 years ago")
+
+    def test_coarse_never_reports_zero_months(self):
+        """A 30-day gap is "1 month", not "0 months" - integer division
+        by 30.44 rounds a real duration down to nothing."""
+        result = format_relative_time("2026-04-19T12:00:00+00:00", now=NOW, coarse=True)
+        assert result == "1 month ago"
+
+    def test_coarse_leaves_the_sub_day_branches_alone(self):
+        assert format_relative_time(
+            "2026-05-19T09:00:00+00:00", now=NOW, coarse=True
+        ) == ("3 hours ago")
+
     def test_trailing_z_is_accepted(self):
         """``Z`` suffix isn't accepted by ``fromisoformat`` on every
         Python the project targets — the formatter normalizes it."""
@@ -69,7 +103,6 @@ class TestFormatRelativeTime:
         specific bucket because real time moves, but a fresh timestamp
         should land in ``just now``."""
         from datetime import datetime as _dt
-        from datetime import timezone as _tz
 
-        ts = _dt.now(_tz.utc).isoformat()
+        ts = _dt.now(UTC).isoformat()
         assert format_relative_time(ts) == "just now"

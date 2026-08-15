@@ -47,10 +47,16 @@ class ProviderIcon(ft.Container):
         if icon_b64:
             content = ft.Container(
                 content=ft.Image(
-                    # src_base64, never src: a remote URL is blocked by
-                    # CORS and a relative one resolves against Flet's
-                    # assets dir, not the HTTP origin (merchant_icon.py).
-                    src_base64=icon_b64,
+                    # A data: URI on src, never src_base64 and never a
+                    # fetched URL. The bytes still ride inline (a remote
+                    # URL is CORS-blocked and a relative one resolves
+                    # against Flet's assets dir - merchant_icon.py), but
+                    # AS A STRING: Flutter caches network images by URL
+                    # string while src_base64 decodes a fresh buffer on
+                    # every remount of a virtualized row - cache keyed by
+                    # buffer identity, so every scroll-back-in re-decoded
+                    # the icon and flashed an empty tile (confirmed live).
+                    src=f"data:image/png;base64,{icon_b64}",
                     width=_SIZE - 2 * _PAD,
                     height=_SIZE - 2 * _PAD,
                     fit=ft.ImageFit.CONTAIN,

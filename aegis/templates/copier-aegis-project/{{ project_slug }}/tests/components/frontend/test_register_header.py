@@ -36,7 +36,7 @@ class TestHeaderLayout:
         """It must claim no height with nothing selected, or the table
         sits behind a permanent blank strip."""
         source = self._source()
-        row = source[source.index("self._selection_row = ft.Row(") :]
+        row = source[source.index("self._selection_row = ft.Container(") :]
         assert "visible=False," in row[: row.index("self.content")]
 
     def test_the_selection_row_follows_the_selection(self) -> None:

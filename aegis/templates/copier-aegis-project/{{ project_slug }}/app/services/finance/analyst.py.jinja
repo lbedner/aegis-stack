@@ -27,8 +27,8 @@ load_all_ai_fixtures(SessionLocal())"
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import date, timedelta
+from dataclasses import dataclass, field, replace
+from datetime import UTC, date, datetime, timedelta
 import statistics
 from typing import Any
 
@@ -48,10 +48,19 @@ from app.services.finance.categorize.insights import (
     format_usd,
     month_key,
     monthly_category_spend,
+    pace_day,
 )
 from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
 from app.services.finance.finance_service import FinanceService
+from app.services.finance.envelopes import envelope_metadata
+from app.services.finance.goals import (
+    goal_eta,
+    goal_metadata,
+    goal_monthly_need,
+    goal_progress,
+)
 from app.services.finance.models import (
+    FinanceAnalystSnapshot,
     FinanceCategory,
     FinanceInsight,
     FinanceNetWorthSnapshot,
@@ -59,18 +68,40 @@ from app.services.finance.models import (
 
 __all__ = [
     "ANALYST_AGENT_SLUG",
+    "ANALYST_RULES",
+    "DEEP_DIVE_AGENT_SLUG",
+    "DEEP_DIVE_INSIGHT_TYPE",
+    "DEEP_DIVE_SYSTEM_PROMPT",
+    "DeepDive",
+    "deep_dive_agent_definition",
     "ANALYST_NOTE_INSIGHT_TYPE",
     "SNAPSHOT_MODULE_SLUG",
     "ReportFacts",
     "SectionCommentary",
     "build_finance_snapshot",
     "build_report_facts",
+    "build_deep_dive_context",
+    "context_label",
+    "diff_facts",
+    "findings_digest",
     "finance_snapshot",
     "load_finance_agent_fixtures",
+    "render_deep_dive",
+    "run_deep_dive",
     "render_report",
+    "save_snapshot",
+    "snapshot_before",
+    "snapshot_series",
 ]
 
 ANALYST_AGENT_SLUG = "finance-analyst"
+DEEP_DIVE_AGENT_SLUG = "finance-analyst-deep"
+DEEP_DIVE_SURFACE = "finance-analyst-deep"
+DEEP_DIVE_INSIGHT_TYPE = "analyst_deep_dive"
+# Notes live in the same table as the findings they describe. Every note
+# type has to be excluded wherever findings are counted, or the analyst
+# starts analysing its own output.
+_NOTE_INSIGHT_TYPES = frozenset({ANALYST_NOTE_INSIGHT_TYPE, DEEP_DIVE_INSIGHT_TYPE})
 SNAPSHOT_MODULE_SLUG = "finance_snapshot"
 ANALYST_SURFACE = "finance-analyst"
 
@@ -85,6 +116,11 @@ STANDALONE_USER_ID = "0"
 # thinking before it writes the report anyone sees.
 ANALYST_TEMPERATURE = 0.2
 ANALYST_MAX_TOKENS = 2_000
+# The review is five prose sections rather than five sentences, so it needs
+# a bigger budget than the note. Same low temperature: this is analysis, and
+# the whole design rests on it not getting inventive with figures.
+DEEP_DIVE_TEMPERATURE = 0.3
+DEEP_DIVE_MAX_TOKENS = 6_000
 SNAPSHOT_TOKEN_ESTIMATE = 1_200
 
 _NET_WORTH_WINDOW_DAYS = 90
@@ -103,33 +139,178 @@ _SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2}
 # rest as a count so the note can still say "and much more needs review".
 MAX_ANOMALY_LINES = 20
 
-ANALYST_SYSTEM_PROMPT = """\
-You are a personal finance analyst. Each day the application builds a report \
-whose layout and figures are computed by code; your job is ONLY the \
-commentary that accompanies each section. You receive the day's finance \
-context and return one entry per field:
-
-- headline: a short paragraph on what needs attention first. Anything under \
-OPEN ANOMALIES was flagged by the application's own checks and always leads. \
-On a quiet day, say so plainly in two sentences.
-- cash_and_bills, credit, spending, investments: one to three sentences of \
-judgment for that area. Return an empty string when the area has nothing \
-worth saying - the application omits the section's commentary line.
-
-Follow these rules exactly:
-
+# The invariants, in one place because BOTH prompts must obey them and a
+# copy in each is a copy that drifts. Embedded, not appended, so each
+# prompt keeps its own section order.
+ANALYST_RULES = """\
 - Use only figures that appear in the context. Never calculate, estimate, \
-convert, or invent a number. Prefer saying what a figure means over \
-repeating it; the report already shows the numbers beside your words.
-- Address the reader as "you". Plain prose only: no headings, no bullets, \
-no markdown, no emoji, no sign-off - the application owns the layout.
+convert, or invent a number. Every figure you are given is already computed; \
+if the number you want is not there, say the thing without it.
+- Address the reader as "you". Plain prose only: no headings, no bullets, no \
+markdown, no emoji, no sign-off - the application owns the layout.
 - Do not recite the context back. Never inventory balances, holdings, or \
-upcoming payments; mention one only when it explains a finding or a risk, \
-like a minimum payment your cash cannot cover or a card near its limit.
-- The CASH PROJECTION figures are the application's own forecast. A \
-projected drop below zero always deserves a sentence.
+upcoming payments; mention one only when it explains a finding or a risk.
+- Prefer saying what a figure MEANS over repeating it. The report already \
+prints the numbers beside your words."""
+
+
+ANALYST_SYSTEM_PROMPT = f"""\
+## ROLE
+
+You are a personal finance analyst writing today's short note. The \
+application computes the report's layout and every figure in it; you write \
+only the commentary that sits under each section.
+
+## WHAT YOU RECEIVE
+
+Labeled sections of the day's finances. OPEN ANOMALIES are findings the \
+application's own checks raised. CHANGED SINCE lists what moved since your \
+last note, already compared for you. YOUR PREVIOUS NOTE shows how you opened \
+last time.
+
+## WHAT YOU RETURN
+
+- headline: a short paragraph on what needs attention first. OPEN ANOMALIES \
+lead. On a quiet day, say so plainly in two sentences.
+- what_changed: one to three sentences on what MOVED since the last note and \
+whether the reader should care. Empty string when CHANGED SINCE is absent.
+- cash_and_bills, credit, spending, investments: one to three sentences of \
+judgment for that area. Empty string when the area has nothing worth saying - \
+the application then omits that section's commentary line.
+
+## RULES
+
+{ANALYST_RULES}
+- The CASH PROJECTION figures are the application's own forecast. A projected \
+drop below zero always deserves a sentence.
+- Movement beats standing figures. A balance reads the same every day; a \
+change does not. Say what a move MEANS - a runway that slipped is worse than \
+one that held, even when both are negative.
+- Do not repeat YOUR PREVIOUS NOTE. If the same thing is still true, say what \
+has changed about it, or lead with the next most important thing.
+- SPENDING figures are month-to-date against the same days of earlier months. \
+Never describe a partial month as if it were a whole one.
 - Keep each field under 60 words.
 """
+
+
+# How many findings the digest names per group before it stops listing
+# and just counts. The COUNT is always honest; the listing is a sample.
+DIGEST_SAMPLE_PER_GROUP = 4
+
+
+DEEP_DIVE_SYSTEM_PROMPT = f"""\
+## ROLE
+
+You are a personal finance analyst writing a full review, on request rather \
+than on a schedule. The daily note is a headline; this is the piece someone \
+reads once and then decides something. Take the room you need.
+
+## WHAT YOU RECEIVE
+
+The same labeled finance context the daily note gets, except that the flat \
+findings list is replaced by a FINDINGS DIGEST grouping every open finding by \
+kind and severity with real counts - plus a BUDGET PLAN whose suggested cuts \
+were computed by the application.
+
+## WHAT YOU RETURN
+
+- situation: where this person actually stands, in a paragraph. Money in, \
+money out, and whether the month clears. Lead with the answer, not the \
+build-up.
+- drivers: what is CAUSING that, named specifically. Which bills, which \
+income, which categories. Causes, not a list of balances.
+- findings: triage the FINDINGS DIGEST. Which groups deserve action, which \
+are almost certainly noise, and why. Say plainly when a whole group looks \
+like a detector artefact rather than a problem - a recurring bill flagged as \
+a large charge every month is the detector learning, not the reader \
+overspending.
+- options: what this person could actually DO, most useful first, each with \
+its effect. Where BUDGET PLAN suggests cuts, explain what they buy rather \
+than restating the figures. Say when an option is unpleasant.
+- risks: what could still go wrong, including anything the numbers cannot \
+see - a late deposit, an unbilled expense, a bill with no history yet.
+
+## RULES
+
+{ANALYST_RULES}
+- You may be long where being long earns it, and you must be short where it \
+does not. A section with little to say gets two sentences, not padding.
+- Never tell the reader to consult a professional, and never hedge a figure \
+the context states plainly.
+- Recommend, do not lecture. This person can read their own balances; what \
+they cannot do is see which of 75 findings matter.
+- Return an empty string for any section the context genuinely cannot \
+support. A confident paragraph about something you were not told is the one \
+failure that makes the whole report untrustworthy.
+"""
+
+
+class DeepDive(BaseModel):
+    """The on-request review. Longer than the daily note and shaped around
+    decisions rather than areas of the balance sheet."""
+
+    situation: str = Field(description="Where the reader stands, one paragraph.")
+    drivers: str = Field(default="", description="What is causing it, named.")
+    findings: str = Field(default="", description="Triage of the open findings.")
+    options: str = Field(default="", description="What they can do, best first.")
+    risks: str = Field(default="", description="What could still go wrong.")
+
+
+_DEEP_DIVE_SECTIONS = (
+    ("Where you stand", "situation"),
+    ("What is driving it", "drivers"),
+    ("The open findings", "findings"),
+    ("What you can do", "options"),
+    ("What could still go wrong", "risks"),
+)
+
+
+def render_deep_dive(dive: DeepDive) -> str:
+    """The review, in a fixed order with empty sections dropped.
+
+    No figures of its own: unlike the daily note this report is entirely
+    the model's prose, because the numbers it would otherwise print are
+    already in the note above it.
+    """
+    blocks: list[str] = []
+    for label, attr in _DEEP_DIVE_SECTIONS:
+        prose = str(getattr(dive, attr, "") or "").strip()
+        if prose:
+            blocks.append(f"**{label}**\n\n{prose}")
+    return "\n\n".join(blocks)
+
+
+def findings_digest(insights: list[FinanceInsight]) -> str:
+    """Every open finding grouped by kind and severity, worst group first.
+
+    The daily note gets a flat list truncated at twenty, which is why it
+    never mentions findings at all: twenty unranked lines out of seventy-five
+    is noise with no shape. Grouping turns it into something triageable -
+    "twenty-seven large-charge flags, twelve critical" is a pattern, and a
+    pattern can be dismissed or acted on as a whole.
+
+    Counts always cover everything; only the sample of titles is capped.
+    """
+    if not insights:
+        return "FINDINGS DIGEST (0)\n- none open; the checks found nothing"
+
+    groups: dict[tuple[str, str], list[FinanceInsight]] = {}
+    for insight in insights:
+        groups.setdefault((insight.severity, insight.insight_type), []).append(insight)
+
+    lines = [f"FINDINGS DIGEST ({len(insights)} open)"]
+    for (severity, insight_type), found in sorted(
+        groups.items(),
+        key=lambda item: (_SEVERITY_ORDER.get(item[0][0], 3), -len(item[1])),
+    ):
+        lines.append(f"- [{severity}] {insight_type}: {len(found)}")
+        for insight in found[:DIGEST_SAMPLE_PER_GROUP]:
+            lines.append(f"    - {context_label(insight.title)}")
+        hidden = len(found) - DIGEST_SAMPLE_PER_GROUP
+        if hidden > 0:
+            lines.append(f"    - ...and {hidden} more of the same kind")
+    return "\n".join(lines)
 
 
 def user_id_for(owner_user_id: int | None) -> str:
@@ -169,14 +350,54 @@ def _amount(cents: int) -> str:
     return f"-{format_usd(cents)}" if cents < 0 else format_usd(cents)
 
 
+# Findings whose live version is ALWAYS a computed section of the same
+# context. An insight row freezes its figures on the day it is raised, so
+# feeding the model both produced a note whose headline quoted the stale
+# trigger while its own facts bullet named the live one (confirmed on a
+# real note: "$216.25 Anthropic" against "Central Hudson"). The projection
+# section owns the concept; the row stays in the UI but out of the prompt.
+_PROJECTION_OWNED_TYPES = frozenset({"cash_runway"})
+
+# Context lines are read by a model, not grepped - past this length a
+# title is descriptor garbage (ACH trace codes), not information.
+_CONTEXT_LABEL_LIMIT = 64
+
+
+def context_label(text: str, *, limit: int = _CONTEXT_LABEL_LIMIT) -> str:
+    """A title fit for the model's context: whitespace collapsed, hard cap.
+
+    Cleans for READING, nothing more - naming raw descriptors properly is
+    the payee system's job, and doing it here would hide that gap.
+    """
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 3].rstrip() + "..."
+
+
 def _accounts_section(accounts: list[Any]) -> str:
+    """Balances the model may quote, and only those.
+
+    An account without a tracked balance used to render as "$0.00" -
+    "Citizens Bank Mortgage: $0.00 owed" is not a balance, it is a gap in
+    the data dressed as a fact, and a model told the mortgage stands at
+    zero will eventually say so. Untracked accounts are listed by name
+    under one honest line instead.
+    """
     lines = [f"ACCOUNTS ({len(accounts)})"]
+    untracked: list[str] = []
     for account in accounts:
-        balance = format_usd(account.current_balance or 0)
+        if not account.current_balance:
+            untracked.append(account.name)
+            continue
         owed = " owed" if account.classification == "liability" else ""
         lines.append(
             f"- {account.name} ({account.account_type}, "
-            f"{account.classification}): {balance}{owed}"
+            f"{account.classification}): {format_usd(account.current_balance)}{owed}"
+        )
+    if untracked:
+        lines.append(
+            f"- {len(untracked)} with no recorded balance: {', '.join(untracked)}"
         )
     return "\n".join(lines)
 
@@ -370,10 +591,16 @@ async def _ranked_spending(
     """Top categories this month as ``(name, spent, typical)``, largest first.
 
     The same buckets the overspend rule uses, so a category the rule did not
-    flag still shows the reader why it did not.
+    flag still shows the reader why it did not - including the pacing, or
+    the two surfaces would disagree about what "typical" means.
+
+    ``typical`` is the prior months measured TO THE SAME DAY. Against whole
+    months, nine days of a thirty-day month makes every category look cheap,
+    and the note duly reported spending as "below typical" on the 9th - true
+    of almost everything on almost every 9th, and therefore worthless.
     """
     by_category = await monthly_category_spend(
-        db, owner_user_id=owner_user_id, today=today
+        db, owner_user_id=owner_user_id, today=today, through_day=pace_day(today)
     )
     current = month_key(today)
 
@@ -404,7 +631,14 @@ async def _spending_section(
     )
     if not ranked:
         return None
-    lines = [f"SPENDING THIS MONTH ({month_key(today)})"]
+    through = pace_day(today)
+    header = f"SPENDING THIS MONTH ({month_key(today)})"
+    if through is not None:
+        header += (
+            f" - month to date, compared with the same first {through} days "
+            "of earlier months"
+        )
+    lines = [header]
     for name, this_month, typical in ranked:
         if typical is None:
             lines.append(f"- {name}: {format_usd(this_month)} (no earlier months)")
@@ -430,7 +664,12 @@ async def _anomalies_section(
 ) -> str:
     """The deterministic findings. The one section that drives the note."""
     insights = await service.list_insights(owner_user_id=owner_user_id, status="new")
-    flagged = [i for i in insights if i.insight_type != ANALYST_NOTE_INSIGHT_TYPE]
+    flagged = [
+        i
+        for i in insights
+        if i.insight_type not in _NOTE_INSIGHT_TYPES
+        and i.insight_type not in _PROJECTION_OWNED_TYPES
+    ]
     if not flagged:
         return "OPEN ANOMALIES (0)\n- none; the checks found nothing this run"
     flagged.sort(key=lambda i: _SEVERITY_ORDER.get(i.severity, 3))
@@ -438,13 +677,79 @@ async def _anomalies_section(
     lines = [f"OPEN ANOMALIES ({len(flagged)})"]
     for insight in shown:
         body = f" {insight.body}" if insight.body else ""
-        lines.append(f"- [{insight.severity}] {insight.title}.{body}")
+        lines.append(f"- [{insight.severity}] {context_label(insight.title)}.{body}")
     remainder = len(flagged) - len(shown)
     if remainder:
         lines.append(
             f"- plus {remainder} more open findings not listed here "
             "(the most severe are above)"
         )
+    return "\n".join(lines)
+
+
+async def _envelopes_section(
+    service: FinanceService, *, owner_user_id: int | None
+) -> str | None:
+    """Envelopes: name, balance, standing credit - an overdrawn one is
+    called out (borrowed against next month). Absent when none exist."""
+    envelopes = await service.list_envelopes(owner_user_id=owner_user_id)
+    if not envelopes:
+        return None
+    lines = ["ENVELOPES"]
+    for account in envelopes:
+        meta = envelope_metadata(account.metadata_)
+        if meta is None:
+            continue
+        balance = account.current_balance or 0
+        line = f"- {account.name}: {_amount(balance)}"
+        if meta.monthly_credit:
+            line += f", credits {_amount(meta.monthly_credit)}/mo"
+            line += " automatically" if meta.auto_credit else " by hand"
+        if balance < 0:
+            line += " (overdrawn - borrowed against next month)"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+async def _goals_section(
+    service: FinanceService, *, owner_user_id: int | None, today: date
+) -> str | None:
+    """Savings goals: progress, this month's ask, and a PRECOMPUTED landing
+    date - "at $0.00/mo: never" spelled out, so the model narrates the
+    verdict instead of attempting the arithmetic. Absent when no goals
+    exist: an empty section is junk context."""
+    goal_accounts = await service.list_goals(owner_user_id=owner_user_id)
+    if not goal_accounts:
+        return None
+    lines = ["GOALS"]
+    for account in goal_accounts:
+        meta = goal_metadata(account.metadata_)
+        if meta is None:
+            continue
+        balance = account.current_balance or 0
+        pct = round(goal_progress(balance=balance, target=meta.target_amount) * 100)
+        base = (
+            f"- {account.name}: {_amount(balance)} of "
+            f"{_amount(meta.target_amount)} ({pct}%)"
+        )
+        if balance >= meta.target_amount or meta.status == "reached":
+            lines.append(f"{base} (reached)")
+            continue
+        if meta.status == "paused":
+            lines.append(f"{base} (paused)")
+            continue
+        rate = await service.goal_rate(account, today=today)
+        eta = goal_eta(
+            balance=balance,
+            target=meta.target_amount,
+            monthly_rate=rate,
+            today=today,
+        )
+        need = goal_monthly_need(meta, balance=balance, today=today)
+        if eta is None:
+            lines.append(f"{base}, at {_amount(rate or 0)}/mo: never")
+        else:
+            lines.append(f"{base}, asking {_amount(need)}/mo, lands {eta.isoformat()}")
     return "\n".join(lines)
 
 
@@ -487,6 +792,13 @@ class SectionCommentary(BaseModel):
             "lead. Two plain sentences on a quiet day."
         )
     )
+    what_changed: str = Field(
+        default="",
+        description=(
+            "1-3 sentences on what MOVED since the last note and whether it "
+            "matters. Empty when nothing moved."
+        ),
+    )
     cash_and_bills: str = Field(
         default="", description="1-3 sentences on cash and upcoming bills."
     )
@@ -518,10 +830,20 @@ class ReportFacts:
     first_negative: tuple[date, str] | None = None
     credit_lines: list[str] = field(default_factory=list)
     spending: list[tuple[str, int, int | None]] = field(default_factory=list)
+    # Day of month the spending norms were measured to, or None for a
+    # finished month. The report says so, or a part-month "typical" reads
+    # as a monthly one.
+    spending_through_day: int | None = None
     portfolio_total: int | None = None
     positions: int = 0
     open_critical: int = 0
     open_warning: int = 0
+    # Sum of goal balances - the trended "saved toward dreams" figure.
+    goals_total_saved: int | None = None
+    # Pre-rendered "what moved since the last note" lines. Computed by
+    # ``diff_facts`` against the previous day's snapshot, so the model is
+    # handed the comparison already made and never does the arithmetic.
+    changes: list[str] = field(default_factory=list)
 
 
 _REPORT_SPENDING_LINES = 3
@@ -562,6 +884,213 @@ def _spending_movers(
         (name, this_month, typical)
         for _delta, name, this_month, typical in movers[:limit]
     ]
+
+
+# How far back a ranged read looks by default. The delta only needs
+# yesterday; this is for the trend questions the table exists to allow.
+SNAPSHOT_SERIES_DAYS = 90
+
+
+def _days_apart(earlier: date, later: date) -> str:
+    """ "3 days later" / "3 days earlier", computed here so the model never
+    does date arithmetic on a figure a reader will check."""
+    delta = (later - earlier).days
+    if delta == 0:
+        return "same day"
+    unit = "day" if abs(delta) == 1 else "days"
+    return f"{abs(delta)} {unit} {'later' if delta > 0 else 'earlier'}"
+
+
+def diff_facts(
+    previous: ReportFacts | None, current: ReportFacts, *, since: date
+) -> list[str]:
+    """What moved between two days, as finished lines.
+
+    Deterministic and code-owned for the same reason every other figure is:
+    a wrong number here is a bug with one place to fix, not a model to argue
+    with. Returns ``[]`` when nothing moved, and the caller omits the section
+    entirely - a report that says "no change" every quiet day trains the
+    reader to skip it.
+    """
+    if previous is None:
+        return []
+
+    lines: list[str] = []
+
+    # The runway first: of everything here, the date the money runs out is
+    # the one a reader feels, and its MOVEMENT is the thing a standing
+    # figure can never show.
+    was = previous.first_negative
+    now = current.first_negative
+    if was is not None and now is not None and was[0] != now[0]:
+        lines.append(
+            f"- cash now goes below zero on {now[0]} ({now[1]}), "
+            f"was {was[0]} - {_days_apart(was[0], now[0])}"
+        )
+    elif was is not None and now is None:
+        lines.append(f"- cash no longer goes below zero (was {was[0]}, {was[1]})")
+    elif was is None and now is not None:
+        lines.append(f"- cash is now projected below zero on {now[0]} ({now[1]})")
+
+    if previous.cash_today is not None and current.cash_today is not None:
+        moved = current.cash_today - previous.cash_today
+        if moved:
+            lines.append(f"- cash on hand {_signed(moved)} since {since}")
+
+    if previous.projection_low is not None and current.projection_low is not None:
+        low_moved = current.projection_low[1] - previous.projection_low[1]
+        if low_moved:
+            lines.append(
+                f"- projected low {_signed(low_moved)} "
+                f"to {_amount(current.projection_low[1])} on {current.projection_low[0]}"
+            )
+
+    if previous.net_worth is not None and current.net_worth is not None:
+        moved = current.net_worth - previous.net_worth
+        if moved:
+            lines.append(f"- net worth {_signed(moved)} since {since}")
+
+    if previous.goals_total_saved is not None and current.goals_total_saved is not None:
+        moved = current.goals_total_saved - previous.goals_total_saved
+        if moved:
+            lines.append(f"- goal savings {_signed(moved)} since {since}")
+
+    for label, before, after in (
+        ("critical", previous.open_critical, current.open_critical),
+        ("warning", previous.open_warning, current.open_warning),
+    ):
+        moved = after - before
+        if moved > 0:
+            lines.append(f"- {moved} new {label} finding{'s' if moved != 1 else ''}")
+        elif moved < 0:
+            count = abs(moved)
+            lines.append(
+                f"- {count} {label} finding{'s' if count != 1 else ''} resolved"
+            )
+
+    return lines
+
+
+def _snapshot_to_facts(row: FinanceAnalystSnapshot) -> ReportFacts:
+    """The trended columns back as facts. Credit lines and spending are
+    prose inputs rather than figures worth diffing, so they do not round
+    trip and the delta never refers to them."""
+
+    def pair(day: date | None, amount: int | None) -> tuple[date, int] | None:
+        return None if day is None or amount is None else (day, amount)
+
+    return ReportFacts(
+        net_worth=row.net_worth,
+        cash_today=row.cash_today,
+        projection_end=pair(row.projection_end_date, row.projection_end_amount),
+        projection_low=pair(row.projection_low_date, row.projection_low_amount),
+        first_negative=(
+            None
+            if row.first_negative_date is None
+            else (row.first_negative_date, row.first_negative_name or "")
+        ),
+        portfolio_total=row.portfolio_total,
+        positions=row.positions,
+        open_critical=row.open_critical,
+        open_warning=row.open_warning,
+        goals_total_saved=row.goals_total_saved,
+    )
+
+
+async def save_snapshot(
+    db: AsyncSession, *, owner_user_id: int | None, day: date, facts: ReportFacts
+) -> FinanceAnalystSnapshot:
+    """Record the day's figures, replacing that day if it already exists.
+
+    One row per owner per day, the same rule the note follows: a forced
+    re-run must not leave two versions of one day for tomorrow to diff.
+    """
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    row = (
+        await db.exec(
+            select(FinanceAnalystSnapshot).where(
+                FinanceAnalystSnapshot.owner_user_id == store_owner,
+                FinanceAnalystSnapshot.as_of_date == day,
+            )
+        )
+    ).first()
+    if row is None:
+        row = FinanceAnalystSnapshot(owner_user_id=store_owner, as_of_date=day)
+
+    row.net_worth = facts.net_worth
+    row.cash_today = facts.cash_today
+    row.portfolio_total = facts.portfolio_total
+    row.positions = facts.positions
+    row.projection_end_date = facts.projection_end[0] if facts.projection_end else None
+    row.projection_end_amount = (
+        facts.projection_end[1] if facts.projection_end else None
+    )
+    row.projection_low_date = facts.projection_low[0] if facts.projection_low else None
+    row.projection_low_amount = (
+        facts.projection_low[1] if facts.projection_low else None
+    )
+    row.first_negative_date = facts.first_negative[0] if facts.first_negative else None
+    row.first_negative_name = facts.first_negative[1] if facts.first_negative else None
+    row.open_critical = facts.open_critical
+    row.open_warning = facts.open_warning
+    row.goals_total_saved = facts.goals_total_saved
+
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def snapshot_before(
+    db: AsyncSession, *, owner_user_id: int | None, day: date
+) -> tuple[date, ReportFacts] | None:
+    """The most recent snapshot STRICTLY before ``day``, with its date.
+
+    Strictly, or a forced re-run would diff today against itself and always
+    report that nothing moved. Notes are not guaranteed daily either, so a
+    gap falls back to the last good day rather than giving up.
+    """
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    row = (
+        await db.exec(
+            select(FinanceAnalystSnapshot)
+            .where(
+                FinanceAnalystSnapshot.owner_user_id == store_owner,
+                FinanceAnalystSnapshot.as_of_date < day,
+            )
+            .order_by(FinanceAnalystSnapshot.as_of_date.desc())
+            .limit(1)
+        )
+    ).first()
+    return None if row is None else (row.as_of_date, _snapshot_to_facts(row))
+
+
+async def snapshot_series(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    days: int = SNAPSHOT_SERIES_DAYS,
+    today: date | None = None,
+) -> list[tuple[date, ReportFacts]]:
+    """The window's snapshots, oldest first.
+
+    The reason these figures are columns rather than a blob on the note: a
+    ranged read answers "has the runway slipped every week this month",
+    which a one-step delta cannot.
+    """
+    today = today or date.today()
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    rows = (
+        await db.exec(
+            select(FinanceAnalystSnapshot)
+            .where(
+                FinanceAnalystSnapshot.owner_user_id == store_owner,
+                FinanceAnalystSnapshot.as_of_date >= today - timedelta(days=days),
+                FinanceAnalystSnapshot.as_of_date <= today,
+            )
+            .order_by(FinanceAnalystSnapshot.as_of_date)
+        )
+    ).all()
+    return [(row.as_of_date, _snapshot_to_facts(row)) for row in rows]
 
 
 async def build_report_facts(
@@ -609,7 +1138,7 @@ async def build_report_facts(
     )
 
     insights = await service.list_insights(owner_user_id=owner_user_id, status="new")
-    flagged = [i for i in insights if i.insight_type != ANALYST_NOTE_INSIGHT_TYPE]
+    flagged = [i for i in insights if i.insight_type not in _NOTE_INSIGHT_TYPES]
 
     return ReportFacts(
         net_worth=net_worth,
@@ -627,10 +1156,16 @@ async def build_report_facts(
                 limit=_SPENDING_RANK_POOL,
             )
         ),
+        spending_through_day=pace_day(today),
         portfolio_total=portfolio_total,
         positions=len(holdings),
         open_critical=sum(1 for i in flagged if i.severity == "critical"),
         open_warning=sum(1 for i in flagged if i.severity == "warning"),
+        goals_total_saved=(
+            sum(a.current_balance or 0 for a in goal_accounts)
+            if (goal_accounts := await service.list_goals(owner_user_id=owner_user_id))
+            else None
+        ),
     )
 
 
@@ -651,6 +1186,12 @@ def render_report(facts: ReportFacts, commentary: SectionCommentary) -> str:
             chunk += "\n\n" + prose.strip()
         blocks.append(chunk)
 
+    # Above the standing figures: what MOVED is the only part of the report
+    # that cannot be read off yesterday's copy, so it earns the top slot.
+    # Absent entirely on a quiet day rather than saying "no change" - an
+    # empty daily ritual teaches the reader to skip the section.
+    block("What changed", facts.changes, commentary.what_changed)
+
     cash_lines: list[str] = []
     if facts.cash_today is not None and facts.projection_end is not None:
         end_date, end_balance = facts.projection_end
@@ -670,9 +1211,14 @@ def render_report(facts: ReportFacts, commentary: SectionCommentary) -> str:
     block("Credit cards and loans", facts.credit_lines, commentary.credit)
 
     spending_lines = []
+    pace_suffix = (
+        f" by day {facts.spending_through_day}"
+        if facts.spending_through_day is not None
+        else ""
+    )
     for name, this_month, typical in facts.spending:
         typical_text = (
-            f", typical {format_usd(typical)}"
+            f", typical {format_usd(typical)}{pace_suffix}"
             if typical is not None
             else " (no earlier months)"
         )
@@ -701,13 +1247,60 @@ def render_report(facts: ReportFacts, commentary: SectionCommentary) -> str:
     return "\n\n".join(blocks)
 
 
+async def _changes_section(
+    db: AsyncSession, *, owner_user_id: int | None, today: date
+) -> str | None:
+    """What moved since the last note, plus what that note led with.
+
+    The previous headline is here so the model can carry a thread ("the
+    shortfall you had on the 12th is now the 14th") and, just as usefully,
+    so it can avoid opening with the same sentence two days running.
+    """
+    baseline = await snapshot_before(db, owner_user_id=owner_user_id, day=today)
+    if baseline is None:
+        return None
+    since, previous = baseline
+    current = await build_report_facts(db, owner_user_id=owner_user_id, today=today)
+    changes = diff_facts(previous, current, since=since)
+
+    lines: list[str] = []
+    if changes:
+        lines.append(f"CHANGED SINCE {since}")
+        lines.extend(changes)
+
+    note = await _note_on(db, owner_user_id=owner_user_id, day=since)
+    headline = ""
+    if note is not None and isinstance(note.metadata_, dict):
+        commentary = note.metadata_.get("commentary")
+        if isinstance(commentary, dict):
+            headline = str(commentary.get("headline") or "").strip()
+    if headline:
+        lines.append("")
+        lines.append(f"YOUR PREVIOUS NOTE ({since}) OPENED WITH")
+        lines.append(f"- {headline}")
+        lines.append(
+            "- do not repeat this; say what has moved since, or move on to "
+            "what matters most today"
+        )
+    return "\n".join(lines) if lines else None
+
+
 async def build_finance_snapshot(
-    db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    today: date | None = None,
+    include_anomalies: bool = True,
 ) -> str | None:
     """Everything the analyst is allowed to know, as labeled plain text.
 
     ``None`` when the owner has no accounts: there is nothing to narrate, and a
     model handed an empty context will happily narrate anyway.
+
+    ``include_anomalies=False`` drops the flat OPEN ANOMALIES list for a
+    caller that supplies its own findings view - the deep dive replaces it
+    with the grouped digest, and carrying both fed the model the same 75
+    findings twice in a context where Ollama truncates from the front.
     """
     today = today or date.today()
     service = FinanceService(db)
@@ -726,9 +1319,14 @@ async def build_finance_snapshot(
         await _cashflow_section(service, owner_user_id=owner_user_id, today=today),
         await _spending_section(db, owner_user_id=owner_user_id, today=today),
         await _transactions_section(service, account_list, owner_user_id=owner_user_id),
-        await _anomalies_section(service, owner_user_id=owner_user_id),
+        await _anomalies_section(service, owner_user_id=owner_user_id)
+        if include_anomalies
+        else None,
+        await _changes_section(db, owner_user_id=owner_user_id, today=today),
         await _projection_section(service, owner_user_id=owner_user_id, today=today),
         await _upcoming_section(service, owner_user_id=owner_user_id, today=today),
+        await _goals_section(service, owner_user_id=owner_user_id, today=today),
+        await _envelopes_section(service, owner_user_id=owner_user_id),
     ]
     return "\n\n".join(section for section in sections if section)
 
@@ -800,6 +1398,28 @@ def analyst_agent_definition() -> dict[str, Any]:
     }
 
 
+def deep_dive_agent_definition() -> dict[str, Any]:
+    """The seed row for the on-request deep dive.
+
+    A SEPARATE agent row rather than a mode on the daily one, so it can be
+    pointed at a bigger model and given a larger token budget without
+    changing what runs nightly. Both read the same memory module.
+    """
+    return {
+        "slug": DEEP_DIVE_AGENT_SLUG,
+        "name": "Finance Analyst (deep dive)",
+        "description": "On-request full review: situation, causes, findings triage, options",
+        "category": "finance",
+        "model_id": None,
+        "system_prompt": DEEP_DIVE_SYSTEM_PROMPT,
+        "temperature": DEEP_DIVE_TEMPERATURE,
+        "max_tokens": DEEP_DIVE_MAX_TOKENS,
+        "memory_modules": [SNAPSHOT_MODULE_SLUG],
+        "knowledge_base_ids": [],
+        "is_active": True,
+    }
+
+
 def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
     """Seed the analyst agent and its memory module, skipping existing rows.
 
@@ -819,21 +1439,39 @@ def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
         counts["finance_memory_modules"] = 1
         logger.info(f"Seeded memory module '{module['slug']}'")
 
-    agent = analyst_agent_definition()
-    if session.exec(select(Agent).where(Agent.slug == agent["slug"])).first() is None:
-        session.add(Agent(**agent))
-        counts["finance_agents"] = 1
-        logger.info(f"Seeded agent '{agent['slug']}'")
+    for definition in (analyst_agent_definition(), deep_dive_agent_definition()):
+        if (
+            session.exec(select(Agent).where(Agent.slug == definition["slug"])).first()
+            is not None
+        ):
+            continue
+        session.add(Agent(**definition))
+        counts["finance_agents"] += 1
+        logger.info(f"Seeded agent '{definition['slug']}'")
 
     if any(counts.values()):
         session.commit()
     return counts
 {% if ai_framework == "pydantic-ai" %}
 
-
 def note_dedup_key(day: date) -> str:
     """One note per owner per day, keyed so a re-run is a no-op."""
     return f"note:{day:%Y%m%d}"
+
+
+async def _note_on(
+    db: AsyncSession, *, owner_user_id: int | None, day: date
+) -> FinanceInsight | None:
+    """The note written on a given day, if there is one."""
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    return (
+        await db.exec(
+            select(FinanceInsight).where(
+                FinanceInsight.owner_user_id == store_owner,
+                FinanceInsight.dedup_key == note_dedup_key(day),
+            )
+        )
+    ).first()
 
 
 async def existing_note(
@@ -849,6 +1487,165 @@ async def existing_note(
             )
         )
     ).first()
+
+
+async def build_deep_dive_context(
+    db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
+) -> str | None:
+    """The daily snapshot plus the two things the short note never gets.
+
+    FINDINGS DIGEST: every open finding grouped and counted, instead of the
+    twenty unranked lines the note is capped at - which is exactly why the
+    note never mentions findings at all.
+
+    BUDGET PLAN: the deterministic trim suggestions the Budget tab already
+    computes. The model explains what a cut BUYS; it never invents one, so
+    the arithmetic behind every recommendation stays code-owned.
+    """
+    today = today or date.today()
+    # No flat anomaly list here - the digest below covers every finding,
+    # and carrying both fed the model the same 75 findings twice.
+    base = await build_finance_snapshot(
+        db, owner_user_id=owner_user_id, today=today, include_anomalies=False
+    )
+    if base is None:
+        return None
+
+    service = FinanceService(db)
+    insights = await service.list_insights(owner_user_id=owner_user_id, status="new")
+    flagged = [i for i in insights if i.insight_type not in _NOTE_INSIGHT_TYPES]
+    sections = [base, findings_digest(flagged)]
+
+    try:
+        summary = await service.budget_summary(owner_user_id=owner_user_id)
+    except Exception:
+        # A review without the budget plan is still worth reading; a review
+        # that failed to render because the budget read broke is not.
+        logger.exception("Deep dive: budget plan unavailable")
+        summary = None
+
+    if summary:
+        stats = summary.get("stats", {})
+        lines = [
+            "BUDGET PLAN",
+            f"- income {format_usd(stats.get('income_total', 0))}/month"
+            f" · bills {format_usd(stats.get('fixed_total', 0))}/month"
+            f" · budgets {format_usd(stats.get('flexible_allocated', 0))}/month",
+            f"- this month nets {_signed(stats.get('month_net', 0))}",
+        ]
+        for trim in summary.get("trims", []):
+            if trim.get("kind") == "pause_goal":
+                lines.append(
+                    f"- suggested: pause goal {trim['label']} "
+                    f"({_signed(trim['recovered'])}/month back)"
+                )
+                continue
+            lines.append(
+                f"- suggested cut: {trim['label']} "
+                f"{format_usd(trim['allocated_amount'])} -> "
+                f"{format_usd(trim['suggested_amount'])} "
+                f"({_signed(-trim['cut'])})"
+            )
+        residual = stats.get("trim_residual", 0)
+        if residual:
+            lines.append(
+                f"- even at those cuts {format_usd(residual)} of the gap remains;"
+                " it is bills or income, not budgets"
+            )
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(sections)
+
+
+async def run_deep_dive(
+    db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
+) -> FinanceInsight | None:
+    """Write an on-request full review. Writes; the caller commits.
+
+    Unlike the nightly note this is NOT deduped per day - it is something a
+    reader asks for, and asking twice after changing a budget should produce
+    a second answer rather than silently returning the first.
+
+    Total in the same way ``run_analyst_note`` is: a local model that is
+    stopped or mid-pull costs a log line, not an exception in the caller.
+    """
+    today = today or date.today()
+
+    from pydantic_ai import Agent as PydanticAgent
+    from pydantic_ai.settings import ModelSettings
+
+    from app.core.config import settings
+    from app.services.ai.agent_loader import resolve_agent
+    from app.services.ai.config import AIServiceConfig
+    from app.services.ai.providers import model_for
+    from app.services.ai.usage_recording import extract_usage, record_usage
+
+    agent_config = await resolve_agent(DEEP_DIVE_AGENT_SLUG, session=db)
+    if agent_config.slug != DEEP_DIVE_AGENT_SLUG:
+        logger.warning(
+            "Deep dive skipped: agent is not registered or is inactive",
+            agent_slug=DEEP_DIVE_AGENT_SLUG,
+        )
+        return None
+
+    context = await build_deep_dive_context(
+        db, owner_user_id=owner_user_id, today=today
+    )
+    if context is None:
+        return None
+
+    service_config = AIServiceConfig.from_settings(settings)
+    update: dict[str, object] = {
+        "temperature": agent_config.temperature,
+        "max_tokens": agent_config.max_tokens,
+    }
+    if agent_config.model_id:
+        update["model"] = agent_config.model_id
+    service_config = service_config.model_copy(update=update)
+
+    try:
+        model, model_name = model_for(service_config, settings)
+        agent: PydanticAgent[None, DeepDive] = PydanticAgent(
+            model,
+            instructions=agent_config.system_prompt,
+            output_type=DeepDive,
+            model_settings=ModelSettings(
+                temperature=agent_config.temperature,
+                max_tokens=agent_config.max_tokens,
+            ),
+        )
+        result = await agent.run(context)
+        dive = result.output
+        record_usage(
+            action=f"chat:{DEEP_DIVE_SURFACE}",
+            model_name=model_name,
+            usage=extract_usage(result),
+            user_id=user_id_for(owner_user_id),
+        )
+    except Exception:
+        logger.exception(
+            "Deep dive skipped: could not run the agent", owner_user_id=owner_user_id
+        )
+        return None
+
+    if not dive.situation.strip():
+        logger.warning(
+            "Deep dive skipped: the model returned nothing", owner_user_id=owner_user_id
+        )
+        return None
+
+    note = FinanceInsight(
+        owner_user_id=0 if owner_user_id is None else owner_user_id,
+        insight_type=DEEP_DIVE_INSIGHT_TYPE,
+        dedup_key=f"deep:{today:%Y%m%d}:{datetime.now(UTC):%H%M%S%f}",
+        severity="info",
+        title=f"Deep dive - {today.isoformat()}",
+        body=render_deep_dive(dive),
+        metadata_={"model_name": model_name, "sections": dive.model_dump()},
+    )
+    db.add(note)
+    await db.flush()
+    return note
 
 
 async def run_analyst_note(
@@ -915,6 +1712,13 @@ async def run_analyst_note(
     if snapshot is None:
         return None
     facts = await build_report_facts(db, owner_user_id=owner_user_id, today=today)
+    # The report's own delta lines. The snapshot the model reads carries the
+    # same comparison as prose context (see ``_changes_section``); this is
+    # the code-owned copy that renders, so the two can never disagree.
+    baseline = await snapshot_before(db, owner_user_id=owner_user_id, day=today)
+    if baseline is not None:
+        since, previous = baseline
+        facts = replace(facts, changes=diff_facts(previous, facts, since=since))
 
     try:
         model, model_name = model_for(service_config, settings)
@@ -969,7 +1773,12 @@ async def run_analyst_note(
         "commentary": commentary.model_dump(),
     }
     db.add(note)
+    # Today's figures become tomorrow's baseline. Written only after the note
+    # itself succeeded, so a failed model run leaves no snapshot and the next
+    # note diffs against the last good day rather than against a day nobody
+    # ever read.
+    await save_snapshot(db, owner_user_id=owner_user_id, day=today, facts=facts)
     await db.flush()
     return note
-{% endif %}
-{% endif %}
+{%- endif %}
+{%- endif %}

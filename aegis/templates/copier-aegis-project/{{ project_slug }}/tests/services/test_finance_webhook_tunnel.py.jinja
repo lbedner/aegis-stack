@@ -5,10 +5,15 @@ quick-tunnel hostname discovery, and the /item/webhook/update reconciliation.
 Offline: cloudflared's metrics endpoint and the Plaid API are both faked.
 """
 
+import asyncio
+
 import httpx
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.backend.shutdown.finance_webhook_tunnel import (
+    shutdown_finance_webhook_tunnel,
+)
 from app.components.backend.startup import finance_webhook_tunnel as tunnel
 from app.services.finance import connection_service
 from app.services.finance.providers import plaid as plaid_mod
@@ -182,4 +187,81 @@ class TestStartupHookGating:
         await tunnel.startup_finance_webhook_tunnel()
         assert called is False
         assert get_webhook_url() is None
+
+
+class TestTaskLifetime:
+    """The discovery task must not outlive the app that started it.
+
+    It polls for up to ~20s, then sets a module-global webhook URL and
+    opens a database session. Nothing cancelled it, so after the app it
+    belonged to went away the task kept running and did both of those
+    things inside whatever was running by then - a leaked task holding a
+    connection in production, and in the test suite an unrelated test
+    watching its own globals get rewritten under it.
+
+    The paired startup/shutdown hook is the house pattern for exactly
+    this; the payment webhook forwarder has had both halves all along.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_task_left_behind(self):
+        yield
+        tunnel._tunnel_task = None
+
+    async def _start_a_polling_tunnel(self, monkeypatch) -> None:
+        """Start the hook against a tunnel that never answers, so the task
+        is parked mid-poll - the state it is in for most of its life."""
+        monkeypatch.setattr(
+            tunnel.settings, "PLAID_TUNNEL_METRICS_URL", "http://tunnel:1234", raising=False
+        )
+
+        async def never_answers(metrics_url: str) -> str | None:
+            return None
+
+        monkeypatch.setattr(tunnel, "discover_tunnel_hostname", never_answers)
+        await tunnel.startup_finance_webhook_tunnel()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_cancels_a_tunnel_still_polling(self, monkeypatch) -> None:
+        await self._start_a_polling_tunnel(monkeypatch)
+        task = tunnel._tunnel_task
+        assert task is not None and not task.done()
+
+        await shutdown_finance_webhook_tunnel()
+
+        assert task.done(), "the discovery task survived shutdown"
+        assert tunnel._tunnel_task is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancelled_tunnel_never_sets_the_webhook_url(
+        self, monkeypatch
+    ) -> None:
+        """The leak that actually bit: a task resolving after its app is
+        gone still rewrote the global every other caller reads."""
+        await self._start_a_polling_tunnel(monkeypatch)
+        await shutdown_finance_webhook_tunnel()
+        await asyncio.sleep(0)
+        assert get_webhook_url() is None
+
+    @pytest.mark.asyncio
+    async def test_shutdown_clears_a_url_the_tunnel_had_already_set(self) -> None:
+        """The tunnel is going away, so the URL pointing at it has to go
+        too - otherwise link tokens keep carrying a dead hostname."""
+        set_runtime_webhook_url("https://abc.trycloudflare.com/wh")
+        await shutdown_finance_webhook_tunnel()
+        assert get_webhook_url() is None
+
+    @pytest.mark.asyncio
+    async def test_shutdown_without_a_tunnel_is_a_noop(self) -> None:
+        """The gate fails on prod and plain compose, so most shutdowns
+        have no task to cancel. That must not raise on the way down."""
+        tunnel._tunnel_task = None
+        await shutdown_finance_webhook_tunnel()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_is_idempotent(self, monkeypatch) -> None:
+        await self._start_a_polling_tunnel(monkeypatch)
+        await shutdown_finance_webhook_tunnel()
+        await shutdown_finance_webhook_tunnel()
+
 {%- endif %}

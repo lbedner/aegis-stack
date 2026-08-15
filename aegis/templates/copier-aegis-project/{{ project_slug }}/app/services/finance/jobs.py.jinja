@@ -6,11 +6,13 @@ Each job opens its own session and commits (services never commit themselves).
 """
 
 import logging
+from datetime import date
 
 from sqlmodel import select
 
 from app.core.db import get_async_session
 from app.services.finance import networth_service
+from app.services.finance.finance_service import FinanceService
 from app.services.finance.categorize import (
     detect_recurring,
     generate_insights,
@@ -53,6 +55,59 @@ async def finance_recompute_snapshots_job() -> None:
         )
     except Exception:
         logger.exception("Finance snapshot recompute failed")
+
+
+async def finance_goal_auto_contribute_job() -> None:
+    """Monthly (the 1st): book each toggled-on virtual goal's declared
+    amount as a goal_auto valuation - the plan saves unless actively
+    paused (per-goal opt-in). Idempotent per month, so a scheduler
+    catch-up run later in the month books nothing twice."""
+    try:
+        async with get_async_session() as session:
+            service = FinanceService(session)
+            owners = (
+                await session.exec(
+                    select(FinanceAccount.owner_user_id)
+                    .where(FinanceAccount.deleted_at.is_(None))
+                    .distinct()
+                )
+            ).all()
+            booked = 0
+            for owner_user_id in owners:
+                booked += await service.auto_contribute_goals(
+                    owner_user_id=owner_user_id, today=date.today()
+                )
+            await session.commit()
+        logger.info("Finance: auto-contributed to %d goal(s)", booked)
+    except Exception:
+        logger.exception("Finance goal auto-contribute failed")
+
+
+
+async def finance_envelope_credit_job() -> None:
+    """Monthly (the 1st): book each auto-credit-on envelope's monthly
+    credit - the allowance arrives whether anyone logs in or not.
+    Idempotent per month, catch-up safe."""
+    try:
+        async with get_async_session() as session:
+            service = FinanceService(session)
+            owners = (
+                await session.exec(
+                    select(FinanceAccount.owner_user_id)
+                    .where(FinanceAccount.deleted_at.is_(None))
+                    .distinct()
+                )
+            ).all()
+            booked = 0
+            for owner_user_id in owners:
+                booked += await service.auto_credit_envelopes(
+                    owner_user_id=owner_user_id, today=date.today()
+                )
+            await session.commit()
+        logger.info("Finance: auto-credited %d envelope(s)", booked)
+    except Exception:
+        logger.exception("Finance envelope auto-credit failed")
+
 {%- if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 
 

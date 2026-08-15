@@ -47,7 +47,11 @@ from app.services.insights.jobs import collect_plausible_job
 {% endif %}
 {% endif %}
 {% if include_finance %}
-from app.services.finance.jobs import finance_recompute_snapshots_job
+from app.services.finance.jobs import (
+    finance_envelope_credit_job,
+    finance_goal_auto_contribute_job,
+    finance_recompute_snapshots_job,
+)
 {% endif %}
 {% if include_finance and include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 from app.services.finance.jobs import finance_analyst_note_job
@@ -353,6 +357,36 @@ def create_scheduler() -> AsyncIOScheduler:
         hour=2,
         id="finance_recompute_snapshots",
         name="Finance: Recompute Net-Worth Snapshots",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+    # Goals: book toggled-on virtual goals' declared amounts on the 1st.
+    # Idempotent per month, so a missed run caught up later books nothing
+    # twice - the plan saves unless actively paused.
+    scheduler.add_job(
+        finance_goal_auto_contribute_job,
+        trigger="cron",
+        day=1,
+        hour=2,
+        minute=45,
+        id="finance_goal_auto_contribute",
+        name="Finance: Auto-Contribute to Goals",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    # Envelopes: the allowance arrives on its cadence (weekly credits
+    # land Mondays), so the job checks DAILY and the per-period
+    # idempotency inside it decides whether anything books.
+    scheduler.add_job(
+        finance_envelope_credit_job,
+        trigger="cron",
+        hour=2,
+        minute=50,
+        id="finance_envelope_credit",
+        name="Finance: Credit Envelopes",
         max_instances=1,
         coalesce=True,
         replace_existing=True,

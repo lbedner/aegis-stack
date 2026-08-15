@@ -1822,7 +1822,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                     "ck_finance_account_type",
                     "account_type IN ('checking', 'savings', 'credit_card', 'loan', "
                     "'investment', 'brokerage', 'crypto', 'property', 'vehicle', "
-                    "'cash', 'other_asset', 'other_liability')",
+                    "'cash', 'goal', 'envelope', 'other_asset', 'other_liability')",
                 ),
                 CheckConstraintSpec(
                     "ck_finance_account_classification",
@@ -2026,7 +2026,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 CheckConstraintSpec(
                     "ck_finance_valuation_source",
                     "source IN ('manual', 'zillow', 'kbb', 'exchange_api', 'onchain', "
-                    "'plaid', 'snaptrade', 'coingecko', 'reconciliation')",
+                    "'plaid', 'snaptrade', 'coingecko', 'reconciliation', 'goal_auto', 'envelope_auto')",
                 ),
             ],
         ),
@@ -2360,7 +2360,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 CheckConstraintSpec(
                     "ck_finance_transfer_method",
                     "match_method IN ('auto_amount_date', 'plaid_transfer', "
-                    "'user_manual', 'rule')",
+                    "'user_manual', 'rule', 'payment_history')",
                 ),
                 CheckConstraintSpec(
                     "ck_finance_transfer_status",
@@ -2934,6 +2934,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                     default="False",
                 ),
                 ColumnSpec("is_muted", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("paused_until", "sa.Date()", nullable=True),
                 ColumnSpec("service_type", "sa.Text()", nullable=True),
                 ColumnSpec("source", "sa.String(12)", nullable=False),
                 ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
@@ -2993,7 +2994,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                     "ck_finance_recurring_frequency",
                     "frequency IN ('weekly', 'biweekly', 'semi_monthly', "
                     "'monthly', 'bimonthly', 'quarterly', 'semi_annually', "
-                    "'annually', 'irregular', 'unknown')",
+                    "'annually', 'once', 'irregular', 'unknown')",
                 ),
                 CheckConstraintSpec(
                     "ck_finance_recurring_status",
@@ -3503,6 +3504,39 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 ),
                 ForeignKeySpec(
                     ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_analyst_snapshot",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("as_of_date", "sa.Date()", nullable=False),
+                ColumnSpec("net_worth", "sa.BigInteger()", nullable=True),
+                ColumnSpec("cash_today", "sa.BigInteger()", nullable=True),
+                ColumnSpec("portfolio_total", "sa.BigInteger()", nullable=True),
+                ColumnSpec("positions", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("projection_end_date", "sa.Date()", nullable=True),
+                ColumnSpec("projection_end_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("projection_low_date", "sa.Date()", nullable=True),
+                ColumnSpec("projection_low_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("first_negative_date", "sa.Date()", nullable=True),
+                ColumnSpec("first_negative_name", "sa.String(255)", nullable=True),
+                ColumnSpec(
+                    "open_critical", "sa.Integer()", nullable=False, default="0"
+                ),
+                ColumnSpec("open_warning", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("goals_total_saved", "sa.BigInteger()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_analyst_snapshot_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_analyst_snapshot_day", ["as_of_date"]),
+                IndexSpec(
+                    "uq_finance_analyst_snapshot_owner_day",
+                    ["owner_user_id", "as_of_date"],
+                    unique=True,
                 ),
             ],
         ),

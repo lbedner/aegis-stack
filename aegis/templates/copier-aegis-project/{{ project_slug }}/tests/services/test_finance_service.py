@@ -716,6 +716,96 @@ class TestCategorization:
         rows = await svc.spending_by_category(owner_user_id=1, days=30)
         assert rows == [("General Merchandise", 5000), ("Food And Drink", 2000)]
 
+    @pytest.mark.asyncio
+    async def test_spending_by_category_rolls_up_to_the_parent_segment(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Two "Food & Dining:*" leaves combine into one "Food & Dining"
+        total instead of each competing separately for a top-N pie slice -
+        the fix for the Overview pie's "Other" slice fragmenting real
+        spending across every sub-category (confirmed on live data: 30.7%
+        "Other" leaf-grouped vs 16.3% parent-rolled-up, same window)."""
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        groceries = await svc.get_or_create_category_from_hint(
+            "Food & Dining:Groceries:Whole Foods"
+        )
+        eating_out = await svc.get_or_create_category_from_hint(
+            "Food & Dining:Eating Out:Chipotle"
+        )
+        shopping = await svc.get_or_create_pfc_category("GENERAL_MERCHANDISE")
+        for amount, cat in [
+            (-1000, groceries),
+            (-1500, eating_out),
+            (-2000, shopping),
+        ]:
+            await svc.create_transaction(
+                owner_user_id=1,
+                account_id=account.id,
+                amount=amount,
+                txn_date=date.today(),
+                name="x",
+                category_id=cat.id,
+            )
+        rows = await svc.spending_by_category(owner_user_id=1, days=30)
+        assert rows == [
+            ("Food & Dining", 2500),
+            ("General Merchandise", 2000),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_spending_transactions_matches_the_parent_categorys_leaves(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The transactions behind a spending_by_category slice - passing
+        the parent name pulls every leaf underneath it, so drilling into
+        a pie slice shows exactly what summed to its total. A list of
+        names (the "Other" drill-down case) matches any of them."""
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        groceries = await svc.get_or_create_category_from_hint(
+            "Food & Dining:Groceries"
+        )
+        eating_out = await svc.get_or_create_category_from_hint(
+            "Food & Dining:Eating Out"
+        )
+        shopping = await svc.get_or_create_pfc_category("GENERAL_MERCHANDISE")
+        for amount, cat, name in [
+            (-1000, groceries, "Whole Foods"),
+            (-1500, eating_out, "Chipotle"),
+            (-2000, shopping, "Best Buy"),
+        ]:
+            await svc.create_transaction(
+                owner_user_id=1,
+                account_id=account.id,
+                amount=amount,
+                txn_date=date.today(),
+                name=name,
+                category_id=cat.id,
+            )
+
+        food = await svc.spending_transactions(
+            owner_user_id=1, days=30, categories=["Food & Dining"]
+        )
+        assert {t.name for t in food} == {"Whole Foods", "Chipotle"}
+
+        combined = await svc.spending_transactions(
+            owner_user_id=1,
+            days=30,
+            categories=["Food & Dining", "General Merchandise"],
+        )
+        assert {t.name for t in combined} == {"Whole Foods", "Chipotle", "Best Buy"}
+
 
 class TestAnalystAvailability:
     """Renders on every finance stack, with or without the AI service."""

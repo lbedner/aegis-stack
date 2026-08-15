@@ -30,12 +30,14 @@ from app.components.frontend.controls.form_fields import (
 from app.components.frontend.controls.pickers import (
     BulkActionTrigger,
     CategoryPickerButton,
+    CategoryPickerField,
 )
 from app.components.frontend.controls.provider_icon import ProviderIcon
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.table import TableNameText
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.dashboard.modals.modal_sections import (
+    ChartColors,
     DateRangeChips,
     EmptyStatePlaceholder,
     LineChartCard,
@@ -52,7 +54,8 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_date
 
 from .finance_modal import (
-    _FREQUENCY_LABELS,
+    BILL_FREQUENCY_OPTIONS,
+    FinancePanel,
     _category_leaf,
     _frequency_label,
 )
@@ -77,6 +80,12 @@ _COLUMNS = [
     DataTableColumn("Health", width=100),
 ]
 _NEXT_DUE_COLUMN = 5
+# ASCENDING: this page answers "what is coming up", so the first row has
+# to be the next thing due. Descending put the furthest-away bill at the
+# top and the one due tomorrow below the fold. Blanks are unaffected -
+# DataTable's type-ranked key sorts them last either way, which is where
+# a bill with no due date belongs on a list about what is next.
+_NEXT_DUE_SORT_DESC = False
 
 # staleness (backend, stream_staleness) -> (label, color, tooltip-body).
 # Mirrors the exact recency signal _missed_recurring already uses to
@@ -96,8 +105,7 @@ _HEALTH_STYLE: dict[str, tuple[str, str, str]] = {
     "stale": (
         "Stale",
         Theme.Colors.ERROR,
-        "Last matched before the lookback window - probably not a live "
-        "bill anymore.",
+        "Last matched before the lookback window - probably not a live bill anymore.",
     ),
 }
 
@@ -133,9 +141,40 @@ def _is_curated(stream: dict) -> bool:
     Bills/Income = what you set. Everything else waits in Detected for
     the Confirm that is now the single door in.
     """
-    return bool(
-        stream.get("source") == "user" or stream.get("is_user_confirmed")
-    )
+    return bool(stream.get("source") == "user" or stream.get("is_user_confirmed"))
+
+
+def pause_options(today: date) -> list[tuple[str, date]]:
+    """The pause dialog's quick picks, as real calendar months.
+
+    ``add_months`` (the cadence engine's own stepper) rather than day
+    arithmetic: "3 months" from Aug 9 is Nov 9, and from Aug 31 it clamps
+    to the shorter month instead of drifting into the next one.
+    """
+    from app.services.finance.constants import add_months
+
+    return [
+        (f"{n} month{'s' if n > 1 else ''}", add_months(today, n)) for n in (1, 2, 3, 6)
+    ]
+
+
+def pause_label(until_iso: str) -> str:
+    """ "until Nov 9" or "indefinitely" - the year 9999 is an
+    implementation detail nobody should ever read."""
+    from app.services.finance.constants import PAUSE_INDEFINITE
+
+    if date.fromisoformat(str(until_iso)) >= PAUSE_INDEFINITE:
+        return "indefinitely"
+    return f"until {until_iso}"
+
+
+def stream_is_paused(stream: dict) -> bool:
+    """The frontend half of ``is_paused``: same lazy comparison, read off
+    the response dict."""
+    until = stream.get("paused_until")
+    if not until:
+        return False
+    return date.today() < date.fromisoformat(str(until))
 
 
 def _status_key(stream: dict) -> str:
@@ -144,6 +183,10 @@ def _status_key(stream: dict) -> str:
     column is 88 copies of a word the tab title already said."""
     if stream.get("is_muted"):
         return "muted"
+    if stream_is_paused(stream):
+        return "paused"
+    if stream.get("is_payment"):
+        return "payment"
     if stream.get("direction") == "inflow":
         return "income"
     if _is_curated(stream):
@@ -151,7 +194,59 @@ def _status_key(stream: dict) -> str:
     return "detected"
 
 
-class ProjectionPanel(ft.Container):
+def projection_columns() -> list[DataTableColumn]:
+    """The projection ledger's columns: Date, Name, Amount, Balance.
+
+    Category and Account ship hidden (one click away in the picker).
+    That is a WIDTH budget, not a taste call: the ledger gets 9/20 of
+    the modal, ~565px on a small laptop, and a flex column gets only
+    what the fixed ones leave. With Category visible the fixed widths
+    plus the picker gutter and spacing overflowed that share, so the one
+    flex column - Name, the identity column - silently rendered at ZERO
+    width and the ledger showed category strings where bill names
+    belong. Confirmed live at 1459px; the control tree looks correct the
+    whole time, which is why only the width-budget test can hold the
+    line. (``build_cell``'s docstring records the same collapse shipping
+    twice before in other tables.)
+    """
+    # Widths sized to their real content ("Aug 15, 2026", "-$14,349.00"),
+    # not round numbers - every spare pixel here is Name width.
+    return [
+        DataTableColumn("Date", width=100, style="secondary"),
+        DataTableColumn("Name", style="body", hideable=False),
+        DataTableColumn("Category", width=170, style="secondary", visible=False),
+        DataTableColumn("Account", width=170, style="secondary", visible=False),
+        DataTableColumn("Amount", width=110, alignment="right"),
+        DataTableColumn("Balance", width=120, alignment="right"),
+    ]
+
+
+def projection_layout(chart: ft.Control, table: ft.Control) -> ft.Row:
+    """Chart beside the ledger, not above it.
+
+    Stacked, the chart ate the height and left the ledger ~4 visible
+    rows. The two halves answer one question together - the line says
+    WHEN the balance turns, the rows say WHAT turns it - so they share
+    the width rather than hiding one behind a sub-tab. The chart keeps
+    the wider share (a compressed date axis stops being readable before
+    a table does); the ledger gets the full tab height.
+
+    ``expand=True`` on the Row is load-bearing, not styling: STRETCH
+    against an unbounded parent renders NOTHING in Flet's release build
+    (the import-review dialog shipped exactly that bug).
+    """
+    return ft.Row(
+        [
+            ft.Container(content=chart, expand=11),
+            ft.Container(content=table, expand=9),
+        ],
+        spacing=Theme.Spacing.MD,
+        vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+        expand=True,
+    )
+
+
+class ProjectionPanel(FinancePanel):
     """Projected cash balance, the Quicken "Projected Balances" view:
     today's cash balance walked forward through scheduled bills and
     income. Chart on top (the house line-chart card), the occurrence
@@ -174,18 +269,8 @@ class ProjectionPanel(ft.Container):
         account_filter: Any = None,
         register_filter_listener: Any = None,
     ) -> None:
-        super().__init__()
-        self.page = page
-        self.expand = True
+        super().__init__(page, account_filter, register_filter_listener, expand=True)
         self.padding = ft.padding.all(Theme.Spacing.LG)
-        # One filter for the whole dialog: narrowing to a card has to
-        # narrow the forecast too, or the projected balance keeps walking
-        # forward through bills on accounts you are not looking at.
-        from .finance_modal import AccountFilter
-
-        self._account_filter = account_filter or AccountFilter()
-        if register_filter_listener is not None:
-            register_filter_listener(self._on_account_filter_change)
         self._days = 180
         self._body = ft.Container(expand=True)
         # The headline figures live bare in the header row (label over
@@ -201,17 +286,34 @@ class ProjectionPanel(ft.Container):
             [
                 ft.Row(
                     [
+                        # The title Column IS the flex child (replacing the
+                        # old spacer Container): the subtitle absorbs any
+                        # squeeze by ellipsizing, so the chips and headline
+                        # figures to its right can never be pushed off the
+                        # edge. Same confirmed-live pattern as the register
+                        # header (TransactionsPanel's title/subtitle). The
+                        # tooltip keeps the full sentence one hover away
+                        # when it is truncated.
                         ft.Column(
                             [
                                 H3Text("Projected balance"),
                                 SecondaryText(
-                                    "Scheduled bills and income applied "
-                                    "to today's cash balance"
+                                    "Every scheduled bill and paycheck applied "
+                                    "to today's balance, day by day, so you can "
+                                    "see exactly when money gets tight",
+                                    no_wrap=True,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                    tooltip=(
+                                        "Every scheduled bill and paycheck "
+                                        "applied to today's balance, day by "
+                                        "day, so you can see exactly when "
+                                        "money gets tight"
+                                    ),
                                 ),
                             ],
                             spacing=2,
+                            expand=True,
                         ),
-                        ft.Container(expand=True),
                         DateRangeChips(
                             options=self._RANGES,
                             selected_days=self._days,
@@ -227,14 +329,6 @@ class ProjectionPanel(ft.Container):
             spacing=Theme.Spacing.MD,
             expand=True,
         )
-
-    def _on_account_filter_change(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
-
-    def did_mount(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
 
     def _on_range(self, days: int) -> None:
         self._days = days
@@ -252,9 +346,7 @@ class ProjectionPanel(ft.Container):
             # Nothing checked is not the same as no filter - see
             # AccountFilter.params. Skip the fetch rather than send an
             # empty list the server would read as "everything".
-            self._body.content = EmptyStatePlaceholder(
-                message="No accounts selected."
-            )
+            self._body.content = EmptyStatePlaceholder(message="No accounts selected.")
             if self._body.page:
                 self._body.update()
             return
@@ -326,38 +418,35 @@ class ProjectionPanel(ft.Container):
                 )
             else:
                 tooltips.append(f"{key}\nBalance  {_usd_signed(balance)}")
-        # The line goes red the moment the projection dips below zero
-        # anywhere in the window; a healthy forecast stays teal.
-        line_color = (
-            Theme.Colors.SUCCESS
-            if min(values, default=0.0) >= 0
-            else Theme.Colors.ERROR
-        )
         chart = LineChartCard(
             title="Projected balance",
             subtitle=f"next {days} days · {len(points)} scheduled items",
+            # Taller than the stacked default: the chart owns the left
+            # column now and a squat line under a tall table reads odd.
+            height=420,
             x_labels=labels,
             series=[
+                # Polarity on the SEGMENTS, not the whole line: the old
+                # treatment coloured everything by where the projection
+                # ENDED, so a week underwater mid-window read all-teal and
+                # a $10 miss read all-red. Zero is the midpoint that
+                # matters, and the days below it are the point of the
+                # chart.
                 LineSeries(
                     label="Balance",
-                    color=line_color,
+                    color=Theme.Colors.SUCCESS,
                     points=[(i, v) for i, v in enumerate(values)],
                     tooltips=tooltips,
                     fill=True,
                     stroke_width=3,
+                    split_y=0.0,
+                    split_below_color=ChartColors.ERROR,
                 )
             ],
             min_y=chart_floor(values),
         )
 
-        columns = [
-            DataTableColumn("Date", width=110, style="secondary"),
-            DataTableColumn("Name", style="body", hideable=False),
-            DataTableColumn("Category", width=170, style="secondary"),
-            DataTableColumn("Account", width=170, style="secondary"),
-            DataTableColumn("Amount", width=120, alignment="right"),
-            DataTableColumn("Balance", width=130, alignment="right"),
-        ]
+        columns = projection_columns()
         rows = [
             [
                 date_cell(p.get("date"), SecondaryText),
@@ -379,29 +468,22 @@ class ProjectionPanel(ft.Container):
             ]
             for p in points
         ]
-        self._body.content = ft.Column(
-            [
-                chart,
-                ft.Container(
-                    content=DataTable(
-                        columns=columns,
-                        rows=rows,
-                        row_padding=6,
-                        show_header_border=True,
-                        show_row_borders=True,
-                        initial_sort=0,
-                        column_picker=True,
-                        empty_message=(
-                            "Nothing scheduled in this window. Confirm or "
-                            "add bills and income to project them."
-                        ),
-                        expand=True,
-                    ),
-                    expand=True,
+        self._body.content = projection_layout(
+            chart,
+            DataTable(
+                columns=columns,
+                rows=rows,
+                row_padding=6,
+                show_header_border=True,
+                show_row_borders=True,
+                initial_sort=0,
+                column_picker=True,
+                empty_message=(
+                    "Nothing scheduled in this window. Confirm or "
+                    "add bills and income to project them."
                 ),
-            ],
-            spacing=Theme.Spacing.MD,
-            expand=True,
+                expand=True,
+            ),
         )
         if self._body.page is not None:
             self._body.update()
@@ -409,7 +491,7 @@ class ProjectionPanel(ft.Container):
             self._cards.update()
 
 
-class RecurringTab(ft.Container):
+class RecurringTab(FinancePanel):
     """Bills & Income: two tables (income, bills) plus Add and curation."""
 
     def __init__(
@@ -418,9 +500,7 @@ class RecurringTab(ft.Container):
         account_filter: Any = None,
         register_filter_listener: Any = None,
     ) -> None:
-        super().__init__()
-        self.page = page
-        self.expand = True
+        super().__init__(page, account_filter, register_filter_listener, expand=True)
         self.padding = ft.padding.all(Theme.Spacing.LG)
         self._monthly = SecondaryText("")
         self._body = ft.Container(expand=True)
@@ -494,15 +574,6 @@ class RecurringTab(ft.Container):
         self._selection_label = SecondaryText("", visible=False)
         # Category options, fetched once - the edit/add dialogs and the
         # bulk picker all read this list.
-        # The dialog-wide account filter. Bills are per-account (the
-        # table has an Account column), so "All accounts" narrowing to one
-        # card has to narrow this list too - it is one filter for the
-        # whole dialog, not a per-tab preference.
-        from .finance_modal import AccountFilter
-
-        self._account_filter = account_filter or AccountFilter()
-        if register_filter_listener is not None:
-            register_filter_listener(self._on_account_filter_change)
         # For the account dropdown in both dialogs. A bill with no
         # account cannot reach the forecast, so this is worth offering at
         # creation as well as after the fact.
@@ -522,6 +593,16 @@ class RecurringTab(ft.Container):
             compact=True,
         )
         self._mute_button.tooltip = "Silence insights for the checked rows"
+        self._pause_button = PulseButton(
+            on_click_callable=self._bulk_pause,
+            text="Pause",
+            variant="muted",
+            compact=True,
+        )
+        self._pause_button.tooltip = (
+            "Pause the checked rows until a date - out of the forecast "
+            "and totals, back on their own after"
+        )
         self._delete_button = PulseButton(
             on_click_callable=self._bulk_delete,
             text="Delete",
@@ -568,6 +649,7 @@ class RecurringTab(ft.Container):
                         self._selection_label,
                         self._categorize_trigger,
                         self._mute_button,
+                        self._pause_button,
                         self._delete_button,
                         add_button,
                         ft.IconButton(
@@ -609,10 +691,6 @@ class RecurringTab(ft.Container):
             spacing=Theme.Spacing.MD,
             expand=True,
         )
-
-    def did_mount(self) -> None:
-        if self.page:
-            self.page.run_task(self._load)
 
     # -- data --------------------------------------------------------------
 
@@ -656,6 +734,9 @@ class RecurringTab(ft.Container):
             self._monthly.update()
 
     def _on_account_filter_change(self) -> None:
+        # Local-refilter override: the fetch already holds every
+        # account's streams, so a narrower filter re-renders the
+        # cached list instead of refetching (see _filtered_items).
         self._render()
 
     def _filtered_items(self) -> list[dict]:
@@ -837,7 +918,7 @@ class RecurringTab(ft.Container):
                 selected_indices=selected_indices,
                 on_selection_change=_on_selection,
                 initial_sort=_NEXT_DUE_COLUMN,
-                initial_sort_desc=True,
+                initial_sort_desc=_NEXT_DUE_SORT_DESC,
                 column_picker=True,
                 empty_message="None yet. Add one, or import a file.",
                 # Virtualized + fills the tab: detection over a deep import
@@ -869,6 +950,29 @@ class RecurringTab(ft.Container):
                 "Muted",
                 Theme.Colors.TEXT_SECONDARY,
                 "Silenced. This stream raises no insights until unmuted.",
+            )
+        elif stream_is_paused(stream):
+            until = stream.get("paused_until")
+            note = stream.get("pause_note")
+            status_control = status_dot(
+                "Paused",
+                Theme.Colors.TEXT_SECONDARY,
+                f"Paused {pause_label(until)}."
+                + (f" Why: {note}" if note else "")
+                + " Out of the forecast, the Bills total and every nag "
+                "until then; back on its own the day the date passes.",
+            )
+        elif stream.get("is_payment"):
+            # A transfer, but a payment FIRST: it drains cash on a rhythm
+            # the forecast charges once confirmed, while staying out of
+            # the Bills total (the card's swipes already counted there).
+            status_control = status_dot(
+                "Payment",
+                Theme.Colors.ACCENT,
+                "A card or loan payment. Confirm it (and pin the amount) "
+                "and the cash forecast will charge it; it never counts in "
+                "the Bills total, because the card's own charges already "
+                "did.",
             )
         elif stream.get("direction") == "inflow":
             # Income needs no curation: the missed-payment rule chases
@@ -978,9 +1082,7 @@ class RecurringTab(ft.Container):
             return
         self.page.run_task(self._apply_category, stream_ids, int(category_key))
 
-    async def _apply_category(
-        self, stream_ids: list[int], category_id: int
-    ) -> None:
+    async def _apply_category(self, stream_ids: list[int], category_id: int) -> None:
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
@@ -1008,13 +1110,16 @@ class RecurringTab(ft.Container):
         self._selection_label.value = f"{count} selected" if count else ""
         self._selection_label.visible = bool(count)
         self._mute_button.visible = bool(count)
+        self._pause_button.visible = bool(count)
         self._delete_button.visible = bool(count)
         self._mute_button.text = f"Mute ({count})" if count else "Mute"
+        self._pause_button.text = f"Pause ({count})" if count else "Pause"
         self._delete_button.text = f"Delete ({count})" if count else "Delete"
         self._categorize_trigger.set_count(count)
         for control in (
             self._selection_label,
             self._mute_button,
+            self._pause_button,
             self._delete_button,
         ):
             if control.page:
@@ -1047,6 +1152,251 @@ class RecurringTab(ft.Container):
             await self._load()
         finally:
             self._set_busy(False)
+
+    async def _open_match_dialog(self, stream: dict) -> None:
+        """Pick the transaction that paid this bill.
+
+        Candidates come pre-shortlisted (same direction, unclaimed,
+        amount in the bill's neighborhood, newest first) but the CHOICE
+        is the user's - this exists precisely because the automatic
+        matcher was wrong to find nothing, so a second automatic guess
+        would repeat the mistake with confidence.
+        """
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        data = await api.get(f"{_RECURRING_URL}/{stream.get('id')}/match-candidates")
+        if not isinstance(data, dict):
+            # A failed fetch is not "no matches" - saying so sent a real
+            # payment on a hunt for a bug that was actually a 500 here.
+            ErrorSnackBar(api.last_error or "Could not load match candidates.").launch(
+                self.page
+            )
+            return
+        items = data.get("items", [])
+        dialog: StyledAlertDialog | None = None
+
+        async def _cancel() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        async def _pick(txn: dict) -> None:
+            await _cancel()
+            result = await api.post(
+                f"{_RECURRING_URL}/{stream.get('id')}/attach",
+                json={"transaction_id": txn.get("id")},
+            )
+            if result is None:
+                ErrorSnackBar(api.last_error or "Could not match.").launch(self.page)
+                return
+            SuccessSnackBar(
+                f"Matched. {stream.get('name')} is paid; next expected "
+                f"{result.get('next_expected_date') or 'never (one-time)'}."
+            ).launch(self.page)
+            await self._load()
+
+        if not items:
+            rows: list[ft.Control] = [
+                SecondaryText(
+                    "No unclaimed transactions look like this bill. The "
+                    "payment may not be imported yet, or its amount is "
+                    "far from the bill's figure."
+                )
+            ]
+        else:
+            rows = [
+                ft.Row(
+                    [
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    TableNameText(
+                                        t.get("merchant") or t.get("name") or ""
+                                    ),
+                                    SecondaryText(
+                                        f"{t.get('date')} · "
+                                        f"{t.get('account_name') or ''}",
+                                        size=Theme.Typography.BODY_SMALL,
+                                    ),
+                                ],
+                                spacing=0,
+                                tight=True,
+                            ),
+                            expand=True,
+                        ),
+                        NumericText(
+                            _usd(t.get("amount", 0)),
+                            size=Theme.Typography.BODY_SMALL,
+                        ),
+                        PulseButton(
+                            on_click_callable=(lambda txn=t: _pick(txn)),
+                            text="This one",
+                            variant="teal",
+                            compact=True,
+                        ),
+                    ],
+                    spacing=Theme.Spacing.MD,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+                for t in items
+            ]
+
+        dialog = StyledAlertDialog(
+            title=f"Which payment was {stream.get('name')}?",
+            body=ft.Column(
+                rows,
+                spacing=Theme.Spacing.SM,
+                tight=True,
+                scroll=ft.ScrollMode.AUTO,
+                height=min(60 * max(len(rows), 1) + 20, 420),
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_cancel,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                )
+            ],
+            width=520,
+        )
+        self.page.open(dialog)
+
+    def _open_pause_dialog(self, stream_ids: list[int]) -> None:
+        """Until when, and optionally why. One dialog for a single row
+        (the edit dialog's Pause) and a checked set (the bulk action).
+
+        The why goes to ``metadata_`` server-side and comes back on the
+        row's Paused tooltip - the note future-you reads after forgetting
+        why an investment went quiet ("waiting until the pool is paid
+        off"). Optional on purpose; a required field would get junk.
+        """
+        from app.services.finance.constants import PAUSE_INDEFINITE, add_months
+
+        today = date.today()
+        until = FormDateField(
+            label="Paused until",
+            value=pause_options(today)[2][1].isoformat(),  # 3 months
+            width=200,
+        )
+        note = FormTextField(
+            label="Why? (optional, shown on the row)",
+            hint="e.g. pausing investments until the pool is paid off",
+            width=360,
+        )
+        state = {"indefinite": False}
+
+        def _on_pick(months: int) -> None:
+            # 0 is the "No end date" chip: the date field hides rather
+            # than displaying the sentinel year, which is an
+            # implementation detail nobody should read.
+            state["indefinite"] = months == 0
+            until.visible = months != 0
+            if months:
+                until.value = add_months(today, months).isoformat()
+            if until.page:
+                until.update()
+
+        # The SAME chips control every range picker in the product uses,
+        # so the selected pick carries the standard teal pill treatment
+        # instead of four identical muted buttons with no state.
+        quick_row = DateRangeChips(
+            options=[
+                ("1 month", 1),
+                ("2 months", 2),
+                ("3 months", 3),
+                ("6 months", 6),
+                ("No end date", 0),
+            ],
+            selected_days=3,
+            on_change=_on_pick,
+        )
+        dialog: StyledAlertDialog | None = None
+
+        async def _cancel() -> None:
+            if dialog is not None:
+                dialog.open = False
+            self.page.update()
+
+        async def _apply() -> None:
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
+
+            if state["indefinite"]:
+                when = PAUSE_INDEFINITE
+            else:
+                raw = (until.value or "").strip()
+                try:
+                    when = date.fromisoformat(raw)
+                except ValueError:
+                    ErrorSnackBar("Pick a date to pause until.").launch(self.page)
+                    return
+                if when <= today:
+                    ErrorSnackBar("The pause needs a future date.").launch(self.page)
+                    return
+            await _cancel()
+            api = get_session_state(self.page).api_client
+            body: dict[str, str] = {"until": when.isoformat()}
+            note_text = (note.value or "").strip()
+            if note_text:
+                body["note"] = note_text
+            done = 0
+            for stream_id in stream_ids:
+                await api.post(f"{_RECURRING_URL}/{stream_id}/pause", json=body)
+                if not api.last_error:
+                    done += 1
+            failed = len(stream_ids) - done
+            message = (
+                f"Paused {done} {pause_label(when.isoformat())}."
+                if not failed
+                else f"Paused {done}, {failed} failed."
+            )
+            (ErrorSnackBar if failed else SuccessSnackBar)(message).launch(self.page)
+            self._selected.clear()
+            self._update_selection()
+            await self._load()
+
+        count = len(stream_ids)
+        dialog = StyledAlertDialog(
+            title=("Pause this bill" if count == 1 else f"Pause {count} bills"),
+            body=ft.Column(
+                [
+                    quick_row,
+                    until,
+                    note,
+                    SecondaryText(
+                        "Out of the forecast, the Bills total and every "
+                        "nag until then - back on its own the day the "
+                        "date passes.",
+                        size=Theme.Typography.BODY_SMALL,
+                    ),
+                ],
+                spacing=Theme.Spacing.MD,
+                tight=True,
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_cancel,
+                    text="Cancel",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=_apply,
+                    text="Pause",
+                    variant="teal",
+                    compact=True,
+                ),
+            ],
+            width=420,
+        )
+        self.page.open(dialog)
+
+    async def _bulk_pause(self) -> None:
+        if self._selected:
+            self._open_pause_dialog(sorted(self._selected))
 
     async def _bulk_mute(self) -> None:
         """Mute is reversible (Unmute stays reachable on Detected), so it
@@ -1103,9 +1453,7 @@ class RecurringTab(ft.Container):
             failed = len(ids) - done
             word = "Deleted" if verb == "delete" else "Muted"
             message = (
-                f"{word} {done}."
-                if not failed
-                else f"{word} {done}, {failed} failed."
+                f"{word} {done}." if not failed else f"{word} {done}, {failed} failed."
             )
             (ErrorSnackBar if failed else SuccessSnackBar)(message).launch(self.page)
             self._selected.clear()
@@ -1154,7 +1502,7 @@ class RecurringTab(ft.Container):
         )
         frequency_dd = FormDropdown(
             label="Repeats",
-            options=list(_FREQUENCY_LABELS.items()),
+            options=list(BILL_FREQUENCY_OPTIONS.items()),
             value="monthly",
             width=360,
         )
@@ -1257,46 +1605,39 @@ class RecurringTab(ft.Container):
         name = FormTextField(
             label="Name",
             value=stream.get("name") or "",
-            width=360,
         )
         # The detector produces cadences (bimonthly, semi-annual) the
         # manual-entry set doesn't offer; the current one is always a
         # choice so opening the dropdown never lies about the stream.
-        freq_options = list(_FREQUENCY_LABELS.items())
-        if current_freq not in _FREQUENCY_LABELS:
+        freq_options = list(BILL_FREQUENCY_OPTIONS.items())
+        if current_freq not in BILL_FREQUENCY_OPTIONS:
             freq_options.append((current_freq, current_freq.replace("_", " ").title()))
         frequency_dd = FormDropdown(
             label="Repeats",
             options=freq_options,
             value=current_freq,
-            width=360,
         )
         amount = FormTextField(
             label="Amount ($)",
             value=f"{current_amount / 100:.2f}" if current_amount else "",
-            width=360,
         )
         due = FormDateField(
             label="Next due date",
             value=current_due,
-            width=360,
         )
         # The bill's OWN category. Blank means "keep inferring it from the
         # transactions", which is what every bill does until someone
         # states otherwise (FinanceService.stream_category_names).
         current_category = str(stream.get("category_id") or "")
-        category_dd = FormDropdown(
-            label="Category",
-            options=[("", "Infer from transactions"), *self._categories],
+        category_dd = CategoryPickerField(
+            categories=self._categories,
             value=current_category,
-            width=360,
         )
         current_account = str(stream.get("account_id") or "")
         account_dd = FormDropdown(
             label="Account",
             options=[("", "No account"), *self._accounts],
             value=current_account,
-            width=360,
         )
 
         async def _cancel() -> None:
@@ -1395,6 +1736,51 @@ class RecurringTab(ft.Container):
             SuccessSnackBar(f"{new_name} updated.").launch(self.page)
             await self._load()
 
+        async def _toggle_pause() -> None:
+            dialog.open = False
+            self.page.update()
+            if stream_is_paused(stream):
+                from app.components.frontend.state.session_state import (
+                    get_session_state,
+                )
+
+                api = get_session_state(self.page).api_client
+                await api.post(f"{_RECURRING_URL}/{stream.get('id')}/resume")
+                if api.last_error:
+                    ErrorSnackBar(api.last_error).launch(self.page)
+                    return
+                SuccessSnackBar(f"{stream.get('name')} resumed.").launch(self.page)
+                await self._load()
+                return
+            self._open_pause_dialog([int(stream.get("id"))])
+
+        async def _open_match() -> None:
+            dialog.open = False
+            self.page.update()
+            await self._open_match_dialog(stream)
+
+        match_button = PulseButton(
+            on_click_callable=_open_match,
+            text="Match...",
+            variant="muted",
+            compact=True,
+        )
+        match_button.tooltip = (
+            "Point this bill at the transaction that paid it - consumes "
+            "the occurrence and teaches the matcher for next month"
+        )
+        pause_button = PulseButton(
+            on_click_callable=_toggle_pause,
+            text="Resume" if stream_is_paused(stream) else "Pause...",
+            variant="muted",
+            compact=True,
+        )
+        pause_button.tooltip = (
+            f"Paused {pause_label(stream.get('paused_until'))} - end it early"
+            if stream_is_paused(stream)
+            else "Skip this for a while: out of the forecast and totals "
+            "until a date you pick, back on its own after"
+        )
         mute_button = PulseButton(
             on_click_callable=_toggle_mute,
             text="Unmute" if stream.get("is_muted") else "Mute",
@@ -1415,16 +1801,25 @@ class RecurringTab(ft.Container):
         delete_button.tooltip = "Remove this entry. Transactions are kept."
         dialog = StyledAlertDialog(
             title="Edit bill or income",
+            # No width pins on the fields: the house form controls
+            # stretch by design, and the STRETCH alignment is what lets
+            # the dialog's width govern - six hardcoded width=360 pins
+            # here are why widening the dialog once just grew margin.
             body=ft.Column(
                 [name, amount, frequency_dd, due, category_dd, account_dd],
                 spacing=Theme.Spacing.MD,
                 tight=True,
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             ),
-            # Delete and Mute sit apart on the left: they act on the stream
-            # itself, not the form, and shouldn't read as part of Cancel/Save.
+            # One row, dialog widened to hold it: Delete and the stream
+            # verbs (Mute/Pause/Match) sit apart on the left - they act
+            # on the bill itself, not the form - Cancel/Save on the
+            # right. 400px fit four buttons; six need the width.
             actions=[
                 delete_button,
                 mute_button,
+                pause_button,
+                match_button,
                 ft.Container(expand=True),
                 PulseButton(
                     on_click_callable=_cancel,
@@ -1439,6 +1834,6 @@ class RecurringTab(ft.Container):
                     compact=True,
                 ),
             ],
-            width=400,
+            width=560,
         )
         self.page.open(dialog)

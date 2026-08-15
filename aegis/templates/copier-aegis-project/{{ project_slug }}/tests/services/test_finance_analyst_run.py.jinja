@@ -301,7 +301,13 @@ class TestRunAnalystNote:
     async def test_the_note_is_not_fed_back_as_an_anomaly(
         self, async_db_session: AsyncSession, monkeypatch, use_test_session
     ) -> None:
-        """Yesterday's note lives in the same table as the findings."""
+        """Yesterday's note lives in the same table as the findings.
+
+        It IS quoted back deliberately now, under its own heading, so the
+        analyst can carry a thread day to day - so this pins the thing that
+        was always the actual risk: it must never arrive dressed as a
+        finding the rules produced.
+        """
         use_test_session(async_db_session)
         _fake_model(monkeypatch)
         await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
@@ -315,7 +321,71 @@ class TestRunAnalystNote:
         )
 
         assert snapshot is not None
-        assert NOTE_TEXT not in snapshot
+        anomalies = snapshot.split("OPEN ANOMALIES")[1].split("\n\n")[0]
+        assert NOTE_TEXT not in anomalies
+
+    @pytest.mark.asyncio
+    async def test_yesterdays_headline_comes_back_as_memory(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """Without this the analyst re-describes the same state every day,
+        because it cannot see what it already said."""
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+        await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 19)
+        )
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert "YOUR PREVIOUS NOTE" in snapshot
+        assert NOTE_TEXT in snapshot
+
+    @pytest.mark.asyncio
+    async def test_a_run_records_the_day_for_tomorrow_to_diff(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+
+        await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 19)
+        )
+
+        baseline = await analyst.snapshot_before(
+            async_db_session, owner_user_id=OWNER, day=date(2026, 7, 20)
+        )
+        assert baseline is not None
+        assert baseline[0] == date(2026, 7, 19)
+
+    @pytest.mark.asyncio
+    async def test_a_failed_run_leaves_no_baseline(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """Otherwise tomorrow diffs against a day nobody ever read."""
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch, headline="   ")
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+
+        assert (
+            await analyst.run_analyst_note(
+                async_db_session, owner_user_id=OWNER, today=date(2026, 7, 19)
+            )
+            is None
+        )
+        assert (
+            await analyst.snapshot_before(
+                async_db_session, owner_user_id=OWNER, day=date(2026, 7, 20)
+            )
+            is None
+        )
 
 
 class TestSchedulerRegistration:

@@ -14,8 +14,13 @@ from app.services.ai.fetchers import FetchContext, registered_fetcher_names, run
 from app.services.ai.models.agents import Agent, MemoryModule
 from app.services.finance import analyst, demo_seed
 from app.services.finance.categorize import generate_insights
+from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
 from app.services.finance.finance_service import FinanceService
-from app.services.finance.models import FinanceInsight
+from app.services.finance.models import (
+    FinanceAnalystSnapshot,
+    FinanceCategory,
+    FinanceInsight,
+)
 
 OWNER = 1
 
@@ -582,7 +587,8 @@ class TestFixtures:
     def test_seeds_the_agent_and_its_module(self, db_session: Session) -> None:
         counts = analyst.load_finance_agent_fixtures(db_session)
 
-        assert counts == {"finance_agents": 1, "finance_memory_modules": 1}
+        # Two agents now: the nightly note and the on-request deep dive.
+        assert counts == {"finance_agents": 2, "finance_memory_modules": 1}
         agent = db_session.exec(
             select(Agent).where(Agent.slug == analyst.ANALYST_AGENT_SLUG)
         ).one()
@@ -756,4 +762,815 @@ class TestSpendingMovers:
 
     def test_a_trivial_new_category_still_needs_the_floor(self) -> None:
         assert analyst._spending_movers([("Stamps", 900, None)]) == []
-{% endif %}
+
+
+class TestTheSnapshotTable:
+    """Today's figures survive until tomorrow as typed columns, so a later
+    note can ask what MOVED and a ranged question stays answerable."""
+
+    def _facts(self, **overrides):
+        defaults = dict(
+            net_worth=85_577_023,
+            cash_today=256_346,
+            projection_end=(date(2026, 9, 27), -1_164_722),
+            projection_low=(date(2026, 9, 5), -1_499_419),
+            first_negative=(date(2026, 8, 1), "Eleanor"),
+            portfolio_total=20_090_756,
+            positions=10,
+            open_critical=2,
+            open_warning=3,
+        )
+        defaults.update(overrides)
+        return analyst.ReportFacts(**defaults)
+
+    @pytest.mark.asyncio
+    async def test_it_round_trips_through_the_database(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        facts = self._facts()
+        await analyst.save_snapshot(
+            async_db_session, owner_user_id=OWNER, day=date(2026, 8, 8), facts=facts
+        )
+        restored = await analyst.snapshot_before(
+            async_db_session, owner_user_id=OWNER, day=date(2026, 8, 9)
+        )
+        assert restored is not None
+        day, loaded = restored
+        assert day == date(2026, 8, 8)
+        # Only the trended columns come back; credit_lines and spending are
+        # prose inputs, not figures worth diffing.
+        assert loaded.net_worth == facts.net_worth
+        assert loaded.cash_today == facts.cash_today
+        assert loaded.first_negative == facts.first_negative
+        assert loaded.projection_low == facts.projection_low
+        assert loaded.open_critical == 2
+
+    @pytest.mark.asyncio
+    async def test_re_running_a_day_replaces_that_days_row(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """One row per owner per day, same rule the note itself follows -
+        a forced re-run must not leave two versions of one day to diff."""
+        for cash in (100_000, 250_000):
+            await analyst.save_snapshot(
+                async_db_session,
+                owner_user_id=OWNER,
+                day=date(2026, 8, 8),
+                facts=self._facts(cash_today=cash),
+            )
+        rows = (
+            await async_db_session.exec(
+                select(FinanceAnalystSnapshot).where(
+                    FinanceAnalystSnapshot.owner_user_id == OWNER
+                )
+            )
+        ).all()
+        assert len(rows) == 1
+        assert rows[0].cash_today == 250_000
+
+    @pytest.mark.asyncio
+    async def test_it_reads_the_most_recent_earlier_day(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Notes are not guaranteed daily: a gap must diff against the last
+        good day rather than giving up."""
+        for day, cash in (
+            (date(2026, 8, 1), 100_000),
+            (date(2026, 8, 6), 175_000),
+        ):
+            await analyst.save_snapshot(
+                async_db_session,
+                owner_user_id=OWNER,
+                day=day,
+                facts=self._facts(cash_today=cash),
+            )
+        found = await analyst.snapshot_before(
+            async_db_session, owner_user_id=OWNER, day=date(2026, 8, 9)
+        )
+        assert found[0] == date(2026, 8, 6)
+        assert found[1].cash_today == 175_000
+
+    @pytest.mark.asyncio
+    async def test_todays_own_row_is_not_its_own_baseline(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Strictly earlier, or a forced re-run would diff today against
+        itself and always report nothing moved."""
+        await analyst.save_snapshot(
+            async_db_session,
+            owner_user_id=OWNER,
+            day=date(2026, 8, 9),
+            facts=self._facts(),
+        )
+        assert (
+            await analyst.snapshot_before(
+                async_db_session, owner_user_id=OWNER, day=date(2026, 8, 9)
+            )
+            is None
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_first_ever_run_has_no_baseline(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        assert (
+            await analyst.snapshot_before(
+                async_db_session, owner_user_id=OWNER, day=date(2026, 8, 9)
+            )
+            is None
+        )
+
+    @pytest.mark.asyncio
+    async def test_owners_do_not_see_each_others_days(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        await analyst.save_snapshot(
+            async_db_session,
+            owner_user_id=99,
+            day=date(2026, 8, 8),
+            facts=self._facts(),
+        )
+        assert (
+            await analyst.snapshot_before(
+                async_db_session, owner_user_id=OWNER, day=date(2026, 8, 9)
+            )
+            is None
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_series_comes_back_oldest_first(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The whole point of columns over a blob: a ranged read."""
+        for day in (date(2026, 8, 3), date(2026, 8, 1), date(2026, 8, 2)):
+            await analyst.save_snapshot(
+                async_db_session, owner_user_id=OWNER, day=day, facts=self._facts()
+            )
+        series = await analyst.snapshot_series(
+            async_db_session, owner_user_id=OWNER, days=30, today=date(2026, 8, 4)
+        )
+        assert [day for day, _ in series] == [
+            date(2026, 8, 1),
+            date(2026, 8, 2),
+            date(2026, 8, 3),
+        ]
+
+
+class TestTheDelta:
+    """What moved since the last note. Deterministic and code-owned: the
+    model is handed the comparison already made, never the arithmetic."""
+
+    BASE = dict(
+        net_worth=85_000_000,
+        cash_today=100_000,
+        projection_end=(date(2026, 9, 27), -100_000),
+        projection_low=(date(2026, 9, 5), -200_000),
+        first_negative=(date(2026, 8, 12), "Central Hudson"),
+        open_critical=16,
+        open_warning=59,
+    )
+
+    def _facts(self, **overrides):
+        return analyst.ReportFacts(**{**self.BASE, **overrides})
+
+    def _lines(self, **overrides) -> str:
+        return "\n".join(
+            analyst.diff_facts(
+                self._facts(), self._facts(**overrides), since=date(2026, 8, 8)
+            )
+        )
+
+    def test_no_change_says_nothing(self) -> None:
+        """A daily note that reports "nothing moved" every quiet day is
+        the noise this section exists to avoid."""
+        assert (
+            analyst.diff_facts(self._facts(), self._facts(), since=date(2026, 8, 8))
+            == []
+        )
+
+    def test_the_runway_moving_is_reported_with_its_direction(self) -> None:
+        """The single most useful line: the date your cash runs out moved,
+        and which way. Days are computed here so the model never does date
+        arithmetic."""
+        later = self._lines(first_negative=(date(2026, 8, 15), "Central Hudson"))
+        assert "2026-08-15" in later
+        assert "2026-08-12" in later
+        assert "3 days later" in later
+
+        earlier = self._lines(first_negative=(date(2026, 8, 9), "Central Hudson"))
+        assert "3 days earlier" in earlier
+
+    def test_the_runway_clearing_is_reported(self) -> None:
+        lines = self._lines(first_negative=None)
+        assert "no longer" in "\n".join([lines]).lower()
+
+    def test_a_new_shortfall_is_reported(self) -> None:
+        lines = "\n".join(
+            analyst.diff_facts(
+                self._facts(first_negative=None),
+                self._facts(),
+                since=date(2026, 8, 8),
+            )
+        )
+        assert "2026-08-12" in lines
+
+    def test_cash_movement_is_signed(self) -> None:
+        assert "+$500.00" in self._lines(cash_today=150_000)
+        assert "-$500.00" in self._lines(cash_today=50_000)
+
+    def test_net_worth_movement_is_signed(self) -> None:
+        assert "-$1,000.00" in self._lines(net_worth=84_900_000)
+
+    def test_new_findings_are_counted(self) -> None:
+        lines = self._lines(open_critical=19)
+        assert "3" in lines
+        assert "critical" in lines
+
+    def test_resolved_findings_are_counted(self) -> None:
+        lines = self._lines(open_warning=50)
+        assert "9" in lines
+
+    def test_a_first_ever_note_has_nothing_to_diff(self) -> None:
+        assert analyst.diff_facts(None, self._facts(), since=date(2026, 8, 8)) == []
+
+
+class TestTheChangedSection:
+    """The delta gets its own report section, above everything else."""
+
+    def _facts(self, **overrides):
+        defaults = dict(
+            cash_today=256_346,
+            projection_end=(date(2026, 9, 27), -1_164_722),
+            changes=["- cash on hand +$500.00 since 2026-08-08"],
+        )
+        defaults.update(overrides)
+        return analyst.ReportFacts(**defaults)
+
+    def test_it_renders_above_the_standing_figures(self) -> None:
+        report = analyst.render_report(
+            self._facts(),
+            analyst.SectionCommentary(
+                headline="Cash improved.",
+                what_changed="Your runway moved out two days.",
+            ),
+        )
+        assert "**What changed**" in report
+        assert report.index("**What changed**") < report.index("**Cash and bills**")
+        assert "Your runway moved out two days." in report
+
+    def test_it_is_omitted_when_nothing_moved(self) -> None:
+        """No section at all rather than a section saying "no change" - the
+        report is read every day and an empty ritual trains people to skip
+        it."""
+        report = analyst.render_report(
+            self._facts(changes=[]),
+            analyst.SectionCommentary(
+                headline="Quiet.", what_changed="Nothing much moved today."
+            ),
+        )
+        assert "**What changed**" not in report
+        assert "Nothing much moved today." not in report
+
+
+class TestSpendingOnPace:
+    """A part-finished month compared against whole prior months is the
+    kind of wrong that still sounds like analysis.
+
+    On the 9th, "Groceries $174.51, typical $1,551.02" is comparing nine
+    days against thirty, so the model duly reported spending as "below
+    typical" - true of almost every category on almost every 9th.
+    """
+
+    async def _spend(self, svc, account, category, when, cents):
+        await svc.create_transaction(
+            account_id=account.id,
+            amount=-cents,
+            txn_date=when,
+            owner_user_id=OWNER,
+            name="GROCERY",
+            category_id=category.id,
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_norm_is_measured_to_the_same_day_of_month(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=OWNER,
+        )
+        category = FinanceCategory(
+            owner_user_id=OWNER,
+            name="Groceries",
+            slug="groceries",
+            classification="expense",
+        )
+        async_db_session.add(category)
+        await async_db_session.flush()
+
+        # Each prior month: $100 by the 5th, another $400 later on.
+        for month in (4, 5, 6):
+            await self._spend(svc, account, category, date(2026, month, 5), 10_000)
+            await self._spend(svc, account, category, date(2026, month, 24), 40_000)
+        await self._spend(svc, account, category, date(2026, 7, 5), 12_000)
+
+        ranked = await analyst._ranked_spending(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 9), limit=5
+        )
+
+        assert ranked, "the current month has spend and must be ranked"
+        _name, this_month, typical = ranked[0]
+        assert this_month == 12_000
+        # $100 by the 9th, not the $500 a whole month reaches.
+        assert typical == 10_000
+
+    @pytest.mark.asyncio
+    async def test_a_finished_month_is_compared_whole(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """On the last day there is nothing to pro-rate, and truncating
+        would understate the norm."""
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=OWNER,
+        )
+        category = FinanceCategory(
+            owner_user_id=OWNER,
+            name="Groceries",
+            slug="groceries",
+            classification="expense",
+        )
+        async_db_session.add(category)
+        await async_db_session.flush()
+
+        for month in (4, 5, 6):
+            await self._spend(svc, account, category, date(2026, month, 5), 10_000)
+            await self._spend(svc, account, category, date(2026, month, 24), 40_000)
+        await self._spend(svc, account, category, date(2026, 7, 5), 12_000)
+
+        ranked = await analyst._ranked_spending(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 31), limit=5
+        )
+
+        assert ranked[0][2] == 50_000
+
+
+class TestThePaceLabel:
+    """The report has to say which norm it is showing, or the reader
+    reasonably reads a part-month figure as a monthly one."""
+
+    def _report(self, through_day):
+        facts = analyst.ReportFacts(
+            spending=[("Groceries", 17_451, 45_030)],
+            spending_through_day=through_day,
+        )
+        return analyst.render_report(facts, analyst.SectionCommentary(headline="x"))
+
+    def test_a_partial_month_says_by_which_day(self) -> None:
+        report = self._report(9)
+        assert "- Groceries: $174.51, typical $450.30 by day 9" in report
+
+    def test_a_whole_month_carries_no_qualifier(self) -> None:
+        report = self._report(None)
+        assert "- Groceries: $174.51, typical $450.30" in report
+        assert "by day" not in report
+
+
+class TestThePromptsShareTheirRules:
+    """Two prompts, one set of invariants. A copy in each is a copy that
+    drifts, and the drift is silent: nothing fails, the deep dive just
+    quietly starts inventing numbers one day."""
+
+    def test_both_prompts_embed_the_shared_rules(self) -> None:
+        assert analyst.ANALYST_RULES in analyst.ANALYST_SYSTEM_PROMPT
+        assert analyst.ANALYST_RULES in analyst.DEEP_DIVE_SYSTEM_PROMPT
+
+    def test_the_shared_rules_carry_the_no_arithmetic_invariant(self) -> None:
+        """The load-bearing one: every figure is computed by code, so a
+        wrong number is a facts bug with one place to fix."""
+        assert "Never calculate" in analyst.ANALYST_RULES
+
+    def test_both_prompts_are_sectioned(self) -> None:
+        for prompt in (analyst.ANALYST_SYSTEM_PROMPT, analyst.DEEP_DIVE_SYSTEM_PROMPT):
+            for header in ("## ROLE", "## WHAT YOU RETURN", "## RULES"):
+                assert header in prompt
+
+    def test_the_deep_dive_is_not_capped_like_the_daily_note(self) -> None:
+        """The short note's 60-word cap is the whole reason it cannot go
+        deep; carrying it over would make the second prompt pointless."""
+        assert "under 60 words" in analyst.ANALYST_SYSTEM_PROMPT
+        assert "under 60 words" not in analyst.DEEP_DIVE_SYSTEM_PROMPT
+
+
+class TestTheDeepDiveAgent:
+    """A separate agent row, so it can carry its own model, temperature and
+    token budget without disturbing the nightly note."""
+
+    def test_it_has_its_own_slug(self) -> None:
+        assert analyst.DEEP_DIVE_AGENT_SLUG != analyst.ANALYST_AGENT_SLUG
+
+    def test_it_seeds_alongside_the_daily_analyst(self, db_session: Session) -> None:
+        analyst.load_finance_agent_fixtures(db_session)
+        db_session.commit()
+        slugs = {row.slug for row in db_session.exec(select(Agent)).all()}
+        assert analyst.DEEP_DIVE_AGENT_SLUG in slugs
+        assert analyst.ANALYST_AGENT_SLUG in slugs
+
+    def test_reseeding_adds_nothing(self, db_session: Session) -> None:
+        analyst.load_finance_agent_fixtures(db_session)
+        db_session.commit()
+        analyst.load_finance_agent_fixtures(db_session)
+        db_session.commit()
+        rows = db_session.exec(
+            select(Agent).where(Agent.slug == analyst.DEEP_DIVE_AGENT_SLUG)
+        ).all()
+        assert len(rows) == 1
+
+    def test_its_notes_do_not_collide_with_the_daily_ones(self) -> None:
+        """Same table, and the daily note is dedup-keyed one per day. A
+        deep dive run twice in a day must not be swallowed as a duplicate
+        of the morning note."""
+        assert analyst.DEEP_DIVE_INSIGHT_TYPE != ANALYST_NOTE_INSIGHT_TYPE
+
+
+class TestTheFindingsDigest:
+    """75 open findings arrive as 20 unranked lines today, so the note
+    never mentions them. The deep dive gets them grouped and counted
+    instead, which is what makes triage possible at all."""
+
+    def _insight(self, insight_type, severity, title):
+        return FinanceInsight(
+            owner_user_id=OWNER,
+            insight_type=insight_type,
+            severity=severity,
+            title=title,
+            dedup_key=f"{insight_type}:{title}",
+        )
+
+    def test_it_groups_by_type_and_severity_with_counts(self) -> None:
+        digest = analyst.findings_digest(
+            [
+                self._insight("large_transaction", "critical", "a"),
+                self._insight("large_transaction", "critical", "b"),
+                self._insight("fee_charged", "warning", "c"),
+            ]
+        )
+        assert "large_transaction" in digest
+        assert "2" in digest
+        assert "fee_charged" in digest
+
+    def test_the_worst_group_leads(self) -> None:
+        digest = analyst.findings_digest(
+            [
+                self._insight("fee_charged", "warning", "c"),
+                self._insight("cash_runway", "critical", "a"),
+            ]
+        )
+        assert digest.index("cash_runway") < digest.index("fee_charged")
+
+    def test_nothing_open_says_so(self) -> None:
+        assert "none" in analyst.findings_digest([]).lower()
+
+    def test_every_finding_is_counted_even_when_not_listed(self) -> None:
+        """The count is the honest part: a digest that silently drops the
+        tail reads as "that is all of them"."""
+        many = [
+            self._insight("large_transaction", "warning", f"t{i}") for i in range(40)
+        ]
+        assert "40" in analyst.findings_digest(many)
+
+
+class TestTheDeepDiveReport:
+    def _dive(self, **overrides):
+        defaults = dict(
+            situation="You are short before the 12th.",
+            drivers="Two bills land before any income does.",
+            findings="Most of the large-charge flags are your mortgage.",
+            options="Deferring the card payment covers the gap.",
+            risks="A late Prudential deposit would reopen it.",
+        )
+        defaults.update(overrides)
+        return analyst.DeepDive(**defaults)
+
+    def test_sections_keep_a_fixed_order(self) -> None:
+        report = analyst.render_deep_dive(self._dive())
+        positions = [
+            report.index("**Where you stand**"),
+            report.index("**What is driving it**"),
+            report.index("**The open findings**"),
+            report.index("**What you can do**"),
+            report.index("**What could still go wrong**"),
+        ]
+        assert positions == sorted(positions)
+
+    def test_an_empty_section_is_omitted(self) -> None:
+        report = analyst.render_deep_dive(self._dive(risks=""))
+        assert "**What could still go wrong**" not in report
+
+    def test_the_prose_survives_verbatim(self) -> None:
+        report = analyst.render_deep_dive(self._dive())
+        assert "Two bills land before any income does." in report
+
+
+class TestContextHygiene:
+    """What must NOT reach the model. The prompt says "use only figures in
+    the context", which makes the context a promise: anything stale,
+    duplicated, or misleading in it comes back out as confident prose."""
+
+    @pytest.mark.asyncio
+    async def test_the_projection_owns_cash_runway(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The cash_runway finding's BODY freezes the figures from the day
+        it was raised; CASH PROJECTION is recomputed live on every build.
+        Feeding both produced a note whose headline quoted a stale trigger
+        while its own bullet named the live one (confirmed on a real note:
+        "$216.25 Anthropic" vs "Central Hudson"). One concept, one owner.
+        """
+        svc = FinanceService(async_db_session)
+        await svc.create_manual_account(
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=OWNER,
+        )
+        from app.services.finance.categorize.insights import create_insight_if_new
+
+        await create_insight_if_new(
+            async_db_session,
+            owner_user_id=OWNER,
+            insight_type="cash_runway",
+            dedup_key="runway:stale",
+            severity="critical",
+            title="Cash is projected to run out on 2026-08-12",
+            body="You have $3,709.09 in cash today; stale by a week.",
+        )
+        await create_insight_if_new(
+            async_db_session,
+            owner_user_id=OWNER,
+            insight_type="fee_charged",
+            dedup_key="fee:1",
+            severity="warning",
+            title="Fee charged: $3.00",
+            body="Non-chase Atm Fee on 2026-08-04 cost $3.00.",
+        )
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER
+        )
+
+        assert "$3,709.09" not in snapshot
+        assert "Fee charged: $3.00" in snapshot
+
+    @pytest.mark.asyncio
+    async def test_the_deep_dive_reads_findings_once_not_twice(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The first cut handed the model the flat OPEN ANOMALIES list AND
+        the digest of the same findings - ~3KB of duplication in a context
+        where Ollama truncates from the front, eating the system prompt."""
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await generate_insights(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+        await async_db_session.commit()
+
+        context = await analyst.build_deep_dive_context(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert context is not None
+        assert "FINDINGS DIGEST" in context
+        assert "OPEN ANOMALIES" not in context
+
+    @pytest.mark.asyncio
+    async def test_the_daily_note_keeps_its_flat_findings_list(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The note wants the top few findings verbatim (bodies included,
+        they carry the figures); only the deep dive trades that for the
+        grouped view."""
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await generate_insights(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+        await async_db_session.commit()
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert "OPEN ANOMALIES" in snapshot
+
+
+class TestAccountLinesAreNotFakeFacts:
+    """ "Citizens Bank Mortgage: $0.00 owed" is not a balance, it is an
+    untracked balance rendered as a fact - and a model told the mortgage
+    stands at zero will eventually say so."""
+
+    def _account(self, name, balance, classification="asset", type_="checking"):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            name=name,
+            account_type=type_,
+            classification=classification,
+            current_balance=balance,
+        )
+
+    def test_tracked_balances_render_as_before(self) -> None:
+        section = analyst._accounts_section([self._account("Ally Savings", 2_370_000)])
+        assert "- Ally Savings (checking, asset): $23,700.00" in section
+
+    def test_untracked_balances_are_named_not_zeroed(self) -> None:
+        section = analyst._accounts_section(
+            [
+                self._account("Ally Savings", 2_370_000),
+                self._account("Citizens Mortgage", 0, "liability", "loan"),
+                self._account("CHASE SAVINGS", None),
+            ]
+        )
+        assert "$0.00" not in section
+        assert "no recorded balance" in section
+        assert "Citizens Mortgage" in section
+        assert "CHASE SAVINGS" in section
+
+    def test_the_count_still_covers_every_account(self) -> None:
+        section = analyst._accounts_section(
+            [self._account("A", 100), self._account("B", 0)]
+        )
+        assert "ACCOUNTS (2)" in section
+
+
+class TestContextLabels:
+    """Raw bank descriptors reach the context through stream and insight
+    titles. 100+ characters of ACH trace codes is not information, and it
+    appeared twice per finding."""
+
+    def test_a_normal_title_is_untouched(self) -> None:
+        assert analyst.context_label("Prudential hasn't arrived") == (
+            "Prudential hasn't arrived"
+        )
+
+    def test_descriptor_garbage_is_truncated(self) -> None:
+        raw = (
+            "Deposit ACH SSA TREAS 310 TYPE: XXSOC SEC ID: CO: SSA TREAS 310 "
+            "Entry Class Code: PPD ACH Trace Numb hasn't arrived"
+        )
+        out = analyst.context_label(raw)
+        assert len(out) <= 64
+        assert out.endswith("...")
+        assert out.startswith("Deposit ACH SSA TREAS 310")
+
+    def test_whitespace_runs_collapse(self) -> None:
+        assert analyst.context_label("CHECK #  1810   1810") == "CHECK # 1810 1810"
+
+    def test_the_digest_uses_it(self) -> None:
+        raw_title = "X" * 200
+        insight = FinanceInsight(
+            owner_user_id=OWNER,
+            insight_type="missed_recurring",
+            severity="warning",
+            title=raw_title,
+            dedup_key="k",
+        )
+        digest = analyst.findings_digest([insight])
+        assert raw_title not in digest
+        assert "X" * 61 + "..." in digest
+
+class TestGoalsSection:
+    """The analyst knows the goals: progress, ask, and a precomputed ETA
+    ("at \$0/mo: never" spelled out - the model never does the math).
+    Absent entirely when no goals exist (context hygiene)."""
+
+    @pytest.mark.asyncio
+    async def test_goals_ride_the_snapshot(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        await service.create_manual_account(
+            owner_user_id=OWNER,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=100_000,
+        )
+        vacation = await service.create_virtual_goal(
+            owner_user_id=OWNER,
+            name="Vacation",
+            target_amount=300_000,
+            monthly_contribution=25_000,
+        )
+        await service.contribute_to_goal(
+            vacation.id, amount=120_000, owner_user_id=OWNER, when=date(2026, 8, 1)
+        )
+        await service.create_virtual_goal(
+            owner_user_id=OWNER, name="Someday", target_amount=500_000
+        )
+        await async_db_session.commit()
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER
+        )
+
+        assert snapshot is not None
+        assert "GOALS" in snapshot
+        assert "Vacation" in snapshot
+        assert "$1,200.00 of $3,000.00" in snapshot
+        # The never case is precomputed and spelled out.
+        assert "at $0.00/mo: never" in snapshot
+
+    @pytest.mark.asyncio
+    async def test_no_goals_no_section(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        await service.create_manual_account(
+            owner_user_id=OWNER,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=100_000,
+        )
+        await async_db_session.commit()
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER
+        )
+        assert snapshot is not None
+        assert "GOALS" not in snapshot
+
+
+class TestGoalsMemory:
+    """goals_total_saved trends in the snapshot table and diff_facts
+    reports its movement."""
+
+    def test_diff_reports_goal_movement(self) -> None:
+        previous = analyst.ReportFacts(goals_total_saved=120_000)
+        current = analyst.ReportFacts(goals_total_saved=150_000)
+        lines = analyst.diff_facts(previous, current, since=date(2026, 8, 7))
+        assert any("goal" in line and "+$300.00" in line for line in lines)
+
+    def test_no_movement_no_line(self) -> None:
+        previous = analyst.ReportFacts(goals_total_saved=120_000)
+        current = analyst.ReportFacts(goals_total_saved=120_000)
+        lines = analyst.diff_facts(previous, current, since=date(2026, 8, 7))
+        assert not any("goal" in line for line in lines)
+
+    def test_first_snapshot_has_no_delta(self) -> None:
+        current = analyst.ReportFacts(goals_total_saved=120_000)
+        assert analyst.diff_facts(None, current, since=date(2026, 8, 7)) == []
+
+class TestEnvelopesSection:
+    @pytest.mark.asyncio
+    async def test_envelopes_ride_the_snapshot_negative_called_out(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        await service.create_manual_account(
+            owner_user_id=OWNER,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=100_000,
+        )
+        allowance = await service.create_envelope(
+            owner_user_id=OWNER, name="Allowance", monthly_credit=4_000
+        )
+        await service.spend_from_envelope(
+            allowance.id, amount=1_000, owner_user_id=OWNER, when=date(2026, 8, 5)
+        )
+        await async_db_session.commit()
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER
+        )
+        assert snapshot is not None
+        assert "ENVELOPES" in snapshot
+        assert "Allowance" in snapshot
+        assert "overdrawn" in snapshot  # negative balance called out
+
+    @pytest.mark.asyncio
+    async def test_no_envelopes_no_section(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        await service.create_manual_account(
+            owner_user_id=OWNER,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=100_000,
+        )
+        await async_db_session.commit()
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER
+        )
+        assert snapshot is not None
+        assert "ENVELOPES" not in snapshot
+{%- endif %}

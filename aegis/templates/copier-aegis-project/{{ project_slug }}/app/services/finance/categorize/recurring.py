@@ -25,6 +25,7 @@ from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
+from app.services.finance.constants import CADENCES
 from app.services.finance.importers.base import normalize_payee
 from app.services.finance.models import (
     FinanceAccount,
@@ -32,7 +33,39 @@ from app.services.finance.models import (
     FinanceMerchant,
     FinanceRecurringStream,
     FinanceTransaction,
+    FinanceTransfer,
 )
+
+
+def _payment_leg():
+    """SQL predicate: this row is the CASH side of a confirmed transfer
+    into a liability account - a credit-card or loan payment.
+
+    A payment is a transfer, but it is a payment FIRST: it drains the
+    checking account on a rhythm the cash forecast has to know about.
+    Excluding all transfer legs from detection meant the largest single
+    monthly outflow (the card autopay) could never form a stream -
+    nothing to confirm, nothing to project, and a runway optimistic by
+    the whole payment (confirmed live). Only the outflow leg qualifies;
+    the card-side inflow, and asset-to-asset moves, stay out.
+    """
+    return (
+        select(FinanceTransfer.id)
+        .join(
+            FinanceAccount,
+            FinanceAccount.id
+            == select(FinanceTransaction.account_id)
+            .where(FinanceTransaction.id == FinanceTransfer.to_transaction_id)
+            .scalar_subquery(),
+        )
+        .where(
+            FinanceTransfer.from_transaction_id == FinanceTransaction.id,
+            FinanceTransfer.status == "confirmed",
+            FinanceAccount.classification == "liability",
+        )
+        .exists()
+    )
+
 
 MIN_OCCURRENCES = 3
 INTERVAL_TOLERANCE = 0.20  # +/- 20% of a canonical cadence
@@ -63,13 +96,13 @@ MAX_SILENCE_DAYS = 365
 SILENCE_CADENCE_MULTIPLE = 2
 AMOUNT_TOLERANCE = 0.20  # within 20% of median => fixed amount
 # Canonical cadence (median-gap days) -> frequency label.
-_CADENCES: tuple[tuple[int, str], ...] = (
-    (7, "weekly"),
-    (14, "biweekly"),
-    (15, "semi_monthly"),
-    (30, "monthly"),
-    (90, "quarterly"),
-    (365, "annually"),
+# Derived from the cadence table (constants.CADENCES), which is ordered
+# shortest-first - and the order is load-bearing here, because the FIRST
+# band a median falls in wins. Where two touch, the shorter cadence takes
+# the overlap: at 72 days that is bimonthly, which is also the closer
+# canonical value (12 days from 60, 18 from 90).
+_CADENCES: tuple[tuple[int, str], ...] = tuple(
+    (cadence.detect_days, key) for key, cadence in CADENCES.items()
 )
 _SUBSCRIPTION_FREQUENCIES = {"monthly", "annually"}
 
@@ -234,9 +267,7 @@ async def _resolve_payee_key(
     return base, on_base
 
 
-async def _curated_members(
-    db: AsyncSession, owner_user_id: int | None
-) -> set[int]:
+async def _curated_members(db: AsyncSession, owner_user_id: int | None) -> set[int]:
     """Transactions belonging to a stream the user would call a real bill.
 
     Detection is a proposal engine, and anything the user SET - confirmed
@@ -323,9 +354,7 @@ async def detect_recurring(
     # structurally, which matters because the matching outflow is often
     # not imported at all (81 AMEX credits here with no counterpart).
     # Spending charged TO the card is untouched: that is an ordinary bill.
-    liability_accounts = {
-        a.id for a in accounts if a.classification == "liability"
-    }
+    liability_accounts = {a.id for a in accounts if a.classification == "liability"}
 
     txns = (
         await db.exec(
@@ -333,7 +362,17 @@ async def detect_recurring(
                 _owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
                 FinanceTransaction.deleted_at.is_(None),
                 FinanceTransaction.dedup_status != "duplicate",
-                FinanceTransaction.is_transfer.is_(False),
+                # Ordinary rows only - transfer legs and excluded
+                # bookkeeping recur with steady descriptors, exactly the
+                # shape this hunts, and must not become "bills". The one
+                # carve-out is the cash leg of a card/loan payment (see
+                # _payment_leg): a payment is a transfer that the cash
+                # forecast genuinely has to know about.
+                or_(
+                    (FinanceTransaction.is_transfer.is_(False))
+                    & (FinanceTransaction.excluded_from_reports.is_(False)),
+                    _payment_leg(),
+                ),
                 FinanceTransaction.status == "posted",
                 FinanceTransaction.account_id.in_(list(acct_ids)),
             )
@@ -833,7 +872,6 @@ def _declared_cadence(members: list[FinanceTransaction]) -> tuple[str, float | N
     return _frequency_for(median_interval) or "irregular", median_interval
 
 
-
 def _plan_key(account_id: int, direction: str, payee: str) -> str:
     return f"{account_id}|{direction}|{payee}"
 
@@ -872,9 +910,7 @@ async def plan_recurring(
     for txn in selected:
         key = _payee_key(txn)
         if key and txn.account_id is not None:
-            wanted.add(
-                (txn.account_id, "outflow" if txn.amount < 0 else "inflow", key)
-            )
+            wanted.add((txn.account_id, "outflow" if txn.amount < 0 else "inflow", key))
     if not wanted:
         return []
 
@@ -886,7 +922,17 @@ async def plan_recurring(
                 _owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
                 FinanceTransaction.deleted_at.is_(None),
                 FinanceTransaction.dedup_status != "duplicate",
-                FinanceTransaction.is_transfer.is_(False),
+                # Ordinary rows only - transfer legs and excluded
+                # bookkeeping recur with steady descriptors, exactly the
+                # shape this hunts, and must not become "bills". The one
+                # carve-out is the cash leg of a card/loan payment (see
+                # _payment_leg): a payment is a transfer that the cash
+                # forecast genuinely has to know about.
+                or_(
+                    (FinanceTransaction.is_transfer.is_(False))
+                    & (FinanceTransaction.excluded_from_reports.is_(False)),
+                    _payment_leg(),
+                ),
                 FinanceTransaction.status == "posted",
             )
         )
@@ -1047,6 +1093,7 @@ async def declare_recurring(
     exclude_transaction_ids: list[int] | None = None,
     categories: dict[str, int] | None = None,
     amounts: dict[str, int] | None = None,
+    frequencies: dict[str, str] | None = None,
 ) -> DeclareRecurringResult:
     """Turn selected transactions into confirmed recurring streams, and
     reconcile whatever else was already describing the same bill.
@@ -1055,6 +1102,14 @@ async def declare_recurring(
     - the caller previews with ``plan_recurring``, the user edits the name
     it proposed, and the edit comes back here. Anything unnamed keeps the
     proposal.
+
+    ``frequencies`` states the cadence the same way, and matters more than
+    it looks. Detection knows six canonical gaps; a semiannual premium is
+    not one of them, so it measures as ``irregular``, and the forecast
+    cannot STEP an irregular stream - the bill silently never appears in
+    it. Stating the cadence is what puts it there. A label the forecast
+    cannot step is ignored rather than stored, since accepting one would
+    leave the bill exactly as invisible while looking deliberate.
 
     Reconciliation is the point, not a side effect. The same bill routinely
     exists two or three times over - a descriptor drifted, so detection
@@ -1087,6 +1142,15 @@ async def declare_recurring(
     chosen = names or {}
     chosen_categories = categories or {}
     chosen_amounts = amounts or {}
+    # Local import: ``finance_service`` imports this module, so the step
+    # table cannot be reached at module scope.
+    from app.services.finance.finance_service import _FREQUENCY_STEPS
+
+    chosen_frequencies = {
+        key: value
+        for key, value in (frequencies or {}).items()
+        if value in _FREQUENCY_STEPS
+    }
 
     for group in plan:
         members = group.members
@@ -1096,6 +1160,13 @@ async def declare_recurring(
         name = (chosen.get(group.key) or "").strip() or group.name
         category_id = chosen_categories.get(group.key)
         stated_amount = chosen_amounts.get(group.key)
+        frequency = chosen_frequencies.get(group.key) or group.frequency
+        # The next date has to follow the cadence just stated. Leaving it
+        # where the measured median put it would contradict the
+        # instruction on the very next line.
+        next_expected = group.next_expected_date
+        if frequency != group.frequency:
+            next_expected = _FREQUENCY_STEPS[frequency](group.last_date)
         try:
             async with db.begin_nested():
                 stream = await _upsert_stream(
@@ -1106,12 +1177,12 @@ async def declare_recurring(
                     payee=group.payee,
                     merchant_id=members[-1].merchant_id,
                     name=name,
-                    frequency=group.frequency,
+                    frequency=frequency,
                     average_amount=group.average_amount,
                     last_amount=group.last_amount,
                     first_date=group.first_date,
                     last_date=group.last_date,
-                    next_expected_date=group.next_expected_date,
+                    next_expected_date=next_expected,
                     occurrence_count=group.occurrence_count,
                     variable=group.variable,
                     is_subscription=(

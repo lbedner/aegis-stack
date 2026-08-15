@@ -193,3 +193,98 @@ class TestGroupDialogSizing:
         # Too short even for that: the ceiling still wins, because a
         # cramped table beats a dialog whose buttons are clipped away.
         assert _group_table_height(40, 400) < _GROUP_TABLE_MIN_HEIGHT
+
+
+class TestMakeRecurringFitsItsWindow:
+    """The other dialog that sizes a table this way, and the one that got
+    it wrong.
+
+    ``_GROUP_DIALOG_CHROME`` was itemised for "Name this payee": one lead
+    line, one form row, one table. "Make recurring" renders a form row,
+    three or four lead lines, AND a table PER GROUP, so the same number
+    under-counts the chrome and, with more than one group, hands every
+    table the whole window. The panel clips (HARD_EDGE) rather than
+    scrolling, so the overflow lands on the action row and the dialog
+    becomes unfinishable.
+
+    Reported live on a single 18-row group: "The table is too long so I
+    can't proceed."
+    """
+
+    def test_the_panel_fits_at_every_size_and_group_count(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_modal import (
+            _DECLARE_GROUP_CHROME,
+            _DIALOG_FIXED_CHROME,
+            _declare_body_height,
+            _group_table_height,
+        )
+
+        for window in (400, 600, 800, 973, 1200, 1600):
+            for groups in (1, 2, 3, 5, 12):
+                for rows in (1, 18, 100):
+                    table = _group_table_height(
+                        rows, window, tables=groups, table_chrome=_DECLARE_GROUP_CHROME
+                    )
+                    body = _declare_body_height(groups, table, window)
+                    panel = body + _DIALOG_FIXED_CHROME
+                    assert panel <= window, (
+                        f"{groups} group(s) of {rows} rows in a {window}px "
+                        f"window needs {panel}px - the action row is clipped"
+                    )
+
+    def test_the_reported_case_fits(self) -> None:
+        """One group, 18 transactions, an ordinary window."""
+        from app.components.frontend.dashboard.modals.finance_modal import (
+            _DECLARE_GROUP_CHROME,
+            _DIALOG_FIXED_CHROME,
+            _declare_body_height,
+            _group_table_height,
+        )
+
+        table = _group_table_height(
+            18, 1000, tables=1, table_chrome=_DECLARE_GROUP_CHROME
+        )
+        assert _declare_body_height(1, table, 1000) + _DIALOG_FIXED_CHROME <= 1000
+        # And it is not degenerate: the table still gets real room.
+        assert table > 0
+
+    def test_more_groups_get_a_smaller_share(self) -> None:
+        """Each group brings its own table. They cannot all have the whole
+        window, which is what a per-dialog constant assumed."""
+        from app.components.frontend.dashboard.modals.finance_modal import (
+            _DECLARE_GROUP_CHROME,
+            _group_table_height,
+        )
+
+        one = _group_table_height(
+            100, 1600, tables=1, table_chrome=_DECLARE_GROUP_CHROME
+        )
+        three = _group_table_height(
+            100, 1600, tables=3, table_chrome=_DECLARE_GROUP_CHROME
+        )
+        assert three < one
+
+    def test_the_name_this_payee_dialog_is_unchanged(self) -> None:
+        """The default call has to keep sizing exactly as it did: that
+        dialog was calibrated correctly and is not what broke."""
+        from app.components.frontend.dashboard.modals.finance_modal import (
+            _DENSE_ROW_HEIGHT,
+            _GROUP_DIALOG_CHROME,
+            _group_table_height,
+        )
+
+        for window in (600, 973, 1600):
+            for rows in (1, 12, 40):
+                wanted = rows * _DENSE_ROW_HEIGHT + 56
+                expected = max(0, min(max(200, wanted), window - _GROUP_DIALOG_CHROME))
+                assert _group_table_height(rows, window) == expected
+
+    def test_a_body_that_fits_is_not_padded_out(self) -> None:
+        """A short sweep must not stretch the panel to the whole window
+        just because it could."""
+        from app.components.frontend.dashboard.modals.finance_modal import (
+            _DECLARE_GROUP_CHROME,
+            _declare_body_height,
+        )
+
+        assert _declare_body_height(1, 100, 1600) == 100 + _DECLARE_GROUP_CHROME

@@ -72,3 +72,25 @@ class TestAccountDisplayBalance:
         }
         assert _account_display_balance(account) == 0
 {%- endif %}
+
+
+class TestANegativeBalanceIsNeverPlain:
+    """An overdrawn account must read as trouble at every level.
+
+    The sidebar reserved colour for totals so it would not become a wall
+    of accent - right for teal, wrong for red: TOTAL CHECKING (CHASE) at
+    -$222.56 rendered in plain white and read as an ordinary number.
+    headline_stat_color's own rule: colour the number in trouble, never
+    every healthy one.
+    """
+
+    def test_a_negative_row_balance_is_red(self) -> None:
+        import inspect
+
+        from app.components.frontend.dashboard.modals import finance_modal
+
+        source = inspect.getsource(finance_modal)
+        start = source.index("Individual account rows read in the primary")
+        block = source[start : start + 800]
+        assert "balance < 0" in block
+        assert "Theme.Colors.ERROR" in block

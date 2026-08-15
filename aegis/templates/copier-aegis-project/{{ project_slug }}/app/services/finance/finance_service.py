@@ -19,6 +19,7 @@ import calendar
 from collections import Counter, defaultdict
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 import re
 import statistics
 from typing import Any
@@ -29,12 +30,34 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.constants import (
     ANALYST_NOTE_INSIGHT_TYPE,
+    CADENCE_KEYS,
+    CADENCES,
     CASH_ACCOUNT_TYPES,
+    ONE_TIME_FREQUENCY,
     UNCATEGORIZED_CATEGORY_NAMES,
     Provider,
+    add_months,
+    step_cadence,
+)
+from app.services.finance.envelopes import (
+    ENVELOPE_ACCOUNT_TYPE,
+    envelope_metadata,
+    set_envelope_metadata,
+)
+from app.services.finance.goals import (
+    DEFAULT_PRIORITY,
+    GOAL_ACCOUNT_TYPE,
+    MonthlyFigures,
+    allocate_month,
+    clear_goal_metadata,
+    goal_auto_contribute,
+    goal_metadata,
+    set_auto_contribute,
+    set_goal_metadata,
 )
 from app.services.finance.models import (
     FinanceAccount,
+    FinanceBalanceSnapshot,
     FinanceBudget,
     FinanceBudgetCategory,
     FinanceCategory,
@@ -55,6 +78,7 @@ from app.services.finance.models import (
     FinanceTrade,
     FinanceTransaction,
     FinanceTransactionSplit,
+    FinanceTransactionTag,
     FinanceTransfer,
     FinanceValuation,
 )
@@ -68,16 +92,18 @@ from app.services.finance.schemas import (
 
 _DEFAULT_CURRENCY = "usd"
 
+# ``external_id_source`` value marking a reconciliation adjustment (FIN-37).
+# A plain-column discriminator: the import pipeline's LANE-3 edit matching
+# and the source CHECK constraint both stay untouched by it.
+RECONCILE_MARKER = "reconcile"
+
 # Kept as a module alias so existing references read the shared definition.
 _CASH_ACCOUNT_TYPES = CASH_ACCOUNT_TYPES
 
 
-def _add_months(day: date, months: int) -> date:
-    """Calendar-aware month step (Jan 31 + 1 month = Feb 28, not Mar 3)."""
-    month_index = day.month - 1 + months
-    year = day.year + month_index // 12
-    month = month_index % 12 + 1
-    return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
+# The month step lives with the cadence table; aliased so the many call
+# sites below keep reading the same way.
+_add_months = add_months
 
 
 def _month_bounds(period_month: int) -> tuple[date, date]:
@@ -87,9 +113,153 @@ def _month_bounds(period_month: int) -> tuple[date, date]:
     return start, _add_months(start, 1)
 
 
+# Appended to the month that absorbs a prior overage. A budget line
+# smaller than its allocation, with nothing to explain it, reads as a bug
+# in the forecast rather than as the overage being made up.
+_BUDGET_CARRY_NOTE = " (tightened by last month's overspend)"
+
+
+def _period_month_for(day: date) -> int:
+    """The YYYYMM period a date falls in."""
+    return day.year * 100 + day.month
+
+
+def _month_end(day: date) -> date:
+    """The last day of ``day``'s month."""
+    return date(day.year, day.month, calendar.monthrange(day.year, day.month)[1])
+
+
 def _current_period_month() -> int:
     today = date.today()
     return today.year * 100 + today.month
+
+
+def _display_cash_balance(accounts: list[Any], totals: dict[int, int]) -> int:
+    """Today's spendable cash: the sidebar's own display rule - the
+    authoritative ``current_balance`` when a real balance write happened,
+    else the register sum. One rule, shared by the projection walk and
+    the budget outlook, so "today's balance" can never mean two things."""
+    balance = 0
+    for account in accounts:
+        current = account.current_balance
+        authoritative = current is not None and (current != 0 or account.balance_as_of)
+        balance += current if authoritative else totals.get(account.id, 0)
+    return balance
+
+
+def _monthly_income(streams: list[Any]) -> tuple[int, int]:
+    """(monthly-equivalent confirmed income, source count) - the one income
+    figure the header, the goal allocation engine, and the verdict all
+    share, so a percent-of-income goal and the Income cell can never
+    disagree about what "income" means."""
+    from app.services.finance.categorize.insights import (
+        _MONTHLY_FACTOR,
+        is_commitment,
+        is_paused,
+    )
+
+    rows = [
+        (s, _MONTHLY_FACTOR.get(s.frequency, 0.0))
+        for s in streams
+        if s.direction == "inflow"
+        and not s.is_muted
+        and not is_paused(s)
+        and is_commitment(s)
+    ]
+    rows = [(s, f) for s, f in rows if f > 0]
+    total = int(sum((s.expected_amount or s.average_amount or 0) * f for s, f in rows))
+    return total, len(rows)
+
+
+def plan_budget_trims(
+    lines: list[dict[str, Any]],
+    *,
+    deficit: int,
+    goals: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Deterministic cuts that close a negative month.
+
+    The rules, stated once so the UI and any later decision layer share
+    them. TIER 1: pause a goal before cutting a budget - a dream
+    deferred beats groceries squeezed. Goals pause largest-need-first
+    (fewest dreams disturbed), each recovering its whole monthly need
+    (a pause is all-or-nothing), until the gap is covered or goals run
+    out. TIER 2: a line's FLOOR is what it has already spent this period
+    (a budget below money already gone is a lie, not a plan); cuts
+    distribute proportionally to each line's slack above its floor,
+    largest-remainder rounded so they sum exactly. Whatever neither tier
+    covers is returned as ``residual`` - the part of the gap that
+    belongs to bills or income. Every row carries ``kind``
+    (``pause_goal`` | ``cut_budget``).
+    """
+    if deficit <= 0:
+        return {"cuts": [], "residual": 0}
+    pauses: list[dict[str, Any]] = []
+    for goal in sorted(
+        goals or [],
+        key=lambda g: (-g["monthly_need"], str(g.get("label", "")).casefold()),
+    ):
+        if deficit <= 0:
+            break
+        need = goal["monthly_need"]
+        if need <= 0:
+            continue
+        pauses.append(
+            {
+                "kind": "pause_goal",
+                "account_id": goal["account_id"],
+                "label": goal.get("label") or "Goal",
+                "recovered": need,
+            }
+        )
+        deficit -= need
+    if deficit <= 0:
+        return {"cuts": pauses, "residual": 0}
+    slack = [
+        (line, max(0, line["allocated_amount"] - max(line["spent_amount"], 0)))
+        for line in lines
+    ]
+    slack = [(line, room) for line, room in slack if room > 0]
+    total_slack = sum(room for _line, room in slack)
+    if total_slack == 0:
+        return {"cuts": pauses, "residual": deficit}
+    take = min(deficit, total_slack)
+    raw = [(line, room, take * room / total_slack) for line, room in slack]
+    cuts = [(line, room, int(share)) for line, room, share in raw]
+    remainder = take - sum(cut for _l, _r, cut in cuts)
+    # Largest fractional parts absorb the leftover cents, never past slack.
+    by_fraction = sorted(
+        range(len(cuts)), key=lambda i: raw[i][2] - cuts[i][2], reverse=True
+    )
+    for i in by_fraction:
+        if remainder <= 0:
+            break
+        line, room, cut = cuts[i]
+        if cut < room:
+            cuts[i] = (line, room, cut + 1)
+            remainder -= 1
+    return {
+        "cuts": pauses
+        + [
+            {
+                "kind": "cut_budget",
+                "id": line["id"],
+                "label": line.get("category_name")
+                or line.get("payee_label")
+                or line.get("label")
+                or "Overall",
+                "category_id": line.get("category_id"),
+                "payee_key": line.get("payee_key"),
+                "allocated_amount": line["allocated_amount"],
+                "spent_amount": line["spent_amount"],
+                "cut": cut,
+                "suggested_amount": line["allocated_amount"] - cut,
+            }
+            for line, _room, cut in cuts
+            if cut > 0
+        ],
+        "residual": deficit - take,
+    }
 
 
 def _budget_line_status(allocated_amount: int, spent_amount: int) -> str:
@@ -127,15 +297,9 @@ def _commitment_variance_status(
     return ("warn" if abs(variance) > tolerance else "good"), variance
 
 
+# Derived from the cadence table - see app/services/finance/constants.py.
 _FREQUENCY_STEPS: dict[str, Callable[[date], date]] = {
-    "weekly": lambda d: d + timedelta(days=7),
-    "biweekly": lambda d: d + timedelta(days=14),
-    "semi_monthly": lambda d: d + timedelta(days=15),
-    "monthly": lambda d: _add_months(d, 1),
-    "bimonthly": lambda d: _add_months(d, 2),
-    "quarterly": lambda d: _add_months(d, 3),
-    "semi_annually": lambda d: _add_months(d, 6),
-    "annually": lambda d: _add_months(d, 12),
+    key: partial(step_cadence, key) for key in CADENCE_KEYS
 }
 # Holdings store quantity as units x 1e8 (``quantity_e8``); prices are scaled
 # integers (``price / 10**price_scale`` = unit price).
@@ -246,6 +410,12 @@ def analyst_available() -> bool:
         return False
 
     return hasattr(analyst, "run_analyst_note")
+
+
+def _owner_clause_txn(column, owner_user_id: int | None):
+    """NULL-owner (standalone) rows match IS NULL, same convention the
+    categorize package uses."""
+    return column.is_(None) if owner_user_id is None else column == owner_user_id
 
 
 class FinanceService:
@@ -662,6 +832,149 @@ class FinanceService:
         await self.db.flush()
         return tag
 
+    async def list_tags(
+        self, *, owner_user_id: int | None = None
+    ) -> list[tuple[FinanceTag, int]]:
+        """Every live tag with how many transactions wear it, name order.
+
+        The count is what turns the list into a directory - which flags
+        are live versus leftovers - computed in ONE outer-joined query."""
+        store_owner = 0 if owner_user_id is None else owner_user_id
+        rows = (
+            await self.db.exec(
+                select(FinanceTag, func.count(FinanceTransactionTag.tag_id))
+                .join(
+                    FinanceTransactionTag,
+                    FinanceTransactionTag.tag_id == FinanceTag.id,
+                    isouter=True,
+                )
+                .where(
+                    FinanceTag.owner_user_id == store_owner,
+                    FinanceTag.deleted_at.is_(None),
+                )
+                .group_by(FinanceTag.id)
+                .order_by(FinanceTag.name)
+            )
+        ).all()
+        return [(tag, int(count)) for tag, count in rows]
+
+    async def tag_transactions(
+        self, transaction_ids: list[int], name: str, *, owner_user_id: int | None = None
+    ) -> FinanceTag:
+        """Attach a tag (created on first use) to every given transaction.
+
+        Idempotent: rows already wearing it are left alone, so re-flagging
+        a mixed selection never trips the composite PK."""
+        tag = await self.get_or_create_tag(name, owner_user_id=owner_user_id)
+        already = set(
+            (
+                await self.db.exec(
+                    select(FinanceTransactionTag.transaction_id).where(
+                        FinanceTransactionTag.tag_id == tag.id,
+                        FinanceTransactionTag.transaction_id.in_(transaction_ids),
+                    )
+                )
+            ).all()
+        )
+        for txn_id in transaction_ids:
+            if txn_id not in already:
+                self.db.add(FinanceTransactionTag(transaction_id=txn_id, tag_id=tag.id))
+        await self.db.flush()
+        return tag
+
+    async def untag_transactions(
+        self,
+        transaction_ids: list[int],
+        tag_id: int,
+        *,
+        owner_user_id: int | None = None,
+    ) -> int:
+        """Detach one tag from the given transactions; the tag itself and
+        its other attachments stay. Returns how many rows were removed."""
+        links = (
+            await self.db.exec(
+                select(FinanceTransactionTag).where(
+                    FinanceTransactionTag.tag_id == tag_id,
+                    FinanceTransactionTag.transaction_id.in_(transaction_ids),
+                )
+            )
+        ).all()
+        for link in links:
+            await self.db.delete(link)
+        await self.db.flush()
+        return len(links)
+
+    async def soft_delete_transactions(
+        self, transaction_ids: list[int], *, owner_user_id: int | None = None
+    ) -> int:
+        """Soft-delete transactions (``deleted_at``), returning how many.
+
+        Every read path already filters ``deleted_at``, so the rows leave
+        the register, budgets, and projections with no recompute step.
+        Linked-row rules: a transfer pair's SURVIVING leg is unpaired and
+        comes back into view (the money movement on its account still
+        happened); a split parent takes its split lines with it.
+        """
+        query = select(FinanceTransaction).where(
+            FinanceTransaction.id.in_(transaction_ids),
+            FinanceTransaction.deleted_at.is_(None),
+        )
+        if owner_user_id is not None:
+            query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+        rows = (await self.db.exec(query)).all()
+        if not rows:
+            return 0
+        now = _utcnow()
+        deleting = {txn.id for txn in rows}
+        for txn in rows:
+            txn.deleted_at = now
+            txn.updated_at = now
+            self.db.add(txn)
+            pair_id = txn.transfer_pair_transaction_id
+            if pair_id is not None and pair_id not in deleting:
+                survivor = await self.db.get(FinanceTransaction, pair_id)
+                if survivor is not None:
+                    survivor.is_transfer = False
+                    survivor.transfer_pair_transaction_id = None
+                    survivor.transfer_group_id = None
+                    survivor.updated_at = now
+                    self.db.add(survivor)
+            if txn.is_split:
+                splits = (
+                    await self.db.exec(
+                        select(FinanceTransactionSplit).where(
+                            FinanceTransactionSplit.parent_transaction_id == txn.id
+                        )
+                    )
+                ).all()
+                for split in splits:
+                    await self.db.delete(split)
+        await self.db.flush()
+        return len(rows)
+
+    async def transaction_tags(
+        self, transaction_ids: list[int] | set[int]
+    ) -> dict[int, list[FinanceTag]]:
+        """Tags per transaction, batched for a register page - every id
+        gets a key (empty list when untagged), one query for the lot."""
+        by_txn: dict[int, list[FinanceTag]] = {txn_id: [] for txn_id in transaction_ids}
+        if not by_txn:
+            return by_txn
+        rows = (
+            await self.db.exec(
+                select(FinanceTransactionTag.transaction_id, FinanceTag)
+                .join(FinanceTag, FinanceTag.id == FinanceTransactionTag.tag_id)
+                .where(
+                    FinanceTransactionTag.transaction_id.in_(list(by_txn)),
+                    FinanceTag.deleted_at.is_(None),
+                )
+                .order_by(FinanceTag.name)
+            )
+        ).all()
+        for txn_id, tag in rows:
+            by_txn[txn_id].append(tag)
+        return by_txn
+
     async def get_or_create_pfc_category(self, pfc_primary: str) -> FinanceCategory:
         """Fetch (or create) the system category for a Plaid personal-finance
         category primary (e.g. ``FOOD_AND_DRINK``). Categories are global/system
@@ -737,6 +1050,12 @@ class FinanceService:
         filters = [
             FinanceTransaction.deleted_at.is_(None),
             FinanceTransaction.dedup_status != "duplicate",
+            # A work queue, not a register: a row excluded from reports
+            # (a transfer leg, an issuer-adjustment pair) can never change
+            # a figure whatever it is categorized as, so asking is
+            # busywork - nine adjustment legs sat here nagging until this
+            # filter existed.
+            FinanceTransaction.excluded_from_reports.is_(False),
             FinanceTransaction.account_id.in_(live_accounts),
             or_(
                 FinanceTransaction.category_id.is_(None),
@@ -1177,7 +1496,9 @@ class FinanceService:
                 "total_amount": int(total or 0),
                 "last_date": last_date,
             }
-            for merchant_id, count, total, last_date in (await self.db.exec(query)).all()
+            for merchant_id, count, total, last_date in (
+                await self.db.exec(query)
+            ).all()
             if merchant_id is not None
         }
 
@@ -1269,9 +1590,7 @@ class FinanceService:
             query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
         rows = (await self.db.exec(query)).all()
         tally = Counter(t.category_id for t in rows if t.category_id is not None)
-        dominant_id, dominant_count = (
-            tally.most_common(1)[0] if tally else (None, 0)
-        )
+        dominant_id, dominant_count = tally.most_common(1)[0] if tally else (None, 0)
         names = await self.category_names({dominant_id} if dominant_id else set())
         return {
             "merchant_id": merchant_id,
@@ -1733,6 +2052,20 @@ class FinanceService:
         txn.category_source = source
         txn.is_user_categorized = source == "user"
         txn.is_reviewed = True
+        # The transfer flag follows the category, in the same gesture -
+        # fixing a miscategorized card payment must fix the numbers now,
+        # not on the next import. Only CATEGORY-driven flags are undone
+        # (transfer_group_id NULL): a pairing is evidence from both sides
+        # of the money, and dissolving it is Review's reject, which
+        # restores both legs together.
+        category = await self.db.get(FinanceCategory, category_id)
+        to_transfer = category is not None and category.classification == "transfer"
+        if to_transfer and not txn.is_transfer:
+            txn.is_transfer = True
+            txn.excluded_from_reports = True
+        elif not to_transfer and txn.is_transfer and txn.transfer_group_id is None:
+            txn.is_transfer = False
+            txn.excluded_from_reports = False
         txn.updated_at = _utcnow()
         self.db.add(txn)
         await self.db.flush()
@@ -1871,9 +2204,13 @@ class FinanceService:
         return list((await self.db.exec(query)).all())
 
     _STREAM_DIRECTIONS = frozenset({"inflow", "outflow"})
-    _STREAM_FREQUENCIES = frozenset(
-        {"weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "annually"}
-    )
+    # DERIVED, never re-listed. This was a hand-written copy of the same
+    # six cadences and it drifted: the menus and the forecast grew
+    # bimonthly and semiannual, this did not, so the edit dialog offered
+    # cadences that raised on save. A stream may be stored with exactly
+    # the cadences the forecast can step - anything else is a bill that
+    # cannot appear in it.
+    _STREAM_FREQUENCIES = frozenset(CADENCE_KEYS) | {ONE_TIME_FREQUENCY}
 
     async def create_recurring_stream(
         self,
@@ -1948,6 +2285,45 @@ class FinanceService:
         ).all()
         return {int(row) for row in rows}
 
+    async def payment_stream_ids(self, stream_ids: Sequence[int]) -> set[int]:
+        """The subset of streams that are card/loan PAYMENTS: their
+        members are the cash side of confirmed transfers into a liability
+        account.
+
+        A payment is a transfer, but it is a payment first. The split
+        matters because the two halves of the app disagree about it: the
+        cash forecast must charge it (it genuinely drains checking every
+        month), while the Bills total and spending math must not (the
+        card swipes already counted - adding the payment double-counts
+        every dollar on the card).
+        """
+        if not stream_ids:
+            return set()
+        to_txn = select(FinanceTransaction.account_id).where(
+            FinanceTransaction.id == FinanceTransfer.to_transaction_id
+        )
+        rows = (
+            await self.db.exec(
+                select(FinanceTransaction.recurring_stream_id)
+                .where(
+                    FinanceTransaction.recurring_stream_id.in_(list(stream_ids)),
+                    select(FinanceTransfer.id)
+                    .join(
+                        FinanceAccount,
+                        FinanceAccount.id == to_txn.scalar_subquery(),
+                    )
+                    .where(
+                        FinanceTransfer.from_transaction_id == FinanceTransaction.id,
+                        FinanceTransfer.status == "confirmed",
+                        FinanceAccount.classification == "liability",
+                    )
+                    .exists(),
+                )
+                .distinct()
+            )
+        ).all()
+        return {int(row) for row in rows}
+
     async def _get_recurring(
         self, stream_id: int, owner_user_id: int | None
     ) -> FinanceRecurringStream | None:
@@ -1978,6 +2354,256 @@ class FinanceService:
         if stream is None:
             return None
         stream.is_muted = False
+        self.db.add(stream)
+        await self.db.flush()
+        return stream
+
+    async def attach_transaction_to_stream(
+        self,
+        transaction_id: int,
+        stream_id: int,
+        *,
+        owner_user_id: int | None = None,
+    ) -> FinanceRecurringStream | None:
+        """Reconcile a stray transaction with the bill it paid.
+
+        The automatic matcher unites the two when the payee key lines up;
+        this is the manual verb for when it cannot (a changed descriptor,
+        a hand-entered bill no bank string resembles). It does BOTH
+        halves of the job: consumes the occurrence (membership, due date
+        stepped from the payment's date - the same rule the matcher
+        follows - occurrence counted), and TEACHES the payee key by
+        aligning merchant between the two, so future months match on
+        their own instead of putting the user on a mark-as-paid
+        treadmill. The due date never moves backward: attaching June's
+        charge for the record must not re-arm July's nag.
+        """
+        stream = await self._get_recurring(stream_id, owner_user_id)
+        if stream is None:
+            return None
+        txn_query = select(FinanceTransaction).where(
+            FinanceTransaction.id == transaction_id,
+            FinanceTransaction.deleted_at.is_(None),
+        )
+        if owner_user_id is not None:
+            txn_query = txn_query.where(
+                FinanceTransaction.owner_user_id == owner_user_id
+            )
+        txn = (await self.db.exec(txn_query)).first()
+        if txn is None:
+            return None
+
+        txn.recurring_stream_id = stream.id
+        # Teach whichever side knows less.
+        if txn.merchant_id is not None and stream.merchant_id is None:
+            stream.merchant_id = txn.merchant_id
+        elif stream.merchant_id is not None and txn.merchant_id is None:
+            txn.merchant_id = stream.merchant_id
+
+        # Backfill: claim the payee's OTHER unclaimed rows too. Teaching
+        # the key only helps future months - without this, last
+        # quarter's payments still read as unplanned spending and the
+        # "Everything else" figure double-counts the bill (confirmed
+        # live: a nursing-home bill counted once in BILLS and again in
+        # the observed run rate). Strays only: rows a live stream
+        # already claims are not re-litigated.
+        if txn.merchant_id is not None:
+            live_claim = select(FinanceRecurringStream.id).where(
+                FinanceRecurringStream.id == FinanceTransaction.recurring_stream_id,
+                FinanceRecurringStream.deleted_at.is_(None),
+            )
+            amount_clause = (
+                FinanceTransaction.amount > 0
+                if stream.direction == "inflow"
+                else FinanceTransaction.amount < 0
+            )
+            strays = (
+                await self.db.exec(
+                    select(FinanceTransaction).where(
+                        FinanceTransaction.id != txn.id,
+                        FinanceTransaction.merchant_id == txn.merchant_id,
+                        FinanceTransaction.deleted_at.is_(None),
+                        FinanceTransaction.dedup_status != "duplicate",
+                        amount_clause,
+                        or_(
+                            FinanceTransaction.recurring_stream_id.is_(None),
+                            ~live_claim.exists(),
+                        ),
+                        _owner_clause_txn(
+                            FinanceTransaction.owner_user_id, owner_user_id
+                        ),
+                    )
+                )
+            ).all()
+            for stray in strays:
+                stray.recurring_stream_id = stream.id
+                self.db.add(stray)
+
+        stream.occurrence_count += 1
+        stream.last_amount = abs(txn.amount)
+        if stream.last_date is None or txn.date_ > stream.last_date:
+            stream.last_date = txn.date_
+        if stream.frequency == ONE_TIME_FREQUENCY:
+            # "Pay someone back" has no next occurrence - the payment
+            # arriving is the end of it, not a reschedule.
+            stream.next_expected_date = None
+        else:
+            step = _FREQUENCY_STEPS.get(stream.frequency)
+            if step is not None:
+                advanced = step(txn.date_)
+                current = stream.next_expected_date
+                if current is None or advanced > current:
+                    stream.next_expected_date = advanced
+
+        self.db.add(txn)
+        self.db.add(stream)
+        await self.db.flush()
+        return stream
+
+    async def recurring_match_candidates(
+        self,
+        stream_id: int,
+        *,
+        owner_user_id: int | None = None,
+        limit: int = 20,
+    ) -> list[FinanceTransaction]:
+        """The shortlist a human would scan when reconciling a bill:
+        unclaimed rows in the bill's direction whose amount lands in the
+        neighborhood of what the bill costs, newest first.
+
+        The amount band is deliberately loose (half to double the
+        expected figure, or everything when the bill has no figure) -
+        this feeds a picker where the user decides, not an auto-match,
+        and a too-tight band hides exactly the changed-amount payment
+        that broke the automatic match in the first place.
+        """
+        stream = await self._get_recurring(stream_id, owner_user_id)
+        if stream is None:
+            return []
+        amount_clause = (
+            FinanceTransaction.amount > 0
+            if stream.direction == "inflow"
+            else FinanceTransaction.amount < 0
+        )
+        # "Unclaimed" includes rows held by a DELETED stream: a dismissed
+        # detector guess keeps claiming its pattern (that is how a
+        # dismissal stays silent), but a human reconciling a confirmed
+        # bill outranks a dead proposal - hiding those rows made the
+        # Fidelity payment invisible here twice (confirmed live).
+        live_claim = select(FinanceRecurringStream.id).where(
+            FinanceRecurringStream.id == FinanceTransaction.recurring_stream_id,
+            FinanceRecurringStream.deleted_at.is_(None),
+        )
+        filters = [
+            FinanceTransaction.deleted_at.is_(None),
+            FinanceTransaction.dedup_status != "duplicate",
+            or_(
+                FinanceTransaction.recurring_stream_id.is_(None),
+                ~live_claim.exists(),
+            ),
+            amount_clause,
+            _owner_clause_txn(FinanceTransaction.owner_user_id, owner_user_id),
+        ]
+        expected = stream.expected_amount or stream.average_amount
+        if expected:
+            filters.append(
+                func.abs(FinanceTransaction.amount).between(
+                    int(expected * 0.5), int(expected * 2)
+                )
+            )
+        # This dialog answers "which payment was THIS due date" - last
+        # year's identical charges are not answers to that question, and
+        # six of them crowded out everything else (confirmed live). The
+        # window scales with the cadence so an annual bill still sees a
+        # sensible neighborhood.
+        due = stream.next_expected_date
+        if due is not None:
+            cadence = CADENCES.get(stream.frequency)
+            reach = max(45, int(cadence.detect_days * 1.5)) if cadence else 45
+            window = timedelta(days=reach)
+            filters.append(FinanceTransaction.date_.between(due - window, due + window))
+        rows = (
+            await self.db.exec(
+                select(FinanceTransaction)
+                .where(*filters)
+                .order_by(FinanceTransaction.date_.desc())
+                .limit(limit * 5)
+            )
+        ).all()
+
+        # Likeliest first, not newest first: a small bill's band admits
+        # every coffee in the register, and the real payment (exact
+        # amount, dated near the due date) must not drown under a page
+        # of newer lookalikes (confirmed live).
+        today = date.today()
+        # Name affinity outranks the figures: a candidate carrying the
+        # bill's own payee (or its name in the descriptor) is the answer
+        # even when a stranger's amount lands a dollar nearer - ranked
+        # purely on figures, last year's Etsy outranked rows literally
+        # named after the bill (confirmed live).
+        stream_name = (stream.name or "").casefold()
+
+        def named_alike(txn: FinanceTransaction) -> bool:
+            if stream.merchant_id is not None and txn.merchant_id == stream.merchant_id:
+                return True
+            if not stream_name:
+                return False
+            haystack = f"{txn.name or ''} {txn.original_description or ''}".casefold()
+            return stream_name in haystack
+
+        def likelihood(txn: FinanceTransaction) -> tuple[int, int, int]:
+            amount_distance = abs(abs(txn.amount) - expected) if expected else 0
+            date_distance = abs((txn.date_ - (due or today)).days)
+            return (0 if named_alike(txn) else 1, amount_distance, date_distance)
+
+        # When rows carry the bill's own name, the strangers are noise
+        # and stay out entirely ("it's so obviously Fidelity and not
+        # AT&T"); the amount shortlist earns its keep only when the
+        # payment arrived under an unrecognizable descriptor.
+        named = [t for t in rows if named_alike(t)]
+        pool = named if named else rows
+        return sorted(pool, key=likelihood)[:limit]
+
+    async def pause_recurring(
+        self,
+        stream_id: int,
+        *,
+        until: date,
+        note: str | None = None,
+        owner_user_id: int | None = None,
+    ) -> FinanceRecurringStream | None:
+        """Pause a stream until a date: out of the forecast, the Bills
+        total, the month verdict and every nag until then - and back in
+        all of them the day the date passes, by pure comparison (see
+        ``is_paused``). ``note`` is the why, for the future reader who
+        forgot ("waiting until the pool is paid off"); it rides in
+        ``metadata_`` rather than a column because it is prose for one
+        surface, not a fact anything computes on.
+        """
+        stream = await self._get_recurring(stream_id, owner_user_id)
+        if stream is None:
+            return None
+        stream.paused_until = until
+        if note and note.strip():
+            stream.metadata_ = {**(stream.metadata_ or {}), "pause_note": note.strip()}
+        self.db.add(stream)
+        await self.db.flush()
+        return stream
+
+    async def resume_recurring(
+        self, stream_id: int, *, owner_user_id: int | None = None
+    ) -> FinanceRecurringStream | None:
+        """End a pause early. Clears the note too - a stale reason
+        explaining a pause that is no longer happening is worse than no
+        note at all."""
+        stream = await self._get_recurring(stream_id, owner_user_id)
+        if stream is None:
+            return None
+        stream.paused_until = None
+        if stream.metadata_ and "pause_note" in stream.metadata_:
+            stream.metadata_ = {
+                k: v for k, v in stream.metadata_.items() if k != "pause_note"
+            }
         self.db.add(stream)
         await self.db.flush()
         return stream
@@ -2043,6 +2669,16 @@ class FinanceService:
             stream.amount_is_variable = False
         if next_expected_date is not None:
             stream.next_expected_date = next_expected_date
+        elif frequency in _FREQUENCY_STEPS and stream.next_expected_date is None:
+            # A cadence with no date to apply it to still projects
+            # nothing, so stating one has to complete the repair. This is
+            # the shape a bill takes when it has been seen ONCE: no gap to
+            # measure, so no cadence and no next date - it sits in Bills
+            # reading "Active" and contributes zero to the forecast.
+            # Stepped from the last occurrence when there is one; the
+            # forecast rolls a past date forward on its own.
+            step = _FREQUENCY_STEPS[frequency]
+            stream.next_expected_date = step(stream.last_date or date.today())
         if category_id is not None:
             stream.category_id = category_id
         if account_id is not None and account_id != stream.account_id:
@@ -2161,7 +2797,7 @@ class FinanceService:
         are not re-charged - chasing a missed payment is the insight
         rules' job, not the forecast's.
         """
-        from app.services.finance.categorize import is_commitment
+        from app.services.finance.categorize import is_commitment, is_paused
 
         today = today or date.today()
         horizon = today + timedelta(days=days)
@@ -2183,19 +2819,24 @@ class FinanceService:
         totals = await self.account_transaction_totals(
             owner_user_id=owner_user_id, account_ids=[a.id for a in cash]
         )
-        start_balance = 0
-        for account in cash:
-            current = account.current_balance
-            authoritative = current is not None and (
-                current != 0 or account.balance_as_of
-            )
-            start_balance += current if authoritative else totals.get(account.id, 0)
+        start_balance = _display_cash_balance(cash, totals)
 
         streams = await self.list_recurring(owner_user_id=owner_user_id)
         transfer_ids = await self.transfer_stream_ids([s.id for s in streams])
+        # Payment streams are the carve-out from the transfer exclusion:
+        # the card autopay genuinely drains checking on a rhythm, and a
+        # forecast that skips it runs optimistic by the whole payment
+        # every month (confirmed live, ~$1,800/mo). The commitment gate
+        # below still applies - a detector average poisoned by a one-off
+        # paydown must not walk the forecast until the user pins it.
+        payment_ids = await self.payment_stream_ids(list(transfer_ids))
         occurrences: list[tuple[date, FinanceRecurringStream, int]] = []
         for stream in streams:
-            if stream.is_muted or stream.id in transfer_ids:
+            if (
+                stream.is_muted
+                or is_paused(stream, today)
+                or (stream.id in transfer_ids and stream.id not in payment_ids)
+            ):
                 continue
             # ``account_id is None`` is a hand-entered bill that belongs
             # to no account, so no account selection is a statement about
@@ -2218,8 +2859,15 @@ class FinanceService:
             # pinned in the edit dialog.
             if not is_commitment(stream):
                 continue
-            step = _FREQUENCY_STEPS.get(stream.frequency)
             amount = stream.expected_amount or stream.average_amount or 0
+            if stream.frequency == ONE_TIME_FREQUENCY:
+                # One occurrence, never stepped, never re-charged from the
+                # past (chasing a missed payment is the insight rules' job).
+                when = stream.next_expected_date
+                if amount > 0 and today <= when <= horizon:
+                    occurrences.append((when, stream, amount))
+                continue
+            step = _FREQUENCY_STEPS.get(stream.frequency)
             if step is None or amount <= 0:
                 continue
             when = stream.next_expected_date
@@ -2277,6 +2925,13 @@ class FinanceService:
             for when, stream, amount in occurrences
         ]
         walk.extend(budget_points)
+        # Active goals drain the walk too - committing to a dream visibly
+        # costs the chart.
+        walk.extend(
+            await self._goal_drawdowns(
+                owner_user_id=owner_user_id, today=today, horizon=horizon
+            )
+        )
         walk.sort(key=lambda item: (item[0], item[1].casefold()))
 
         balance = start_balance
@@ -2304,6 +2959,69 @@ class FinanceService:
             points=points,
             total=len(points),
         )
+
+    async def _goal_drawdowns(
+        self,
+        *,
+        owner_user_id: int | None,
+        today: date,
+        horizon: date,
+    ) -> list[tuple[date, str, int, dict[str, Any]]]:
+        """Monthly goal contributions as forecast outflows, on the 1st
+        (the day 's auto-contribute books). Paused/reached goals ask
+        nothing (the pure-math contract). The linked-yield guard: a
+        LINKED goal's synthetic month yields when a real inbound transfer
+        to that account is already booked in that calendar month -
+        without it, committing AND transferring double-drops the line.
+        """
+        goal_accounts = await self.list_goals(owner_user_id=owner_user_id)
+        if not goal_accounts:
+            return []
+        linked_ids = [
+            a.id for a in goal_accounts if a.account_type != GOAL_ACCOUNT_TYPE
+        ]
+        booked_months: dict[int, set[tuple[int, int]]] = {}
+        if linked_ids:
+            transfers = (
+                await self.db.exec(
+                    select(
+                        FinanceTransaction.account_id, FinanceTransaction.date_
+                    ).where(
+                        FinanceTransaction.account_id.in_(linked_ids),
+                        FinanceTransaction.is_transfer.is_(True),
+                        FinanceTransaction.amount > 0,
+                        FinanceTransaction.deleted_at.is_(None),
+                        FinanceTransaction.date_ >= date(today.year, today.month, 1),
+                        FinanceTransaction.date_ <= horizon,
+                    )
+                )
+            ).all()
+            for account_id, when in transfers:
+                booked_months.setdefault(account_id, set()).add((when.year, when.month))
+        allocations = await self.goal_allocations(
+            owner_user_id=owner_user_id, today=today
+        )
+        out: list[tuple[date, str, int, dict[str, Any]]] = []
+        for account in goal_accounts:
+            meta = goal_metadata(account.metadata_)
+            if meta is None:
+                continue
+            need = allocations.get(account.id, 0)
+            if need <= 0:
+                continue
+            when = add_months(date(today.year, today.month, 1), 1)
+            while when <= horizon:
+                if (when.year, when.month) not in booked_months.get(account.id, set()):
+                    out.append(
+                        (
+                            when,
+                            account.name,
+                            -need,
+                            {"direction": "outflow", "goal_account_id": account.id},
+                        )
+                    )
+                when = add_months(when, 1)
+        return out
 
     async def _budget_drawdowns(
         self,
@@ -2334,8 +3052,7 @@ class FinanceService:
         if not lines:
             return []
         names = {
-            c.id: c.name
-            for c in (await self.db.exec(select(FinanceCategory))).all()
+            c.id: c.name for c in (await self.db.exec(select(FinanceCategory))).all()
         }
         out: list[tuple[date, str, int, dict[str, Any]]] = []
         for line in lines:
@@ -2346,17 +3063,42 @@ class FinanceService:
                 or getattr(line, "payee_label", None)
                 or "Budget"
             )
-            when = today
+            allocated = int(line.allocated_amount)
+            extra = {"direction": "outflow", "category": names.get(line.category_id)}
+
+            # What is LEFT of this month's envelope, not the whole of it.
+            # Money already spent has left the account and is in the
+            # starting balance; charging the allocation on top counts it
+            # twice, and every new transaction widens the gap.
+            spent = await self._spend_for_target(
+                owner_user_id=owner_user_id,
+                period_month=_period_month_for(today),
+                category_id=line.category_id,
+                payee_key=line.payee_key,
+            )
+            remaining = allocated - spent
+            if remaining > 0:
+                # Dated at month END: it has not happened yet, so it must
+                # not dent the line today. Dating these at ``today`` also
+                # piled every budget line onto the first point of the walk.
+                out.append((_month_end(today), label, -remaining, extra))
+
+            # Overspending is not a write-off. The overage carries into the
+            # next envelope as a TIGHTER budget, so the forecast shows it
+            # being made up without anyone editing the budget. Only the
+            # next month: you make it up once, then the envelope is clean.
+            # Underspend carries nothing, because the remainder above
+            # already assumes this month's envelope gets used.
+            carry = min(0, remaining)
+            when = _month_end(_add_months(today, 1))
+            first = True
             while when <= horizon:
-                out.append(
-                    (
-                        when,
-                        label,
-                        -int(line.allocated_amount),
-                        {"direction": "outflow", "category": names.get(line.category_id)},
-                    )
-                )
-                when = _add_months(when, 1)
+                amount = max(0, allocated + carry) if first else allocated
+                if amount > 0:
+                    name = label + (_BUDGET_CARRY_NOTE if first and carry else "")
+                    out.append((when, name, -amount, extra))
+                first = False
+                when = _month_end(_add_months(when, 1))
         return out
 
     async def delete_recurring(
@@ -2374,6 +3116,22 @@ class FinanceService:
         stream.deleted_at = _utcnow()
         if stream.source != "user":
             stream.is_muted = True
+        # Free the members. Leaving them claimed by the corpse made them
+        # invisible to Match (claimed) AND to re-detection (pinned), so a
+        # confirmed twin of a deleted duplicate starved forever - 366
+        # transactions sat zombie-claimed by 20 dead streams before this
+        # released on delete (the purge path always did; this path
+        # never had).
+        members = (
+            await self.db.exec(
+                select(FinanceTransaction).where(
+                    FinanceTransaction.recurring_stream_id == stream.id
+                )
+            )
+        ).all()
+        for member in members:
+            member.recurring_stream_id = None
+            self.db.add(member)
         self.db.add(stream)
         await self.db.flush()
         return True
@@ -2495,11 +3253,13 @@ class FinanceService:
         *,
         owner_user_id: int | None = None,
         account_id: int | None = None,
+        account_ids: list[int] | None = None,
         from_date: date | None = None,
         to_date: date | None = None,
         category_id: int | None = None,
         merchant_id: int | None = None,
         without_merchant: bool = False,
+        tag_id: int | None = None,
         query: str | None = None,
         include_transfers: bool = False,
         page: int = 1,
@@ -2524,6 +3284,10 @@ class FinanceService:
             filters.append(FinanceTransaction.owner_user_id == owner_user_id)
         if account_id is not None:
             filters.append(FinanceTransaction.account_id == account_id)
+        if account_ids is not None:
+            # The register's account-picker scope: same convention as
+            # every other ``account_ids`` consumer (None = no filter).
+            filters.append(FinanceTransaction.account_id.in_(account_ids))
         if from_date is not None:
             filters.append(FinanceTransaction.date_ >= from_date)
         if to_date is not None:
@@ -2536,6 +3300,14 @@ class FinanceService:
             # The payee work queue: rows nobody has named yet. Distinct from
             # merchant_id=None, which simply means "don't filter by payee".
             filters.append(FinanceTransaction.merchant_id.is_(None))
+        if tag_id is not None:
+            filters.append(
+                FinanceTransaction.id.in_(
+                    select(FinanceTransactionTag.transaction_id).where(
+                        FinanceTransactionTag.tag_id == tag_id
+                    )
+                )
+            )
         if query:
             filters.append(transaction_search_filter(query))
         select_query = select(FinanceTransaction).where(*filters)
@@ -2867,6 +3639,672 @@ class FinanceService:
             self.db.add(account)
             await self.db.flush()
         return valuation
+
+    # -- Goals ----------------------------------------------------------------
+    #
+    # . A goal is an account wearing goal metadata -
+    # no goal tables. Virtual goals are hidden manual accounts whose
+    # assigned-so-far rides valuations; linked goals are real visible
+    # accounts flagged via metadata, whose contributions are their own
+    # transfers. The metadata shape lives in ``goals.py`` - these methods
+    # are its only writers.
+
+    async def list_goals(
+        self, *, owner_user_id: int | None = None
+    ) -> list[FinanceAccount]:
+        """Every account wearing goal metadata - virtual (hidden) and
+        linked alike. Filtered in Python: the goal keys live in JSON the
+        SQL layer never reads, and the account population is tens, not
+        thousands."""
+        query = select(FinanceAccount).where(FinanceAccount.deleted_at.is_(None))
+        if owner_user_id is not None:
+            query = query.where(FinanceAccount.owner_user_id == owner_user_id)
+        accounts = (await self.db.exec(query.order_by(FinanceAccount.id))).all()
+        return [a for a in accounts if goal_metadata(a.metadata_) is not None]
+
+    async def goal_allocations(
+        self, *, owner_user_id: int | None, today: date
+    ) -> dict[int, int]:
+        """This month's evaluated ask per goal account id - the engine run
+        once over the whole goal set, against the same income/committed
+        figures the budget header shows."""
+        goal_accounts = await self.list_goals(owner_user_id=owner_user_id)
+        if not goal_accounts:
+            return {}
+        from app.services.finance.categorize import commitment_rollup
+
+        streams = await self.list_recurring(owner_user_id=owner_user_id)
+        income_total, _count = _monthly_income(streams)
+        rollup = commitment_rollup(streams, today=today)
+        budget = await self.get_or_create_budget(
+            owner_user_id=owner_user_id, period_month=_current_period_month()
+        )
+        allocated = sum(
+            line.allocated_amount
+            for line in (
+                await self.db.exec(
+                    select(FinanceBudgetCategory).where(
+                        FinanceBudgetCategory.budget_id == budget.id,
+                        FinanceBudgetCategory.period_month == _current_period_month(),
+                    )
+                )
+            ).all()
+        )
+        figures = MonthlyFigures(
+            income_total=income_total,
+            committed=rollup["monthly_total"] + allocated,
+        )
+        rows = [
+            (str(account.id), meta, account.current_balance or 0)
+            for account in goal_accounts
+            if (meta := goal_metadata(account.metadata_)) is not None
+        ]
+        return {
+            int(key): ask
+            for key, ask in allocate_month(figures, rows, today=today).items()
+        }
+
+    async def goal_rate(self, account: FinanceAccount, *, today: date) -> int | None:
+        """Cents/month the goal is actually growing at: the declared rate
+        when one is set, else the trailing observed rate from the
+        account's own balance-snapshot history (>=14 days of it within the
+        last 120), else ``None`` - which renders as "never"."""
+        meta = goal_metadata(account.metadata_)
+        if meta is not None and meta.monthly_contribution:
+            return meta.monthly_contribution
+        window_start = today - timedelta(days=120)
+        snapshots = (
+            await self.db.exec(
+                select(FinanceBalanceSnapshot)
+                .where(
+                    FinanceBalanceSnapshot.account_id == account.id,
+                    FinanceBalanceSnapshot.balance_date >= window_start,
+                )
+                .order_by(FinanceBalanceSnapshot.balance_date)
+            )
+        ).all()
+        if len(snapshots) < 2:
+            return None
+        first, last = snapshots[0], snapshots[-1]
+        days = (last.balance_date - first.balance_date).days
+        if days < 14:
+            return None
+        rate = round((last.balance - first.balance) * 30 / days)
+        return rate if rate > 0 else None
+
+    async def create_virtual_goal(
+        self,
+        *,
+        owner_user_id: int | None,
+        name: str,
+        target_amount: int,
+        target_date: date | None = None,
+        monthly_contribution: int | None = None,
+        contribution_kind: str = "fixed",
+        contribution_bps: int | None = None,
+        priority: int = DEFAULT_PRIORITY,
+    ) -> FinanceAccount:
+        """A virtual goal: hidden manual account (its money already sits in
+        a cash account, so it must not count twice in net worth)."""
+        account = await self.create_manual_account(
+            owner_user_id=owner_user_id,
+            name=name,
+            account_type=GOAL_ACCOUNT_TYPE,
+            classification="asset",
+        )
+        account.is_hidden = True
+        account.metadata_ = set_goal_metadata(
+            account.metadata_,
+            target_amount=target_amount,
+            target_date=target_date,
+            monthly_contribution=monthly_contribution,
+            contribution_kind=contribution_kind,
+            contribution_bps=contribution_bps,
+            priority=priority,
+        )
+        self.db.add(account)
+        await self.db.flush()
+        return account
+
+    async def flag_account_as_goal(
+        self,
+        account_id: int,
+        *,
+        owner_user_id: int | None,
+        target_amount: int,
+        target_date: date | None = None,
+        monthly_contribution: int | None = None,
+        contribution_kind: str = "fixed",
+        contribution_bps: int | None = None,
+        priority: int = DEFAULT_PRIORITY,
+    ) -> FinanceAccount | None:
+        """A linked goal: an existing real account starts wearing goal
+        metadata. It stays visible and keeps counting in net worth - the
+        money is really there."""
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None:
+            return None
+        account.metadata_ = set_goal_metadata(
+            account.metadata_,
+            target_amount=target_amount,
+            target_date=target_date,
+            monthly_contribution=monthly_contribution,
+            contribution_kind=contribution_kind,
+            contribution_bps=contribution_bps,
+            priority=priority,
+        )
+        self.db.add(account)
+        await self.db.flush()
+        return account
+
+    async def unflag_goal(
+        self, account_id: int, *, owner_user_id: int | None
+    ) -> FinanceAccount | None:
+        """Strip the goal keys; everything else about the account survives."""
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None:
+            return None
+        account.metadata_ = clear_goal_metadata(account.metadata_)
+        self.db.add(account)
+        await self.db.flush()
+        return account
+
+    async def contribute_to_goal(
+        self,
+        account_id: int,
+        *,
+        amount: int,
+        owner_user_id: int | None,
+        when: date | None = None,
+    ) -> FinanceAccount:
+        """Assign money to a VIRTUAL goal: a valuation at balance+amount
+        (idempotent per date via upsert; ``upsert_valuation`` maintains
+        ``current_balance``). Refused for linked goals - their
+        contributions are their real transfers, and a manual top-up would
+        double-count against the account's own register.
+        """
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None:
+            raise ValueError(f"No account {account_id}.")
+        if account.account_type != GOAL_ACCOUNT_TYPE:
+            raise ValueError(
+                "Linked goals book contributions from their own transfers; "
+                "manual contributions are for virtual goals only."
+            )
+        await self.upsert_valuation(
+            account_id=account_id,
+            as_of_date=when or _utcnow().date(),
+            value=(account.current_balance or 0) + amount,
+            owner_user_id=owner_user_id,
+            note="Goal contribution",
+        )
+        refreshed = await self.get_account(account_id, owner_user_id=owner_user_id)
+        assert refreshed is not None  # just written
+        return refreshed
+
+    async def set_goal_status(
+        self, account_id: int, status: str, *, owner_user_id: int | None
+    ) -> FinanceAccount | None:
+        """active | paused | reached - validated by the metadata contract."""
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None:
+            return None
+        meta = goal_metadata(account.metadata_)
+        if meta is None:
+            raise ValueError(f"Account {account_id} is not a goal.")
+        account.metadata_ = set_goal_metadata(
+            account.metadata_,
+            target_amount=meta.target_amount,
+            target_date=meta.target_date,
+            monthly_contribution=meta.monthly_contribution,
+            status=status,
+            contribution_kind=meta.contribution_kind,
+            contribution_bps=meta.contribution_bps,
+            priority=meta.priority,
+        )
+        self.db.add(account)
+        await self.db.flush()
+        return account
+
+    async def set_goal_auto_contribute(
+        self, account_id: int, enabled: bool, *, owner_user_id: int | None
+    ) -> FinanceAccount | None:
+        """Toggle 's monthly auto-booking for one goal."""
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None:
+            return None
+        if goal_metadata(account.metadata_) is None:
+            raise ValueError(f"Account {account_id} is not a goal.")
+        account.metadata_ = set_auto_contribute(account.metadata_, enabled)
+        self.db.add(account)
+        await self.db.flush()
+        return account
+
+    async def auto_contribute_goals(
+        self, *, owner_user_id: int | None, today: date
+    ) -> int:
+        """'s monthly booking: each toggled-on, ACTIVE, VIRTUAL goal
+        gets its declared amount as a ``goal_auto`` valuation dated the
+        1st. Returns how many booked. Idempotent per month: the distinct
+        source makes "already booked" a precise existence check, not a
+        note-string match. Linked goals never book - reality does.
+        """
+        first = date(today.year, today.month, 1)
+        allocations = await self.goal_allocations(
+            owner_user_id=owner_user_id, today=today
+        )
+        booked = 0
+        for account in await self.list_goals(owner_user_id=owner_user_id):
+            meta = goal_metadata(account.metadata_)
+            if (
+                meta is None
+                or meta.status != "active"
+                or account.account_type != GOAL_ACCOUNT_TYPE
+                or not goal_auto_contribute(account.metadata_)
+            ):
+                continue
+            amount = allocations.get(account.id, 0)
+            if amount <= 0:
+                continue
+            already = (
+                await self.db.exec(
+                    select(FinanceValuation.id).where(
+                        FinanceValuation.account_id == account.id,
+                        FinanceValuation.as_of_date == first,
+                        FinanceValuation.source == "goal_auto",
+                    )
+                )
+            ).first()
+            if already is not None:
+                continue
+            await self.upsert_valuation(
+                account_id=account.id,
+                as_of_date=first,
+                value=(account.current_balance or 0) + amount,
+                owner_user_id=owner_user_id,
+                source="goal_auto",
+                note="Goal auto-contribution",
+            )
+            booked += 1
+        return booked
+
+    # -- Envelopes ------------------------------------------------------
+    #
+    # Virtual sub-accounts: a running balance inside real cash (an
+    # allowance, a repairs pot). Hidden manual accounts whose balance and
+    # dated history ride valuations - the goals design minus the target,
+    # plus a spend-down verb. Balances may go negative (borrowing against
+    # next month reads red; it is a fact, not an error).
+
+    async def create_envelope(
+        self,
+        *,
+        owner_user_id: int | None,
+        name: str,
+        monthly_credit: int | None = None,
+        cadence: str = "monthly",
+        starting_balance: int = 0,
+    ) -> FinanceAccount:
+        account = await self.create_manual_account(
+            owner_user_id=owner_user_id,
+            name=name,
+            account_type=ENVELOPE_ACCOUNT_TYPE,
+            classification="asset",
+        )
+        account.is_hidden = True
+        account.metadata_ = set_envelope_metadata(
+            account.metadata_, monthly_credit=monthly_credit, cadence=cadence
+        )
+        self.db.add(account)
+        await self.db.flush()
+        if starting_balance > 0:
+            return await self.credit_envelope(
+                account.id,
+                amount=starting_balance,
+                owner_user_id=owner_user_id,
+                note="Starting balance",
+            )
+        return account
+
+    async def list_envelopes(
+        self, *, owner_user_id: int | None = None
+    ) -> list[FinanceAccount]:
+        query = select(FinanceAccount).where(
+            FinanceAccount.deleted_at.is_(None),
+            FinanceAccount.account_type == ENVELOPE_ACCOUNT_TYPE,
+        )
+        if owner_user_id is not None:
+            query = query.where(FinanceAccount.owner_user_id == owner_user_id)
+        return list((await self.db.exec(query.order_by(FinanceAccount.id))).all())
+
+    async def _walk_envelope(
+        self,
+        account_id: int,
+        *,
+        delta: int,
+        owner_user_id: int | None,
+        when: date | None,
+        note: str | None,
+        source: str = "manual",
+    ) -> FinanceAccount:
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None or envelope_metadata(account.metadata_) is None:
+            raise ValueError(f"No envelope {account_id}.")
+        await self.upsert_valuation(
+            account_id=account_id,
+            as_of_date=when or _utcnow().date(),
+            value=(account.current_balance or 0) + delta,
+            owner_user_id=owner_user_id,
+            source=source,
+            note=note,
+        )
+        refreshed = await self.get_account(account_id, owner_user_id=owner_user_id)
+        assert refreshed is not None  # just written
+        return refreshed
+
+    async def credit_envelope(
+        self,
+        account_id: int,
+        *,
+        amount: int,
+        owner_user_id: int | None,
+        when: date | None = None,
+        note: str | None = None,
+    ) -> FinanceAccount:
+        if amount <= 0:
+            raise ValueError("Credit a positive amount.")
+        return await self._walk_envelope(
+            account_id,
+            delta=amount,
+            owner_user_id=owner_user_id,
+            when=when,
+            note=note or "Credit",
+        )
+
+    async def spend_from_envelope(
+        self,
+        account_id: int,
+        *,
+        amount: int,
+        owner_user_id: int | None,
+        when: date | None = None,
+        note: str | None = None,
+    ) -> FinanceAccount:
+        if amount <= 0:
+            raise ValueError("Spend a positive amount.")
+        return await self._walk_envelope(
+            account_id,
+            delta=-amount,
+            owner_user_id=owner_user_id,
+            when=when,
+            note=note or "Spent",
+        )
+
+    async def set_envelope_auto_credit(
+        self, account_id: int, enabled: bool, *, owner_user_id: int | None
+    ) -> FinanceAccount | None:
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None:
+            return None
+        meta = envelope_metadata(account.metadata_)
+        if meta is None:
+            raise ValueError(f"Account {account_id} is not an envelope.")
+        account.metadata_ = set_envelope_metadata(
+            account.metadata_,
+            monthly_credit=meta.monthly_credit,
+            auto_credit=enabled,
+            cadence=meta.cadence,
+        )
+        self.db.add(account)
+        await self.db.flush()
+        return account
+
+    async def update_envelope(
+        self,
+        account_id: int,
+        *,
+        owner_user_id: int | None,
+        monthly_credit: int | None,
+        auto_credit: bool,
+        cadence: str = "monthly",
+    ) -> FinanceAccount | None:
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None or envelope_metadata(account.metadata_) is None:
+            return None
+        account.metadata_ = set_envelope_metadata(
+            account.metadata_,
+            monthly_credit=monthly_credit,
+            auto_credit=auto_credit,
+            cadence=cadence,
+        )
+        self.db.add(account)
+        await self.db.flush()
+        return account
+
+    async def auto_credit_envelopes(
+        self, *, owner_user_id: int | None, today: date
+    ) -> int:
+        """The 1st-of-month booking: each auto-credit-on envelope's
+        monthly credit as an ``envelope_auto`` valuation. Idempotent per
+        month via the distinct source - catch-up safe."""
+        booked = 0
+        for account in await self.list_envelopes(owner_user_id=owner_user_id):
+            meta = envelope_metadata(account.metadata_)
+            if meta is None or not meta.auto_credit or not meta.monthly_credit:
+                continue
+            # The period's booking date IS the idempotency key: the 1st
+            # for monthly, this week's Monday for weekly.
+            if meta.cadence == "weekly":
+                period_start = today - timedelta(days=today.weekday())
+            else:
+                period_start = date(today.year, today.month, 1)
+            already = (
+                await self.db.exec(
+                    select(FinanceValuation.id).where(
+                        FinanceValuation.account_id == account.id,
+                        FinanceValuation.as_of_date == period_start,
+                        FinanceValuation.source == "envelope_auto",
+                    )
+                )
+            ).first()
+            if already is not None:
+                continue
+            await self.upsert_valuation(
+                account_id=account.id,
+                as_of_date=period_start,
+                value=(account.current_balance or 0) + meta.monthly_credit,
+                owner_user_id=owner_user_id,
+                source="envelope_auto",
+                note="Weekly credit" if meta.cadence == "weekly" else "Monthly credit",
+            )
+            booked += 1
+        return booked
+
+    # -- Reconciliation -------------------------------------------------------
+    #
+    # FIN-37. Reconciliation lives in BALANCE-space, never spend-space: the
+    # correction is either a transfer-flagged adjustment transaction (every
+    # analytics consumer - spending summary, cashflow, detection, insight
+    # rules, budget math - already excludes ``is_transfer``, while balance
+    # walks include it) or, for an account with no register at all, a plain
+    # valuation. ``external_id_source='reconcile'`` is the discriminator the
+    # import pipeline uses to keep LANE-3 edit-matching away from
+    # adjustments; ``external_id`` carries the statement date, which makes
+    # re-reconciling a date REPLACE its adjustment instead of stacking.
+
+    async def _register_balance_as_of(self, account_id: int, as_of: date) -> int:
+        """Signed sum of the account's posted register through ``as_of``."""
+        total = (
+            await self.db.exec(
+                select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(
+                    FinanceTransaction.account_id == account_id,
+                    FinanceTransaction.deleted_at.is_(None),
+                    FinanceTransaction.status == "posted",
+                    FinanceTransaction.date_ <= as_of,
+                )
+            )
+        ).one()
+        return int(total or 0)
+
+    async def _reconcile_adjustment_for(
+        self, account_id: int, statement_date: date
+    ) -> FinanceTransaction | None:
+        return (
+            await self.db.exec(
+                select(FinanceTransaction).where(
+                    FinanceTransaction.account_id == account_id,
+                    FinanceTransaction.external_id_source == RECONCILE_MARKER,
+                    FinanceTransaction.date_ == statement_date,
+                    FinanceTransaction.deleted_at.is_(None),
+                )
+            )
+        ).first()
+
+    async def reconcile_preview(
+        self,
+        account_id: int,
+        *,
+        owner_user_id: int | None = None,
+        statement_date: date,
+        statement_balance: int,
+    ) -> dict[str, Any] | None:
+        """What reconciling WOULD do: the register-vs-statement delta.
+
+        The register figure excludes any prior adjustment for this same
+        statement date - re-reconciling replaces it, so the delta must be
+        measured as if it were not there.
+        """
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        if account is None:
+            return None
+        has_register = (
+            await self.db.exec(
+                select(FinanceTransaction.id)
+                .where(
+                    FinanceTransaction.account_id == account_id,
+                    FinanceTransaction.deleted_at.is_(None),
+                    # NULL-safe: ordinary rows carry a NULL source, and
+                    # ``NULL != 'reconcile'`` is not true in SQL.
+                    func.coalesce(FinanceTransaction.external_id_source, "")
+                    != RECONCILE_MARKER,
+                )
+                .limit(1)
+            )
+        ).first() is not None
+        register = await self._register_balance_as_of(account_id, statement_date)
+        existing = await self._reconcile_adjustment_for(account_id, statement_date)
+        if existing is not None:
+            register -= existing.amount
+        return {
+            "account_id": account_id,
+            "route": "adjustment" if has_register else "valuation",
+            "statement_date": statement_date,
+            "statement_balance": statement_balance,
+            "register_balance": register,
+            "delta": statement_balance - register,
+            "adjustment_transaction_id": existing.id if existing else None,
+            "applied": False,
+        }
+
+    async def reconcile_account(
+        self,
+        account_id: int,
+        *,
+        owner_user_id: int | None = None,
+        statement_date: date,
+        statement_balance: int,
+    ) -> dict[str, Any] | None:
+        """Reconcile the account to a statement. Idempotent per date.
+
+        Adjustment route: one transfer-flagged transaction dated the
+        statement day absorbs the delta (replaced on re-reconcile; removed
+        when the delta reaches zero). Valuation route (no register): the
+        statement balance is posted as a valuation. Either way the
+        account's waterline (``metadata.reconciled_through``) and headline
+        balance move, and net-worth snapshots recompute from the statement
+        date FORWARD - history before it is untouched.
+        """
+        preview = await self.reconcile_preview(
+            account_id,
+            owner_user_id=owner_user_id,
+            statement_date=statement_date,
+            statement_balance=statement_balance,
+        )
+        if preview is None:
+            return None
+        account = await self.get_account(account_id, owner_user_id=owner_user_id)
+        delta = preview["delta"]
+        result = dict(preview)
+        result["applied"] = True
+
+        if preview["route"] == "valuation":
+            await self.upsert_valuation(
+                account_id=account_id,
+                as_of_date=statement_date,
+                value=statement_balance,
+                owner_user_id=owner_user_id,
+                note="Reconciled to statement",
+            )
+            result["adjustment_transaction_id"] = None
+        else:
+            existing = await self._reconcile_adjustment_for(account_id, statement_date)
+            audit = (
+                f"Reconciled to statement: {statement_balance / 100:,.2f} "
+                f"(register showed {preview['register_balance'] / 100:,.2f})"
+            )
+            if delta == 0:
+                if existing is not None:
+                    await self.db.delete(existing)
+                    await self.db.flush()
+                result["adjustment_transaction_id"] = None
+            elif existing is not None:
+                existing.amount = delta
+                existing.memo = audit
+                existing.updated_at = _utcnow()
+                self.db.add(existing)
+                await self.db.flush()
+                result["adjustment_transaction_id"] = existing.id
+            else:
+                txn = await self.create_transaction(
+                    account_id=account_id,
+                    amount=delta,
+                    txn_date=statement_date,
+                    owner_user_id=owner_user_id,
+                    name="Balance adjustment",
+                    external_id=f"reconcile:{statement_date.isoformat()}",
+                    external_id_source=RECONCILE_MARKER,
+                    memo=audit,
+                )
+                # Balance-space, not spend-space: every analytics consumer
+                # filters transfers out; the balance walks keep them.
+                txn.is_transfer = True
+                self.db.add(txn)
+                await self.db.flush()
+                result["adjustment_transaction_id"] = txn.id
+            # The statement is the freshest balance fact we hold unless a
+            # later one is already stamped.
+            if account.balance_as_of is None or (
+                statement_date >= account.balance_as_of.date()
+            ):
+                account.current_balance = statement_balance
+                account.balance_as_of = datetime(
+                    statement_date.year, statement_date.month, statement_date.day
+                )
+
+        account.metadata_ = {
+            **(account.metadata_ or {}),
+            "reconciled_through": statement_date.isoformat(),
+        }
+        self.db.add(account)
+        await self.db.flush()
+        result["reconciled_through"] = statement_date
+
+        from app.services.finance import networth_service
+
+        await networth_service.recompute_snapshots(
+            self.db, owner_user_id=owner_user_id, start_date=statement_date
+        )
+        return result
 
     async def list_valuations(
         self, account_id: int, *, owner_user_id: int | None = None
@@ -3250,16 +4688,29 @@ class FinanceService:
         *,
         owner_user_id: int | None,
         account_id: int | None = None,
+        account_ids: list[int] | None = None,
         limit: int = 100,
     ) -> list[FinanceTrade]:
-        """Recent trades for an owner (optionally one account), newest first."""
+        """Recent trades for an owner (optionally one account), newest first.
+
+        ``account_ids`` is the register's account-picker scope - without
+        it the All Accounts view showed every brokerage's trades no matter
+        what the picker said.
+        """
         trade_owner = 0 if owner_user_id is None else owner_user_id
         query = select(FinanceTrade).where(
             FinanceTrade.owner_user_id == trade_owner,
             FinanceTrade.deleted_at.is_(None),
+            # Same live-account guard as list_transactions: a removed
+            # account's trades stay stored but leave the feeds.
+            FinanceTrade.account_id.in_(
+                select(FinanceAccount.id).where(FinanceAccount.deleted_at.is_(None))
+            ),
         )
         if account_id is not None:
             query = query.where(FinanceTrade.account_id == account_id)
+        if account_ids is not None:
+            query = query.where(FinanceTrade.account_id.in_(account_ids))
         query = query.order_by(
             FinanceTrade.trade_date.desc(), FinanceTrade.id.desc()
         ).limit(limit)
@@ -3370,9 +4821,7 @@ class FinanceService:
         )
         if owner_user_id is not None:
             query = query.where(FinanceBudget.owner_user_id == owner_user_id)
-        existing = (
-            await self.db.exec(query.order_by(FinanceBudget.id))
-        ).first()
+        existing = (await self.db.exec(query.order_by(FinanceBudget.id))).first()
         if existing is not None:
             return existing
         await self.get_or_create_currency(_DEFAULT_CURRENCY)
@@ -3451,9 +4900,22 @@ class FinanceService:
     _BUDGET_LOOKBACK_MONTHS = 6
     # Must actually show up most months - a one-off is not a budget.
     _BUDGET_MIN_MONTHS = 4
-    # Biggest month over smallest, among months with spend. Auto repairs
-    # ran 63x here ($36 to $2,301); a median of that predicts nothing.
-    _BUDGET_MAX_SPREAD = 3.0
+    # Steady means AT MOST ONE MONTH OUT OF LINE. A month counts as
+    # unusual when it lands outside +/-50% of the median.
+    #
+    # Two measures were wrong before this. Biggest-over-smallest asks how
+    # far apart the two most EXTREME months are, which one outlier
+    # destroys: on a real ledger a $300 portfolio contribution identical
+    # in five of six months scored 4.3x and was thrown out along with
+    # every other steady line, leaving zero suggestions. Median absolute
+    # deviation fixes that but overcorrects - it survives one outlier by
+    # ignoring outliers, so auto repairs at $36, $40, $2301, $50, $45,
+    # $1800 scored a placid 0.20 and would have been budgeted at $47.
+    #
+    # Counting them asks the question directly, and says out loud what a
+    # user can check: how many months did not look like the others.
+    _BUDGET_UNUSUAL_BAND = 0.5
+    _BUDGET_MAX_UNUSUAL_MONTHS = 1
     # Below this, a line is noise nobody wants to manage.
     _BUDGET_MIN_AMOUNT = 2_000
     # Share of a category's monthly spend that bills must already account
@@ -3527,23 +4989,48 @@ class FinanceService:
         from app.services.finance.categorize.insights import (
             _MONTHLY_FACTOR,
             is_commitment,
+            is_paused,
         )
 
-        by_name = {
-            c.name: c.id
-            for c in (await self.db.exec(select(FinanceCategory))).all()
-        }
+        all_categories = (await self.db.exec(select(FinanceCategory))).all()
+        by_name = {c.name: c.id for c in all_categories}
+        # A budget line is about money SPENT. Categories carry their own
+        # classification, and it is the reliable signal: the
+        # transaction-level ``is_transfer`` guard above only catches rows
+        # PAIRING flagged, and it misses plenty - with the steadiness gate
+        # fixed, the single largest suggestion on a real ledger became
+        # "Transfer" at $1,599/month, money moving between the user's own
+        # accounts.
+        spendable = {c.id for c in all_categories if c.classification == "expense"}
         inferred = await self.stream_category_names([s.id for s in live_streams])
         billed_per_month: dict[int, int] = {}
+        # Categories a CONFIRMED bill claims. Presence, not magnitude: the
+        # user already said this money is a bill, so no arithmetic gets to
+        # re-suggest it - the magnitude test below stays for unconfirmed
+        # detector rhythms only (where it is what keeps one grocery-store
+        # rhythm from blocking the whole groceries budget).
+        confirmed_categories: set[int] = set()
         for stream in live_streams:
+            if stream.is_muted or is_paused(stream):
+                continue
+            confirmed = bool(stream.is_user_confirmed or stream.source == "user")
+            category_id = stream.category_id or by_name.get(inferred.get(stream.id, ""))
+            if category_id is None and confirmed:
+                # A confirmed bill stripped of its members infers nothing
+                # from them (FIN-34 made this real: the Mortgage bill sat
+                # at 0 members and Mortgage got suggested). The stream's
+                # own name through the alias table is the fallback signal.
+                category_id = await self.resolve_category_alias(stream.name)
+            if category_id is None:
+                continue
+            if confirmed:
+                confirmed_categories.add(category_id)
+                continue
             # Only what the FORECAST charges can double-count. Most
             # merchant rhythms fail the commitment gate and project
             # nothing - counting them here blocked groceries with 19
             # shopping streams that never touch the balance.
-            if stream.is_muted or not is_commitment(stream):
-                continue
-            category_id = stream.category_id or by_name.get(inferred.get(stream.id, ""))
-            if category_id is None:
+            if not is_commitment(stream):
                 continue
             amount = stream.expected_amount or stream.average_amount or 0
             factor = _MONTHLY_FACTOR.get(stream.frequency, 0)
@@ -3565,23 +5052,38 @@ class FinanceService:
             ).all()
         }
         names = {
-            c.id: c.name
-            for c in (await self.db.exec(select(FinanceCategory))).all()
+            c.id: c.name for c in (await self.db.exec(select(FinanceCategory))).all()
         }
 
         picks: list[dict[str, Any]] = []
         for category_id, months in per_month.items():
+            # ``already`` also carries the DISMISSAL markers (period-less
+            # budget-line rows, see dismiss_budget_suggestions) - a
+            # declined suggestion is excluded by the same set as a set one.
             if category_id in already:
+                continue
+            if category_id in confirmed_categories:
+                continue
+            if category_id not in spendable:
+                continue
+            # Steady, and passes every numeric gate on real data - but
+            # "budget your uncategorized spending" is not something anyone
+            # can act on. The fix for that money is to categorize it.
+            if (names.get(category_id) or "").strip().lower() in (
+                UNCATEGORIZED_CATEGORY_NAMES
+            ):
                 continue
             spends = [v for v in months.values() if v > 0]
             if len(spends) < self._BUDGET_MIN_MONTHS:
                 continue
-            spread = max(spends) / min(spends)
-            if spread > self._BUDGET_MAX_SPREAD:
-                continue
             # Median, not mean: one repair bill should not set the year.
             amount = int(statistics.median(spends))
             if amount < self._BUDGET_MIN_AMOUNT:
+                continue
+            low = amount * (1 - self._BUDGET_UNUSUAL_BAND)
+            high = amount * (1 + self._BUDGET_UNUSUAL_BAND)
+            unusual = sum(1 for v in spends if v < low or v > high)
+            if unusual > self._BUDGET_MAX_UNUSUAL_MONTHS:
                 continue
             # Bills already cover most of this category - the forecast has
             # counted it once, and a budget line would count it again.
@@ -3594,11 +5096,113 @@ class FinanceService:
                     "category_name": names.get(category_id),
                     "suggested_amount": amount,
                     "months_seen": len(spends),
-                    "spread": round(spread, 2),
+                    "unusual_months": unusual,
                 }
             )
         picks.sort(key=lambda p: -p["suggested_amount"])
         return picks
+
+    # -- Suggestion dismissals ------------------------------------------------
+    #
+    # A declined suggestion is stored as a MARKER row on the standing
+    # "Monthly" budget: a ``finance_budget_category`` row with the category
+    # set and ``period_month`` NULL. Real budget lines always carry a
+    # period, and every lines/summary read filters on one, so markers are
+    # invisible everywhere except here - and ``suggest_budget_lines``'s
+    # ``already`` set (which does NOT filter by period, on purpose) excludes
+    # them with no extra query. Standing by construction: the budget row is
+    # one per owner across all months, so a dismissal never re-nags on
+    # month rollover. No new table, no new column.
+
+    async def _dismissal_markers(
+        self, *, owner_user_id: int | None
+    ) -> list[FinanceBudgetCategory]:
+        budget = await self.get_or_create_budget(
+            owner_user_id=owner_user_id, period_month=_current_period_month()
+        )
+        return list(
+            (
+                await self.db.exec(
+                    select(FinanceBudgetCategory).where(
+                        FinanceBudgetCategory.budget_id == budget.id,
+                        FinanceBudgetCategory.category_id.is_not(None),
+                        FinanceBudgetCategory.period_month.is_(None),
+                    )
+                )
+            ).all()
+        )
+
+    async def list_dismissed_suggestions(
+        self, *, owner_user_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Declined suggestions, with display names, name-sorted."""
+        markers = await self._dismissal_markers(owner_user_id=owner_user_id)
+        if not markers:
+            return []
+        names = {
+            c.id: c.name
+            for c in (
+                await self.db.exec(
+                    select(FinanceCategory).where(
+                        FinanceCategory.id.in_([m.category_id for m in markers])
+                    )
+                )
+            ).all()
+        }
+        return sorted(
+            (
+                {
+                    "category_id": m.category_id,
+                    "category_name": names.get(m.category_id),
+                }
+                for m in markers
+            ),
+            key=lambda d: d["category_name"] or "",
+        )
+
+    async def dismiss_budget_suggestions(
+        self, *, owner_user_id: int | None = None, category_ids: list[int]
+    ) -> int:
+        """Decline suggestions for these categories. Idempotent; returns
+        how many new dismissals were recorded."""
+        budget = await self.get_or_create_budget(
+            owner_user_id=owner_user_id, period_month=_current_period_month()
+        )
+        existing = {
+            m.category_id
+            for m in await self._dismissal_markers(owner_user_id=owner_user_id)
+        }
+        added = 0
+        for category_id in dict.fromkeys(category_ids):
+            if category_id is None or category_id in existing:
+                continue
+            self.db.add(
+                FinanceBudgetCategory(
+                    owner_user_id=0 if owner_user_id is None else owner_user_id,
+                    budget_id=budget.id,
+                    category_id=category_id,
+                    period_month=None,
+                    allocated_amount=0,
+                )
+            )
+            added += 1
+        if added:
+            await self.db.flush()
+        return added
+
+    async def restore_budget_suggestions(
+        self, *, owner_user_id: int | None = None, category_ids: list[int]
+    ) -> int:
+        """Un-decline suggestions: delete the markers. Returns how many."""
+        wanted = {c for c in category_ids if c is not None}
+        removed = 0
+        for marker in await self._dismissal_markers(owner_user_id=owner_user_id):
+            if marker.category_id in wanted:
+                await self.db.delete(marker)
+                removed += 1
+        if removed:
+            await self.db.flush()
+        return removed
 
     async def upsert_budget_line(
         self,
@@ -3685,7 +5289,11 @@ class FinanceService:
         return True
 
     async def budget_summary(
-        self, *, owner_user_id: int | None = None, period_month: int | None = None
+        self,
+        *,
+        owner_user_id: int | None = None,
+        period_month: int | None = None,
+        account_ids: list[int] | None = None,
     ) -> dict[str, Any]:
         """Flexible: explicit limits the owner chose to track (category or
         payee) - the only bucket with a real spend-vs-allocation status.
@@ -3744,6 +5352,8 @@ class FinanceService:
             ]
             if owner_user_id is not None:
                 filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+            if account_ids is not None:
+                filters.append(FinanceTransaction.account_id.in_(account_ids))
             return filters
 
         # 4. ONE fetch of THIS period's outflows, tallied by category,
@@ -3765,9 +5375,14 @@ class FinanceService:
         spent_by_category: dict[int, int] = defaultdict(int)
         spent_by_payee: dict[str, int] = defaultdict(int)
         spent_by_stream: dict[int, int] = defaultdict(int)
-        for cat_id, merchant_name, original_description, name, amount, stream_id in (
-            txn_rows
-        ):
+        for (
+            cat_id,
+            merchant_name,
+            original_description,
+            name,
+            amount,
+            stream_id,
+        ) in txn_rows:
             spend = -amount
             if cat_id is not None:
                 spent_by_category[cat_id] += spend
@@ -3797,6 +5412,8 @@ class FinanceService:
         streams = await self.list_recurring(owner_user_id=owner_user_id)
         transfer_ids = await self.transfer_stream_ids([s.id for s in streams])
         streams = [s for s in streams if s.id not in transfer_ids]
+        if account_ids is not None:
+            streams = [s for s in streams if s.account_id in account_ids]
         rollup = commitment_rollup(streams)
         stream_category_names = await self.stream_category_names(
             {s.id for s in rollup["fixed"] + rollup["non_monthly"]}
@@ -3870,11 +5487,96 @@ class FinanceService:
                 row["category_name"] or row["payee_label"] or "Overall"
                 for row in over_budget
             ],
-            "fixed_total": sum(
-                row["allocated_amount"] for row in fixed_lines + non_monthly_lines
-            ),
+            # MONTHLY-EQUIVALENT, not the sum of face values: this is the
+            # header's "Bills / month" figure AND the number ``month_net``
+            # subtracts below, so the two must ride the same footing. A
+            # quarterly $300 bill costs $100 a month; summing the face
+            # values instead (the original) overstated the cell by the
+            # whole non-monthly book, and the strip visibly failed its own
+            # arithmetic - the three cells on display did not subtract to
+            # the fourth.
+            "fixed_total": rollup["monthly_total"],
             "fixed_count": len(fixed_lines) + len(non_monthly_lines),
         }
+
+        # 8. The month's bottom line: confirmed income minus confirmed
+        # bills minus budget allocations, all monthly-equivalent - the
+        # same commitment gate and factors the forecast walks with, so
+        # this verdict and the Projected tab cannot disagree. Budget
+        # lines are the flexible ones only; a category a bill covers is
+        # already excluded from budgets by the suggestion guards.
+
+        income_total, income_count = _monthly_income(streams)
+        stats["income_total"] = income_total
+        stats["income_count"] = income_count
+        # Goals ask their monthly need of the month, the same
+        # commitment-gate discipline bills ride:
+        # paused/reached goals ask nothing, by the pure-math contract.
+        goal_accounts = await self.list_goals(owner_user_id=owner_user_id)
+        figures = MonthlyFigures(
+            income_total=stats["income_total"],
+            committed=stats["fixed_total"] + stats["flexible_allocated"],
+        )
+        engine_rows = [
+            (str(account.id), meta, account.current_balance or 0)
+            for account in goal_accounts
+            if (meta := goal_metadata(account.metadata_)) is not None
+        ]
+        asks = allocate_month(figures, engine_rows, today=today)
+        goal_asks = [
+            {
+                "account_id": account.id,
+                "label": account.name,
+                "monthly_need": asks.get(str(account.id), 0),
+            }
+            for account in goal_accounts
+            if goal_metadata(account.metadata_) is not None
+        ]
+        stats["goals_total"] = sum(g["monthly_need"] for g in goal_asks)
+        stats["goals_count"] = sum(1 for g in goal_asks if g["monthly_need"] > 0)
+
+        # Auto-credit envelopes are spoken-for money too: the allowance
+        # leaves the spendable month whether or not anyone clicks. Manual
+        # envelopes ask nothing - crediting them is a choice made live.
+        envelope_credits = [
+            int(meta.monthly_credit * CADENCES[meta.cadence].monthly_factor)
+            for account in await self.list_envelopes(owner_user_id=owner_user_id)
+            if (meta := envelope_metadata(account.metadata_)) is not None
+            and meta.auto_credit
+            and meta.monthly_credit
+        ]
+        stats["envelopes_total"] = sum(envelope_credits)
+        stats["envelopes_count"] = len(envelope_credits)
+
+        # The sixth term: observed spending no bill and no limit covers.
+        stats["everything_else"] = await self.uncovered_spending_rate(
+            owner_user_id=owner_user_id, today=today, account_ids=account_ids
+        )
+
+        # Subtracts the figures the header STRIP shows, not equivalents of
+        # them recomputed here - the cells and this verdict are one
+        # arithmetic statement, and a reader checking it by hand has to
+        # get the same answer.
+        stats["month_net"] = (
+            stats["income_total"]
+            - stats["fixed_total"]
+            - stats["flexible_allocated"]
+            - stats["goals_total"]
+            - stats["envelopes_total"]
+            - stats["everything_else"]
+        )
+
+        # 9. When the month lands negative, the summary carries its own
+        # fix: pause-a-goal rows first, then deterministic per-line cuts
+        # (see plan_budget_trims). One payload, so the tab offers the
+        # adjustment beside the verdict and a later decision layer reads
+        # the same structure.
+        plan = plan_budget_trims(
+            flexible_lines,
+            deficit=max(0, -stats["month_net"]),
+            goals=goal_asks,
+        )
+        stats["trim_residual"] = plan["residual"]
 
         return {
             "period_month": month,
@@ -3884,7 +5586,339 @@ class FinanceService:
                 bucket("flexible", flexible_lines),
             ],
             "stats": stats,
+            "trims": plan["cuts"],
         }
+
+    async def uncovered_spending_rate(
+        self,
+        *,
+        owner_user_id: int | None = None,
+        today: date | None = None,
+        account_ids: list[int] | None = None,
+    ) -> int:
+        """Cents/month of observed spending no bill and no budget limit
+        covers - the trailing 3 full months' average of spend-space
+        outflows that are neither linked to a recurring stream nor in a
+        budgeted category. The sixth term of the month equation: without
+        it, unplanned spending is invisible and every future month reads
+        optimistic by exactly that amount (confirmed live: ~40% of real
+        spending was in no bucket).
+        """
+        filters, _window = await self._uncovered_spend_filters(
+            owner_user_id=owner_user_id, today=today, account_ids=account_ids
+        )
+        total = (
+            await self.db.exec(
+                select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(
+                    *filters
+                )
+            )
+        ).one()
+        return round(-int(total) / 3)
+
+    async def _uncovered_spend_filters(
+        self,
+        *,
+        owner_user_id: int | None,
+        today: date | None,
+        account_ids: list[int] | None,
+    ) -> tuple[list[Any], tuple[date, date]]:
+        """The uncovered-spend population, shared by the rate and its
+        per-category breakdown so the popup's rows always sum to the
+        cell's figure. Returns (filters, (window_start, window_end))."""
+        today = today or date.today()
+        window_end = date(today.year, today.month, 1)
+        window_start = add_months(window_end, -3)
+
+        budget = await self.get_or_create_budget(
+            owner_user_id=owner_user_id, period_month=_current_period_month()
+        )
+        budgeted_category_ids = {
+            line.category_id
+            for line in (
+                await self.db.exec(
+                    select(FinanceBudgetCategory).where(
+                        FinanceBudgetCategory.budget_id == budget.id,
+                        FinanceBudgetCategory.period_month == _current_period_month(),
+                    )
+                )
+            ).all()
+            if line.category_id is not None
+        }
+
+        live_accounts = select(FinanceAccount.id).where(
+            FinanceAccount.deleted_at.is_(None)
+        )
+        filters: list[Any] = [
+            FinanceTransaction.deleted_at.is_(None),
+            FinanceTransaction.dedup_status != "duplicate",
+            FinanceTransaction.excluded_from_reports.is_(False),
+            FinanceTransaction.is_transfer.is_(False),
+            FinanceTransaction.account_id.in_(live_accounts),
+            FinanceTransaction.amount < 0,
+            FinanceTransaction.date_ >= window_start,
+            FinanceTransaction.date_ < window_end,
+            FinanceTransaction.recurring_stream_id.is_(None),
+            # A reconciliation adjustment is bookkeeping, not spending.
+            or_(
+                FinanceTransaction.external_id_source.is_(None),
+                FinanceTransaction.external_id_source != "reconcile",
+            ),
+        ]
+        if owner_user_id is not None:
+            filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+        if account_ids is not None:
+            filters.append(FinanceTransaction.account_id.in_(account_ids))
+        if budgeted_category_ids:
+            filters.append(
+                or_(
+                    FinanceTransaction.category_id.is_(None),
+                    FinanceTransaction.category_id.notin_(budgeted_category_ids),
+                )
+            )
+        return filters, (window_start, window_end)
+
+    async def budget_stat_details(
+        self,
+        *,
+        owner_user_id: int | None = None,
+        today: date | None = None,
+        account_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
+        """Per-row backup for the header cells, for the click-a-cell popup.
+
+        Income and Bills mirror the cells' own math row for row (same
+        commitment gate, same monthly-equivalent factors as
+        ``_monthly_income``/``commitment_rollup``), so the rows always sum
+        to the cell. Everything-else is the uncovered-spend bucket grouped
+        by category, over the SAME filters as the rate.
+        """
+        from app.services.finance.categorize.insights import (
+            _MONTHLY_FACTOR,
+            commitment_rollup,
+            is_commitment,
+            is_paused,
+        )
+
+        today = today or date.today()
+        streams = await self.list_recurring(owner_user_id=owner_user_id)
+
+        income_rows = [
+            {
+                "label": s.name,
+                "value": int(
+                    (s.expected_amount or s.average_amount or 0)
+                    * _MONTHLY_FACTOR.get(s.frequency, 0.0)
+                ),
+                "caption": None
+                if _MONTHLY_FACTOR.get(s.frequency, 0.0) >= 1.0
+                else s.frequency,
+            }
+            for s in streams
+            if s.direction == "inflow"
+            and not s.is_muted
+            and not is_paused(s, today)
+            and is_commitment(s)
+            and _MONTHLY_FACTOR.get(s.frequency, 0.0) > 0
+        ]
+        income_rows.sort(key=lambda r: -r["value"])
+
+        rollup = commitment_rollup(streams, today=today)
+        bills_rows = [
+            {
+                "label": s.name,
+                "value": int(
+                    (s.average_amount or 0) * _MONTHLY_FACTOR.get(s.frequency, 0.0)
+                ),
+                "caption": None
+                if _MONTHLY_FACTOR.get(s.frequency, 0.0) >= 1.0
+                else f"${(s.average_amount or 0) / 100:,.2f} {s.frequency}",
+            }
+            for s in rollup["fixed"] + rollup["non_monthly"]
+        ]
+        bills_rows.sort(key=lambda r: -r["value"])
+
+        filters, (window_start, window_end) = await self._uncovered_spend_filters(
+            owner_user_id=owner_user_id, today=today, account_ids=account_ids
+        )
+        grouped = (
+            await self.db.exec(
+                select(
+                    FinanceTransaction.category_id,
+                    func.count(),
+                    func.sum(FinanceTransaction.amount),
+                )
+                .where(*filters)
+                .group_by(FinanceTransaction.category_id)
+            )
+        ).all()
+        names = await self.category_names(
+            {category_id for category_id, _n, _total in grouped if category_id}
+        )
+        else_rows = [
+            {
+                "label": names.get(category_id) or "Uncategorized",
+                "value": round(-int(total) / 3),
+                "caption": f"{count} row{'s' if count != 1 else ''}",
+            }
+            for category_id, count, total in grouped
+        ]
+        else_rows.sort(key=lambda r: -r["value"])
+
+        window_last = add_months(window_end, -1)
+        window = (
+            f"{window_start.strftime('%b')} - {window_last.strftime('%b %Y')} average"
+        )
+        return {
+            "income": income_rows,
+            "bills": bills_rows,
+            "everything_else": else_rows,
+            "window": window,
+        }
+
+    async def budget_month_outlook(
+        self,
+        *,
+        owner_user_id: int | None = None,
+        months: int = 6,
+        today: date | None = None,
+        account_ids: list[int] | None = None,
+    ) -> list[dict[str, Any]]:
+        """The header equation computed per month, months ahead - bills at
+        FACE VALUE on their real cadence, so the month the annual premium
+        lands looks like that month and not like an average. "Fine this
+        month" and "broke in October" become visible from one page.
+
+        Same population rules as the header: confirmed commitments only,
+        muted/paused out, transfers (card payments included) out of the
+        bills figure - swipes are already counted in budgets. Budgets,
+        goals, and envelopes ask their standing monthly amounts of every
+        month (they are plans, not occurrences).
+        """
+        from app.services.finance.categorize import is_commitment, is_paused
+
+        today = today or date.today()
+        first = date(today.year, today.month, 1)
+        horizon_end = add_months(first, months)
+
+        streams = await self.list_recurring(owner_user_id=owner_user_id)
+        # Same scoping rule as budget_summary, the header this pages.
+        if account_ids is not None:
+            streams = [s for s in streams if s.account_id in account_ids]
+        transfer_ids = await self.transfer_stream_ids([s.id for s in streams])
+        due_in: dict[tuple[int, int, str], int] = {}
+        for stream in streams:
+            if (
+                stream.is_muted
+                or is_paused(stream, today)
+                or stream.id in transfer_ids
+                or not is_commitment(stream)
+                or stream.next_expected_date is None
+            ):
+                continue
+            amount = stream.expected_amount or stream.average_amount or 0
+            if amount <= 0:
+                continue
+            direction = "in" if stream.direction == "inflow" else "out"
+            if stream.frequency == ONE_TIME_FREQUENCY:
+                when = stream.next_expected_date
+                if today <= when < horizon_end:
+                    key = (when.year, when.month, direction)
+                    due_in[key] = due_in.get(key, 0) + amount
+                continue
+            step = _FREQUENCY_STEPS.get(stream.frequency)
+            if step is None:
+                continue
+            when = stream.next_expected_date
+            guard = 0
+            while when < today and guard < 400:
+                when = step(when)
+                guard += 1
+            while when < horizon_end and guard < 400:
+                key = (when.year, when.month, direction)
+                due_in[key] = due_in.get(key, 0) + amount
+                when = step(when)
+                guard += 1
+
+        # The standing monthly asks - plans, identical every month.
+        budget = await self.get_or_create_budget(
+            owner_user_id=owner_user_id, period_month=_current_period_month()
+        )
+        budgets_monthly = sum(
+            line.allocated_amount
+            for line in (
+                await self.db.exec(
+                    select(FinanceBudgetCategory).where(
+                        FinanceBudgetCategory.budget_id == budget.id,
+                        FinanceBudgetCategory.period_month == _current_period_month(),
+                    )
+                )
+            ).all()
+        )
+        goals_monthly = sum(
+            (
+                await self.goal_allocations(owner_user_id=owner_user_id, today=today)
+            ).values()
+        )
+        envelopes_monthly = sum(
+            int(meta.monthly_credit * CADENCES[meta.cadence].monthly_factor)
+            for account in await self.list_envelopes(owner_user_id=owner_user_id)
+            if (meta := envelope_metadata(account.metadata_)) is not None
+            and meta.auto_credit
+            and meta.monthly_credit
+        )
+        everything_else = await self.uncovered_spending_rate(
+            owner_user_id=owner_user_id, today=today, account_ids=account_ids
+        )
+
+        # The LEVEL under the rates: today's real cash for the selected
+        # accounts, compounded through each month's net - a healthy rate
+        # starting from an empty account still reads red where it should.
+        accounts, _total = await self.list_accounts(
+            owner_user_id=owner_user_id, page_size=500
+        )
+        if account_ids is not None:
+            allowed = set(account_ids)
+            accounts = [a for a in accounts if a.id in allowed]
+        cash = [
+            a
+            for a in accounts
+            if a.classification != "liability" and a.account_type in _CASH_ACCOUNT_TYPES
+        ]
+        totals = await self.account_transaction_totals(
+            owner_user_id=owner_user_id, account_ids=[a.id for a in cash]
+        )
+        running = _display_cash_balance(cash, totals)
+
+        outlook: list[dict[str, Any]] = []
+        for offset in range(months):
+            month_start = add_months(first, offset)
+            income_due = due_in.get((month_start.year, month_start.month, "in"), 0)
+            bills_due = due_in.get((month_start.year, month_start.month, "out"), 0)
+            month_net = (
+                income_due
+                - bills_due
+                - budgets_monthly
+                - goals_monthly
+                - envelopes_monthly
+                - everything_else
+            )
+            outlook.append(
+                {
+                    "period_month": month_start.year * 100 + month_start.month,
+                    "income_due": income_due,
+                    "bills_due": bills_due,
+                    "budgets": budgets_monthly,
+                    "goals": goals_monthly,
+                    "envelopes": envelopes_monthly,
+                    "everything_else": everything_else,
+                    "month_net": month_net,
+                    "start_balance": running,
+                    "end_balance": running + month_net,
+                }
+            )
+            running += month_net
+        return outlook
 
     async def parse_budget_goal(
         self, *, owner_user_id: int | None, text: str
@@ -3982,7 +6016,10 @@ class FinanceService:
                 break
 
         if matched_category is not None:
-            cat_filters = [*filters, FinanceTransaction.category_id == matched_category.id]
+            cat_filters = [
+                *filters,
+                FinanceTransaction.category_id == matched_category.id,
+            ]
             cat_total = (
                 await self.db.exec(
                     select(func.sum(FinanceTransaction.amount)).where(*cat_filters)

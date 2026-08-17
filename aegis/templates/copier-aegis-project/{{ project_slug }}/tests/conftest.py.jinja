@@ -11,7 +11,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator
 
-import pytest
+# Before any app import reads settings: a developer .env with a real
+# LOGFIRE_TOKEN must never arm instrumentation (or ship test spans).
+os.environ["LOGFIRE_TOKEN"] = ""
+
+import pytest  # noqa: E402
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 {%- if include_database %}

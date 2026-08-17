@@ -15,58 +15,17 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize import declare_recurring
-from app.services.finance.finance_service import FinanceService
-
-
-async def _account(svc: FinanceService, name: str = "Checking"):
-    return await svc.create_manual_account(
-        name=name,
-        account_type="checking",
-        classification="asset",
-        owner_user_id=1,
-    )
-
-
-async def _category(db: AsyncSession, name: str):
-    from app.services.finance.models import FinanceCategory
-
-    row = FinanceCategory(
-        owner_user_id=1,
-        name=name,
-        slug=name.lower().replace(" ", "-").replace(":", "-").replace("&", "and"),
-        classification="expense",
-    )
-    db.add(row)
-    await db.flush()
-    return row
+from app.services.finance.domains.detection import declare_recurring
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import declare_bill
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_category as _category
 
 
 async def _bill(svc: FinanceService, db: AsyncSession, account_id: int, name: str):
-    txns = [
-        await svc.create_transaction(
-            account_id=account_id,
-            amount=-1_000,
-            txn_date=date(2026, m, 4),
-            owner_user_id=1,
-            name=name,
-        )
-        for m in range(1, 5)
-    ]
-    await declare_recurring(db, [t.id for t in txns], owner_user_id=1)
-    from sqlmodel import select
-
-    from app.services.finance.models import FinanceRecurringStream
-
-    stream = (
-        await db.exec(
-            select(FinanceRecurringStream).where(
-                FinanceRecurringStream.deleted_at.is_(None),
-                FinanceRecurringStream.name == name,
-            )
-        )
-    ).first()
-    return stream, txns
+    return await declare_bill(
+        svc, db, account_id, name, [date(2026, m, 4) for m in range(1, 5)]
+    )
 
 
 class TestBillCategory:
@@ -86,9 +45,7 @@ class TestBillCategory:
             )
         household = await _category(async_db_session, "Home:Household")
 
-        await svc.update_recurring(
-            stream.id, owner_user_id=1, category_id=household.id
-        )
+        await svc.update_recurring(stream.id, owner_user_id=1, category_id=household.id)
 
         names = await svc.stream_category_names([stream.id])
         assert names[stream.id] == "Home:Household"
@@ -125,9 +82,7 @@ class TestBillCategory:
             )
         household = await _category(async_db_session, "Home:Household")
 
-        await svc.update_recurring(
-            stream.id, owner_user_id=1, category_id=household.id
-        )
+        await svc.update_recurring(stream.id, owner_user_id=1, category_id=household.id)
 
         for txn in txns:
             await async_db_session.refresh(txn)
@@ -139,7 +94,7 @@ class TestCategoryAtDeclareTime:
     async def test_make_recurring_can_set_the_category(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -184,7 +139,7 @@ class TestCategoryAtDeclareTime:
     async def test_declaring_with_a_category_leaves_transactions_alone(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -236,9 +191,7 @@ class TestEditingTheCadence:
             name="MVP",
         )
         await declare_recurring(db, [txn.id], owner_user_id=1)
-        stream = (
-            await svc.list_recurring(owner_user_id=1)
-        )[0]
+        stream = (await svc.list_recurring(owner_user_id=1))[0]
         assert stream.frequency == "unknown"
         assert stream.next_expected_date is None
         return stream
@@ -345,7 +298,7 @@ class TestTheCadenceListsAllAgree:
     gaps were invisible until a real bill fell through one:
 
         _CADENCES            what detection can measure
-        _FREQUENCY_STEPS     what the forecast can step
+        FREQUENCY_STEPS     what the forecast can step
         _FREQUENCY_LABELS    what the menus offer
         _STREAM_FREQUENCIES  what create/update will accept
 
@@ -359,18 +312,16 @@ class TestTheCadenceListsAllAgree:
         from app.components.frontend.dashboard.modals.finance_modal import (
             _FREQUENCY_LABELS,
         )
-        from app.services.finance.finance_service import (
-            _FREQUENCY_STEPS,
-            FinanceService,
-        )
+        from app.services.finance.service import FinanceService
+        from app.services.finance.utils import FREQUENCY_STEPS
 
-        assert set(_FREQUENCY_LABELS) == set(_FREQUENCY_STEPS)
+        assert set(_FREQUENCY_LABELS) == set(FREQUENCY_STEPS)
         # The validator also accepts "once" - a dated one-off debt is
         # storable and forecastable (single occurrence) but has no step.
         from app.services.finance.constants import ONE_TIME_FREQUENCY
 
         assert set(FinanceService._STREAM_FREQUENCIES) == (
-            set(_FREQUENCY_STEPS) | {ONE_TIME_FREQUENCY}
+            set(FREQUENCY_STEPS) | {ONE_TIME_FREQUENCY}
         )
 
     def test_everything_detection_measures_can_be_stepped(self) -> None:
@@ -378,7 +329,7 @@ class TestTheCadenceListsAllAgree:
         that is fine, the user states those by hand. The reverse is not:
         measuring a cadence nothing can step is how a detected bill goes
         missing from the projection."""
-        from app.services.finance.categorize.recurring import _CADENCES
-        from app.services.finance.finance_service import _FREQUENCY_STEPS
+        from app.services.finance.domains.detection.recurring.cadence import _CADENCES
+        from app.services.finance.utils import FREQUENCY_STEPS
 
-        assert {label for _days, label in _CADENCES} <= set(_FREQUENCY_STEPS)
+        assert {label for _days, label in _CADENCES} <= set(FREQUENCY_STEPS)

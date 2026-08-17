@@ -11,6 +11,10 @@ from pathlib import Path
 {% endif %}
 from typing import Any
 
+from app.components.backend.startup.schema_recovery import (
+    _create_missing_tables,
+    _existing_tables_by_schema,
+)
 from app.core.log import logger
 
 {% if include_auth %}
@@ -49,6 +53,9 @@ def _check_and_stamp_existing_tables() -> None:
         from alembic.script import ScriptDirectory
         from sqlalchemy import inspect
 
+        from app.components.backend.startup.migration_signatures import (
+            SERVICE_MIGRATION_SIGNATURES,
+        )
         from app.core.db import db_session
 
         alembic_cfg = Config("alembic/alembic.ini")
@@ -62,18 +69,7 @@ def _check_and_stamp_existing_tables() -> None:
             context = MigrationContext.configure(session.connection())
             current_rev = context.get_current_revision()
 
-        # Map known service migrations to their signature
-        # - ("table", name): check if table exists (CREATE TABLE migrations)
-        # - ("column", table, col): check if column exists (ALTER TABLE migrations)
-        service_signatures: dict[str, tuple[str, ...]] = {
-            "auth": ("table", "user"),
-            "auth_rbac": ("column", "user", "role"),
-            "auth_org": ("table", "organization"),
-            "ai": ("table", "llm_vendor"),
-            "ai_voice": ("table", "voice_usage"),
-            "blog": ("table", "blog_post"),
-            "scheduler": ("table", "scheduler.job_execution"),
-        }
+        service_signatures = SERVICE_MIGRATION_SIGNATURES
 
         # Build signature mapping from migration filenames
         signatures: dict[str, tuple[str, ...]] = {}
@@ -88,14 +84,17 @@ def _check_and_stamp_existing_tables() -> None:
                     if sig:
                         signatures[rev.revision] = sig
 
-        # Get column info for alter-table checks
+        # Get column info for alter-table checks. Qualified names resolve
+        # against their schema; on engines without schemas (SQLite) the same
+        # table exists bare, so both spellings land in the map.
         db_columns: dict[str, set[str]] = {}
         for table_name in existing_tables:
-            if "." in table_name:
-                continue  # column signatures only target default-schema tables
+            schema, _, bare = table_name.rpartition(".")
             try:
-                cols = inspector.get_columns(table_name)
-                db_columns[table_name] = {c["name"] for c in cols}
+                cols = inspector.get_columns(bare, schema=schema or None)
+                names = {c["name"] for c in cols}
+                db_columns[table_name] = names
+                db_columns[bare] = names
             except Exception:
                 pass
 
@@ -111,10 +110,33 @@ def _check_and_stamp_existing_tables() -> None:
 
             already_applied = False
             if sig[0] == "table":
-                already_applied = sig[1] in existing_tables
+                # Signatures use the schema-qualified spelling; SQLite has no
+                # schemas, so the same table exists under its bare name there.
+                already_applied = (
+                    sig[1] in existing_tables
+                    or sig[1].split(".")[-1] in existing_tables
+                )
             elif sig[0] == "column":
                 table_name, col_name = sig[1], sig[2]
-                already_applied = col_name in db_columns.get(table_name, set())
+                already_applied = col_name in db_columns.get(
+                    table_name, db_columns.get(table_name.split(".")[-1], set())
+                )
+            elif sig[0] == "foreign_key":
+                table_name, col_name = sig[1], sig[2]
+                schema, _, bare = table_name.rpartition(".")
+                fks = []
+                for candidate_schema in dict.fromkeys((schema or None, None)):
+                    try:
+                        fks = inspector.get_foreign_keys(
+                            bare, schema=candidate_schema
+                        )
+                    except Exception:
+                        continue
+                    if fks:
+                        break
+                already_applied = any(
+                    col_name in fk.get("constrained_columns", ()) for fk in fks
+                )
 
             if already_applied:
                 logger.warning(
@@ -214,65 +236,22 @@ def _run_migrations() -> bool:
         logger.info("Database migrations applied successfully")
         return True
     except Exception as e:
-        logger.error(f"Failed to run migrations: {e}")
+        if "already exists" in str(e):
+            # Schema is ahead of alembic_version (a persisted volume, or a
+            # stamp that never landed). The startup stamp pass recovers this
+            # for every SIGNED migration - reaching here means one shipped
+            # without a signature. One actionable line, not a traceback per
+            # boot.
+            logger.error(
+                "Migrations replayed DDL that already exists - alembic_version "
+                f"is behind the actual schema ({e}). Fix: add the migration's "
+                "signature to _SERVICE_MIGRATION_SIGNATURES, or run "
+                "`python -m alembic -c alembic/alembic.ini stamp <revision>`."
+            )
+        else:
+            logger.error(f"Failed to run migrations: {e}")
         return False
 {% endif %}
-
-
-def _existing_tables_by_schema(inspector: Any) -> set[str]:
-    """Existing tables across every schema our models use, keyed to match
-    ``SQLModel.metadata.tables``: schema-qualified (``schema.name``) for
-    non-default schemas, bare otherwise. Without the qualification a table
-    in a component schema (e.g. ``scheduler``) reads as missing.
-    """
-    from sqlmodel import SQLModel
-
-    model_schemas = {table.schema for table in SQLModel.metadata.tables.values()}
-    existing: set[str] = set()
-    for schema in model_schemas:
-        for name in inspector.get_table_names(schema=schema):
-            existing.add(f"{schema}.{name}" if schema else name)
-    return existing
-
-
-def _create_missing_tables() -> None:
-    """Create any model table still missing after migrations.
-
-    A safety net for the stale-revision / stamp recovery: stamping the DB to
-    head can mark a migration "applied" without running it, leaving a table
-    it should have created absent (e.g. a new component table against a
-    persisted volume from a different project lineage). This recreates only
-    the missing tables (and their schema) directly from the model metadata,
-    so the schema can never be left stamped-but-incomplete. Idempotent.
-    """
-    try:
-        from sqlalchemy import inspect as sa_inspect
-        from sqlmodel import SQLModel, text
-
-        from app.core.db import engine
-
-        existing = _existing_tables_by_schema(sa_inspect(engine))
-        missing = [
-            table
-            for key, table in SQLModel.metadata.tables.items()
-            if key not in existing and key != "alembic_version"
-        ]
-        if not missing:
-            return
-
-        # create_all does not create schemas; ensure non-default ones exist.
-        schemas = {table.schema for table in missing if table.schema}
-        with engine.begin() as conn:
-            for schema in schemas:
-                conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-
-        SQLModel.metadata.create_all(engine, tables=missing)
-        logger.warning(
-            "Created missing table(s) after migrations: "
-            f"{sorted(table.name for table in missing)}"
-        )
-    except Exception as e:
-        logger.debug(f"Missing-table backfill skipped: {e}")
 
 
 def _check_schema_mismatch() -> None:
@@ -449,7 +428,7 @@ async def startup_database_init() -> None:
         # against, so a fresh DB can import Chase/AMEX files immediately.
         try:
             from app.core.db import db_session as get_db_session
-            from app.services.finance.seed import seed_finance_tables
+            from app.services.finance.seeds.seed import seed_finance_tables
 
             with get_db_session() as session:
                 seed_finance_tables(session)
@@ -459,19 +438,29 @@ async def startup_database_init() -> None:
 {% endif %}
 
 {% if include_ai and database_engine == "postgres" %}
-        # Sync LLM catalog (postgres only - SQLite syncs during generation)
-        # Uses sync Session because sync_llm_catalog does sync DB ops (async is for HTTP calls)
+        # Seed the LLM catalog if it is empty (postgres only - SQLite syncs
+        # during generation). Once populated, the scheduler's periodic job
+        # owns freshness: a full sync on every startup meant every dev
+        # hot-reload re-ran tens of thousands of catalog queries.
+        # Uses sync Session because sync_llm_catalog does sync DB ops
+        # (async is for HTTP calls).
         try:
-            logger.info("Starting LLM catalog sync...")
             from sqlmodel import Session
+
             from app.core.db import engine
             from app.services.ai.etl import sync_llm_catalog
+            from app.services.ai.etl.llm_sync_service import catalog_is_populated
 
-            logger.info("Creating database session for LLM sync...")
             with Session(engine) as session:
-                logger.info("Calling sync_llm_catalog...")
-                result = await sync_llm_catalog(session, mode="chat")
-                logger.info(f"LLM catalog synced: {result.total_synced} models")
+                if catalog_is_populated(session):
+                    logger.info(
+                        "LLM catalog already populated; leaving refresh to the "
+                        "scheduled sync job"
+                    )
+                else:
+                    logger.info("LLM catalog empty; running initial sync...")
+                    result = await sync_llm_catalog(session, mode="chat")
+                    logger.info(f"LLM catalog synced: {result.total_synced} models")
         except Exception as e:
             logger.warning(f"LLM catalog sync skipped: {e}")
 {% endif %}

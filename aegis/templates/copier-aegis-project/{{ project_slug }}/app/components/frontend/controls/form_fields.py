@@ -693,9 +693,7 @@ class FormDateField(ft.Container):
         self._field._text_field.read_only = True
         self._field._text_field.suffix_icon = ft.Icons.CALENDAR_MONTH
         self._field._text_field.on_click = self._toggle
-        self._panel = CalendarPanel(
-            selected=self._parsed(), on_pick=self._picked
-        )
+        self._panel = CalendarPanel(selected=self._parsed(), on_pick=self._picked)
         # Bordered like the popup it replaces, so it still reads as a
         # surface floating over the form rather than another form row.
         self._holder = ft.Container(

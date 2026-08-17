@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlmodel import Session, select
+
 from app.core.config import settings
 from app.core.log import logger
 from app.services.ai.etl.clients.litellm_client import LiteLLMClient
@@ -29,7 +31,6 @@ from app.services.ai.models.llm import (
     LLMVendor,
     Modality,
 )
-from sqlmodel import Session, select
 
 try:
     from app.services.ai.ollama import OllamaClient, OllamaModel
@@ -170,6 +171,13 @@ class LLMSyncService:
         self.litellm_client = LiteLLMClient()
         self._vendor_cache: dict[str, LLMVendor] = {}
         self._model_cache: dict[str, LargeLanguageModel] = {}
+        # Keyed by (llm_id, llm_vendor_id); ids are None only before the
+        # owning row's first flush, and every cache write happens after it.
+        self._deployment_cache: dict[tuple[int | None, int | None], LLMDeployment] = {}
+        self._price_cache: dict[tuple[int | None, int | None], LLMPrice] = {}
+        self._modality_cache: dict[
+            int | None, dict[tuple[Modality, Direction], LLMModality]
+        ] = {}
 
     async def sync(
         self,
@@ -276,12 +284,29 @@ class LLMSyncService:
         return result
 
     def _load_caches(self) -> None:
-        """Load existing vendors and models into cache."""
+        """Load the whole catalog into caches, one query per table.
+
+        Everything the per-model loop needs must be here: with ~3,000
+        models a single stray per-model lookup is 3,000 queries per run
+        (observed live before deployments/prices/modalities were cached).
+        """
         vendors = self.session.exec(select(LLMVendor)).all()
         self._vendor_cache = {v.name: v for v in vendors}
 
         models = self.session.exec(select(LargeLanguageModel)).all()
         self._model_cache = {m.model_id: m for m in models}
+
+        deployments = self.session.exec(select(LLMDeployment)).all()
+        self._deployment_cache = {(d.llm_id, d.llm_vendor_id): d for d in deployments}
+
+        prices = self.session.exec(select(LLMPrice)).all()
+        self._price_cache = {(p.llm_id, p.llm_vendor_id): p for p in prices}
+
+        modalities = self.session.exec(select(LLMModality)).all()
+        self._modality_cache = {}
+        for record in modalities:
+            per_model = self._modality_cache.setdefault(record.llm_id, {})
+            per_model[(record.modality, record.direction)] = record
 
     def _update_if_changed(self, obj: Any, field: str, new_value: Any) -> bool:
         """Update field if value changed, return True if changed."""
@@ -441,13 +466,7 @@ class LLMSyncService:
             result: SyncResult to update.
             dry_run: If True, don't persist changes.
         """
-        # Check for existing deployment
-        existing = self.session.exec(
-            select(LLMDeployment).where(
-                LLMDeployment.llm_id == model.id,
-                LLMDeployment.llm_vendor_id == vendor.id,
-            )
-        ).first()
+        existing = self._deployment_cache.get((model.id, vendor.id))
 
         if existing:
             changed = any(
@@ -487,6 +506,10 @@ class LLMSyncService:
 
             if not dry_run:
                 self.session.add(deployment)
+            if model.id is not None:
+                # A dry-run model never flushed, so its id is None - caching
+                # under (None, vendor) would alias every new model together.
+                self._deployment_cache[(model.id, vendor.id)] = deployment
             result.deployments_synced += 1
 
     def _upsert_price(
@@ -506,13 +529,7 @@ class LLMSyncService:
             result: SyncResult to update.
             dry_run: If True, don't persist changes.
         """
-        # Check for existing price
-        existing = self.session.exec(
-            select(LLMPrice).where(
-                LLMPrice.llm_id == model.id,
-                LLMPrice.llm_vendor_id == vendor.id,
-            )
-        ).first()
+        existing = self._price_cache.get((model.id, vendor.id))
 
         if existing:
             changed = any(
@@ -550,6 +567,8 @@ class LLMSyncService:
 
             if not dry_run:
                 self.session.add(price)
+            if model.id is not None:
+                self._price_cache[(model.id, vendor.id)] = price
             result.prices_synced += 1
 
     def _sync_modalities(
@@ -584,13 +603,7 @@ class LLMSyncService:
             result.modalities_synced += len(new_modalities)
             return
 
-        # Get existing modalities and build lookup
-        existing_records = self.session.exec(
-            select(LLMModality).where(LLMModality.llm_id == model.id)
-        ).all()
-        existing_modalities = {
-            (rec.modality, rec.direction): rec for rec in existing_records
-        }
+        existing_modalities = self._modality_cache.setdefault(model.id, {})
 
         # Find what to add and what to delete
         existing_set = set(existing_modalities.keys())
@@ -603,7 +616,7 @@ class LLMSyncService:
 
         # Delete removed modalities
         for key in to_delete:
-            self.session.delete(existing_modalities[key])
+            self.session.delete(existing_modalities.pop(key))
 
         if to_delete:
             self.session.flush()
@@ -616,6 +629,7 @@ class LLMSyncService:
                 direction=direction,
             )
             self.session.add(mod_record)
+            existing_modalities[(modality, direction)] = mod_record
             result.modalities_synced += 1
 
     async def sync_ollama(self, dry_run: bool = False) -> SyncResult:
@@ -760,6 +774,19 @@ class LLMSyncService:
             self._model_cache[model_id] = model
             result.models_added += 1
             logger.debug(f"Added Ollama model: {model_id}")
+
+
+def catalog_is_populated(session: Session) -> bool:
+    """Whether any model is already in the catalog.
+
+    The webserver startup hook syncs only into an EMPTY catalog; once
+    populated, the scheduler's periodic job owns freshness. Before this
+    guard every startup (and every dev hot-reload) re-ran a full sync -
+    tens of thousands of queries against a catalog that was already
+    current.
+    """
+    first = session.exec(select(LargeLanguageModel.id).limit(1)).first()
+    return first is not None
 
 
 async def sync_llm_catalog(

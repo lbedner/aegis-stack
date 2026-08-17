@@ -15,7 +15,7 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
 
 
 async def _three_transactions(

@@ -57,6 +57,8 @@ app's pattern today.
 
 from __future__ import annotations
 
+from typing import Any
+
 import flet as ft
 
 from app.components.frontend.theme import AegisTheme as Theme
@@ -256,3 +258,37 @@ class Dropdown(ft.Container):
         self._overlay_layer.visible = open_
         if self.page is not None:
             self._overlay_layer.update()
+
+
+class NativeDropdown(ft.Dropdown):  # type: ignore[misc]
+    """A themed NATIVE ft.Dropdown, for use INSIDE real dialogs.
+
+    The overlay ``Dropdown`` above (and every picker built on it) paints via
+    ``page.overlay``, which renders BEHIND an ``ft.AlertDialog`` - the exact
+    layering problem ``OverlayStyledDialog`` exists for. Inside a dialog the
+    native Flutter menu is the only surface that paints on top, so this class
+    carries the app's input theming onto ``ft.Dropdown`` instead: one recipe,
+    not a copy of nine style kwargs at every dialog call site.
+
+    ``enable_filter``/``enable_search`` default on - a native dropdown is
+    only reached for when the option list is too long to scan.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        from app.components.frontend.theme import AegisTheme as Theme
+
+        defaults: dict[str, Any] = {
+            "enable_filter": True,
+            "enable_search": True,
+            "dense": True,
+            "width": 300,
+            "border_radius": Theme.Components.INPUT_RADIUS,
+            "bgcolor": ft.Colors.SURFACE,
+            "border_color": ft.Colors.OUTLINE,
+            "focused_border_color": Theme.Colors.PRIMARY,
+            "text_size": 13,
+            "content_padding": ft.padding.symmetric(horizontal=12, vertical=6),
+            "menu_height": 240,
+        }
+        defaults.update(kwargs)
+        super().__init__(**defaults)

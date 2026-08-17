@@ -29,6 +29,7 @@ from app.components.frontend.controls.snack_bar import (
     SuccessSnackBar,
 )
 from app.components.frontend.controls.table import TableCellText, TableNameText
+from app.components.frontend.dashboard.modals.finance_modal.formatting import _usd
 from app.components.frontend.dashboard.modals.modal_sections import (
     EmptyStatePlaceholder,
     date_cell,
@@ -47,12 +48,6 @@ _TRANSACTIONS_URL = "/api/v1/finance/transactions"
 _PAGE_SIZE = 500
 # Matches the register's dense rows, so the two read as one product.
 _ROW_HEIGHT = 40
-
-
-def _usd(cents: int | None) -> str:
-    value = cents or 0
-    sign = "-" if value < 0 else ""
-    return f"{sign}${abs(value) / 100:,.2f}"
 
 
 class PayeesTab(FinancePanel):

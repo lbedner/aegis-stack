@@ -15,31 +15,12 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
+from tests.services._finance_factories import seed_account as _account, seed_category as _category
 from app.services.finance.models import FinanceCategory
+from app.services.finance.service import FinanceService
 
 TODAY = date(2026, 8, 2)
 
-
-async def _category(db: AsyncSession, name: str) -> FinanceCategory:
-    row = FinanceCategory(
-        owner_user_id=1,
-        name=name,
-        slug=name.lower().replace(" ", "-").replace(":", "-").replace("&", "and"),
-        classification="expense",
-    )
-    db.add(row)
-    await db.flush()
-    return row
-
-
-async def _account(svc: FinanceService):
-    return await svc.create_manual_account(
-        name="Checking",
-        account_type="checking",
-        classification="asset",
-        owner_user_id=1,
-    )
 
 
 async def _spend(
@@ -76,9 +57,9 @@ class TestSuggestions:
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
 
-        assert [p["category_id"] for p in picks] == [groceries.id]
+        assert [p.category_id for p in picks] == [groceries.id]
         # Median of the months, not the mean - and in cents.
-        assert 130_000 <= picks[0]["suggested_amount"] <= 150_000
+        assert 130_000 <= picks[0].suggested_amount <= 150_000
 
     @pytest.mark.asyncio
     async def test_a_lumpy_category_is_not(
@@ -157,7 +138,7 @@ class TestSuggestions:
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
 
-        assert [p["category_id"] for p in picks] == []
+        assert [p.category_id for p in picks] == []
 
     @pytest.mark.asyncio
     async def test_a_line_you_already_set_is_not_re_suggested(
@@ -265,7 +246,7 @@ class TestBillOverlapUsesInferredCategories:
     async def test_a_bill_with_no_stored_category_still_blocks(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import declare_recurring
+        from app.services.finance.domains.detection import declare_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -290,7 +271,7 @@ class TestBillOverlapUsesInferredCategories:
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
 
-        assert productivity.id not in {p["category_id"] for p in picks}
+        assert productivity.id not in {p.category_id for p in picks}
 
 
 class TestOnlyForecastChargingBillsBlock:
@@ -338,7 +319,7 @@ class TestOnlyForecastChargingBillsBlock:
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
 
-        assert groceries.id in {p["category_id"] for p in picks}
+        assert groceries.id in {p.category_id for p in picks}
 
 
 class TestSuggestionDismissals:
@@ -365,7 +346,7 @@ class TestSuggestionDismissals:
         _, groceries = await self._steady_groceries(svc, async_db_session)
 
         before = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
-        assert groceries.id in [p["category_id"] for p in before]
+        assert groceries.id in [p.category_id for p in before]
 
         assert (
             await svc.dismiss_budget_suggestions(
@@ -375,8 +356,8 @@ class TestSuggestionDismissals:
         )
         assert await svc.suggest_budget_lines(owner_user_id=1, today=TODAY) == []
         dismissed = await svc.list_dismissed_suggestions(owner_user_id=1)
-        assert [d["category_id"] for d in dismissed] == [groceries.id]
-        assert dismissed[0]["category_name"] == "Food & Dining:Groceries"
+        assert [d.category_id for d in dismissed] == [groceries.id]
+        assert dismissed[0].category_name == "Food & Dining:Groceries"
 
         # Idempotent: declining again records nothing new.
         assert (
@@ -393,7 +374,7 @@ class TestSuggestionDismissals:
             == 1
         )
         after = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
-        assert groceries.id in [p["category_id"] for p in after]
+        assert groceries.id in [p.category_id for p in after]
         assert await svc.list_dismissed_suggestions(owner_user_id=1) == []
 
     @pytest.mark.asyncio
@@ -406,9 +387,9 @@ class TestSuggestionDismissals:
             owner_user_id=1, category_ids=[groceries.id]
         )
         summary = await svc.budget_summary(owner_user_id=1)
-        for bucket in summary.get("buckets", []):
-            for line in bucket.get("lines", []):
-                assert line.get("category_id") != groceries.id
+        for bucket in summary.buckets:
+            for line in bucket.lines:
+                assert line.category_id != groceries.id
 
 
 class TestConfirmedBillSuppression:
@@ -445,7 +426,7 @@ class TestConfirmedBillSuppression:
         await svc.update_recurring(stream.id, owner_user_id=1, category_id=rent.id)
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
-        assert rent.id not in [p["category_id"] for p in picks]
+        assert rent.id not in [p.category_id for p in picks]
 
     @pytest.mark.asyncio
     async def test_confirmed_bill_with_no_category_resolves_via_name_alias(
@@ -483,7 +464,7 @@ class TestConfirmedBillSuppression:
         )
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
-        assert rent.id not in [p["category_id"] for p in picks]
+        assert rent.id not in [p.category_id for p in picks]
 
 
 class TestTheForecastStaysInSyncWithActuals:
@@ -731,10 +712,10 @@ class TestOneQuietMonthIsNotErratic:
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
 
-        assert [p["category_name"] for p in picks] == ["Investing:Portfolio"]
+        assert [p.category_name for p in picks] == ["Investing:Portfolio"]
         # The MEDIAN month, not dragged up by the outlier.
-        assert picks[0]["suggested_amount"] == 30_000
-        assert picks[0]["unusual_months"] == 1
+        assert picks[0].suggested_amount == 30_000
+        assert picks[0].unusual_months == 1
 
     @pytest.mark.asyncio
     async def test_genuinely_erratic_spending_is_still_refused(
@@ -773,7 +754,7 @@ class TestOneQuietMonthIsNotErratic:
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
 
-        assert picks[0]["unusual_months"] == 0
+        assert picks[0].unusual_months == 0
 
 
 class TestUncategorizedIsNeverABudgetLine:
@@ -815,7 +796,7 @@ class TestUncategorizedIsNeverABudgetLine:
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
 
-        assert [p["category_name"] for p in picks] == ["Food & Dining:Groceries"]
+        assert [p.category_name for p in picks] == ["Food & Dining:Groceries"]
 
     @pytest.mark.asyncio
     async def test_two_odd_months_is_not_steady(
@@ -903,7 +884,7 @@ class TestOnlyExpensesAreBudgeted:
 
         picks = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
 
-        assert [p["category_name"] for p in picks] == ["Food & Dining:Groceries"]
+        assert [p.category_name for p in picks] == ["Food & Dining:Groceries"]
 
 
 class TestTheSuggestionRowReadsRight:

@@ -11,13 +11,13 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.envelopes import (
+from app.services.finance.domains.planning.envelopes import (
     ENVELOPE_ACCOUNT_TYPE,
     EnvelopeMeta,
     envelope_metadata,
     set_envelope_metadata,
 )
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
 
 
 class TestMetadataContract:
@@ -28,6 +28,19 @@ class TestMetadataContract:
         meta = envelope_metadata(written)
         assert meta == EnvelopeMeta(monthly_credit=4_000, auto_credit=True)
         assert written["neighbour"] == "kept"
+
+    def test_stored_shape_is_json_native(self) -> None:
+        """The stored form is the storage contract: plain JSON keys and
+        values, no model objects leaking into ``metadata_``."""
+        written = set_envelope_metadata(
+            None, monthly_credit=4_000, auto_credit=True, cadence="weekly"
+        )
+        assert written == {
+            "envelope": True,
+            "envelope_monthly_credit": 4_000,
+            "envelope_auto_credit": True,
+            "envelope_credit_cadence": "weekly",
+        }
 
     def test_defaults(self) -> None:
         meta = envelope_metadata(set_envelope_metadata(None))
@@ -190,17 +203,17 @@ class TestEnvelopesJoinTheEquation:
             owner_user_id=1, name="Repairs", monthly_credit=10_000
         )
 
-        stats = (await service.budget_summary(owner_user_id=1))["stats"]
+        stats = (await service.budget_summary(owner_user_id=1)).stats
 
-        assert stats["envelopes_total"] == 4_000
-        assert stats["month_net"] == 500_000 - 4_000
+        assert stats.envelopes_total == 4_000
+        assert stats.month_net == 500_000 - 4_000
         assert (
-            stats["income_total"]
-            - stats["fixed_total"]
-            - stats["flexible_allocated"]
-            - stats["goals_total"]
-            - stats["envelopes_total"]
-            == stats["month_net"]
+            stats.income_total
+            - stats.fixed_total
+            - stats.flexible_allocated
+            - stats.goals_total
+            - stats.envelopes_total
+            == stats.month_net
         )
 
 
@@ -270,9 +283,9 @@ class TestWeeklyCadence:
         )
         await service.set_envelope_auto_credit(envelope.id, True, owner_user_id=1)
 
-        stats = (await service.budget_summary(owner_user_id=1))["stats"]
+        stats = (await service.budget_summary(owner_user_id=1)).stats
         # $10/week at the same weekly->monthly factor bills use.
-        assert stats["envelopes_total"] == int(1_000 * 52 / 12)
+        assert stats.envelopes_total == int(1_000 * 52 / 12)
 
 
 class TestSeedMoney:

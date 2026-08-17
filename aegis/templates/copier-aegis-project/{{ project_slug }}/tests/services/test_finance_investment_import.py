@@ -1,5 +1,5 @@
 """Tests for the investment-activity ingestion lane (custodian trade ledgers,
-as opposed to register CSVs which land in ``import_service``).
+as opposed to register CSVs which land in ``imports``).
 
 Plain ``.py`` (finance-only stacks). Uses a small hand-crafted Optum-shaped
 TSV fixture covering a conversion-in, ordinary buys, a reinvested dividend, a
@@ -13,10 +13,10 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
-from app.services.finance.investments.activity import replay_positions
-from app.services.finance.investments.loader import import_investment_activities
-from app.services.finance.investments.optum import (
+from app.services.finance.service import FinanceService
+from app.services.finance.domains.investments.activity import replay_positions
+from app.services.finance.domains.investments.loader import import_investment_activities
+from app.services.finance.domains.investments.optum import (
     UnknownActivityTypeError,
     parse_optum_settled_transactions,
 )

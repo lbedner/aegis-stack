@@ -8,6 +8,7 @@ and connection counts, with the service's health colour. Mirrors
 """
 
 import flet as ft
+
 from app.services.finance.constants import FINANCE_COMPONENT_NAME
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle

@@ -199,9 +199,7 @@ class MemoryModuleEditPopup(BasePopup):
                             [
                                 ft.Container(content=self._context_key, expand=True),
                                 ft.Container(width=Theme.Spacing.SM),
-                                ft.Container(
-                                    content=self._fetch_function, expand=True
-                                ),
+                                ft.Container(content=self._fetch_function, expand=True),
                             ]
                         ),
                         self._prompt_content,
@@ -209,9 +207,7 @@ class MemoryModuleEditPopup(BasePopup):
                             [
                                 ft.Container(content=self._priority, expand=True),
                                 ft.Container(width=Theme.Spacing.SM),
-                                ft.Container(
-                                    content=self._token_estimate, expand=True
-                                ),
+                                ft.Container(content=self._token_estimate, expand=True),
                             ]
                         ),
                         ft.Row(
@@ -314,9 +310,9 @@ class MemoryModuleEditPopup(BasePopup):
                 is_active=bool(self._active.value),
             )
         except ValueError:
-            ErrorSnackBar(
-                "Priority and token estimate must be whole numbers."
-            ).launch(self._page)
+            ErrorSnackBar("Priority and token estimate must be whole numbers.").launch(
+                self._page
+            )
             return
 
         api = get_session_state(self._page).api_client

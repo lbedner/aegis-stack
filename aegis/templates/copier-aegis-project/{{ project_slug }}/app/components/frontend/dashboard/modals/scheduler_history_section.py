@@ -101,9 +101,7 @@ def _build_execution_row(record: dict[str, Any]) -> ExpandableRow:
             )
         )
         expanded_items.append(ft.Container(height=4))
-        expanded_items.append(
-            build_error_detail_block(record.get("error_message", ""))
-        )
+        expanded_items.append(build_error_detail_block(record.get("error_message", "")))
         expanded_items.append(ft.Container(height=4))
 
     expanded_items.append(

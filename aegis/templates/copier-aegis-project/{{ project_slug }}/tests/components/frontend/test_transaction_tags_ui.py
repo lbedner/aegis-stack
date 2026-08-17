@@ -165,21 +165,25 @@ class TestRegisterWiring:
             assert "_tag_picker" in source, panel.__name__
 
     def test_the_apply_and_fetch_paths_are_shared(self) -> None:
-        """Three panels tag; one POST helper and one options fetch serve
-        all of them - the panels differ only in what opens the picker."""
-        import inspect
-
+        """Three panels tag; ONE mixin owns the apply path and one POST
+        helper serves it - the panels differ only in what opens the
+        picker. Stronger than the original source-grep: the panels no
+        longer carry their own copies at all."""
         from app.components.frontend.dashboard.modals import finance_modal
+        from app.components.frontend.dashboard.modals.finance_modal.curation_shared import (
+            TagApplyMixin,
+        )
 
         assert callable(finance_modal.fetch_tag_options)
         assert callable(finance_modal.post_tag)
         for panel in (
+            finance_modal.TransactionsPanel,
             finance_modal.UncategorizedPanel,
             finance_modal.NoPayeePanel,
         ):
-            source = inspect.getsource(panel)
-            assert "post_tag(" in source, panel.__name__
-            assert "fetch_tag_options(" in source, panel.__name__
+            assert TagApplyMixin in panel.__mro__, panel.__name__
+            # and none of them re-declares the verb locally
+            assert "_apply_tag" not in vars(panel), panel.__name__
 
     def test_every_trigger_gets_the_selection_count(self) -> None:
         """A BulkActionTrigger is INVISIBLE until set_count() is called -

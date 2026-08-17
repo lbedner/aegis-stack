@@ -637,6 +637,12 @@ def update_command(
             typer.echo(t("update.merge_conflicts", count=len(sync_result.conflicts)))
             for conflict_file in sync_result.conflicts:
                 typer.echo(f"      - {conflict_file}")
+        if sync_result.removed:
+            typer.echo(t("update.removed_files", count=len(sync_result.removed)))
+        if sync_result.stale:
+            typer.echo(t("update.stale_files", count=len(sync_result.stale)))
+            for stale_file in sync_result.stale:
+                typer.echo(f"      - {stale_file}")
 
         # Run post-generation tasks — but skip when conflicts exist.
         # ``run_post_generation_tasks`` calls ``uv sync``, which will fail

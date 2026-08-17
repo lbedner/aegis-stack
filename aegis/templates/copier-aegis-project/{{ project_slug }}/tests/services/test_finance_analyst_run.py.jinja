@@ -22,8 +22,9 @@ from app.services.ai.agent_loader import invalidate_agent_cache
 from app.services.ai.config import AIServiceConfig
 from app.services.ai.models import AIProvider
 from app.services.ai.providers import ProviderError, model_for
-from app.services.finance import analyst, demo_seed
+from app.services.finance.domains.detection import analyst
 from app.services.finance.models import FinanceInsight
+from app.services.finance.seeds import demo_seed
 
 OWNER = 1
 NOTE_TEXT = "Your spending is up in one category this month. Nothing else moved."

@@ -11,6 +11,7 @@ name.
 """
 
 import flet as ft
+
 from app.components.frontend.theme import AegisTheme as Theme
 
 

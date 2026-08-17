@@ -25,12 +25,15 @@ The ``aclose()`` method releases the underlying connection pool;
 call it from ``on_disconnect`` or ``clear_session_state``.
 """
 
-import inspect
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+import inspect
+import time
 from typing import Any
 
 import httpx
+
 from app.core.config import settings
 from app.core.log import logger
 
@@ -79,6 +82,13 @@ class APIClient:
             timeout=timeout,
             follow_redirects=True,
         )
+        # Opt-in GET cache (see ``get``'s ``cache_ttl``). Key is
+        # endpoint+params; value is (monotonic deadline, parsed body).
+        # ``_get_inflight`` coalesces concurrent identical reads onto one
+        # request - a dashboard opening every tab fires the same reference
+        # reads many times in the same instant.
+        self._get_cache: dict[str, tuple[float, dict | list | None]] = {}
+        self._get_inflight: dict[str, asyncio.Task[dict | list | None]] = {}
 
     async def aclose(self) -> None:
         """Release the underlying connection pool. Call on session teardown."""
@@ -89,10 +99,57 @@ class APIClient:
         self._client.cookies.clear()
 
     async def get(
-        self, endpoint: str, params: dict[str, Any] | None = None
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        *,
+        cache_ttl: float | None = None,
     ) -> dict | list | None:
-        """GET request. Returns parsed JSON or None on error."""
-        return await self._request("GET", endpoint, params=params)
+        """GET request. Returns parsed JSON or None on error.
+
+        ``cache_ttl`` opts this read into the client's GET cache: the
+        parsed body is reused for that many seconds, and concurrent
+        identical reads share one request in flight. Any write through
+        this client drops the whole cache, so a caller can never read its
+        own write stale. Reserve it for reference data many surfaces read
+        at once (account lists, category options) - never for anything
+        whose params make it unique per view anyway.
+        """
+        if cache_ttl is None:
+            return await self._request("GET", endpoint, params=params)
+        return await self._cached_get(endpoint, params, cache_ttl)
+
+    async def _cached_get(
+        self, endpoint: str, params: dict[str, Any] | None, ttl: float
+    ) -> dict | list | None:
+        key = f"{endpoint}?{sorted((params or {}).items())!r}"
+        hit = self._get_cache.get(key)
+        if hit is not None and time.monotonic() < hit[0]:
+            return hit[1]
+
+        inflight = self._get_inflight.get(key)
+        if inflight is None:
+
+            async def fetch() -> dict | list | None:
+                try:
+                    result = await self._request("GET", endpoint, params=params)
+                    if result is not None:
+                        # Errors return None and are never cached - a
+                        # blip must not blank a surface for a whole TTL.
+                        self._get_cache[key] = (time.monotonic() + ttl, result)
+                    return result
+                finally:
+                    self._get_inflight.pop(key, None)
+
+            inflight = asyncio.create_task(fetch())
+            self._get_inflight[key] = inflight
+        return await inflight
+
+    def _invalidate_get_cache(self) -> None:
+        """Drop every cached GET. Called after any write through this
+        client: reference data is cheap to refetch and a stale read after
+        the user's own edit is a visible bug."""
+        self._get_cache.clear()
 
     async def post(
         self,
@@ -184,6 +241,8 @@ class APIClient:
             ``(0, None)`` on network/timeout errors;
             ``(status_code, parsed_json or None)`` otherwise.
         """
+        if method != "GET":
+            self._invalidate_get_cache()
         url = f"{self.base_url}{endpoint}"
         headers: dict[str, str] = {}
         if form_data is not None:
@@ -287,6 +346,44 @@ class APIClient:
             self._in_unauthorized = False
 
     async def _request(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        form_data: dict[str, str] | None = None,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+        timeout: float | None = None,
+        _retry_on_401: bool = True,
+    ) -> dict | list | None:
+        if method == "GET":
+            return await self._perform_request(
+                method,
+                endpoint,
+                params=params,
+                json=json,
+                form_data=form_data,
+                files=files,
+                timeout=timeout,
+                _retry_on_401=_retry_on_401,
+            )
+        try:
+            return await self._perform_request(
+                method,
+                endpoint,
+                params=params,
+                json=json,
+                form_data=form_data,
+                files=files,
+                timeout=timeout,
+                _retry_on_401=_retry_on_401,
+            )
+        finally:
+            # AFTER the write, not before: a cached read racing a write
+            # could re-cache the pre-write body for a whole TTL.
+            self._invalidate_get_cache()
+
+    async def _perform_request(
         self,
         method: str,
         endpoint: str,

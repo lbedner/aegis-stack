@@ -6,6 +6,7 @@ in either tree or radial layout.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import SecondaryText
 from app.services.system.models import ComponentStatus
 

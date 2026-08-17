@@ -1523,6 +1523,20 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 ),
             ],
         ),
+        TableSpec(
+            name="finance_icon",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("domain", "sa.String(255)", nullable=False),
+                # NULL = negative entry: the domain is known to miss, and is
+                # not retried until fetched_at ages past the retry window.
+                ColumnSpec("icon_b64", "sa.Text()", nullable=True),
+                ColumnSpec("fetched_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_icon_domain", ["domain"], unique=True),
+            ],
+        ),
         # ----- Group A: connections & sync ---------------------------------
         TableSpec(
             name="finance_institution",

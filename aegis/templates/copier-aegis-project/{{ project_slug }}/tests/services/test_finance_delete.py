@@ -14,7 +14,7 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
 from app.services.finance.models import FinanceTransactionSplit
 
 

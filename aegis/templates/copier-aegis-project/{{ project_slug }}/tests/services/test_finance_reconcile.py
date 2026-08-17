@@ -13,8 +13,9 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import RECONCILE_MARKER, FinanceService
+from app.services.finance.domains.ledger.accounts import RECONCILE_MARKER
 from app.services.finance.models import FinanceTransaction, FinanceValuation
+from app.services.finance.service import FinanceService
 
 STATEMENT_DAY = date(2026, 8, 1)
 
@@ -66,13 +67,13 @@ class TestReconcileAdjustment:
             statement_date=STATEMENT_DAY,
             statement_balance=statement,
         )
-        assert result is not None and result["applied"]
-        assert result["delta"] == -12_345
+        assert result is not None and result.applied
+        assert result.delta == -12_345
 
         # The register now agrees with the statement...
-        assert await svc._register_balance_as_of(account.id, STATEMENT_DAY) == statement
+        assert await svc.register_balance_as_of(account.id, STATEMENT_DAY) == statement
         adjustment = await async_db_session.get(
-            FinanceTransaction, result["adjustment_transaction_id"]
+            FinanceTransaction, result.adjustment_transaction_id
         )
         assert adjustment is not None
         assert adjustment.is_transfer is True
@@ -105,8 +106,8 @@ class TestReconcileAdjustment:
             statement_balance=register - 9_000,
         )
         # Same date -> the same adjustment row, re-measured; never stacked.
-        assert second["adjustment_transaction_id"] == first["adjustment_transaction_id"]
-        assert second["delta"] == -9_000
+        assert second.adjustment_transaction_id == first.adjustment_transaction_id
+        assert second.delta == -9_000
         adjustments = (
             await async_db_session.exec(
                 select(FinanceTransaction).where(
@@ -124,8 +125,8 @@ class TestReconcileAdjustment:
             statement_date=STATEMENT_DAY,
             statement_balance=register,
         )
-        assert third["delta"] == 0
-        assert third["adjustment_transaction_id"] is None
+        assert third.delta == 0
+        assert third.adjustment_transaction_id is None
         remaining = (
             await async_db_session.exec(
                 select(FinanceTransaction).where(
@@ -143,8 +144,8 @@ class TestReconcileAdjustment:
         """LANE-3 edit matching must not claim an adjustment: an import row
         landing on its (date, amount) is new money, not a rename of the
         correction."""
-        from app.services.finance.import_service import plan_transactions
-        from app.services.finance.importers.base import ParsedTransaction
+        from app.services.finance.adapters.importers.base import ParsedTransaction
+        from app.services.finance.adapters.importers.imports import plan_transactions
 
         svc = FinanceService(async_db_session)
         account = await _checking(svc)
@@ -161,7 +162,7 @@ class TestReconcileAdjustment:
             parsed=[
                 ParsedTransaction(
                     date=STATEMENT_DAY,
-                    amount=result["delta"],
+                    amount=result.delta,
                     name="Some Real Merchant",
                     source="qif",
                 )
@@ -177,7 +178,7 @@ class TestReconcileAdjustment:
         """detect_transfers filters ``is_transfer`` rows out of its
         candidates, so an adjustment can never be paired as a transfer leg
         - pin it in case that filter ever loosens."""
-        from app.services.finance.categorize import detect_transfers
+        from app.services.finance.domains.detection import detect_transfers
 
         svc = FinanceService(async_db_session)
         account = await _checking(svc)
@@ -204,7 +205,7 @@ class TestReconcileAdjustment:
         )
         await detect_transfers(async_db_session, owner_user_id=1)
         adjustment = await async_db_session.get(
-            FinanceTransaction, result["adjustment_transaction_id"]
+            FinanceTransaction, result.adjustment_transaction_id
         )
         assert adjustment.transfer_group_id is None
 
@@ -227,8 +228,8 @@ class TestReconcileValuationRoute:
             statement_date=STATEMENT_DAY,
             statement_balance=565_000_00,
         )
-        assert result["route"] == "valuation"
-        assert result["adjustment_transaction_id"] is None
+        assert result.route == "valuation"
+        assert result.adjustment_transaction_id is None
         valuations = (
             await async_db_session.exec(
                 select(FinanceValuation).where(
@@ -263,8 +264,8 @@ class TestReconcilePreview:
             statement_date=STATEMENT_DAY,
             statement_balance=register - 12_345,
         )
-        assert preview["delta"] == -12_345
-        assert preview["applied"] is False
+        assert preview.delta == -12_345
+        assert preview.applied is False
         adjustments = (
             await async_db_session.exec(
                 select(FinanceTransaction).where(

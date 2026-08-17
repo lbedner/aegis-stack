@@ -51,13 +51,13 @@ class TestEveryViewIsDerived:
     def test_the_forecast_steps_exactly_these(self) -> None:
         """Steps stay cadence-only: ``once`` projects a single occurrence
         by its own rule and must never be stepped."""
-        from app.services.finance.finance_service import _FREQUENCY_STEPS
+        from app.services.finance.utils import FREQUENCY_STEPS
 
-        assert set(_FREQUENCY_STEPS) == set(CADENCE_KEYS)
+        assert set(FREQUENCY_STEPS) == set(CADENCE_KEYS)
 
     def test_the_validator_accepts_cadences_plus_once(self) -> None:
         from app.services.finance.constants import ONE_TIME_FREQUENCY
-        from app.services.finance.finance_service import FinanceService
+        from app.services.finance.service import FinanceService
 
         assert set(FinanceService._STREAM_FREQUENCIES) == (
             set(CADENCE_KEYS) | {ONE_TIME_FREQUENCY}
@@ -77,14 +77,14 @@ class TestEveryViewIsDerived:
         assert set(BILL_FREQUENCY_OPTIONS) == set(CADENCE_KEYS) | {ONE_TIME_FREQUENCY}
 
     def test_the_rollup_weights_exactly_these(self) -> None:
-        from app.services.finance.categorize.insights import _MONTHLY_FACTOR
+        from app.services.finance.domains.detection.insights import MONTHLY_FACTOR
 
-        assert set(_MONTHLY_FACTOR) == set(CADENCE_KEYS)
+        assert set(MONTHLY_FACTOR) == set(CADENCE_KEYS)
 
     def test_detection_matches_a_subset(self) -> None:
         """Detection may know fewer - a cadence can be user-stated only.
         The reverse is the bug: measuring something nothing can step."""
-        from app.services.finance.categorize.recurring import _CADENCES
+        from app.services.finance.domains.detection.recurring.cadence import _CADENCES
 
         assert {label for _days, label in _CADENCES} <= set(CADENCE_KEYS)
 
@@ -92,12 +92,11 @@ class TestEveryViewIsDerived:
         """The layer the earlier fixes never reached: a service that
         stores semiannual behind a schema that rejects it is a 422 the
         user reads as "the app will not let me say what this bill is"."""
+        from app.services.finance.constants import ONE_TIME_FREQUENCY
         from app.services.finance.schemas import (
             RecurringStreamCreate,
             RecurringStreamUpdate,
         )
-
-        from app.services.finance.constants import ONE_TIME_FREQUENCY
 
         for model in (RecurringStreamCreate, RecurringStreamUpdate):
             allowed = _literal_values(model, "frequency")

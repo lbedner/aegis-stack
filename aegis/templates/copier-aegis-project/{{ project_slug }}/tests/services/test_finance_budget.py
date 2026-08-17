@@ -14,45 +14,30 @@ from sqlalchemy import event
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.constants import PAUSE_INDEFINITE
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.schemas import BudgetLineResponse, GoalAsk
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_category as _category
+from tests.services._finance_factories import seed_txn as _txn
+
+
+def _trim_line(
+    id: int, label: str, allocated_amount: int, spent_amount: int
+) -> BudgetLineResponse:
+    """A flexible line as the trim planner sees it (label = category name)."""
+    return BudgetLineResponse(
+        id=id,
+        category_id=None,
+        category_name=label,
+        payee_key=None,
+        payee_label=None,
+        allocated_amount=allocated_amount,
+        spent_amount=spent_amount,
+        status="good",
+    )
+
 
 _MONTH = 202607
-
-
-async def _account(svc, name="Checking", owner_user_id=1):
-    return await svc.create_manual_account(
-        name=name,
-        account_type="checking",
-        classification="asset",
-        owner_user_id=owner_user_id,
-    )
-
-
-async def _txn(
-    svc, account_id, amount, day, *, name=None, category_id=None, owner_user_id=1
-):
-    return await svc.create_transaction(
-        account_id=account_id,
-        amount=amount,
-        txn_date=day,
-        owner_user_id=owner_user_id,
-        name=name,
-        category_id=category_id,
-    )
-
-
-async def _category(db, name: str):
-    from app.services.finance.models import FinanceCategory
-
-    row = FinanceCategory(
-        owner_user_id=1,
-        name=name,
-        slug=name.lower().replace(" ", "-").replace(":", "-"),
-        classification="expense",
-    )
-    db.add(row)
-    await db.flush()
-    return row
 
 
 @contextmanager
@@ -109,10 +94,10 @@ class TestUpsertBudgetLine:
             payee_label=None,
             allocated_amount=50_000,
         )
-        assert created["category_id"] == groceries.id
-        assert created["allocated_amount"] == 50_000
-        assert created["spent_amount"] == 0
-        assert created["status"] == "good"
+        assert created.category_id == groceries.id
+        assert created.allocated_amount == 50_000
+        assert created.spent_amount == 0
+        assert created.status == "good"
 
         replaced = await svc.upsert_budget_line(
             owner_user_id=1,
@@ -123,8 +108,8 @@ class TestUpsertBudgetLine:
             allocated_amount=75_000,
         )
         # Same line, not a duplicate.
-        assert replaced["id"] == created["id"]
-        assert replaced["allocated_amount"] == 75_000
+        assert replaced.id == created.id
+        assert replaced.allocated_amount == 75_000
 
     @pytest.mark.asyncio
     async def test_payee_target(self, async_db_session: AsyncSession) -> None:
@@ -137,9 +122,9 @@ class TestUpsertBudgetLine:
             payee_label="Starbucks",
             allocated_amount=6_000,
         )
-        assert line["category_id"] is None
-        assert line["payee_key"] == "starbucks"
-        assert line["payee_label"] == "Starbucks"
+        assert line.category_id is None
+        assert line.payee_key == "starbucks"
+        assert line.payee_label == "Starbucks"
 
     @pytest.mark.asyncio
     async def test_both_targets_rejected_by_db_check(
@@ -172,8 +157,8 @@ class TestDeleteBudgetLine:
             payee_label="Starbucks",
             allocated_amount=6_000,
         )
-        assert await svc.delete_budget_line(line["id"], owner_user_id=1) is True
-        assert await svc.delete_budget_line(line["id"], owner_user_id=1) is False
+        assert await svc.delete_budget_line(line.id, owner_user_id=1) is True
+        assert await svc.delete_budget_line(line.id, owner_user_id=1) is False
 
     @pytest.mark.asyncio
     async def test_delete_missing_returns_false(
@@ -224,20 +209,16 @@ class TestBudgetSummary:
         )
 
         summary = await svc.budget_summary(owner_user_id=1, period_month=_MONTH)
-        assert summary["period_month"] == _MONTH
-        flexible = next(b for b in summary["buckets"] if b["name"] == "flexible")
+        assert summary.period_month == _MONTH
+        flexible = next(b for b in summary.buckets if b.name == "flexible")
         by_category = {
-            line["category_id"]: line
-            for line in flexible["lines"]
-            if line["category_id"]
+            line.category_id: line for line in flexible.lines if line.category_id
         }
-        by_payee = {
-            line["payee_key"]: line for line in flexible["lines"] if line["payee_key"]
-        }
-        assert by_category[groceries.id]["spent_amount"] == 12_000
-        assert by_category[groceries.id]["status"] == "critical"  # 120% of 100
-        assert by_payee["STARBUCKS"]["spent_amount"] == 1_800
-        assert by_payee["STARBUCKS"]["status"] == "warn"  # 90% of 20
+        by_payee = {line.payee_key: line for line in flexible.lines if line.payee_key}
+        assert by_category[groceries.id].spent_amount == 12_000
+        assert by_category[groceries.id].status == "critical"  # 120% of 100
+        assert by_payee["STARBUCKS"].spent_amount == 1_800
+        assert by_payee["STARBUCKS"].status == "warn"  # 90% of 20
 
     @pytest.mark.asyncio
     async def test_recurring_streams_are_context_not_limits(
@@ -263,12 +244,12 @@ class TestBudgetSummary:
         await async_db_session.flush()
 
         summary = await svc.budget_summary(owner_user_id=1, period_month=_MONTH)
-        fixed = next(b for b in summary["buckets"] if b["name"] == "fixed")
-        assert len(fixed["lines"]) == 1
-        line = fixed["lines"][0]
-        assert line["allocated_amount"] == 185_000
-        assert line["spent_amount"] == 185_000
-        assert line["status"] != "critical"
+        fixed = next(b for b in summary.buckets if b.name == "fixed")
+        assert len(fixed.lines) == 1
+        line = fixed.lines[0]
+        assert line.allocated_amount == 185_000
+        assert line.spent_amount == 185_000
+        assert line.status != "critical"
 
     @pytest.mark.asyncio
     async def test_commitment_flags_when_it_moves_vs_last_month(
@@ -292,10 +273,10 @@ class TestBudgetSummary:
         await async_db_session.flush()
 
         summary = await svc.budget_summary(owner_user_id=1, period_month=_MONTH)
-        fixed = next(b for b in summary["buckets"] if b["name"] == "fixed")
-        line = fixed["lines"][0]
-        assert line["status"] == "warn"
-        assert line["variance_amount"] == 800
+        fixed = next(b for b in summary.buckets if b.name == "fixed")
+        line = fixed.lines[0]
+        assert line.status == "warn"
+        assert line.variance_amount == 800
 
     @pytest.mark.asyncio
     async def test_commitment_on_schedule_when_stable(
@@ -319,10 +300,10 @@ class TestBudgetSummary:
         await async_db_session.flush()
 
         summary = await svc.budget_summary(owner_user_id=1, period_month=_MONTH)
-        fixed = next(b for b in summary["buckets"] if b["name"] == "fixed")
-        line = fixed["lines"][0]
-        assert line["status"] == "good"
-        assert line["variance_amount"] == 0
+        fixed = next(b for b in summary.buckets if b.name == "fixed")
+        line = fixed.lines[0]
+        assert line.status == "good"
+        assert line.variance_amount == 0
 
     @pytest.mark.asyncio
     async def test_stats_block(self, async_db_session: AsyncSession) -> None:
@@ -350,15 +331,15 @@ class TestBudgetSummary:
         )
 
         summary = await svc.budget_summary(owner_user_id=1, period_month=_MONTH)
-        stats = summary["stats"]
-        assert stats["flexible_spent"] == 12_000
-        assert stats["flexible_allocated"] == 10_000
-        assert stats["flexible_count"] == 1
-        assert stats["over_budget_count"] == 1
-        assert stats["over_budget_labels"] == [groceries.name]
-        assert stats["on_track_count"] == 0
-        assert stats["fixed_total"] == 185_000
-        assert stats["fixed_count"] == 1
+        stats = summary.stats
+        assert stats.flexible_spent == 12_000
+        assert stats.flexible_allocated == 10_000
+        assert stats.flexible_count == 1
+        assert stats.over_budget_count == 1
+        assert stats.over_budget_labels == [groceries.name]
+        assert stats.on_track_count == 0
+        assert stats.fixed_total == 185_000
+        assert stats.fixed_count == 1
 
     @pytest.mark.asyncio
     async def test_no_n_plus_1_as_line_count_grows(
@@ -453,12 +434,12 @@ class TestAccountScoping:
         summary = await svc.budget_summary(
             owner_user_id=1, period_month=_MONTH, account_ids=[checking.id]
         )
-        stats = summary["stats"]
-        flexible = next(b for b in summary["buckets"] if b["name"] == "flexible")
+        stats = summary.stats
+        flexible = next(b for b in summary.buckets if b.name == "flexible")
 
-        assert stats["income_total"] == 500_000
-        assert stats["income_count"] == 1
-        assert flexible["lines"][0]["spent_amount"] == 20_000
+        assert stats.income_total == 500_000
+        assert stats.income_count == 1
+        assert flexible.lines[0].spent_amount == 20_000
 
     @pytest.mark.asyncio
     async def test_no_filter_counts_every_account(
@@ -486,10 +467,10 @@ class TestAccountScoping:
             account_id=savings.id,
         )
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["income_total"] == 600_000
-        assert stats["income_count"] == 2
+        assert stats.income_total == 600_000
+        assert stats.income_count == 2
 
 
 class TestParseBudgetGoal:
@@ -507,12 +488,16 @@ class TestParseBudgetGoal:
         result = await svc.parse_budget_goal(
             owner_user_id=1, text="I wanna cut back on Starbucks"
         )
-        assert result["matched"] is True
-        assert result["target_type"] == "payee"
-        assert result["payee_label"] == "Starbucks Store 123"
+        assert result.matched is True
+        assert result.target_type == "payee"
+        assert result.payee_label == "Starbucks Store 123"
+        assert result.label == "Starbucks Store 123"
+        assert result.fraction == 0.5
+        # Copy is the frontend's job now - the service returns data only.
+        assert not hasattr(result, "message")
         # $24 over ~90 days -> ~$8/mo baseline, 50% default -> ~$4 limit.
-        assert result["baseline_monthly"] == 800
-        assert result["suggested_limit"] == 400
+        assert result.baseline_monthly == 800
+        assert result.suggested_limit == 400
 
     @pytest.mark.asyncio
     async def test_explicit_percentage_in_text(
@@ -526,8 +511,9 @@ class TestParseBudgetGoal:
         result = await svc.parse_budget_goal(
             owner_user_id=1, text="cut Starbucks to 30%"
         )
-        assert result["matched"] is True
-        assert result["suggested_limit"] == round(result["baseline_monthly"] * 0.30)
+        assert result.matched is True
+        assert result.fraction == 0.30
+        assert result.suggested_limit == round(result.baseline_monthly * 0.30)
 
     @pytest.mark.asyncio
     async def test_matches_category_when_no_payee_hits(
@@ -548,9 +534,9 @@ class TestParseBudgetGoal:
         result = await svc.parse_budget_goal(
             owner_user_id=1, text="I need to cut back on groceries"
         )
-        assert result["matched"] is True
-        assert result["target_type"] == "category"
-        assert result["category_id"] == groceries.id
+        assert result.matched is True
+        assert result.target_type == "category"
+        assert result.category_id == groceries.id
 
     @pytest.mark.asyncio
     async def test_no_match_writes_nothing_and_reports_unmatched(
@@ -560,9 +546,10 @@ class TestParseBudgetGoal:
         result = await svc.parse_budget_goal(
             owner_user_id=1, text="something entirely unrelated"
         )
-        assert result["matched"] is False
-        assert result["category_id"] is None
-        assert result["payee_key"] is None
+        assert result.matched is False
+        assert result.category_id is None
+        assert result.payee_key is None
+        assert not hasattr(result, "message")
 
 
 class TestTheMonthOutlook:
@@ -610,14 +597,14 @@ class TestTheMonthOutlook:
         )
 
         summary = await svc.budget_summary(owner_user_id=1)
-        stats = summary["stats"]
+        stats = summary.stats
 
-        assert stats["income_total"] == 500_000
-        assert stats["income_count"] == 1
-        assert stats["fixed_total"] == 200_000
-        assert stats["fixed_count"] == 1
+        assert stats.income_total == 500_000
+        assert stats.income_count == 1
+        assert stats.fixed_total == 200_000
+        assert stats.fixed_count == 1
         # 5,000 - 2,000 - 1,000
-        assert stats["month_net"] == 200_000
+        assert stats.month_net == 200_000
 
     @pytest.mark.asyncio
     async def test_a_negative_month_says_so(
@@ -653,9 +640,9 @@ class TestTheMonthOutlook:
             allocated_amount=100_000,
         )
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["month_net"] == -50_000
+        assert stats.month_net == -50_000
 
     @pytest.mark.asyncio
     async def test_a_non_monthly_bill_counts_at_its_monthly_share(
@@ -676,9 +663,9 @@ class TestTheMonthOutlook:
             account_id=account.id,
         )
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["fixed_total"] == 10_000
+        assert stats.fixed_total == 10_000
 
     @pytest.mark.asyncio
     async def test_the_cells_reconcile_to_the_verdict(
@@ -725,11 +712,11 @@ class TestTheMonthOutlook:
             allocated_amount=100_000,
         )
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
         assert (
-            stats["income_total"] - stats["fixed_total"] - stats["flexible_allocated"]
-            == stats["month_net"]
+            stats.income_total - stats.fixed_total - stats.flexible_allocated
+            == stats.month_net
         )
 
     @pytest.mark.asyncio
@@ -754,10 +741,10 @@ class TestTheMonthOutlook:
         async_db_session.add(stream)
         await async_db_session.flush()
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["income_total"] == 0
-        assert stats["income_count"] == 0
+        assert stats.income_total == 0
+        assert stats.income_count == 0
 
 
 class TestTrimPlan:
@@ -772,90 +759,57 @@ class TestTrimPlan:
     """
 
     def test_cuts_are_proportional_to_slack(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
         lines = [
-            {
-                "id": 1,
-                "label": "Groceries",
-                "allocated_amount": 100_000,
-                "spent_amount": 40_000,
-            },
-            {
-                "id": 2,
-                "label": "Fun",
-                "allocated_amount": 40_000,
-                "spent_amount": 10_000,
-            },
+            _trim_line(1, "Groceries", 100_000, 40_000),
+            _trim_line(2, "Fun", 40_000, 10_000),
         ]
         plan = plan_budget_trims(lines, deficit=45_000)
 
-        assert plan["residual"] == 0
-        by_id = {c["id"]: c for c in plan["cuts"]}
+        assert plan.residual == 0
+        by_id = {c.id: c for c in plan.cuts}
         # Slack 60k and 30k -> cuts 30k and 15k.
-        assert by_id[1]["suggested_amount"] == 70_000
-        assert by_id[2]["suggested_amount"] == 25_000
-        assert sum(c["cut"] for c in plan["cuts"]) == 45_000
+        assert by_id[1].suggested_amount == 70_000
+        assert by_id[2].suggested_amount == 25_000
+        assert sum(c.cut for c in plan.cuts) == 45_000
 
     def test_a_line_never_drops_below_what_is_already_spent(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
-        lines = [
-            {
-                "id": 1,
-                "label": "Groceries",
-                "allocated_amount": 100_000,
-                "spent_amount": 95_000,
-            },
-        ]
+        lines = [_trim_line(1, "Groceries", 100_000, 95_000)]
         plan = plan_budget_trims(lines, deficit=50_000)
 
-        assert plan["cuts"][0]["suggested_amount"] == 95_000
-        assert plan["residual"] == 45_000
+        assert plan.cuts[0].suggested_amount == 95_000
+        assert plan.residual == 45_000
 
     def test_an_exhausted_line_is_left_out(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
         lines = [
-            {
-                "id": 1,
-                "label": "Overrun",
-                "allocated_amount": 30_000,
-                "spent_amount": 30_000,
-            },
-            {"id": 2, "label": "Fun", "allocated_amount": 40_000, "spent_amount": 0},
+            _trim_line(1, "Overrun", 30_000, 30_000),
+            _trim_line(2, "Fun", 40_000, 0),
         ]
         plan = plan_budget_trims(lines, deficit=10_000)
 
-        assert [c["id"] for c in plan["cuts"]] == [2]
+        assert [c.id for c in plan.cuts] == [2]
 
     def test_a_positive_month_needs_no_plan(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
-        plan = plan_budget_trims(
-            [{"id": 1, "label": "A", "allocated_amount": 10_000, "spent_amount": 0}],
-            deficit=0,
-        )
-        assert plan["cuts"] == []
-        assert plan["residual"] == 0
+        plan = plan_budget_trims([_trim_line(1, "A", 10_000, 0)], deficit=0)
+        assert plan.cuts == []
+        assert plan.residual == 0
 
     def test_rounding_never_overshoots_the_floor(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
-        lines = [
-            {
-                "id": i,
-                "label": f"L{i}",
-                "allocated_amount": 10_000,
-                "spent_amount": 3_333,
-            }
-            for i in (1, 2, 3)
-        ]
+        lines = [_trim_line(i, f"L{i}", 10_000, 3_333) for i in (1, 2, 3)]
         plan = plan_budget_trims(lines, deficit=20_001)
 
-        for cut in plan["cuts"]:
-            assert cut["suggested_amount"] >= 3_333
-        assert plan["residual"] == 0
+        for cut in plan.cuts:
+            assert cut.suggested_amount >= 3_333
+        assert plan.residual == 0
 
     @pytest.mark.asyncio
     async def test_a_negative_month_ships_its_trim_plan(
@@ -897,11 +851,11 @@ class TestTrimPlan:
 
         summary = await svc.budget_summary(owner_user_id=1)
 
-        assert summary["stats"]["month_net"] == -50_000
-        trims = summary["trims"]
+        assert summary.stats.month_net == -50_000
+        trims = summary.trims
         assert len(trims) == 1
-        assert trims[0]["suggested_amount"] == 50_000
-        assert trims[0]["cut"] == 50_000
+        assert trims[0].suggested_amount == 50_000
+        assert trims[0].cut == 50_000
 
 
 class TestGoalsJoinTheEquation:
@@ -940,11 +894,11 @@ class TestGoalsJoinTheEquation:
             monthly_contribution=50_000,
         )
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["goals_total"] == 75_000
-        assert stats["goals_count"] == 2
-        assert stats["month_net"] == 500_000 - 75_000
+        assert stats.goals_total == 75_000
+        assert stats.goals_count == 2
+        assert stats.month_net == 500_000 - 75_000
 
     @pytest.mark.asyncio
     async def test_paused_and_reached_goals_ask_nothing(
@@ -969,11 +923,11 @@ class TestGoalsJoinTheEquation:
             full.id, amount=50_000, owner_user_id=1, when=date(2026, 8, 1)
         )
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["goals_total"] == 0
-        assert stats["goals_count"] == 0
-        assert stats["month_net"] == 500_000
+        assert stats.goals_total == 0
+        assert stats.goals_count == 0
+        assert stats.month_net == 500_000
 
     @pytest.mark.asyncio
     async def test_the_equation_still_balances_by_hand(
@@ -1007,73 +961,66 @@ class TestGoalsJoinTheEquation:
             monthly_contribution=25_000,
         )
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
         assert (
-            stats["income_total"]
-            - stats["fixed_total"]
-            - stats["flexible_allocated"]
-            - stats["goals_total"]
-            == stats["month_net"]
+            stats.income_total
+            - stats.fixed_total
+            - stats.flexible_allocated
+            - stats.goals_total
+            == stats.month_net
         )
-        assert stats["month_net"] == 500_000 - 200_000 - 100_000 - 25_000
+        assert stats.month_net == 500_000 - 200_000 - 100_000 - 25_000
 
 
 class TestGoalPauseTier:
     """GL-06: pause a goal before cutting a budget. Rows carry ``kind``;
     the budget floor/rounding math is untouched; residual stays honest."""
 
-    LINES = [
-        {
-            "id": 1,
-            "label": "Groceries",
-            "allocated_amount": 100_000,
-            "spent_amount": 40_000,
-        },
-    ]
+    LINES = [_trim_line(1, "Groceries", 100_000, 40_000)]
     GOALS = [
-        {"account_id": 71, "label": "Vacation", "monthly_need": 25_000},
-        {"account_id": 72, "label": "Roof", "monthly_need": 50_000},
+        GoalAsk(account_id=71, label="Vacation", monthly_need=25_000),
+        GoalAsk(account_id=72, label="Roof", monthly_need=50_000),
     ]
 
     def test_a_small_gap_pauses_before_it_cuts(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
         plan = plan_budget_trims(self.LINES, deficit=40_000, goals=self.GOALS)
-        kinds = [row["kind"] for row in plan["cuts"]]
+        kinds = [row.kind for row in plan.cuts]
         # Largest goal first: pausing Roof (+$500) over-covers the $400 gap
         # on its own - no budget is touched.
         assert kinds == ["pause_goal"]
-        assert plan["cuts"][0]["label"] == "Roof"
-        assert plan["cuts"][0]["recovered"] == 50_000
-        assert plan["residual"] == 0
+        assert plan.cuts[0].label == "Roof"
+        assert plan.cuts[0].recovered == 50_000
+        assert plan.residual == 0
 
     def test_a_large_gap_pauses_everything_then_cuts(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
         plan = plan_budget_trims(self.LINES, deficit=100_000, goals=self.GOALS)
-        kinds = [row["kind"] for row in plan["cuts"]]
+        kinds = [row.kind for row in plan.cuts]
         assert kinds == ["pause_goal", "pause_goal", "cut_budget"]
-        cut = plan["cuts"][-1]
+        cut = plan.cuts[-1]
         # 100k - 75k of pauses = 25k left; slack is 60k, floor untouched.
-        assert cut["cut"] == 25_000
-        assert cut["suggested_amount"] == 75_000
-        assert plan["residual"] == 0
+        assert cut.cut == 25_000
+        assert cut.suggested_amount == 75_000
+        assert plan.residual == 0
 
     def test_residual_stays_honest_past_all_tiers(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
         plan = plan_budget_trims(self.LINES, deficit=200_000, goals=self.GOALS)
         # 75k paused + 60k slack = 135k coverable; the rest is bills/income.
-        assert plan["residual"] == 65_000
+        assert plan.residual == 65_000
 
     def test_no_goals_is_exactly_the_old_plan(self) -> None:
-        from app.services.finance.finance_service import plan_budget_trims
+        from app.services.finance.domains.planning.budgets import plan_budget_trims
 
         with_arg = plan_budget_trims(self.LINES, deficit=45_000, goals=[])
         without = plan_budget_trims(self.LINES, deficit=45_000)
         assert with_arg == without
-        assert all(row["kind"] == "cut_budget" for row in with_arg["cuts"])
+        assert all(row.kind == "cut_budget" for row in with_arg.cuts)
 
 
 class TestMonthOutlook:
@@ -1123,18 +1070,18 @@ class TestMonthOutlook:
             owner_user_id=1, months=4, today=date(2026, 8, 10)
         )
 
-        assert [entry["period_month"] for entry in outlook] == [
+        assert [entry.period_month for entry in outlook] == [
             202608,
             202609,
             202610,
             202611,
         ]
         september, october = outlook[1], outlook[2]
-        assert september["bills_due"] == 200_000  # just rent
-        assert october["bills_due"] == 450_000  # rent + the whole Geico
-        assert september["month_net"] == 300_000
-        assert october["month_net"] == 50_000
-        assert october["month_net"] < september["month_net"]
+        assert september.bills_due == 200_000  # just rent
+        assert october.bills_due == 450_000  # rent + the whole Geico
+        assert september.month_net == 300_000
+        assert october.month_net == 50_000
+        assert october.month_net < september.month_net
 
     @pytest.mark.asyncio
     async def test_muted_and_paused_stay_out(
@@ -1156,7 +1103,7 @@ class TestMonthOutlook:
         outlook = await svc.budget_month_outlook(
             owner_user_id=1, months=3, today=date(2026, 8, 10)
         )
-        assert all(entry["bills_due"] == 200_000 for entry in outlook[1:])
+        assert all(entry.bills_due == 200_000 for entry in outlook[1:])
 
     @pytest.mark.asyncio
     async def test_goals_and_budgets_ask_every_month(
@@ -1184,9 +1131,9 @@ class TestMonthOutlook:
             owner_user_id=1, months=3, today=date(2026, 8, 10)
         )
         for entry in outlook[1:]:
-            assert entry["budgets"] == 100_000
-            assert entry["goals"] == 25_000
-            assert entry["month_net"] == 500_000 - 200_000 - 100_000 - 25_000
+            assert entry.budgets == 100_000
+            assert entry.goals == 25_000
+            assert entry.month_net == 500_000 - 200_000 - 100_000 - 25_000
 
     @pytest.mark.asyncio
     async def test_the_outlook_honours_the_account_filter(
@@ -1216,9 +1163,9 @@ class TestMonthOutlook:
             today=date(2026, 8, 10),
             account_ids=[checking_id],
         )
-        assert everything[1]["income_due"] == 600_000
-        assert just_checking[1]["income_due"] == 500_000
-        assert just_checking[1]["bills_due"] == 200_000
+        assert everything[1].income_due == 600_000
+        assert just_checking[1].income_due == 500_000
+        assert just_checking[1].bills_due == 200_000
 
     @pytest.mark.asyncio
     async def test_the_outlook_carries_the_running_balance(
@@ -1241,10 +1188,10 @@ class TestMonthOutlook:
         )
 
         first, second = outlook[0], outlook[1]
-        assert first["start_balance"] == 50_000
-        assert first["end_balance"] == 50_000 + first["month_net"]
-        assert second["start_balance"] == first["end_balance"]
-        assert second["end_balance"] == second["start_balance"] + second["month_net"]
+        assert first.start_balance == 50_000
+        assert first.end_balance == 50_000 + first.month_net
+        assert second.start_balance == first.end_balance
+        assert second.end_balance == second.start_balance + second.month_net
 
 
 class TestStatDetails:
@@ -1302,20 +1249,19 @@ class TestStatDetails:
             owner_user_id=1, today=date(2026, 8, 10)
         )
 
-        assert [(r["label"], r["value"]) for r in details["income"]] == [
-            ("Paycheck", 500_000)
-        ]
+        assert [(r.label, r.value) for r in details.income] == [("Paycheck", 500_000)]
         # Monthly-equivalent, biggest first; the annual bill names its
         # real cadence so $100/mo is not mistaken for the face value.
-        bills = details["bills"]
-        assert [(r["label"], r["value"]) for r in bills] == [
+        bills = details.bills
+        assert [(r.label, r.value) for r in bills] == [
             ("Mortgage", 220_000),
             ("Car insurance", 10_000),
         ]
-        assert "annually" in (bills[1]["caption"] or "")
+        assert bills[1].frequency == "annually"
+        assert bills[1].per_period_amount == 120_000
         # The popup's sum IS the cell's figure.
         summary = await svc.budget_summary(owner_user_id=1)
-        assert sum(r["value"] for r in bills) == summary["stats"]["fixed_total"]
+        assert sum(r.value for r in bills) == summary.stats.fixed_total
 
     @pytest.mark.asyncio
     async def test_everything_else_rows_group_the_bucket(
@@ -1343,15 +1289,16 @@ class TestStatDetails:
             owner_user_id=1, today=date(2026, 8, 10)
         )
 
-        rows = details["everything_else"]
-        assert [(r["label"], r["value"]) for r in rows] == [("Uncategorized", 33_000)]
-        assert "4 rows" in (rows[0]["caption"] or "")
+        rows = details.everything_else
+        assert [(r.label, r.value) for r in rows] == [("Uncategorized", 33_000)]
+        assert rows[0].transaction_count == 4
         # The rows sum to the cell's rate, always.
         rate = await svc.uncovered_spending_rate(
             owner_user_id=1, today=date(2026, 8, 10)
         )
-        assert sum(r["value"] for r in rows) == rate
-        assert details["window"] == "May - Jul 2026 average"
+        assert sum(r.value for r in rows) == rate
+        assert details.window_start == date(2026, 5, 1)
+        assert details.window_end == date(2026, 8, 1)
 
 
 class TestEverythingElse:
@@ -1484,12 +1431,12 @@ class TestEverythingElse:
                 svc, account.id, date(2026, month, 12), 60_000, name="Random"
             )
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
-        assert stats["everything_else"] == 60_000
-        assert stats["month_net"] == 500_000 - 60_000
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+        assert stats.everything_else == 60_000
+        assert stats.month_net == 500_000 - 60_000
 
         outlook = await svc.budget_month_outlook(
             owner_user_id=1, months=2, today=date(2026, 8, 10)
         )
-        assert outlook[1]["everything_else"] == 60_000
-        assert outlook[1]["month_net"] == 500_000 - 60_000
+        assert outlook[1].everything_else == 60_000
+        assert outlook[1].month_net == 500_000 - 60_000

@@ -21,15 +21,28 @@ from app.core.config import settings
 from app.core.log import logger
 
 
-def register_middleware(app: FastAPI) -> None:
-    """Configure Logfire observability and instrument the application.
+_configured: bool | None = None
 
-    No-op when ``LOGFIRE_TOKEN`` is empty — the OTEL SDK is heavy and
-    serves no purpose without a destination. See the module docstring.
+
+def configure_logfire() -> bool:
+    """Configure Logfire + the process-wide instrumentations (HTTPX,
+    SQLAlchemy). Returns whether observability is active. Idempotent -
+    the bootstrap call in the app factory and the middleware-discovery
+    hook both land here.
+
+    Split from ``register_middleware`` so non-web processes (the
+    scheduler running background jobs) get the same configuration - a
+    span opened in a process that never configured Logfire is silently
+    dropped. No-op when ``LOGFIRE_TOKEN`` is empty — the OTEL SDK is
+    heavy and serves no purpose without a destination.
     """
+    global _configured
+    if _configured is not None:
+        return _configured
     if not settings.LOGFIRE_TOKEN:
         logger.info("Logfire: token not set — instrumentation disabled")
-        return
+        _configured = False
+        return False
 
     # Cap the OTEL BatchSpanProcessor before the SDK reads its env.
     # ``setdefault`` so explicit operator overrides in ``.env`` /
@@ -55,10 +68,6 @@ def register_middleware(app: FastAPI) -> None:
         send_to_logfire=True,
         console=False,
     )
-
-    # Instrument FastAPI (always)
-    logfire.instrument_fastapi(app, excluded_urls="/health/.*|/dashboard/.*")
-    logger.info("Logfire: FastAPI instrumented")
 
     # Instrument HTTPX (always -- httpx is a core dependency)
     logfire.instrument_httpx()
@@ -87,3 +96,47 @@ def register_middleware(app: FastAPI) -> None:
 {%- endif %}
 
     logger.info("Logfire observability active (sending to Logfire cloud)")
+    _configured = True
+    return True
+
+
+def install_auto_tracing() -> None:
+    """Span every service and frontend function call slower than 10ms.
+
+    The generic answer to "instrument the business logic": Logfire's
+    import hook wraps whole module trees, so a scheduled job or an API
+    request renders as nested service-function spans with their SQL
+    children - no hand-placed decorators. MUST run before the traced
+    packages are imported, which is why the app factory module and the
+    scheduler entrypoint call this at the top, before their own app
+    imports.
+
+    ``app.components.frontend`` is traced too because the UI builds
+    server-side in the SAME event loop as the API: a slow view build
+    blocks every in-flight request, and without spans there that stall
+    is a 4-second hole in the trace with no visible culprit.
+    """
+    if not configure_logfire():
+        return
+    import logfire
+
+    logfire.install_auto_tracing(
+        modules=["app.services", "app.components.frontend"],
+        min_duration=0.01,
+        check_imported_modules="warn",
+    )
+    logger.info(
+        "Logfire: auto-tracing app.services + app.components.frontend "
+        "(>=10ms spans)"
+    )
+
+
+def register_middleware(app: FastAPI) -> None:
+    """Middleware-discovery hook: configure the process, then add the
+    web-only FastAPI instrumentation on top."""
+    if not configure_logfire():
+        return
+    import logfire
+
+    logfire.instrument_fastapi(app, excluded_urls="/health/.*|/dashboard/.*")
+    logger.info("Logfire: FastAPI instrumented")

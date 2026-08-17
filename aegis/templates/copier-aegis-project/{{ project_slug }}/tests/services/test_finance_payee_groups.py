@@ -14,7 +14,9 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_payee_txn
 
 # Verbatim descriptor shapes from a real card export - the point of the test
 # is that these five disagree in every way EXCEPT containing "DOORDASH", so
@@ -28,23 +30,8 @@ _DOORDASH = [
 ]
 
 
-async def _account(svc: FinanceService):
-    return await svc.create_manual_account(
-        name="Checking",
-        account_type="checking",
-        classification="asset",
-        owner_user_id=1,
-    )
-
-
 async def _txn(svc: FinanceService, account_id: int, name: str, day: int):
-    return await svc.create_transaction(
-        account_id=account_id,
-        amount=-1_500,
-        txn_date=date(2026, 7, day),
-        owner_user_id=1,
-        name=name,
-    )
+    return await seed_payee_txn(svc, account_id, name, date(2026, 7, day), -1_500)
 
 
 class TestPayeeGroups:
@@ -97,7 +84,7 @@ class TestPayeeGroups:
 
         page, _, _ = await svc.payee_groups(owner_user_id=1)
         updated = await svc.assign_payee_group(
-            [g["key"] for g in page], merchant.id, owner_user_id=1
+            [g.key for g in page], merchant.id, owner_user_id=1
         )
 
         assert updated == 5
@@ -118,7 +105,7 @@ class TestPayeeGroups:
         merchant = await svc.create_merchant("DoorDash", owner_user_id=1)
 
         page, _, _ = await svc.payee_groups(owner_user_id=1)
-        doordash_keys = [g["key"] for g in page if "DOORDASH" in g["key"].upper()]
+        doordash_keys = [g.key for g in page if "DOORDASH" in g.key.upper()]
         updated = await svc.assign_payee_group(
             doordash_keys, merchant.id, owner_user_id=1
         )

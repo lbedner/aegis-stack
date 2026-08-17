@@ -1631,6 +1631,23 @@ class BudgetTrimResponse(BaseModel):
     recovered: int | None = None
 
 
+class GoalAsk(BaseModel):
+    """One active goal's evaluated monthly ask - what the month equation
+    subtracts for it, and what pausing it would recover."""
+
+    account_id: int
+    label: str
+    monthly_need: int
+
+
+class BudgetTrimPlan(BaseModel):
+    """The close-the-gap plan: pause/cut rows plus the residual neither
+    tier covers (the part of the gap that belongs to bills or income)."""
+
+    cuts: list[BudgetTrimResponse] = Field(default_factory=list)
+    residual: int = 0
+
+
 class BudgetSummaryResponse(BaseModel):
     period_month: int  # YYYYMM
     buckets: list[BudgetBucketResponse]
@@ -1641,20 +1658,54 @@ class BudgetSummaryResponse(BaseModel):
 
 
 class StatDetailRow(BaseModel):
-    """One row of a header cell's click-through detail."""
+    """One row of a header cell's click-through detail.
+
+    Data only - the popup composes its own captions from these fields
+    (a sub-monthly bill's cadence and face value; the row count behind
+    an everything-else average).
+    """
 
     label: str
     value: int  # cents
-    caption: str | None = None
+    frequency: str | None = None
+    per_period_amount: int | None = None  # cents, sub-monthly bills only
+    transaction_count: int | None = None
 
 
 class BudgetStatDetailsResponse(BaseModel):
-    """Per-row backup for the Budget header's fetched cells."""
+    """Per-row backup for the Budget header's fetched cells.
+
+    ``window_start``/``window_end`` bound the everything-else average
+    (``[start, end)``); the popup renders the human label.
+    """
 
     income: list[StatDetailRow]
     bills: list[StatDetailRow]
     everything_else: list[StatDetailRow]
-    window: str  # e.g. "May - Jul 2026 average"
+    window_start: date
+    window_end: date
+
+
+class FinanceOverviewResponse(BaseModel):
+    """One payload for the Overview surface - the composite the modal
+    fetches in a single round trip instead of eight.
+
+    Sections reuse the granular endpoints' response models verbatim, so
+    a widget reads the same shape whether it came from the composite or
+    from a targeted refresh of the matching granular endpoint.
+    ``account_ids`` filtering applies to net_worth, cashflow, and
+    spending (the windowed aggregates), mirroring how the surface used
+    the granular endpoints.
+    """
+
+    accounts: AccountListResponse
+    net_worth: list[NetWorthPoint]
+    cashflow: CashflowResponse
+    top_payees: PayeeListResponse
+    projection: ProjectionResponse
+    recent_transactions: TransactionListResponse
+    uncategorized: TransactionListResponse
+    spending: list[SpendingCategory]
 
 
 class GoalParseRequest(BaseModel):
@@ -1673,4 +1724,68 @@ class GoalParseResponse(BaseModel):
     payee_label: str | None = None
     baseline_monthly: int | None = None
     suggested_limit: int | None = None
-    message: str
+    # Display name of whatever matched (payee label or category name) and
+    # the cut fraction applied - the frontend writes the sentence.
+    label: str | None = None
+    fraction: float | None = None
+
+
+# -- Action acknowledgements ------------------------------------------------
+#
+# What a mutating endpoint reports back: how much it changed. Named models
+# rather than bare dicts so the OpenAPI schema (and any generated client)
+# carries the field names instead of a free-form map.
+
+
+class MerchantMergeResult(BaseModel):
+    """Transactions repointed onto the surviving payee, and how many
+    source payees were folded in."""
+
+    moved: int
+    merged: int
+
+
+class MerchantAssignResult(BaseModel):
+    updated: int
+
+
+class TransactionDeleteResult(BaseModel):
+    deleted: int
+
+
+class TagRemoveResult(BaseModel):
+    removed: int
+
+
+class PayeeGroupAssignResult(BaseModel):
+    """``merchant_id`` echoes the payee the groups landed on - it may have
+    been created by this same call, so the caller cannot know it up front."""
+
+    updated: int
+    merchant_id: int
+
+
+class SuggestionDismissResult(BaseModel):
+    dismissed: int
+
+
+class SuggestionRestoreResult(BaseModel):
+    restored: int
+
+
+class RecurringRescanResult(BaseModel):
+    """A detection sweep: rhythms found, plus stale streams pruned."""
+
+    detected: int
+    pruned: int
+
+
+class RecurringCategorizeResult(BaseModel):
+    updated: int
+
+
+class WebhookAckResult(BaseModel):
+    """What a verified inbound provider webhook did, for the provider's own
+    delivery log - never a client-facing payload."""
+
+    status: str

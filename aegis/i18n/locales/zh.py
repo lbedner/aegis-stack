@@ -489,6 +489,11 @@ MESSAGES: dict[str, str] = {
     "update.moved_files": "   已从嵌套目录移动 {count} 个新文件",
     "update.synced_files": "   已同步 {count} 处模板变更",
     "update.merge_conflicts": ("   {count} 个文件存在合并冲突（搜索 <<<<<<< 解决）："),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
+    ),
     "update.running_postgen": "正在执行生成后任务……",
     "update.skipping_postgen_conflicts": (
         "Skipping post-generation tasks — merge conflicts present.\n"

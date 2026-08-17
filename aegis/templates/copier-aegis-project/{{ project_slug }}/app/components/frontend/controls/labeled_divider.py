@@ -8,6 +8,7 @@ credentials and OAuth providers on the login form.
 from __future__ import annotations
 
 import flet as ft
+
 from app.components.frontend.controls.text import LabelText
 from app.components.frontend.styles import PulseColors
 

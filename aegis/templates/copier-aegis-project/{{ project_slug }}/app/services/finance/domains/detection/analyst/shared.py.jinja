@@ -1,0 +1,65 @@
+{% if include_ai and ai_backend != "memory" %}"""Identity: agent slugs, surfaces, insight types, and the user-id sentinel.
+"""
+
+from datetime import date
+
+from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
+
+
+
+ANALYST_AGENT_SLUG = "finance-analyst"
+
+
+DEEP_DIVE_AGENT_SLUG = "finance-analyst-deep"
+
+
+DEEP_DIVE_SURFACE = "finance-analyst-deep"
+
+
+DEEP_DIVE_INSIGHT_TYPE = "analyst_deep_dive"
+
+
+# Notes live in the same table as the findings they describe. Every note
+# type has to be excluded wherever findings are counted, or the analyst
+# starts analysing its own output.
+_NOTE_INSIGHT_TYPES = frozenset({ANALYST_NOTE_INSIGHT_TYPE, DEEP_DIVE_INSIGHT_TYPE})
+
+
+SNAPSHOT_MODULE_SLUG = "finance_snapshot"
+
+
+ANALYST_SURFACE = "finance-analyst"
+
+
+
+# A standalone (no-auth) install has NULL-owner finance rows, while insights
+# and streams use the 0 sentinel. Agent deps carry a string user id, so that
+# same sentinel is what stands in for "the only user".
+STANDALONE_USER_ID = "0"
+
+
+
+
+def user_id_for(owner_user_id: int | None) -> str:
+    """The agent-facing user id for a finance owner."""
+    return STANDALONE_USER_ID if owner_user_id is None else str(owner_user_id)
+
+
+
+
+def owner_user_id_for(user_id: str) -> int | None:
+    """Map an agent's user id back to a finance owner.
+
+    Raises ``ValueError`` on anything unparseable rather than falling back to
+    the standalone owner: silently widening the scope would hand one user's
+    ledger to another in a multi-user install.
+    """
+    if user_id == STANDALONE_USER_ID:
+        return None
+    return int(user_id)
+
+
+def note_dedup_key(day: date) -> str:
+    """One note per owner per day, keyed so a re-run is a no-op."""
+    return f"note:{day:%Y%m%d}"
+{% endif %}

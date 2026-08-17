@@ -10,16 +10,9 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from app.services.finance.service import FinanceService
 
-
-async def _account(svc, name, account_type, classification, owner_user_id=1):
-    return await svc.create_manual_account(
-        name=name,
-        account_type=account_type,
-        classification=classification,
-        owner_user_id=owner_user_id,
-    )
 
 
 class TestCategorizeTransaction:
@@ -109,12 +102,12 @@ class TestSuggestCategories:
         )
 
         result = await svc.suggest_categories(owner_user_id=1)
-        assert result["skipped"] == 0
-        assert len(result["items"]) == 1
-        suggestion = result["items"][0]
-        assert suggestion["transaction_id"] == fresh.id
-        assert suggestion["category_id"] == groceries.id
-        assert suggestion["category_name"] == groceries.name
+        assert result.skipped == 0
+        assert len(result.items) == 1
+        suggestion = result.items[0]
+        assert suggestion.transaction_id == fresh.id
+        assert suggestion.category_id == groceries.id
+        assert suggestion.category_name == groceries.name
 
         # A preview - the transaction itself must be untouched.
         await async_db_session.refresh(fresh)
@@ -134,8 +127,8 @@ class TestSuggestCategories:
         )
 
         result = await svc.suggest_categories(owner_user_id=1)
-        assert result["items"] == []
-        assert result["skipped"] == 1
+        assert result.items == []
+        assert result.skipped == 1
 
     @pytest.mark.asyncio
     async def test_tied_precedent_is_skipped_not_guessed(
@@ -175,8 +168,8 @@ class TestSuggestCategories:
         )
 
         result = await svc.suggest_categories(owner_user_id=1)
-        assert result["items"] == []
-        assert result["skipped"] == 1
+        assert result.items == []
+        assert result.skipped == 1
 
     @pytest.mark.asyncio
     async def test_transaction_ids_scopes_the_sweep(
@@ -230,14 +223,14 @@ class TestSuggestCategories:
         result = await svc.suggest_categories(
             owner_user_id=1, transaction_ids=[joes_fresh.id]
         )
-        assert [s["transaction_id"] for s in result["items"]] == [joes_fresh.id]
-        assert result["skipped"] == 0
+        assert [s.transaction_id for s in result.items] == [joes_fresh.id]
+        assert result.skipped == 0
 
         result_both = await svc.suggest_categories(
             owner_user_id=1,
             transaction_ids=[joes_fresh.id, starbucks_fresh.id],
         )
-        assert {s["transaction_id"] for s in result_both["items"]} == {
+        assert {s.transaction_id for s in result_both.items} == {
             joes_fresh.id,
             starbucks_fresh.id,
         }
@@ -276,12 +269,12 @@ class TestExcludedRowsStayOutOfTheQueue:
         )
         await async_db_session.flush()
 
-        result = await svc.uncategorized_transactions(owner_user_id=1, limit=None)
+        items, total = await svc.uncategorized_transactions(owner_user_id=1, limit=None)
 
-        names = [t.name for t in result["items"]]
+        names = [t.name for t in items]
         assert "Coffee Cart" in names
         assert "Adj Redist Bal" not in names
-        assert result["total"] == 1
+        assert total == 1
 
     @pytest.mark.asyncio
     async def test_transfer_legs_are_not_asked_about_either(
@@ -303,6 +296,6 @@ class TestExcludedRowsStayOutOfTheQueue:
         async_db_session.add(leg)
         await async_db_session.flush()
 
-        result = await svc.uncategorized_transactions(owner_user_id=1, limit=None)
+        _items, total = await svc.uncategorized_transactions(owner_user_id=1, limit=None)
 
-        assert result["total"] == 0
+        assert total == 0

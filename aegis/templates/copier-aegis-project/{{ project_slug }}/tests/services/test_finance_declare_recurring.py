@@ -13,44 +13,16 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize import (
+from app.services.finance.domains.detection import (
     declare_recurring,
     detect_recurring,
     plan_recurring,
 )
-from app.services.finance.finance_service import FinanceService
-from app.services.finance.models import FinanceRecurringStream, FinanceTransaction
-
-
-async def _account(svc: FinanceService, name: str = "Checking"):
-    return await svc.create_manual_account(
-        name=name,
-        account_type="checking",
-        classification="asset",
-        owner_user_id=1,
-    )
-
-
-async def _txn(svc: FinanceService, account_id: int, name: str, day: date, cents: int):
-    return await svc.create_transaction(
-        account_id=account_id,
-        amount=cents,
-        txn_date=day,
-        owner_user_id=1,
-        name=name,
-    )
-
-
-async def _live_streams(db: AsyncSession) -> list[FinanceRecurringStream]:
-    return list(
-        (
-            await db.exec(
-                select(FinanceRecurringStream).where(
-                    FinanceRecurringStream.deleted_at.is_(None)
-                )
-            )
-        ).all()
-    )
+from app.services.finance.models import FinanceTransaction
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import live_streams as _live_streams
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_payee_txn as _txn
 
 
 class TestDeclareRecurring:
@@ -200,9 +172,7 @@ class TestDeclareRecurring:
             [t.id for t in old + new], merchant.id, owner_user_id=1
         )
 
-        result = await declare_recurring(
-            async_db_session, [old[0].id], owner_user_id=1
-        )
+        result = await declare_recurring(async_db_session, [old[0].id], owner_user_id=1)
 
         assert result.streams == 1
         assert result.transactions == 6  # both descriptors, one bill
@@ -249,7 +219,9 @@ class TestDeclareRecurring:
         a = await _txn(svc, first.id, "ACME SAAS", date(2026, 5, 2), -1_000)
         b = await _txn(svc, second.id, "ACME SAAS", date(2026, 5, 2), -1_000)
 
-        result = await declare_recurring(async_db_session, [a.id, b.id], owner_user_id=1)
+        result = await declare_recurring(
+            async_db_session, [a.id, b.id], owner_user_id=1
+        )
 
         assert result.streams == 2
 
@@ -269,7 +241,7 @@ class TestRecurringPreview:
     async def test_preview_reports_the_full_rollup_not_the_selection(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -307,7 +279,7 @@ class TestRecurringPreview:
             [t.id for t in old + new], merchant.id, owner_user_id=1
         )
 
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         plan = await plan_recurring(async_db_session, [old[0].id], owner_user_id=1)
 
@@ -321,7 +293,7 @@ class TestRecurringPreview:
     async def test_preview_does_not_write_anything(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -330,9 +302,7 @@ class TestRecurringPreview:
             for m in range(1, 4)
         ]
 
-        await plan_recurring(
-            async_db_session, [t.id for t in txns], owner_user_id=1
-        )
+        await plan_recurring(async_db_session, [t.id for t in txns], owner_user_id=1)
 
         assert await _live_streams(async_db_session) == []
 
@@ -340,7 +310,7 @@ class TestRecurringPreview:
     async def test_a_typed_name_wins_over_the_proposal(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -391,7 +361,7 @@ class TestRecurringPreview:
         """The UI previews, then sends names back keyed by these - so a key
         that changed between the two calls would silently drop the rename.
         """
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -421,7 +391,9 @@ class TestExclusions:
         """The real shape: a monthly subscription plus one odd charge from
         the same payee in the same month (usage, not a bill)."""
         subscription = [
-            await _txn(svc, account_id, "CLAUDE.AI SUBSCRIPTI", date(2026, m, 11), -21_625)
+            await _txn(
+                svc, account_id, "CLAUDE.AI SUBSCRIPTI", date(2026, m, 11), -21_625
+            )
             for m in range(1, 8)
         ]
         odd = await _txn(svc, account_id, "ANTHROPIC USAGE", date(2026, 7, 13), -2_209)
@@ -497,9 +469,7 @@ class TestExclusions:
             await _txn(svc, account.id, "ACME GYM", date(2026, m, 3), -3_000)
             for m in range(1, 5)
         ]
-        await declare_recurring(
-            async_db_session, [t.id for t in txns], owner_user_id=1
-        )
+        await declare_recurring(async_db_session, [t.id for t in txns], owner_user_id=1)
         bill = (await _live_streams(async_db_session))[0]
 
         await detect_recurring(async_db_session, owner_user_id=1)
@@ -568,7 +538,7 @@ class TestMultipleBillsPerPayee:
     async def test_the_preview_says_it_will_be_a_separate_bill(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -653,9 +623,7 @@ class TestDetectionLeavesRealBillsAlone:
             await _txn(svc, account.id, "ACME SUBSCRIPTION", date(2026, m, 4), -1_200)
             for m in range(1, 5)
         ]
-        await declare_recurring(
-            async_db_session, [t.id for t in txns], owner_user_id=1
-        )
+        await declare_recurring(async_db_session, [t.id for t in txns], owner_user_id=1)
         merchant = await svc.create_merchant("Acme", owner_user_id=1)
         await svc.assign_merchant([t.id for t in txns], merchant.id, owner_user_id=1)
 
@@ -676,9 +644,7 @@ class TestDetectionLeavesRealBillsAlone:
             await _txn(svc, account.id, "ACME GYM", date(2026, m, 3), -3_000)
             for m in range(1, 5)
         ]
-        await declare_recurring(
-            async_db_session, [t.id for t in txns], owner_user_id=1
-        )
+        await declare_recurring(async_db_session, [t.id for t in txns], owner_user_id=1)
         bill = (await _live_streams(async_db_session))[0]
 
         await detect_recurring(async_db_session, owner_user_id=1)
@@ -745,7 +711,9 @@ class TestDeclaredAmount:
         # Median lands nowhere near the $5,000 pick, which is the point.
         amounts = [50_000, 60_000, 500_000, 70_000, 1_632_000]
         return [
-            await _txn(svc, account_id, "PURE PROACTIVE H PAYROLL", date(2026, m, 15), a)
+            await _txn(
+                svc, account_id, "PURE PROACTIVE H PAYROLL", date(2026, m, 15), a
+            )
             for m, a in enumerate(amounts, start=1)
         ]
 
@@ -753,7 +721,7 @@ class TestDeclaredAmount:
     async def test_the_plan_reports_what_you_actually_picked(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -772,7 +740,7 @@ class TestDeclaredAmount:
     ) -> None:
         """Same rule update_recurring already follows: stating the amount
         beats the detector's average, so the bill stops reading "varies"."""
-        from app.services.finance.categorize import plan_recurring
+        from app.services.finance.domains.detection import plan_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -979,9 +947,9 @@ class TestTheMenuMatchesTheEngine:
         from app.components.frontend.dashboard.modals.finance_modal import (
             _FREQUENCY_LABELS,
         )
-        from app.services.finance.finance_service import _FREQUENCY_STEPS
+        from app.services.finance.utils import FREQUENCY_STEPS
 
-        assert set(_FREQUENCY_LABELS) <= set(_FREQUENCY_STEPS)
+        assert set(_FREQUENCY_LABELS) <= set(FREQUENCY_STEPS)
 
     def test_every_steppable_cadence_can_be_picked(self) -> None:
         """The other direction, and the actual bug: the forecast could
@@ -990,6 +958,6 @@ class TestTheMenuMatchesTheEngine:
         from app.components.frontend.dashboard.modals.finance_modal import (
             _FREQUENCY_LABELS,
         )
-        from app.services.finance.finance_service import _FREQUENCY_STEPS
+        from app.services.finance.utils import FREQUENCY_STEPS
 
-        assert set(_FREQUENCY_STEPS) <= set(_FREQUENCY_LABELS)
+        assert set(FREQUENCY_STEPS) <= set(_FREQUENCY_LABELS)

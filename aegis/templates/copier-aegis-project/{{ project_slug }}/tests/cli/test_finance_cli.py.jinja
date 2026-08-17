@@ -53,7 +53,7 @@ class TestSeedDemo:
         mock_seed = AsyncMock(return_value=_seed_result())
         with (
             patch("app.core.db.get_async_session", new=cm),
-            patch("app.services.finance.demo_seed.seed_demo", new=mock_seed),
+            patch("app.services.finance.seeds.demo_seed.seed_demo", new=mock_seed),
         ):
             result = runner.invoke(app, ["seed-demo", "--owner-user-id", "1", "--yes"])
         assert result.exit_code == 0
@@ -68,7 +68,7 @@ class TestSeedDemo:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.demo_seed.seed_demo",
+                "app.services.finance.seeds.demo_seed.seed_demo",
                 new=AsyncMock(return_value=_seed_result(skipped=True)),
             ),
         ):
@@ -81,7 +81,7 @@ class TestSeedDemo:
         mock_seed = AsyncMock(return_value=_seed_result(reset=True))
         with (
             patch("app.core.db.get_async_session", new=cm),
-            patch("app.services.finance.demo_seed.seed_demo", new=mock_seed),
+            patch("app.services.finance.seeds.demo_seed.seed_demo", new=mock_seed),
         ):
             result = runner.invoke(
                 app, ["seed-demo", "--reset", "--months", "6", "--yes"]
@@ -101,10 +101,10 @@ class TestSeedDemo:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.demo_seed.count_foreign_accounts",
+                "app.services.finance.seeds.demo_seed.count_foreign_accounts",
                 new=AsyncMock(return_value=3),
             ),
-            patch("app.services.finance.demo_seed.seed_demo", new=mock_seed),
+            patch("app.services.finance.seeds.demo_seed.seed_demo", new=mock_seed),
         ):
             declined = runner.invoke(app, ["seed-demo"], input="n\n")
             accepted = runner.invoke(app, ["seed-demo"], input="y\n")
@@ -120,10 +120,10 @@ class TestSeedDemo:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.demo_seed.count_foreign_accounts",
+                "app.services.finance.seeds.demo_seed.count_foreign_accounts",
                 new=mock_count,
             ),
-            patch("app.services.finance.demo_seed.seed_demo", new=mock_seed),
+            patch("app.services.finance.seeds.demo_seed.seed_demo", new=mock_seed),
         ):
             result = runner.invoke(app, ["seed-demo", "--yes"])
         assert result.exit_code == 0
@@ -136,10 +136,10 @@ class TestSeedDemo:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.demo_seed.count_foreign_accounts",
+                "app.services.finance.seeds.demo_seed.count_foreign_accounts",
                 new=AsyncMock(return_value=0),
             ),
-            patch("app.services.finance.demo_seed.seed_demo", new=mock_seed),
+            patch("app.services.finance.seeds.demo_seed.seed_demo", new=mock_seed),
         ):
             result = runner.invoke(app, ["seed-demo"])
         assert result.exit_code == 0
@@ -151,8 +151,8 @@ class TestSeedDemo:
         mock_seed = AsyncMock(return_value=_seed_result())
         with (
             patch("app.core.db.get_async_session", new=cm),
-            patch("app.services.finance.demo_seed.clear_demo", new=mock_clear),
-            patch("app.services.finance.demo_seed.seed_demo", new=mock_seed),
+            patch("app.services.finance.seeds.demo_seed.clear_demo", new=mock_clear),
+            patch("app.services.finance.seeds.demo_seed.seed_demo", new=mock_seed),
         ):
             result = runner.invoke(app, ["seed-demo", "--clear"])
         assert result.exit_code == 0
@@ -166,7 +166,7 @@ class TestSeedDemo:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.demo_seed.clear_demo",
+                "app.services.finance.seeds.demo_seed.clear_demo",
                 new=AsyncMock(return_value=0),
             ),
         ):
@@ -197,7 +197,7 @@ class TestSync:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.sync_owner_connections",
+                "app.services.finance.adapters.providers.connections.sync_owner_connections",
                 new=mock_sync,
             ),
         ):
@@ -212,7 +212,7 @@ class TestSync:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.sync_owner_connections",
+                "app.services.finance.adapters.providers.connections.sync_owner_connections",
                 new=AsyncMock(return_value=[]),
             ),
         ):
@@ -226,7 +226,7 @@ class TestSync:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.sync_one_connection",
+                "app.services.finance.adapters.providers.connections.sync_one_connection",
                 new=mock_one,
             ),
         ):
@@ -240,7 +240,7 @@ class TestSync:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.sync_one_connection",
+                "app.services.finance.adapters.providers.connections.sync_one_connection",
                 new=AsyncMock(return_value=None),
             ),
         ):
@@ -257,7 +257,7 @@ class TestFireWebhook:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.fire_sandbox_webhook",
+                "app.services.finance.adapters.providers.connections.fire_sandbox_webhook",
                 new=mock_fire,
             ),
         ):
@@ -274,7 +274,7 @@ class TestFireWebhook:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.fire_sandbox_webhook",
+                "app.services.finance.adapters.providers.connections.fire_sandbox_webhook",
                 new=AsyncMock(return_value=[]),
             ),
         ):
@@ -283,13 +283,13 @@ class TestFireWebhook:
         assert "No Plaid connections" in result.output
 
     def test_provider_error_maps_to_exit_1(self) -> None:
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         _session, cm = _fake_session_cm()
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.fire_sandbox_webhook",
+                "app.services.finance.adapters.providers.connections.fire_sandbox_webhook",
                 new=AsyncMock(
                     side_effect=PlaidError("sandbox_only", "not in sandbox")
                 ),
@@ -310,7 +310,7 @@ class TestSnapTradeConnect:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.start_snaptrade_connect",
+                "app.services.finance.adapters.providers.connections.start_snaptrade_connect",
                 new=AsyncMock(return_value=(connection, portal_url)),
             ),
         ):
@@ -324,7 +324,7 @@ class TestSnapTradeConnect:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.complete_snaptrade_connect",
+                "app.services.finance.adapters.providers.connections.complete_snaptrade_connect",
                 new=AsyncMock(return_value=[_sync_result(connection_id=3)]),
             ),
         ):
@@ -338,7 +338,7 @@ class TestSnapTradeConnect:
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.complete_snaptrade_connect",
+                "app.services.finance.adapters.providers.connections.complete_snaptrade_connect",
                 new=AsyncMock(return_value=[]),
             ),
         ):
@@ -347,13 +347,13 @@ class TestSnapTradeConnect:
         assert "No new authorization" in result.output
 
     def test_connect_maps_provider_error_to_exit_1(self) -> None:
-        from app.services.finance.providers.snaptrade import SnapTradeError
+        from app.services.finance.adapters.providers.snaptrade import SnapTradeError
 
         _session, cm = _fake_session_cm()
         with (
             patch("app.core.db.get_async_session", new=cm),
             patch(
-                "app.services.finance.connection_service.start_snaptrade_connect",
+                "app.services.finance.adapters.providers.connections.start_snaptrade_connect",
                 new=AsyncMock(
                     side_effect=SnapTradeError("missing_credentials", "not set")
                 ),

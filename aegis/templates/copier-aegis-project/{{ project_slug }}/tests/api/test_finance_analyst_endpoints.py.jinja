@@ -15,9 +15,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai import module_context
 from app.services.ai.agent_loader import invalidate_agent_cache
-from app.services.finance import analyst
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.domains.detection import analyst
 from app.services.finance.models import FinanceInsight
+from app.services.finance.service import FinanceService
 
 NOTE_TEXT = "Nothing unusual this month. Your balances are where you left them."
 RUN_URL = "/api/v1/finance/analyst/run"
@@ -243,7 +243,7 @@ async def test_background_run_writes_the_note_as_a_job(
     """``background=true``: 202 + job id; the terminal event carries the note."""
     import time
 
-    from app.components.backend.api.finance import router as finance_router_module
+    from app.components.backend.api.finance import analyst as finance_analyst_module
 
     calls = await analyst_ready(async_db_session, acting_owner_user_id)
 
@@ -251,7 +251,7 @@ async def test_background_run_writes_the_note_as_a_job(
     async def _session():
         yield async_db_session
 
-    monkeypatch.setattr(finance_router_module, "_job_session", _session)
+    monkeypatch.setattr(finance_analyst_module, "_job_session", _session)
 
     response = authenticated_client.post(RUN_URL, params={"background": "true"})
     assert response.status_code == 202

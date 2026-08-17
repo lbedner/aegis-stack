@@ -2,8 +2,9 @@
 
 from .action_menu import ActionDropdown, ActionMenu, ActionMenuItem, MenuAction
 from .busy_bar import busy_bar
-from .buttons import ConfirmDialog
+from .buttons import BaseIconButton, ConfirmDialog
 from .data_table import DataTable, DataTableColumn
+from .dropdown import NativeDropdown
 from .expand_arrow import ExpandArrow
 from .expandable_data_table import ExpandableDataTable, ExpandableRow
 from .form_fields import (
@@ -45,6 +46,8 @@ from .text import (
 )
 
 __all__ = [
+    "BaseIconButton",
+    "NativeDropdown",
     # Legacy controls (refactored to use theme)
     "NumericText",
     "PrimaryText",

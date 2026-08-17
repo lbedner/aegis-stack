@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
 
 
 @pytest.mark.asyncio
@@ -53,6 +53,60 @@ async def test_finance_health_reflects_accounts(
     response = authenticated_client.get("/api/v1/finance/health")
     assert response.status_code == 200
     assert response.json()["accounts"] == 1
+
+
+@pytest.mark.asyncio
+async def test_overview_composite_matches_granular_endpoints(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """One surface, one round trip: /overview returns every Overview
+    section in the granular endpoints' own shapes, consistent with them."""
+    from datetime import date
+
+    service = FinanceService(async_db_session)
+    account = await service.create_manual_account(
+        owner_user_id=acting_owner_user_id,
+        name="Chase Checking",
+        account_type="checking",
+        classification="asset",
+        current_balance=500_000,
+    )
+    today = date.today()
+    await service.create_transaction(
+        account_id=account.id,
+        amount=-12_345,
+        txn_date=today,
+        owner_user_id=acting_owner_user_id,
+        name="Groceries Run",
+    )
+    await async_db_session.commit()
+
+    response = authenticated_client.get("/api/v1/finance/overview")
+    assert response.status_code == 200
+    body = response.json()
+    for section in (
+        "accounts",
+        "net_worth",
+        "cashflow",
+        "top_payees",
+        "projection",
+        "recent_transactions",
+        "uncategorized",
+        "spending",
+    ):
+        assert section in body
+
+    granular = authenticated_client.get("/api/v1/finance/accounts").json()
+    assert body["accounts"]["total"] == granular["total"] == 1
+
+    recent = body["recent_transactions"]
+    assert recent["total"] == 1
+    assert recent["items"][0]["name"] == "Groceries Run"
+    # The uncategorized preview carries the FULL backlog count.
+    assert body["uncategorized"]["total"] == 1
+    assert body["cashflow"]["items"], "cashflow months render even when quiet"
 
 
 @pytest.mark.asyncio
@@ -216,7 +270,7 @@ async def test_net_worth_series_after_recompute(
     """FIN-13 acceptance: House ($505k) + Mortgage ($300k) → net worth $205k."""
     from datetime import UTC, datetime, timedelta
 
-    from app.services.finance import networth_service
+    from app.services.finance.domains.ledger import networth
 
     today = datetime.now(UTC).date()
     # House with two valuations; Mortgage as a liability.
@@ -247,7 +301,7 @@ async def test_net_worth_series_after_recompute(
     )
 
     # Materialize snapshots (the nightly job's work), then read the series.
-    await networth_service.recompute_snapshots(
+    await networth.recompute_snapshots(
         async_db_session, owner_user_id=acting_owner_user_id
     )
     await async_db_session.commit()
@@ -315,8 +369,8 @@ async def test_import_batch_report(
     """FIN-14: GET /import/batches/{id} shows per-row outcomes."""
     from pathlib import Path
 
-    from app.services.finance import import_service
-    from app.services.finance.importers.ofx import parse_ofx
+    from app.services.finance.adapters.importers import imports
+    from app.services.finance.adapters.importers.ofx import parse_ofx
 
     fixture = (
         Path(__file__).parent.parent
@@ -333,7 +387,7 @@ async def test_import_batch_report(
         account_type="checking",
         classification="asset",
     )
-    result = await import_service.ingest_transactions(
+    result = await imports.ingest_transactions(
         async_db_session,
         owner_user_id=acting_owner_user_id,
         source_type="qfx",
@@ -499,13 +553,13 @@ async def test_background_import_runs_as_a_job(
     """``background=true``: 202 + job id, terminal event carries the counts."""
     from contextlib import asynccontextmanager
 
-    from app.components.backend.api.finance import router as finance_router_module
+    from app.components.backend.api.finance import imports as finance_imports_module
 
     @asynccontextmanager
     async def _session():
         yield async_db_session
 
-    monkeypatch.setattr(finance_router_module, "_job_session", _session)
+    monkeypatch.setattr(finance_imports_module, "_job_session", _session)
 
     account_id = await _checking_account(async_db_session, acting_owner_user_id)
     data = (_FIXTURES / "sample_quicken.qif").read_bytes()
@@ -539,13 +593,13 @@ async def test_background_import_failure_lands_in_the_job_error(
     reaches the subscriber instead of dying in a log."""
     from contextlib import asynccontextmanager
 
-    from app.components.backend.api.finance import router as finance_router_module
+    from app.components.backend.api.finance import imports as finance_imports_module
 
     @asynccontextmanager
     async def _session():
         yield async_db_session
 
-    monkeypatch.setattr(finance_router_module, "_job_session", _session)
+    monkeypatch.setattr(finance_imports_module, "_job_session", _session)
 
     data = (_FIXTURES / "sample_quicken.qif").read_bytes()
     response = authenticated_client.post(
@@ -580,13 +634,13 @@ async def test_job_events_stream_ends_with_the_terminal_snapshot(
     from contextlib import asynccontextmanager
     import json as jsonlib
 
-    from app.components.backend.api.finance import router as finance_router_module
+    from app.components.backend.api.finance import imports as finance_imports_module
 
     @asynccontextmanager
     async def _session():
         yield async_db_session
 
-    monkeypatch.setattr(finance_router_module, "_job_session", _session)
+    monkeypatch.setattr(finance_imports_module, "_job_session", _session)
 
     account_id = await _checking_account(async_db_session, acting_owner_user_id)
     data = (_FIXTURES / "sample_quicken.qif").read_bytes()
@@ -923,7 +977,7 @@ async def test_uncategorized_empty_account_ids_means_nothing(
     result = await service.uncategorized_transactions(
         owner_user_id=acting_owner_user_id, account_ids=[]
     )
-    assert result == {"items": [], "total": 0}
+    assert result == ([], 0)
 
 
 @pytest.mark.asyncio
@@ -1259,8 +1313,8 @@ async def test_recurring_delete_drops_from_listing_and_mutes_detected(
     resurrecting it cannot bring it back loud. Unknown id 404s."""
     from sqlmodel import select
 
-    from app.services.finance.finance_service import FinanceService
     from app.services.finance.models import FinanceRecurringStream
+    from app.services.finance.service import FinanceService
 
     created = authenticated_client.post(
         "/api/v1/finance/recurring",
@@ -1334,8 +1388,8 @@ async def test_recurring_edit_detected_stream_pins_amount_keeps_payee_key(
     the stream, and changing it would spawn a duplicate next pass."""
     from sqlmodel import select
 
-    from app.services.finance.finance_service import FinanceService
     from app.services.finance.models import FinanceRecurringStream
+    from app.services.finance.service import FinanceService
 
     await FinanceService(async_db_session).get_or_create_currency("usd")
     store_owner = 0 if acting_owner_user_id is None else acting_owner_user_id
@@ -1380,8 +1434,8 @@ async def test_recurring_confirm_promotes_a_detected_stream(
     async_db_session: AsyncSession,
     acting_owner_user_id: int | None,
 ) -> None:
-    from app.services.finance.finance_service import FinanceService
     from app.services.finance.models import FinanceRecurringStream
+    from app.services.finance.service import FinanceService
 
     await FinanceService(async_db_session).get_or_create_currency("usd")
     store_owner = 0 if acting_owner_user_id is None else acting_owner_user_id
@@ -1417,8 +1471,8 @@ async def test_monthly_rollup_counts_commitments_only(
     the "per month in recurring bills" figure; declared bills count."""
     from datetime import date
 
-    from app.services.finance.finance_service import FinanceService
     from app.services.finance.models import FinanceRecurringStream
+    from app.services.finance.service import FinanceService
 
     service = FinanceService(async_db_session)
     await service.create_recurring_stream(
@@ -1853,7 +1907,7 @@ async def test_preview_splits_out_rows_for_removed_accounts(
     await service.soft_delete_account(amex.id, owner_user_id=acting_owner_user_id)
 
     from app.services.finance.models import FinanceImportProfile
-    from app.services.finance.seed import CSV_IMPORT_PROFILES, DEFAULT_CURRENCIES
+    from app.services.finance.seeds.seed import CSV_IMPORT_PROFILES, DEFAULT_CURRENCIES
 
     for currency in DEFAULT_CURRENCIES:
         await service.get_or_create_currency(currency["code"])
@@ -2530,7 +2584,8 @@ class TestBudgetStatDetails:
         ]
         assert body["bills"] == []
         assert body["everything_else"][0]["label"] == "Uncategorized"
-        assert "average" in body["window"]
+        # Data-only contract: the popup composes the window label itself.
+        assert body["window_start"] < body["window_end"]
 
 
 class TestBudgetOutlook:

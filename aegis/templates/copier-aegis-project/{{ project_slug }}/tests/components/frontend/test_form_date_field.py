@@ -12,7 +12,10 @@ import inspect
 import flet as ft
 
 from app.components.frontend.controls.form_fields import FormDateField
-from app.components.frontend.dashboard.modals import finance_recurring_tab
+from app.components.frontend.dashboard.modals.finance_recurring_tab import (
+            dialogs,
+            editor,
+        )
 
 
 class TestValueContract:
@@ -80,6 +83,6 @@ class TestValueContract:
 
 class TestBillDialogsUseIt:
     def test_no_typed_date_fields_remain(self) -> None:
-        source = inspect.getsource(finance_recurring_tab)
+        source = inspect.getsource(editor) + inspect.getsource(dialogs)
         assert "YYYY-MM-DD" not in source
         assert source.count("FormDateField(") == 3  # add + edit + pause

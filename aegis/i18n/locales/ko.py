@@ -598,6 +598,11 @@ MESSAGES: dict[str, str] = {
     "update.merge_conflicts": (
         "   {count}개 파일에 병합 충돌 있음 (<<<<<<< 검색으로 해결):"
     ),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
+    ),
     "update.running_postgen": "후처리 작업 실행 중...",
     "update.skipping_postgen_conflicts": (
         "Skipping post-generation tasks — merge conflicts present.\n"

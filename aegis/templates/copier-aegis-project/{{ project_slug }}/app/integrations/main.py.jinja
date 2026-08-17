@@ -4,23 +4,35 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import flet.fastapi as flet_fastapi
-from app.components.backend.hooks import backend_hooks
-from app.components.backend.main import create_backend_app
-from app.components.frontend.main import create_frontend_app
+# Observability bootstrap BEFORE the app imports: auto-tracing installs an
+# import hook, so it must run while app.services is still unimported. This
+# module is uvicorn's factory target, so reload workers pass through here.
+try:
+    from app.components.backend.middleware.logfire_tracing import (
+        install_auto_tracing,
+    )
+except ImportError:  # observability component not installed
+    pass
+else:
+    install_auto_tracing()
+
+from app.components.backend.hooks import backend_hooks  # noqa: E402
+from app.components.backend.main import create_backend_app  # noqa: E402
+from app.components.frontend.main import create_frontend_app  # noqa: E402
 {%- if include_htmx %}
-from app.components.web_frontend.main import (
+from app.components.web_frontend.main import (  # noqa: E402
     CachedStaticFiles,
     create_web_frontend_app,
 )
 {%- endif %}
-from app.core.config import settings
-from app.core.constants import dashboard_upload_dir
-from app.core.log import logger, setup_logging
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from app.core.config import settings  # noqa: E402
+from app.core.constants import dashboard_upload_dir  # noqa: E402
+from app.core.log import logger, setup_logging  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException  # noqa: E402
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
+from fastapi.openapi.utils import get_openapi  # noqa: E402
+from fastapi.responses import HTMLResponse  # noqa: E402
+from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 
 _docs_security = HTTPBasic(auto_error=False)
 

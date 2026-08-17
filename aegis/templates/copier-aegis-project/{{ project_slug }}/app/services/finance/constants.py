@@ -85,7 +85,6 @@ UNCATEGORIZED_CATEGORY_NAMES = frozenset(
 # which is exactly the difference this table encodes.
 
 
-
 @dataclass(frozen=True)
 class Cadence:
     """One recurring interval, and everything that depends on it.
@@ -177,3 +176,9 @@ def step_cadence(key: str, day: date) -> date:
     if cadence.months:
         return add_months(day, cadence.months)
     return day + timedelta(days=cadence.days)
+
+
+# ``external_id_source`` value marking a reconciliation adjustment (FIN-37).
+# A plain-column discriminator: the import pipeline's LANE-3 edit matching
+# and the source CHECK constraint both stay untouched by it.
+RECONCILE_MARKER = "reconcile"

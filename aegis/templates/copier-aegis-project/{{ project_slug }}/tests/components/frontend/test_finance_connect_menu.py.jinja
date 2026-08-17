@@ -11,7 +11,10 @@ time by the connect flow instead.
 
 from unittest.mock import patch
 
-from app.components.frontend.dashboard.modals import finance_modal
+from app.components.frontend.dashboard.modals.finance_modal import (
+    connect,
+    import_summary,
+)
 
 
 def _noop(_e: object) -> None:
@@ -44,32 +47,32 @@ def _menu_labels(menu) -> list[str]:
 
 
 def test_menu_shows_built_in_providers_without_credentials() -> None:
-    with patch.object(finance_modal.settings, "FINANCE_PLAID", True, create=True), \
+    with patch.object(connect.settings, "FINANCE_PLAID", True, create=True), \
         patch.object(
-            finance_modal.settings, "FINANCE_SNAPTRADE", True, create=True
+            connect.settings, "FINANCE_SNAPTRADE", True, create=True
         ):
-        menu = finance_modal._build_connect_menu(_noop, _noop)
+        menu = connect._build_connect_menu(_noop, _noop)
     labels = _menu_labels(menu)
     assert "Connect a bank" in labels
     assert "Connect a brokerage" in labels
 
 
 def test_menu_omits_providers_not_built_in() -> None:
-    with patch.object(finance_modal.settings, "FINANCE_PLAID", True, create=True), \
+    with patch.object(connect.settings, "FINANCE_PLAID", True, create=True), \
         patch.object(
-            finance_modal.settings, "FINANCE_SNAPTRADE", False, create=True
+            connect.settings, "FINANCE_SNAPTRADE", False, create=True
         ):
-        menu = finance_modal._build_connect_menu(_noop, _noop)
+        menu = connect._build_connect_menu(_noop, _noop)
     labels = _menu_labels(menu)
     assert labels == ["Connect a bank"]
 
 
 def test_no_menu_when_no_provider_built_in() -> None:
-    with patch.object(finance_modal.settings, "FINANCE_PLAID", False, create=True), \
+    with patch.object(connect.settings, "FINANCE_PLAID", False, create=True), \
         patch.object(
-            finance_modal.settings, "FINANCE_SNAPTRADE", False, create=True
+            connect.settings, "FINANCE_SNAPTRADE", False, create=True
         ):
-        menu = finance_modal._build_connect_menu(_noop, _noop)
+        menu = connect._build_connect_menu(_noop, _noop)
     assert menu is None
 
 
@@ -78,7 +81,7 @@ def test_import_menu_names_both_lanes_and_their_formats() -> None:
     kind from the selected account. Both lanes must be offered explicitly,
     each naming what it accepts, so the format is known before the file
     dialog opens."""
-    menu = finance_modal._import_menu(_noop, _noop)
+    menu = import_summary._import_menu(_noop, _noop)
     labels = _menu_labels(menu)
 
     assert "Transactions" in labels

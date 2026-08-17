@@ -14,30 +14,20 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
-
-
-async def _account(svc):
-    return await svc.create_manual_account(
-        name="Checking",
-        account_type="checking",
-        classification="asset",
-        owner_user_id=1,
-    )
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_stream
 
 
 async def _bill(svc, account, **overrides):
-    kwargs = dict(
-        owner_user_id=1,
+    defaults = dict(
         name="World Anvil",
-        direction="outflow",
-        frequency="monthly",
         expected_amount=1_500,
         next_expected_date=date(2026, 7, 30),
         account_id=account.id,
     )
-    kwargs.update(overrides)
-    return await svc.create_recurring_stream(**kwargs)
+    defaults.update(overrides)
+    return await seed_stream(svc, **defaults)
 
 
 async def _payment(

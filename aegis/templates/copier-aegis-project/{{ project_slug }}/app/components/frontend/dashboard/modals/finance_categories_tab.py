@@ -14,12 +14,14 @@ import, which makes it a faithful regrouping rather than a guess.
 import flet as ft
 
 from app.components.frontend.controls import (
+    BodyText,
     H3Text,
     NumericText,
     SecondaryText,
 )
 from app.components.frontend.controls.data_table import DataTable, DataTableColumn
 from app.components.frontend.controls.table import TableNameText
+from app.components.frontend.dashboard.modals.finance_modal.formatting import _usd
 from app.components.frontend.dashboard.modals.modal_sections import (
     DateRangeChips,
     headline_stat,
@@ -47,12 +49,6 @@ _COLUMNS = [
 
 # Indent for a child row, so the tree's depth reads without a rule line.
 _CHILD_INDENT = 26
-
-
-def _usd(cents: int | None) -> str:
-    value = cents or 0
-    sign = "-" if value < 0 else ""
-    return f"{sign}${abs(value) / 100:,.2f}"
 
 
 def _split(name: str) -> tuple[str, str]:
@@ -257,11 +253,7 @@ class CategoriesTab(ft.Container):
         )
         return [
             ft.Container(
-                content=ft.Text(
-                    child.get("_leaf") or "",
-                    size=Theme.Typography.BODY,
-                    color=name_color,
-                ),
+                content=BodyText(child.get("_leaf") or "", color=name_color),
                 padding=ft.padding.only(left=_CHILD_INDENT),
             ),
             SecondaryText(child.get("classification") or ""),

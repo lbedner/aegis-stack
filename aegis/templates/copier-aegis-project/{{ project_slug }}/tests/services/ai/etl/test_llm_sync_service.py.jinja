@@ -538,6 +538,136 @@ class TestLLMSyncServiceErrorHandling:
         assert result.models_added == 1
         # OpenRouter error should be logged but not in errors list
         # (OpenRouter failure is non-fatal)
+
+
+def _chat_model(model_id: str, provider: str = "openai") -> LiteLLMModel:
+    """A minimal chat model for batching tests."""
+    return LiteLLMModel(
+        model_id=model_id,
+        provider=provider,
+        mode="chat",
+        max_tokens=128000,
+        max_input_tokens=None,
+        max_output_tokens=16384,
+        input_cost_per_token=0.000005,
+        output_cost_per_token=0.000015,
+        supports_function_calling=True,
+        supports_parallel_function_calling=False,
+        supports_vision=False,
+        supports_audio_input=False,
+        supports_audio_output=False,
+        supports_reasoning=False,
+        supports_response_schema=False,
+        supports_system_messages=True,
+        supports_prompt_caching=False,
+        deprecation_date=None,
+    )
+
+
+class _StatementCounter:
+    """Counts statements hitting the database through the sync engine."""
+
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+        self.count = 0
+
+    def _increment(self, *args: object, **kwargs: object) -> None:
+        self.count += 1
+
+    def __enter__(self) -> "_StatementCounter":
+        from sqlalchemy import event
+
+        event.listen(self._engine, "before_cursor_execute", self._increment)
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        from sqlalchemy import event
+
+        event.remove(self._engine, "before_cursor_execute", self._increment)
+
+
+class TestLLMSyncServiceQueryBatching:
+    """A sync's query count must not grow with catalog size.
+
+    The per-model loop used to SELECT deployments, prices, and modalities
+    once per model (~7 statements x 3,000 models per run, observed live);
+    everything must come from the caches ``_load_caches`` preloads.
+    """
+
+    def _sync(self, session: Session, models: dict[str, LiteLLMModel]) -> SyncResult:
+        # A fresh service per call, the way every real caller constructs
+        # one - a warm in-process cache would hide missing preloads.
+        service = LLMSyncService(session)
+        with (
+            patch.object(
+                service.litellm_client, "fetch_models", new_callable=AsyncMock
+            ) as mock_litellm,
+            patch.object(
+                service.openrouter_client, "fetch_models", new_callable=AsyncMock
+            ) as mock_openrouter,
+        ):
+            mock_litellm.return_value = models
+            mock_openrouter.return_value = []
+
+            import asyncio
+
+            return asyncio.run(service.sync(mode_filter="chat", dry_run=False))
+
+    def test_no_change_resync_cost_is_independent_of_catalog_size(
+        self, sync_db_engine: Engine, sync_db_session: Session
+    ) -> None:
+        small = {
+            f"openai/model-{i}": _chat_model(f"openai/model-{i}") for i in range(2)
+        }
+        big = {f"openai/model-{i}": _chat_model(f"openai/model-{i}") for i in range(8)}
+
+        self._sync(sync_db_session, small)
+        with _StatementCounter(sync_db_engine) as resync_small:
+            self._sync(sync_db_session, small)
+
+        self._sync(sync_db_session, big)
+        with _StatementCounter(sync_db_engine) as resync_big:
+            self._sync(sync_db_session, big)
+
+        assert resync_big.count == resync_small.count
+
+    def test_resync_makes_no_changes(self, sync_db_session: Session) -> None:
+        """Batched lookups must still dedupe: a second sync of the same
+        catalog adds nothing and updates nothing."""
+        models = {
+            f"openai/model-{i}": _chat_model(f"openai/model-{i}") for i in range(3)
+        }
+        self._sync(sync_db_session, models)
+
+        result = self._sync(sync_db_session, models)
+
+        assert result.models_added == 0
+        assert result.models_updated == 0
+        assert result.deployments_synced == 0
+        assert result.prices_synced == 0
+        deployments = sync_db_session.exec(select(LLMDeployment)).all()
+        assert len(deployments) == 3
+
+
+class TestCatalogPopulated:
+    """The startup hook's guard: sync only into an empty catalog."""
+
+    def test_empty_catalog_reports_unpopulated(self, sync_db_session: Session) -> None:
+        from app.services.ai.etl.llm_sync_service import catalog_is_populated
+
+        assert catalog_is_populated(sync_db_session) is False
+
+    def test_catalog_with_a_model_reports_populated(
+        self, sync_db_session: Session
+    ) -> None:
+        from app.services.ai.etl.llm_sync_service import catalog_is_populated
+
+        sync_db_session.add(
+            LargeLanguageModel(model_id="openai/gpt-4o", title="GPT-4o")
+        )
+        sync_db_session.flush()
+
+        assert catalog_is_populated(sync_db_session) is True
 {% else %}
 # ETL sync service tests require database backend (ai_backend != "memory")
 # These tests are skipped when using memory-only AI backend

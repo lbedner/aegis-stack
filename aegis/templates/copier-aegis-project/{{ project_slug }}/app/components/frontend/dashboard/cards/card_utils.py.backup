@@ -1,0 +1,676 @@
+"""
+Card Utility Functions
+
+Simple shared functions to eliminate code duplication across dashboard cards.
+No inheritance or ABC complexity - just common functionality extracted.
+"""
+
+from collections.abc import Callable
+
+import flet as ft
+
+from app.components.frontend.controls import (
+    H3Text,
+    LabelText,
+    PrimaryText,
+    SecondaryText,
+    StatusTag,
+)
+from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+# Provider color mapping for AI service (shared across AI card and modal)
+PROVIDER_COLORS = {
+    "groq": ft.Colors.PURPLE,
+    "openai": ft.Colors.GREEN,
+    "anthropic": ft.Colors.ORANGE,
+    "google": ft.Colors.BLUE,
+    "mistral": ft.Colors.INDIGO,
+    "cohere": ft.Colors.TEAL,
+    "gemini": ft.Colors.BLUE,
+}
+
+
+def get_status_colors(component_data: ComponentStatus) -> tuple[str, str, str]:
+    """
+    Get status-aware colors for any card.
+
+    Args:
+        component_data: ComponentStatus containing status information
+
+    Returns:
+        Tuple of (primary_color, background_color, border_color)
+    """
+    status = component_data.status
+
+    if status == ComponentStatusType.HEALTHY:
+        return (Theme.Colors.SUCCESS, ft.Colors.SURFACE, ft.Colors.OUTLINE)
+    elif status == ComponentStatusType.INFO:
+        return (Theme.Colors.INFO, ft.Colors.SURFACE, Theme.Colors.INFO)
+    elif status == ComponentStatusType.WARNING:
+        return (Theme.Colors.WARNING, ft.Colors.SURFACE, Theme.Colors.WARNING)
+    else:  # UNHEALTHY
+        return (
+            Theme.Colors.ERROR,
+            ft.Colors.with_opacity(0.25, Theme.Colors.ERROR),
+            Theme.Colors.ERROR,
+        )
+
+
+def get_status_color(status: str) -> str:
+    """
+    Map a status string to a theme color.
+
+    Args:
+        status: Status string ("success", "healthy", "info",
+            "warning", "error", "unhealthy")
+
+    Returns:
+        Theme color constant
+    """
+    status_colors = {
+        "success": Theme.Colors.SUCCESS,
+        "healthy": Theme.Colors.SUCCESS,
+        "info": Theme.Colors.INFO,
+        "warning": Theme.Colors.WARNING,
+        "error": Theme.Colors.ERROR,
+        "unhealthy": Theme.Colors.ERROR,
+    }
+    return status_colors.get(status.lower(), Theme.Colors.SUCCESS)
+
+
+def get_ai_engine_display(metadata: dict) -> str:
+    """
+    Get formatted AI engine name for display.
+
+    Args:
+        metadata: Component metadata dict containing 'engine' key
+
+    Returns:
+        Formatted engine name (e.g., "Pydantic AI", "LangChain")
+    """
+    engine = metadata.get("engine", "AI Engine")
+    engine_display_map = {
+        "pydantic-ai": "Pydantic AI",
+        "langchain": "LangChain",
+    }
+    return engine_display_map.get(
+        engine, engine.replace("-", " ").title() if engine else "AI Engine"
+    )
+
+
+def create_metric_container(label: str, value: str) -> ft.Container:
+    """
+    Create a metric container with label and value.
+
+    Args:
+        label: Metric label text
+        value: Metric value text
+
+    Returns:
+        Container with styled metric display
+    """
+    return ft.Container(
+        content=ft.Column(
+            [
+                SecondaryText(label),
+                ft.Container(height=8),
+                PrimaryText(value),
+            ],
+            spacing=0,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+        ),
+        padding=ft.padding.all(16),
+        bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.GREY),
+        border_radius=8,
+        border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
+        height=80,
+        expand=True,
+    )
+
+
+def get_status_detail(component_data: ComponentStatus) -> str | None:
+    """
+    Get status detail text explaining why a component is not healthy.
+
+    Only shows detail for INFO, WARNING, UNHEALTHY states (not HEALTHY).
+    Looks at sub-components to find the specific issue causing the status.
+
+    Args:
+        component_data: ComponentStatus containing status and message
+
+    Returns:
+        Issue-specific detail string, or None for healthy components
+    """
+    if component_data.status == ComponentStatusType.HEALTHY:
+        return None
+
+    # Look for non-healthy sub-components to explain the issue
+    if component_data.sub_components:
+        issues = []
+        for name, sub in component_data.sub_components.items():
+            if sub.status != ComponentStatusType.HEALTHY:
+                # Check nested sub_components (e.g., worker -> queues -> media)
+                if sub.sub_components:
+                    for sub_name, sub_sub in sub.sub_components.items():
+                        if sub_sub.status != ComponentStatusType.HEALTHY:
+                            # Use just the message, not "name: message" for brevity
+                            msg = sub_sub.message or sub_sub.status.value
+                            issues.append(f"{sub_name}: {msg}")
+                else:
+                    # Show the message directly - e.g. Pydantic ValidationError
+                    # text - falling back to the bare status level.
+                    msg = sub.message or sub.status.value
+                    issues.append(f"{name}: {msg}")
+        if issues:
+            # Limit to 2 issues for brevity
+            return "; ".join(issues[:2])
+
+    # Fallback: extract detail after colon if present
+    message = component_data.message
+    if message and not message.startswith("Failed"):
+        if ": " in message:
+            return message.split(": ", 1)[1]
+        return message
+    return None
+
+
+def create_health_tag(
+    component_data: ComponentStatus, detail: str | None = None
+) -> StatusTag:
+    """
+    Create a health status tag for a component.
+
+    Uses exception-based design: "Quiet when Good, Loud when Bad"
+    - HEALTHY: Subtle dot + text
+    - INFO/WARNING: Dot + text with tinted background
+    - UNHEALTHY: Bold filled background (alarm state)
+
+    Args:
+        component_data: ComponentStatus containing status information
+        detail: Optional detail text (e.g., "2/3 online")
+
+    Returns:
+        StatusTag with escalating visual weight based on severity
+    """
+    return StatusTag(status=component_data.status, detail=detail)
+
+
+def create_header_row(
+    title: str,
+    subtitle: str,
+    component_data: ComponentStatus,
+    status_detail: str | None = None,
+    padding: ft.Padding | None = None,
+) -> ft.Container:
+    """
+    Create a header row with title/subtitle on left and health tag on right.
+
+    Args:
+        title: Card title text
+        subtitle: Card subtitle text
+        component_data: ComponentStatus for health tag
+        status_detail: Optional detail for status tag (e.g., "2/3 online")
+        padding: Optional padding override (default: bottom=16 for cards)
+
+    Returns:
+        Container with header layout
+    """
+    # Default padding for card headers; None for table rows
+    if padding is None:
+        padding = ft.padding.only(bottom=16)
+
+    return ft.Container(
+        content=ft.Row(
+            [
+                ft.Column(
+                    [
+                        H3Text(title),
+                        SecondaryText(subtitle),
+                    ],
+                    spacing=2,
+                ),
+                create_health_tag(component_data, detail=status_detail),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        ),
+        padding=padding,
+    )
+
+
+def create_responsive_3_section_layout(
+    left_content: ft.Control, middle_content: ft.Control, right_content: ft.Control
+) -> ft.Row:
+    """
+    Create responsive 3-section card layout prioritizing middle section.
+
+    Args:
+        left_content: Technology badge content
+        middle_content: Main metrics/data content (gets priority)
+        right_content: Details/performance content
+
+    Returns:
+        Row with responsive flex layout
+    """
+    return ft.Row(
+        [
+            # Left: Tech badge (fixed width)
+            ft.Container(
+                content=left_content,
+                width=200,  # Fixed width - honors TechBadge width
+            ),
+            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+            # Middle: Metrics (PRIORITY - gets most space and protection)
+            ft.Container(
+                content=middle_content,
+                expand=5,  # ~50% of space, PRIORITY SECTION
+                padding=ft.padding.all(16),
+                width=300,  # Minimum width to keep metrics functional
+            ),
+            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+            # Right: Details (flexible, shrinks most aggressively)
+            ft.Container(
+                content=right_content,
+                expand=3,  # ~30% of space, can shrink aggressively
+                padding=ft.padding.all(16),
+                width=150,  # Minimum width to prevent complete disappearance
+            ),
+        ]
+    )
+
+
+def create_stats_row(label: str, value: str, value_color: str | None = None) -> ft.Row:
+    """
+    Create a standardized statistics row with label and value.
+
+    Args:
+        label: The label text (e.g., "Active Workers")
+        value: The value text (e.g., "2")
+        value_color: Optional color for the value text
+
+    Returns:
+        Row with label and value properly aligned
+    """
+    value_control = LabelText(value)
+    if value_color:
+        value_control.color = value_color
+
+    return ft.Row(
+        [
+            SecondaryText(f"{label}:"),
+            value_control,
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+    )
+
+
+def create_health_status_indicator(
+    healthy_count: int,
+    total_count: int,
+    worst_status: ComponentStatusType | None = None,
+) -> ft.Container:
+    """
+    Create a circular health status indicator with color coding.
+
+    Args:
+        healthy_count: Number of healthy components
+        total_count: Total number of components
+        worst_status: The worst status among all components (determines color)
+
+    Returns:
+        Container with circular progress and component count
+    """
+    percentage = 0.0 if total_count == 0 else healthy_count / total_count * 100
+
+    # Color coding based on worst status present
+    if worst_status == ComponentStatusType.UNHEALTHY:
+        color = Theme.Colors.ERROR
+        status_text = "Critical"
+        status_color = Theme.Colors.ERROR
+    elif worst_status == ComponentStatusType.WARNING:
+        color = Theme.Colors.WARNING
+        status_text = "Warning"
+        status_color = Theme.Colors.WARNING
+    elif worst_status == ComponentStatusType.INFO:
+        color = Theme.Colors.INFO
+        status_text = "Info"
+        status_color = Theme.Colors.INFO
+    else:
+        # All healthy or no components
+        color = Theme.Colors.SUCCESS
+        status_text = "Healthy"
+        status_color = Theme.Colors.SUCCESS
+
+    return ft.Container(
+        content=ft.Row(
+            [
+                ft.ProgressRing(
+                    value=percentage / 100,
+                    color=color,
+                    bgcolor=ft.Colors.with_opacity(0.3, color),
+                    stroke_width=6,
+                    width=50,
+                    height=50,
+                ),
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Text(
+                                f"{healthy_count}/{total_count}",
+                                size=18,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.ON_SURFACE,
+                            ),
+                            ft.Text(
+                                status_text,
+                                size=12,
+                                color=status_color,
+                                weight=ft.FontWeight.W_500,
+                            ),
+                        ],
+                        spacing=2,
+                    ),
+                    margin=ft.margin.only(left=12),
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.START,
+        ),
+        padding=ft.padding.symmetric(horizontal=16, vertical=8),
+    )
+
+
+def create_progress_indicator(
+    label: str, value: float, details: str, color: str
+) -> ft.Container:
+    """
+    Create a progress indicator with label, progress bar, and details.
+
+    Args:
+        label: Label for the progress indicator
+        value: Progress value (0-100)
+        details: Additional details text
+        color: Color for the progress bar
+
+    Returns:
+        Container with the progress indicator
+    """
+    return ft.Container(
+        content=ft.Column(
+            [
+                ft.Text(
+                    label,
+                    size=12,
+                    weight=ft.FontWeight.W_600,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                ft.Container(
+                    content=ft.ProgressBar(
+                        value=value / 100.0,
+                        height=8,
+                        color=color,
+                        bgcolor=ft.Colors.with_opacity(
+                            0.3, ft.Colors.ON_SURFACE_VARIANT
+                        ),
+                        border_radius=4,
+                    ),
+                    margin=ft.margin.only(top=4, bottom=4),
+                ),
+                ft.Row(
+                    [
+                        ft.Text(
+                            f"{value:.1f}%",
+                            size=16,
+                            weight=ft.FontWeight.W_700,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                        ft.Text(
+                            details,
+                            size=14,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+            ],
+            spacing=2,
+        ),
+        padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        expand=True,
+    )
+
+
+def create_modal_for_component(
+    component_name: str, component_data: ComponentStatus, page: ft.Page
+) -> ft.Container | None:
+    """
+    Factory function to create appropriate popup dialog for a component.
+
+    Args:
+        component_name: Name of the component (e.g., "scheduler", "worker")
+        component_data: ComponentStatus containing component health and metrics
+        page: The Flet page instance
+
+    Returns:
+        Popup Container instance for the component, or None if component not supported
+    """
+    # Service modal imports (in-tree + plugins) — absolute paths so
+    # external plugins use the same shape as in-tree services.
+    from app.components.frontend.dashboard.modals.ai_modal import AIDetailDialog
+
+    # Component / always-present modal imports.
+    from app.components.frontend.dashboard.modals.backend_modal import (
+        BackendDetailDialog,
+    )
+    from app.components.frontend.dashboard.modals.database_modal import (
+        DatabaseDetailDialog,
+    )
+    from app.components.frontend.dashboard.modals.finance_modal import (
+        FinanceDetailDialog,
+    )
+    from app.components.frontend.dashboard.modals.frontend_modal import (
+        FrontendDetailDialog,
+    )
+    from app.components.frontend.dashboard.modals.ollama_modal import OllamaDetailDialog
+    from app.components.frontend.dashboard.modals.scheduler_modal import (
+        SchedulerDetailDialog,
+    )
+
+    modal_map: dict[str, type[ft.Container]] = {
+        "ai": AIDetailDialog,
+        "service_finance": FinanceDetailDialog,
+        "backend": BackendDetailDialog,
+        "frontend": FrontendDetailDialog,
+        "database": DatabaseDetailDialog,
+        "ollama": OllamaDetailDialog,
+        "scheduler": SchedulerDetailDialog,
+    }
+
+    modal_class = modal_map.get(component_name)
+    if modal_class:
+        return modal_class(component_data, page)
+
+    return None
+
+
+def _open_modal(
+    component_name: str, component_data: ComponentStatus, page: ft.Page
+) -> None:
+    """Open a component detail modal, using cache for subsequent opens."""
+    modal_cache: dict[str, ft.Container] = page.data.setdefault("_modal_cache", {})
+
+    # Data-heavy modals: always recreate so they load fresh data on each open.
+    # Backend's Performance tab pulls per-request metrics that change on every
+    # call; a cached dialog freezes those numbers at first-open time.
+    no_cache = {"backend"}
+    if component_name in no_cache:
+        old = modal_cache.pop(component_name, None)
+        if old and old in page.overlay:
+            page.overlay.remove(old)
+
+    popup = modal_cache.get(component_name)
+    if popup is None:
+        popup = create_modal_for_component(component_name, component_data, page)
+        if popup:
+            modal_cache[component_name] = popup
+            page.overlay.append(popup)
+        else:
+            # No factory branch matched — the click silently does nothing.
+            # That is almost always a wiring gap (a missing
+            # create_modal_for_component branch or modal_map entry), so leave a
+            # trail instead of a dead click. See issue #814.
+            from app.core.log import logger
+
+            logger.warning(
+                "No modal registered for component '%s'; card click is a no-op "
+                "(check create_modal_for_component and the modal_map).",
+                component_name,
+            )
+    else:
+        # Refresh cached modal with latest health check data
+        if hasattr(popup, "update_data"):
+            popup.update_data(component_data)
+    if popup:
+        popup.show()
+        page.update()
+
+
+def create_card_click_handler(
+    component_name: str, component_data: ComponentStatus
+) -> Callable[[ft.ControlEvent], None]:
+    """
+    Create a click handler for a card that opens its detail popup.
+
+    Args:
+        component_name: Name of the component
+        component_data: ComponentStatus containing component information
+
+    Returns:
+        Click event handler function
+    """
+
+    def handle_click(e: ft.ControlEvent) -> None:
+        """Handle card click by opening detail popup."""
+        if not e.page:
+            return
+        _open_modal(component_name, component_data, e.page)
+
+    return handle_click
+
+
+def format_next_run_time(iso_time_str: str) -> str:
+    """
+    Format ISO datetime string to human readable relative time.
+
+    Generic utility that can be used by any component card/modal to display
+    upcoming execution times in a user-friendly format.
+
+    Args:
+        iso_time_str: ISO 8601 formatted datetime string (with or without timezone)
+
+    Returns:
+        Human-readable relative time string ("in 2h", "in 3d", "Past due", etc.)
+        Returns "Unknown" if parsing fails or input is empty
+    """
+    from datetime import UTC, datetime
+
+    from app.core.log import logger
+
+    if not iso_time_str:
+        return "Unknown"
+
+    try:
+        # Handle both timezone-aware and naive datetimes
+        if iso_time_str.endswith("Z"):
+            next_run = datetime.fromisoformat(iso_time_str.replace("Z", "+00:00"))
+        elif "+" in iso_time_str or iso_time_str.endswith("00:00"):
+            next_run = datetime.fromisoformat(iso_time_str)
+        else:
+            # Assume UTC if no timezone info
+            next_run = datetime.fromisoformat(iso_time_str).replace(tzinfo=UTC)
+
+        now = datetime.now(UTC)
+
+        # Make sure both datetimes are timezone-aware
+        if next_run.tzinfo is None:
+            next_run = next_run.replace(tzinfo=UTC)
+
+        delta = next_run - now
+        total_seconds = delta.total_seconds()
+
+        if total_seconds < 0:
+            return "Past due"
+        elif total_seconds < 60:
+            return f"in {int(total_seconds)}s"
+        elif total_seconds < 3600:
+            minutes = int(total_seconds / 60)
+            return f"in {minutes}m"
+        elif total_seconds < 86400:
+            hours = total_seconds / 3600
+            if hours < 2:
+                return f"in {hours:.1f}h"
+            else:
+                return f"in {int(hours)}h"
+        else:
+            days = int(total_seconds / 86400)
+            return f"in {days}d"
+    except Exception as e:
+        logger.debug(f"Failed to format next run time '{iso_time_str}': {e}")
+        return "Unknown"
+
+
+async def trigger_dashboard_refresh(page: ft.Page) -> None:
+    """
+    Trigger an immediate dashboard refresh.
+
+    Call this after any action that changes component state
+    (e.g., saving config, toggling services).
+
+    Args:
+        page: The Flet page instance
+    """
+    refresh_fn = page.data.get("refresh_dashboard")
+    if refresh_fn:
+        await refresh_fn()
+
+
+def format_schedule_human_readable(schedule: str) -> str:
+    """
+    Convert schedule format to human readable description.
+
+    Generic utility that can be used by any component card/modal to display
+    scheduling patterns in a user-friendly format.
+
+    Args:
+        schedule: Schedule string (typically from APScheduler or similar)
+
+    Returns:
+        Human-readable schedule description ("Daily at 2:00 AM UTC", etc.)
+        Returns original schedule string if no pattern matches
+        Returns "Unknown schedule" for empty/invalid input
+    """
+    import re
+
+    from app.core.log import logger
+
+    if not schedule or "Unknown" in schedule:
+        return "Unknown schedule"
+
+    # Handle common cron patterns
+    if "hour=2, minute=0, second=0" in schedule:
+        return "Daily at 2:00 AM UTC"
+    elif "hour=" in schedule and "minute=" in schedule:
+        # Extract hour and minute from the schedule string
+        try:
+            hour_match = re.search(r"hour=([0-9]+)", schedule)
+            minute_match = re.search(r"minute=([0-9]+)", schedule)
+            if hour_match and minute_match:
+                hour = int(hour_match.group(1))
+                minute = int(minute_match.group(1))
+                time_str = f"{hour:02d}:{minute:02d}"
+                return f"Daily at {time_str} UTC"
+        except Exception as e:
+            logger.debug(f"Failed to parse schedule pattern '{schedule}': {e}")
+
+    # Fallback to original schedule
+    return schedule

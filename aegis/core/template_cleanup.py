@@ -193,6 +193,16 @@ class SyncResult:
     """Answer keys added to .copier-answers.yml because the target template
     version introduced them (e.g. ``postgres_provider`` in 0.9.0)."""
 
+    removed: list[str] = field(default_factory=list)
+    """Files deleted because the target template no longer ships them and the
+    project had not customized them."""
+
+    stale: list[str] = field(default_factory=list)
+    """Files the target template no longer ships that were customized, so they
+    were KEPT. They are dead code the project still carries — and when the
+    replacement is a package of the same name, the leftover module is shadowed,
+    so those customizations have silently stopped running."""
+
 
 def _reconcile_new_answer_keys(project_path: Path, new_rendered_dir: Path) -> list[str]:
     """Backfill answer keys the target template records but the project lacks.
@@ -539,6 +549,12 @@ def sync_template_changes(
             except OSError as e:
                 verbose_print(f"   Warning: Could not sync {relative}: {e}")
 
+        # Second pass: files the target template DROPPED. The loop above walks
+        # the new render, so a deleted file is invisible to it and survives
+        # forever - a module renamed to a package of the same name leaves the
+        # old file shadowed but present, which is valid code nobody runs.
+        _remove_dropped_files(project_path, old_rendered_dir, new_rendered_dir, result)
+
         # Backfill answer keys the target version added (the answers file
         # itself is skipped by the content sync above). Must run inside the
         # temp-dir block while the rendered answers file still exists.
@@ -549,6 +565,78 @@ def sync_template_changes(
             verbose_print(f"   Backfilled new answer: {key}")
 
     return result
+
+
+def _remove_dropped_files(
+    project_path: Path,
+    old_rendered_dir: Path | None,
+    new_rendered_dir: Path,
+    result: SyncResult,
+) -> None:
+    """Delete project files the target template no longer ships.
+
+    Walks the OLD render - the mirror of the sync loop - and deletes anything
+    absent from the new one. Three guards, each load-bearing:
+
+    * **No old render, no deletions.** Without a base there is no way to tell
+      "the template dropped this" from "the user added this", and guessing
+      wrong destroys work. The merge path degrades to overwrite semantics when
+      the old render fails; this path has to stop entirely.
+    * **Both renders use the same answers.** A file missing because a component
+      is switched off is missing from BOTH, so component footprints are never
+      deletion candidates - only genuine template removals are.
+    * **Content must still match the old render.** The same customization test
+      the 3-way merge applies. An edited file is kept and reported instead,
+      because a rename means its edits have stopped running and the user needs
+      to hear that, not lose the evidence.
+    """
+    if old_rendered_dir is None:
+        return
+
+    removed_paths: list[Path] = []
+    for old_file in sorted(old_rendered_dir.rglob("*")):
+        if old_file.is_dir():
+            continue
+        relative = old_file.relative_to(old_rendered_dir)
+        if _should_skip_sync(str(relative)):
+            continue
+        if (new_rendered_dir / relative).exists():
+            continue
+        project_file = project_path / relative
+        if not project_file.exists():
+            continue
+        try:
+            if project_file.read_bytes() != old_file.read_bytes():
+                result.stale.append(str(relative))
+                verbose_print(
+                    f"   Kept customized file no longer in template: {relative}"
+                )
+                continue
+            project_file.unlink()
+        except OSError as e:
+            verbose_print(f"   Warning: Could not remove {relative}: {e}")
+            continue
+        result.removed.append(str(relative))
+        removed_paths.append(project_file)
+        verbose_print(f"   Removed file no longer in template: {relative}")
+
+    # Prune directories the deletions emptied, deepest first so a nested tree
+    # collapses in one pass.
+    for parent in sorted(
+        {p.parent for p in removed_paths}, key=lambda p: len(p.parts), reverse=True
+    ):
+        current = parent
+        while current != project_path and current.is_relative_to(project_path):
+            try:
+                if not current.exists() or any(current.iterdir()):
+                    break
+                current.rmdir()
+                verbose_print(
+                    f"   Removed empty directory: {current.relative_to(project_path)}"
+                )
+            except OSError:
+                break
+            current = current.parent
 
 
 def _warn_raw_merge_fallback(relative: Path) -> None:

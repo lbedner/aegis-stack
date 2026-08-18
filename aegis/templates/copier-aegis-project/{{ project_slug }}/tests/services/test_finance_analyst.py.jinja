@@ -12,15 +12,15 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.fetchers import FetchContext, registered_fetcher_names, run_fetcher
 from app.services.ai.models.agents import Agent, MemoryModule
-from app.services.finance import analyst, demo_seed
-from app.services.finance.categorize import generate_insights
 from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.domains.detection import analyst, generate_insights
 from app.services.finance.models import (
     FinanceAnalystSnapshot,
     FinanceCategory,
     FinanceInsight,
 )
+from app.services.finance.seeds import demo_seed
+from app.services.finance.service import FinanceService
 
 OWNER = 1
 
@@ -1300,7 +1300,7 @@ class TestContextHygiene:
             classification="asset",
             owner_user_id=OWNER,
         )
-        from app.services.finance.categorize.insights import create_insight_if_new
+        from app.services.finance.domains.detection.insights import create_insight_if_new
 
         await create_insight_if_new(
             async_db_session,

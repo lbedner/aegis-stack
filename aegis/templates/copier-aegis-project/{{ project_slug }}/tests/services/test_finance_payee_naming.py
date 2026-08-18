@@ -12,7 +12,7 @@ prefer it when it is already a human-written name rather than a bank's
 all-caps blob.
 """
 
-from app.services.finance.importers.base import suggested_payee_name
+from app.services.finance.utils import suggested_payee_name
 
 
 class TestSuggestedPayeeName:

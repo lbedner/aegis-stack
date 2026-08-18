@@ -1,0 +1,374 @@
+{% if include_ai and ai_backend != "memory" %}"""Snapshot sections for the month's activity: cashflow, spending, findings, plans."""
+
+from datetime import date
+from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.finance.domains.detection.insights import format_usd
+from app.services.finance.domains.planning.goals import goal_metadata
+import statistics
+from datetime import timedelta
+from app.services.finance.domains.detection.insights import (
+    month_key,
+    monthly_category_spend,
+    pace_day,
+)
+from app.services.finance.domains.ledger import queries as ledger_queries
+from app.services.finance.domains.planning.envelopes import envelope_metadata
+from app.services.finance.domains.planning.goals import (
+    goal_eta,
+    goal_monthly_need,
+    goal_progress,
+)
+from app.services.finance.domains.detection.analyst.shared import _NOTE_INSIGHT_TYPES
+from app.services.finance.domains.detection.analyst.sections import (
+    ReportContext,
+    _PROJECTION_OWNED_TYPES,
+    _amount,
+    _signed,
+    context_label,
+)
+
+
+
+
+
+
+
+
+_CASHFLOW_MONTHS = 6
+
+
+
+
+
+
+
+
+_RECENT_TRANSACTIONS = 10
+
+
+
+
+
+
+
+
+_TOP_CATEGORIES = 6
+
+
+
+
+
+
+
+
+
+
+def _cashflow_section(ctx: ReportContext) -> str | None:
+    """Income against spend per month, with the net pre-signed."""
+    months = ctx.cashflow
+    if not any(row.income or row.expense for row in months):
+        return None
+    current = month_key(ctx.today)
+    lines = ["CASHFLOW BY MONTH"]
+    for row in months:
+        suffix = " (month to date)" if row.month == current else ""
+        lines.append(
+            f"- {row.month}: income {format_usd(row.income)}, "
+            f"spend {format_usd(row.expense)}, net {_signed(row.net)}{suffix}"
+        )
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+def _transactions_section(ctx: ReportContext) -> str | None:
+    """The last few ledger entries, newest first.
+
+    Deliberately shallow: enough for the note to anchor "that large charge"
+    to a name and a date, not a register dump.
+    """
+    txns, total = ctx.recent_transactions, ctx.transactions_total
+    if not txns:
+        return None
+    names = {account.id: account.name for account in ctx.accounts}
+    lines = [f"RECENT TRANSACTIONS (latest {len(txns)} of {total})"]
+    for txn in txns:
+        account_name = names.get(txn.account_id, "unknown account")
+        lines.append(
+            f"- {txn.date_}: {txn.name or 'unnamed'} {_signed(txn.amount)} "
+            f"({account_name})"
+        )
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+async def _ranked_spending(
+    db: AsyncSession, *, owner_user_id: int | None, today: date, limit: int
+) -> list[tuple[str, int, int | None]]:
+    """Top categories this month as ``(name, spent, typical)``, largest first.
+
+    The same buckets the overspend rule uses, so a category the rule did not
+    flag still shows the reader why it did not - including the pacing, or
+    the two surfaces would disagree about what "typical" means.
+
+    ``typical`` is the prior months measured TO THE SAME DAY. Against whole
+    months, nine days of a thirty-day month makes every category look cheap,
+    and the note duly reported spending as "below typical" on the 9th - true
+    of almost everything on almost every 9th, and therefore worthless.
+    """
+    by_category = await monthly_category_spend(
+        db, owner_user_id=owner_user_id, today=today, through_day=pace_day(today)
+    )
+    current = month_key(today)
+
+    ranked: list[tuple[int, int, int | None]] = []
+    for category_id, months in by_category.items():
+        this_month = months.get(current, 0)
+        if this_month <= 0:
+            continue
+        prior = [spend for key, spend in months.items() if key != current]
+        typical = int(statistics.median(prior)) if prior else None
+        ranked.append((this_month, category_id, typical))
+    ranked.sort(reverse=True)
+    ranked = ranked[:limit]
+
+    names = await _category_names(db, [category_id for _, category_id, _ in ranked])
+    return [
+        (names.get(category_id, f"category {category_id}"), this_month, typical)
+        for this_month, category_id, typical in ranked
+    ]
+
+
+
+
+
+
+
+
+
+
+def _spending_section(ctx: ReportContext) -> str | None:
+    """This month's category spend beside its own recent norm."""
+    ranked = ctx.ranked_spending[:_TOP_CATEGORIES]
+    if not ranked:
+        return None
+    today = ctx.today
+    through = pace_day(today)
+    header = f"SPENDING THIS MONTH ({month_key(today)})"
+    if through is not None:
+        header += (
+            f" - month to date, compared with the same first {through} days "
+            "of earlier months"
+        )
+    lines = [header]
+    for name, this_month, typical in ranked:
+        if typical is None:
+            lines.append(f"- {name}: {format_usd(this_month)} (no earlier months)")
+        else:
+            lines.append(
+                f"- {name}: {format_usd(this_month)}, typical {format_usd(typical)}"
+            )
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+async def _category_names(db: AsyncSession, ids: list[int]) -> dict[int, str]:
+    """Names for the ranked categories in one query."""
+    return await ledger_queries.category_names_by_id(db, ids)
+
+
+
+
+
+
+
+
+
+
+def _anomalies_section(ctx: ReportContext) -> str:
+    """The deterministic findings. The one section that drives the note."""
+    insights = ctx.new_insights
+    flagged = [
+        i
+        for i in insights
+        if i.insight_type not in _NOTE_INSIGHT_TYPES
+        and i.insight_type not in _PROJECTION_OWNED_TYPES
+    ]
+    if not flagged:
+        return "OPEN ANOMALIES (0)\n- none; the checks found nothing this run"
+    flagged.sort(key=lambda i: _SEVERITY_ORDER.get(i.severity, 3))
+    shown = flagged[:MAX_ANOMALY_LINES]
+    lines = [f"OPEN ANOMALIES ({len(flagged)})"]
+    for insight in shown:
+        body = f" {insight.body}" if insight.body else ""
+        lines.append(f"- [{insight.severity}] {context_label(insight.title)}.{body}")
+    remainder = len(flagged) - len(shown)
+    if remainder:
+        lines.append(
+            f"- plus {remainder} more open findings not listed here "
+            "(the most severe are above)"
+        )
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+def _envelopes_section(ctx: ReportContext) -> str | None:
+    """Envelopes: name, balance, standing credit - an overdrawn one is
+    called out (borrowed against next month). Absent when none exist."""
+    envelopes = ctx.envelope_accounts
+    if not envelopes:
+        return None
+    lines = ["ENVELOPES"]
+    for account in envelopes:
+        meta = envelope_metadata(account.metadata_)
+        if meta is None:
+            continue
+        balance = account.current_balance or 0
+        line = f"- {account.name}: {_amount(balance)}"
+        if meta.monthly_credit:
+            line += f", credits {_amount(meta.monthly_credit)}/mo"
+            line += " automatically" if meta.auto_credit else " by hand"
+        if balance < 0:
+            line += " (overdrawn - borrowed against next month)"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+def _goals_section(ctx: ReportContext) -> str | None:
+    """Savings goals: progress, this month's ask, and a PRECOMPUTED landing
+    date - "at $0.00/mo: never" spelled out, so the model narrates the
+    verdict instead of attempting the arithmetic. Absent when no goals
+    exist: an empty section is junk context."""
+    goal_accounts = ctx.goal_accounts
+    today = ctx.today
+    if not goal_accounts:
+        return None
+    lines = ["GOALS"]
+    for account in goal_accounts:
+        meta = goal_metadata(account.metadata_)
+        if meta is None:
+            continue
+        balance = account.current_balance or 0
+        pct = round(goal_progress(balance=balance, target=meta.target_amount) * 100)
+        base = (
+            f"- {account.name}: {_amount(balance)} of "
+            f"{_amount(meta.target_amount)} ({pct}%)"
+        )
+        if balance >= meta.target_amount or meta.status == "reached":
+            lines.append(f"{base} (reached)")
+            continue
+        if meta.status == "paused":
+            lines.append(f"{base} (paused)")
+            continue
+        rate = ctx.goal_rates.get(account.id)
+        eta = goal_eta(
+            balance=balance,
+            target=meta.target_amount,
+            monthly_rate=rate,
+            today=today,
+        )
+        need = goal_monthly_need(meta, balance=balance, today=today)
+        if eta is None:
+            lines.append(f"{base}, at {_amount(rate or 0)}/mo: never")
+        else:
+            lines.append(f"{base}, asking {_amount(need)}/mo, lands {eta.isoformat()}")
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+def _upcoming_section(ctx: ReportContext) -> str | None:
+    streams = ctx.streams
+    today = ctx.today
+    horizon = today + timedelta(days=_UPCOMING_DAYS)
+    upcoming = [
+        stream
+        for stream in streams
+        if stream.next_expected_date is not None
+        and today <= stream.next_expected_date <= horizon
+    ]
+    if not upcoming:
+        return None
+    lines = [f"EXPECTED IN THE NEXT {_UPCOMING_DAYS} DAYS"]
+    for stream in upcoming:
+        amount = stream.expected_amount or stream.average_amount or 0
+        direction = 1 if stream.direction == "inflow" else -1
+        lines.append(
+            f"- {stream.name}: {_signed(direction * abs(amount))} "
+            f"on {stream.next_expected_date}"
+        )
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+_UPCOMING_DAYS = 14
+
+
+
+
+
+
+
+
+# A historical import can leave hundreds of open findings at once. Listing
+# them all outgrows the model's context window, and Ollama truncates from
+# the FRONT - discarding the system prompt first, after which the model has
+# no idea it is a finance analyst. Show the most severe few; summarize the
+# rest as a count so the note can still say "and much more needs review".
+MAX_ANOMALY_LINES = 20
+
+
+
+
+
+
+
+
+_SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2}
+{% endif %}

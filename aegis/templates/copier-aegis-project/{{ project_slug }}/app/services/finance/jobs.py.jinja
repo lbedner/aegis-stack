@@ -11,14 +11,14 @@ from datetime import date
 from sqlmodel import select
 
 from app.core.db import get_async_session
-from app.services.finance import networth_service
-from app.services.finance.finance_service import FinanceService
-from app.services.finance.categorize import (
+from app.services.finance.domains.detection import (
     detect_recurring,
     generate_insights,
     promote_curated_streams,
 )
+from app.services.finance.domains.ledger import networth
 from app.services.finance.models import FinanceAccount, FinanceConnection
+from app.services.finance.service import FinanceService
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ async def finance_recompute_snapshots_job() -> None:
                 await detect_recurring(session, owner_user_id=owner_user_id)
                 await promote_curated_streams(session, owner_user_id=owner_user_id)
                 await generate_insights(session, owner_user_id=owner_user_id)
-                days_written += await networth_service.recompute_snapshots(
+                days_written += await networth.recompute_snapshots(
                     session, owner_user_id=owner_user_id
                 )
             await session.commit()
@@ -120,7 +120,7 @@ async def finance_analyst_note_job() -> None:
     their note. ``run_analyst_note`` already absorbs its own errors, so this
     only has to guard the session.
     """
-    from app.services.finance.analyst import run_analyst_note
+    from app.services.finance.domains.detection.analyst import run_analyst_note
 
     try:
         async with get_async_session() as session:
@@ -155,7 +155,7 @@ async def finance_sync_connections_job() -> None:
     are internally throttled to one pull per account per day (their polling
     budget), so a more frequent schedule stays within it.
     """
-    from app.services.finance import connection_service
+    from app.services.finance.adapters.providers import connections
 
     try:
         async with get_async_session() as session:
@@ -171,7 +171,7 @@ async def finance_sync_connections_job() -> None:
             ).all()
             added = 0
             for owner_user_id in owners:
-                results = await connection_service.sync_owner_connections(
+                results = await connections.sync_owner_connections(
                     session, owner_user_id=owner_user_id
                 )
                 added += sum(r.added for r in results)

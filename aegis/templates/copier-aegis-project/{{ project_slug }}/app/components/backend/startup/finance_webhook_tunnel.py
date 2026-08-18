@@ -59,8 +59,8 @@ async def discover_tunnel_hostname(metrics_url: str) -> str | None:
 
 
 async def _discover_and_reconcile(metrics_url: str) -> None:
-    from app.services.finance import connection_service
-    from app.services.finance.providers.plaid import set_runtime_webhook_url
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.plaid import set_runtime_webhook_url
 
     hostname: str | None = None
     for _ in range(_DISCOVERY_ATTEMPTS):
@@ -84,7 +84,7 @@ async def _discover_and_reconcile(metrics_url: str) -> None:
 
     try:
         async with get_async_session() as session:
-            updated = await connection_service.refresh_webhook_urls(
+            updated = await connections.refresh_webhook_urls(
                 session, webhook_url=webhook_url
             )
             await session.commit()

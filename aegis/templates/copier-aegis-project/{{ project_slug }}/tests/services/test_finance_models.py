@@ -241,7 +241,7 @@ class TestFinanceConnection:
     async def test_partial_unique_provider_item_and_soft_delete(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.models import _utcnow
+        from app.services.finance.models.base import _utcnow
 
         first = FinanceConnection(
             provider="plaid",
@@ -632,7 +632,8 @@ class TestFinanceTransaction:
     async def test_partial_unique_external_and_soft_delete(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.models import FinanceTransaction, _utcnow
+        from app.services.finance.models import FinanceTransaction
+        from app.services.finance.models.base import _utcnow
 
         acct = await _seed_account(async_db_session)
         first = await _seed_transaction(
@@ -1111,7 +1112,8 @@ class TestFinanceMerchant:
     async def test_user_partial_unique_and_soft_delete(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.models import FinanceMerchant, _utcnow
+        from app.services.finance.models import FinanceMerchant
+        from app.services.finance.models.base import _utcnow
 
         first = FinanceMerchant(
             owner_user_id=1, name="Netflix", normalized_name="netflix", source="user"
@@ -1172,7 +1174,8 @@ class TestFinanceMerchant:
 class TestFinanceTag:
     @pytest.mark.asyncio
     async def test_round_trip_and_unique(self, async_db_session: AsyncSession) -> None:
-        from app.services.finance.models import FinanceTag, _utcnow
+        from app.services.finance.models import FinanceTag
+        from app.services.finance.models.base import _utcnow
 
         async_db_session.add(
             FinanceTag(owner_user_id=1, name="Vacation", normalized_name="vacation")

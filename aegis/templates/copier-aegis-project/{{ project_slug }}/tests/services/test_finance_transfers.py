@@ -11,18 +11,11 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize import detect_transfers
-from app.services.finance.finance_service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from app.services.finance.domains.detection import detect_transfers
+from app.services.finance.service import FinanceService
 from app.services.finance.models import FinanceCategory, FinanceTransfer
 
-
-async def _account(svc, name, account_type, classification):
-    return await svc.create_manual_account(
-        name=name,
-        account_type=account_type,
-        classification=classification,
-        owner_user_id=1,
-    )
 
 
 class TestTransferDetection:

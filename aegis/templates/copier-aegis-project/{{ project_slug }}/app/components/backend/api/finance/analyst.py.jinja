@@ -1,0 +1,100 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""The analyst agent endpoints: run a note, fetch the existing one.
+
+One sub-router of the finance API (see ``router.py``, the aggregator).
+"""
+
+from datetime import date
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+)
+from fastapi.responses import JSONResponse
+from app.core.db import get_async_session as _job_session
+from app.services.finance.deps import (
+    get_finance_service,
+    get_owner_user_id,
+)
+from app.services.finance.schemas import InsightResponse
+from app.services.finance.service import FinanceService
+from app.services.system.jobs import (
+    JobHandle,
+    get_job_runner,
+)
+
+router = APIRouter()
+
+
+_ANALYST_UNAVAILABLE = (
+    "The analyst could not write a note. Check that the model "
+    "provider is reachable and that the agent is registered."
+)
+
+
+@router.post("/analyst/run", response_model=None)
+async def run_analyst(
+    force: bool = Query(default=False),
+    background: bool = False,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> InsightResponse | JSONResponse:
+    """Write today's analyst note now rather than waiting for the nightly job.
+
+    Without ``force`` an existing note for today comes back untouched and no
+    model is called. With it, today's note is dropped and written again. The
+    request waits on the model: a local one can take tens of seconds, which is
+    the price of the data never leaving the machine.
+
+    With ``background=true`` the model wait happens in an in-process job and
+    the response is ``202 {"job_id": ...}``; follow
+    ``GET /api/v1/jobs/{id}/events``. The terminal event's ``result`` is the
+    note in the synchronous response's shape.
+    """
+    from app.services.finance.domains.detection.analyst import (
+        existing_note,
+        run_analyst_note,
+    )
+
+    today = date.today()
+    if force:
+        current = await existing_note(
+            service.db, owner_user_id=owner_user_id, today=today
+        )
+        if current is not None:
+            await service.db.delete(current)
+            await service.db.flush()
+
+    if background:
+        # The job writes on its own session; a force-delete still sitting
+        # uncommitted on the request session would be invisible to it and
+        # the "already written today" check would resurrect the old note.
+        if force:
+            await service.db.commit()
+
+        async def work(handle: JobHandle) -> dict:
+            handle.set_label("Writing today's note...")
+            async with _job_session() as session:
+                note = await run_analyst_note(
+                    session, owner_user_id=owner_user_id, today=today
+                )
+                await session.commit()
+            if note is None:
+                raise RuntimeError(_ANALYST_UNAVAILABLE)
+            return InsightResponse.from_row(note).model_dump(mode="json")
+
+        job_id = get_job_runner().start(
+            "finance-analyst-note", work, label="Writing today's note..."
+        )
+        return JSONResponse({"job_id": job_id}, status_code=status.HTTP_202_ACCEPTED)
+
+    note = await run_analyst_note(service.db, owner_user_id=owner_user_id, today=today)
+    if note is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_ANALYST_UNAVAILABLE,
+        )
+    return InsightResponse.from_row(note)
+{% endif %}

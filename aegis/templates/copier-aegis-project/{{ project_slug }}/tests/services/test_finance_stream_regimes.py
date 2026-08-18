@@ -19,28 +19,14 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize import declare_recurring, detect_recurring
-from app.services.finance.finance_service import FinanceService
+from tests.services._finance_factories import seed_account as _account, seed_spend_series as _spend
+from app.services.finance.domains.detection import declare_recurring, detect_recurring
+from app.services.finance.service import FinanceService
 from app.services.finance.models import FinanceRecurringStream
 
 TODAY = date(2026, 8, 3)
 
 
-async def _account(svc: FinanceService, name: str = "Checking"):
-    return await svc.create_manual_account(
-        name=name, account_type="checking",
-        classification="asset", owner_user_id=1,
-    )
-
-
-async def _spend(svc, account_id, days, cents=-2_500, name="ACME"):
-    return [
-        await svc.create_transaction(
-            account_id=account_id, amount=cents, txn_date=day,
-            owner_user_id=1, name=name,
-        )
-        for day in days
-    ]
 
 
 async def _rows(db: AsyncSession) -> list[FinanceRecurringStream]:
@@ -249,7 +235,7 @@ class TestOnlyTheRecordCounts:
     async def test_a_proposal_costs_nothing_in_the_rollup(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import commitment_rollup
+        from app.services.finance.domains.detection import commitment_rollup
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -263,7 +249,7 @@ class TestOnlyTheRecordCounts:
     async def test_confirming_makes_it_count(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import commitment_rollup
+        from app.services.finance.domains.detection import commitment_rollup
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)

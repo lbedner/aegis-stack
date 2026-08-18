@@ -275,10 +275,6 @@ class AegisTheme:
             ),
         )
 
-
-
-
-
         # Instant transitions
         theme.page_transitions = ft.PageTransitionsTheme(
             android=ft.PageTransitionTheme.NONE,
@@ -389,8 +385,6 @@ class AegisTheme:
                 color=LightColorPalette.TEXT_PRIMARY_DEFAULT,
             ),
         )
-
-
 
         # Instant transitions
         theme.page_transitions = ft.PageTransitionsTheme(

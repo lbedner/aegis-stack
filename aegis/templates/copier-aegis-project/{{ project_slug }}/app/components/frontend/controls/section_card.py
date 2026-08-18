@@ -75,9 +75,7 @@ class SectionCard(ft.Container):
         )
         body_container = ft.Container(content=body, padding=body_pad, expand=expand)
 
-        self.content = ft.Column(
-            [header, body_container], spacing=0, expand=expand
-        )
+        self.content = ft.Column([header, body_container], spacing=0, expand=expand)
         self.bgcolor = ft.Colors.SURFACE
         self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.border_radius = Theme.Components.CARD_RADIUS

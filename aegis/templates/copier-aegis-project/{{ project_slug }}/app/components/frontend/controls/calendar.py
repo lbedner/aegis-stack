@@ -130,7 +130,9 @@ class CalendarPanel(ft.Container):
             self.update()
 
     def _render(self) -> None:
-        self._heading.value = f"{calendar.month_name[self._cursor.month]} {self._cursor.year}"
+        self._heading.value = (
+            f"{calendar.month_name[self._cursor.month]} {self._cursor.year}"
+        )
         self._grid.controls = [
             ft.Row(
                 [self._day(day) for day in week],

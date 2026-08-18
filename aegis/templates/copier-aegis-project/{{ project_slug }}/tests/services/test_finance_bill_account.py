@@ -17,29 +17,34 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_stream
 
 
 async def _accounts(svc: FinanceService):
     first = await svc.create_manual_account(
-        name="Checking", account_type="checking",
-        classification="asset", owner_user_id=1,
+        name="Checking",
+        account_type="checking",
+        classification="asset",
+        owner_user_id=1,
     )
     second = await svc.create_manual_account(
-        name="Savings", account_type="savings",
-        classification="asset", owner_user_id=1,
+        name="Savings",
+        account_type="savings",
+        classification="asset",
+        owner_user_id=1,
     )
     return first, second
 
 
 async def _bill(svc: FinanceService, name: str, account_id: int | None):
-    return await svc.create_recurring_stream(
+    return await seed_stream(
+        svc,
         name=name,
         direction="inflow",
         frequency="semi_monthly",
         expected_amount=500_000,
         next_expected_date=date(2026, 8, 15),
-        owner_user_id=1,
         account_id=account_id,
     )
 
@@ -89,9 +94,7 @@ class TestSetBillAccount:
         await _bill(svc, "Betr Health", savings.id)
 
         with pytest.raises(ValueError):
-            await svc.update_recurring(
-                here.id, owner_user_id=1, account_id=savings.id
-            )
+            await svc.update_recurring(here.id, owner_user_id=1, account_id=savings.id)
 
     @pytest.mark.asyncio
     async def test_leaving_the_account_out_does_not_clear_it(
@@ -158,6 +161,4 @@ class TestRetiredGhostsDoNotBlockAMove:
         live = await _bill(svc, "Eleanor", checking.id)
 
         with pytest.raises(ValueError):
-            await svc.update_recurring(
-                live.id, owner_user_id=1, account_id=savings.id
-            )
+            await svc.update_recurring(live.id, owner_user_id=1, account_id=savings.id)

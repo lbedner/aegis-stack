@@ -17,39 +17,15 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize import detect_recurring
-from app.services.finance.categorize.recurring import _frequency_for, _rhythm_ratio
-from app.services.finance.finance_service import FinanceService
+from tests.services._finance_factories import seed_account as _account, seed_spend_series as _spend, live_streams as _live_streams
+from app.services.finance.domains.detection import detect_recurring
+from app.services.finance.domains.detection.recurring.cadence import (
+    _frequency_for,
+    _rhythm_ratio,
+)
 from app.services.finance.models import FinanceRecurringStream
+from app.services.finance.service import FinanceService
 
-
-async def _live_streams(db: AsyncSession) -> list[FinanceRecurringStream]:
-    return list(
-        (
-            await db.exec(
-                select(FinanceRecurringStream).where(
-                    FinanceRecurringStream.deleted_at.is_(None)
-                )
-            )
-        ).all()
-    )
-
-
-async def _account(svc: FinanceService):
-    return await svc.create_manual_account(
-        name="Checking", account_type="checking",
-        classification="asset", owner_user_id=1,
-    )
-
-
-async def _spend(svc, account_id, days: list[date], cents: int = -2_500, name="ACME"):
-    return [
-        await svc.create_transaction(
-            account_id=account_id, amount=cents, txn_date=day,
-            owner_user_id=1, name=name,
-        )
-        for day in days
-    ]
 
 
 class TestCadenceTolerance:
@@ -106,8 +82,12 @@ class TestDetectionEndToEnd:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         start = date(2019, 8, 26)
-        days = [start, start + timedelta(days=2044),
-                start + timedelta(days=2474), start + timedelta(days=2491)]
+        days = [
+            start,
+            start + timedelta(days=2044),
+            start + timedelta(days=2474),
+            start + timedelta(days=2491),
+        ]
         await _spend(svc, account.id, days, name="STEWART'S SHOPS")
 
         result = await detect_recurring(async_db_session, owner_user_id=1)
@@ -121,7 +101,8 @@ class TestDetectionEndToEnd:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
-            svc, account.id,
+            svc,
+            account.id,
             [date(2023, 3, 1), date(2024, 3, 2), date(2025, 3, 1)],
             name="ANNUAL DUES",
         )
@@ -224,7 +205,8 @@ class TestDeadStreams:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
-            svc, account.id,
+            svc,
+            account.id,
             [date(2019, m, 2) for m in (7, 8, 9, 10, 11)],
             name="CAPITAL ONE AUTO CARPAY",
         )
@@ -260,7 +242,8 @@ class TestDeadStreams:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
-            svc, account.id,
+            svc,
+            account.id,
             [date(2023, 9, 1), date(2024, 9, 1), date(2025, 9, 1)],
             name="ANNUAL DUES",
         )
@@ -295,7 +278,9 @@ class TestChurnSelfHeals:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
-            svc, account.id, [date(2019, m, 2) for m in (7, 8, 9, 10, 11)],
+            svc,
+            account.id,
+            [date(2019, m, 2) for m in (7, 8, 9, 10, 11)],
             name="CAPITAL ONE AUTO CARPAY",
         )
         # A pass reading the old rows as if current (old code, a backfill)
@@ -308,9 +293,7 @@ class TestChurnSelfHeals:
             async_db_session, owner_user_id=1, today=date(2026, 8, 3)
         )
 
-        rows = (
-            await async_db_session.exec(select(FinanceRecurringStream))
-        ).all()
+        rows = (await async_db_session.exec(select(FinanceRecurringStream))).all()
         assert rows == []
 
 
@@ -329,8 +312,11 @@ class TestTrivialAmounts:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
-            svc, account.id, [date(2026, m, 28) for m in range(1, 7)],
-            cents=-31, name="Deposit Dividend 0.020%",
+            svc,
+            account.id,
+            [date(2026, m, 28) for m in range(1, 7)],
+            cents=-31,
+            name="Deposit Dividend 0.020%",
         )
 
         result = await detect_recurring(
@@ -348,8 +334,11 @@ class TestTrivialAmounts:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
-            svc, account.id, [date(2026, m, 9) for m in range(1, 7)],
-            cents=-541, name="CVS EXTRACAREPLUS",
+            svc,
+            account.id,
+            [date(2026, m, 9) for m in range(1, 7)],
+            cents=-541,
+            name="CVS EXTRACAREPLUS",
         )
 
         result = await detect_recurring(
@@ -378,12 +367,17 @@ class TestInflowsOnLiabilityAccounts:
     ) -> None:
         svc = FinanceService(async_db_session)
         card = await svc.create_manual_account(
-            name="AMEX", account_type="credit_card",
-            classification="liability", owner_user_id=1,
+            name="AMEX",
+            account_type="credit_card",
+            classification="liability",
+            owner_user_id=1,
         )
         await _spend(
-            svc, card.id, [date(2026, m, 11) for m in range(1, 7)],
-            cents=157_527, name="AUTOPAY PAYMENT - THANK YOU",
+            svc,
+            card.id,
+            [date(2026, m, 11) for m in range(1, 7)],
+            cents=157_527,
+            name="AUTOPAY PAYMENT - THANK YOU",
         )
 
         result = await detect_recurring(
@@ -398,12 +392,17 @@ class TestInflowsOnLiabilityAccounts:
     ) -> None:
         svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
-            name="Checking", account_type="checking",
-            classification="asset", owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=1,
         )
         await _spend(
-            svc, checking.id, [date(2026, m, 8) for m in range(1, 7)],
-            cents=203_100, name="SSA TREAS 310 SOC SEC",
+            svc,
+            checking.id,
+            [date(2026, m, 8) for m in range(1, 7)],
+            cents=203_100,
+            name="SSA TREAS 310 SOC SEC",
         )
 
         result = await detect_recurring(
@@ -420,12 +419,17 @@ class TestInflowsOnLiabilityAccounts:
         charged to the card is a normal bill."""
         svc = FinanceService(async_db_session)
         card = await svc.create_manual_account(
-            name="AMEX", account_type="credit_card",
-            classification="liability", owner_user_id=1,
+            name="AMEX",
+            account_type="credit_card",
+            classification="liability",
+            owner_user_id=1,
         )
         await _spend(
-            svc, card.id, [date(2026, m, 9) for m in range(1, 7)],
-            cents=-1_599, name="NETFLIX.COM",
+            svc,
+            card.id,
+            [date(2026, m, 9) for m in range(1, 7)],
+            cents=-1_599,
+            name="NETFLIX.COM",
         )
 
         result = await detect_recurring(
@@ -438,7 +442,7 @@ class TestInflowsOnLiabilityAccounts:
 class TestTwoMonthAndSixMonthRhythms:
     """Cadences the forecast could always step but detection could not name.
 
-    ``_FREQUENCY_STEPS`` has handled bimonthly and semiannual from the
+    ``FREQUENCY_STEPS`` has handled bimonthly and semiannual from the
     start, and the projection walks a stream by stepping its frequency.
     ``_CADENCES`` did not list either, so a six-month insurance premium
     measured as "irregular" - and an irregular stream cannot be stepped,
@@ -637,20 +641,26 @@ class TestPaymentLegsAreDetectable:
 
     async def _liability(self, svc, name="Amex"):
         return await svc.create_manual_account(
-            name=name, account_type="credit_card",
-            classification="liability", owner_user_id=1,
+            name=name,
+            account_type="credit_card",
+            classification="liability",
+            owner_user_id=1,
         )
 
     async def _payment_pairs(self, svc, checking, card, months, cents=180_111):
         for m in months:
             await svc.create_transaction(
-                account_id=checking.id, amount=-cents,
-                txn_date=date(2026, m, 13), owner_user_id=1,
+                account_id=checking.id,
+                amount=-cents,
+                txn_date=date(2026, m, 13),
+                owner_user_id=1,
                 name="AMERICAN EXPRESS ACH PMT",
             )
             await svc.create_transaction(
-                account_id=card.id, amount=cents,
-                txn_date=date(2026, m, 13), owner_user_id=1,
+                account_id=card.id,
+                amount=cents,
+                txn_date=date(2026, m, 13),
+                owner_user_id=1,
                 name="AUTOPAY PAYMENT - THANK YOU",
             )
 
@@ -658,7 +668,7 @@ class TestPaymentLegsAreDetectable:
     async def test_a_card_autopay_forms_a_stream_on_the_cash_side(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.categorize import detect_transfers
+        from app.services.finance.domains.detection import detect_transfers
 
         svc = FinanceService(async_db_session)
         checking = await _account(svc)
@@ -684,23 +694,29 @@ class TestPaymentLegsAreDetectable:
         """Moving money to savings every month is not a payment; letting
         it through re-creates the five-figure fiction the transfer
         exclusion exists to prevent."""
-        from app.services.finance.categorize import detect_transfers
+        from app.services.finance.domains.detection import detect_transfers
 
         svc = FinanceService(async_db_session)
         checking = await _account(svc)
         savings = await svc.create_manual_account(
-            name="Savings", account_type="savings",
-            classification="asset", owner_user_id=1,
+            name="Savings",
+            account_type="savings",
+            classification="asset",
+            owner_user_id=1,
         )
         for m in range(1, 7):
             await svc.create_transaction(
-                account_id=checking.id, amount=-50_000,
-                txn_date=date(2026, m, 1), owner_user_id=1,
+                account_id=checking.id,
+                amount=-50_000,
+                txn_date=date(2026, m, 1),
+                owner_user_id=1,
                 name="TRANSFER TO SAVINGS",
             )
             await svc.create_transaction(
-                account_id=savings.id, amount=50_000,
-                txn_date=date(2026, m, 1), owner_user_id=1,
+                account_id=savings.id,
+                amount=50_000,
+                txn_date=date(2026, m, 1),
+                owner_user_id=1,
                 name="TRANSFER FROM CHECKING",
             )
         await detect_transfers(
@@ -721,25 +737,33 @@ class TestPaymentStreamsReachTheForecast:
     """
 
     async def _payment_stream(self, svc, db):
-        from app.services.finance.categorize import detect_recurring, detect_transfers
+        from app.services.finance.domains.detection import detect_recurring, detect_transfers
 
         checking = await _account(svc)
         card = await svc.create_manual_account(
-            name="Amex", account_type="credit_card",
-            classification="liability", owner_user_id=1,
+            name="Amex",
+            account_type="credit_card",
+            classification="liability",
+            owner_user_id=1,
         )
         for m in range(1, 7):
             await svc.create_transaction(
-                account_id=checking.id, amount=-180_111,
-                txn_date=date(2026, m, 13), owner_user_id=1,
+                account_id=checking.id,
+                amount=-180_111,
+                txn_date=date(2026, m, 13),
+                owner_user_id=1,
                 name="AMERICAN EXPRESS ACH PMT",
             )
             await svc.create_transaction(
-                account_id=card.id, amount=180_111,
-                txn_date=date(2026, m, 13), owner_user_id=1,
+                account_id=card.id,
+                amount=180_111,
+                txn_date=date(2026, m, 13),
+                owner_user_id=1,
                 name="AUTOPAY PAYMENT - THANK YOU",
             )
-        await detect_transfers(db, owner_user_id=1, today=date(2026, 7, 1), lookback_days=0)
+        await detect_transfers(
+            db, owner_user_id=1, today=date(2026, 7, 1), lookback_days=0
+        )
         await detect_recurring(db, owner_user_id=1)
         streams = await _live_streams(db)
         assert len(streams) == 1
@@ -809,7 +833,7 @@ class TestPaymentStreamsReachTheForecast:
         async_db_session.add(stream)
         await async_db_session.flush()
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["fixed_total"] == 0
-        assert stats["fixed_count"] == 0
+        assert stats.fixed_total == 0
+        assert stats.fixed_count == 0

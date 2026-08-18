@@ -12,26 +12,9 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
-
-
-async def _account(svc: FinanceService):
-    return await svc.create_manual_account(
-        name="Checking",
-        account_type="checking",
-        classification="asset",
-        owner_user_id=1,
-    )
-
-
-async def _txn(svc: FinanceService, account_id: int, name: str, day: date, cents: int):
-    return await svc.create_transaction(
-        account_id=account_id,
-        amount=cents,
-        txn_date=day,
-        owner_user_id=1,
-        name=name,
-    )
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_payee_txn as _txn
 
 
 class TestUpdateMerchant:
@@ -283,7 +266,7 @@ class TestMergeMerchants:
     ) -> None:
         """A bill still pointing at a payee that no longer exists would
         lose its name and its icon."""
-        from app.services.finance.categorize import declare_recurring
+        from app.services.finance.domains.detection import declare_recurring
 
         svc = FinanceService(async_db_session)
         account = await _account(svc)
@@ -294,9 +277,7 @@ class TestMergeMerchants:
             for m in range(1, 5)
         ]
         await svc.assign_merchant([t.id for t in txns], drop.id, owner_user_id=1)
-        await declare_recurring(
-            async_db_session, [txns[0].id], owner_user_id=1
-        )
+        await declare_recurring(async_db_session, [txns[0].id], owner_user_id=1)
 
         await svc.merge_merchants([drop.id], keep.id, owner_user_id=1)
 
@@ -348,14 +329,14 @@ class TestRenameKeepsTheDedupKey:
     async def test_a_punctuation_only_fix_is_already_stable(
         self, async_db_session: AsyncSession
     ) -> None:
-        """"Mcdonald S" and "McDonald\'s" normalize to the SAME key, since
+        """ "Mcdonald S" and "McDonald\'s" normalize to the SAME key, since
         normalize_payee strips the apostrophe either way - so the common
         fix cannot desync anything."""
         svc = FinanceService(async_db_session)
         merchant = await svc.create_merchant("Mcdonald S", owner_user_id=1)
 
-        await svc.update_merchant(merchant.id, name="McDonald\'s", owner_user_id=1)
-        again = await svc.create_merchant("McDonald\'s", owner_user_id=1)
+        await svc.update_merchant(merchant.id, name="McDonald's", owner_user_id=1)
+        again = await svc.create_merchant("McDonald's", owner_user_id=1)
 
         assert again.id == merchant.id
         assert len(await svc.list_merchants(owner_user_id=1)) == 1
@@ -371,8 +352,8 @@ class TestRenameKeepsTheDedupKey:
         svc = FinanceService(async_db_session)
         merchant = await svc.create_merchant("Joes", owner_user_id=1)
 
-        await svc.update_merchant(merchant.id, name="Joe\'s Coffee", owner_user_id=1)
-        again = await svc.create_merchant("Joe\'s Coffee", owner_user_id=1)
+        await svc.update_merchant(merchant.id, name="Joe's Coffee", owner_user_id=1)
+        again = await svc.create_merchant("Joe's Coffee", owner_user_id=1)
 
         assert again.id == merchant.id
         assert len(await svc.list_merchants(owner_user_id=1)) == 1

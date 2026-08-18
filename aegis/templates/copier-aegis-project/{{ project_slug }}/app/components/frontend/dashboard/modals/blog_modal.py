@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     ActionMenu,
     ActionMenuItem,
@@ -121,9 +122,7 @@ class OverviewTab(ft.Container):
             ),
             width=self._SIDEBAR_WIDTH,
             padding=ft.padding.all(Theme.Spacing.MD),
-            border=ft.border.only(
-                left=ft.border.BorderSide(1, ft.Colors.OUTLINE)
-            ),
+            border=ft.border.only(left=ft.border.BorderSide(1, ft.Colors.OUTLINE)),
         )
         self.content = ft.Row(
             [self._main_area, self._sidebar],
@@ -150,9 +149,7 @@ class OverviewTab(ft.Container):
         self._posts = posts
 
         if not posts:
-            self._main_area.content = EmptyStatePlaceholder(
-                "No published posts yet."
-            )
+            self._main_area.content = EmptyStatePlaceholder("No published posts yet.")
             self._sidebar_list.controls = []
         else:
             self._show_post(posts[0])
@@ -183,10 +180,7 @@ class OverviewTab(ft.Container):
             header_children.append(ft.Container(height=Theme.Spacing.SM))
             header_children.append(
                 ft.Row(
-                    [
-                        Tag(slug, color=Theme.Colors.PRIMARY)
-                        for slug in tag_slugs
-                    ],
+                    [Tag(slug, color=Theme.Colors.PRIMARY) for slug in tag_slugs],
                     spacing=6,
                     alignment=ft.MainAxisAlignment.START,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -223,9 +217,7 @@ class OverviewTab(ft.Container):
             self._render_sidebar()
 
     def _render_sidebar(self) -> None:
-        self._sidebar_list.controls = [
-            self._sidebar_item(post) for post in self._posts
-        ]
+        self._sidebar_list.controls = [self._sidebar_item(post) for post in self._posts]
         if self._sidebar_list.page:
             self._sidebar_list.update()
 
@@ -353,9 +345,7 @@ class PostsTab(ft.Container):
                                 ft.TextButton(
                                     "Refresh",
                                     icon=ft.Icons.REFRESH,
-                                    on_click=lambda _: self.page.run_task(
-                                        self._load
-                                    ),
+                                    on_click=lambda _: self.page.run_task(self._load),
                                     style=ft.ButtonStyle(
                                         color=ft.Colors.ON_SURFACE_VARIANT
                                     ),
@@ -400,9 +390,7 @@ class PostsTab(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         if not file.path:
-            ErrorSnackBar(
-                "Cannot read picked file (no local path)."
-            ).launch(self.page)
+            ErrorSnackBar("Cannot read picked file (no local path).").launch(self.page)
             return
         try:
             with open(file.path, "rb") as fh:
@@ -419,9 +407,9 @@ class PostsTab(ft.Container):
         elif name.endswith((".md", ".markdown")):
             mime = "text/markdown"
         else:
-            ErrorSnackBar(
-                "Unsupported file type. Use .md, .zip, or .json."
-            ).launch(self.page)
+            ErrorSnackBar("Unsupported file type. Use .md, .zip, or .json.").launch(
+                self.page
+            )
             return
 
         api = get_session_state(self.page).api_client
@@ -435,12 +423,10 @@ class PostsTab(ft.Container):
             return
 
         SuccessSnackBar(
-
-                f"Imported: {result.get('created', 0)} created, "
-                f"{result.get('updated', 0)} updated, "
-                f"{result.get('skipped', 0)} skipped, "
-                f"{result.get('failed', 0)} failed."
-
+            f"Imported: {result.get('created', 0)} created, "
+            f"{result.get('updated', 0)} updated, "
+            f"{result.get('skipped', 0)} skipped, "
+            f"{result.get('failed', 0)} failed."
         ).launch(self.page)
         await self._load()
 
@@ -494,9 +480,7 @@ class PostsTab(ft.Container):
                 ActionMenuItem(
                     "Publish",
                     ft.Icons.UPLOAD,
-                    lambda _: self.page.run_task(
-                        self._post_action, post_id, "publish"
-                    ),
+                    lambda _: self.page.run_task(self._post_action, post_id, "publish"),
                 )
             )
         if status != "archived":
@@ -504,9 +488,7 @@ class PostsTab(ft.Container):
                 ActionMenuItem(
                     "Archive",
                     ft.Icons.ARCHIVE,
-                    lambda _: self.page.run_task(
-                        self._post_action, post_id, "archive"
-                    ),
+                    lambda _: self.page.run_task(self._post_action, post_id, "archive"),
                 )
             )
         items.append(ft.PopupMenuItem())
@@ -651,7 +633,9 @@ class TagsTab(ft.Container):
 
     def _confirm_delete_tag(self, tag: dict[str, Any]) -> None:
         tag_id = int(tag["id"])
-        name = str(tag.get("name") or tag.get("slug") or "this tag").strip() or "this tag"
+        name = (
+            str(tag.get("name") or tag.get("slug") or "this tag").strip() or "this tag"
+        )
 
         async def _do_delete() -> None:
             await self._delete_tag(tag_id)
@@ -1125,8 +1109,7 @@ class EditorTab(ft.Container):
             [
                 (
                     str(p.get("id")),
-                    f"{p.get('title') or '(untitled)'} "
-                    f"[{p.get('status', 'draft')}]",
+                    f"{p.get('title') or '(untitled)'} [{p.get('status', 'draft')}]",
                 )
                 for p in posts
             ]

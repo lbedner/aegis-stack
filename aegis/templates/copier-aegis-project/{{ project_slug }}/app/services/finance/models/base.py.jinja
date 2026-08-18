@@ -1,0 +1,70 @@
+"""Shared column helpers and the schema every finance table is bound to.
+
+SQLModel tables for the finance aggregator. Grown incrementally across the
+finance schema tickets; the migration in ``aegis.core.migration_generator``
+(``FINANCE_MIGRATION``) is the parallel definition and must stay column-for-
+column compatible (tests build tables from these models via
+``SQLModel.metadata.create_all``; the generated project builds them from the
+migration).
+
+The one stack-conditional line in the whole model layer lives here
+(``_SCHEMA``), which is why this file is a template and its siblings are
+plain Python.
+
+Conventions (see docs/plans/finance-service/finance-schema-canonical.md):
+- int autoincrement PKs; money + scaled integers use ``BigInteger`` (net worth
+  and ``*_e8`` values overflow int32);
+- enums are ``String`` + ``CheckConstraint`` (portable across SQLite/Postgres),
+  never native enums; provider taxonomies that grow are plain ``str`` columns;
+- partial-unique indexes declare BOTH ``sqlite_where`` and ``postgresql_where``;
+- timestamps are naive UTC via ``_utcnow``;
+- on Postgres every finance table lives in a dedicated ``finance`` schema
+  (``_SCHEMA``); SQLite has no schemas so ``_SCHEMA`` is None (default DB).
+  Tests run on SQLite and attach an in-memory ``finance`` database per the
+  conftest schema-attach, so schema-qualified models still create_all cleanly.
+"""
+
+from datetime import UTC, date, datetime
+from typing import Any
+
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    Index,
+)
+from sqlmodel import Field, SQLModel
+
+# Postgres schema for finance tables; None on SQLite (no schema support).
+_SCHEMA: str | None = {% if database_engine == "postgres" %}"finance"{% else %}None{% endif %}
+# Foreign-key target prefix ("finance." on Postgres, "" on SQLite).
+_FK = f"{_SCHEMA}." if _SCHEMA else ""
+
+
+def _bigint(name: str, *, nullable: bool = True, default: Any = None) -> Any:
+    """A BigInteger money / scaled-integer column.
+
+    Net worth and brokerage balances (and ``*_e8`` quantities/rates) overflow
+    int32, so all money columns are BigInteger. Values are integer minor units
+    (cents), never floats.
+    """
+    return Field(default=default, sa_column=Column(name, BigInteger, nullable=nullable))
+
+
+def _utcnow() -> datetime:
+    """UTC timestamp stored as naive datetime for SQLite/Postgres portability."""
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+# Ciphertext columns on FinanceConnection: encrypted in the service layer,
+# masked in __repr__. Mirror of app.services.finance.constants.ENCRYPTED_COLUMNS.
+_ENCRYPTED_COLUMNS: tuple[str, ...] = (
+    "access_token_encrypted",
+    "api_key_encrypted",
+    "api_secret_encrypted",
+    "api_passphrase_encrypted",
+    "refresh_token_encrypted",
+)

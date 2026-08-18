@@ -11,7 +11,7 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
 
 
 class TestFinanceAccounts:
@@ -486,7 +486,7 @@ class TestFinanceNetWorth:
     async def test_recompute_series_liability_sign(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
 
         svc = FinanceService(async_db_session)
         house = await svc.create_manual_account(
@@ -515,8 +515,8 @@ class TestFinanceNetWorth:
             current_balance=30_000_000,
         )
 
-        await networth_service.recompute_snapshots(async_db_session, owner_user_id=1)
-        series = await networth_service.get_net_worth_series(
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
+        series = await networth.get_net_worth_series(
             async_db_session, owner_user_id=1, days=90
         )
         assert series, "expected net-worth snapshots"
@@ -526,12 +526,30 @@ class TestFinanceNetWorth:
         assert latest.net_worth_amount == 20_500_000  # 50.5M - 30M
 
     @pytest.mark.asyncio
+    async def test_series_via_facade(self, async_db_session: AsyncSession) -> None:
+        """Routes read the series through the facade, so it must expose it."""
+        from app.services.finance.domains.ledger import networth
+
+        svc = FinanceService(async_db_session)
+        await svc.create_manual_account(
+            owner_user_id=1,
+            name="Cash",
+            account_type="checking",
+            classification="asset",
+            current_balance=1_000_00,
+        )
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
+        series = await svc.get_net_worth_series(owner_user_id=1, days=90)
+        assert series
+        assert series[-1].net_worth_amount == 1_000_00
+
+    @pytest.mark.asyncio
     async def test_recompute_is_idempotent(
         self, async_db_session: AsyncSession
     ) -> None:
         from sqlmodel import func, select
 
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceNetWorthSnapshot
 
         svc = FinanceService(async_db_session)
@@ -542,10 +560,10 @@ class TestFinanceNetWorth:
             classification="asset",
             current_balance=100_000,
         )
-        await networth_service.recompute_snapshots(async_db_session, owner_user_id=1)
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
         count_q = select(func.count()).select_from(FinanceNetWorthSnapshot)
         first = (await async_db_session.exec(count_q)).one()
-        await networth_service.recompute_snapshots(async_db_session, owner_user_id=1)
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
         second = (await async_db_session.exec(count_q)).one()
         assert first == second and first > 0  # upsert, no duplicate rows
 
@@ -555,7 +573,7 @@ class TestFinanceNetWorth:
     ) -> None:
         from sqlmodel import select
 
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceBalanceSnapshot
 
         svc = FinanceService(async_db_session)
@@ -572,7 +590,7 @@ class TestFinanceNetWorth:
             as_of_date=valued_on,
             value=50_000_000,
         )
-        await networth_service.recompute_snapshots(async_db_session, owner_user_id=1)
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
         snaps = (
             await async_db_session.exec(
                 select(FinanceBalanceSnapshot).where(
@@ -596,7 +614,7 @@ class TestFinanceNetWorth:
         from sqlalchemy import event
         from sqlalchemy.engine import Engine
 
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
 
         selects = {"n": 0}
 
@@ -617,7 +635,7 @@ class TestFinanceNetWorth:
             event.listen(Engine, "before_cursor_execute", _on_exec)
             try:
                 selects["n"] = 0
-                await networth_service.recompute_snapshots(
+                await networth.recompute_snapshots(
                     async_db_session, owner_user_id=owner
                 )
                 return selects["n"]
@@ -815,7 +833,7 @@ class TestAnalystAvailability:
         is pruned entirely from a project generated without the AI service. A
         missing module has to read as "no", not raise ImportError and take the
         card, the health surface, and the CLI down with it."""
-        from app.services.finance.finance_service import analyst_available
+        from app.services.finance.domains.ledger.networth import analyst_available
 
         assert analyst_available() in (True, False)
 
@@ -835,7 +853,7 @@ class TestNetWorthSnapshotsFromRegister:
     ) -> None:
         from datetime import date, timedelta
 
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
 
         svc = FinanceService(async_db_session)
         # Neither account gets an authoritative balance: this is exactly a
@@ -868,12 +886,12 @@ class TestNetWorthSnapshotsFromRegister:
             )
         await async_db_session.flush()
 
-        written = await networth_service.recompute_snapshots(
+        written = await networth.recompute_snapshots(
             async_db_session, owner_user_id=1, start_date=today - timedelta(days=2)
         )
         assert written > 0
 
-        series = await networth_service.get_net_worth_series(
+        series = await networth.get_net_worth_series(
             async_db_session, owner_user_id=1, days=5
         )
         latest = series[-1]
@@ -894,8 +912,8 @@ class TestInvestmentHistoryReconstruction:
     def test_single_security_account_is_valued_from_its_trades(self) -> None:
         from datetime import date
 
+        from app.services.finance.domains.ledger.networth import _investment_points
         from app.services.finance.models import FinanceAccount
-        from app.services.finance.networth_service import _investment_points
 
         account = FinanceAccount(
             owner_user_id=1,
@@ -924,8 +942,8 @@ class TestInvestmentHistoryReconstruction:
         precise and be fiction, so reconstruction declines."""
         from datetime import date
 
+        from app.services.finance.domains.ledger.networth import _investment_points
         from app.services.finance.models import FinanceAccount
-        from app.services.finance.networth_service import _investment_points
 
         account = FinanceAccount(
             owner_user_id=1,
@@ -942,8 +960,8 @@ class TestInvestmentHistoryReconstruction:
         """Fee rows carry a quantity but no price - they cannot value a day."""
         from datetime import date
 
+        from app.services.finance.domains.ledger.networth import _investment_points
         from app.services.finance.models import FinanceAccount
-        from app.services.finance.networth_service import _investment_points
 
         account = FinanceAccount(
             owner_user_id=1,
@@ -1026,14 +1044,14 @@ class TestAccountScopedViews:
             owner_user_id=1, months=1, today=today, account_ids=[checking.id]
         )
 
-        assert scoped[-1]["income"] == 50_000
-        assert scoped[-1]["expense"] == 0
+        assert scoped[-1].income == 50_000
+        assert scoped[-1].expense == 0
 
     @pytest.mark.asyncio
     async def test_net_worth_series_scopes_and_signs_by_classification(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceBalanceSnapshot
 
         svc = FinanceService(async_db_session)
@@ -1052,13 +1070,13 @@ class TestAccountScopedViews:
             )
         await async_db_session.flush()
 
-        both = await networth_service.get_net_worth_series(
+        both = await networth.get_net_worth_series(
             async_db_session,
             owner_user_id=1,
             days=7,
             account_ids=[checking.id, card.id],
         )
-        one = await networth_service.get_net_worth_series(
+        one = await networth.get_net_worth_series(
             async_db_session, owner_user_id=1, days=7, account_ids=[checking.id]
         )
 
@@ -1074,7 +1092,7 @@ class TestAccountScopedViews:
     ) -> None:
         """The join back to the owner's accounts is the tenancy guard: passing
         someone else's account id must not leak their series."""
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceBalanceSnapshot
 
         svc = FinanceService(async_db_session)
@@ -1096,7 +1114,7 @@ class TestAccountScopedViews:
         )
         await async_db_session.flush()
 
-        series = await networth_service.get_net_worth_series(
+        series = await networth.get_net_worth_series(
             async_db_session, owner_user_id=1, days=7, account_ids=[foreign.id]
         )
 

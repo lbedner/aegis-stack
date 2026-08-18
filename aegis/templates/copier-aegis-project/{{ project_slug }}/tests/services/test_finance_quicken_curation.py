@@ -15,9 +15,8 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance import import_service
-from app.services.finance.categorize import promote_curated_streams
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.domains.detection import promote_curated_streams
+from app.services.finance.adapters.importers import imports
 from app.services.finance.models import (
     FinanceCategoryAlias,
     FinanceRecurringStream,
@@ -25,6 +24,7 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransactionTag,
 )
+from app.services.finance.service import FinanceService
 
 OWNER = 1
 
@@ -93,7 +93,7 @@ def _quicken_csv(rows: list[str]) -> bytes:
 
 async def _seed_csv_profiles(session: AsyncSession) -> None:
     from app.services.finance.models import FinanceImportProfile
-    from app.services.finance.seed import CSV_IMPORT_PROFILES, DEFAULT_CURRENCIES
+    from app.services.finance.seeds.seed import CSV_IMPORT_PROFILES, DEFAULT_CURRENCIES
 
     svc = FinanceService(session)
     for currency in DEFAULT_CURRENCIES:
@@ -116,7 +116,7 @@ class TestImportCarriesCuration:
             ]
         )
 
-        result = await import_service.import_file(
+        result = await imports.import_file(
             async_db_session,
             owner_user_id=OWNER,
             file_name="quicken.csv",

@@ -10,16 +10,18 @@ from pathlib import Path
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance import import_service
-from app.services.finance.finance_service import FinanceService
-from app.services.finance.importers.base import (
+from app.services.finance.adapters.importers import imports
+from app.services.finance.adapters.importers.base import (
     ParsedTransaction,
     compute_import_hash,
+)
+from app.services.finance.adapters.importers.ofx import parse_ofx
+from app.services.finance.adapters.importers.qif import parse_qif
+from app.services.finance.models import FinanceAccount
+from app.services.finance.service import FinanceService
+from app.services.finance.utils import (
     normalize_payee,
 )
-from app.services.finance.importers.ofx import parse_ofx
-from app.services.finance.importers.qif import parse_qif
-from app.services.finance.models import FinanceAccount
 
 _FIXTURES = Path(__file__).parent / "finance" / "fixtures"
 
@@ -70,7 +72,7 @@ class TestImportPipeline:
         self, async_db_session: AsyncSession
     ) -> None:
         account = await _account(async_db_session)
-        result = await import_service.ingest_transactions(
+        result = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qfx",
@@ -97,7 +99,7 @@ class TestImportPipeline:
     ) -> None:
         account = await _account(async_db_session)
         data = _qfx()
-        first = await import_service.ingest_transactions(
+        first = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qfx",
@@ -108,7 +110,7 @@ class TestImportPipeline:
         )
         assert first.rows_inserted == 6
 
-        second = await import_service.ingest_transactions(
+        second = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qfx",
@@ -135,7 +137,7 @@ class TestImportPipeline:
         without lane 3 a re-export lands the same money twice."""
         account = await _account(async_db_session)
         data = _qif()
-        first = await import_service.ingest_transactions(
+        first = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -162,7 +164,7 @@ class TestImportPipeline:
             category_hint="Bills & Utilities:Water",
             memo="edited memo",
         )
-        result = await import_service.ingest_transactions(
+        result = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -183,7 +185,7 @@ class TestImportPipeline:
         assert touched.memo == "edited memo"
         assert touched.category_id is not None
         # The hash is restamped, so the NEXT import sees a plain duplicate.
-        again = await import_service.ingest_transactions(
+        again = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -222,7 +224,7 @@ class TestImportPipeline:
             )
             for n in (1, 2)
         ]
-        await import_service.ingest_transactions(
+        await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -231,7 +233,7 @@ class TestImportPipeline:
             parsed=twins,
             default_account_id=account.id,
         )
-        result = await import_service.ingest_transactions(
+        result = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -256,7 +258,7 @@ class TestImportPipeline:
     ) -> None:
         account = await _account(async_db_session)
         data = _qfx()
-        await import_service.ingest_transactions(
+        await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qfx",
@@ -267,7 +269,7 @@ class TestImportPipeline:
         )
         # Same FITIDs F001-F005, but F006 becomes a brand-new F007 (diff bytes).
         overlapping = data.replace(b"<FITID>F006", b"<FITID>F007")
-        result = await import_service.ingest_transactions(
+        result = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qfx",
@@ -296,7 +298,7 @@ class TestImportPipeline:
         from sqlalchemy import event
         from sqlalchemy.engine import Engine
 
-        from app.services.finance.importers.base import ParsedTransaction
+        from app.services.finance.adapters.importers.base import ParsedTransaction
 
         def _rows(n: int, label: str) -> list[ParsedTransaction]:
             # Distinct external_ids (LANE 1) with a shared category string so
@@ -330,7 +332,7 @@ class TestImportPipeline:
             event.listen(Engine, "before_cursor_execute", _on_exec)
             try:
                 selects["n"] = 0
-                await import_service.ingest_transactions(
+                await imports.ingest_transactions(
                     async_db_session,
                     owner_user_id=1,
                     source_type="ofx",
@@ -404,7 +406,7 @@ class TestParseQif:
         1900s dates don't jump to the 2000s (Copilot review)."""
         from datetime import date
 
-        from app.services.finance.importers.qif import _parse_qif_date
+        from app.services.finance.adapters.importers.qif import _parse_qif_date
 
         assert _parse_qif_date("12/31/99") == date(1999, 12, 31)  # legacy 1900s
         assert _parse_qif_date("1/5'20") == date(2020, 1, 5)  # apostrophe => 2000s
@@ -439,7 +441,7 @@ class TestQifImport:
         account = await _account(async_db_session)
         category_id = await _seed_dining_alias(async_db_session)
         data = _qif()
-        result = await import_service.ingest_transactions(
+        result = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -488,7 +490,7 @@ class TestQifImport:
     ) -> None:
         account = await _account(async_db_session)
         data = _qif()
-        await import_service.ingest_transactions(
+        await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -497,7 +499,7 @@ class TestQifImport:
             parsed=parse_qif(data, source="qif"),
             default_account_id=account.id,
         )
-        second = await import_service.ingest_transactions(
+        second = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -514,7 +516,7 @@ class TestQifImport:
     ) -> None:
         account = await _account(async_db_session)
         data = _qif()
-        await import_service.ingest_transactions(
+        await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -527,7 +529,7 @@ class TestQifImport:
         extended = data + (
             b"D07/09/2026\nT-15.00\nPNew Cafe\n^\nD07/10/2026\nT-20.00\nPNew Store\n^\n"
         )
-        result = await import_service.ingest_transactions(
+        result = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="qif",
@@ -551,7 +553,7 @@ def _csv(name: str) -> bytes:
 
 def _profiles() -> list:
     from app.services.finance.models import FinanceImportProfile
-    from app.services.finance.seed import CSV_IMPORT_PROFILES
+    from app.services.finance.seeds.seed import CSV_IMPORT_PROFILES
 
     return [FinanceImportProfile(is_system=True, **p) for p in CSV_IMPORT_PROFILES]
 
@@ -560,7 +562,7 @@ async def _seed_csv_profiles(session: AsyncSession) -> None:
     # Profiles reference a currency (FK), so seed currencies first — matching
     # production seed order — so the helper works even when no account has been
     # created yet. get_or_create is idempotent for callers that already have.
-    from app.services.finance.seed import DEFAULT_CURRENCIES
+    from app.services.finance.seeds.seed import DEFAULT_CURRENCIES
 
     svc = FinanceService(session)
     for currency in DEFAULT_CURRENCIES:
@@ -572,7 +574,7 @@ async def _seed_csv_profiles(session: AsyncSession) -> None:
 
 class TestCsvProfiles:
     def test_amex_charge_lands_negative(self) -> None:
-        from app.services.finance.importers import csv_profiles
+        from app.services.finance.adapters.importers import csv_profiles
 
         data = _csv("sample_amex.csv")
         profile, index = csv_profiles.detect_profile(data, _profiles())
@@ -582,7 +584,7 @@ class TestCsvProfiles:
         assert charge.amount == -12050  # +120.50 reported -> outflow negative
 
     def test_chase_cc_detects_and_signs(self) -> None:
-        from app.services.finance.importers import csv_profiles
+        from app.services.finance.adapters.importers import csv_profiles
 
         data = _csv("sample_chase_cc.csv")
         profile, index = csv_profiles.detect_profile(data, _profiles())
@@ -594,7 +596,7 @@ class TestCsvProfiles:
         assert by_name["ONLINE PAYMENT THANK YOU"].amount == 50000  # payment +
 
     def test_unknown_header_returns_none(self) -> None:
-        from app.services.finance.importers import csv_profiles
+        from app.services.finance.adapters.importers import csv_profiles
 
         profile, index = csv_profiles.detect_profile(
             b"Foo,Bar,Baz\n1,2,3\n", _profiles()
@@ -604,7 +606,7 @@ class TestCsvProfiles:
     def test_quicken_mac_skips_preamble(self) -> None:
         """Quicken Mac's report CSV has a title + spacer before the header —
         detection scans past them and parses with the outflow-negative sign."""
-        from app.services.finance.importers import csv_profiles
+        from app.services.finance.adapters.importers import csv_profiles
 
         data = _csv("sample_quicken_mac.csv")
         profile, index = csv_profiles.detect_profile(data, _profiles())
@@ -624,7 +626,7 @@ class TestCsvProfiles:
     def test_quicken_all_transactions_reads_account_column(self) -> None:
         """The 'All Transactions' report is a multi-account layout: each row
         carries its owning account in the Account column -> account_key."""
-        from app.services.finance.importers import csv_profiles
+        from app.services.finance.adapters.importers import csv_profiles
 
         data = _csv("sample_quicken_all.csv")
         profile, index = csv_profiles.detect_profile(data, _profiles())
@@ -641,7 +643,7 @@ class TestCsvProfiles:
         one added column rejected the entire file. Parsing addresses
         columns by name, so extras were always harmless - detection now
         accepts a row that carries the full signature plus extras."""
-        from app.services.finance.importers import csv_profiles
+        from app.services.finance.adapters.importers import csv_profiles
 
         data = _csv("sample_quicken_all_scheduled.csv")
         profile, index = csv_profiles.detect_profile(data, _profiles())
@@ -657,7 +659,7 @@ class TestCsvProfiles:
     def test_exact_match_wins_over_a_looser_one(self) -> None:
         """A file whose header exactly matches one profile must not be
         claimed by another whose signature merely fits inside it."""
-        from app.services.finance.importers import csv_profiles
+        from app.services.finance.adapters.importers import csv_profiles
 
         data = _csv("sample_quicken_all.csv")
         profile, _ = csv_profiles.detect_profile(data, list(reversed(_profiles())))
@@ -666,7 +668,7 @@ class TestCsvProfiles:
 
 class TestInferAccountKind:
     def test_infers_type_and_classification_from_name(self) -> None:
-        from app.services.finance.import_service import infer_account_kind
+        from app.services.finance.adapters.importers.imports import infer_account_kind
 
         assert infer_account_kind("CHASE SAVINGS") == ("savings", "asset")
         assert infer_account_kind("TOTAL CHECKING (CHASE)") == ("checking", "asset")
@@ -705,7 +707,7 @@ class TestCsvImport:
 
         account = await _account(async_db_session)
         await _seed_csv_profiles(async_db_session)
-        result = await import_service.import_csv(
+        result = await imports.import_csv(
             async_db_session,
             owner_user_id=1,
             file_name="amex.csv",
@@ -743,7 +745,7 @@ class TestCsvImport:
         from app.services.finance.models import FinanceImportBatchRow
 
         await _seed_csv_profiles(async_db_session)
-        result = await import_service.import_csv(
+        result = await imports.import_csv(
             async_db_session,
             owner_user_id=1,
             file_name="all_scheduled.csv",
@@ -797,7 +799,7 @@ class TestCsvImport:
             source="csv",
             is_scheduled=True,
         )
-        first = await import_service.ingest_transactions(
+        first = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="csv",
@@ -811,7 +813,7 @@ class TestCsvImport:
 
         # The same posted row again, this time with no scheduled sibling:
         # it must hash identically and read as a duplicate.
-        second = await import_service.ingest_transactions(
+        second = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="csv",
@@ -832,7 +834,7 @@ class TestCsvImport:
 
         # A future-dated row is held out even with no "scheduled" flag, for
         # sources that carry no such column.
-        third = await import_service.ingest_transactions(
+        third = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="csv",
@@ -862,7 +864,7 @@ class TestCsvImport:
 
         account = await _account(async_db_session)
         await _seed_csv_profiles(async_db_session)
-        await import_service.import_csv(
+        await imports.import_csv(
             async_db_session,
             owner_user_id=1,
             file_name="quicken.csv",
@@ -886,7 +888,7 @@ class TestCsvImport:
         """A multi-account report imports with no account_id: rows route to
         per-name accounts, auto-creating the ones that don't exist yet."""
         await _seed_csv_profiles(async_db_session)
-        result = await import_service.import_csv(
+        result = await imports.import_csv(
             async_db_session,
             owner_user_id=1,
             file_name="all.csv",
@@ -937,7 +939,7 @@ class TestCsvImport:
         the per-account LANE-2 hash catches every row as a duplicate."""
         await _seed_csv_profiles(async_db_session)
         data = _csv("sample_quicken_all.csv")
-        await import_service.import_csv(
+        await imports.import_csv(
             async_db_session,
             owner_user_id=1,
             file_name="all.csv",
@@ -946,7 +948,7 @@ class TestCsvImport:
         )
         # Trailing newline -> new file sha, same content, so the sha
         # short-circuit is bypassed and every row is re-checked per account.
-        result = await import_service.import_csv(
+        result = await imports.import_csv(
             async_db_session,
             owner_user_id=1,
             file_name="all2.csv",
@@ -966,7 +968,7 @@ class TestCsvImport:
     ) -> None:
         from sqlmodel import select
 
-        from app.services.finance.importers.csv_profiles import (
+        from app.services.finance.adapters.importers.csv_profiles import (
             UnknownCsvLayoutError,
         )
         from app.services.finance.models import FinanceImportBatch
@@ -974,7 +976,7 @@ class TestCsvImport:
         account = await _account(async_db_session)
         await _seed_csv_profiles(async_db_session)
         with pytest.raises(UnknownCsvLayoutError):
-            await import_service.import_csv(
+            await imports.import_csv(
                 async_db_session,
                 owner_user_id=1,
                 file_name="weird.csv",
@@ -997,14 +999,14 @@ class TestCsvImport:
         account = await _account(async_db_session)
         await _seed_csv_profiles(async_db_session)
         data = _csv("sample_chase_checking.csv")
-        await import_service.import_csv(
+        await imports.import_csv(
             async_db_session,
             owner_user_id=1,
             file_name="chk.csv",
             file_bytes=data,
             account_id=account.id,
         )
-        second = await import_service.import_csv(
+        second = await imports.import_csv(
             async_db_session,
             owner_user_id=1,
             file_name="chk.csv",
@@ -1039,7 +1041,7 @@ class TestImportPreviewAndCategoryGuard:
         self, session: AsyncSession
     ) -> tuple[FinanceAccount, int | None]:
         account = await _account(session)
-        first = await import_service.import_file(
+        first = await imports.import_file(
             session,
             owner_user_id=1,
             file_name="q.qif",
@@ -1082,7 +1084,7 @@ class TestImportPreviewAndCategoryGuard:
 
         edited = _qif_edited()
         # The preview flags the decision before anything is written...
-        preview = await import_service.preview_file(
+        preview = await imports.preview_file(
             async_db_session,
             owner_user_id=1,
             file_name="q2.qif",
@@ -1095,7 +1097,7 @@ class TestImportPreviewAndCategoryGuard:
         assert target.category_id == user_category.id  # preview wrote nothing
 
         # ...and the commit honours the same plan.
-        result = await import_service.import_file(
+        result = await imports.import_file(
             async_db_session,
             owner_user_id=1,
             file_name="q2.qif",
@@ -1114,7 +1116,7 @@ class TestImportPreviewAndCategoryGuard:
                 )
             )
         ).first()
-        assert import_service.CATEGORY_KEPT_NOTE in (reason or "")
+        assert imports.CATEGORY_KEPT_NOTE in (reason or "")
 
     @pytest.mark.asyncio
     async def test_rule_set_category_still_updates(
@@ -1126,7 +1128,7 @@ class TestImportPreviewAndCategoryGuard:
         assert target.category_source == "rule"  # came from the import hint
         category_before = target.category_id
 
-        result = await import_service.import_file(
+        result = await imports.import_file(
             async_db_session,
             owner_user_id=1,
             file_name="q2.qif",
@@ -1164,7 +1166,7 @@ class TestImportPreviewAndCategoryGuard:
             )
 
         before = await _row_counts()
-        preview = await import_service.preview_file(
+        preview = await imports.preview_file(
             async_db_session,
             owner_user_id=1,
             file_name="q2.qif",
@@ -1174,7 +1176,7 @@ class TestImportPreviewAndCategoryGuard:
         assert await _row_counts() == before  # a preview is a pure read
         assert preview.new_category_hints == ["Coffee Shops"]
 
-        result = await import_service.import_file(
+        result = await imports.import_file(
             async_db_session,
             owner_user_id=1,
             file_name="q2.qif",
@@ -1201,7 +1203,7 @@ class TestImportPreviewAndCategoryGuard:
         self, async_db_session: AsyncSession
     ) -> None:
         account, batch_id = await self._baseline(async_db_session)
-        preview = await import_service.preview_file(
+        preview = await imports.preview_file(
             async_db_session,
             owner_user_id=1,
             file_name="q.qif",
@@ -1220,7 +1222,7 @@ class TestImportPreviewAndCategoryGuard:
 
         await _seed_csv_profiles(async_db_session)
         data = _csv("sample_quicken_all.csv")
-        preview = await import_service.preview_file(
+        preview = await imports.preview_file(
             async_db_session,
             owner_user_id=1,
             file_name="all.csv",
@@ -1261,7 +1263,7 @@ class TestDoubleSubmitLandsOnTheFirstBatch:
                 account_key=None,
             )
         ]
-        first = await import_service.ingest_transactions(
+        first = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="csv",
@@ -1275,7 +1277,7 @@ class TestDoubleSubmitLandsOnTheFirstBatch:
         # Simulate the race window: the second run's early check misses
         # (as if the first commit weren't visible yet), so it walks into
         # the unique constraint - and must land on the winner, not raise.
-        real = import_service._prior_batch
+        real = imports._prior_batch
         calls = {"n": 0}
 
         async def miss_once(db, **kwargs):
@@ -1284,9 +1286,9 @@ class TestDoubleSubmitLandsOnTheFirstBatch:
                 return None
             return await real(db, **kwargs)
 
-        monkeypatch.setattr(import_service, "_prior_batch", miss_once)
+        monkeypatch.setattr(imports, "_prior_batch", miss_once)
 
-        second = await import_service.ingest_transactions(
+        second = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="csv",
@@ -1340,7 +1342,7 @@ class TestDeletedTransactionStaysDeleted:
                 account_key="TOTAL CHECKING",
             ),
         ]
-        first = await import_service.ingest_transactions(
+        first = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="csv",
@@ -1355,7 +1357,7 @@ class TestDeletedTransactionStaysDeleted:
         coffee = next(r for r in rows if r.name == "Coffee")
         await service.soft_delete_transactions([coffee.id], owner_user_id=1)
 
-        plan = await import_service.plan_transactions(
+        plan = await imports.plan_transactions(
             async_db_session,
             owner_user_id=1,
             parsed=parsed,
@@ -1371,7 +1373,7 @@ class TestDeletedTransactionStaysDeleted:
         assert plan.count("inserted") == 0
 
         # And the commit executes the same verdict: nothing comes back.
-        result = await import_service.ingest_transactions(
+        result = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="csv",
@@ -1430,7 +1432,7 @@ class TestRemovedAccountStaysRemoved:
                 account_key="X017 AUDI A6",
             ),
         ]
-        plan = await import_service.plan_transactions(
+        plan = await imports.plan_transactions(
             async_db_session,
             owner_user_id=1,
             parsed=parsed,
@@ -1449,7 +1451,7 @@ class TestRemovedAccountStaysRemoved:
         assert "removed" in (ignored[0].reason or "")
 
         # ...and ingest executes the same verdict.
-        result = await import_service.ingest_transactions(
+        result = await imports.ingest_transactions(
             async_db_session,
             owner_user_id=1,
             source_type="csv",
@@ -1463,3 +1465,29 @@ class TestRemovedAccountStaysRemoved:
         accounts, total = await service.list_accounts(owner_user_id=1)
         assert [a.name for a in accounts] == ["TOTAL CHECKING"]
         assert keep.id is not None
+
+
+class TestFacadeDelegation:
+    """The API layer drives imports through ``FinanceService``, so the facade
+    must expose the pipeline; ``importers.imports`` is package-internal."""
+
+    @pytest.mark.asyncio
+    async def test_preview_and_import_via_facade(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        account = await _account(async_db_session)
+        service = FinanceService(async_db_session)
+        plan = await service.preview_file(
+            owner_user_id=1,
+            file_name="q.qif",
+            file_bytes=_qif(),
+            account_id=account.id,
+        )
+        assert plan.rows_total == 8
+        result = await service.import_file(
+            owner_user_id=1,
+            file_name="q.qif",
+            file_bytes=_qif(),
+            account_id=account.id,
+        )
+        assert result.rows_inserted == 8

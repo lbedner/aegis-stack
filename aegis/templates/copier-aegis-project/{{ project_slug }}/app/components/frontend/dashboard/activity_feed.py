@@ -5,11 +5,12 @@ Shows recent system activity and events with inline severity filtering.
 Groups consecutive alerts from the same component to keep the feed scannable.
 """
 
-import threading
 from dataclasses import dataclass
 from datetime import datetime
+import threading
 
 import flet as ft
+
 from app.components.frontend.controls import (
     DataTableColumn,
     PrimaryText,

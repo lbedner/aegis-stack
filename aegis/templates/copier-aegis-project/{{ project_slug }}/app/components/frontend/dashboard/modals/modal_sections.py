@@ -1524,7 +1524,16 @@ class LineChartCard(ft.Container):
                 )
                 tick += step
 
+        # A polarity-split chart must not run fl_chart's implicit data
+        # animation: on an in-place update the lerp interpolates the axis
+        # bounds and the gradient stops out of sync, and for ~150ms the
+        # red below-zero band paints across the top of the plot before
+        # settling (confirmed live on the Projected tab). Plain charts
+        # have a single colour, so their lerp has nothing to mis-blend
+        # and they keep the default animation.
+        has_split = any(s.split_y is not None for s in series)
         chart = ft.LineChart(
+            animate=ft.Animation(duration=0) if has_split else None,
             data_series=chart_data,
             left_axis=ft.ChartAxis(labels_size=50, labels=left_labels),
             # 24px hugs the 9px date labels; 50 left a dead band between

@@ -6,6 +6,7 @@ overview metrics, slowest spans, recent exceptions, and configuration.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     DataTable,
@@ -19,13 +20,12 @@ from app.components.frontend.controls.expandable_data_table import (
 )
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.formatting import format_relative_time
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
-from app.core.formatting import format_relative_time
-
 from .modal_sections import PIE_CHART_COLORS, EmptyStatePlaceholder, MetricCard
 
 # Number of spans to show in the overview bar chart

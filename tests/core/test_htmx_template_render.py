@@ -46,6 +46,23 @@ def _ctx(**overrides: Any) -> dict[str, Any]:
     return {**get_copier_defaults(), "include_htmx": False, **overrides}
 
 
+def _blank_lines_between(rendered: str, first: str, second: str) -> int:
+    """Blank lines separating the first line containing ``first`` from the
+    next line containing ``second``.
+
+    Anchored on the gate's actual property - adjacency - rather than on the
+    full import statements. Matching those verbatim made this test fail the
+    moment the imports grew a ``# noqa`` comment, which says nothing about
+    whitespace control and everything about the anchor being too literal.
+    """
+    lines = rendered.split("\n")
+    start = next(i for i, line in enumerate(lines) if first in line)
+    end = next(
+        i for i, line in enumerate(lines[start + 1 :], start + 1) if second in line
+    )
+    return sum(1 for line in lines[start + 1 : end] if not line.strip())
+
+
 class TestHtmxOffLeavesNoTrace:
     """The default project must render exactly as it did pre-HF-03."""
 
@@ -103,9 +120,11 @@ class TestHtmxOffLeavesNoTrace:
         """
         rendered = _render("app/integrations/main.py.jinja", _ctx())
         assert (
-            "from app.components.frontend.main import create_frontend_app\n"
-            "from app.core.config import settings\n"
-        ) in rendered
+            _blank_lines_between(
+                rendered, "import create_frontend_app", "from app.core.config import"
+            )
+            == 0
+        )
 
 
 class TestHtmxOnAddsWebFrontend:
@@ -121,10 +140,21 @@ class TestHtmxOnAddsWebFrontend:
         its neighbours without opening a blank line on either side."""
         rendered = _render("app/integrations/main.py.jinja", _ctx(include_htmx=True))
         assert (
-            "from app.components.frontend.main import create_frontend_app\n"
-            "from app.components.web_frontend.main import (\n"
-        ) in rendered
-        assert ")\nfrom app.core.config import settings\n" in rendered
+            _blank_lines_between(
+                rendered,
+                "import create_frontend_app",
+                "from app.components.web_frontend",
+            )
+            == 0
+        )
+        assert (
+            _blank_lines_between(
+                rendered,
+                "from app.components.web_frontend",
+                "from app.core.config import",
+            )
+            == 0
+        )
 
     def test_main_mounts_static(self) -> None:
         rendered = _render("app/integrations/main.py.jinja", _ctx(include_htmx=True))

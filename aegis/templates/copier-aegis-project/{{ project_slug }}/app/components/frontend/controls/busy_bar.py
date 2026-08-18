@@ -19,6 +19,7 @@ Example::
 """
 
 import flet as ft
+
 from app.components.frontend.styles import PulseColors
 
 

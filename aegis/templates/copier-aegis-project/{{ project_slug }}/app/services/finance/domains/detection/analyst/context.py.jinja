@@ -1,0 +1,97 @@
+{% if include_ai and ai_backend != "memory" %}"""The report context: one load, every figure the sections need."""
+
+from datetime import date
+from typing import Any
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+)
+from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.finance.domains.ledger import networth
+from app.services.finance.models import (
+    FinanceAccount,
+    FinanceInsight,
+    FinanceLiabilityDetail,
+    FinanceNetWorthSnapshot,
+    FinanceRecurringStream,
+    FinanceTransaction,
+)
+from app.services.finance.domains.planning.envelopes import ENVELOPE_ACCOUNT_TYPE
+from app.services.finance.domains.planning.goals import (
+    goal_metadata,
+    goal_rates,
+)
+from app.services.finance.schemas import (
+    CashflowMonth,
+    ProjectionResponse,
+)
+from app.services.finance.service import FinanceService
+from app.services.finance.domains.ledger import queries as ledger_queries
+from app.services.finance.domains.detection.analyst.activity import (
+    _CASHFLOW_MONTHS,
+    _RECENT_TRANSACTIONS,
+    _ranked_spending,
+)
+from app.services.finance.domains.detection.analyst.sections import (
+    ReportContext,
+    _SPENDING_RANK_POOL,
+    _ACCOUNT_PAGE_SIZE,
+    _NET_WORTH_WINDOW_DAYS,
+    _PROJECTION_DAYS,
+)
+
+
+
+
+
+
+
+
+
+async def load_report_context(
+    db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
+) -> ReportContext:
+    """One pass over the batched reads; everything downstream is data."""
+    today = today or date.today()
+    service = FinanceService(db)
+    live = await ledger_queries.live_accounts_for_owner(db, owner_user_id=owner_user_id)
+    accounts = sorted(
+        (a for a in live if not a.is_hidden),
+        key=lambda a: (a.classification, a.name),
+    )[:_ACCOUNT_PAGE_SIZE]
+    goal_accounts = [a for a in live if goal_metadata(a.metadata_) is not None]
+    envelope_accounts = [a for a in live if a.account_type == ENVELOPE_ACCOUNT_TYPE]
+    liabilities = [a for a in accounts if a.classification == "liability"]
+    recent, transactions_total = await service.list_transactions(
+        owner_user_id=owner_user_id, page_size=_RECENT_TRANSACTIONS
+    )
+    return ReportContext(
+        today=today,
+        accounts=accounts,
+        goal_accounts=goal_accounts,
+        envelope_accounts=envelope_accounts,
+        liability_details=await service.liability_details([a.id for a in liabilities]),
+        series=await networth.get_net_worth_series(
+            db, owner_user_id=owner_user_id, days=_NET_WORTH_WINDOW_DAYS
+        ),
+        projection=await service.project_balances(
+            owner_user_id=owner_user_id, days=_PROJECTION_DAYS, today=today
+        ),
+        holdings=await service.list_current_holdings(owner_user_id=owner_user_id),
+        new_insights=await service.list_insights(
+            owner_user_id=owner_user_id, status="new"
+        ),
+        streams=await service.list_recurring(owner_user_id=owner_user_id),
+        cashflow=await service.monthly_cashflow(
+            owner_user_id=owner_user_id, months=_CASHFLOW_MONTHS, today=today
+        ),
+        ranked_spending=await _ranked_spending(
+            db, owner_user_id=owner_user_id, today=today, limit=_SPENDING_RANK_POOL
+        ),
+        recent_transactions=list(recent),
+        transactions_total=transactions_total,
+        goal_rates=(
+            await goal_rates(db, goal_accounts, today=today) if goal_accounts else {}
+        ),
+    )
+{% endif %}

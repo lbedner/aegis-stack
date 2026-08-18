@@ -13,17 +13,10 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize.insights import commitment_rollup
-from app.services.finance.finance_service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from app.services.finance.domains.detection.insights import commitment_rollup
+from app.services.finance.service import FinanceService
 
-
-async def _account(svc: FinanceService):
-    return await svc.create_manual_account(
-        name="Checking",
-        account_type="checking",
-        classification="asset",
-        owner_user_id=1,
-    )
 
 
 async def _once_bill(svc, *, due=date(2026, 8, 15), amount=50_000):
@@ -112,7 +105,7 @@ class TestAOneTimeBill:
             owner_user_id=1,
             name="BOB",
         )
-        from app.services.finance.categorize import declare_recurring
+        from app.services.finance.domains.detection import declare_recurring
 
         await declare_recurring(async_db_session, [txn.id], owner_user_id=1)
         stream = (await svc.list_recurring(owner_user_id=1))[0]

@@ -6,6 +6,7 @@ Supports both SQLite and PostgreSQL backends.
 """
 
 import flet as ft
+
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer

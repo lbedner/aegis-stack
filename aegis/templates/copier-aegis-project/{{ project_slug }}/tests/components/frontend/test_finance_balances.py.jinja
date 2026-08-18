@@ -87,9 +87,9 @@ class TestANegativeBalanceIsNeverPlain:
     def test_a_negative_row_balance_is_red(self) -> None:
         import inspect
 
-        from app.components.frontend.dashboard.modals import finance_modal
+        from app.components.frontend.dashboard.modals.finance_modal import sidebar
 
-        source = inspect.getsource(finance_modal)
+        source = inspect.getsource(sidebar)
         start = source.index("Individual account rows read in the primary")
         block = source[start : start + 800]
         assert "balance < 0" in block

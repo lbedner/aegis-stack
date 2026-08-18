@@ -15,41 +15,43 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize import generate_insights
-from app.services.finance.categorize.insights import commitment_rollup, is_paused
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.domains.detection import generate_insights
+from app.services.finance.domains.detection.insights import commitment_rollup, is_paused
 from app.services.finance.models import FinanceInsight, FinanceRecurringStream
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_stream
 
 TODAY = date(2026, 8, 9)
 
 
-async def _account(svc):
-    return await svc.create_manual_account(
-        name="Checking", account_type="checking",
-        classification="asset", owner_user_id=1,
-    )
-
-
 async def _bill(svc, account, name="M1 Finance", amount=30_000, direction="outflow"):
-    return await svc.create_recurring_stream(
-        owner_user_id=1, name=name, direction=direction,
-        frequency="monthly", expected_amount=amount,
-        next_expected_date=date(2026, 8, 15), account_id=account.id,
+    return await seed_stream(
+        svc,
+        name=name,
+        direction=direction,
+        expected_amount=amount,
+        next_expected_date=date(2026, 8, 15),
+        account_id=account.id,
     )
 
 
 class TestThePredicate:
     def _stream(self, until):
         return FinanceRecurringStream(
-            owner_user_id=1, name="x", direction="outflow",
-            frequency="monthly", source="user", paused_until=until,
+            owner_user_id=1,
+            name="x",
+            direction="outflow",
+            frequency="monthly",
+            source="user",
+            paused_until=until,
         )
 
     def test_paused_while_the_date_is_ahead(self) -> None:
         assert is_paused(self._stream(date(2026, 11, 1)), TODAY) is True
 
     def test_expires_on_its_own_day(self) -> None:
-        """"Until Nov 1" means active again ON Nov 1 - the lazy expiry
+        """ "Until Nov 1" means active again ON Nov 1 - the lazy expiry
         that makes a scheduler job unnecessary."""
         assert is_paused(self._stream(TODAY), TODAY) is False
 
@@ -67,14 +69,12 @@ class TestTheMoneyMathAgrees:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
-        await svc.pause_recurring(
-            stream.id, until=date(2026, 11, 1), owner_user_id=1
-        )
+        await svc.pause_recurring(stream.id, until=date(2026, 11, 1), owner_user_id=1)
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["fixed_total"] == 0
-        assert stats["fixed_count"] == 0
+        assert stats.fixed_total == 0
+        assert stats.fixed_count == 0
 
     @pytest.mark.asyncio
     async def test_a_muted_bill_finally_leaves_the_rollup_too(
@@ -100,13 +100,9 @@ class TestTheMoneyMathAgrees:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
-        await svc.pause_recurring(
-            stream.id, until=date(2026, 11, 1), owner_user_id=1
-        )
+        await svc.pause_recurring(stream.id, until=date(2026, 11, 1), owner_user_id=1)
 
-        projection = await svc.project_balances(
-            owner_user_id=1, today=TODAY, days=30
-        )
+        projection = await svc.project_balances(owner_user_id=1, today=TODAY, days=30)
 
         assert projection.points == []
 
@@ -119,9 +115,7 @@ class TestTheMoneyMathAgrees:
         svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
-        await svc.pause_recurring(
-            stream.id, until=date(2026, 9, 1), owner_user_id=1
-        )
+        await svc.pause_recurring(stream.id, until=date(2026, 9, 1), owner_user_id=1)
 
         projection = await svc.project_balances(
             owner_user_id=1, today=date(2026, 9, 2), days=30
@@ -138,13 +132,11 @@ class TestTheMoneyMathAgrees:
         stream = await _bill(
             svc, account, name="Paycheck", amount=500_000, direction="inflow"
         )
-        await svc.pause_recurring(
-            stream.id, until=date(2026, 11, 1), owner_user_id=1
-        )
+        await svc.pause_recurring(stream.id, until=date(2026, 11, 1), owner_user_id=1)
 
-        stats = (await svc.budget_summary(owner_user_id=1))["stats"]
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
 
-        assert stats["income_total"] == 0
+        assert stats.income_total == 0
 
     @pytest.mark.asyncio
     async def test_a_paused_bill_is_never_nagged_as_missed(
@@ -158,9 +150,7 @@ class TestTheMoneyMathAgrees:
         stream.status = "mature"
         stream.next_expected_date = date(2026, 7, 1)  # overdue
         async_db_session.add(stream)
-        await svc.pause_recurring(
-            stream.id, until=date(2026, 11, 1), owner_user_id=1
-        )
+        await svc.pause_recurring(stream.id, until=date(2026, 11, 1), owner_user_id=1)
 
         await generate_insights(
             async_db_session, owner_user_id=1, today=TODAY, lookback_days=0
@@ -168,9 +158,9 @@ class TestTheMoneyMathAgrees:
 
         missed = (
             await async_db_session.exec(
-                __import__("sqlmodel").select(FinanceInsight).where(
-                    FinanceInsight.insight_type == "missed_recurring"
-                )
+                __import__("sqlmodel")
+                .select(FinanceInsight)
+                .where(FinanceInsight.insight_type == "missed_recurring")
             )
         ).all()
         assert missed == []

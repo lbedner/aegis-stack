@@ -34,6 +34,16 @@ editing (accidental `aegis init` nesting has produced `my-app/my-app/my-app`).
 files are stack-specific so edit surgically. See memory
 `project-my-app-disposable`.
 
+### Module size budget
+Logic modules cap at **500 lines**; declaration modules (models, schemas,
+locales, seeds, fixtures) at **900**. No module may be both >40% of its
+package and >400 lines - that shape is one file wearing a folder. Enforced by
+`tests/core/test_module_size_budget.py`, whose `BUDGET` dict is a ratchet: it
+records existing debt at current size, so nothing gets worse and anything new
+must meet the cap outright. Shrink a file under its limit and the test tells
+you to delete its entry. The reader being protected is an agent: 500 lines is
+~7k tokens, and past ~2000 the Read tool pages instead of loading.
+
 ### Scope control
 Fix exactly what is asked. No scope creep, no unrequested test suites, minimal
 viable change, and verify it works.

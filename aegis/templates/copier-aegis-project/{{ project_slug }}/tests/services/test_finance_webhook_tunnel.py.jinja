@@ -15,9 +15,9 @@ from app.components.backend.shutdown.finance_webhook_tunnel import (
     shutdown_finance_webhook_tunnel,
 )
 from app.components.backend.startup import finance_webhook_tunnel as tunnel
-from app.services.finance import connection_service
-from app.services.finance.providers import plaid as plaid_mod
-from app.services.finance.providers.plaid import (
+from app.services.finance.adapters.providers import connections
+from app.services.finance.adapters.providers import plaid as plaid_mod
+from app.services.finance.adapters.providers.plaid import (
     get_webhook_url,
     set_runtime_webhook_url,
 )
@@ -129,14 +129,14 @@ class TestRefreshWebhookUrls:
         self, async_db_session: AsyncSession
     ) -> None:
         for item in ("item-1", "item-2"):
-            await connection_service.create_plaid_connection(
+            await connections.create_plaid_connection(
                 async_db_session,
                 owner_user_id=1,
                 access_token=f"tok-{item}",
                 item_id=item,
             )
         client = _RecordingClient()
-        updated = await connection_service.refresh_webhook_urls(
+        updated = await connections.refresh_webhook_urls(
             async_db_session,
             webhook_url="https://abc.trycloudflare.com/wh",
             client=client,
@@ -152,14 +152,14 @@ class TestRefreshWebhookUrls:
         self, async_db_session: AsyncSession
     ) -> None:
         for item in ("item-1", "item-2"):
-            await connection_service.create_plaid_connection(
+            await connections.create_plaid_connection(
                 async_db_session,
                 owner_user_id=1,
                 access_token=f"tok-{item}",
                 item_id=item,
             )
         client = _RecordingClient(fail_tokens={"tok-item-1"})
-        updated = await connection_service.refresh_webhook_urls(
+        updated = await connections.refresh_webhook_urls(
             async_db_session,
             webhook_url="https://abc.trycloudflare.com/wh",
             client=client,

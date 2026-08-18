@@ -6,6 +6,7 @@ configuration, and integration status.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,

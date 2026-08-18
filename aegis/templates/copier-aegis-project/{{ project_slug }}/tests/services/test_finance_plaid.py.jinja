@@ -11,9 +11,13 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance import connection_service
-from app.services.finance.finance_service import FinanceService
-from app.services.finance.models import FinanceImportBatch, FinanceTransaction
+from app.services.finance.models import (
+    FinanceImportBatch,
+    FinanceTransaction,
+    FinanceWebhookEvent,
+)
+from app.services.finance.adapters.providers import connections
+from app.services.finance.service import FinanceService
 
 # Shapes copied from a real sandbox response (accounts/get, transactions/sync).
 _ACCOUNTS = [
@@ -247,7 +251,7 @@ class FakePlaidClient:
         }
 
     async def get_holdings(self, _access_token):
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         if not self._holdings:
             raise PlaidError("NO_INVESTMENT_ACCOUNTS", "item has no investments")
@@ -269,7 +273,7 @@ class TestPlaidConnection:
     async def test_create_connection_encrypts_token_and_is_idempotent(
         self, async_db_session: AsyncSession
     ) -> None:
-        first = await connection_service.create_plaid_connection(
+        first = await connections.create_plaid_connection(
             async_db_session,
             owner_user_id=1,
             access_token="access-sandbox-secret",
@@ -278,7 +282,7 @@ class TestPlaidConnection:
         assert first.access_token_encrypted != "access-sandbox-secret"
         assert first.provider == "plaid"
         # Same item id -> same row (re-linked), not a duplicate.
-        again = await connection_service.create_plaid_connection(
+        again = await connections.create_plaid_connection(
             async_db_session,
             owner_user_id=1,
             access_token="access-sandbox-rotated",
@@ -291,10 +295,10 @@ class TestPlaidConnection:
         self, async_db_session: AsyncSession
     ) -> None:
         client = FakePlaidClient(_ACCOUNTS, _TXNS)
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        result = await connection_service.sync_plaid_connection(
+        result = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         assert result.accounts == 4
@@ -322,11 +326,11 @@ class TestPlaidConnection:
     async def test_sync_labels_connection_with_institution_name(
         self, async_db_session: AsyncSession
     ) -> None:
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
         assert conn.label is None
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=FakePlaidClient(_ACCOUNTS, _TXNS)
         )
         assert conn.label == "First Platypus Bank"  # UI shows this, not "Plaid"
@@ -335,10 +339,10 @@ class TestPlaidConnection:
     async def test_sync_categorizes_from_plaid_pfc(
         self, async_db_session: AsyncSession
     ) -> None:
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=FakePlaidClient(_ACCOUNTS, _TXNS)
         )
         svc = FinanceService(async_db_session)
@@ -354,13 +358,13 @@ class TestPlaidConnection:
         # ``always`` returns the same transactions on every page, so the second
         # sync must dedup them by (account, source, transaction_id).
         client = FakePlaidClient(_ACCOUNTS, _TXNS, always=True)
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        first = await connection_service.sync_plaid_connection(
+        first = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
-        second = await connection_service.sync_plaid_connection(
+        second = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         assert first.added == 2
@@ -378,10 +382,10 @@ class TestPlaidConnection:
         client = FakePlaidClient(
             _ACCOUNTS, _TXNS, holdings=_HOLDINGS, securities=_SECURITIES
         )
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        result = await connection_service.sync_plaid_connection(
+        result = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         assert result.holdings == 2
@@ -413,10 +417,10 @@ class TestPlaidConnection:
             investment_txns=_INVESTMENT_TXNS,
             investment_securities=_SECURITIES,
         )
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        result = await connection_service.sync_plaid_connection(
+        result = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         assert result.trades == 2
@@ -446,13 +450,13 @@ class TestPlaidConnection:
             investment_txns=_INVESTMENT_TXNS,
             investment_securities=_SECURITIES,
         )
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        first = await connection_service.sync_plaid_connection(
+        first = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
-        second = await connection_service.sync_plaid_connection(
+        second = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         assert first.trades == 2
@@ -472,19 +476,19 @@ class TestPlaidConnection:
         update the existing accounts, not duplicate them."""
         svc = FinanceService(async_db_session)
 
-        conn_a = await connection_service.create_plaid_connection(
+        conn_a = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="a", item_id="item-a"
         )
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn_a, client=FakePlaidClient(_ACCOUNTS, [])
         )
 
         # Same accounts (same name + mask), brand-new account_ids.
         relinked = [{**a, "account_id": a["account_id"] + "_v2"} for a in _ACCOUNTS]
-        conn_b = await connection_service.create_plaid_connection(
+        conn_b = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="b", item_id="item-b"
         )
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn_b, client=FakePlaidClient(relinked, [])
         )
 
@@ -505,10 +509,10 @@ class TestPlaidConnection:
         them — the content hash (LANE-2) must, or every transaction doubles."""
         svc = FinanceService(async_db_session)
 
-        conn_a = await connection_service.create_plaid_connection(
+        conn_a = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="a", item_id="item-a"
         )
-        first = await connection_service.sync_plaid_connection(
+        first = await connections.sync_plaid_connection(
             async_db_session, conn_a, client=FakePlaidClient(_ACCOUNTS, _TXNS)
         )
         assert first.added == 2
@@ -525,10 +529,10 @@ class TestPlaidConnection:
             }
             for t in _TXNS
         ]
-        conn_b = await connection_service.create_plaid_connection(
+        conn_b = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="b", item_id="item-b"
         )
-        second = await connection_service.sync_plaid_connection(
+        second = await connections.sync_plaid_connection(
             async_db_session,
             conn_b,
             client=FakePlaidClient(relinked_accounts, relinked_txns),
@@ -547,16 +551,16 @@ class TestPlaidConnection:
         and every account under it (history rows are kept, not deleted)."""
         svc = FinanceService(async_db_session)
         client = FakePlaidClient(_ACCOUNTS, _TXNS)
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         assert len(accounts) == 4
 
-        ok, revoke = await connection_service.disconnect_connection(
+        ok, revoke = await connections.disconnect_connection(
             async_db_session, conn.id, owner_user_id=1, client=client
         )
         assert ok is True
@@ -567,7 +571,7 @@ class TestPlaidConnection:
         await revoke()
         assert client.removed_tokens == ["tok"]  # Item revoked at Plaid
         # Connection drops from the active listing; accounts drop from listings.
-        conns = await connection_service.list_plaid_connections(
+        conns = await connections.list_plaid_connections(
             async_db_session, owner_user_id=1
         )
         assert conns == []
@@ -594,7 +598,7 @@ class TestPlaidConnection:
     async def test_disconnect_missing_connection_returns_false(
         self, async_db_session: AsyncSession
     ) -> None:
-        ok, revoke = await connection_service.disconnect_connection(
+        ok, revoke = await connections.disconnect_connection(
             async_db_session, 999, owner_user_id=1, client=FakePlaidClient([], [])
         )
         assert ok is False
@@ -607,24 +611,24 @@ class TestPlaidConnection:
         """A stuck/invalid Item must still be removable: a Plaid error on
         item/remove is swallowed (in the deferred revoke) and the local
         teardown has already happened."""
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         class BoomClient(FakePlaidClient):
             async def remove_item(self, access_token):
                 raise PlaidError("ITEM_NOT_FOUND", "already gone")
 
         client = BoomClient(_ACCOUNTS, _TXNS)
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
-        ok, revoke = await connection_service.disconnect_connection(
+        ok, revoke = await connections.disconnect_connection(
             async_db_session, conn.id, owner_user_id=1, client=client
         )
         assert ok is True
-        conns = await connection_service.list_plaid_connections(
+        conns = await connections.list_plaid_connections(
             async_db_session, owner_user_id=1
         )
         assert conns == []
@@ -643,17 +647,17 @@ class TestPlaidConnection:
                 raise httpx.ConnectError("plaid unreachable")
 
         client = UnreachableClient(_ACCOUNTS, _TXNS)
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
-        ok, revoke = await connection_service.disconnect_connection(
+        ok, revoke = await connections.disconnect_connection(
             async_db_session, conn.id, owner_user_id=1, client=client
         )
         assert ok is True
-        conns = await connection_service.list_plaid_connections(
+        conns = await connections.list_plaid_connections(
             async_db_session, owner_user_id=1
         )
         assert conns == []
@@ -667,17 +671,17 @@ class TestPlaidConnection:
         """A corrupted/rekeyed ciphertext must not block the local teardown:
         the disconnect succeeds with no revoke (nothing usable to revoke)."""
         client = FakePlaidClient(_ACCOUNTS, _TXNS)
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
         conn.access_token_encrypted = "not-a-valid-ciphertext"
-        ok, revoke = await connection_service.disconnect_connection(
+        ok, revoke = await connections.disconnect_connection(
             async_db_session, conn.id, owner_user_id=1, client=client
         )
         assert ok is True
         assert revoke is None
         assert client.removed_tokens == []
-        conns = await connection_service.list_plaid_connections(
+        conns = await connections.list_plaid_connections(
             async_db_session, owner_user_id=1
         )
         assert conns == []
@@ -688,7 +692,7 @@ class TestPlaidConnection:
     ) -> None:
         # Pending (no public tokens yet) -> no connections, so the frontend
         # keeps polling.
-        pending = await connection_service.complete_hosted_link(
+        pending = await connections.complete_hosted_link(
             async_db_session,
             "link-token-x",
             owner_user_id=1,
@@ -700,7 +704,7 @@ class TestPlaidConnection:
         client = FakePlaidClient(
             _ACCOUNTS, _TXNS, public_tokens=["public-sandbox-abc"]
         )
-        results = await connection_service.complete_hosted_link(
+        results = await connections.complete_hosted_link(
             async_db_session, "link-token-x", owner_user_id=1, client=client
         )
         assert len(results) == 1
@@ -716,10 +720,10 @@ class TestPlaidConnection:
         self, async_db_session: AsyncSession
     ) -> None:
         client = FakePlaidClient(_ACCOUNTS, _TXNS)
-        await connection_service.create_plaid_connection(
+        await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
-        result = await connection_service.process_plaid_webhook(
+        result = await connections.process_plaid_webhook(
             async_db_session,
             {
                 "webhook_type": "TRANSACTIONS",
@@ -739,14 +743,14 @@ class TestPlaidConnection:
     ) -> None:
         fake = FakePlaidClient([], [])
         # ITEM webhook for an item we don't have -> unknown_item, no state flip.
-        non_txn = await connection_service.process_plaid_webhook(
+        non_txn = await connections.process_plaid_webhook(
             async_db_session,
             {"webhook_type": "ITEM", "webhook_code": "ERROR", "item_id": "item-1"},
             client=fake,
         )
         assert non_txn == "unknown_item"
         # Transaction webhook for an item we don't have -> unknown_item.
-        unknown = await connection_service.process_plaid_webhook(
+        unknown = await connections.process_plaid_webhook(
             async_db_session,
             {
                 "webhook_type": "TRANSACTIONS",
@@ -791,7 +795,7 @@ class TestPlaidPendingAndMutations:
     precedence, and removed[] tombstones."""
 
     async def _connect(self, db: AsyncSession):
-        return await connection_service.create_plaid_connection(
+        return await connections.create_plaid_connection(
             db, owner_user_id=1, access_token="tok", item_id="item-1"
         )
 
@@ -811,7 +815,7 @@ class TestPlaidPendingAndMutations:
         self, async_db_session: AsyncSession
     ) -> None:
         conn = await self._connect(async_db_session)
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=FakePlaidClient(_ACCOUNTS, [_PENDING_TXN])
         )
         rows = await self._plaid_rows(async_db_session)
@@ -825,12 +829,12 @@ class TestPlaidPendingAndMutations:
     ) -> None:
         conn = await self._connect(async_db_session)
         client = FakePlaidClient(_ACCOUNTS, [_PENDING_TXN], always=True)
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         # Next sync generation: the posted row replaces the pre-auth.
         client._added = [_POSTED_TXN]
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
 
@@ -852,7 +856,7 @@ class TestPlaidPendingAndMutations:
         self, async_db_session: AsyncSession
     ) -> None:
         conn = await self._connect(async_db_session)
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session,
             conn,
             client=FakePlaidClient(_ACCOUNTS, [_PENDING_TXN, _POSTED_TXN]),
@@ -867,7 +871,7 @@ class TestPlaidPendingAndMutations:
     ) -> None:
         conn = await self._connect(async_db_session)
         client = FakePlaidClient(_ACCOUNTS, [_PENDING_TXN], always=True)
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         # The pre-auth never posts; Plaid retracts it via removed[].
@@ -875,7 +879,7 @@ class TestPlaidPendingAndMutations:
         client._removed = [
             {"transaction_id": "txn_pending_coffee", "account_id": "acc_check"}
         ]
-        result = await connection_service.sync_plaid_connection(
+        result = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         assert result.removed == 1
@@ -897,7 +901,7 @@ class TestPlaidPendingAndMutations:
     ) -> None:
         conn = await self._connect(async_db_session)
         client = FakePlaidClient(_ACCOUNTS, _TXNS, always=True)
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         rows = {r.external_id: r for r in await self._plaid_rows(async_db_session)}
@@ -910,7 +914,7 @@ class TestPlaidPendingAndMutations:
 
         # Bank rewrites history (modified[]): display fields refresh, but the
         # user's category wins over the provider's.
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         rows = {r.external_id: r for r in await self._plaid_rows(async_db_session)}
@@ -923,14 +927,14 @@ class TestPlaidPendingAndMutations:
     ) -> None:
         conn = await self._connect(async_db_session)
         client = FakePlaidClient(_ACCOUNTS, [dict(_TXNS[0])], always=True)
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         # Plaid re-categorizes the merchant in a later sync generation.
         client._added = [
             {**_TXNS[0], "personal_finance_category": {"primary": "TRAVEL"}}
         ]
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         rows = {r.external_id: r for r in await self._plaid_rows(async_db_session)}
@@ -945,7 +949,7 @@ class TestPlaidPendingAndMutations:
     ) -> None:
         conn = await self._connect(async_db_session)
         client = FakePlaidClient(_ACCOUNTS, [], always=True)
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         svc = FinanceService(async_db_session)
@@ -969,7 +973,7 @@ class TestPlaidPendingAndMutations:
             )
 
         client._removed = [{"transaction_id": "txn_shared", "account_id": "acc_check"}]
-        result = await connection_service.sync_plaid_connection(
+        result = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         assert result.removed == 1
@@ -986,7 +990,7 @@ class TestPlaidWebhookLifecycle:
     needs-attention flag."""
 
     async def _connect(self, db: AsyncSession):
-        return await connection_service.create_plaid_connection(
+        return await connections.create_plaid_connection(
             db, owner_user_id=1, access_token="tok", item_id="item-1"
         )
 
@@ -995,7 +999,7 @@ class TestPlaidWebhookLifecycle:
         self, async_db_session: AsyncSession
     ) -> None:
         conn = await self._connect(async_db_session)
-        result = await connection_service.process_plaid_webhook(
+        result = await connections.process_plaid_webhook(
             async_db_session,
             {
                 "webhook_type": "ITEM",
@@ -1023,7 +1027,7 @@ class TestPlaidWebhookLifecycle:
         self, async_db_session: AsyncSession
     ) -> None:
         conn = await self._connect(async_db_session)
-        result = await connection_service.process_plaid_webhook(
+        result = await connections.process_plaid_webhook(
             async_db_session,
             {
                 "webhook_type": "ITEM",
@@ -1045,7 +1049,7 @@ class TestPlaidWebhookLifecycle:
         self, async_db_session: AsyncSession
     ) -> None:
         conn = await self._connect(async_db_session)
-        result = await connection_service.process_plaid_webhook(
+        result = await connections.process_plaid_webhook(
             async_db_session,
             {
                 "webhook_type": "ITEM",
@@ -1069,17 +1073,17 @@ class TestPlaidWebhookLifecycle:
             "item_id": "item-1",
         }
         client = FakePlaidClient(_ACCOUNTS, _TXNS)
-        first = await connection_service.process_plaid_webhook(
+        first = await connections.process_plaid_webhook(
             async_db_session, payload, client=client
         )
-        second = await connection_service.process_plaid_webhook(
+        second = await connections.process_plaid_webhook(
             async_db_session, dict(payload), client=client
         )
         assert first == "synced"
         assert second == "duplicate"
         events = (
             await async_db_session.exec(
-                select(connection_service.FinanceWebhookEvent)
+                select(FinanceWebhookEvent)
             )
         ).all()
         assert len(events) == 1  # the idempotency key blocked a second row
@@ -1095,7 +1099,7 @@ class TestPlaidWebhookLifecycle:
         await async_db_session.flush()
         # The user re-authenticated via update-mode Link; the next sync works
         # and the connection returns to healthy.
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=FakePlaidClient(_ACCOUNTS, _TXNS)
         )
         assert conn.status == "healthy"
@@ -1107,7 +1111,7 @@ class TestPlaidWebhookLifecycle:
     ) -> None:
         conn = await self._connect(async_db_session)
         client = FakePlaidClient([], [])
-        session = await connection_service.relink_connection(
+        session = await connections.relink_connection(
             async_db_session, conn.id, owner_user_id=1, client=client
         )
         assert session is not None
@@ -1127,13 +1131,13 @@ class TestPlaidWebhookLifecycle:
         conn = await self._connect(async_db_session)
         client = FakePlaidClient([], [])
         assert (
-            await connection_service.relink_connection(
+            await connections.relink_connection(
                 async_db_session, 99999, owner_user_id=1, client=client
             )
             is None
         )
         assert (
-            await connection_service.relink_connection(
+            await connections.relink_connection(
                 async_db_session, conn.id, owner_user_id=2, client=client
             )
             is None
@@ -1183,13 +1187,13 @@ class TestPlaidLiabilities:
     ) -> None:
         import copy
 
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
         client = FakePlaidClient(
             _ACCOUNTS, [], liabilities=copy.deepcopy(_LIABILITIES)
         )
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         rows = await self._liability_rows(async_db_session)
@@ -1219,7 +1223,7 @@ class TestPlaidLiabilities:
         # Re-pull with changed values -> same row updated in place, never a
         # second row per account.
         client._liabilities["credit"][0]["minimum_payment_amount"] = 35.0
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         rows = await self._liability_rows(async_db_session)
@@ -1230,11 +1234,11 @@ class TestPlaidLiabilities:
     async def test_item_without_liabilities_support_makes_zero_calls(
         self, async_db_session: AsyncSession
     ) -> None:
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
         client = FakePlaidClient(_ACCOUNTS, _TXNS)  # no liabilities capability
-        result = await connection_service.sync_plaid_connection(
+        result = await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         assert result.added == 2  # the sync itself is unaffected
@@ -1255,7 +1259,7 @@ class _FailsForToken(FakePlaidClient):
         return await super().get_accounts(_access_token)
 
     async def sync_transactions(self, _access_token, cursor=None):
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         if _access_token == self._fail_token:
             raise PlaidError("INTERNAL_SERVER_ERROR", "bank is on fire")
@@ -1270,14 +1274,14 @@ class TestSyncFailureIsolation:
     async def test_one_failing_connection_does_not_stop_the_rest(
         self, async_db_session: AsyncSession
     ) -> None:
-        first = await connection_service.create_plaid_connection(
+        first = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok-1", item_id="item-1"
         )
-        second = await connection_service.create_plaid_connection(
+        second = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok-2", item_id="item-2"
         )
         client = _FailsForToken(_ACCOUNTS, _TXNS, fail_token="tok-1")
-        results = await connection_service.sync_owner_connections(
+        results = await connections.sync_owner_connections(
             async_db_session, owner_user_id=1, client=client
         )
         # The healthy bank synced; the failing one is marked, not fatal.
@@ -1300,7 +1304,7 @@ class TestSyncFailureIsolation:
     async def test_needs_user_action_connection_is_skipped(
         self, async_db_session: AsyncSession
     ) -> None:
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok-1", item_id="item-1"
         )
         conn.needs_user_action = True
@@ -1309,7 +1313,7 @@ class TestSyncFailureIsolation:
         await async_db_session.flush()
 
         client = _FailsForToken(_ACCOUNTS, _TXNS, fail_token="none")
-        results = await connection_service.sync_owner_connections(
+        results = await connections.sync_owner_connections(
             async_db_session, owner_user_id=1, client=client
         )
         assert results == []
@@ -1320,14 +1324,14 @@ class TestSyncFailureIsolation:
     async def test_sync_one_connection_targets_a_single_bank(
         self, async_db_session: AsyncSession
     ) -> None:
-        first = await connection_service.create_plaid_connection(
+        first = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok-1", item_id="item-1"
         )
-        await connection_service.create_plaid_connection(
+        await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok-2", item_id="item-2"
         )
         client = _FailsForToken(_ACCOUNTS, _TXNS, fail_token="none")
-        result = await connection_service.sync_one_connection(
+        result = await connections.sync_one_connection(
             async_db_session, first.id, owner_user_id=1, client=client
         )
         assert result is not None
@@ -1338,18 +1342,18 @@ class TestSyncFailureIsolation:
     async def test_sync_one_connection_unknown_or_foreign_returns_none(
         self, async_db_session: AsyncSession
     ) -> None:
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok-1", item_id="item-1"
         )
         client = _FailsForToken(_ACCOUNTS, _TXNS, fail_token="none")
         assert (
-            await connection_service.sync_one_connection(
+            await connections.sync_one_connection(
                 async_db_session, 99999, owner_user_id=1, client=client
             )
             is None
         )
         assert (
-            await connection_service.sync_one_connection(
+            await connections.sync_one_connection(
                 async_db_session, conn.id, owner_user_id=2, client=client
             )
             is None
@@ -1365,11 +1369,11 @@ class TestPlaidFireSandboxWebhook:
     async def test_fires_for_each_plaid_connection(
         self, async_db_session: AsyncSession
     ) -> None:
-        conn = await connection_service.create_plaid_connection(
+        conn = await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
         client = FakePlaidClient([], [])
-        fired = await connection_service.fire_sandbox_webhook(
+        fired = await connections.fire_sandbox_webhook(
             async_db_session, owner_user_id=1, client=client
         )
         assert fired == [conn.id]
@@ -1379,15 +1383,15 @@ class TestPlaidFireSandboxWebhook:
     async def test_refuses_outside_sandbox(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
-        await connection_service.create_plaid_connection(
+        await connections.create_plaid_connection(
             async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
         )
         client = FakePlaidClient([], [])
         client.environment = "production"
         with pytest.raises(PlaidError):
-            await connection_service.fire_sandbox_webhook(
+            await connections.fire_sandbox_webhook(
                 async_db_session, owner_user_id=1, client=client
             )
         assert client.fired_webhooks == []
@@ -1460,7 +1464,7 @@ class TestPlaidWebhookVerification:
         return signing_input + "." + b64url(signature)
 
     def _client(self, jwk):
-        from app.services.finance.providers.plaid import PlaidClient
+        from app.services.finance.adapters.providers.plaid import PlaidClient
 
         class KeyedClient(PlaidClient):
             def __init__(self) -> None:
@@ -1484,7 +1488,7 @@ class TestPlaidWebhookVerification:
 
     @pytest.mark.asyncio
     async def test_tampered_body_is_rejected(self) -> None:
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         private_key, jwk = self._make_key()
         token = self._make_jwt(private_key, b'{"item_id": "item-1"}')
@@ -1495,7 +1499,7 @@ class TestPlaidWebhookVerification:
 
     @pytest.mark.asyncio
     async def test_non_es256_alg_is_rejected(self) -> None:
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         private_key, jwk = self._make_key()
         body = b"{}"
@@ -1507,7 +1511,7 @@ class TestPlaidWebhookVerification:
     async def test_stale_iat_is_rejected(self) -> None:
         import time
 
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         private_key, jwk = self._make_key()
         body = b"{}"
@@ -1517,7 +1521,7 @@ class TestPlaidWebhookVerification:
 
     @pytest.mark.asyncio
     async def test_wrong_key_signature_is_rejected(self) -> None:
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         _key_a, jwk = self._make_key()
         other_key, _jwk_b = self._make_key()
@@ -1544,7 +1548,7 @@ class TestPlaidSyncAudit:
     never advances the cursor past pages that were not applied."""
 
     async def _connect(self, db: AsyncSession):
-        return await connection_service.create_plaid_connection(
+        return await connections.create_plaid_connection(
             db, owner_user_id=1, access_token="tok", item_id="item-1"
         )
 
@@ -1565,7 +1569,7 @@ class TestPlaidSyncAudit:
     ) -> None:
         conn = await self._connect(async_db_session)
         client = FakePlaidClient(_ACCOUNTS, _TXNS, always=True)
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         batches = await self._batches(async_db_session)
@@ -1590,7 +1594,7 @@ class TestPlaidSyncAudit:
         assert all(t.import_batch_id == first.id for t in txns)
 
         # A second pass is its own audit row, resuming from the prior cursor.
-        await connection_service.sync_plaid_connection(
+        await connections.sync_plaid_connection(
             async_db_session, conn, client=client
         )
         batches = await self._batches(async_db_session)
@@ -1604,7 +1608,7 @@ class TestPlaidSyncAudit:
     async def test_midsync_failure_never_advances_the_cursor(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.providers.plaid import PlaidError
+        from app.services.finance.adapters.providers.plaid import PlaidError
 
         class ExplodesOnPageTwo(FakePlaidClient):
             async def sync_transactions(self, _access_token, cursor=None):
@@ -1620,7 +1624,7 @@ class TestPlaidSyncAudit:
 
         conn = await self._connect(async_db_session)
         with pytest.raises(PlaidError):
-            await connection_service.sync_plaid_connection(
+            await connections.sync_plaid_connection(
                 async_db_session,
                 conn,
                 client=ExplodesOnPageTwo(_ACCOUNTS, []),
@@ -1642,7 +1646,7 @@ class TestPlaidSyncAudit:
 
         # Recovery: the next run starts from the last committed cursor and
         # applies everything exactly once.
-        result = await connection_service.sync_plaid_connection(
+        result = await connections.sync_plaid_connection(
             async_db_session, conn, client=FakePlaidClient(_ACCOUNTS, _TXNS)
         )
         assert result.added == 2
@@ -1657,8 +1661,8 @@ class TestPlaidClientPost:
     async def test_non_json_body_raises_plaid_error(self, monkeypatch) -> None:
         """A non-JSON body (e.g. an HTML 502 from an upstream proxy) surfaces as
         a PlaidError, not a raw JSONDecodeError."""
-        from app.services.finance.providers import plaid as plaid_mod
-        from app.services.finance.providers.plaid import PlaidClient, PlaidError
+        from app.services.finance.adapters.providers import plaid as plaid_mod
+        from app.services.finance.adapters.providers.plaid import PlaidClient, PlaidError
 
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(502, text="<html>Bad Gateway</html>")

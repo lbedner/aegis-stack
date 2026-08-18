@@ -6,6 +6,7 @@ Combines FastAPI backend and Flet frontend into a single unified view.
 """
 
 import flet as ft
+
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
@@ -105,12 +106,8 @@ class ServerCard:
                     # the middleware has recorded at least one request).
                     ft.Row(
                         [
-                            create_metric_container(
-                                "Avg Response", f"{avg_ms:.0f}ms"
-                            ),
-                            create_metric_container(
-                                "p95 Response", f"{p95_ms:.0f}ms"
-                            ),
+                            create_metric_container("Avg Response", f"{avg_ms:.0f}ms"),
+                            create_metric_container("p95 Response", f"{p95_ms:.0f}ms"),
                         ],
                         expand=True,
                     ),

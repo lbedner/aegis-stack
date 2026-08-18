@@ -118,3 +118,62 @@ class TestAxisLabelPositions:
     def test_the_label_count_stays_readable(self) -> None:
         for count in (30, 90, 365, 1000):
             assert len(axis_label_positions(count)) <= 12
+
+
+def _find_chart(control: object) -> object | None:
+    """Depth-first search for the ft.LineChart inside a card's tree."""
+    import flet as ft
+
+    if isinstance(control, ft.LineChart):
+        return control
+    for child_attr in ("content", "controls"):
+        child = getattr(control, child_attr, None)
+        if child is None:
+            continue
+        children = child if isinstance(child, list) else [child]
+        for c in children:
+            found = _find_chart(c)
+            if found is not None:
+                return found
+    return None
+
+
+class TestSplitChartAnimation:
+    """A polarity-split chart must not run Flet's implicit data animation.
+
+    The lerp between old and new chart states interpolates the axis
+    bounds and the gradient stops out of sync, so during the ~150ms
+    settle the red 'below zero' band paints across the top of the plot
+    (confirmed live on the Projected tab). A plain single-colour chart
+    has nothing to mis-blend, so it keeps the default animation.
+    """
+
+    def _card(self, split: bool) -> LineChartCard:
+        from app.components.frontend.dashboard.modals.modal_sections import (
+            LineSeries,
+        )
+
+        return LineChartCard(
+            title="t",
+            x_labels=["2026-01-01", "2026-01-02"],
+            series=[
+                LineSeries(
+                    label="s",
+                    color="#17CCBF",
+                    points=[(0, 5.0), (1, -5.0)],
+                    fill=True,
+                    split_y=0.0 if split else None,
+                )
+            ],
+            min_y=-10.0,
+        )
+
+    def test_split_series_disables_the_data_animation(self) -> None:
+        chart = _find_chart(self._card(split=True))
+        assert chart is not None
+        assert chart.animate is not None and chart.animate.duration == 0
+
+    def test_plain_series_keeps_the_default_animation(self) -> None:
+        chart = _find_chart(self._card(split=False))
+        assert chart is not None
+        assert chart.animate is None

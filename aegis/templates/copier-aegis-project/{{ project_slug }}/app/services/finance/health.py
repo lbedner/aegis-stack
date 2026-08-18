@@ -11,7 +11,7 @@ from app.core.db import get_async_session
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .constants import FINANCE_COMPONENT_NAME
-from .finance_service import FinanceService
+from .service import FinanceService
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,7 @@ async def check_finance_service_health() -> ComponentStatus:
             else ComponentStatusType.WARNING
         )
         message = (
-            f"{summary.account_count} accounts, "
-            f"{summary.connection_count} connections"
+            f"{summary.account_count} accounts, {summary.connection_count} connections"
         )
         return ComponentStatus(
             name=FINANCE_COMPONENT_NAME,

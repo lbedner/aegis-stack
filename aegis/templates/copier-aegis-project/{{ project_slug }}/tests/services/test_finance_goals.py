@@ -13,8 +13,7 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.finance_service import FinanceService
-from app.services.finance.goals import (
+from app.services.finance.domains.planning.goals import (
     GOAL_ACCOUNT_TYPE,
     GoalMeta,
     MonthlyFigures,
@@ -26,6 +25,7 @@ from app.services.finance.goals import (
     goal_progress,
     set_goal_metadata,
 )
+from app.services.finance.service import FinanceService
 
 
 class TestMetadataContract:
@@ -44,6 +44,25 @@ class TestMetadataContract:
             monthly_contribution=25_000,
         )
         assert written["reconciled_through"] == "2026-08-01"
+
+    def test_stored_shape_is_json_native(self) -> None:
+        """The stored form is the storage contract: plain JSON keys and
+        values, no model objects leaking into ``metadata_``."""
+        written = set_goal_metadata(
+            None,
+            target_amount=300_000,
+            target_date=date(2027, 6, 1),
+            monthly_contribution=25_000,
+        )
+        assert written == {
+            "goal_target_amount": 300_000,
+            "goal_status": "active",
+            "goal_target_date": "2027-06-01",
+            "goal_monthly_contribution": 25_000,
+            "goal_contribution_kind": "fixed",
+            "goal_contribution_bps": None,
+            "goal_priority": 100,
+        }
 
     def test_minimal_goal_defaults(self) -> None:
         meta = goal_metadata(set_goal_metadata(None, target_amount=100_000))
@@ -421,7 +440,8 @@ class TestAutoContribute:
             owner_user_id=1, today=date(2026, 9, 1)
         )
         again = await service.auto_contribute_goals(
-            owner_user_id=1, today=date(2026, 9, 15)  # rerun mid-month
+            owner_user_id=1,
+            today=date(2026, 9, 15),  # rerun mid-month
         )
 
         assert first == 1
@@ -431,9 +451,7 @@ class TestAutoContribute:
         assert refreshed.current_balance == 25_000  # once, not twice
 
     @pytest.mark.asyncio
-    async def test_next_month_books_again(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_next_month_books_again(self, async_db_session: AsyncSession) -> None:
         service = FinanceService(async_db_session)
         goal = await service.create_virtual_goal(
             owner_user_id=1,
@@ -523,9 +541,7 @@ class TestAllocationEngine:
         # $8,200 income, $7,000 committed, one $500 fixed goal above the
         # sweep -> the sweep gets the remaining $700, not $1,200.
         figures = MonthlyFigures(income_total=820_000, committed=700_000)
-        fixed = self._goal(
-            "Starter", monthly_contribution=50_000, priority=1
-        )
+        fixed = self._goal("Starter", monthly_contribution=50_000, priority=1)
         sweep = self._goal("Snowball", contribution_kind="surplus", priority=2)
         asks = allocate_month(
             figures,
@@ -542,7 +558,9 @@ class TestAllocationEngine:
     def test_two_surplus_goals_fund_in_priority_order(self) -> None:
         figures = MonthlyFigures(income_total=500_000, committed=400_000)
         first = self._goal(
-            "Debt", contribution_kind="surplus", priority=1,
+            "Debt",
+            contribution_kind="surplus",
+            priority=1,
             target_amount=60_000,
         )
         second = self._goal("Fund", contribution_kind="surplus", priority=2)
@@ -564,9 +582,7 @@ class TestAllocationEngine:
 
     def test_paused_and_reached_ask_nothing(self) -> None:
         figures = MonthlyFigures(income_total=820_000, committed=0)
-        paused = self._goal(
-            "Paused", status="paused", monthly_contribution=50_000
-        )
+        paused = self._goal("Paused", status="paused", monthly_contribution=50_000)
         full = self._goal("Full", monthly_contribution=50_000, balance=1_000_000)
         asks = allocate_month(
             figures,
@@ -597,9 +613,7 @@ class TestAllocationEngine:
 
     def test_bad_rules_are_rejected(self) -> None:
         with pytest.raises(ValueError):
-            set_goal_metadata(
-                None, target_amount=100, contribution_kind="vibes"
-            )
+            set_goal_metadata(None, target_amount=100, contribution_kind="vibes")
         with pytest.raises(ValueError):
             set_goal_metadata(
                 None,
@@ -652,9 +666,9 @@ class TestConsumersReadTheEngine:
             contribution_kind="percent_income",
             contribution_bps=1_000,
         )
-        stats = (await service.budget_summary(owner_user_id=1))["stats"]
-        assert stats["goals_total"] == 82_000  # 10% of $8,200
-        assert stats["month_net"] == 820_000 - 82_000
+        stats = (await service.budget_summary(owner_user_id=1)).stats
+        assert stats.goals_total == 82_000  # 10% of $8,200
+        assert stats.month_net == 820_000 - 82_000
 
         allocations = await service.goal_allocations(
             owner_user_id=1, today=date(2026, 8, 10)

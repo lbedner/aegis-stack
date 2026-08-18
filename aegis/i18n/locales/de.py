@@ -631,6 +631,11 @@ MESSAGES: dict[str, str] = {
     "update.merge_conflicts": (
         "   {count} Datei(en) haben Merge-Konflikte (nach <<<<<<< suchen):"
     ),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
+    ),
     "update.running_postgen": "Führe Nachgenerierungsaufgaben aus...",
     "update.skipping_postgen_conflicts": (
         "Skipping post-generation tasks — merge conflicts present.\n"

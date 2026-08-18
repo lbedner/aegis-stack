@@ -12,40 +12,28 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance import demo_seed
-from app.services.finance.categorize import (
+from app.services.finance.domains.detection import (
     detect_recurring,
     generate_insights,
     stream_staleness,
 )
-from app.services.finance.finance_service import FinanceService
 from app.services.finance.models import (
     FinanceCategory,
     FinanceInsight,
     FinanceRecurringStream,
 )
+from app.services.finance.seeds import demo_seed
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_txn
 
 _MONTH_STARTS = [date(2026, m, 15) for m in range(1, 8)]  # Jan..Jul 15th
 _TODAY = date(2026, 7, 20)
 
 
-async def _account(svc):
-    return await svc.create_manual_account(
-        name="Checking",
-        account_type="checking",
-        classification="asset",
-        owner_user_id=1,
-    )
-
-
 async def _txn(svc, account_id, amount, day, name, category_id=None):
-    return await svc.create_transaction(
-        account_id=account_id,
-        amount=amount,
-        txn_date=day,
-        owner_user_id=1,
-        name=name,
-        category_id=category_id,
+    return await seed_txn(
+        svc, account_id, amount, day, name=name, category_id=category_id
     )
 
 
@@ -1552,7 +1540,7 @@ class TestSubscriptionCreep:
 
 
 class TestOverspendOnPace:
-    """"More than usual" has to mean "more than usual BY NOW".
+    """ "More than usual" has to mean "more than usual BY NOW".
 
     The rule compared a part-finished month against whole prior months, so
     it could barely fire until the month was nearly over - by which point
@@ -1589,15 +1577,27 @@ class TestOverspendOnPace:
         category = await self._dining(async_db_session)
         for month in (4, 5, 6):
             await _txn(
-                svc, account.id, -10000, date(2026, month, 5), "DINING",
+                svc,
+                account.id,
+                -10000,
+                date(2026, month, 5),
+                "DINING",
                 category_id=category.id,
             )
             await _txn(
-                svc, account.id, -20000, date(2026, month, 25), "DINING",
+                svc,
+                account.id,
+                -20000,
+                date(2026, month, 25),
+                "DINING",
                 category_id=category.id,
             )
         await _txn(
-            svc, account.id, -25000, date(2026, 7, 5), "DINING",
+            svc,
+            account.id,
+            -25000,
+            date(2026, 7, 5),
+            "DINING",
             category_id=category.id,
         )
 
@@ -1618,11 +1618,19 @@ class TestOverspendOnPace:
         category = await self._dining(async_db_session)
         for month in (4, 5, 6):
             await _txn(
-                svc, account.id, -10000, date(2026, month, 2), "DINING",
+                svc,
+                account.id,
+                -10000,
+                date(2026, month, 2),
+                "DINING",
                 category_id=category.id,
             )
         await _txn(
-            svc, account.id, -90000, date(2026, 7, 1), "DINING",
+            svc,
+            account.id,
+            -90000,
+            date(2026, 7, 1),
+            "DINING",
             category_id=category.id,
         )
 
@@ -1642,11 +1650,19 @@ class TestOverspendOnPace:
         category = await self._dining(async_db_session)
         for month in (4, 5, 6):
             await _txn(
-                svc, account.id, -300, date(2026, month, 5), "DINING",
+                svc,
+                account.id,
+                -300,
+                date(2026, month, 5),
+                "DINING",
                 category_id=category.id,
             )
         await _txn(
-            svc, account.id, -4000, date(2026, 7, 5), "DINING",
+            svc,
+            account.id,
+            -4000,
+            date(2026, 7, 5),
+            "DINING",
             category_id=category.id,
         )
 

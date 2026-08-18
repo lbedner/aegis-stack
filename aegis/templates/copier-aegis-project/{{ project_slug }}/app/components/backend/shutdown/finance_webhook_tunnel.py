@@ -27,7 +27,7 @@ from app.core.log import logger
 
 async def shutdown_finance_webhook_tunnel() -> None:
     """Cancel the tunnel discovery task and clear its webhook override."""
-    from app.services.finance.providers.plaid import set_runtime_webhook_url
+    from app.services.finance.adapters.providers.plaid import set_runtime_webhook_url
 
     task = _tunnel._tunnel_task
     _tunnel._tunnel_task = None

@@ -10,7 +10,7 @@ from sqlmodel import Session
 from app.services.ai.fixtures.agent_fixtures import load_agent_fixtures
 from app.services.ai.fixtures.llm_fixtures import load_all_llm_fixtures
 {% if include_finance %}
-from app.services.finance.analyst import load_finance_agent_fixtures
+from app.services.finance.domains.detection.analyst import load_finance_agent_fixtures
 {% endif %}
 
 

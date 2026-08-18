@@ -11,19 +11,14 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.categorize import declare_recurring
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import declare_bill
 
 
 async def _bill(svc, db, account_id, name, cents):
-    txns = [
-        await svc.create_transaction(
-            account_id=account_id, amount=cents, txn_date=date(2026, m, 5),
-            owner_user_id=1, name=name,
-        )
-        for m in range(1, 8)
-    ]
-    await declare_recurring(db, [t.id for t in txns], owner_user_id=1)
+    await declare_bill(
+        svc, db, account_id, name, [date(2026, m, 5) for m in range(1, 8)], cents=cents
+    )
 
 
 class TestProjectionAccountFilter:
@@ -33,12 +28,16 @@ class TestProjectionAccountFilter:
     ) -> None:
         svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
-            name="Checking", account_type="checking",
-            classification="asset", owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=1,
         )
         savings = await svc.create_manual_account(
-            name="Savings", account_type="savings",
-            classification="asset", owner_user_id=1,
+            name="Savings",
+            account_type="savings",
+            classification="asset",
+            owner_user_id=1,
         )
         await _bill(svc, async_db_session, checking.id, "RENT", -180_000)
         await _bill(svc, async_db_session, savings.id, "STORAGE", -9_000)
@@ -60,8 +59,10 @@ class TestProjectionAccountFilter:
     ) -> None:
         svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
-            name="Checking", account_type="checking",
-            classification="asset", owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=1,
         )
         await _bill(svc, async_db_session, checking.id, "RENT", -180_000)
 
@@ -86,13 +87,19 @@ class TestAccountLessBills:
     ) -> None:
         svc = FinanceService(async_db_session)
         await svc.create_manual_account(
-            name="Checking", account_type="checking",
-            classification="asset", owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=1,
         )
         await svc.create_recurring_stream(
-            owner_user_id=1, name="Betr Health", direction="inflow",
-            frequency="semi_monthly", expected_amount=500_000,
-            next_expected_date=date(2026, 8, 15), account_id=None,
+            owner_user_id=1,
+            name="Betr Health",
+            direction="inflow",
+            frequency="semi_monthly",
+            expected_amount=500_000,
+            next_expected_date=date(2026, 8, 15),
+            account_id=None,
         )
 
         result = await svc.project_balances(
@@ -107,17 +114,25 @@ class TestAccountLessBills:
     ) -> None:
         svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
-            name="Checking", account_type="checking",
-            classification="asset", owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=1,
         )
         await svc.create_recurring_stream(
-            owner_user_id=1, name="Betr Health", direction="inflow",
-            frequency="semi_monthly", expected_amount=500_000,
-            next_expected_date=date(2026, 8, 15), account_id=None,
+            owner_user_id=1,
+            name="Betr Health",
+            direction="inflow",
+            frequency="semi_monthly",
+            expected_amount=500_000,
+            next_expected_date=date(2026, 8, 15),
+            account_id=None,
         )
 
         result = await svc.project_balances(
-            owner_user_id=1, days=120, today=date(2026, 8, 2),
+            owner_user_id=1,
+            days=120,
+            today=date(2026, 8, 2),
             account_ids=[checking.id],
         )
 

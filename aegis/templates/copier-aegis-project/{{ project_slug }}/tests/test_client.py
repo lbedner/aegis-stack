@@ -17,6 +17,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from app.core.client import APIClient
 
 
@@ -75,9 +76,7 @@ class TestAPIClient:
         assert client.timeout == 30.0
 
     @pytest.mark.asyncio
-    async def test_get_success(
-        self, make_client: Callable[..., APIClient]
-    ) -> None:
+    async def test_get_success(self, make_client: Callable[..., APIClient]) -> None:
         client = make_client()
         client._client.request = AsyncMock(  # type: ignore[method-assign]
             return_value=_mock_response(200, {"data": "ok"})
@@ -731,3 +730,106 @@ class TestLastError:
 
         assert client.last_error is not None
         assert "connect" in client.last_error.lower()
+
+
+class TestGetCache:
+    """Opt-in GET caching: one fetch serves a whole burst of readers.
+
+    A dashboard opening every tab fires the same reference reads many
+    times at once (observed live: /accounts x8 in one open). Callers that
+    pass ``cache_ttl`` share one request in flight and one cached result;
+    any write through the client drops the cache, so a caller can never
+    read its own write stale.
+    """
+
+    @pytest.mark.asyncio
+    async def test_second_read_within_ttl_does_not_refetch(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(return_value={"items": [1]})
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        first = await client.get("/api/v1/finance/accounts", cache_ttl=30)
+        second = await client.get("/api/v1/finance/accounts", cache_ttl=30)
+
+        assert first == second == {"items": [1]}
+        assert fetch.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_distinct_params_are_distinct_entries(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(return_value={"items": []})
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        await client.get("/api/x", params={"days": 30}, cache_ttl=30)
+        await client.get("/api/x", params={"days": 90}, cache_ttl=30)
+
+        assert fetch.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_concurrent_burst_coalesces_to_one_request(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import asyncio
+
+        client = make_client()
+
+        async def slow_fetch(*args: Any, **kwargs: Any) -> dict:
+            await asyncio.sleep(0)
+            return {"items": [1]}
+
+        fetch = AsyncMock(side_effect=slow_fetch)
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        results = await asyncio.gather(
+            *(client.get("/api/v1/finance/accounts", cache_ttl=30) for _ in range(8))
+        )
+
+        assert all(r == {"items": [1]} for r in results)
+        assert fetch.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_a_write_invalidates_the_cache(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(return_value={"items": [1]})
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        await client.get("/api/v1/finance/accounts", cache_ttl=30)
+        await client.post("/api/v1/finance/accounts", json={"name": "New"})
+        await client.get("/api/v1/finance/accounts", cache_ttl=30)
+
+        get_calls = [c for c in fetch.await_args_list if c.args[0] == "GET"]
+        assert len(get_calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_an_error_result_is_not_cached(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(side_effect=[None, {"items": [1]}])
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        first = await client.get("/api/v1/finance/accounts", cache_ttl=30)
+        second = await client.get("/api/v1/finance/accounts", cache_ttl=30)
+
+        assert first is None
+        assert second == {"items": [1]}
+        assert fetch.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_uncached_get_always_fetches(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(return_value={"items": [1]})
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        await client.get("/api/v1/finance/accounts")
+        await client.get("/api/v1/finance/accounts")
+
+        assert fetch.await_count == 2

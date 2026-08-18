@@ -345,6 +345,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "认证",
     "projectmap.ai": "AI 对话",
     "projectmap.comms": "通信",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "文档",
     # ── 项目生成后：底部信息 ──────────────────────────────────────────
     "postgen.docs_link": "文档：https://docs.aegis-stack.io",
@@ -725,6 +729,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "交互式选择服务",
     "common.help_force": "忽略版本不匹配警告强制执行",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "要创建的 Aegis Stack 项目名称",
     "init.help_opt_components": "组件列表，用逗号分隔（redis、worker、scheduler、database）",
     "init.help_opt_python": "生成项目使用的 Python 版本（3.11、3.12、3.13 或 3.14）",

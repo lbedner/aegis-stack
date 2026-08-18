@@ -146,6 +146,8 @@ extend-exclude = [
     "aegis/templates",
     "test-project",
     "my-app",
+    "finance-app",
+    "finance-blueprint",
     "demo-*",
 ]
 
@@ -197,6 +199,8 @@ exclude = [
     "aegis/templates/**",
     "test-project/**",
     "my-app/**",
+    "finance-app/**",
+    "finance-blueprint/**",
     "test-*/**",
     "*-test/**",
     "demo-*/**",

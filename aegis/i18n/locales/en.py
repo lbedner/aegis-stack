@@ -453,6 +453,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "Authentication",
     "projectmap.ai": "AI conversations",
     "projectmap.comms": "Communications",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "Documentation",
     # ── Post-generation: footer ───────────────────────────────────────
     "postgen.docs_link": "Docs: https://docs.aegis-stack.io",
@@ -901,6 +905,14 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_components": (
         "Comma-separated list of components (redis,worker,scheduler,database)"
     ),
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_opt_python": (
         "Python version for generated project (3.11, 3.12, 3.13, or 3.14)"
     ),

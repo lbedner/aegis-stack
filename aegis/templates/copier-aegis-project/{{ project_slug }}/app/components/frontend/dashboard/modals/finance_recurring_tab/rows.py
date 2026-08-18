@@ -37,6 +37,7 @@ from app.components.frontend.dashboard.modals.finance_recurring_tab.shared impor
     _is_curated,
     _status_key,
     _usd,
+    past_due,
     pause_label,
     stream_is_paused,
 )
@@ -61,7 +62,7 @@ _HEALTH_STYLE: dict[str, tuple[str, str, str]] = {
     "overdue": (
         "Overdue",
         Theme.Colors.WARNING,
-        "Past due beyond the grace window - hasn't arrived yet.",
+        "Past its due date - hasn't arrived yet.",
     ),
     "stale": (
         "Stale",
@@ -256,8 +257,18 @@ class RowsMixin(RecurringTabState):
         # TableNameText this replaced did, so Name would silently stop
         # sorting without this.
         name_cell.data = name
+        staleness = stream.get("staleness", "fresh")
+        # Display truth over grace: the backend's "fresh" tolerates a few
+        # days of settlement lag before the missed-bill insight fires,
+        # but a row whose due date has passed reading "Active" is a lie
+        # to the person scanning the table (and disagrees with the
+        # Review queue, which counts exactly these).
+        if staleness == "fresh" and past_due(
+            stream, date.today().isoformat()
+        ):
+            staleness = "overdue"
         label, color, tooltip = _HEALTH_STYLE.get(
-            stream.get("staleness", "fresh"), _HEALTH_STYLE["fresh"]
+            staleness, _HEALTH_STYLE["fresh"]
         )
         if stream.get("staleness") == "stale" and stream.get("last_date"):
             tooltip = f"Last matched {stream['last_date']} - probably not a live bill anymore."

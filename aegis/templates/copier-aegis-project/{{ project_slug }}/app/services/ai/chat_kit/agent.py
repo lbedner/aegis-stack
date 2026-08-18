@@ -19,6 +19,7 @@ context in the system block is what feeds one.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Any, Generic, TypeVar
 
@@ -160,7 +161,11 @@ class ToolChatAgent(Generic[DepsT]):
             return
 
         answer = "".join(answer_parts)
-        cost = self._recorder(
+        # The default recorder opens a SYNC db session (usage_recording):
+        # milliseconds of blocking, but on the streaming loop - a worker
+        # thread keeps the turn's tail latency off every other session.
+        cost = await asyncio.to_thread(
+            self._recorder,
             action=self._action,
             model_name=self._model_name,
             usage=usage,

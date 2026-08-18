@@ -32,6 +32,16 @@ BACKUP_FILE_PREFIX = "database_backup_"
 {% endif %}
 
 
+{% if database_engine != "sqlite" %}
+async def _run_blocking(cmd: list[str]) -> "subprocess.CompletedProcess[str]":
+    """pg_dump/psql run for as long as the database is big; in a worker
+    thread the event loop (and every other scheduled job) keeps breathing."""
+    return await asyncio.to_thread(
+        subprocess.run, cmd, capture_output=True, text=True
+    )
+
+
+{% endif %}
 async def backup_database_job() -> None:
     """
     Scheduled database backup job.
@@ -66,10 +76,8 @@ async def backup_database_job() -> None:
     # Run pg_dump. Raise on failure so the run is recorded as failed instead
     # of a silent "success" that left no usable dump behind.
     try:
-        result = subprocess.run(
-            ["pg_dump", settings.database_url_effective, "-f", str(backup_path)],
-            capture_output=True,
-            text=True,
+        result = await _run_blocking(
+            ["pg_dump", settings.database_url_effective, "-f", str(backup_path)]
         )
     except FileNotFoundError as e:
         raise RuntimeError(
@@ -162,19 +170,15 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
         # Create backup before restore
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         pre_restore_path = backup_dir / f"pre_restore_backup_{timestamp}.sql"
-        pre_result = subprocess.run(
-            ["pg_dump", settings.database_url_effective, "-f", str(pre_restore_path)],
-            capture_output=True,
-            text=True,
+        pre_result = await _run_blocking(
+            ["pg_dump", settings.database_url_effective, "-f", str(pre_restore_path)]
         )
         if pre_result.returncode == 0:
             logger.info(f"Created pre-restore backup: {pre_restore_path}")
 
         # Restore from backup using psql
-        result = subprocess.run(
-            ["psql", settings.database_url_effective, "-f", str(backup_path)],
-            capture_output=True,
-            text=True,
+        result = await _run_blocking(
+            ["psql", settings.database_url_effective, "-f", str(backup_path)]
         )
         if result.returncode == 0:
             logger.info(f"Database restored from backup: {backup_filename}")

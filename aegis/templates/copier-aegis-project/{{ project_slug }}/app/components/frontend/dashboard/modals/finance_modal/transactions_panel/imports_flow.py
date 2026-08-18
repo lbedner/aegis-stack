@@ -39,6 +39,12 @@ from app.core.config import settings
 from app.core.constants import dashboard_upload_dir
 
 
+# Import uploads parse the file and run the reconciliation plan inside
+# the request, so they legitimately outlive the client-wide 10s UI
+# budget. The commit path is exempt: it returns a job id immediately
+# and streams progress over SSE.
+_IMPORT_TIMEOUT_SECONDS = 120.0
+
 class ImportsFlowMixin(TransactionsPanelState):
     """The file-import flow: picker, upload, preview, run, summary dialogs."""
 
@@ -169,6 +175,7 @@ class ImportsFlowMixin(TransactionsPanelState):
             "/api/v1/finance/import/preview",
             files={"file": (original_name, data, "application/octet-stream")},
             params=params,
+            timeout=_IMPORT_TIMEOUT_SECONDS,
         )
         if not isinstance(preview, dict):
             # Show the real reason (HTTP status + detail body), not a
@@ -194,6 +201,7 @@ class ImportsFlowMixin(TransactionsPanelState):
         preview = await api.post_multipart(
             "/api/v1/finance/import-investments/preview",
             files={"file": (original_name, data, "application/octet-stream")},
+            timeout=_IMPORT_TIMEOUT_SECONDS,
         )
         if not isinstance(preview, dict):
             overlay.fail(
@@ -305,6 +313,7 @@ class ImportsFlowMixin(TransactionsPanelState):
             "/api/v1/finance/import-investments",
             files={"file": (original_name, data, "application/octet-stream")},
             params=params,
+            timeout=_IMPORT_TIMEOUT_SECONDS,
         )
         if not isinstance(response, dict):
             overlay.fail(

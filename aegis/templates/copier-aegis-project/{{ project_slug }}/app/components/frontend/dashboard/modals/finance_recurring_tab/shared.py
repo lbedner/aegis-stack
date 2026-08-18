@@ -55,6 +55,31 @@ def _usd_signed(cents: int, *, plus: bool = False) -> str:
     return f"{sign}{_usd(abs(cents))}"
 
 
+def past_due(stream: dict, today_iso: str) -> bool:
+    """Due date strictly before today - no grace window."""
+    due = stream.get("next_expected_date")
+    return bool(due) and due < today_iso
+
+
+def needs_review(stream: dict, today_iso: str) -> bool:
+    """A bill whose due date has passed and is still worth chasing.
+
+    Deliberately IGNORES the health dot's grace window: grace exists so
+    settlement lag doesn't nag about a bill due two days ago, but Review
+    is the user explicitly asking "what has passed?" - a bill due
+    yesterday belongs in the queue even while its dot still reads
+    Active. Stale zombies (last matched before the lookback window) stay
+    out; they are probably not live bills at all.
+    """
+    return (
+        stream.get("direction") == "outflow"
+        and _is_curated(stream)
+        and not stream.get("is_muted")
+        and stream.get("staleness") != "stale"
+        and past_due(stream, today_iso)
+    )
+
+
 def _is_curated(stream: dict) -> bool:
     """A stream the user personally vouched for - THE RECORD.
 

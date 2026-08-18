@@ -139,3 +139,32 @@ class ImportResult(BaseModel):
     # Rows belonging to an account the user REMOVED - deleting an account
     # is a standing decision, and a re-import must not resurrect it.
     rows_ignored: int = 0
+
+
+class UnsupportedFileTypeError(ValueError):
+    """Raised for a file extension no importer handles."""
+
+
+def _extension(file_name: str | None) -> str:
+    name = (file_name or "").lower()
+    return name.rsplit(".", 1)[-1] if "." in name else ""
+
+
+def _parse_by_extension(
+    file_name: str | None, file_bytes: bytes
+) -> tuple[str, list[ParsedTransaction]]:
+    """(source_type, parsed rows) for OFX/QFX/QIF — the id-carrying formats
+    whose parsing needs no DB state. CSV goes through profile detection
+    instead. Unknown extensions raise ``UnsupportedFileTypeError``."""
+    extension = _extension(file_name)
+    if extension in ("ofx", "qfx"):
+        from app.services.finance.adapters.importers.ofx import parse_ofx
+
+        return extension, parse_ofx(file_bytes, source=extension)
+    if extension == "qif":
+        from app.services.finance.adapters.importers.qif import parse_qif
+
+        return "qif", parse_qif(file_bytes, source="qif")
+    raise UnsupportedFileTypeError(
+        f"Unsupported file type '.{extension}'. Supported: .ofx, .qfx, .qif, .csv."
+    )

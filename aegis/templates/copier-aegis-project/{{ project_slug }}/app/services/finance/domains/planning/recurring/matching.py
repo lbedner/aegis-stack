@@ -97,15 +97,59 @@ async def recurring_match_candidates(
     # even when a stranger's amount lands a dollar nearer - ranked
     # purely on figures, last year's Etsy outranked rows literally
     # named after the bill (confirmed live).
-    stream_name = (stream.name or "").casefold()
-
-    def named_alike(txn: FinanceTransaction) -> bool:
-        if stream.merchant_id is not None and txn.merchant_id == stream.merchant_id:
+    def named_for(
+        name: str | None, merchant_id: int | None, txn: FinanceTransaction
+    ) -> bool:
+        if merchant_id is not None and txn.merchant_id == merchant_id:
             return True
-        if not stream_name:
+        name_cf = (name or "").casefold()
+        if not name_cf:
             return False
         haystack = f"{txn.name or ''} {txn.original_description or ''}".casefold()
-        return stream_name in haystack
+        return name_cf in haystack
+
+    def named_alike(txn: FinanceTransaction) -> bool:
+        return named_for(stream.name, stream.merchant_id, txn)
+
+    # A row carrying a DIFFERENT live bill's name is that bill's
+    # business, not an answer here: ranked on figures alone, the
+    # YouTube picker offered DoorDash rows whose amounts landed in
+    # the window (confirmed live). Only the fallback pool filters
+    # these - a row naming THIS bill stays offered regardless, and
+    # the tie goes to the human.
+    siblings = [
+        (s.name, s.merchant_id)
+        for s in await queries.active_streams(db, owner_user_id=owner_user_id)
+        if s.id != stream.id and s.direction == stream.direction
+    ]
+
+    def claimed_by_sibling(txn: FinanceTransaction) -> bool:
+        return any(named_for(n, m, txn) for n, m in siblings)
+
+    # A row the system already IDENTIFIES as someone else is not a
+    # candidate: a $9 bill's band admits every $9 purchase in the
+    # register, and they all arrive pre-labelled - McDonald's as Fast
+    # Food, CVS as Pharmacy (nine of them in the Patreon picker,
+    # confirmed live). A resolved merchant or a category pointing away
+    # from the bill is that identification. The fallback exists for
+    # UNRECOGNIZABLE descriptors, and those still pass: no merchant, no
+    # category, nothing known. The bill's own category is the stored one
+    # or, exactly like the display inference, the one its matched
+    # history agrees on - the Citi bill stores none, but every member is
+    # Finance Charge, and that is what separates the interest rows (the
+    # answers) from the grocery runs (confirmed live).
+    reference_category = stream.category_id
+    if reference_category is None:
+        reference_category = await queries.stream_member_category_id(db, stream.id)
+
+    def identified_as_other(txn: FinanceTransaction) -> bool:
+        if txn.merchant_id is not None and txn.merchant_id != stream.merchant_id:
+            return True
+        return (
+            reference_category is not None
+            and txn.category_id is not None
+            and txn.category_id != reference_category
+        )
 
     def likelihood(txn: FinanceTransaction) -> tuple[int, int, int]:
         amount_distance = abs(abs(txn.amount) - expected) if expected else 0
@@ -117,5 +161,7 @@ async def recurring_match_candidates(
     # AT&T"); the amount shortlist earns its keep only when the
     # payment arrived under an unrecognizable descriptor.
     named = [t for t in rows if named_alike(t)]
-    pool = named if named else rows
+    pool = named or [
+        t for t in rows if not claimed_by_sibling(t) and not identified_as_other(t)
+    ]
     return sorted(pool, key=likelihood)[:limit]

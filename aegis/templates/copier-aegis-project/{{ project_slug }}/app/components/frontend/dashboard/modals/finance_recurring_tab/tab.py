@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import flet as ft
@@ -38,6 +39,7 @@ from app.components.frontend.dashboard.modals.finance_recurring_tab.shared impor
     _RECURRING_URL,
     _is_curated,
     _usd,
+    needs_review,
 )
 from app.components.frontend.dashboard.modals.modal_sections import DateRangeChips
 from app.components.frontend.theme import AegisTheme as Theme
@@ -193,6 +195,19 @@ class RecurringTab(
             compact=True,
         )
         add_button.tooltip = "Declare a bill or income the detector cannot see"
+        # One reconciliation session over every overdue bill, instead of
+        # find-click-close per row. Hidden until something is overdue;
+        # _render keeps the count honest on every reload.
+        self._review_button = PulseButton(
+            on_click_callable=self._open_review_queue,
+            text="Review",
+            variant="teal",
+            compact=True,
+        )
+        self._review_button.tooltip = (
+            "Step through each overdue bill's likely payments"
+        )
+        self._review_button.visible = False
         self.content = ft.Column(
             [
                 ft.Row(
@@ -209,6 +224,7 @@ class RecurringTab(
                         self._mute_button,
                         self._pause_button,
                         self._delete_button,
+                        self._review_button,
                         add_button,
                         BaseIconButton(
                             self._rescan,
@@ -353,6 +369,15 @@ class RecurringTab(
         # three per load is what made this tab feel slow; the API itself
         # answers in ~10ms). The others build on first visit - see
         # _show_subtab.
+        due = [s for s in items if needs_review(s, date.today().isoformat())]
+        # .text is a dead store after construction (BaseElevatedButton
+        # renders a content Text built in __init__) - the label lives in
+        # content.value.
+        if isinstance(self._review_button.content, ft.Text):
+            self._review_button.content.value = f"Review ({len(due)})"
+        self._review_button.visible = bool(due)
+        if self._review_button.page is not None:
+            self._review_button.update()
         self._partitions = [
             (f"Bills ({len(bills)})", bills),
             (f"Income ({len(income)})", income),

@@ -99,3 +99,63 @@ class TestJobRunner:
 
         assert runner.get(ids[0]) is None
         assert runner.get(ids[2]) is not None
+
+
+class TestSubprocessRunsOffTheEventLoop:
+    """pg_dump/psql block for their whole duration; on the loop they
+    freeze every other scheduled job (same disease as the import parse,
+    fixed the same way)."""
+
+    @staticmethod
+    def _fake_run(seen: list):
+        import threading
+
+        def fake_run(cmd, **kwargs):
+            seen.append(threading.current_thread())
+
+            class _Result:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return _Result()
+
+        return fake_run
+
+    @pytest.mark.asyncio
+    async def test_backup_job_dumps_in_a_thread(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        import threading
+
+        from app.services.system import backup as backup_module
+
+        if not hasattr(backup_module, "subprocess"):
+            pytest.skip("sqlite backup copies a file; no subprocess to thread")
+        seen: list[threading.Thread] = []
+        monkeypatch.setattr(backup_module.subprocess, "run", self._fake_run(seen))
+        monkeypatch.chdir(tmp_path)
+        await backup_module.backup_database_job()
+        assert seen
+        assert all(t is not threading.main_thread() for t in seen)
+
+    @pytest.mark.asyncio
+    async def test_restore_runs_in_a_thread(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        import threading
+
+        from app.services.system import backup as backup_module
+
+        if not hasattr(backup_module, "subprocess"):
+            pytest.skip("sqlite backup copies a file; no subprocess to thread")
+        seen: list[threading.Thread] = []
+        monkeypatch.setattr(backup_module.subprocess, "run", self._fake_run(seen))
+        monkeypatch.chdir(tmp_path)
+        backups = tmp_path / "backups"
+        backups.mkdir()
+        (backups / "b.sql").write_text("-- dump")
+        ok = await backup_module.restore_database_from_backup("b.sql")
+        assert ok
+        assert seen
+        assert all(t is not threading.main_thread() for t in seen)

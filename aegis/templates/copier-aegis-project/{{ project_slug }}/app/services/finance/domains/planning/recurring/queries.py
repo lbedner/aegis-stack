@@ -221,6 +221,33 @@ async def stream_member_category_votes(
     return list(rows)
 
 
+async def stream_member_category_id(
+    db: AsyncSession, stream_id: int
+) -> int | None:
+    """The member transactions' most common category id.
+
+    The id-flavored twin of ``stream_member_category_votes`` (which
+    feeds the DISPLAY inference by name): a bill that stores no
+    category still has an effective one wherever its matched history
+    agrees, and the match shortlist needs it as an id to compare
+    against candidates.
+    """
+    row = (
+        await db.exec(
+            select(FinanceTransaction.category_id, func.count().label("hits"))
+            .where(
+                FinanceTransaction.recurring_stream_id == stream_id,
+                FinanceTransaction.category_id.is_not(None),
+                FinanceTransaction.deleted_at.is_(None),
+            )
+            .group_by(FinanceTransaction.category_id)
+            .order_by(func.count().desc())
+            .limit(1)
+        )
+    ).first()
+    return row[0] if row else None
+
+
 async def stream_stored_category_names(
     db: AsyncSession, stream_ids: list[int]
 ) -> list[tuple[int, str]]:

@@ -2672,3 +2672,68 @@ class TestBudgetOutlook:
         pause = next(t for t in trims if t.get("kind") == "pause_goal")
         assert pause["label"] == "Vacation"
         assert pause["recovered"] == 25_000
+
+
+REVIEW_QUEUE_URL = "/api/v1/finance/recurring/review-queue"
+
+
+@pytest.mark.asyncio
+async def test_review_queue_returns_only_bills_with_candidates(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """One batch call for a review session: the client sends the bills it
+    considers past due, the server answers with each one's shortlist, and
+    bills with nothing to offer are omitted entirely - the session never
+    shows a no-candidates card."""
+    from datetime import date
+
+    from tests.services._finance_factories import seed_account, seed_stream
+
+    svc = FinanceService(async_db_session)
+    account = await seed_account(svc, owner_user_id=acting_owner_user_id)
+    matchable = await seed_stream(
+        svc,
+        name="Citi",
+        expected_amount=9_977,
+        next_expected_date=date(2026, 8, 6),
+        owner_user_id=acting_owner_user_id,
+        account_id=account.id,
+    )
+    barren = await seed_stream(
+        svc,
+        name="Patreon",
+        expected_amount=900,
+        next_expected_date=date(2026, 8, 1),
+        owner_user_id=acting_owner_user_id,
+        account_id=account.id,
+    )
+    payment = await svc.create_transaction(
+        account_id=account.id,
+        amount=-11_790,
+        txn_date=date(2026, 8, 7),
+        owner_user_id=acting_owner_user_id,
+        name="INTEREST CHARGED TO PUR PR-00/00/00.",
+    )
+    await async_db_session.commit()
+
+    response = authenticated_client.get(
+        f"{REVIEW_QUEUE_URL}?ids={matchable.id},{barren.id}"
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [e["stream_id"] for e in items] == [matchable.id]
+    assert [c["id"] for c in items[0]["candidates"]] == [payment.id]
+
+
+@pytest.mark.asyncio
+async def test_review_queue_ignores_ids_that_are_not_yours(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    response = authenticated_client.get(f"{REVIEW_QUEUE_URL}?ids=999999")
+    assert response.status_code == 200
+    assert response.json()["items"] == []

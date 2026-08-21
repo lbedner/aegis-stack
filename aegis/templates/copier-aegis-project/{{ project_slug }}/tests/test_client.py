@@ -652,6 +652,54 @@ class TestPerRequestTimeout:
         assert "10" not in client.last_error.split("300")[0]
 
 
+class TestImportUploadsGetALongerBudget:
+    """The finance import call sites must actually USE the override.
+
+    The plumbing below is tested above; this pins the call sites, which is
+    where a 10s default silently killed real imports.
+    """
+
+    def test_import_budget_exceeds_the_client_default(self) -> None:
+        imports_flow = pytest.importorskip(
+            "app.components.frontend.dashboard.modals.finance_modal"
+            ".transactions_panel.imports_flow",
+            reason="finance UI not part of this stack",
+        )
+
+        assert imports_flow._IMPORT_TIMEOUT_SECONDS > APIClient().timeout
+
+    @pytest.mark.asyncio
+    async def test_in_request_import_calls_pass_the_budget(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        # The endpoints that parse the file and run the plan before
+        # responding. (/api/v1/finance/import is exempt: it returns a job
+        # id immediately and streams progress.)
+        imports_flow = pytest.importorskip(
+            "app.components.frontend.dashboard.modals.finance_modal"
+            ".transactions_panel.imports_flow",
+            reason="finance UI not part of this stack",
+        )
+        budget = imports_flow._IMPORT_TIMEOUT_SECONDS
+
+        for endpoint in (
+            "/api/v1/finance/import/preview",
+            "/api/v1/finance/import-investments/preview",
+            "/api/v1/finance/import-investments",
+        ):
+            client = make_client()
+            client._client.request = AsyncMock(  # type: ignore[method-assign]
+                return_value=_mock_response(200, {"ok": True})
+            )
+            await client.post_multipart(
+                endpoint,
+                files={"file": ("a.csv", b"x", "application/octet-stream")},
+                timeout=budget,
+            )
+            sent = client._client.request.call_args.kwargs["timeout"]
+            assert sent == budget, endpoint
+
+
 class TestLastError:
     """``last_error`` keeps the real failure reason for UI surfaces.
 

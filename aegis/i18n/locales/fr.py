@@ -445,6 +445,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "Authentification",
     "projectmap.ai": "Conversations IA",
     "projectmap.comms": "Communications",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "Documentation",
     # ── Post-generation: footer ───────────────────────────────────────
     "postgen.docs_link": "Docs : https://docs.aegis-stack.io",
@@ -893,6 +897,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "Sélectionner les services interactivement",
     "common.help_force": "Forcer malgré les avertissements d'incompatibilité de version",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "Nom du nouveau projet Aegis Stack à créer",
     "init.help_opt_components": "Liste de composants séparés par des virgules (redis,worker,scheduler,database)",
     "init.help_opt_python": "Version de Python pour le projet généré (3.11, 3.12, 3.13 ou 3.14)",

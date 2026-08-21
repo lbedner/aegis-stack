@@ -35,6 +35,10 @@ def _drive(keys: list[str]):
 # (redis is skipped entirely when an accepted worker already bundled it)
 _DECLINE_ALL = ["n"] * 14
 
+# The full init flow opens with the starting-point screen; enter selects
+# Blank canvas. (run_guided_selection alone never shows it.)
+_BLANK = ["\r"]
+
 
 class TestGuidedDrivesEngine:
     def test_decline_everything(self) -> None:
@@ -288,7 +292,7 @@ class TestReviewScreen:
     def test_review_enter_confirms_plan(self) -> None:
         # database accepted (engine screen -> enter = SQLite), everything else
         # declined, enter on REVIEW.
-        keys = ["n", "n", "y", "\r"] + ["n"] * 11 + ["\r"]
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 11 + ["\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
@@ -299,20 +303,20 @@ class TestReviewScreen:
         # Accept the last service (finance), esc on REVIEW -> it is re-asked
         # and declined -> second REVIEW confirmed. The plan must reflect the
         # revision, not the original answer.
-        keys = _DECLINE_ALL[:13] + ["y", "esc", "n", "\r"]
+        keys = _BLANK + _DECLINE_ALL[:13] + ["y", "esc", "n", "\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert plan.services == []
 
     def test_review_detail_panes_toggle_harmlessly(self) -> None:
-        keys = ["n", "n", "y"] + ["n"] * 11 + ["f", "d", "f", "\r"]
+        keys = _BLANK + ["n", "n", "y"] + ["n"] * 11 + ["f", "d", "f", "\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
 
     def test_yes_skips_review(self) -> None:
         # With --yes the review is skipped entirely: no extra key consumed.
-        keys = ["n", "n", "y", "\r"] + ["n"] * 11
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 11
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", yes=True, ui=ui)
         assert "database" in plan.components
@@ -320,7 +324,7 @@ class TestReviewScreen:
     def test_plan_includes_dependency_auto_adds(self) -> None:
         # Worker accepted -> the resolved plan carries the auto-added redis
         # (same resolution quick mode runs; REVIEW shows it tagged "auto").
-        keys = ["y", "\r"] + ["n"] * 12 + ["\r"]
+        keys = _BLANK + ["y", "\r"] + ["n"] * 12 + ["\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         bases = [c.split("[", 1)[0] for c in plan.components]
@@ -341,7 +345,7 @@ class TestInExperienceBuild:
             calls.append(plan.project_name)
             return "/tmp/demo"
 
-        keys = ["n", "n", "y", "\r"] + ["n"] * 11 + ["\r", "\r"]
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 11 + ["\r", "\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow(
             "demo",
@@ -360,7 +364,7 @@ class TestInExperienceBuild:
             print("loud generation output")
             return "/tmp/demo"
 
-        keys = _DECLINE_ALL + ["\r", "\r"]
+        keys = _BLANK + _DECLINE_ALL + ["\r", "\r"]
         run_guided_init_flow(
             "demo", "3.13", ui=GuidedSelectionUI(keys=keys), builder=builder
         )
@@ -375,7 +379,7 @@ class TestInExperienceBuild:
             reporter.step("deps", "Installing dependencies", "uv sync")
             return "/tmp/demo"
 
-        keys = _DECLINE_ALL + ["\r", "\r"]
+        keys = _BLANK + _DECLINE_ALL + ["\r", "\r"]
         ui = GuidedSelectionUI(keys=keys)
         run_guided_init_flow("demo", "3.13", ui=ui, builder=builder)
         recorded = ui._build_steps
@@ -396,7 +400,7 @@ class TestInExperienceBuild:
         )
 
         long_replay = "uvx aegis-stack init demo --components " + "x" * 200
-        keys = _DECLINE_ALL + ["\r", "c", "\r"]  # review, copy, finish
+        keys = _BLANK + _DECLINE_ALL + ["\r", "c", "\r"]  # review, copy, finish
         ui = GuidedSelectionUI(keys=keys)
         run_guided_init_flow(
             "demo",
@@ -428,7 +432,7 @@ class TestInExperienceBuild:
             print("partial progress line")
             raise RuntimeError("uv sync exploded")
 
-        keys = _DECLINE_ALL + ["\r"]
+        keys = _BLANK + _DECLINE_ALL + ["\r"]
         with pytest.raises(GuidedBuildError) as excinfo:
             run_guided_init_flow(
                 "demo", "3.13", ui=GuidedSelectionUI(keys=keys), builder=builder

@@ -25,6 +25,7 @@ commit would do, not a parallel re-implementation that can drift.
 
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import UTC, datetime
 from datetime import date as date_cls
@@ -39,6 +40,9 @@ from app.services.finance.adapters.importers import queries
 from app.services.finance.adapters.importers.base import (
     ImportResult,
     ParsedTransaction,
+    UnsupportedFileTypeError,  # noqa: F401 — re-export; the API router catches imports.UnsupportedFileTypeError
+    _extension,
+    _parse_by_extension,
     assign_import_hashes,
 )
 from app.services.finance.models import (
@@ -1025,7 +1029,9 @@ async def import_csv(
             header, [p.name for p in profiles], batch_id=failed.id
         )
 
-    parsed = csv_profiles.parse_csv(file_bytes, profile, header_index=header_index)
+    parsed = await asyncio.to_thread(
+        csv_profiles.parse_csv, file_bytes, profile, header_index=header_index
+    )
     multi_account = "account" in profile.column_mapping.values()
     if not multi_account and account_id is None:
         raise ValueError("CSV import requires a target account_id for this layout.")
@@ -1039,35 +1045,6 @@ async def import_csv(
         default_account_id=None if multi_account else account_id,
         import_profile_id=profile.id,
         auto_create_accounts=multi_account,
-    )
-
-
-class UnsupportedFileTypeError(ValueError):
-    """Raised for a file extension no importer handles."""
-
-
-def _extension(file_name: str | None) -> str:
-    name = (file_name or "").lower()
-    return name.rsplit(".", 1)[-1] if "." in name else ""
-
-
-def _parse_by_extension(
-    file_name: str | None, file_bytes: bytes
-) -> tuple[str, list[ParsedTransaction]]:
-    """(source_type, parsed rows) for OFX/QFX/QIF — the id-carrying formats
-    whose parsing needs no DB state. CSV goes through profile detection
-    instead. Unknown extensions raise ``UnsupportedFileTypeError``."""
-    extension = _extension(file_name)
-    if extension in ("ofx", "qfx"):
-        from app.services.finance.adapters.importers.ofx import parse_ofx
-
-        return extension, parse_ofx(file_bytes, source=extension)
-    if extension == "qif":
-        from app.services.finance.adapters.importers.qif import parse_qif
-
-        return "qif", parse_qif(file_bytes, source="qif")
-    raise UnsupportedFileTypeError(
-        f"Unsupported file type '.{extension}'. Supported: .ofx, .qfx, .qif, .csv."
     )
 
 
@@ -1096,7 +1073,9 @@ async def import_file(
             file_bytes=file_bytes,
             account_id=account_id,
         )
-    source_type, parsed = _parse_by_extension(file_name, file_bytes)
+    source_type, parsed = await asyncio.to_thread(
+        _parse_by_extension, file_name, file_bytes
+    )
     if source_type == "qif" and account_id is None:
         raise ValueError("QIF import requires a target account_id.")
     return await ingest_transactions(
@@ -1154,7 +1133,9 @@ async def preview_file(
                 [p.name for p in profiles],
                 batch_id=None,
             )
-        parsed = csv_profiles.parse_csv(file_bytes, profile, header_index=header_index)
+        parsed = await asyncio.to_thread(
+            csv_profiles.parse_csv, file_bytes, profile, header_index=header_index
+        )
         multi_account = "account" in profile.column_mapping.values()
         if not multi_account and account_id is None:
             raise ValueError("CSV import requires a target account_id for this layout.")
@@ -1166,7 +1147,9 @@ async def preview_file(
             auto_create_accounts=multi_account,
         )
     else:
-        source_type, parsed = _parse_by_extension(file_name, file_bytes)
+        source_type, parsed = await asyncio.to_thread(
+            _parse_by_extension, file_name, file_bytes
+        )
         if source_type == "qif" and account_id is None:
             raise ValueError("QIF import requires a target account_id.")
         plan = await plan_transactions(

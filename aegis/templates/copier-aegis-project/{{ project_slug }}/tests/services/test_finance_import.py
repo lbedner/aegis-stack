@@ -1491,3 +1491,53 @@ class TestFacadeDelegation:
             account_id=account.id,
         )
         assert result.rows_inserted == 8
+
+
+class TestParseRunsOffTheEventLoop:
+    """Parsing up to 10 MB of text is the import's one big sync CPU chunk.
+
+    On the loop it starves everything sharing the process — health polls
+    time out and the job's own SSE stream drops — so both entry points
+    must hand the parse to a worker thread.
+    """
+
+    @staticmethod
+    def _spy(record: list) -> object:
+        import threading
+
+        def fake_parse(file_name: str | None, file_bytes: bytes):
+            record.append(threading.current_thread())
+            return "qfx", []
+
+        return fake_parse
+
+    @pytest.mark.asyncio
+    async def test_preview_parses_in_a_thread(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import threading
+
+        seen: list[threading.Thread] = []
+        monkeypatch.setattr(imports, "_parse_by_extension", self._spy(seen))
+        await imports.preview_file(
+            async_db_session, owner_user_id=1, file_name="a.qfx", file_bytes=b"x"
+        )
+        assert seen and seen[0] is not threading.main_thread()
+
+    @pytest.mark.asyncio
+    async def test_import_parses_in_a_thread(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import threading
+
+        seen: list[threading.Thread] = []
+        monkeypatch.setattr(imports, "_parse_by_extension", self._spy(seen))
+        account = await _account(async_db_session)
+        await imports.import_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="a.qfx",
+            file_bytes=b"x",
+            account_id=account.id,
+        )
+        assert seen and seen[0] is not threading.main_thread()

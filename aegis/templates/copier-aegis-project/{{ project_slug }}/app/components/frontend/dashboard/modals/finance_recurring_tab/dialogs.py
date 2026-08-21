@@ -30,6 +30,7 @@ from app.components.frontend.dashboard.modals.finance_recurring_tab.base import 
 from app.components.frontend.dashboard.modals.finance_recurring_tab.shared import (
     _RECURRING_URL,
     _usd,
+    needs_review,
     pause_label,
     pause_options,
 )
@@ -40,7 +41,69 @@ from app.components.frontend.theme import AegisTheme as Theme
 class StreamDialogsMixin(RecurringTabState):
     """The match-a-payment and pause dialogs."""
 
-    async def _open_match_dialog(self, stream: dict) -> None:
+    async def _open_review_queue(self) -> None:
+        """Walk every passed bill that HAS likely payments, one dialog
+        after another.
+
+        One batch call answers the whole session: the client sends the
+        bills it considers past due (needs_review, soonest-due first),
+        the server returns each one's shortlist, and bills with nothing
+        to offer never enter the queue - so "1 of 4" counts dialogs the
+        user will actually see. Each step is the ordinary match dialog
+        with its position in the title and a Skip.
+        """
+        from app.components.frontend.state.session_state import get_session_state
+
+        today_iso = date.today().isoformat()
+        passed = sorted(
+            (s for s in self._items if needs_review(s, today_iso)),
+            key=lambda s: s.get("next_expected_date") or "",
+        )
+        if not passed:
+            SuccessSnackBar("Nothing has passed its due date.").launch(self.page)
+            return
+        api = get_session_state(self.page).api_client
+        ids = ",".join(str(s.get("id")) for s in passed)
+        data = await api.get(f"{_RECURRING_URL}/review-queue?ids={ids}")
+        if not isinstance(data, dict):
+            ErrorSnackBar(
+                api.last_error or "Could not load the review queue."
+            ).launch(self.page)
+            return
+        by_id = {s.get("id"): s for s in passed}
+        queue = [
+            (by_id[entry["stream_id"]], entry["candidates"])
+            for entry in data.get("items", [])
+            if entry.get("stream_id") in by_id and entry.get("candidates")
+        ]
+        if not queue:
+            SuccessSnackBar(
+                f"No likely payments found for the {len(passed)} passed "
+                "bill(s) - they may simply not be imported yet."
+            ).launch(self.page)
+            return
+        stream, items = queue[0]
+        await self._open_match_dialog(stream, queue=queue, index=0, items=items)
+
+    async def _advance_queue(
+        self, queue: list[tuple[dict, list[dict]]], index: int
+    ) -> None:
+        if index + 1 < len(queue):
+            stream, items = queue[index + 1]
+            await self._open_match_dialog(
+                stream, queue=queue, index=index + 1, items=items
+            )
+        else:
+            SuccessSnackBar("Reviewed every overdue bill.").launch(self.page)
+
+    async def _open_match_dialog(
+        self,
+        stream: dict,
+        *,
+        queue: list[tuple[dict, list[dict]]] | None = None,
+        index: int = 0,
+        items: list[dict] | None = None,
+    ) -> None:
         """Pick the transaction that paid this bill.
 
         Candidates come pre-shortlisted (same direction, unclaimed,
@@ -48,19 +111,32 @@ class StreamDialogsMixin(RecurringTabState):
         is the user's - this exists precisely because the automatic
         matcher was wrong to find nothing, so a second automatic guess
         would repeat the mistake with confidence.
+
+        With a ``queue``, this is one step of a review session: the
+        title carries the position, Skip moves on, and a pick advances
+        instead of just closing.
         """
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        data = await api.get(f"{_RECURRING_URL}/{stream.get('id')}/match-candidates")
-        if not isinstance(data, dict):
-            # A failed fetch is not "no matches" - saying so sent a real
-            # payment on a hunt for a bug that was actually a 500 here.
-            ErrorSnackBar(api.last_error or "Could not load match candidates.").launch(
-                self.page
+        if items is None:
+            # Single-bill path (from the row): fetch this bill's
+            # shortlist. Review sessions arrive with candidates already
+            # loaded by the batch endpoint, which also guarantees they
+            # are non-empty - a bill with nothing to offer never became
+            # a step at all.
+            data = await api.get(
+                f"{_RECURRING_URL}/{stream.get('id')}/match-candidates"
             )
-            return
-        items = data.get("items", [])
+            if not isinstance(data, dict):
+                # A failed fetch is not "no matches" - saying so sent a
+                # real payment on a hunt for a bug that was actually a
+                # 500 here.
+                ErrorSnackBar(
+                    api.last_error or "Could not load match candidates."
+                ).launch(self.page)
+                return
+            items = data.get("items", [])
         dialog: StyledAlertDialog | None = None
 
         async def _cancel() -> None:
@@ -82,6 +158,13 @@ class StreamDialogsMixin(RecurringTabState):
                 f"{result.get('next_expected_date') or 'never (one-time)'}."
             ).launch(self.page)
             await self._load()
+            if queue is not None:
+                await self._advance_queue(queue, index)
+
+        async def _skip() -> None:
+            await _cancel()
+            if queue is not None:
+                await self._advance_queue(queue, index)
 
         if not items:
             rows: list[ft.Control] = [
@@ -129,8 +212,26 @@ class StreamDialogsMixin(RecurringTabState):
                 for t in items
             ]
 
+        position = f" ({index + 1} of {len(queue)})" if queue is not None else ""
+        actions: list[ft.Control] = [
+            PulseButton(
+                on_click_callable=_cancel,
+                text="Cancel" if queue is None else "Stop reviewing",
+                variant="muted",
+                compact=True,
+            )
+        ]
+        if queue is not None:
+            actions.append(
+                PulseButton(
+                    on_click_callable=_skip,
+                    text="Skip",
+                    variant="teal",
+                    compact=True,
+                )
+            )
         dialog = StyledAlertDialog(
-            title=f"Which payment was {stream.get('name')}?",
+            title=f"Which payment was {stream.get('name')}?{position}",
             body=ft.Column(
                 rows,
                 spacing=Theme.Spacing.SM,
@@ -138,14 +239,7 @@ class StreamDialogsMixin(RecurringTabState):
                 scroll=ft.ScrollMode.AUTO,
                 height=min(60 * max(len(rows), 1) + 20, 420),
             ),
-            actions=[
-                PulseButton(
-                    on_click_callable=_cancel,
-                    text="Cancel",
-                    variant="muted",
-                    compact=True,
-                )
-            ],
+            actions=actions,
             width=520,
         )
         self.page.open(dialog)

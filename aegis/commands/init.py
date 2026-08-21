@@ -7,9 +7,11 @@ from typing import cast
 
 import typer
 
+from ..blueprints import BLUEPRINTS, Blueprint, blueprint_selection, get_blueprint
 from ..cli import brand
 from ..cli.build_plan import BuildPlan, resolve_build_plan
 from ..cli.callbacks import (
+    apply_service_option_handlers,
     validate_and_resolve_components,
     validate_and_resolve_services,
 )
@@ -239,6 +241,12 @@ def init_command(
         callback=validate_and_resolve_services,
         help=_SERVICES_HELP,
     ),
+    blueprint: str | None = typer.Option(
+        None,
+        "--blueprint",
+        "-b",
+        help=lazy_t("init.help_opt_blueprint"),
+    ),
     python_version: str = typer.Option(
         DEFAULT_PYTHON_VERSION,
         "--python-version",
@@ -332,17 +340,53 @@ def init_command(
         else:
             brand.warn(t("init.overwriting", path=project_path))
 
+    # Blueprint expansion: run the selection engine headlessly with the
+    # blueprint answering, then treat the result exactly like explicit
+    # --components/--services (which win where given). Service bracket
+    # options flow through the same handlers as typed flags.
     # Interactive component selection
     # Note: components is list[str] after callback, despite str annotation
     selected_components = cast(list[str], components) if components else []
     selected_services = cast(list[str], services) if services else []
+    components_given = components is not None
+    services_given = services is not None
+
+    preset: Blueprint | None = None
+    if blueprint is not None:
+        preset = get_blueprint(blueprint)
+        if preset is None:
+            brand.error(
+                t(
+                    "init.unknown_blueprint",
+                    name=blueprint,
+                    available=", ".join(sorted(BLUEPRINTS)),
+                ),
+                err=True,
+            )
+            raise typer.Exit(1)
+        # Interactive (the default) hands the preset to the guided flow so
+        # the plan is reviewed on screen before building. --no-interactive
+        # expands it headlessly here, as does mixing it with explicit
+        # --components/--services (those win, and the guided flow only runs
+        # when neither was given). The expansion fills the resolved lists
+        # directly - the raw option params keep their real (str | None)
+        # type and are never reassigned.
+        if not interactive or components_given or services_given:
+            selection = blueprint_selection(preset)
+            if not components_given:
+                selected_components = selection.components
+                components_given = True
+            if not services_given:
+                selected_services = selection.services
+                services_given = True
+                apply_service_option_handlers(selection.services)
     scheduler_backend = StorageBackends.MEMORY  # Default to in-memory scheduler
 
     # Resolve services to components if services were provided
     # This runs in both interactive and non-interactive modes when --services is specified
     if selected_services:
         # Check if --components was explicitly provided
-        components_explicitly_provided = components is not None
+        components_explicitly_provided = components_given
 
         if components_explicitly_provided:
             # In non-interactive mode with explicit --components, validate compatibility
@@ -409,7 +453,7 @@ def init_command(
         if scheduler_backend != StorageBackends.MEMORY:
             brand.warn(t("init.auto_detected_scheduler", backend=scheduler_backend))
 
-    if interactive and not components and not services:
+    if interactive and not components_given and not services_given:
         import shutil as _shutil
         import sys as _sys
 
@@ -458,6 +502,7 @@ def init_command(
                     project_name,
                     python_version,
                     yes=yes,
+                    blueprint=preset,
                     builder=_guided_builder,
                     replay_command=lambda p: build_replay_command(
                         p.project_name, p.components, p.services

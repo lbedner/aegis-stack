@@ -10,6 +10,7 @@ import yaml
 from ..cli import brand
 from ..constants import AnswerKeys, WorkerBackends
 from ..i18n import t
+from .services import SERVICES
 
 
 def _detect_worker_backend(project_path: Path) -> str:
@@ -73,6 +74,20 @@ def _render_line(
         typer.echo(f"{prefix}{padded_name}← {desc}")
 
 
+def _service_label(name: str, spec: object) -> str:
+    """Short annotation for a service row in the tree.
+
+    Prefers the map-specific ``projectmap.<name>`` string (these are written
+    to fit one tree line); falls back to the registry's own one-liner so a
+    service is never rendered without an annotation.
+    """
+    key = f"projectmap.{name}"
+    label = t(key)
+    if label != key:
+        return label
+    return getattr(spec, "description", "") or name
+
+
 def render_project_map(
     project_path: Path,
     highlight: list[str] | None = None,
@@ -100,9 +115,6 @@ def render_project_map(
     has_observability = (
         app / "components" / "backend" / "middleware" / "logfire_tracing.py"
     ).exists()
-    has_auth = (app / "services" / "auth").exists()
-    has_ai = (app / "services" / "ai").exists()
-    has_comms = (app / "services" / "comms").exists()
     has_models = (app / "models").exists()
     has_cli = (app / "cli").exists()
     has_alembic = (project_path / "alembic").exists()
@@ -138,14 +150,17 @@ def render_project_map(
         prefix = "│   │   └── " if is_last else "│   │   ├── "
         _render_line(prefix, name, desc, highlight, uses, check_name)
 
-    # services/ - only show if any services exist
+    # services/ - derived from the registry, in its declaration order, so a
+    # new service shows up here the moment it generates a directory. This was
+    # a hand-written auth/ai/comms list, which silently hid every service
+    # added after it. Intersecting with the registry also keeps the shared
+    # plumbing that lives under app/services/ (backend, shared, system, ...)
+    # out of the tree.
     service_children: list[tuple[str, str, str]] = []  # (name, desc, check_name)
-    if has_auth:
-        service_children.append(("auth/", t("projectmap.auth"), "auth"))
-    if has_ai:
-        service_children.append(("ai/", t("projectmap.ai"), "ai"))
-    if has_comms:
-        service_children.append(("comms/", t("projectmap.comms"), "comms"))
+    for name, spec in SERVICES.items():
+        if not (app / "services" / name).exists():
+            continue
+        service_children.append((f"{name}/", _service_label(name, spec), name))
 
     if service_children:
         typer.echo(f"│   ├── services/         ← {t('projectmap.services')}")

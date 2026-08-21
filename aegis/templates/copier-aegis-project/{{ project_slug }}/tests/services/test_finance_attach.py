@@ -16,7 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.service import FinanceService
 from tests.services._finance_factories import seed_account as _account
-from tests.services._finance_factories import seed_stream
+from tests.services._finance_factories import seed_category, seed_stream
 
 
 async def _bill(svc, account, **overrides):
@@ -286,6 +286,214 @@ class TestMatchCandidates:
         rows = await svc.recurring_match_candidates(bill.id, owner_user_id=1)
 
         assert rows[0].id == real.id
+
+
+    @pytest.mark.asyncio
+    async def test_another_bills_payment_stays_out_of_the_fallback(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Rows carrying a DIFFERENT live bill's name are that bill's
+        business, not answers here - the YouTube picker offered DoorDash
+        rows because their amounts landed in the window (confirmed live).
+        A genuinely unknown descriptor stays offered: that is the case
+        the fallback shortlist exists for."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        bill = await _bill(
+            svc,
+            account,
+            name="YouTube",
+            expected_amount=2_703,
+            next_expected_date=date(2026, 8, 17),
+        )
+        await _bill(
+            svc,
+            account,
+            name="DoorDash",
+            expected_amount=2_791,
+            next_expected_date=date(2026, 8, 20),
+        )
+        doordash_row = await _payment(
+            svc, account, day=date(2026, 8, 3), cents=-2_791, name="DOORDASH 8291"
+        )
+        unknown_row = await _payment(
+            svc,
+            account,
+            day=date(2026, 8, 10),
+            cents=-2_805,
+            name="SP TRIQUETRA HEALTH",
+        )
+
+        rows = await svc.recurring_match_candidates(bill.id, owner_user_id=1)
+
+        ids = [t.id for t in rows]
+        assert doordash_row.id not in ids
+        assert unknown_row.id in ids
+
+    @pytest.mark.asyncio
+    async def test_own_name_beats_another_bills_claim(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A row naming THIS bill is offered even if another live bill's
+        name also appears in the descriptor - the tie belongs to the
+        human, not to silence."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        bill = await _bill(
+            svc,
+            account,
+            name="YouTube",
+            expected_amount=2_703,
+            next_expected_date=date(2026, 8, 17),
+        )
+        await _bill(
+            svc,
+            account,
+            name="Google",
+            expected_amount=2_700,
+            next_expected_date=date(2026, 8, 20),
+        )
+        both = await _payment(
+            svc,
+            account,
+            day=date(2026, 8, 16),
+            cents=-2_703,
+            name="GOOGLE *YOUTUBE",
+        )
+
+        rows = await svc.recurring_match_candidates(bill.id, owner_user_id=1)
+
+        assert both.id in [t.id for t in rows]
+
+
+    @pytest.mark.asyncio
+    async def test_rows_the_categorizer_already_identified_stay_out(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A $9 bill's band admits every $9 purchase in the register, and
+        they all arrived pre-labelled - McDonald's as Fast Food, CVS as
+        Pharmacy (confirmed live: the Patreon picker offered nine of
+        them). A row the system already identifies as someone else is not
+        a candidate; the fallback exists for UNRECOGNIZABLE descriptors,
+        which stay offered."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        patreon_cat = await seed_category(async_db_session, "Patreon")
+        fast_food = await seed_category(async_db_session, "Fast Food")
+        bill = await _bill(
+            svc,
+            account,
+            name="Patreon",
+            expected_amount=900,
+            next_expected_date=date(2026, 8, 1),
+        )
+        await svc.update_recurring(
+            bill.id, owner_user_id=1, category_id=patreon_cat.id
+        )
+        labelled = await svc.create_transaction(
+            account_id=account.id,
+            amount=-939,
+            txn_date=date(2026, 8, 18),
+            owner_user_id=1,
+            name="MCDONALD'S F32812",
+            category_id=fast_food.id,
+        )
+        unknown = await _payment(
+            svc, account, day=date(2026, 8, 2), cents=-900, name="WEB PMT 8817-A"
+        )
+
+        rows = await svc.recurring_match_candidates(bill.id, owner_user_id=1)
+
+        ids = [t.id for t in rows]
+        assert labelled.id not in ids
+        assert unknown.id in ids
+
+    @pytest.mark.asyncio
+    async def test_a_row_sharing_the_bills_category_stays_offered(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Categorized is only disqualifying when it points at someone
+        ELSE - a row already carrying the bill's own category is more
+        likely the payment, not less."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        patreon_cat = await seed_category(async_db_session, "Patreon")
+        bill = await _bill(
+            svc,
+            account,
+            name="Patreon",
+            expected_amount=900,
+            next_expected_date=date(2026, 8, 1),
+        )
+        await svc.update_recurring(
+            bill.id, owner_user_id=1, category_id=patreon_cat.id
+        )
+        same_cat = await svc.create_transaction(
+            account_id=account.id,
+            amount=-900,
+            txn_date=date(2026, 8, 2),
+            owner_user_id=1,
+            name="INTERNET PAYMENT 22981",
+            category_id=patreon_cat.id,
+        )
+
+        rows = await svc.recurring_match_candidates(bill.id, owner_user_id=1)
+
+        assert same_cat.id in [t.id for t in rows]
+
+
+    @pytest.mark.asyncio
+    async def test_bill_without_a_category_infers_one_from_its_members(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The Citi shape (confirmed live): the bill row stores no
+        category, but its matched history is all Finance Charge - the
+        same inference the list display makes. Without it, no grocery
+        run got cut and the picker showed nine of them; with it, the
+        register noise goes and the interest rows - the actual
+        answers - stay."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        finance_charge = await seed_category(async_db_session, "Finance Charge")
+        groceries = await seed_category(async_db_session, "Groceries")
+        bill = await _bill(
+            svc,
+            account,
+            name="Citi",
+            expected_amount=9_977,
+            next_expected_date=date(2026, 8, 6),
+        )
+        member = await svc.create_transaction(
+            account_id=account.id,
+            amount=-9_977,
+            txn_date=date(2026, 7, 7),
+            owner_user_id=1,
+            name="INTEREST CHARGED TO BALTRNOFFER",
+            category_id=finance_charge.id,
+        )
+        await svc.attach_transaction_to_stream(member.id, bill.id, owner_user_id=1)
+        grocery_run = await svc.create_transaction(
+            account_id=account.id,
+            amount=-10_818,
+            txn_date=date(2026, 8, 8),
+            owner_user_id=1,
+            name="SHOPRITE",
+            category_id=groceries.id,
+        )
+        interest = await svc.create_transaction(
+            account_id=account.id,
+            amount=-11_790,
+            txn_date=date(2026, 8, 7),
+            owner_user_id=1,
+            name="INTEREST CHARGED TO PUR PR-00/00/00.",
+            category_id=finance_charge.id,
+        )
+
+        rows = await svc.recurring_match_candidates(bill.id, owner_user_id=1)
+
+        ids = [t.id for t in rows]
+        assert grocery_run.id not in ids
+        assert interest.id in ids
 
 
 class TestDeleteReleasesMembers:

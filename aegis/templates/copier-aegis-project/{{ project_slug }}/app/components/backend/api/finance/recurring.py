@@ -15,6 +15,7 @@ from fastapi import (
     Query,
     status,
 )
+from pydantic import BaseModel
 
 from app.components.backend.api.finance.base import _NOT_FOUND
 from app.services.finance.deps import (
@@ -300,6 +301,15 @@ async def recurring_match_candidates(
     rows = await service.recurring_match_candidates(
         stream_id, owner_user_id=owner_user_id
     )
+    items = await _candidate_items(service, rows)
+    return TransactionListResponse(items=items, total=len(items))
+
+
+async def _candidate_items(
+    service: FinanceService, rows: list
+) -> list[TransactionResponse]:
+    """Match candidates as enriched responses - shared by the single-bill
+    shortlist and the review queue."""
     names = await service.category_names(
         {t.category_id for t in rows if t.category_id is not None}
     )
@@ -314,7 +324,55 @@ async def recurring_match_candidates(
         item.category = names.get(t.category_id)
         item.merchant = payees.get(t.merchant_id)
         items.append(item)
-    return TransactionListResponse(items=items, total=len(items))
+    return items
+
+
+class ReviewQueueEntry(BaseModel):
+    stream_id: int
+    candidates: list[TransactionResponse]
+
+
+class ReviewQueueResponse(BaseModel):
+    items: list[ReviewQueueEntry]
+
+
+@router.get("/recurring/review-queue", response_model=ReviewQueueResponse)
+async def recurring_review_queue(
+    ids: str,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> ReviewQueueResponse:
+    """Shortlists for a whole review session in one call.
+
+    The client sends the bills IT considers past due (one definition of
+    "needs review", owned by the UI); the answer carries each bill's
+    candidates, and bills with none are omitted - a review session walks
+    matches, never no-candidates cards. Bounded loop over the tested
+    single-bill matcher on purpose: batching its per-stream windows and
+    bands into one query would fork the logic this shortlist just got
+    right.
+    """
+    try:
+        stream_ids = [int(part) for part in ids.split(",") if part.strip()]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ids must be a comma-separated list of stream ids",
+        ) from exc
+    entries: list[ReviewQueueEntry] = []
+    for stream_id in stream_ids[:50]:
+        rows = await service.recurring_match_candidates(
+            stream_id, owner_user_id=owner_user_id
+        )
+        if not rows:
+            continue
+        entries.append(
+            ReviewQueueEntry(
+                stream_id=stream_id,
+                candidates=await _candidate_items(service, rows),
+            )
+        )
+    return ReviewQueueResponse(items=entries)
 
 
 @router.post("/recurring/{stream_id}/attach", response_model=RecurringStreamResponse)

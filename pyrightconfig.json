@@ -1,0 +1,16 @@
+{
+    "exclude": [
+        "**/node_modules",
+        "**/__pycache__",
+        ".venv",
+        "aegis/templates",
+        "my-app",
+        "finance-app",
+        "test-project",
+        "test-*",
+        "demo-*",
+        "stacks"
+    ],
+    "venvPath": ".",
+    "venv": ".venv"
+}

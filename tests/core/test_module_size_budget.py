@@ -78,7 +78,7 @@ BUDGET: dict[str, int] = {
     "i18n/locales/ko.py": 1246,
     "components/frontend/dashboard/modals/backend_modal.py": 1244,
     "i18n/locales/zh_hant.py": 1243,
-    "services/finance/adapters/importers/imports.py": 1206,
+    "services/finance/adapters/importers/imports.py": 1189,
     "components/frontend/dashboard/modals/ollama_modal.py": 1202,
     "components/frontend/dashboard/modals/payment_modal.py": 1111,
     "components/frontend/controls/data_table.py": 1089,

@@ -420,6 +420,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "인증",
     "projectmap.ai": "AI 대화",
     "projectmap.comms": "통신",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "문서",
     # ── Post-generation: footer ───────────────────────────────────────
     "postgen.docs_link": "문서: https://docs.aegis-stack.io",
@@ -840,6 +844,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "대화형 서비스 선택",
     "common.help_force": "버전 불일치 경고를 무시하고 강제로 진행",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "새로 생성할 Aegis Stack 프로젝트 이름",
     "init.help_opt_components": "쉼표로 구분된 컴포넌트 목록 (redis, worker, scheduler, database)",
     "init.help_opt_python": "생성되는 프로젝트의 Python 버전 (3.11, 3.12, 3.13 또는 3.14)",

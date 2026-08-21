@@ -191,3 +191,29 @@ async def test_history_is_passed_to_the_model() -> None:
         history=[ChatMessage("user", "first"), ChatMessage("assistant", "reply")],
     )
     assert isinstance(frames[-1], DoneFrame)
+
+
+class TestRecorderRunsOffTheEventLoop:
+    """record_usage opens a SYNC db session - milliseconds, but on the
+    streaming path's loop. The agent hands it to a worker thread."""
+
+    async def test_recorder_called_in_a_thread(self) -> None:
+        import threading
+
+        seen: list[threading.Thread] = []
+
+        def recorder(*, action, model_name, usage, user_id):
+            seen.append(threading.current_thread())
+            return 0.0
+
+        agent = ToolChatAgent(
+            model=TestModel(),
+            model_name="claude-sonnet-5",
+            instructions="You are a test persona.",
+            deps_type=_Deps,
+            action="chat:metrics",
+            recorder=recorder,
+        )
+        await _drain(agent, scope=_scope(), deps=_Deps(7), message="hi")
+        assert seen
+        assert seen[0] is not threading.main_thread()

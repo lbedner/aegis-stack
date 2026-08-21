@@ -109,6 +109,30 @@ AI & Machine Learning Services
                Supports: OpenAI, Anthropic, Google, Groq, Mistral, Cohere
 ```
 
+### aegis blueprints
+
+List available blueprints: preset component and service selections you can start a project from.
+
+**Usage:**
+```bash
+aegis blueprints
+```
+
+**Example Output:**
+```
+AVAILABLE BLUEPRINTS
+========================================
+
+  finance  Personal finance
+      Track accounts, budgets, and goals, with a local AI analyst that narrates what changed.
+      Includes: worker, scheduler, database, ai, finance
+
+Start a project from one:
+   aegis init my-app --blueprint <name>
+```
+
+A blueprint only pre-fills the answers `aegis init` would ask for, so the stack it produces is identical to selecting those options by hand. Add whatever it leaves out afterwards with `aegis add` and `aegis add-service`.
+
 ---
 
 ## Project Management Commands
@@ -130,6 +154,7 @@ aegis init PROJECT_NAME [OPTIONS]
 
 - `--components, -c TEXT` - Comma-separated list of components
 - `--services, -s TEXT` - Comma-separated list of services
+- `--blueprint, -b TEXT` - Start from a named blueprint, a preset component and service selection (see `aegis blueprints`). Interactively this opens the guided review with the stack already resolved; with `--no-interactive` it expands directly. Explicit `--components`/`--services` win where given.
 - `--interactive / --no-interactive, -i / -ni` - Use interactive selection (default: interactive)
 - `--guided / --quick` - Interactive style: the full-screen guided setup (default) or the classic one-line prompts (`--quick`). Guided needs a real terminal of at least 60x20; anything else falls back to quick prompts automatically.
 - `--force, -f` - Overwrite existing directory if it exists
@@ -140,6 +165,9 @@ aegis init PROJECT_NAME [OPTIONS]
 ```bash
 # Simple API project (full-screen guided setup)
 aegis init my-api
+
+# Personal finance stack from the blueprint
+aegis init money --blueprint finance
 
 # Classic one-line prompts instead
 aegis init my-api --quick
@@ -166,7 +194,15 @@ aegis init my-app --services auth --components database --no-interactive --outpu
 
 Running `aegis init my-app` in a normal terminal opens a full-screen guided setup: one page per component and service, each with a short explanation, its hard requirements, what it pairs well with, and a link to its documentation page. A sidebar tracks your selections as you go.
 
-The flow is welcome page, the preselected foundation (backend + frontend), one question per building block, a review screen showing the resolved plan (with file and dependency detail panes), then the build itself with live progress and a closing summary that includes a copyable one-liner to recreate the same stack anywhere.
+The flow is welcome page, a starting-point screen (blank canvas, or pick from the blueprint gallery), the preselected foundation (backend + frontend), one question per building block, a review screen showing the resolved plan (with file and dependency detail panes), then the build itself with live progress and a closing summary that includes a copyable one-liner to recreate the same stack anywhere.
+
+**Blueprints:**
+
+A blueprint is a ready-made stack. Choosing one on the starting-point screen opens the gallery, where each entry shows what it contains; picking it answers every question for you (components, services, and the value decisions, journaled just like keypresses) and takes you straight to the review screen with the whole resolved plan. One `enter` builds it. The pages that orient someone assembling a stack by hand, the foundation summary and the selections sidebar, are skipped: there are no answers of your own to keep track of.
+
+Blueprints are starting points, not locked paths. Anything a blueprint leaves out is added afterwards with `aegis add` and `aegis add-service`, which is the same way every project grows. `esc` on the review undoes the one decision you actually made and returns you to the starting point, so you can choose a different blueprint or take the blank canvas and answer the questions yourself.
+
+Run `aegis blueprints` to see the roster, or name one directly with `aegis init my-app --blueprint finance`.
 
 Keys:
 

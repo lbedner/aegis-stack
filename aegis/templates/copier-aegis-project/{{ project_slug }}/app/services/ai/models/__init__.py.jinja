@@ -37,7 +37,8 @@ class AIProvider(str, Enum):
     MISTRAL = "mistral"
     COHERE = "cohere"
     OLLAMA = "ollama"  # Local LLM inference via Ollama
-    PUBLIC = "public"  # Free public endpoints (no API key required)
+    PUBLIC = "public"  # LLM7.io: keyless anonymous tier; key unlocks premium
+    POLLINATIONS = "pollinations"  # Pollinations: keyless anonymous tier
 
     @classmethod
     def from_name(cls, value: object) -> "AIProvider | None":
@@ -56,6 +57,7 @@ class AIProvider(str, Enum):
             "llm7.io": cls.PUBLIC.value,
             "llm7": cls.PUBLIC.value,
             "unknown": cls.PUBLIC.value,
+            "pollinations.ai": cls.POLLINATIONS.value,
         }
         norm = aliases.get(norm, norm)
         try:
@@ -245,7 +247,14 @@ PROVIDER_CAPABILITIES = {
         supports_streaming=False,
         supports_function_calling=False,
         supports_vision=False,
-        free_tier_available=True,  # No API key required
+        free_tier_available=True,  # Anonymous tier (open-weight models)
+    ),
+    AIProvider.POLLINATIONS: ProviderCapabilities(
+        provider=AIProvider.POLLINATIONS,
+        supports_streaming=False,  # Anonymous tier rejects stream=true
+        supports_function_calling=False,
+        supports_vision=False,
+        free_tier_available=True,  # Anonymous tier (open-weight models)
     ),
 }
 

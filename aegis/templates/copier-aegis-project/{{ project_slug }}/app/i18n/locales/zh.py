@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "输入费用：",
     "llm.output_price_label": "输出费用：",
     "llm.model_not_in_catalog": "目录中未找到该模型，请运行 'llm sync' 导入数据。",
+    "llm.source_label": "来源:",
+    "llm.source_override": "已保存的选择(覆盖 .env;用 'llm reset' 清除)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env 默认值:",
+    "llm.help_reset": "移除已保存的模型覆盖,让 .env 重新决定模型。",
+    "llm.reset_done": "已清除覆盖。当前活动模型来自 .env:{model}",
+    "llm.reset_none": "未保存任何覆盖。当前活动模型已来自 .env:{model}",
     # 切换模型
     "llm.switching_model": "正在切换到 {model_id}",
     # 模型信息
@@ -736,49 +743,49 @@ MESSAGES: dict[str, str] = {
     "ai.rag_step_query": "2. 使用集合查询：",
     "ai.rag_list_hint": "提示：运行 '{app} rag list' 查看现有集合。",
     # Sentiment stats (CLI)
-    "ai.help_sentiment": "Show conversation sentiment statistics from the analysis job.",
-    "ai.sentiment_title": "Conversation Sentiment",
-    "ai.sentiment_disabled_hint": "Sentiment analysis is disabled. Set AI_SENTIMENT_ENABLED=true to score conversations.",
-    "ai.sentiment_empty": "No conversations scored yet.",
-    "ai.sentiment_distribution": "Sentiment Distribution",
-    "ai.sentiment_avg_score": "Average score:",
-    "ai.sentiment_performance": "Assistant performance:",
-    "ai.sentiment_recent_negatives": "Recent Negative Conversations",
+    "ai.help_sentiment": "显示分析任务生成的对话情感统计。",
+    "ai.sentiment_title": "对话情感",
+    "ai.sentiment_disabled_hint": "情感分析已关闭。设置 AI_SENTIMENT_ENABLED=true 即可为对话评分。",
+    "ai.sentiment_empty": "还没有已评分的对话。",
+    "ai.sentiment_distribution": "情感分布",
+    "ai.sentiment_avg_score": "平均分：",
+    "ai.sentiment_performance": "助手表现：",
+    "ai.sentiment_recent_negatives": "最近的负面对话",
     # Agent registry (CLI)
-    "agents.help": "Inspect and test the agent registry.",
-    "agents.help_list": "List all agents in the registry.",
-    "agents.help_show": "Show one agent's full definition.",
-    "agents.help_test": "Run one test turn through an agent's resolved config.",
-    "agents.opt_message": "Message to send for the test turn",
-    "agents.list_title": "Agents",
-    "agents.empty": "No agents in the registry yet.",
-    "agents.not_found": "Agent '{slug}' not found.",
-    "agents.default_model": "(active default)",
-    "agents.none": "(none)",
-    "agents.col_slug": "Slug",
-    "agents.col_name": "Name",
-    "agents.col_model": "Model",
-    "agents.col_active": "Active",
-    "agents.col_tools": "Tools",
-    "agents.col_modules": "Modules",
-    "agents.col_kind": "Kind",
-    "agents.col_priority": "Priority",
-    "agents.show_prompt": "System prompt:",
-    "agents.show_tools": "Tools:",
-    "agents.show_modules": "Memory modules:",
-    "agents.show_kbs": "Knowledge bases:",
-    "agents.test_running": "Running a test turn through agent '{slug}'...",
-    "agents.test_reply_title": "Reply from '{slug}'",
-    "agents.modules_help": "Inspect memory modules (agent context blocks).",
-    "agents.modules_help_list": "List all memory modules.",
-    "agents.modules_help_show": "Show one memory module's definition.",
-    "agents.modules_title": "Memory Modules",
-    "agents.modules_empty": "No memory modules defined yet.",
-    "agents.module_not_found": "Memory module '{slug}' not found.",
-    "agents.module_static": "static",
-    "agents.module_dynamic": "dynamic",
-    "agents.module_hybrid": "hybrid",
-    "agents.module_content": "Static content:",
+    "agents.help": "查看并测试智能体注册表。",
+    "agents.help_list": "列出注册表中的所有智能体。",
+    "agents.help_show": "显示某个智能体的完整定义。",
+    "agents.help_test": "使用智能体的最终配置执行一次测试对话。",
+    "agents.opt_message": "测试对话要发送的消息",
+    "agents.list_title": "智能体",
+    "agents.empty": "注册表中还没有智能体。",
+    "agents.not_found": "未找到智能体 '{slug}'。",
+    "agents.default_model": "(当前默认)",
+    "agents.none": "(无)",
+    "agents.col_slug": "标识",
+    "agents.col_name": "名称",
+    "agents.col_model": "模型",
+    "agents.col_active": "启用",
+    "agents.col_tools": "工具",
+    "agents.col_modules": "模块",
+    "agents.col_kind": "类型",
+    "agents.col_priority": "优先级",
+    "agents.show_prompt": "系统提示词：",
+    "agents.show_tools": "工具：",
+    "agents.show_modules": "记忆模块：",
+    "agents.show_kbs": "知识库：",
+    "agents.test_running": "正在通过智能体 '{slug}' 执行测试对话...",
+    "agents.test_reply_title": "'{slug}' 的回复",
+    "agents.modules_help": "查看记忆模块（智能体的上下文块）。",
+    "agents.modules_help_list": "列出所有记忆模块。",
+    "agents.modules_help_show": "显示某个记忆模块的定义。",
+    "agents.modules_title": "记忆模块",
+    "agents.modules_empty": "还没有定义记忆模块。",
+    "agents.module_not_found": "未找到记忆模块 '{slug}'。",
+    "agents.module_static": "静态",
+    "agents.module_dynamic": "动态",
+    "agents.module_hybrid": "混合",
+    "agents.module_content": "静态内容：",
     # 斜杠命令
     "slash.help_desc": "查看可用命令",
     "slash.clear_desc": "清屏",
@@ -1157,6 +1164,40 @@ MESSAGES: dict[str, str] = {
     "payment.could_not_archive_price": "无法归档 {id}：{error}",
     "payment.could_not_archive_product": "无法归档 {id}：{error}",
     "payment.fixture_cleanup_aborted": "测试数据清理已中止：{error}",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog (placeholders, translator PR will localise) ──
     "blog.help": "Inspect and manage blog posts and tags",
     "blog.help_status": "Show blog post counts and latest activity",

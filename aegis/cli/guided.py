@@ -47,8 +47,9 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
+from ..blueprints import Blueprint
+from ..blueprints.spec import ACCEPT_PREFIX, QKeys, pick_index, pick_multi
 from ..constants import (
-    DOCS_BASE_URL,
     AIProviders,
     PostgresProviders,
     StorageBackends,
@@ -57,79 +58,35 @@ from ..constants import (
 from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.plugins.spec import PluginSpec, pairs_well_with, required_names
 from ..core.services import SERVICES
-from ..i18n import t
-from .brand import AEGIS_TEAL
 from .build_plan import BuildPlan, resolve_build_plan
+from .guided_blueprints import BlueprintScreens
+from .guided_chrome import (
+    _NEON_DOCS_URL,
+    ACCENT,
+    BODY,
+    LABEL,
+    MIN_HEIGHT,
+    MIN_WIDTH,
+    MUTED,
+    REQUIRES,
+    RULE_STYLE,
+    SIDEBAR_WIDTH,
+    _Choice,
+    _display_name,
+    _docs_line,
+    _docs_url,
+    _fit_url,
+    _g,
+    _GoBack,
+    _one_datastore_note,
+    _read_key,
+    _spec_blurb,
+)
 from .interactive import (
     ProjectSelection,
     get_skip_llm_sync_selection,
     run_project_selection,
 )
-
-ACCENT = AEGIS_TEAL
-MUTED = "grey42"
-BODY = "grey74"
-LABEL = "grey50"
-RULE_STYLE = "grey23"
-REQUIRES = AEGIS_TEAL  # hard-dependency names on the Requires line
-
-MIN_WIDTH = 60
-MIN_HEIGHT = 20
-SIDEBAR_WIDTH = 26
-
-_ARROWS = {
-    b"[A": "up",
-    b"[B": "down",
-    b"[C": "right",
-    b"[D": "left",
-    b"OA": "up",
-    b"OB": "down",
-    b"OC": "right",
-    b"OD": "left",
-}
-
-
-def _read_key(fd: int) -> str:
-    """One keypress from a raw fd; handles CSI/SS3 arrows and bare ESC."""
-    import os
-    import select
-
-    ch = os.read(fd, 1)
-    if ch == b"\x1b":
-        if not select.select([fd], [], [], 0.05)[0]:
-            return "esc"
-        return _ARROWS.get(os.read(fd, 2), "esc")
-    return ch.decode("utf-8", "ignore")
-
-
-# Capability-first display overrides: the guided setup presents what a
-# building block DOES; the underlying component name (redis, ai) is
-# unchanged everywhere else (specs, engine, quick mode, bracket syntax).
-_DISPLAY_NAMES = {
-    "ai": "AI",
-    "redis": "Cache/Broker/Pubsub",
-}
-
-
-def _display_name(name: str) -> str:
-    """Terminal display form of a component/service name."""
-    return _g(f"display.{name}", _DISPLAY_NAMES.get(name, name.capitalize()))
-
-
-def _g(key: str, default: str, **kwargs: object) -> str:
-    """Translate a guided-chrome string, falling back to the inline default.
-
-    Keys live under ``guided.*`` and are OPTIONAL in the locale files:
-    ``t`` returns the key on a miss and the English default is used
-    instead, so locales can adopt guided strings incrementally (the
-    translator adds ``guided.*`` keys to en + a locale together) without
-    tripping the locale-completeness tests today.
-    """
-    full_key = f"guided.{key}"
-    result = t(full_key, **kwargs)
-    if result == full_key:
-        return default.format(**kwargs) if kwargs else default
-    return result
 
 
 def _copy_to_clipboard(text: str) -> bool:
@@ -160,95 +117,6 @@ def _copy_to_clipboard(text: str) -> bool:
         return False
 
 
-def _docs_url(spec: PluginSpec) -> str | None:
-    """Documentation page URL for a spec, or None when it has no page.
-
-    Rendered as a VISIBLE plain URL (the terminal auto-linkifies it), not
-    an OSC 8 styled hyperlink — same pattern as the post-init "Docs:" line.
-    Styled links proved unreliable across terminals.
-    """
-    if not spec.docs_path:
-        return None
-    return f"{DOCS_BASE_URL}{spec.docs_path}/"
-
-
-# The postgres provider screen offers Neon by name, so it links the page
-# that explains it. Not a spec ``docs_path``: providers are choices inside
-# the database component, not plugins with pages of their own.
-_NEON_DOCS_URL = f"{DOCS_BASE_URL}components/database/neon/"
-
-
-def _fit_url(url: str, width: int) -> str:
-    """The deepest ancestor of ``url`` that fits in ``width`` cells.
-
-    Terminals without OSC 8 only linkify what they can SEE, so every form
-    this returns must be a complete, valid URL — scheme included, no
-    ellipsis, never wrapped. mkdocs directory-URLs make every ancestor of
-    a docs page a real page, so a narrow terminal degrades to a working
-    link one level up rather than a broken or dead one. Measures with
-    ``cell_len`` (URLs are ASCII today, but the contract is cells). The
-    origin is the floor: callers must give it at least that much room.
-    """
-    if cell_len(url) <= width:
-        return url
-    scheme, _, rest = url.partition("://")
-    host, _, path = rest.partition("/")
-    origin = f"{scheme}://{host}/"
-    segments = [s for s in path.split("/") if s]
-    while segments:
-        candidate = f"{origin}{'/'.join(segments)}/"
-        if cell_len(candidate) <= width:
-            return candidate
-        segments.pop()
-    return origin
-
-
-def _docs_line(url: str, width: int) -> Text:
-    """One-line plain-text URL the terminal's own detection can linkify.
-
-    NO OSC 8 hyperlink, ever: terminals that see one suppress their own
-    URL detection for that region, and terminals that don't render OSC 8
-    then show no link at all — plain text is the only mechanism that
-    proved reliable across terminals. ``_fit_url`` keeps the visible text
-    a complete, valid URL at any width so detection always has a working
-    target.
-    """
-    return Text(_fit_url(url, width), style=MUTED, justify="center", no_wrap=True)
-
-
-def _one_datastore_note() -> str:
-    """Shown on every screen whose engine pick doubles as the project default.
-
-    Picking postgres for the scheduler (or AI storage, or the database
-    itself) fixes the ONE datastore every later question reuses — the user
-    must learn that here, not when the AI storage screen silently skips.
-    """
-    return _g(
-        "note.one_datastore",
-        "One datastore per project: choosing an engine here sets the "
-        "project database, shared by anything else that stores data.",
-    )
-
-
-def _spec_blurb(spec: PluginSpec) -> str:
-    """Localizable editorial paragraph for a spec.
-
-    Looks for ``component.<name>.long`` / ``service.<name>.long`` in the
-    locale files; falls back to the packaged ``long_description`` (then the
-    one-line ``description``).
-    """
-    kind = getattr(spec.kind, "value", "component")
-    key = f"{kind}.{spec.name}.long"
-    result = t(key)
-    if result != key:
-        return result
-    return spec.long_description or spec.description
-
-
-class _GoBack(Exception):  # noqa: N818 — control-flow signal, not an error
-    """Raised by the live select loop when the user presses esc."""
-
-
 class GuidedBuildError(Exception):
     """A build failed inside the guided experience.
 
@@ -277,15 +145,6 @@ class _GuidedBuildReporter:
 
 
 @dataclass
-class _Choice:
-    value: str
-    title: str
-    body: str = ""
-    # Docs page for THIS choice; rendered only while the choice is focused.
-    docs_url: str = ""
-
-
-@dataclass
 class _JournalEntry:
     """One answered screen: the chosen index plus its breadcrumb effect."""
 
@@ -299,7 +158,7 @@ class _JournalEntry:
     auto_prev: tuple[int, tuple[str, str]] | None = None
 
 
-class GuidedSelectionUI:
+class GuidedSelectionUI(BlueprintScreens):
     """Centered, editorial full-screen renderer for the init selection engine.
 
     Real use: ``with GuidedSelectionUI(name) as ui:`` then
@@ -341,6 +200,10 @@ class GuidedSelectionUI:
         # from the review still rewinds through them. One-shot per pass.
         self._ff: str | None = None  # None | "components" | "all"
         self._sections_seen = 0
+        # Blueprint seeding: while set, every screen auto-answers from the
+        # blueprint (journaled like real answers, same as fast-forward), so
+        # the seeded pass lands on REVIEW with esc-revision fully working.
+        self._blueprint: Blueprint | None = None
 
     # ----- lifecycle (no-op in scripted/test mode) ----------------------
     def __enter__(self) -> GuidedSelectionUI:
@@ -398,6 +261,36 @@ class GuidedSelectionUI:
         self._resume_idx = entry.idx
         return True
 
+    def reset_selection(self) -> None:
+        """Forget every answer and any active blueprint: a clean slate.
+
+        What esc on a blueprint's review uses to start over. Popping one
+        answer at a time is meaningless there — the user answered no
+        questions, they picked a stack — so the whole trail goes and the
+        starting point asks again.
+        """
+        self._journal.clear()
+        self._crumbs.clear()
+        self._cursor = 0
+        self._resume_idx = None
+        self._ff = None
+        self._blueprint = None
+
+    @property
+    def blueprint(self) -> Blueprint | None:
+        """The active preset, if the flow is running one."""
+        return self._blueprint
+
+    @property
+    def _with_sidebar(self) -> bool:
+        """Whether the post-question screens carry the selections trail.
+
+        A blueprint user answered no questions, so review, building, and the
+        ready card drop it; a hand-picked stack keeps it. One predicate so
+        the screens and their body widths can never disagree.
+        """
+        return self._blueprint is None
+
     def note_auto_added(self, name: str, detail: str = "") -> None:
         """An engine rule auto-added ``name``: surface it in the sidebar.
 
@@ -422,6 +315,13 @@ class GuidedSelectionUI:
             if self._journal:
                 self._journal[-1].auto_prev = (at, self._crumbs[at])
             self._crumbs[at] = (display, mark)
+
+    # ----- blueprint seeding ----------------------------------------------
+    def set_blueprint(self, blueprint: Blueprint) -> None:
+        """Activate a blueprint for the whole flow: every screen answers
+        silently from it, so the pass lands on REVIEW; esc from there
+        pops answers and re-asks them live."""
+        self._blueprint = blueprint
 
     # ----- seams --------------------------------------------------------
     def _key(self) -> str:
@@ -472,6 +372,7 @@ class GuidedSelectionUI:
             # alone — their outcome shows up via the chips that follow.
             crumb="push" if context is not None else "none",
             label=_display_name(context.name) if context is not None else "",
+            qkey=f"{ACCEPT_PREFIX}{context.name}" if context is not None else "",
         )
         return choices[idx].value == "yes"
 
@@ -511,6 +412,7 @@ class GuidedSelectionUI:
                 choices,
                 crumb="amend",
                 note=_one_datastore_note(),
+                qkey=QKeys.SCHEDULER_BACKEND,
             )
         ].value
 
@@ -549,6 +451,7 @@ class GuidedSelectionUI:
                 _g("prompt.worker_backend", "Pick a worker backend"),
                 choices,
                 crumb="amend",
+                qkey=QKeys.WORKER_BACKEND,
             )
         ].value
 
@@ -578,6 +481,7 @@ class GuidedSelectionUI:
                 choices,
                 crumb="amend",
                 note=_one_datastore_note(),
+                qkey=QKeys.DATABASE_ENGINE,
             )
         ].value
         if engine == StorageBackends.POSTGRES:
@@ -619,6 +523,7 @@ class GuidedSelectionUI:
                 ),
                 choices,
                 crumb=crumb,
+                qkey=QKeys.POSTGRES_PROVIDER,
                 note=_g(
                     "note.one_database_host",
                     "One database per project: this host serves everything "
@@ -641,7 +546,10 @@ class GuidedSelectionUI:
         ]
         return choices[
             self._select(
-                _g("prompt.auth_level", "Authentication level"), choices, crumb="amend"
+                _g("prompt.auth_level", "Authentication level"),
+                choices,
+                crumb="amend",
+                qkey=QKeys.AUTH_LEVEL,
             )
         ].value
 
@@ -665,7 +573,10 @@ class GuidedSelectionUI:
         ]
         fw = framework[
             self._select(
-                _g("prompt.ai_framework", "AI framework"), framework, crumb="amend"
+                _g("prompt.ai_framework", "AI framework"),
+                framework,
+                crumb="amend",
+                qkey=QKeys.AI_FRAMEWORK,
             )
         ].value
         if existing_engine:
@@ -698,6 +609,7 @@ class GuidedSelectionUI:
                 backend,
                 crumb="amend",
                 note=_one_datastore_note(),
+                qkey=QKeys.AI_STORAGE,
             )
         ].value
         return self._configure_ai_extras(fw, be)
@@ -724,6 +636,7 @@ class GuidedSelectionUI:
             provider_choices,
             preselected,
             crumb="amend",
+            qkey=QKeys.AI_PROVIDERS,
         )
         # Same fallback as quick mode: nothing picked means the free tier.
         providers = [provider_choices[i].value for i in picked] or list(
@@ -748,6 +661,7 @@ class GuidedSelectionUI:
                     shortcuts={"y": 0, "n": 1},
                     compact=True,
                     crumb="amend",
+                    qkey=QKeys.AI_RAG,
                 )
             ].value
             == "rag"
@@ -768,6 +682,7 @@ class GuidedSelectionUI:
                     shortcuts={"y": 0, "n": 1},
                     compact=True,
                     crumb="amend",
+                    qkey=QKeys.AI_VOICE,
                 )
             ].value
             == "voice"
@@ -780,7 +695,7 @@ class GuidedSelectionUI:
         if self._keys is not None:
             return
 
-        width = self._content_width()
+        width = self._content_width(sidebar=False)
         grid = Table.grid(padding=(0, 0))
         grid.add_column(width=width)
         grid.add_row(
@@ -836,7 +751,7 @@ class GuidedSelectionUI:
         if self._keys is not None:
             return
 
-        width = self._content_width()
+        width = self._content_width(sidebar=False)
         grid = Table.grid(padding=(0, 0))
         grid.add_column(width=width)
         grid.add_row(
@@ -910,7 +825,18 @@ class GuidedSelectionUI:
             (f" {_g('hint.quit', 'quit')}", LABEL),
         )
         while True:
-            self._paint(self._frame(self._review_body(plan, pane), hints))
+            # No selections sidebar on a blueprint's review: the trail is
+            # a record of questions this user never answered, and showing
+            # it invites esc-ing back into free-flow mode, which is the one
+            # thing choosing a ready-made stack was meant to avoid. Blank
+            # canvas keeps its sidebar — there the trail is their own work.
+            self._paint(
+                self._frame(
+                    self._review_body(plan, pane),
+                    hints,
+                    sidebar=self._with_sidebar,
+                )
+            )
             key = self._key()
             if key in ("q", "\x03"):
                 raise typer.Abort()
@@ -924,7 +850,7 @@ class GuidedSelectionUI:
                 pane = None if pane == "deps" else "deps"
 
     def _review_body(self, plan: BuildPlan, pane: str | None) -> RenderableType:
-        width = self._content_width()
+        width = self._content_width(sidebar=self._with_sidebar)
         grid = Table.grid(padding=(0, 0))
         grid.add_column(width=width)
         grid.add_row(
@@ -989,6 +915,20 @@ class GuidedSelectionUI:
                     deps=len(plan.dependencies),
                 ),
                 style=MUTED,
+            )
+        )
+        # Nothing chosen here is permanent. Said plainly on the last screen
+        # before the build, because that is where it reads as reassurance
+        # rather than as a footnote nobody reaches.
+        grid.add_row(Text())
+        grid.add_row(
+            Text(
+                _g(
+                    "review.grows",
+                    "Anything missing can be added later: aegis add, "
+                    "aegis add-service.",
+                ),
+                style=LABEL,
             )
         )
 
@@ -1059,7 +999,7 @@ class GuidedSelectionUI:
         self.show_building_progress()
 
     def show_building_progress(self) -> None:
-        width = self._content_width()
+        width = self._content_width(sidebar=self._with_sidebar)
         grid = Table.grid(padding=(0, 0))
         grid.add_column(width=width)
         grid.add_row(
@@ -1101,7 +1041,15 @@ class GuidedSelectionUI:
             )
         )
         self._paint(
-            self._frame(grid, Text(_g("hint.building", "building …"), style=LABEL))
+            # A blueprint build drops the sidebar for the same reason its
+            # review does: the trail records questions this user never
+            # answered. A hand-picked stack keeps it — there it is their
+            # own work, and worth watching land.
+            self._frame(
+                grid,
+                Text(_g("hint.building", "building …"), style=LABEL),
+                sidebar=self._with_sidebar,
+            )
         )
 
     def show_done(
@@ -1125,6 +1073,10 @@ class GuidedSelectionUI:
                 self._frame(
                     self._done_body(plan, project_path, replay, copied, project_map),
                     self._done_hints(replay),
+                    # Same rule as review and building: a blueprint user has
+                    # no answer trail of their own, and the project map on
+                    # this card already says what they got.
+                    sidebar=self._with_sidebar,
                 )
             )
             key = self._key()
@@ -1133,9 +1085,11 @@ class GuidedSelectionUI:
             elif key in ("\r", "\n", "q", "\x03"):
                 return
 
-    def _region_width(self) -> int:
+    def _region_width(self, *, sidebar: bool = True) -> int:
         """Usable width of the content region (right of the sidebar)."""
         total = self._console.size.width
+        if not sidebar:
+            return max(40, total - 12)
         gutters = 2 * SIDEBAR_WIDTH if self._balanced() else SIDEBAR_WIDTH + 8
         return max(40, total - gutters - 4)
 
@@ -1150,9 +1104,12 @@ class GuidedSelectionUI:
         # The card widens beyond the usual 68-char prose column when the
         # replay command needs the room, up to the full content region —
         # the command must be fully visible, never ellipsized.
-        width = self._content_width()
+        width = self._content_width(sidebar=self._with_sidebar)
         if replay:
-            width = min(self._region_width(), max(width, len(replay) + 4))
+            width = min(
+                self._region_width(sidebar=self._with_sidebar),
+                max(width, len(replay) + 4),
+            )
         grid = Table.grid(padding=(0, 0))
         grid.add_column(width=width)
         grid.add_row(
@@ -1236,6 +1193,7 @@ class GuidedSelectionUI:
         crumb: str = "none",
         label: str = "",
         note: str | None = None,
+        qkey: str = "",
     ) -> int:
         # Replay path: hand back the journaled answer, render nothing.
         if self._cursor < len(self._journal):
@@ -1249,6 +1207,15 @@ class GuidedSelectionUI:
             # This is the screen the user backed into; focus their old answer.
             idx = min(self._resume_idx, len(choices) - 1)
             self._resume_idx = None
+        elif self._blueprint is not None:
+            # A blueprint answers EVERY remaining screen silently
+            # (journaled like keypresses), so the seeded pass lands on
+            # REVIEW; esc from there pops an answer and re-asks it live,
+            # and forward replay re-seeds from the blueprint again.
+            idx = pick_index(
+                self._blueprint, qkey, [c.value for c in choices], default_idx
+            )
+            return self._record(idx, choices, crumb, label)
 
         in_components = self._sections_seen < 2
         hints = Text.assemble(
@@ -1331,6 +1298,7 @@ class GuidedSelectionUI:
         preselected: set[int],
         *,
         crumb: str = "none",
+        qkey: str = "",
     ) -> list[int]:
         """Vertical checkbox list with a trailing Continue entry.
 
@@ -1372,6 +1340,13 @@ class GuidedSelectionUI:
             value = ",".join(choices[i].value for i in picked)
             self._record_value(bitmask, value, crumb, "")
             return picked
+
+        if self._blueprint is not None:
+            # Blueprint answers silently, journaled like a live pick.
+            selected = pick_multi(
+                self._blueprint, qkey, [c.value for c in choices], preselected
+            )
+            return _accept()
 
         while True:
             if self._ff is not None:
@@ -1463,8 +1438,17 @@ class GuidedSelectionUI:
         center of the leftover region."""
         return self._console.size.width - 2 * SIDEBAR_WIDTH - 4 >= 48
 
-    def _content_width(self) -> int:
+    def _content_width(self, *, sidebar: bool = True) -> int:
+        """Width of the body column.
+
+        With a sidebar, the mirrored gutters that center the body cost two
+        sidebar widths. Without one the body owns the row, so it keeps the
+        margins but takes a wider measure — still bounded, because prose
+        past ~80 columns is harder to read, not easier.
+        """
         width = self._console.size.width
+        if not sidebar:
+            return max(40, min(80, width - 12))
         avail = width - (2 * SIDEBAR_WIDTH + 4 if self._balanced() else 12)
         return max(40, min(68, avail))
 
@@ -1733,6 +1717,7 @@ def run_guided_init_flow(
     ui: GuidedSelectionUI | None = None,
     builder: Callable[[BuildPlan, _GuidedBuildReporter], object] | None = None,
     replay_command: Callable[[BuildPlan], str] | None = None,
+    blueprint: Blueprint | None = None,
 ) -> tuple[BuildPlan, bool]:
     """The complete guided experience: welcome, questions, REVIEW, build, DONE.
 
@@ -1749,25 +1734,58 @@ def run_guided_init_flow(
     :class:`GuidedBuildError` carrying the captured log, so the caller can
     print it to persistent scrollback after teardown.
 
+    ``blueprint`` preselects a preset (``--blueprint <slug>``), skipping
+    the starting-point screen: naming a slug on the command line IS the
+    choice. Otherwise the screen asks.
+
     ``ui`` is injectable for scripted tests; the default opens the
     alternate screen for the duration.
     """
     own_ui = ui if ui is not None else GuidedSelectionUI(project_name)
     with own_ui:
         own_ui.show_welcome()
-        own_ui.show_core_stack()
-        while True:
-            state: ProjectSelection = run_guided_selection(own_ui)
-            plan = resolve_build_plan(
-                project_name,
-                state.components,
-                state.scheduler_backend,
-                state.services,
-                python_version,
-            )
-            if yes or own_ui.show_review(plan) == "build":
-                break
-            own_ui.pop_answer()
+        # Starting point: blank canvas or a blueprint (esc returns to the
+        # welcome page). A blueprint only seeds the answers — the pass below
+        # journals them and lands on REVIEW with everything revisable.
+        plan: BuildPlan | None = None
+        while plan is None:
+            if blueprint is None:
+                while True:
+                    try:
+                        blueprint = own_ui.choose_blueprint()
+                        break
+                    except _GoBack:
+                        own_ui.show_welcome()
+            if blueprint is not None:
+                own_ui.set_blueprint(blueprint)
+            else:
+                # The foundation page orients someone about to assemble a
+                # stack question by question. A blueprint user is not
+                # assembling one, so it would just be a page between them
+                # and their build.
+                own_ui.show_core_stack()
+            while True:
+                state: ProjectSelection = run_guided_selection(own_ui)
+                candidate = resolve_build_plan(
+                    project_name,
+                    state.components,
+                    state.scheduler_backend,
+                    state.services,
+                    python_version,
+                )
+                if yes or own_ui.show_review(candidate) == "build":
+                    plan = candidate
+                    break
+                if own_ui.blueprint is not None:
+                    # esc on a blueprint's review: the only decision made
+                    # was the blueprint itself, so undo THAT and ask the
+                    # starting point again. Stepping into the questions
+                    # would drop them into a trail of answers they never
+                    # gave.
+                    own_ui.reset_selection()
+                    blueprint = None
+                    break
+                own_ui.pop_answer()
 
         if builder is not None:
             import io

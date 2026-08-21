@@ -41,11 +41,25 @@ EDITABLE_FIELDS = frozenset(
 )
 
 
+# Editable fields whose columns reject NULL; description/category/model_id
+# stay nullable (model_id None = follow the active default).
+_NON_NULLABLE_FIELDS = frozenset(
+    {"name", "temperature", "max_tokens", "system_prompt", "is_active"}
+)
+
+
 def _validate_changes(changes: dict[str, Any]) -> None:
     unknown = set(changes) - EDITABLE_FIELDS
     if unknown:
+        raise InvalidAgentUpdateError(f"Unknown agent fields: {sorted(unknown)}")
+    null_fields = sorted(
+        field
+        for field in _NON_NULLABLE_FIELDS
+        if field in changes and changes[field] is None
+    )
+    if null_fields:
         raise InvalidAgentUpdateError(
-            f"Unknown agent fields: {sorted(unknown)}"
+            f"Fields cannot be null: {', '.join(null_fields)}"
         )
     if "name" in changes and not str(changes["name"]).strip():
         raise InvalidAgentUpdateError("Agent name cannot be empty")
@@ -54,16 +68,12 @@ def _validate_changes(changes: dict[str, Any]) -> None:
     if "temperature" in changes:
         temperature = float(changes["temperature"])
         if not 0.0 <= temperature <= 2.0:
-            raise InvalidAgentUpdateError(
-                "temperature must be between 0.0 and 2.0"
-            )
+            raise InvalidAgentUpdateError("temperature must be between 0.0 and 2.0")
     if "max_tokens" in changes and int(changes["max_tokens"]) <= 0:
         raise InvalidAgentUpdateError("max_tokens must be positive")
 
 
-async def list_agents(
-    *, session: AsyncSession | None = None
-) -> list[Agent]:
+async def list_agents(*, session: AsyncSession | None = None) -> list[Agent]:
     """All agents, tools eager-loaded, ordered by slug."""
     if session is None:
         async with get_async_session() as owned_session:

@@ -6,6 +6,7 @@ click-to-open-modal functionality and hover effects.
 """
 
 import flet as ft
+
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from app.services.system.ui import get_component_label, get_component_subtitle

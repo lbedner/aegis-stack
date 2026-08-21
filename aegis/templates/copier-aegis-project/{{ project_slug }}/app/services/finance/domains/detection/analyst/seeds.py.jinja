@@ -1,0 +1,125 @@
+{% if include_ai and ai_backend != "memory" %}"""The database handoff: agent + memory-module seed rows and their loader.
+"""
+
+from typing import Any
+from sqlmodel import (
+    Session,
+    select,
+)
+from app.core.log import logger
+from app.services.ai.models.agents import (
+    Agent,
+    MemoryModule,
+)
+from app.services.finance.domains.detection.analyst.prompts import ANALYST_MAX_TOKENS, ANALYST_SYSTEM_PROMPT, ANALYST_TEMPERATURE, DEEP_DIVE_MAX_TOKENS, DEEP_DIVE_SYSTEM_PROMPT, DEEP_DIVE_TEMPERATURE
+from app.services.finance.domains.detection.analyst.shared import ANALYST_AGENT_SLUG, DEEP_DIVE_AGENT_SLUG, SNAPSHOT_MODULE_SLUG
+
+
+SNAPSHOT_TOKEN_ESTIMATE = 1_200
+
+
+
+
+def snapshot_module_definition() -> dict[str, Any]:
+    """The seed row for the snapshot memory module."""
+    return {
+        "slug": SNAPSHOT_MODULE_SLUG,
+        "name": "Finance snapshot",
+        "description": (
+            "Balances, net-worth trend, credit card and loan detail, portfolio "
+            "positions, monthly cashflow, category spend against its norm, "
+            "recent transactions, open anomalies, the cash forecast, and what "
+            "is due next."
+        ),
+        "category": "finance",
+        "prompt_content": None,
+        "fetch_function": SNAPSHOT_MODULE_SLUG,
+        "context_key": SNAPSHOT_MODULE_SLUG,
+        "priority": 10,
+        "token_estimate": SNAPSHOT_TOKEN_ESTIMATE,
+        "is_active": True,
+    }
+
+
+
+
+def analyst_agent_definition() -> dict[str, Any]:
+    """The seed row for the finance analyst agent.
+
+    ``model_id`` is None so the agent follows whatever model the AI service is
+    configured with. Point it at one pulled Ollama tag by setting that column.
+    """
+    return {
+        "slug": ANALYST_AGENT_SLUG,
+        "name": "Finance Analyst",
+        "description": "Writes the daily finance note from detected findings",
+        "category": "finance",
+        "model_id": None,
+        "system_prompt": ANALYST_SYSTEM_PROMPT,
+        "temperature": ANALYST_TEMPERATURE,
+        "max_tokens": ANALYST_MAX_TOKENS,
+        "memory_modules": [SNAPSHOT_MODULE_SLUG],
+        "knowledge_base_ids": [],
+        "is_active": True,
+    }
+
+
+
+
+def deep_dive_agent_definition() -> dict[str, Any]:
+    """The seed row for the on-request deep dive.
+
+    A SEPARATE agent row rather than a mode on the daily one, so it can be
+    pointed at a bigger model and given a larger token budget without
+    changing what runs nightly. Both read the same memory module.
+    """
+    return {
+        "slug": DEEP_DIVE_AGENT_SLUG,
+        "name": "Finance Analyst (deep dive)",
+        "description": "On-request full review: situation, causes, findings triage, options",
+        "category": "finance",
+        "model_id": None,
+        "system_prompt": DEEP_DIVE_SYSTEM_PROMPT,
+        "temperature": DEEP_DIVE_TEMPERATURE,
+        "max_tokens": DEEP_DIVE_MAX_TOKENS,
+        "memory_modules": [SNAPSHOT_MODULE_SLUG],
+        "knowledge_base_ids": [],
+        "is_active": True,
+    }
+
+
+
+
+def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
+    """Seed the analyst agent and its memory module, skipping existing rows.
+
+    Idempotent, and never mutates a row that is already there: both are
+    editable from the dashboard, and a re-seed must not undo that.
+    """
+    counts = {"finance_agents": 0, "finance_memory_modules": 0}
+
+    module = snapshot_module_definition()
+    if (
+        session.exec(
+            select(MemoryModule).where(MemoryModule.slug == module["slug"])
+        ).first()
+        is None
+    ):
+        session.add(MemoryModule(**module))
+        counts["finance_memory_modules"] = 1
+        logger.info(f"Seeded memory module '{module['slug']}'")
+
+    for definition in (analyst_agent_definition(), deep_dive_agent_definition()):
+        if (
+            session.exec(select(Agent).where(Agent.slug == definition["slug"])).first()
+            is not None
+        ):
+            continue
+        session.add(Agent(**definition))
+        counts["finance_agents"] += 1
+        logger.info(f"Seeded agent '{definition['slug']}'")
+
+    if any(counts.values()):
+        session.commit()
+    return counts
+{% endif %}

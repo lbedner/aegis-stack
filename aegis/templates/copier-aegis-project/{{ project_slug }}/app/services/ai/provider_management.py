@@ -7,14 +7,15 @@ at runtime, enabling users to dynamically add providers after project generation
 
 import importlib.util
 import os
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 from .models import AIProvider
 
 # Provider to pydantic-ai-slim extras mapping
-# Note: mistral, cohere, ollama, and public use the OpenAI-compatible API
+# Note: mistral, cohere, ollama, public, and pollinations use the
+# OpenAI-compatible API
 PROVIDER_DEPENDENCIES: dict[str, str] = {
     "openai": "pydantic-ai-slim[openai]",
     "anthropic": "pydantic-ai-slim[anthropic]",
@@ -24,6 +25,7 @@ PROVIDER_DEPENDENCIES: dict[str, str] = {
     "cohere": "pydantic-ai-slim[openai]",
     "ollama": "pydantic-ai-slim[openai]",
     "public": "pydantic-ai-slim[openai]",
+    "pollinations": "pydantic-ai-slim[openai]",
 }
 
 # Actual SDK packages to check for each provider
@@ -37,6 +39,7 @@ PROVIDER_MODULE_CHECKS: dict[str, str] = {
     "cohere": "openai",  # Uses OpenAI-compatible API
     "ollama": "openai",  # Uses OpenAI-compatible API
     "public": "openai",  # Uses OpenAI-compatible API
+    "pollinations": "openai",  # Uses OpenAI-compatible API
 }
 
 # API key documentation URLs for user guidance

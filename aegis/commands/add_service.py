@@ -493,7 +493,11 @@ def add_service_command(
                     typer.echo(f"   {t('add_service.created_file', file=f)}")
 
             if not service_has_migration(target_path, base_service):
-                migration_path = generate_migration(target_path, base_service)
+                # Answers carry the database engine, which selects the
+                # schema-qualified spec variant on Postgres.
+                migration_path = generate_migration(
+                    target_path, base_service, updater.answers
+                )
                 if migration_path:
                     brand.success(
                         f"   {t('add_service.generated_migration', name=migration_path.name)}"
@@ -507,7 +511,9 @@ def add_service_command(
             if migration_service in MIGRATION_SPECS and not service_has_migration(
                 target_path, migration_service
             ):
-                migration_path = generate_migration(target_path, migration_service)
+                migration_path = generate_migration(
+                    target_path, migration_service, updated_answers
+                )
                 if migration_path:
                     brand.success(
                         f"   {t('add_service.generated_migration', name=migration_path.name)}"

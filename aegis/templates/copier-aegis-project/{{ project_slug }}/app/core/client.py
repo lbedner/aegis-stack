@@ -25,12 +25,15 @@ The ``aclose()`` method releases the underlying connection pool;
 call it from ``on_disconnect`` or ``clear_session_state``.
 """
 
-import inspect
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+import inspect
+import time
 from typing import Any
 
 import httpx
+
 from app.core.config import settings
 from app.core.log import logger
 
@@ -55,6 +58,12 @@ class APIClient:
         self.base_url = base_url or f"http://localhost:{settings.PORT}"
         self.timeout = timeout
         self.on_unauthorized = on_unauthorized
+        # Human-readable reason for the most recent failed request, None
+        # after a success. The request methods return None on ANY error
+        # (details go to the log), which leaves UI callers unable to say
+        # what failed - this carries the same detail to the surface that
+        # just got None back (e.g. the loading overlay's error panel).
+        self.last_error: str | None = None
         # Re-entry guard. If ``on_unauthorized`` itself triggers another
         # 401 (the canonical case: ``sign_out`` calls ``/auth/logout``,
         # which 401s when the cookie is already stale — which is exactly
@@ -73,6 +82,13 @@ class APIClient:
             timeout=timeout,
             follow_redirects=True,
         )
+        # Opt-in GET cache (see ``get``'s ``cache_ttl``). Key is
+        # endpoint+params; value is (monotonic deadline, parsed body).
+        # ``_get_inflight`` coalesces concurrent identical reads onto one
+        # request - a dashboard opening every tab fires the same reference
+        # reads many times in the same instant.
+        self._get_cache: dict[str, tuple[float, dict | list | None]] = {}
+        self._get_inflight: dict[str, asyncio.Task[dict | list | None]] = {}
 
     async def aclose(self) -> None:
         """Release the underlying connection pool. Call on session teardown."""
@@ -83,16 +99,71 @@ class APIClient:
         self._client.cookies.clear()
 
     async def get(
-        self, endpoint: str, params: dict[str, Any] | None = None
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        *,
+        cache_ttl: float | None = None,
     ) -> dict | list | None:
-        """GET request. Returns parsed JSON or None on error."""
-        return await self._request("GET", endpoint, params=params)
+        """GET request. Returns parsed JSON or None on error.
+
+        ``cache_ttl`` opts this read into the client's GET cache: the
+        parsed body is reused for that many seconds, and concurrent
+        identical reads share one request in flight. Any write through
+        this client drops the whole cache, so a caller can never read its
+        own write stale. Reserve it for reference data many surfaces read
+        at once (account lists, category options) - never for anything
+        whose params make it unique per view anyway.
+        """
+        if cache_ttl is None:
+            return await self._request("GET", endpoint, params=params)
+        return await self._cached_get(endpoint, params, cache_ttl)
+
+    async def _cached_get(
+        self, endpoint: str, params: dict[str, Any] | None, ttl: float
+    ) -> dict | list | None:
+        key = f"{endpoint}?{sorted((params or {}).items())!r}"
+        hit = self._get_cache.get(key)
+        if hit is not None and time.monotonic() < hit[0]:
+            return hit[1]
+
+        inflight = self._get_inflight.get(key)
+        if inflight is None:
+
+            async def fetch() -> dict | list | None:
+                try:
+                    result = await self._request("GET", endpoint, params=params)
+                    if result is not None:
+                        # Errors return None and are never cached - a
+                        # blip must not blank a surface for a whole TTL.
+                        self._get_cache[key] = (time.monotonic() + ttl, result)
+                    return result
+                finally:
+                    self._get_inflight.pop(key, None)
+
+            inflight = asyncio.create_task(fetch())
+            self._get_inflight[key] = inflight
+        return await inflight
+
+    def _invalidate_get_cache(self) -> None:
+        """Drop every cached GET. Called after any write through this
+        client: reference data is cheap to refetch and a stale read after
+        the user's own edit is a visible bug."""
+        self._get_cache.clear()
 
     async def post(
-        self, endpoint: str, json: dict[str, Any] | None = None
+        self,
+        endpoint: str,
+        json: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> dict | list | None:
-        """POST request with a JSON body. Returns parsed JSON or None on error."""
-        return await self._request("POST", endpoint, json=json)
+        """POST request with a JSON body. Returns parsed JSON or None on error.
+
+        ``timeout`` overrides the client-wide budget for this one call (for
+        endpoints that do real work inline, e.g. the analyst note waits on a
+        local model).
+        """
+        return await self._request("POST", endpoint, json=json, timeout=timeout)
 
     async def post_form(
         self, endpoint: str, data: dict[str, str]
@@ -111,6 +182,7 @@ class APIClient:
         endpoint: str,
         files: dict[str, tuple[str, bytes, str]],
         params: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> dict | list | None:
         """
         POST a ``multipart/form-data`` body.
@@ -121,8 +193,15 @@ class APIClient:
         handled the same as the JSON-bodied methods. ``Content-Type`` is
         **not** set manually — httpx infers ``multipart/form-data;
         boundary=…`` from ``files=``.
+
+        ``timeout`` overrides the client-wide budget for this one call:
+        uploads that trigger server-side processing (the finance file
+        import runs its reconciliation rules inline) legitimately outlive
+        the 10s default.
         """
-        return await self._request("POST", endpoint, files=files, params=params)
+        return await self._request(
+            "POST", endpoint, files=files, params=params, timeout=timeout
+        )
 
     async def put(
         self, endpoint: str, json: dict[str, Any] | None = None
@@ -162,6 +241,8 @@ class APIClient:
             ``(0, None)`` on network/timeout errors;
             ``(status_code, parsed_json or None)`` otherwise.
         """
+        if method != "GET":
+            self._invalidate_get_cache()
         url = f"{self.base_url}{endpoint}"
         headers: dict[str, str] = {}
         if form_data is not None:
@@ -272,6 +353,45 @@ class APIClient:
         json: dict[str, Any] | None = None,
         form_data: dict[str, str] | None = None,
         files: dict[str, tuple[str, bytes, str]] | None = None,
+        timeout: float | None = None,
+        _retry_on_401: bool = True,
+    ) -> dict | list | None:
+        if method == "GET":
+            return await self._perform_request(
+                method,
+                endpoint,
+                params=params,
+                json=json,
+                form_data=form_data,
+                files=files,
+                timeout=timeout,
+                _retry_on_401=_retry_on_401,
+            )
+        try:
+            return await self._perform_request(
+                method,
+                endpoint,
+                params=params,
+                json=json,
+                form_data=form_data,
+                files=files,
+                timeout=timeout,
+                _retry_on_401=_retry_on_401,
+            )
+        finally:
+            # AFTER the write, not before: a cached read racing a write
+            # could re-cache the pre-write body for a whole TTL.
+            self._invalidate_get_cache()
+
+    async def _perform_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        form_data: dict[str, str] | None = None,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+        timeout: float | None = None,
         _retry_on_401: bool = True,
     ) -> dict | list | None:
         url = f"{self.base_url}{endpoint}"
@@ -280,6 +400,9 @@ class APIClient:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
         # NOTE: do NOT set Content-Type for ``files=`` — httpx generates
         # the multipart boundary itself. Setting it here would clobber it.
+        # Per-request timeout only when asked: ``timeout=None`` at the httpx
+        # layer means "no timeout at all", which is never what a UI wants.
+        extra: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
         try:
             response = await self._client.request(
                 method,
@@ -289,14 +412,23 @@ class APIClient:
                 data=form_data,
                 files=files,
                 headers=headers,
+                **extra,
             )
             response.raise_for_status()
+            self.last_error = None
             if response.status_code == 204:
                 return None
             return response.json()
         except httpx.TimeoutException:
+            budget = timeout if timeout is not None else self.timeout
+            self.last_error = f"{method} {endpoint} timed out after {budget:g}s"
             logger.error("api_client.timeout", url=url, method=method)
         except httpx.HTTPStatusError as e:
+            detail = self._response_detail(e.response)
+            self.last_error = (
+                f"{method} {endpoint} failed with HTTP {e.response.status_code}"
+                + (f": {detail}" if detail else "")
+            )
             if e.response.status_code == 401:
                 # Refresh-on-401: silently mint a new access token and
                 # retry the original request once. Skip when this call
@@ -315,6 +447,7 @@ class APIClient:
                         json=json,
                         form_data=form_data,
                         files=files,
+                        timeout=timeout,
                         _retry_on_401=False,
                     )
                 await self._emit_unauthorized()
@@ -325,10 +458,28 @@ class APIClient:
                 status_code=e.response.status_code,
             )
         except httpx.ConnectError:
+            self.last_error = f"Could not connect to the API ({method} {endpoint})"
             logger.error("api_client.connect_error", url=url, method=method)
         except Exception as e:
+            self.last_error = f"{method} {endpoint} failed: {e}"
             logger.error("api_client.error", url=url, method=method, error=str(e))
         return None
+
+    @staticmethod
+    def _response_detail(response: httpx.Response) -> str:
+        """Best-effort human-readable detail from an error response body.
+
+        FastAPI puts the real message in ``{"detail": ...}``; anything else
+        falls back to a truncated body, or empty when unreadable.
+        """
+        try:
+            payload = response.json()
+            if isinstance(payload, dict) and payload.get("detail"):
+                return str(payload["detail"])
+        except Exception:
+            pass
+        text = getattr(response, "text", "")
+        return text[:300] if isinstance(text, str) else ""
 
 
 def get_api_client() -> APIClient:

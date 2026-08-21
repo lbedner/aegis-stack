@@ -163,13 +163,21 @@ class AIService:
 {% endif %}
 
     def refresh_config(self) -> None:
-        """Refresh config after .env changes (e.g., after /model command).
+        """Rebuild config from the live settings singleton.
 
-        Call this after updating .env to ensure self.config reflects current values.
-        This is called by slash commands when provider or model changes.
+        The service is constructed once at import, so its config would
+        otherwise be frozen at whatever was active then. Callers that change
+        the model - the runtime override, or a slash command writing .env -
+        call this so the next request uses the new value.
+
+        Reads the process-wide ``settings`` rather than a fresh ``Settings()``:
+        re-reading .env here would discard a runtime override, which lives in
+        the database and is applied onto this object.
         """
-        from app.core.config import Settings
-        self.config = get_ai_config(Settings())
+        from app.core.config import settings as live_settings
+
+        self.settings = live_settings
+        self.config = get_ai_config(live_settings)
 
 {% if ai_rag %}
     @property

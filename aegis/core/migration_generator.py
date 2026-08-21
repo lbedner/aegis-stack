@@ -23,7 +23,13 @@ from typing import Any
 
 from jinja2 import Environment, Template, TemplateNotFound
 
-from ..constants import AnswerKeys, AuthLevels, StorageBackends
+from ..constants import (
+    AnswerKeys,
+    AuthLevels,
+    DatabaseSchemas,
+    ServiceNames,
+    StorageBackends,
+)
 
 
 @dataclass
@@ -383,6 +389,28 @@ AI_MIGRATION = ServiceMigrationSpec(
                 IndexSpec("ix_large_language_model_llm_vendor_id", ["llm_vendor_id"]),
             ],
             foreign_keys=[ForeignKeySpec(["llm_vendor_id"], "llm_vendor", ["id"])],
+        ),
+        # Active model selection - standalone singleton row. Mirrors
+        # app/services/ai/models/llm/llm_active_selection.py; both sources
+        # must change together.
+        TableSpec(
+            name="llm_active_selection",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # Nullable owner from day one: NULL is the install-wide
+                # default, and carrying the column means per-user selection is
+                # later a code change, not a migration on a shipped table. The
+                # FK to ``user`` is added by the auth link migration when the
+                # auth service is present (see _build_finance_auth_link).
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("model_id", "sa.String()", nullable=False),
+                ColumnSpec("provider", "sa.String()", nullable=True),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_llm_active_selection_owner_user_id", ["owner_user_id"]),
+                IndexSpec("ix_llm_active_selection_model_id", ["model_id"]),
+            ],
         ),
         # LLM Deployment - depends on llm_vendor and large_language_model
         TableSpec(
@@ -1495,6 +1523,20 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 ),
             ],
         ),
+        TableSpec(
+            name="finance_icon",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("domain", "sa.String(255)", nullable=False),
+                # NULL = negative entry: the domain is known to miss, and is
+                # not retried until fetched_at ages past the retry window.
+                ColumnSpec("icon_b64", "sa.Text()", nullable=True),
+                ColumnSpec("fetched_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_icon_domain", ["domain"], unique=True),
+            ],
+        ),
         # ----- Group A: connections & sync ---------------------------------
         TableSpec(
             name="finance_institution",
@@ -1794,7 +1836,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                     "ck_finance_account_type",
                     "account_type IN ('checking', 'savings', 'credit_card', 'loan', "
                     "'investment', 'brokerage', 'crypto', 'property', 'vehicle', "
-                    "'cash', 'other_asset', 'other_liability')",
+                    "'cash', 'goal', 'envelope', 'other_asset', 'other_liability')",
                 ),
                 CheckConstraintSpec(
                     "ck_finance_account_classification",
@@ -1998,7 +2040,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 CheckConstraintSpec(
                     "ck_finance_valuation_source",
                     "source IN ('manual', 'zillow', 'kbb', 'exchange_api', 'onchain', "
-                    "'plaid', 'snaptrade', 'coingecko', 'reconciliation')",
+                    "'plaid', 'snaptrade', 'coingecko', 'reconciliation', 'goal_auto', 'envelope_auto')",
                 ),
             ],
         ),
@@ -2332,7 +2374,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 CheckConstraintSpec(
                     "ck_finance_transfer_method",
                     "match_method IN ('auto_amount_date', 'plaid_transfer', "
-                    "'user_manual', 'rule')",
+                    "'user_manual', 'rule', 'payment_history')",
                 ),
                 CheckConstraintSpec(
                     "ck_finance_transfer_status",
@@ -2906,6 +2948,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                     default="False",
                 ),
                 ColumnSpec("is_muted", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("paused_until", "sa.Date()", nullable=True),
                 ColumnSpec("service_type", "sa.Text()", nullable=True),
                 ColumnSpec("source", "sa.String(12)", nullable=False),
                 ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
@@ -2965,7 +3008,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                     "ck_finance_recurring_frequency",
                     "frequency IN ('weekly', 'biweekly', 'semi_monthly', "
                     "'monthly', 'bimonthly', 'quarterly', 'semi_annually', "
-                    "'annually', 'irregular', 'unknown')",
+                    "'annually', 'once', 'irregular', 'unknown')",
                 ),
                 CheckConstraintSpec(
                     "ck_finance_recurring_status",
@@ -3023,8 +3066,12 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
                 ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
                 ColumnSpec("budget_id", "sa.Integer()", nullable=False),
-                # NULL category = the budget's overall line.
+                # NULL category + NULL payee_key = the budget's overall
+                # line. A line targets a category OR a payee ("Starbucks"),
+                # never both — enforced by ck_finance_budgetcat_target.
                 ColumnSpec("category_id", "sa.Integer()", nullable=True),
+                ColumnSpec("payee_key", "sa.String(96)", nullable=True),
+                ColumnSpec("payee_label", "sa.String(191)", nullable=True),
                 ColumnSpec("period_month", "sa.Integer()", nullable=True),
                 ColumnSpec(
                     "allocated_amount", "sa.BigInteger()", nullable=False, default="0"
@@ -3050,10 +3097,32 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 IndexSpec("ix_finance_budgetcat_budget", ["budget_id"]),
                 IndexSpec("ix_finance_budgetcat_category", ["category_id"]),
                 IndexSpec("ix_finance_budgetcat_month", ["period_month"]),
+                # One partial unique index per target shape — a plain
+                # 3-column unique never deduped payee/overall rows (SQL
+                # NULL semantics: NULL is never equal to NULL).
                 IndexSpec(
-                    "uq_finance_budgetcat",
+                    "uq_finance_budgetcat_category",
                     ["budget_id", "category_id", "period_month"],
                     unique=True,
+                    where="category_id IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_budgetcat_payee",
+                    ["budget_id", "payee_key", "period_month"],
+                    unique=True,
+                    where="payee_key IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_budgetcat_overall",
+                    ["budget_id", "period_month"],
+                    unique=True,
+                    where="category_id IS NULL AND payee_key IS NULL",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_budgetcat_target",
+                    "category_id IS NULL OR payee_key IS NULL",
                 ),
             ],
             foreign_keys=[
@@ -3453,6 +3522,39 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
             ],
         ),
         TableSpec(
+            name="finance_analyst_snapshot",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("as_of_date", "sa.Date()", nullable=False),
+                ColumnSpec("net_worth", "sa.BigInteger()", nullable=True),
+                ColumnSpec("cash_today", "sa.BigInteger()", nullable=True),
+                ColumnSpec("portfolio_total", "sa.BigInteger()", nullable=True),
+                ColumnSpec("positions", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("projection_end_date", "sa.Date()", nullable=True),
+                ColumnSpec("projection_end_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("projection_low_date", "sa.Date()", nullable=True),
+                ColumnSpec("projection_low_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("first_negative_date", "sa.Date()", nullable=True),
+                ColumnSpec("first_negative_name", "sa.String(255)", nullable=True),
+                ColumnSpec(
+                    "open_critical", "sa.Integer()", nullable=False, default="0"
+                ),
+                ColumnSpec("open_warning", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("goals_total_saved", "sa.BigInteger()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_analyst_snapshot_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_analyst_snapshot_day", ["as_of_date"]),
+                IndexSpec(
+                    "uq_finance_analyst_snapshot_owner_day",
+                    ["owner_user_id", "as_of_date"],
+                    unique=True,
+                ),
+            ],
+        ),
+        TableSpec(
             name="finance_transaction_changelog",
             columns=[
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
@@ -3548,7 +3650,8 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
 
 
 # Postgres schema finance tables live in (dropped on SQLite, which has none).
-FINANCE_SCHEMA = "finance"
+# Kept as a module-level alias for readability at the table-builder call sites.
+FINANCE_SCHEMA = DatabaseSchemas.FINANCE
 
 # Every finance table with an ``owner_user_id`` column. The auth-link migration
 # adds an FK from each to ``user.id`` when the auth service is present. Grows as
@@ -4126,6 +4229,20 @@ def _render_migration(
     )
 
 
+def _is_postgres(context: dict[str, Any] | None) -> bool:
+    """Whether the generation context targets a Postgres database.
+
+    Schemas are the only Postgres-specific rendering decision the generator
+    makes, and every caller asks the same question, so it lives here rather
+    than being re-derived. A ``None`` context carries no engine information
+    and is not treated as Postgres.
+    """
+    if context is None:
+        return False
+    engine = context.get(AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE)
+    return engine == StorageBackends.POSTGRES
+
+
 def _resolve_spec(
     service_name: str,
     context: dict[str, Any] | None,
@@ -4136,32 +4253,48 @@ def _resolve_spec(
     per-user mode (``insights_per_user=true``). Both render to a single
     ``00X_insights.py`` migration file; only the shape changes. Other
     services pass through to the static spec unchanged.
+
+    Schemas are resolved last and generically: a spec that declares one
+    keeps it on Postgres and loses it on every other engine. That applies
+    to in-tree services, components, and third-party plugins alike, so a
+    plugin declaring ``MigrationSpec(schema=...)`` renders valid SQL on a
+    SQLite project without naming itself here.
+
+    A ``None`` context means "engine unknown" and renders the spec exactly
+    as declared; callers that know the project's engine should pass it.
     """
     migration_specs = _get_migration_specs()
     if service_name not in migration_specs:
         return None
 
-    if service_name == "insights" and context is not None:
+    if service_name == ServiceNames.INSIGHTS and context is not None:
         flag = context.get(AnswerKeys.INSIGHTS_PER_USER)
         per_user = flag == "yes" or flag is True
         if per_user:
             return _build_insights_migration(per_user=True)
 
-    # Finance tables live in a dedicated Postgres ``finance`` schema; SQLite has
-    # no schemas, so there they stay unqualified. Resolve the schema-qualified
-    # variant only for a Postgres target.
-    if service_name in ("finance", "finance_auth_link") and context is not None:
-        engine = context.get(AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE)
-        if engine == StorageBackends.POSTGRES:
-            if service_name == "finance":
-                return replace(migration_specs["finance"], schema=FINANCE_SCHEMA)
-            # user lives in the default (public) schema, finance_connection in
-            # the finance schema — cross-schema FK.
-            return _build_finance_auth_link(
-                schema=FINANCE_SCHEMA, user_ref_schema="public"
+    # Finance's owner FK crosses from the finance schema to ``public.user``,
+    # so the Postgres shape is a different spec, not just a schema override.
+    if service_name in (
+        ServiceNames.FINANCE,
+        ServiceNames.FINANCE_AUTH_LINK,
+    ) and _is_postgres(context):
+        if service_name == ServiceNames.FINANCE:
+            return replace(
+                migration_specs[ServiceNames.FINANCE], schema=DatabaseSchemas.FINANCE
             )
+        return _build_finance_auth_link(
+            schema=DatabaseSchemas.FINANCE, user_ref_schema=DatabaseSchemas.PUBLIC
+        )
 
-    return migration_specs[service_name]
+    spec = migration_specs[service_name]
+
+    # Engines without schema support drop the qualifier entirely; the tables
+    # still get created, just in the single unscoped namespace.
+    if spec.schema is not None and context is not None and not _is_postgres(context):
+        return replace(spec, schema=None)
+
+    return spec
 
 
 def generate_migration(

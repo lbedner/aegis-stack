@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from app.services.ai.models import AIProvider
 from app.services.ai.providers import (
     ProviderError,
@@ -75,6 +76,12 @@ class TestGetModelClass:
         """Verify Public provider uses OpenAIChatModel."""
         pytest.importorskip("openai")
         model_class = _get_model_class(AIProvider.PUBLIC)
+        assert model_class.__name__ == "OpenAIChatModel"
+
+    def test_pollinations_returns_openai_model(self) -> None:
+        """Verify Pollinations provider uses OpenAIChatModel (OpenAI-compatible)."""
+        pytest.importorskip("openai")
+        model_class = _get_model_class(AIProvider.POLLINATIONS)
         assert model_class.__name__ == "OpenAIChatModel"
 
 
@@ -158,6 +165,11 @@ class TestGetSupportedProviders:
         """Verify PUBLIC is in the list of supported providers."""
         providers = get_supported_providers()
         assert AIProvider.PUBLIC in providers
+
+    def test_pollinations_in_supported_providers(self) -> None:
+        """Verify POLLINATIONS is in the list of supported providers."""
+        providers = get_supported_providers()
+        assert AIProvider.POLLINATIONS in providers
 
 
 # =============================================================================

@@ -277,6 +277,19 @@ class PluginSpec:
     # the user and aborts unless ``--force`` is passed.
     aegis_version: str = ""
 
+    # CLI verb the plugin registers under in the generated project's typer
+    # app, exactly as the user types it. When set, the plugin must ship a
+    # module exposing a ``typer.Typer`` instance named ``app`` at
+    # ``app/cli/<cli_name>.py``, with any hyphens replaced by underscores
+    # (``web-scrape`` -> ``app/cli/web_scrape.py``), since hyphens are not
+    # importable in a module path. The generated project's
+    # ``app/cli/main.py`` plugin loop applies the same normalization when
+    # it registers the module via ``app.add_typer(...)``, so the verb keeps
+    # its hyphen on the command line. ``None`` means the plugin ships no
+    # CLI surface. Decoupled from ``name`` so the install identifier
+    # (``crawl4ai``) and the user-facing verb (``crawl``) can differ.
+    cli_name: str | None = None
+
     # ----- Read-only legacy aliases -------------------------------------
 
     @property

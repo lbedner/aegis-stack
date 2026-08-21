@@ -19,6 +19,7 @@ from app.components.frontend.controls import (
     SecondaryText,
     status_dot,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.components.worker.registry import (
     discover_worker_queues,
@@ -1176,13 +1177,9 @@ class WorkerDetailDialog(BaseDetailPopup):
         self._dirty = False
 
         # Build tabbed layout (matches AI modal tab styling)
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
             tabs=[
                 ft.Tab(
                     text="Overview",

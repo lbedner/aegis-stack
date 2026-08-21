@@ -423,6 +423,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "Аутентификация",
     "projectmap.ai": "AI-диалоги",
     "projectmap.comms": "Коммуникации",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "Документация",
     # ── Пост-генерация: подвал ─────────────────────────────────────────
     "postgen.docs_link": "Документация: https://docs.aegis-stack.io",
@@ -582,6 +586,10 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Целевой шаблон:   {version}",
     "update.already_at_version": "Проект уже на запрашиваемой версии",
     "update.already_at_commit": "Проект уже на целевом коммите",
+    "update.ahead_of_target": ("Проект новее целевой версии шаблона"),
+    "update.ahead_of_target_hint": (
+        "Обновлять нечего. Используйте --to-version, чтобы выбрать конкретную версию."
+    ),
     "update.downgrade_blocked": "Понижение версии не поддерживается",
     "update.downgrade_reason": (
         "Copier не поддерживает откат к более ранним версиям шаблона."
@@ -600,6 +608,11 @@ MESSAGES: dict[str, str] = {
     "update.synced_files": "   Синхронизировано {count} изменений шаблона",
     "update.merge_conflicts": (
         "   {count} файл(ов) с конфликтами слияния (ищите <<<<<<< для разрешения):"
+    ),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
     ),
     "update.running_postgen": "Выполнение пост-генерационных задач...",
     "update.skipping_postgen_conflicts": (
@@ -847,6 +860,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "Выбрать сервисы интерактивно",
     "common.help_force": "Игнорировать предупреждения о несовместимости версий",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "Имя нового проекта Aegis Stack",
     "init.help_opt_components": "Список компонентов через запятую (redis, worker, scheduler, database)",
     "init.help_opt_python": "Версия Python для генерируемого проекта (3.11, 3.12, 3.13 или 3.14)",

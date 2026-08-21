@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "Prix d'entrée :",
     "llm.output_price_label": "Prix de sortie :",
     "llm.model_not_in_catalog": "Modèle introuvable dans le catalogue. Exécutez 'llm sync' pour le remplir.",
+    "llm.source_label": "Source :",
+    "llm.source_override": "sélection enregistrée (remplace .env ; 'llm reset' pour l'effacer)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": "Valeur .env :",
+    "llm.help_reset": "Supprime le remplacement enregistré du modèle pour que .env décide à nouveau.",
+    "llm.reset_done": "Remplacement supprimé. Le modèle actif provient désormais de .env : {model}",
+    "llm.reset_none": "Aucun remplacement enregistré. Le modèle actif provient déjà de .env : {model}",
     # Utilisation
     "llm.switching_model": "Basculement vers {model_id}",
     # Info
@@ -695,49 +702,49 @@ MESSAGES: dict[str, str] = {
     "ai.rag_step_query": "2. Interrogez avec la collection :",
     "ai.rag_list_hint": "Astuce : exécutez '{app} rag list' pour voir les collections existantes.",
     # Sentiment stats (CLI)
-    "ai.help_sentiment": "Show conversation sentiment statistics from the analysis job.",
-    "ai.sentiment_title": "Conversation Sentiment",
-    "ai.sentiment_disabled_hint": "Sentiment analysis is disabled. Set AI_SENTIMENT_ENABLED=true to score conversations.",
-    "ai.sentiment_empty": "No conversations scored yet.",
-    "ai.sentiment_distribution": "Sentiment Distribution",
-    "ai.sentiment_avg_score": "Average score:",
-    "ai.sentiment_performance": "Assistant performance:",
-    "ai.sentiment_recent_negatives": "Recent Negative Conversations",
+    "ai.help_sentiment": "Afficher les statistiques de sentiment des conversations issues de la tâche d'analyse.",
+    "ai.sentiment_title": "Sentiment des conversations",
+    "ai.sentiment_disabled_hint": "L'analyse de sentiment est désactivée. Définissez AI_SENTIMENT_ENABLED=true pour évaluer les conversations.",
+    "ai.sentiment_empty": "Aucune conversation évaluée pour l'instant.",
+    "ai.sentiment_distribution": "Répartition des sentiments",
+    "ai.sentiment_avg_score": "Score moyen :",
+    "ai.sentiment_performance": "Performance de l'assistant :",
+    "ai.sentiment_recent_negatives": "Conversations négatives récentes",
     # Agent registry (CLI)
-    "agents.help": "Inspect and test the agent registry.",
-    "agents.help_list": "List all agents in the registry.",
-    "agents.help_show": "Show one agent's full definition.",
-    "agents.help_test": "Run one test turn through an agent's resolved config.",
-    "agents.opt_message": "Message to send for the test turn",
+    "agents.help": "Inspecter et tester le registre d'agents.",
+    "agents.help_list": "Lister tous les agents du registre.",
+    "agents.help_show": "Afficher la définition complète d'un agent.",
+    "agents.help_test": "Exécuter un tour de test avec la configuration résolue d'un agent.",
+    "agents.opt_message": "Message à envoyer pour le tour de test",
     "agents.list_title": "Agents",
-    "agents.empty": "No agents in the registry yet.",
-    "agents.not_found": "Agent '{slug}' not found.",
-    "agents.default_model": "(active default)",
-    "agents.none": "(none)",
+    "agents.empty": "Aucun agent dans le registre pour l'instant.",
+    "agents.not_found": "Agent '{slug}' introuvable.",
+    "agents.default_model": "(défaut actif)",
+    "agents.none": "(aucun)",
     "agents.col_slug": "Slug",
-    "agents.col_name": "Name",
-    "agents.col_model": "Model",
-    "agents.col_active": "Active",
-    "agents.col_tools": "Tools",
+    "agents.col_name": "Nom",
+    "agents.col_model": "Modèle",
+    "agents.col_active": "Actif",
+    "agents.col_tools": "Outils",
     "agents.col_modules": "Modules",
-    "agents.col_kind": "Kind",
-    "agents.col_priority": "Priority",
-    "agents.show_prompt": "System prompt:",
-    "agents.show_tools": "Tools:",
-    "agents.show_modules": "Memory modules:",
-    "agents.show_kbs": "Knowledge bases:",
-    "agents.test_running": "Running a test turn through agent '{slug}'...",
-    "agents.test_reply_title": "Reply from '{slug}'",
-    "agents.modules_help": "Inspect memory modules (agent context blocks).",
-    "agents.modules_help_list": "List all memory modules.",
-    "agents.modules_help_show": "Show one memory module's definition.",
-    "agents.modules_title": "Memory Modules",
-    "agents.modules_empty": "No memory modules defined yet.",
-    "agents.module_not_found": "Memory module '{slug}' not found.",
-    "agents.module_static": "static",
-    "agents.module_dynamic": "dynamic",
-    "agents.module_hybrid": "hybrid",
-    "agents.module_content": "Static content:",
+    "agents.col_kind": "Type",
+    "agents.col_priority": "Priorité",
+    "agents.show_prompt": "Prompt système :",
+    "agents.show_tools": "Outils :",
+    "agents.show_modules": "Modules de mémoire :",
+    "agents.show_kbs": "Bases de connaissances :",
+    "agents.test_running": "Tour de test en cours avec l'agent '{slug}'...",
+    "agents.test_reply_title": "Réponse de '{slug}'",
+    "agents.modules_help": "Inspecter les modules de mémoire (blocs de contexte des agents).",
+    "agents.modules_help_list": "Lister tous les modules de mémoire.",
+    "agents.modules_help_show": "Afficher la définition d'un module de mémoire.",
+    "agents.modules_title": "Modules de mémoire",
+    "agents.modules_empty": "Aucun module de mémoire défini pour l'instant.",
+    "agents.module_not_found": "Module de mémoire '{slug}' introuvable.",
+    "agents.module_static": "statique",
+    "agents.module_dynamic": "dynamique",
+    "agents.module_hybrid": "hybride",
+    "agents.module_content": "Contenu statique :",
     # Commandes slash
     "slash.help_desc": "Afficher les commandes disponibles",
     "slash.clear_desc": "Effacer l'écran",
@@ -1127,6 +1134,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "Modifier le rôle d'un utilisateur (p. ex. le passer admin).",
     "auth.opt_promote_email": "E-mail de l'utilisateur à mettre à jour",
     "auth.opt_promote_role": "Nouveau rôle à attribuer (user, moderator, admin)",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "Inspecter et gérer les articles et les tags du blog",
     "blog.help_status": "Afficher le nombre d'articles et l'activité récente",

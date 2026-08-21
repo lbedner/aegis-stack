@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 

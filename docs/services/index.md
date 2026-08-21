@@ -229,7 +229,7 @@ Services automatically appear in the health dashboard alongside components, prov
 **Next Steps:**
 
 - **[Integration Patterns](../integration-patterns.md)** - How services integrate with components and architectural patterns
-- **[AI Service](ai/index.md)** - Multi-provider AI chat with PydanticAI
+- **[AI Service](ai/index.md)** - Multi-provider chat, database-driven agent registry, memory modules, RAG, sentiment analytics
 - **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
 - **[Blog Service](blog/index.md)** - Markdown publishing with drafts, tags, and Overseer editor *(experimental)*
 - **[Communications Service](comms/index.md)** - Email, SMS, and voice via Resend/Twilio

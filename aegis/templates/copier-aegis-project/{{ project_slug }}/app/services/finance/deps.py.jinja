@@ -10,7 +10,7 @@ from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_db
-from app.services.finance.finance_service import FinanceService
+from app.services.finance.service import FinanceService
 {%- if include_auth %}
 from app.models.user import User
 from app.services.auth.deps import get_current_active_user

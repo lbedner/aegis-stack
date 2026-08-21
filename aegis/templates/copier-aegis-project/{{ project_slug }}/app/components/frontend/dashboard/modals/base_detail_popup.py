@@ -6,6 +6,7 @@ including title, status badge, scrollable sections, and close button.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import H2Text, SecondaryText, StatusTag
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.theme import AegisTheme as Theme
@@ -122,7 +123,7 @@ class BaseDetailPopup(BasePopup):
         # Wrap in container with padding
         content_container = ft.Container(
             content=modal_content,
-            padding=20,
+            padding=ModalLayout.CONTENT_PADDING,
             width=width,
             height=height,
         )

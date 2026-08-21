@@ -9,8 +9,9 @@ CLI, and dashboard card use.
 from datetime import date
 
 import pytest
-from app.services.finance.finance_service import FinanceService
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.finance.service import FinanceService
 
 
 class TestFinanceAccounts:
@@ -60,9 +61,7 @@ class TestFinanceAccounts:
         assert total == 1
         assert [a.name for a in accounts] == ["A"]
 
-        accounts, total = await svc.list_accounts(
-            owner_user_id=1, include_hidden=True
-        )
+        accounts, total = await svc.list_accounts(owner_user_id=1, include_hidden=True)
         assert total == 2
 
     @pytest.mark.asyncio
@@ -88,9 +87,7 @@ class TestFinanceAccounts:
         assert (await svc.get_net_worth(owner_user_id=2)).total_assets_amount == 999
 
     @pytest.mark.asyncio
-    async def test_update_account_balance(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_update_account_balance(self, async_db_session: AsyncSession) -> None:
         svc = FinanceService(async_db_session)
         acct = await svc.create_manual_account(
             owner_user_id=1,
@@ -111,9 +108,7 @@ class TestFinanceAccounts:
         self, async_db_session: AsyncSession
     ) -> None:
         svc = FinanceService(async_db_session)
-        assert (
-            await svc.update_account_balance(999_999, current_balance=1) is None
-        )
+        assert await svc.update_account_balance(999_999, current_balance=1) is None
 
 
 class TestFinanceTransactions:
@@ -195,9 +190,9 @@ class TestFinanceTransactions:
             owner_user_id=1, account_ids=[checking.id]
         )
         assert scoped == {checking.id: 7_500}
-        assert await svc.account_transaction_totals(
-            owner_user_id=1, account_ids=[]
-        ) == {}
+        assert (
+            await svc.account_transaction_totals(owner_user_id=1, account_ids=[]) == {}
+        )
 
     @pytest.mark.asyncio
     async def test_two_lane_dedup(self, async_db_session: AsyncSession) -> None:
@@ -365,9 +360,7 @@ class TestFinanceHealth:
 
 class TestFinanceAccountEdits:
     @pytest.mark.asyncio
-    async def test_update_rename_hide(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_update_rename_hide(self, async_db_session: AsyncSession) -> None:
         svc = FinanceService(async_db_session)
         acct = await svc.create_manual_account(
             owner_user_id=1,
@@ -421,9 +414,7 @@ class TestFinanceAccountEdits:
         )
         # user 2 sees nothing and can't edit — surfaces as 404 in the router.
         assert await svc.get_account(acct.id, owner_user_id=2) is None
-        assert (
-            await svc.update_account(acct.id, owner_user_id=2, name="hacked") is None
-        )
+        assert await svc.update_account(acct.id, owner_user_id=2, name="hacked") is None
 
 
 class TestFinanceValuations:
@@ -495,7 +486,7 @@ class TestFinanceNetWorth:
     async def test_recompute_series_liability_sign(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
 
         svc = FinanceService(async_db_session)
         house = await svc.create_manual_account(
@@ -524,10 +515,8 @@ class TestFinanceNetWorth:
             current_balance=30_000_000,
         )
 
-        await networth_service.recompute_snapshots(
-            async_db_session, owner_user_id=1
-        )
-        series = await networth_service.get_net_worth_series(
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
+        series = await networth.get_net_worth_series(
             async_db_session, owner_user_id=1, days=90
         )
         assert series, "expected net-worth snapshots"
@@ -537,12 +526,30 @@ class TestFinanceNetWorth:
         assert latest.net_worth_amount == 20_500_000  # 50.5M - 30M
 
     @pytest.mark.asyncio
+    async def test_series_via_facade(self, async_db_session: AsyncSession) -> None:
+        """Routes read the series through the facade, so it must expose it."""
+        from app.services.finance.domains.ledger import networth
+
+        svc = FinanceService(async_db_session)
+        await svc.create_manual_account(
+            owner_user_id=1,
+            name="Cash",
+            account_type="checking",
+            classification="asset",
+            current_balance=1_000_00,
+        )
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
+        series = await svc.get_net_worth_series(owner_user_id=1, days=90)
+        assert series
+        assert series[-1].net_worth_amount == 1_000_00
+
+    @pytest.mark.asyncio
     async def test_recompute_is_idempotent(
         self, async_db_session: AsyncSession
     ) -> None:
         from sqlmodel import func, select
 
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceNetWorthSnapshot
 
         svc = FinanceService(async_db_session)
@@ -553,14 +560,10 @@ class TestFinanceNetWorth:
             classification="asset",
             current_balance=100_000,
         )
-        await networth_service.recompute_snapshots(
-            async_db_session, owner_user_id=1
-        )
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
         count_q = select(func.count()).select_from(FinanceNetWorthSnapshot)
         first = (await async_db_session.exec(count_q)).one()
-        await networth_service.recompute_snapshots(
-            async_db_session, owner_user_id=1
-        )
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
         second = (await async_db_session.exec(count_q)).one()
         assert first == second and first > 0  # upsert, no duplicate rows
 
@@ -570,7 +573,7 @@ class TestFinanceNetWorth:
     ) -> None:
         from sqlmodel import select
 
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceBalanceSnapshot
 
         svc = FinanceService(async_db_session)
@@ -587,9 +590,7 @@ class TestFinanceNetWorth:
             as_of_date=valued_on,
             value=50_000_000,
         )
-        await networth_service.recompute_snapshots(
-            async_db_session, owner_user_id=1
-        )
+        await networth.recompute_snapshots(async_db_session, owner_user_id=1)
         snaps = (
             await async_db_session.exec(
                 select(FinanceBalanceSnapshot).where(
@@ -601,9 +602,7 @@ class TestFinanceNetWorth:
         carried = [s for s in snaps if s.balance_date > valued_on]
         assert exact and exact[0].is_estimated is False
         assert carried  # days after the valuation
-        assert all(
-            s.is_estimated and s.source == "carried_forward" for s in carried
-        )
+        assert all(s.is_estimated and s.source == "carried_forward" for s in carried)
         assert all(s.balance == 50_000_000 for s in snaps)  # value carried
 
     @pytest.mark.asyncio
@@ -615,7 +614,7 @@ class TestFinanceNetWorth:
         from sqlalchemy import event
         from sqlalchemy.engine import Engine
 
-        from app.services.finance import networth_service
+        from app.services.finance.domains.ledger import networth
 
         selects = {"n": 0}
 
@@ -636,7 +635,7 @@ class TestFinanceNetWorth:
             event.listen(Engine, "before_cursor_execute", _on_exec)
             try:
                 selects["n"] = 0
-                await networth_service.recompute_snapshots(
+                await networth.recompute_snapshots(
                     async_db_session, owner_user_id=owner
                 )
                 return selects["n"]
@@ -650,7 +649,12 @@ class TestFinanceNetWorth:
         # SELECT count flat and small (accounts + valuations + balance snaps +
         # net-worth snaps).
         assert small == large, f"query count scaled with accounts: {small} -> {large}"
-        assert large <= 6, f"expected a handful of preload queries, got {large}"
+        # The ceiling tracks the number of bulk preloads, which grew when
+        # net worth learned to reconstruct investment history: accounts,
+        # valuations, balance snapshots, net-worth snapshots, transaction
+        # activity, holdings, trades. What must NOT change is the line
+        # above - the count staying flat as accounts multiply.
+        assert large <= 8, f"expected a handful of preload queries, got {large}"
 
 
 class TestTransactionVisibility:
@@ -729,3 +733,389 @@ class TestCategorization:
             )
         rows = await svc.spending_by_category(owner_user_id=1, days=30)
         assert rows == [("General Merchandise", 5000), ("Food And Drink", 2000)]
+
+    @pytest.mark.asyncio
+    async def test_spending_by_category_rolls_up_to_the_parent_segment(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Two "Food & Dining:*" leaves combine into one "Food & Dining"
+        total instead of each competing separately for a top-N pie slice -
+        the fix for the Overview pie's "Other" slice fragmenting real
+        spending across every sub-category (confirmed on live data: 30.7%
+        "Other" leaf-grouped vs 16.3% parent-rolled-up, same window)."""
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        groceries = await svc.get_or_create_category_from_hint(
+            "Food & Dining:Groceries:Whole Foods"
+        )
+        eating_out = await svc.get_or_create_category_from_hint(
+            "Food & Dining:Eating Out:Chipotle"
+        )
+        shopping = await svc.get_or_create_pfc_category("GENERAL_MERCHANDISE")
+        for amount, cat in [
+            (-1000, groceries),
+            (-1500, eating_out),
+            (-2000, shopping),
+        ]:
+            await svc.create_transaction(
+                owner_user_id=1,
+                account_id=account.id,
+                amount=amount,
+                txn_date=date.today(),
+                name="x",
+                category_id=cat.id,
+            )
+        rows = await svc.spending_by_category(owner_user_id=1, days=30)
+        assert rows == [
+            ("Food & Dining", 2500),
+            ("General Merchandise", 2000),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_spending_transactions_matches_the_parent_categorys_leaves(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The transactions behind a spending_by_category slice - passing
+        the parent name pulls every leaf underneath it, so drilling into
+        a pie slice shows exactly what summed to its total. A list of
+        names (the "Other" drill-down case) matches any of them."""
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        groceries = await svc.get_or_create_category_from_hint(
+            "Food & Dining:Groceries"
+        )
+        eating_out = await svc.get_or_create_category_from_hint(
+            "Food & Dining:Eating Out"
+        )
+        shopping = await svc.get_or_create_pfc_category("GENERAL_MERCHANDISE")
+        for amount, cat, name in [
+            (-1000, groceries, "Whole Foods"),
+            (-1500, eating_out, "Chipotle"),
+            (-2000, shopping, "Best Buy"),
+        ]:
+            await svc.create_transaction(
+                owner_user_id=1,
+                account_id=account.id,
+                amount=amount,
+                txn_date=date.today(),
+                name=name,
+                category_id=cat.id,
+            )
+
+        food = await svc.spending_transactions(
+            owner_user_id=1, days=30, categories=["Food & Dining"]
+        )
+        assert {t.name for t in food} == {"Whole Foods", "Chipotle"}
+
+        combined = await svc.spending_transactions(
+            owner_user_id=1,
+            days=30,
+            categories=["Food & Dining", "General Merchandise"],
+        )
+        assert {t.name for t in combined} == {"Whole Foods", "Chipotle", "Best Buy"}
+
+
+class TestAnalystAvailability:
+    """Renders on every finance stack, with or without the AI service."""
+
+    def test_availability_is_answerable_without_the_analyst_module(self) -> None:
+        """The dashboard card asks this on every render, and the analyst module
+        is pruned entirely from a project generated without the AI service. A
+        missing module has to read as "no", not raise ImportError and take the
+        card, the health surface, and the CLI down with it."""
+        from app.services.finance.domains.ledger.networth import analyst_available
+
+        assert analyst_available() in (True, False)
+
+
+class TestNetWorthSnapshotsFromRegister:
+    """The chart and the accounts page must agree.
+
+    Both bugs here shipped together and cancelled nothing: imported
+    accounts were counted at zero, and debt was ADDED instead of
+    subtracted, so the series was simultaneously missing most accounts
+    and too high by twice the debt.
+    """
+
+    @pytest.mark.asyncio
+    async def test_imported_accounts_count_and_debt_subtracts(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from datetime import date, timedelta
+
+        from app.services.finance.domains.ledger import networth
+
+        svc = FinanceService(async_db_session)
+        # Neither account gets an authoritative balance: this is exactly a
+        # CSV import, where ``current_balance`` stays 0 and the register is
+        # the only source of truth.
+        checking = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        card = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Card",
+            account_type="credit_card",
+            classification="liability",
+        )
+        today = date.today()
+        for account_id, amount in (
+            (checking.id, 500_000),  # +$5,000 in
+            (checking.id, -100_000),  # -$1,000 out  -> $4,000 asset
+            (card.id, -30_000),  # -$300 spent  -> $300 owed
+        ):
+            await svc.create_transaction(
+                owner_user_id=1,
+                account_id=account_id,
+                amount=amount,
+                txn_date=today - timedelta(days=1),
+                name="row",
+            )
+        await async_db_session.flush()
+
+        written = await networth.recompute_snapshots(
+            async_db_session, owner_user_id=1, start_date=today - timedelta(days=2)
+        )
+        assert written > 0
+
+        series = await networth.get_net_worth_series(
+            async_db_session, owner_user_id=1, days=5
+        )
+        latest = series[-1]
+        # Zero-balance imported accounts used to contribute nothing at all.
+        assert latest.total_assets_amount == 400_000
+        # Debt is a POSITIVE magnitude owed...
+        assert latest.total_liabilities_amount == 30_000
+        # ...so it subtracts. Adding the raw negative gave 430_000 here.
+        assert latest.net_worth_amount == 370_000
+
+
+class TestInvestmentHistoryReconstruction:
+    """A synced brokerage balance is ONE point in time. Without history the
+    chart shows nothing, then a cliff on sync day that reads as a windfall.
+    Trades carry unit prices, and quantity is recoverable by undoing them,
+    so the days before the sync can be valued rather than left empty."""
+
+    def test_single_security_account_is_valued_from_its_trades(self) -> None:
+        from datetime import date
+
+        from app.services.finance.domains.ledger.networth import _investment_points
+        from app.services.finance.models import FinanceAccount
+
+        account = FinanceAccount(
+            owner_user_id=1,
+            name="401k",
+            account_type="brokerage",
+            classification="asset",
+            provider="snaptrade",
+        )
+        # Holds 100 units today; bought 10 units at $15 and 10 at $12.
+        holdings = [(7, 100 * 10**8)]
+        trades = [
+            (date(2026, 1, 10), 7, 10 * 10**8, 1200, 2),
+            (date(2026, 2, 10), 7, 10 * 10**8, 1500, 2),
+        ]
+        points = _investment_points(account, holdings, trades)
+        by_date = {d: value for d, value, _src in points}
+        # After the Feb buy the account held all 100 units, at $15 -> $1,500.
+        assert by_date[date(2026, 2, 10)] == 150_000
+        # Before it, 90 units, valued at the Jan price of $12 -> $1,080.
+        assert by_date[date(2026, 1, 10)] == 108_000
+        assert all(src == "computed" for _d, _v, src in points)
+
+    def test_multi_security_accounts_are_left_alone(self) -> None:
+        """Two securities means a day's value needs BOTH prices, and a trade
+        only prices the one it touched. Guessing the other would look
+        precise and be fiction, so reconstruction declines."""
+        from datetime import date
+
+        from app.services.finance.domains.ledger.networth import _investment_points
+        from app.services.finance.models import FinanceAccount
+
+        account = FinanceAccount(
+            owner_user_id=1,
+            name="IRA",
+            account_type="brokerage",
+            classification="asset",
+            provider="snaptrade",
+        )
+        holdings = [(7, 100 * 10**8), (8, 50 * 10**8)]
+        trades = [(date(2026, 1, 10), 7, 10 * 10**8, 1200, 2)]
+        assert _investment_points(account, holdings, trades) == []
+
+    def test_unpriced_trades_yield_nothing(self) -> None:
+        """Fee rows carry a quantity but no price - they cannot value a day."""
+        from datetime import date
+
+        from app.services.finance.domains.ledger.networth import _investment_points
+        from app.services.finance.models import FinanceAccount
+
+        account = FinanceAccount(
+            owner_user_id=1,
+            name="401k",
+            account_type="brokerage",
+            classification="asset",
+            provider="snaptrade",
+        )
+        holdings = [(7, 100 * 10**8)]
+        trades = [(date(2026, 1, 10), 7, -1 * 10**8, 0, 2)]
+        assert _investment_points(account, holdings, trades) == []
+
+
+class TestAccountScopedViews:
+    """``account_ids`` narrows the Overview aggregates to the accounts in view."""
+
+    async def _two_accounts(self, svc):
+        checking = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        card = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Card",
+            account_type="credit_card",
+            classification="liability",
+        )
+        return checking, card
+
+    @pytest.mark.asyncio
+    async def test_spending_by_category_scopes_to_the_accounts(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        checking, card = await self._two_accounts(svc)
+        food = await svc.get_or_create_pfc_category("FOOD_AND_DRINK")
+        for account, amount in ((checking, -1_000), (card, -7_000)):
+            await svc.create_transaction(
+                owner_user_id=1,
+                account_id=account.id,
+                amount=amount,
+                txn_date=date.today(),
+                name="x",
+                category_id=food.id,
+            )
+
+        everything = await svc.spending_by_category(owner_user_id=1, days=30)
+        only_checking = await svc.spending_by_category(
+            owner_user_id=1, days=30, account_ids=[checking.id]
+        )
+
+        assert everything == [("Food And Drink", 8_000)]
+        assert only_checking == [("Food And Drink", 1_000)]
+
+    @pytest.mark.asyncio
+    async def test_cashflow_scopes_to_the_accounts(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        checking, card = await self._two_accounts(svc)
+        today = date.today()
+        await svc.create_transaction(
+            owner_user_id=1,
+            account_id=checking.id,
+            amount=50_000,
+            txn_date=today,
+            name="pay",
+        )
+        await svc.create_transaction(
+            owner_user_id=1,
+            account_id=card.id,
+            amount=-20_000,
+            txn_date=today,
+            name="shop",
+        )
+
+        scoped = await svc.monthly_cashflow(
+            owner_user_id=1, months=1, today=today, account_ids=[checking.id]
+        )
+
+        assert scoped[-1].income == 50_000
+        assert scoped[-1].expense == 0
+
+    @pytest.mark.asyncio
+    async def test_net_worth_series_scopes_and_signs_by_classification(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.domains.ledger import networth
+        from app.services.finance.models import FinanceBalanceSnapshot
+
+        svc = FinanceService(async_db_session)
+        checking, card = await self._two_accounts(svc)
+        day = date.today()
+        for account, balance in ((checking, 100_000), (card, -40_000)):
+            async_db_session.add(
+                FinanceBalanceSnapshot(
+                    account_id=account.id,
+                    owner_user_id=1,
+                    balance_date=day,
+                    balance=balance,
+                    currency="usd",
+                    source="manual",
+                )
+            )
+        await async_db_session.flush()
+
+        both = await networth.get_net_worth_series(
+            async_db_session,
+            owner_user_id=1,
+            days=7,
+            account_ids=[checking.id, card.id],
+        )
+        one = await networth.get_net_worth_series(
+            async_db_session, owner_user_id=1, days=7, account_ids=[checking.id]
+        )
+
+        assert len(both) == 1
+        assert both[0].total_assets_amount == 100_000
+        assert both[0].total_liabilities_amount == 40_000
+        assert both[0].net_worth_amount == 60_000
+        assert one[0].net_worth_amount == 100_000
+
+    @pytest.mark.asyncio
+    async def test_a_foreign_owners_account_id_contributes_nothing(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The join back to the owner's accounts is the tenancy guard: passing
+        someone else's account id must not leak their series."""
+        from app.services.finance.domains.ledger import networth
+        from app.services.finance.models import FinanceBalanceSnapshot
+
+        svc = FinanceService(async_db_session)
+        foreign = await svc.create_manual_account(
+            owner_user_id=2,
+            name="Not yours",
+            account_type="checking",
+            classification="asset",
+        )
+        async_db_session.add(
+            FinanceBalanceSnapshot(
+                account_id=foreign.id,
+                owner_user_id=2,
+                balance_date=date.today(),
+                balance=999_999,
+                currency="usd",
+                source="manual",
+            )
+        )
+        await async_db_session.flush()
+
+        series = await networth.get_net_worth_series(
+            async_db_session, owner_user_id=1, days=7, account_ids=[foreign.id]
+        )
+
+        assert series == []

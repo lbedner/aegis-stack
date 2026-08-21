@@ -453,6 +453,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "Authentication",
     "projectmap.ai": "AI conversations",
     "projectmap.comms": "Communications",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "Documentation",
     # ── Post-generation: footer ───────────────────────────────────────
     "postgen.docs_link": "Docs: https://docs.aegis-stack.io",
@@ -618,6 +622,10 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Target Template:  {version}",
     "update.already_at_version": ("Project is already at the requested version"),
     "update.already_at_commit": "Project is already at the target commit",
+    "update.ahead_of_target": ("Project is newer than the target template version"),
+    "update.ahead_of_target_hint": (
+        "Nothing to update. Use --to-version to target a specific version."
+    ),
     "update.downgrade_blocked": "Downgrade not supported",
     "update.downgrade_reason": (
         "Copier does not support downgrading to older template versions."
@@ -636,6 +644,11 @@ MESSAGES: dict[str, str] = {
     "update.synced_files": "   Synced {count} template changes",
     "update.merge_conflicts": (
         "   {count} file(s) have merge conflicts (search for <<<<<<< to resolve):"
+    ),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
     ),
     "update.running_postgen": "Running post-generation tasks...",
     "update.skipping_postgen_conflicts": (
@@ -892,6 +905,14 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_components": (
         "Comma-separated list of components (redis,worker,scheduler,database)"
     ),
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_opt_python": (
         "Python version for generated project (3.11, 3.12, 3.13, or 3.14)"
     ),

@@ -345,6 +345,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "認證",
     "projectmap.ai": "AI 對話",
     "projectmap.comms": "通信",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "文檔",
     # ── 專案生成後：底部訊息 ──────────────────────────────────────────
     "postgen.docs_link": "文檔：https://docs.aegis-stack.io",
@@ -472,6 +476,8 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   目標模板：{version}",
     "update.already_at_version": "專案已是目標版本",
     "update.already_at_commit": "專案已是目標提交",
+    "update.ahead_of_target": ("專案版本高於目標範本版本"),
+    "update.ahead_of_target_hint": ("無需更新。如需指定版本，請使用 --to-version。"),
     "update.downgrade_blocked": "不支援降級",
     "update.downgrade_reason": "Copier 不支援降級到舊版本模板。",
     "update.changelog": "變更日志：",
@@ -487,6 +493,11 @@ MESSAGES: dict[str, str] = {
     "update.moved_files": "   已從嵌套目錄移動 {count} 個新檔案",
     "update.synced_files": "   已同步 {count} 處模板變更",
     "update.merge_conflicts": ("   {count} 個檔案存在合並衝突（搜索 <<<<<<< 解決）："),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
+    ),
     "update.running_postgen": "正在執行生成後任務……",
     "update.skipping_postgen_conflicts": (
         "Skipping post-generation tasks — merge conflicts present.\n"
@@ -718,6 +729,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "互動式選擇服務",
     "common.help_force": "忽略版本不相容警告並強制執行",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "要建立的 Aegis Stack 專案名稱",
     "init.help_opt_components": "元件清單,以逗號分隔（redis、worker、scheduler、database）",
     "init.help_opt_python": "生成專案使用的 Python 版本（3.11、3.12、3.13 或 3.14）",

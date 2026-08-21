@@ -6,6 +6,7 @@ styling, layout, and behavior across the Overseer dashboard.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import H2Text, Tag
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType

@@ -1,18 +1,16 @@
 """Tests for batch conversation sentiment scoring."""
 {% if ai_backend != "memory" %}
 
-from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel, select
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-import app.services.ai.sentiment as sentiment_module
 from app.models.conversation import Conversation, ConversationMessage
 from app.services.ai.jobs import analyze_sentiment_job
 from app.services.ai.models.sentiment import SentimentAnalysis
+import app.services.ai.sentiment as sentiment_module
 from app.services.ai.sentiment import (
     score_unscored_conversations,
     sentiment_stats,
@@ -28,13 +26,11 @@ _GOOD_VERDICT: dict[str, Any] = {
 
 
 @pytest.fixture
-async def session() -> AsyncGenerator[AsyncSession]:
-    engine = create_async_engine("sqlite+aiosqlite://")
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    async with AsyncSession(engine) as session:
-        yield session
-    await engine.dispose()
+def session(async_db_session: AsyncSession) -> AsyncSession:
+    """The root conftest's transactional async session (rolled back per
+    test). A bare local engine cannot create this project's schema-qualified
+    tables (finance, scheduler, ...)."""
+    return async_db_session
 
 
 async def _add_conversation(

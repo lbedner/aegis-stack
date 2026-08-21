@@ -6,17 +6,19 @@ allowing users to browse voices and preview them with animated visualizer.
 """
 
 import asyncio
-import contextlib
-import random
-import uuid
 from collections.abc import Awaitable, Callable
+import contextlib
 from enum import Enum
+import random
 from typing import Any
+import uuid
 
 import flet as ft
+
 from app.components.frontend.controls import (
     H3Text,
     SecondaryText,
+    ThemedSwitch,
 )
 from app.components.frontend.controls.expand_arrow import ExpandArrow
 from app.components.frontend.theme import AegisTheme as Theme
@@ -585,13 +587,13 @@ class STTRecorderSection(ft.Container):
     def _build_ui(self) -> None:
         """Build the recorder UI components."""
         # Settings toggles
-        self._auto_send_switch = ft.Switch(
+        self._auto_send_switch = ThemedSwitch(
             value=False,
             on_change=self._on_auto_send_change,
             scale=0.8,
         )
 
-        self._tts_switch = ft.Switch(
+        self._tts_switch = ThemedSwitch(
             value=True,
             on_change=self._on_tts_change,
             scale=0.8,

@@ -1,0 +1,14 @@
+All Transactions Report Created: 2026-07-28 01:25:29 -0400
+,
+Filter Criteria:,All Dates
+,All Accounts
+,Any Status
+,All Accounts
+,
+,"Scheduled","Split","Date","Payee/Security","Category","Tags","Amount","Account"
+,,,"7/1/2026","Employer Payroll","Income:Salary","","5,000.00","CHECKING"
+,,,"7/2/2026","Whole Foods","Groceries","","-85.40","CHECKING"
+,"Scheduled",,"8/2/2026","Portasoft","Bills & Utilities:Water","","-38.93","CHECKING"
+,"Overdue",,"7/26/2026","Verizon Wireless","Bills & Utilities:Phone","","-94.08","CHECKING"
+Total Outflows:,,,,,,,-218.41
+Net Total:, 4781.59

@@ -1,9 +1,11 @@
 """Tests for LLM catalog context functionality."""
 
-from collections.abc import Generator
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import Engine
+from sqlmodel import Session
+
 from app.services.ai.llm_catalog_context import (
     FEATURED_VENDORS,
     TOP_MODELS_PER_VENDOR,
@@ -22,8 +24,6 @@ from app.services.ai.models.llm import (
     LLMVendor,
     Modality,
 )
-from sqlalchemy import Engine
-from sqlmodel import Session, SQLModel, create_engine
 
 # =============================================================================
 # Unit Tests for Helper Functions
@@ -118,21 +118,22 @@ class TestIsAliasModel:
 
 
 @pytest.fixture
-def catalog_db_engine() -> Generator[Engine, None, None]:
-    """Create an in-memory SQLite database for catalog tests."""
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    SQLModel.metadata.create_all(engine)
-    yield engine
-    SQLModel.metadata.drop_all(engine)
-    engine.dispose()
+def catalog_db_engine(engine: Engine) -> Engine:
+    """The root conftest's schema-attached engine.
+
+    A bare local ``create_engine`` cannot ``create_all`` this project's
+    metadata: the root conftest imports every service's models, so tables
+    live in named schemas (finance, scheduler, ...) that only the shared
+    engine attaches in-memory databases for.
+    """
+    return engine
 
 
 @pytest.fixture
-def catalog_session(catalog_db_engine: Engine) -> Generator[Session, None, None]:
-    """Create a database session for catalog tests."""
-    with Session(catalog_db_engine) as session:
-        yield session
-        session.rollback()
+def catalog_session(db_session: Session) -> Session:
+    """The root conftest's transactional session (rolled back per test),
+    riding the same connection as ``catalog_db_engine``."""
+    return db_session
 
 
 @pytest.fixture

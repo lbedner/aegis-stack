@@ -2,13 +2,14 @@
 AI Analytics Tab Component
 
 Displays LLM usage statistics including token counts, costs, model breakdown,
-and recent activity. Fetches real data from the /ai/usage/stats API endpoint.
+and recent activity. Fetches real data from the /api/v1/ai/usage/stats API endpoint.
 """
 
 from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     DataTable,
     DataTableColumn,
@@ -408,14 +409,14 @@ class AIAnalyticsTab(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        api_data = await api.get("/ai/usage/stats", params={"recent_limit": 10})
+        api_data = await api.get("/api/v1/ai/usage/stats", params={"recent_limit": 10})
         if api_data is None:
             self._render_error("Could not load usage stats.")
             return
         stats = _transform_api_response(api_data)
         # Sentiment is optional: surfaced only when conversations have
         # been scored (the job is off by default).
-        sentiment = await api.get("/ai/sentiment/stats")
+        sentiment = await api.get("/api/v1/ai/sentiment/stats")
         self._render_stats(stats, sentiment)
 
     def _render_stats(

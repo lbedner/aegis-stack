@@ -12,9 +12,9 @@ import pytest
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance import connection_service
-from app.services.finance.finance_service import FinanceService
 from app.services.finance.models import FinanceSecurity
+from app.services.finance.adapters.providers import connections
+from app.services.finance.service import FinanceService
 
 _AAPL_FIGI = "BBG000B9XRY4"
 
@@ -172,10 +172,8 @@ def _client() -> FakeSnapTradeClient:
 
 
 async def _connect_and_complete(db: AsyncSession, client: FakeSnapTradeClient):
-    await connection_service.start_snaptrade_connect(
-        db, owner_user_id=1, client=client
-    )
-    return await connection_service.complete_snaptrade_connect(
+    await connections.start_snaptrade_connect(db, owner_user_id=1, client=client)
+    return await connections.complete_snaptrade_connect(
         db, owner_user_id=1, client=client
     )
 
@@ -186,7 +184,7 @@ class TestSnapTradeConnect:
         self, async_db_session: AsyncSession
     ) -> None:
         client = _client()
-        connection, url = await connection_service.start_snaptrade_connect(
+        connection, url = await connections.start_snaptrade_connect(
             async_db_session, owner_user_id=1, client=client
         )
         assert url.startswith("https://")
@@ -203,10 +201,10 @@ class TestSnapTradeConnect:
         self, async_db_session: AsyncSession
     ) -> None:
         client = _client()
-        await connection_service.start_snaptrade_connect(
+        await connections.start_snaptrade_connect(
             async_db_session, owner_user_id=1, client=client
         )
-        await connection_service.start_snaptrade_connect(
+        await connections.start_snaptrade_connect(
             async_db_session, owner_user_id=1, client=client
         )
         # One SnapTrade user per owner: the second connect must NOT re-register.
@@ -217,10 +215,10 @@ class TestSnapTradeConnect:
         self, async_db_session: AsyncSession
     ) -> None:
         client = FakeSnapTradeClient()  # portal not finished: no authorizations
-        await connection_service.start_snaptrade_connect(
+        await connections.start_snaptrade_connect(
             async_db_session, owner_user_id=1, client=client
         )
-        results = await connection_service.complete_snaptrade_connect(
+        results = await connections.complete_snaptrade_connect(
             async_db_session, owner_user_id=1, client=client
         )
         assert results == []  # frontend keeps polling
@@ -236,11 +234,11 @@ class TestSnapTradeConnect:
         assert results[0].holdings == 1
         assert results[0].trades == 2
 
-        connections = await connection_service.list_provider_connections(
+        connection_rows = await connections.list_provider_connections(
             async_db_session, provider="snaptrade", owner_user_id=1
         )
-        assert len(connections) == 1
-        connection = connections[0]
+        assert len(connection_rows) == 1
+        connection = connection_rows[0]
         assert connection.provider_item_id == "auth-1"
         assert connection.label == "Fidelity"
         assert connection.status == "healthy"
@@ -325,11 +323,11 @@ class TestSnapTradeConnect:
         await _connect_and_complete(async_db_session, client)
         assert sorted(client.activity_pulls) == ["acct-401k", "acct-roth"]
 
-        connections = await connection_service.list_provider_connections(
+        connection_rows = await connections.list_provider_connections(
             async_db_session, provider="snaptrade", owner_user_id=1
         )
-        connection = connections[0]
-        await connection_service.sync_snaptrade_connection(
+        connection = connection_rows[0]
+        await connections.sync_snaptrade_connection(
             async_db_session, connection, client=client
         )
         # Same day: no account is pulled again.
@@ -337,7 +335,7 @@ class TestSnapTradeConnect:
 
         # A stale cursor (yesterday) re-opens the window — one pull per account.
         connection.sync_cursor = (date.today() - timedelta(days=1)).isoformat()
-        await connection_service.sync_snaptrade_connection(
+        await connections.sync_snaptrade_connection(
             async_db_session, connection, client=client
         )
         assert sorted(client.activity_pulls) == [
@@ -353,12 +351,12 @@ class TestSnapTradeConnect:
     ) -> None:
         client = _client()
         await _connect_and_complete(async_db_session, client)
-        connections = await connection_service.list_provider_connections(
+        connection_rows = await connections.list_provider_connections(
             async_db_session, provider="snaptrade", owner_user_id=1
         )
-        connection = connections[0]
+        connection = connection_rows[0]
         connection.sync_cursor = (date.today() - timedelta(days=1)).isoformat()
-        second = await connection_service.sync_snaptrade_connection(
+        second = await connections.sync_snaptrade_connection(
             async_db_session, connection, client=client
         )
         assert second.trades == 2  # re-applied from the overlap window...
@@ -375,12 +373,12 @@ class TestSnapTradeConnect:
     ) -> None:
         client = _client()
         await _connect_and_complete(async_db_session, client)
-        connections = await connection_service.list_provider_connections(
+        connection_rows = await connections.list_provider_connections(
             async_db_session, provider="snaptrade", owner_user_id=1
         )
-        ok, revoke = await connection_service.disconnect_connection(
+        ok, revoke = await connections.disconnect_connection(
             async_db_session,
-            connections[0].id,
+            connection_rows[0].id,
             owner_user_id=1,
             snaptrade_client=client,
         )
@@ -391,7 +389,7 @@ class TestSnapTradeConnect:
         assert revoke is not None
         await revoke()
         assert client.removed_authorizations == ["auth-1"]
-        remaining = await connection_service.list_provider_connections(
+        remaining = await connections.list_provider_connections(
             async_db_session, provider="snaptrade", owner_user_id=1
         )
         assert remaining == []
@@ -403,14 +401,16 @@ class TestSnapTradeConnect:
     async def test_personal_key_connect_skips_registration(
         self, async_db_session: AsyncSession
     ) -> None:
-        """Personal (PERS-) keys have no registerUser: the key IS the user, so
-        connect must not register and must sign data calls with an empty
-        userId/userSecret pair (verified against SnapTrade's API)."""
+        """Personal (PERS-) keys have no registerUser AND no connection
+        portal (the login endpoint rejects them - verified against
+        SnapTrade's API): brokerages are linked in SnapTrade's own
+        dashboard, so connect returns an EMPTY url and the frontend goes
+        straight to adopting whatever authorizations exist."""
         client = FakeSnapTradeClient(is_personal=True)
-        connection, url = await connection_service.start_snaptrade_connect(
+        connection, url = await connections.start_snaptrade_connect(
             async_db_session, owner_user_id=1, client=client
         )
-        assert url.startswith("https://")
+        assert url == ""  # no portal for personal keys
         assert client.registered == []  # never calls registerUser
         assert connection.provider == "snaptrade"
         assert connection.status == "loading"
@@ -434,10 +434,10 @@ class TestSnapTradeConnect:
         assert results[0].accounts == 2
         assert results[0].holdings == 1
         assert client.registered == []
-        connections = await connection_service.list_provider_connections(
+        connection_rows = await connections.list_provider_connections(
             async_db_session, provider="snaptrade", owner_user_id=1
         )
-        assert connections[0].status == "healthy"
+        assert connection_rows[0].status == "healthy"
 
     @pytest.mark.asyncio
     async def test_disconnect_with_undecryptable_secret_still_tears_down(
@@ -447,20 +447,20 @@ class TestSnapTradeConnect:
         the disconnect succeeds with no revoke (nothing usable to revoke)."""
         client = _client()
         await _connect_and_complete(async_db_session, client)
-        connections = await connection_service.list_provider_connections(
+        connection_rows = await connections.list_provider_connections(
             async_db_session, provider="snaptrade", owner_user_id=1
         )
-        connections[0].access_token_encrypted = "not-a-valid-ciphertext"
-        ok, revoke = await connection_service.disconnect_connection(
+        connection_rows[0].access_token_encrypted = "not-a-valid-ciphertext"
+        ok, revoke = await connections.disconnect_connection(
             async_db_session,
-            connections[0].id,
+            connection_rows[0].id,
             owner_user_id=1,
             snaptrade_client=client,
         )
         assert ok is True
         assert revoke is None
         assert client.removed_authorizations == []
-        remaining = await connection_service.list_provider_connections(
+        remaining = await connections.list_provider_connections(
             async_db_session, provider="snaptrade", owner_user_id=1
         )
         assert remaining == []
@@ -472,7 +472,7 @@ class TestSnapTradeConnect:
         """The delete+re-register recovery is destructive (it revokes the
         user's existing authorizations), so it must NOT fire on transient
         failures - only on SnapTrade's "user already exists" code."""
-        from app.services.finance.providers.snaptrade import SnapTradeError
+        from app.services.finance.adapters.providers.snaptrade import SnapTradeError
 
         class FlakyClient(FakeSnapTradeClient):
             async def register_user(self, user_id):
@@ -480,7 +480,7 @@ class TestSnapTradeConnect:
 
         client = FlakyClient()
         with pytest.raises(SnapTradeError):
-            await connection_service.start_snaptrade_connect(
+            await connections.start_snaptrade_connect(
                 async_db_session, owner_user_id=1, client=client
             )
         assert client.deleted_users == []
@@ -491,7 +491,7 @@ class TestSnapTradeConnect:
     ) -> None:
         """User exists at SnapTrade but no local row holds its secret: the
         recovery deletes and re-registers - gated on the specific code."""
-        from app.services.finance.providers.snaptrade import SnapTradeError
+        from app.services.finance.adapters.providers.snaptrade import SnapTradeError
 
         class ExistsClient(FakeSnapTradeClient):
             async def register_user(self, user_id):
@@ -500,7 +500,7 @@ class TestSnapTradeConnect:
                 return await super().register_user(user_id)
 
         client = ExistsClient()
-        connection, url = await connection_service.start_snaptrade_connect(
+        connection, url = await connections.start_snaptrade_connect(
             async_db_session, owner_user_id=1, client=client
         )
         assert url.startswith("https://")
@@ -515,7 +515,7 @@ class TestSnapTradeConnect:
         Plaid client ever being constructed (no Plaid connections exist)."""
         client = _client()
         await _connect_and_complete(async_db_session, client)
-        results = await connection_service.sync_owner_connections(
+        results = await connections.sync_owner_connections(
             async_db_session, owner_user_id=1, snaptrade_client=client
         )
         assert len(results) == 1

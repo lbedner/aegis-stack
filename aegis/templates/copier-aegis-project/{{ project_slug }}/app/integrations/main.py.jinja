@@ -4,22 +4,35 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import flet.fastapi as flet_fastapi
-from app.components.backend.hooks import backend_hooks
-from app.components.backend.main import create_backend_app
-from app.components.frontend.main import create_frontend_app
+# Observability bootstrap BEFORE the app imports: auto-tracing installs an
+# import hook, so it must run while app.services is still unimported. This
+# module is uvicorn's factory target, so reload workers pass through here.
+try:
+    from app.components.backend.middleware.logfire_tracing import (
+        install_auto_tracing,
+    )
+except ImportError:  # observability component not installed
+    pass
+else:
+    install_auto_tracing()
+
+from app.components.backend.hooks import backend_hooks  # noqa: E402
+from app.components.backend.main import create_backend_app  # noqa: E402
+from app.components.frontend.main import create_frontend_app  # noqa: E402
 {%- if include_htmx %}
-from app.components.web_frontend.main import (
+from app.components.web_frontend.main import (  # noqa: E402
     CachedStaticFiles,
     create_web_frontend_app,
 )
 {%- endif %}
-from app.core.config import settings
-from app.core.log import logger, setup_logging
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from app.core.config import settings  # noqa: E402
+from app.core.constants import dashboard_upload_dir  # noqa: E402
+from app.core.log import logger, setup_logging  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException  # noqa: E402
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
+from fastapi.openapi.utils import get_openapi  # noqa: E402
+from fastapi.responses import HTMLResponse  # noqa: E402
+from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 
 _docs_security = HTTPBasic(auto_error=False)
 
@@ -145,7 +158,18 @@ def create_integrated_app() -> FastAPI:
     # the assets dir (custom favicon, app-icon, override index.html) actually
     # wins over the bundled defaults.
     flet_assets = Path(__file__).resolve().parents[2] / settings.FLET_ASSETS_DIR
-    flet_app = flet_fastapi.app(session_handler, assets_dir=str(flet_assets))
+    # FilePicker uploads (browser -> server) need a landing directory and a
+    # signing key for the upload URLs; without both, pick-and-upload flows
+    # (the finance file import) cannot work in web mode.
+    flet_uploads = dashboard_upload_dir()
+    flet_uploads.mkdir(parents=True, exist_ok=True)
+    flet_app = flet_fastapi.app(
+        session_handler,
+        assets_dir=str(flet_assets),
+        upload_dir=str(flet_uploads),
+        max_upload_size=10 * 1024 * 1024,  # matches the finance import cap
+        secret_key=settings.SECRET_KEY,
+    )
     # Mount Flet at /dashboard to avoid intercepting FastAPI routes like /health
     app.mount("/dashboard", flet_app)
     return app

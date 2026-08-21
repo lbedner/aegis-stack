@@ -13,6 +13,8 @@ Architecture:
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlmodel import Session, select
+
 from app.core.log import logger
 from app.services.ai.models.llm import (
     LargeLanguageModel,
@@ -20,7 +22,6 @@ from app.services.ai.models.llm import (
     LLMPrice,
     LLMVendor,
 )
-from sqlmodel import Session, select
 
 # =============================================================================
 # Vendor Data (7 providers)
@@ -71,9 +72,16 @@ VENDORS: list[dict[str, Any]] = [
     },
     {
         "name": "LLM7.io",
-        "description": "Free public endpoints via LLM7.io (no API key required)",
+        "description": "LLM7.io public endpoints (free anonymous tier; LLM7_API_KEY unlocks premium models)",
         "color": "#00D4AA",
         "api_base": "https://api.llm7.io/v1",
+        "auth_method": "none",
+    },
+    {
+        "name": "Pollinations",
+        "description": "Pollinations public endpoints (free anonymous tier, open-weight models)",
+        "color": "#F59E0B",
+        "api_base": "https://text.pollinations.ai/openai",
         "auth_method": "none",
     },
 ]
@@ -308,6 +316,19 @@ MODELS: dict[str, list[dict[str, Any]]] = {
             "family": "auto",
         },
     ],
+    # Pollinations' anonymous-tier open-weight model
+    "Pollinations": [
+        {
+            "model_id": "openai-fast",
+            "title": "GPT-OSS 20B (Pollinations)",
+            "description": "Open-weight reasoning model via Pollinations anonymous tier",
+            "context_window": 128000,
+            "streamable": False,
+            "enabled": True,
+            "color": "#F59E0B",
+            "family": "gpt-oss",
+        },
+    ],
 }
 
 # =============================================================================
@@ -424,6 +445,9 @@ DEPLOYMENTS: dict[str, list[dict[str, Any]]] = {
         {"model_id": "gpt-4o-mini", "speed": 40, "intelligence": 75, "reasoning": 70},
         {"model_id": "auto", "speed": 40, "intelligence": 75, "reasoning": 70},
     ],
+    "Pollinations": [
+        {"model_id": "openai-fast", "speed": 55, "intelligence": 65, "reasoning": 75},
+    ],
 }
 
 # =============================================================================
@@ -461,6 +485,8 @@ PRICES: dict[tuple[str, str], dict[str, float]] = {
     # LLM7.io pricing (free)
     ("LLM7.io", "gpt-4o-mini"): {"input": 0.00, "output": 0.00},
     ("LLM7.io", "auto"): {"input": 0.00, "output": 0.00},
+    # Pollinations pricing (free anonymous tier)
+    ("Pollinations", "openai-fast"): {"input": 0.00, "output": 0.00},
 }
 
 

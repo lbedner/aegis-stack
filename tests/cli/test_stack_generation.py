@@ -280,6 +280,27 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
     ),
     StackCombination(
+        name="finance_auth",
+        # The owner-scoped half of finance. With auth present the finance
+        # router's ``get_owner_user_id`` resolves through
+        # ``get_current_active_user``, so every route both authenticates and
+        # filters rows by owner — a path the standalone ``finance`` row above
+        # (owner is always ``None``) cannot reach. This row exists because the
+        # generated finance endpoint tests once 401'd in every auth stack
+        # while the matrix stayed green.
+        components=["database", "scheduler"],
+        services=["auth", "finance"],
+        description="Finance service + auth (owner-scoped) + database + scheduler",
+        expected_files=[
+            "app/services/finance/",
+            "app/services/auth/",
+            "app/core/db.py",
+            "app/components/scheduler/",
+        ],
+        expected_docker_services=["webserver", "scheduler"],
+        expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
+    ),
+    StackCombination(
         name="comms",
         components=[],
         services=["comms"],
@@ -482,6 +503,7 @@ def test_stack_combinations_comprehensive() -> None:
         "payment",
         "blog",
         "finance",
+        "finance_auth",
         "comms",
         # The two htmx slices worth localizing: the frontend on its own, and
         # the frontend with auth (which is what pulls in the auth pages and

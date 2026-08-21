@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 import flet as ft
+
 from app.components.frontend.controls.text import BodyText, SecondaryText
 from app.components.frontend.styles import ColorPalette, PulseColors
 

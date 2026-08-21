@@ -52,7 +52,7 @@ jobs:
     
     - name: Run security audit
       run: |
-        # Ignoring pip 25.2 vulnerabilities (uv manages pip, not user-facing)
+        # Ignoring pip vulnerabilities (uv manages pip, not user-facing)
         # Risk: Low - only affects installation of malicious packages from untrusted sources
         # Mitigation: All packages installed from trusted PyPI with uv.lock verification
         #
@@ -66,4 +66,5 @@ jobs:
           --ignore-vuln GHSA-58qw-9mgm-455v \
           --ignore-vuln ECHO-ffe1-1d3c-d9bc \
           --ignore-vuln ECHO-7db2-03aa-5591 \
-          --ignore-vuln PYSEC-2026-89
+          --ignore-vuln PYSEC-2026-89 \
+          --ignore-vuln PYSEC-2026-3721

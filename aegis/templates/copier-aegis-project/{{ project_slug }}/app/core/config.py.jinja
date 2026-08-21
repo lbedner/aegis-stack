@@ -321,6 +321,14 @@ class Settings(
 {% endif %}
 
     # Provider API Keys (optional - many providers offer free tiers)
+    # Optional for the public provider (LLM7.io): keyless requests use
+    # the free anonymous tier (open-weight models); an account key from
+    # https://dash.llm7.io unlocks premium models and higher limits.
+    LLM7_API_KEY: str | None = None
+    # Optional for the pollinations provider: keyless requests use the
+    # free anonymous tier (open-weight models, no streaming); a key
+    # selects an account tier.
+    POLLINATIONS_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     GOOGLE_API_KEY: str | None = None
@@ -435,6 +443,13 @@ class Settings(
 {% if include_finance %}
     # Finance Service Configuration
     FINANCE_DEFAULT_CURRENCY: str = "usd"
+    # How far back the reconciliation alerts look, in days. Transfer
+    # suggestions, fee alerts, and missed-bill checks only consider activity
+    # inside this window of today, so a deep historical import populates the
+    # ledger without burying Review/Insights under years of stale findings.
+    # 0 disables the window (full history). Rules with their own windows
+    # (recurring detection, overspend, large transactions) are unaffected.
+    FINANCE_RULES_LOOKBACK_DAYS: int = 31
     # Provider capabilities built into this stack. Credentials are set
     # separately in .env; these flags say which connect flows exist at all,
     # so the UI can offer them (and prompt for missing credentials) rather

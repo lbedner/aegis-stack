@@ -14,6 +14,15 @@ my-app ai chat "message"  # Send single message
 my-app ai chat            # Interactive chat session (Illiana)
 my-app ai conversations   # List conversations
 my-app ai history <id>    # View conversation history
+my-app ai usage           # Token usage and cost statistics
+my-app ai sentiment       # Conversation sentiment statistics
+
+# Agent Registry
+my-app agents list             # All agents with their grants
+my-app agents show <slug>      # One agent's full definition
+my-app agents test <slug>      # One live turn through the agent
+my-app memory-modules list     # Memory module catalog
+my-app memory-modules show <slug>  # One module's definition
 
 # LLM Catalog
 my-app llm sync           # Sync ~2000 models from cloud/Ollama
@@ -181,6 +190,71 @@ View message history of a conversation:
 ```bash
 my-app ai history <conversation-id>
 ```
+
+---
+
+### ai usage
+
+Aggregated token usage and cost statistics, fetched from the running API server.
+
+```bash
+my-app ai usage             # Summary, token breakdown, model usage
+my-app ai usage --json      # Raw JSON
+my-app ai usage --recent 20 # More recent-activity rows
+```
+
+Requires a database backend (`ai[sqlite]` / `ai[postgres]`) and a running server.
+
+### ai sentiment
+
+Conversation sentiment statistics from the batch analysis job: distribution, average score, assistant performance, and recent negative conversations.
+
+```bash
+my-app ai sentiment         # Rendered distribution
+my-app ai sentiment --json  # Raw JSON
+```
+
+Scoring is off by default; enable it with `AI_SENTIMENT_ENABLED=true`. See [Agents](agents.md) for details.
+
+---
+
+## Agent Registry Commands
+
+Inspect and smoke-test the database-driven [agent registry](agents.md). Requires a database backend.
+
+### agents list
+
+```bash
+my-app agents list
+```
+
+Every agent with its model, active state, and tool/module counts.
+
+### agents show
+
+```bash
+my-app agents show assistant
+```
+
+One agent's full definition: sampling, tools, memory modules, knowledge base scope, and the system prompt.
+
+### agents test
+
+```bash
+my-app agents test assistant
+my-app agents test support -m "What are your hours?"
+```
+
+Runs one live turn through the agent's resolved configuration against the configured model and prints the reply.
+
+### memory-modules list / show
+
+```bash
+my-app memory-modules list
+my-app memory-modules show <slug>
+```
+
+The [memory module](memory-modules.md) catalog: kind (static, dynamic, hybrid), priority, active state, and per-module detail.
 
 ---
 
@@ -429,7 +503,7 @@ Indexed Files: code
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━┩
 │ app/services/ai/service.py            │ 45     │
 │ app/services/auth/service.py          │ 23     │
-│ app/components/backend/api/ai/router… │ 12     │
+│ app/components/backend/api/v1/ai/router… │ 12     │
 └───────────────────────────────────────┴────────┘
 
 Total: 87 files, 1,523 chunks

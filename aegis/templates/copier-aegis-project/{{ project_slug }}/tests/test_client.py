@@ -17,6 +17,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from app.core.client import APIClient
 
 
@@ -75,9 +76,7 @@ class TestAPIClient:
         assert client.timeout == 30.0
 
     @pytest.mark.asyncio
-    async def test_get_success(
-        self, make_client: Callable[..., APIClient]
-    ) -> None:
+    async def test_get_success(self, make_client: Callable[..., APIClient]) -> None:
         client = make_client()
         client._client.request = AsyncMock(  # type: ignore[method-assign]
             return_value=_mock_response(200, {"data": "ok"})
@@ -594,3 +593,291 @@ class TestAPIClient:
         await client.aclose()
 
         client._client.aclose.assert_awaited_once()
+
+
+class TestPerRequestTimeout:
+    """Long-running endpoints (the finance file import) need more than the
+    client-wide 10s without loosening every other call's budget."""
+
+    @pytest.mark.asyncio
+    async def test_multipart_timeout_override_reaches_httpx(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            return_value=_mock_response(200, {"ok": True})
+        )
+
+        await client.post_multipart(
+            "/api/v1/finance/import",
+            files={"file": ("a.qif", b"x", "application/octet-stream")},
+            timeout=300.0,
+        )
+
+        assert client._client.request.call_args.kwargs["timeout"] == 300.0
+
+    @pytest.mark.asyncio
+    async def test_without_override_the_client_default_applies(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            return_value=_mock_response(200, {"ok": True})
+        )
+
+        await client.get("/api/test")
+
+        # No per-request timeout kwarg: the AsyncClient's own default rules.
+        assert "timeout" not in client._client.request.call_args.kwargs
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_reports_the_effective_budget(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import httpx
+
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            side_effect=httpx.TimeoutException("timeout")
+        )
+
+        await client.post_multipart(
+            "/api/v1/finance/import",
+            files={"file": ("a.qif", b"x", "application/octet-stream")},
+            timeout=300.0,
+        )
+
+        assert client.last_error is not None
+        assert "300" in client.last_error
+        assert "10" not in client.last_error.split("300")[0]
+
+
+class TestImportUploadsGetALongerBudget:
+    """The finance import call sites must actually USE the override.
+
+    The plumbing below is tested above; this pins the call sites, which is
+    where a 10s default silently killed real imports.
+    """
+
+    def test_import_budget_exceeds_the_client_default(self) -> None:
+        imports_flow = pytest.importorskip(
+            "app.components.frontend.dashboard.modals.finance_modal"
+            ".transactions_panel.imports_flow",
+            reason="finance UI not part of this stack",
+        )
+
+        assert imports_flow._IMPORT_TIMEOUT_SECONDS > APIClient().timeout
+
+    @pytest.mark.asyncio
+    async def test_in_request_import_calls_pass_the_budget(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        # The endpoints that parse the file and run the plan before
+        # responding. (/api/v1/finance/import is exempt: it returns a job
+        # id immediately and streams progress.)
+        imports_flow = pytest.importorskip(
+            "app.components.frontend.dashboard.modals.finance_modal"
+            ".transactions_panel.imports_flow",
+            reason="finance UI not part of this stack",
+        )
+        budget = imports_flow._IMPORT_TIMEOUT_SECONDS
+
+        for endpoint in (
+            "/api/v1/finance/import/preview",
+            "/api/v1/finance/import-investments/preview",
+            "/api/v1/finance/import-investments",
+        ):
+            client = make_client()
+            client._client.request = AsyncMock(  # type: ignore[method-assign]
+                return_value=_mock_response(200, {"ok": True})
+            )
+            await client.post_multipart(
+                endpoint,
+                files={"file": ("a.csv", b"x", "application/octet-stream")},
+                timeout=budget,
+            )
+            sent = client._client.request.call_args.kwargs["timeout"]
+            assert sent == budget, endpoint
+
+
+class TestLastError:
+    """``last_error`` keeps the real failure reason for UI surfaces.
+
+    The client's contract is "None on error, details in the log" - which
+    leaves the UI unable to say WHAT failed. ``last_error`` carries the
+    same detail the log line gets, for the caller that just got None.
+    """
+
+    @pytest.mark.asyncio
+    async def test_success_clears_last_error(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            return_value=_mock_response(200, {"ok": True})
+        )
+        client.last_error = "stale failure from a previous call"
+
+        await client.get("/api/test")
+
+        assert client.last_error is None
+
+    @pytest.mark.asyncio
+    async def test_timeout_records_endpoint_and_budget(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import httpx
+
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            side_effect=httpx.TimeoutException("timeout")
+        )
+
+        await client.post("/api/v1/finance/import")
+
+        assert client.last_error is not None
+        assert "timed out" in client.last_error
+        assert "/api/v1/finance/import" in client.last_error
+        assert "10" in client.last_error  # the default timeout budget
+
+    @pytest.mark.asyncio
+    async def test_http_error_records_status_and_response_detail(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import httpx
+
+        client = make_client()
+        response = _mock_response(
+            422, {"detail": "QIF import requires a target account_id."}
+        )
+        response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                "422", request=MagicMock(), response=response
+            )
+        )
+        client._client.request = AsyncMock(return_value=response)  # type: ignore[method-assign]
+
+        await client.post("/api/v1/finance/import")
+
+        assert client.last_error is not None
+        assert "422" in client.last_error
+        assert "QIF import requires a target account_id." in client.last_error
+
+    @pytest.mark.asyncio
+    async def test_connect_error_records_last_error(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import httpx
+
+        client = make_client()
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            side_effect=httpx.ConnectError("refused")
+        )
+
+        await client.get("/api/test")
+
+        assert client.last_error is not None
+        assert "connect" in client.last_error.lower()
+
+
+class TestGetCache:
+    """Opt-in GET caching: one fetch serves a whole burst of readers.
+
+    A dashboard opening every tab fires the same reference reads many
+    times at once (observed live: /accounts x8 in one open). Callers that
+    pass ``cache_ttl`` share one request in flight and one cached result;
+    any write through the client drops the cache, so a caller can never
+    read its own write stale.
+    """
+
+    @pytest.mark.asyncio
+    async def test_second_read_within_ttl_does_not_refetch(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(return_value={"items": [1]})
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        first = await client.get("/api/v1/finance/accounts", cache_ttl=30)
+        second = await client.get("/api/v1/finance/accounts", cache_ttl=30)
+
+        assert first == second == {"items": [1]}
+        assert fetch.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_distinct_params_are_distinct_entries(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(return_value={"items": []})
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        await client.get("/api/x", params={"days": 30}, cache_ttl=30)
+        await client.get("/api/x", params={"days": 90}, cache_ttl=30)
+
+        assert fetch.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_concurrent_burst_coalesces_to_one_request(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        import asyncio
+
+        client = make_client()
+
+        async def slow_fetch(*args: Any, **kwargs: Any) -> dict:
+            await asyncio.sleep(0)
+            return {"items": [1]}
+
+        fetch = AsyncMock(side_effect=slow_fetch)
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        results = await asyncio.gather(
+            *(client.get("/api/v1/finance/accounts", cache_ttl=30) for _ in range(8))
+        )
+
+        assert all(r == {"items": [1]} for r in results)
+        assert fetch.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_a_write_invalidates_the_cache(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(return_value={"items": [1]})
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        await client.get("/api/v1/finance/accounts", cache_ttl=30)
+        await client.post("/api/v1/finance/accounts", json={"name": "New"})
+        await client.get("/api/v1/finance/accounts", cache_ttl=30)
+
+        get_calls = [c for c in fetch.await_args_list if c.args[0] == "GET"]
+        assert len(get_calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_an_error_result_is_not_cached(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(side_effect=[None, {"items": [1]}])
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        first = await client.get("/api/v1/finance/accounts", cache_ttl=30)
+        second = await client.get("/api/v1/finance/accounts", cache_ttl=30)
+
+        assert first is None
+        assert second == {"items": [1]}
+        assert fetch.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_uncached_get_always_fetches(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        fetch = AsyncMock(return_value={"items": [1]})
+        client._perform_request = fetch  # type: ignore[method-assign]
+
+        await client.get("/api/v1/finance/accounts")
+        await client.get("/api/v1/finance/accounts")
+
+        assert fetch.await_count == 2

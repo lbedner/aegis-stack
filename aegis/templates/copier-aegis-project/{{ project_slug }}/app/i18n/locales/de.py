@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "Input-Preis:",
     "llm.output_price_label": "Output-Preis:",
     "llm.model_not_in_catalog": "Modell nicht im Katalog. 'llm sync' ausführen zum Befüllen.",
+    "llm.source_label": "Quelle:",
+    "llm.source_override": "gespeicherte Auswahl (überschreibt .env; mit 'llm reset' löschen)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env-Standard:",
+    "llm.help_reset": "Entfernt die gespeicherte Modell-Übersteuerung, sodass wieder .env das Modell bestimmt.",
+    "llm.reset_done": "Übersteuerung entfernt. Das aktive Modell kommt jetzt aus .env: {model}",
+    "llm.reset_none": "Keine Übersteuerung gespeichert. Das aktive Modell kommt bereits aus .env: {model}",
     # Use
     "llm.switching_model": "Wechsle zu {model_id}",
     # Info
@@ -695,49 +702,49 @@ MESSAGES: dict[str, str] = {
     "ai.rag_step_query": "2. Mit Collection abfragen:",
     "ai.rag_list_hint": "Tipp: '{app} rag list' zeigt vorhandene Collections.",
     # Sentiment stats (CLI)
-    "ai.help_sentiment": "Show conversation sentiment statistics from the analysis job.",
-    "ai.sentiment_title": "Conversation Sentiment",
-    "ai.sentiment_disabled_hint": "Sentiment analysis is disabled. Set AI_SENTIMENT_ENABLED=true to score conversations.",
-    "ai.sentiment_empty": "No conversations scored yet.",
-    "ai.sentiment_distribution": "Sentiment Distribution",
-    "ai.sentiment_avg_score": "Average score:",
-    "ai.sentiment_performance": "Assistant performance:",
-    "ai.sentiment_recent_negatives": "Recent Negative Conversations",
+    "ai.help_sentiment": "Sentiment-Statistiken der Konversationen aus dem Analyse-Job anzeigen.",
+    "ai.sentiment_title": "Konversations-Sentiment",
+    "ai.sentiment_disabled_hint": "Sentiment-Analyse ist deaktiviert. Setze AI_SENTIMENT_ENABLED=true, um Konversationen zu bewerten.",
+    "ai.sentiment_empty": "Noch keine Konversationen bewertet.",
+    "ai.sentiment_distribution": "Sentiment-Verteilung",
+    "ai.sentiment_avg_score": "Durchschnittswert:",
+    "ai.sentiment_performance": "Leistung des Assistenten:",
+    "ai.sentiment_recent_negatives": "Aktuelle negative Konversationen",
     # Agent registry (CLI)
-    "agents.help": "Inspect and test the agent registry.",
-    "agents.help_list": "List all agents in the registry.",
-    "agents.help_show": "Show one agent's full definition.",
-    "agents.help_test": "Run one test turn through an agent's resolved config.",
-    "agents.opt_message": "Message to send for the test turn",
-    "agents.list_title": "Agents",
-    "agents.empty": "No agents in the registry yet.",
-    "agents.not_found": "Agent '{slug}' not found.",
-    "agents.default_model": "(active default)",
-    "agents.none": "(none)",
+    "agents.help": "Agent-Registry prüfen und testen.",
+    "agents.help_list": "Alle Agenten in der Registry auflisten.",
+    "agents.help_show": "Vollständige Definition eines Agenten anzeigen.",
+    "agents.help_test": "Einen Testlauf mit der aufgelösten Konfiguration eines Agenten ausführen.",
+    "agents.opt_message": "Nachricht für den Testlauf",
+    "agents.list_title": "Agenten",
+    "agents.empty": "Noch keine Agenten in der Registry.",
+    "agents.not_found": "Agent '{slug}' nicht gefunden.",
+    "agents.default_model": "(aktiver Standard)",
+    "agents.none": "(keine)",
     "agents.col_slug": "Slug",
     "agents.col_name": "Name",
-    "agents.col_model": "Model",
-    "agents.col_active": "Active",
+    "agents.col_model": "Modell",
+    "agents.col_active": "Aktiv",
     "agents.col_tools": "Tools",
-    "agents.col_modules": "Modules",
-    "agents.col_kind": "Kind",
-    "agents.col_priority": "Priority",
-    "agents.show_prompt": "System prompt:",
+    "agents.col_modules": "Module",
+    "agents.col_kind": "Art",
+    "agents.col_priority": "Priorität",
+    "agents.show_prompt": "System-Prompt:",
     "agents.show_tools": "Tools:",
-    "agents.show_modules": "Memory modules:",
-    "agents.show_kbs": "Knowledge bases:",
-    "agents.test_running": "Running a test turn through agent '{slug}'...",
-    "agents.test_reply_title": "Reply from '{slug}'",
-    "agents.modules_help": "Inspect memory modules (agent context blocks).",
-    "agents.modules_help_list": "List all memory modules.",
-    "agents.modules_help_show": "Show one memory module's definition.",
-    "agents.modules_title": "Memory Modules",
-    "agents.modules_empty": "No memory modules defined yet.",
-    "agents.module_not_found": "Memory module '{slug}' not found.",
-    "agents.module_static": "static",
-    "agents.module_dynamic": "dynamic",
+    "agents.show_modules": "Memory-Module:",
+    "agents.show_kbs": "Wissensdatenbanken:",
+    "agents.test_running": "Testlauf mit Agent '{slug}' läuft...",
+    "agents.test_reply_title": "Antwort von '{slug}'",
+    "agents.modules_help": "Memory-Module prüfen (Kontextblöcke für Agenten).",
+    "agents.modules_help_list": "Alle Memory-Module auflisten.",
+    "agents.modules_help_show": "Definition eines Memory-Moduls anzeigen.",
+    "agents.modules_title": "Memory-Module",
+    "agents.modules_empty": "Noch keine Memory-Module definiert.",
+    "agents.module_not_found": "Memory-Modul '{slug}' nicht gefunden.",
+    "agents.module_static": "statisch",
+    "agents.module_dynamic": "dynamisch",
     "agents.module_hybrid": "hybrid",
-    "agents.module_content": "Static content:",
+    "agents.module_content": "Statischer Inhalt:",
     # Slash commands
     "slash.help_desc": "Verfügbare Befehle anzeigen",
     "slash.clear_desc": "Bildschirm leeren",
@@ -1127,6 +1134,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "Rolle eines Benutzers ändern (z. B. zum Admin hochstufen).",
     "auth.opt_promote_email": "E-Mail-Adresse des zu aktualisierenden Benutzers",
     "auth.opt_promote_role": "Neue zuzuweisende Rolle (user, moderator, admin)",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "Blog-Beiträge und Tags prüfen und verwalten",
     "blog.help_status": "Beitragszahlen und letzte Aktivität anzeigen",

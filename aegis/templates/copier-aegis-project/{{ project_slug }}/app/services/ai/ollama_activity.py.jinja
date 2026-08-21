@@ -1,0 +1,158 @@
+{%- if ollama_mode != "none" -%}
+"""
+Ollama model activity tracker.
+
+Ephemeral, in-process record of models moving in and out of Ollama's
+memory, powering the dashboard's Activity tab. Deliberately memory-only
+(a bounded deque, same shape as the system activity feed): the tab
+answers "what just happened", not an audit question, so events reset
+with the process.
+
+Events arrive two ways:
+
+- ``record_loaded`` / ``record_unloaded``: explicit calls this app made
+  through ``OllamaClient`` (the dashboard's Load/Unload buttons).
+- ``observe``: a diff of the running-model set taken on every health
+  poll. This is how idle evictions (``keep_alive`` expiry) and loads
+  triggered outside the app get noticed - Ollama has no event API, so
+  polling is the only signal.
+"""
+
+from __future__ import annotations
+
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Literal
+
+OllamaActivityAction = Literal["loaded", "unloaded", "evicted"]
+
+
+@dataclass
+class OllamaActivityEvent:
+    """A single model transition in or out of Ollama's memory."""
+
+    action: OllamaActivityAction
+    model: str
+    vram_gb: float | None  # VRAM the model held, when known
+    detected: bool  # True when inferred from a poll diff, not an app call
+    timestamp: datetime = field(default_factory=datetime.now)
+
+
+class OllamaActivityTracker:
+    """Bounded, in-memory log of Ollama model load/unload/eviction events."""
+
+    def __init__(self, max_events: int = 50, stale_grace_seconds: float = 30.0) -> None:
+        self._events: deque[OllamaActivityEvent] = deque(maxlen=max_events)
+        # name -> VRAM GB for models believed warm. None until the first
+        # observation: models already warm when the process started predate
+        # the tracker, and fabricating "loaded" events for them would lie
+        # about when they loaded.
+        self._known: dict[str, float] | None = None
+        # Ollama's /api/ps lags explicit actions by a few seconds (an
+        # unloaded model stays listed briefly; a loading one may be missing).
+        # Observations that contradict an explicit action inside this window
+        # are treated as that stale data, not as real transitions - without
+        # it every App unload grows a phantom "loaded then evicted" pair.
+        # Cost: a genuine transition inside the window is noticed one poll
+        # after the window closes instead of immediately.
+        self._stale_grace_seconds = stale_grace_seconds
+        # model name -> (last explicit action, when it happened)
+        self._recent: dict[str, tuple[OllamaActivityAction, datetime]] = {}
+
+    def record_loaded(self, model: str) -> None:
+        """Record a load this app performed."""
+        self._push(OllamaActivityEvent("loaded", model, None, detected=False))
+        self._recent[model] = ("loaded", datetime.now())
+        if self._known is not None:
+            # VRAM is unknown until the next poll; 0.0 marks it pending so
+            # observe() treats the model as already known (no duplicate event).
+            self._known.setdefault(model, 0.0)
+
+    def record_unloaded(self, model: str) -> None:
+        """Record an unload this app performed."""
+        vram = self._known.pop(model, None) if self._known is not None else None
+        self._push(OllamaActivityEvent("unloaded", model, vram or None, detected=False))
+        self._recent[model] = ("unloaded", datetime.now())
+
+    def observe(self, running: dict[str, float]) -> None:
+        """Diff the currently running models against the previous poll.
+
+        Args:
+            running: Mapping of model name to VRAM GB from Ollama's
+                ``/api/ps``. Models that appeared are recorded as loads,
+                models that vanished as evictions. Anything this app
+                loaded or unloaded itself was already recorded explicitly
+                and is not double-counted, including the few seconds where
+                ``/api/ps`` still reports the pre-action state.
+        """
+        if self._known is None:
+            self._known = dict(running)
+            return
+
+        current = dict(running)
+        for name in list(current):
+            if name not in self._known and self._is_stale(name, "unloaded"):
+                # Still listed right after our own unload: stale data, not
+                # a load. Drop it so no event fires now and its later
+                # disappearance is not an eviction either.
+                del current[name]
+        for name, vram in current.items():
+            if name not in self._known:
+                self._push(OllamaActivityEvent("loaded", name, vram, detected=True))
+        for name, vram in self._known.items():
+            if name not in current:
+                if self._is_stale(name, "loaded"):
+                    # Not listed yet right after our own load: keep believing
+                    # it is warm instead of reporting a phantom eviction.
+                    current[name] = vram
+                    continue
+                self._push(
+                    OllamaActivityEvent("evicted", name, vram or None, detected=True)
+                )
+
+        self._known = current
+        self._backfill_vram(running)
+
+    def events(self) -> list[OllamaActivityEvent]:
+        """Recent events, newest first."""
+        return list(self._events)
+
+    def _push(self, event: OllamaActivityEvent) -> None:
+        self._events.appendleft(event)
+
+    def _is_stale(self, model: str, action: OllamaActivityAction) -> bool:
+        """Whether an observation contradicting ``action`` is inside the grace window."""
+        recent = self._recent.get(model)
+        if recent is None:
+            return False
+        last_action, when = recent
+        if last_action != action:
+            return False
+        return (datetime.now() - when).total_seconds() < self._stale_grace_seconds
+
+    def _backfill_vram(self, running: dict[str, float]) -> None:
+        # An explicit load records before VRAM is measurable; fill it in
+        # from the first poll that sees the model warm.
+        for event in self._events:
+            if event.action == "loaded" and event.vram_gb is None:
+                vram = running.get(event.model)
+                if vram:
+                    event.vram_gb = vram
+
+
+# Module-level singleton: the dashboard frontend and the API run in the
+# same process, so both the health check (writer) and the modal (reader)
+# see the same instance.
+_tracker: OllamaActivityTracker | None = None
+
+
+def get_ollama_activity() -> OllamaActivityTracker:
+    """Get the process-wide activity tracker (creates it if needed)."""
+    global _tracker
+    if _tracker is None:
+        _tracker = OllamaActivityTracker()
+    return _tracker
+{%- else -%}
+# Ollama activity tracker not included - ollama_mode is "none"
+{%- endif %}

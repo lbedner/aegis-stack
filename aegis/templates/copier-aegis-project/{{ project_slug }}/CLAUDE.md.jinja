@@ -71,6 +71,9 @@ CLI wires routes, tests, health checks, and dependencies for you.
   `str | None`, `dict[str, Any]`, `list[str]`.
 - No emojis in code, docs, or output.
 - Keep changes minimal and focused; do not scope-creep.
+- DRY: before writing a new component, endpoint, or helper, search for an
+  existing one that already does it (or most of it) and extend/reuse that
+  instead of duplicating logic.
 
 {% if include_database %}## Database
 

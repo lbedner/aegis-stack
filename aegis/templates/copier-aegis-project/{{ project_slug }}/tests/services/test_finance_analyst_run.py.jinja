@@ -1,0 +1,417 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""Tests for the headless analyst run and the ``model_for`` helper.
+
+No live model is ever contacted: the turn runs on pydantic-ai's ``TestModel``,
+and the provider helper is exercised against patched client classes. What is
+under test is the plumbing and the refusals, not the prose.
+"""
+
+from contextlib import asynccontextmanager
+from datetime import date
+from unittest.mock import MagicMock, patch
+
+from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.models.test import TestModel
+import pytest
+from sqlmodel import Session, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai import module_context
+from app.services.ai.agent_loader import invalidate_agent_cache
+from app.services.ai.config import AIServiceConfig
+from app.services.ai.models import AIProvider
+from app.services.ai.providers import ProviderError, model_for
+from app.services.finance.domains.detection import analyst
+from app.services.finance.models import FinanceInsight
+from app.services.finance.seeds import demo_seed
+
+OWNER = 1
+NOTE_TEXT = "Your spending is up in one category this month. Nothing else moved."
+
+
+@pytest.fixture(autouse=True)
+def _clean_agent_cache():
+    """``resolve_agent`` memoizes per process; tests must not inherit rows."""
+    invalidate_agent_cache()
+    yield
+    invalidate_agent_cache()
+
+
+@pytest.fixture
+def use_test_session(monkeypatch):
+    """Point the memory-module renderer at the test's own session.
+
+    ``render_memory_modules`` opens its own session when the caller does not
+    supply one, which in a test would reach the real database.
+    """
+
+    def _install(session: AsyncSession) -> None:
+        @asynccontextmanager
+        async def _session():
+            yield session
+
+        monkeypatch.setattr(module_context, "get_async_session", _session)
+
+    return _install
+
+
+def _fake_model(monkeypatch, headline: str = NOTE_TEXT) -> list[str]:
+    """Swap in a TestModel and record every time a model is handed out.
+
+    The analyst asks for structured ``SectionCommentary`` output, so the fake
+    answers through the output tool rather than free text.
+    """
+    calls: list[str] = []
+
+    def _model_for(config, settings):
+        calls.append(config.model)
+        return TestModel(custom_output_args={"headline": headline}), "test-model"
+
+    monkeypatch.setattr("app.services.ai.providers.model_for", _model_for)
+    return calls
+
+
+async def _seed_agent(session: AsyncSession) -> None:
+    """Insert the analyst rows on the async session the run will use."""
+    session.add(analyst.MemoryModule(**analyst.snapshot_module_definition()))
+    session.add(analyst.Agent(**analyst.analyst_agent_definition()))
+    await session.flush()
+
+
+async def _notes(session: AsyncSession) -> list[FinanceInsight]:
+    return list(
+        (
+            await session.exec(
+                select(FinanceInsight).where(
+                    FinanceInsight.insight_type == analyst.ANALYST_NOTE_INSIGHT_TYPE
+                )
+            )
+        ).all()
+    )
+
+
+class TestModelFor:
+    """The helper that hands a bare model to callers who bring their own agent."""
+
+    def test_ollama_model_points_at_the_local_openai_endpoint(self) -> None:
+        config = AIServiceConfig(
+            provider=AIProvider.OLLAMA, model="qwen2.5:7b", temperature=0.2
+        )
+        settings = MagicMock()
+        settings.ollama_base_url_effective = "http://localhost:11434"
+
+        with (
+            patch("app.services.ai.providers.AsyncOpenAI") as client,
+            patch("app.services.ai.providers.OpenAIChatModel") as chat_model,
+            patch("app.services.ai.providers.OpenAIProvider"),
+        ):
+            model, model_name = model_for(config, settings)
+
+        assert model_name == "qwen2.5:7b"
+        assert model is chat_model.return_value
+        # Ollama speaks OpenAI at /v1 and wants no real key.
+        assert client.call_args.kwargs["base_url"] == "http://localhost:11434/v1"
+        assert client.call_args.kwargs["api_key"] == "ollama"
+        assert chat_model.call_args.kwargs["model_name"] == "qwen2.5:7b"
+
+    def test_keyless_public_provider_is_refused_with_a_pointer(self) -> None:
+        """The public endpoints build their own clients; there is no bare model
+        to hand back, and saying so beats returning a broken one."""
+        config = AIServiceConfig(provider=AIProvider.PUBLIC, model="auto")
+
+        with pytest.raises(ProviderError) as excinfo:
+            model_for(config, MagicMock())
+
+        assert "get_agent" in str(excinfo.value)
+
+    def test_a_keyed_provider_without_its_key_is_refused(self) -> None:
+        settings = MagicMock()
+        settings.OPENAI_API_KEY = None
+        config = AIServiceConfig(provider=AIProvider.OPENAI, model="gpt-4o")
+
+        with pytest.raises(ProviderError) as excinfo:
+            model_for(config, settings)
+
+        assert "No API key configured" in str(excinfo.value)
+
+
+class TestRunAnalystNote:
+    @pytest.mark.asyncio
+    async def test_writes_one_note_from_the_snapshot(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+
+        note = await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert note is not None
+        assert note.insight_type == analyst.ANALYST_NOTE_INSIGHT_TYPE
+        assert note.severity == "info"
+        # The body is the rendered formulaic report: the model's headline
+        # leads, the code-owned skeleton follows.
+        assert note.body.startswith(NOTE_TEXT)
+        assert "**Cash and bills**" in note.body
+        assert "Open findings:" in note.body
+        assert note.dedup_key == "note:20260720"
+        assert note.metadata_["model_name"] == "test-model"
+        assert note.metadata_["commentary"]["headline"] == NOTE_TEXT
+        assert len(await _notes(async_db_session)) == 1
+
+    @pytest.mark.asyncio
+    async def test_the_snapshot_actually_reaches_the_model(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """The whole design rests on this: the model is handed the deterministic
+        figures. If the memory module does not make it into the turn, the agent
+        is writing from nothing and every number it produces is invented."""
+        use_test_session(async_db_session)
+        seen: dict[str, str] = {}
+
+        def _respond(messages, info):
+            seen["messages"] = repr(messages)
+            tool = info.output_tools[0]
+            return ModelResponse(
+                parts=[ToolCallPart(tool.name, {"headline": NOTE_TEXT})]
+            )
+
+        monkeypatch.setattr(
+            "app.services.ai.providers.model_for",
+            lambda config, settings: (
+                FunctionModel(_respond),
+                "function-model",
+            ),
+        )
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+
+        note = await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert note is not None
+        sent = seen.get("messages", "")
+        assert "ACCOUNTS" in sent
+        assert "OPEN ANOMALIES" in sent
+        assert "Chase Total Checking" in sent
+
+    @pytest.mark.asyncio
+    async def test_a_second_run_the_same_day_never_reaches_the_model(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """A local model costs real seconds. Re-running must be free, not
+        merely idempotent."""
+        use_test_session(async_db_session)
+        calls = _fake_model(monkeypatch)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+        today = date(2026, 7, 20)
+
+        first = await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=today
+        )
+        second = await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=today
+        )
+
+        assert first is not None
+        assert second is not None
+        assert second.id == first.id
+        assert len(calls) == 1
+        assert len(await _notes(async_db_session)) == 1
+
+    @pytest.mark.asyncio
+    async def test_an_owner_with_no_accounts_gets_no_note(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        use_test_session(async_db_session)
+        calls = _fake_model(monkeypatch)
+        await _seed_agent(async_db_session)
+
+        note = await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert note is None
+        assert calls == []
+        assert await _notes(async_db_session) == []
+
+    @pytest.mark.asyncio
+    async def test_an_unregistered_agent_is_skipped_not_substituted(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """``resolve_agent`` falls back to the default agent, which knows
+        nothing about a ledger. Writing its output as a finance note would be
+        worse than writing none."""
+        use_test_session(async_db_session)
+        calls = _fake_model(monkeypatch)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+
+        note = await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert note is None
+        assert calls == []
+        assert await _notes(async_db_session) == []
+
+    @pytest.mark.asyncio
+    async def test_a_failing_model_writes_nothing(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """Ollama stopped, mid-pull, or out of memory is an ordinary night. It
+        must cost a log line, never a note containing an error message."""
+        use_test_session(async_db_session)
+
+        def _explode(config, settings):
+            raise ProviderError("Ollama connection failed")
+
+        monkeypatch.setattr("app.services.ai.providers.model_for", _explode)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+
+        note = await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert note is None
+        assert await _notes(async_db_session) == []
+
+    @pytest.mark.asyncio
+    async def test_an_empty_answer_writes_nothing(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch, headline="   ")
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+
+        note = await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert note is None
+        assert await _notes(async_db_session) == []
+
+    @pytest.mark.asyncio
+    async def test_the_note_is_not_fed_back_as_an_anomaly(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """Yesterday's note lives in the same table as the findings.
+
+        It IS quoted back deliberately now, under its own heading, so the
+        analyst can carry a thread day to day - so this pins the thing that
+        was always the actual risk: it must never arrive dressed as a
+        finding the rules produced.
+        """
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+        await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 19)
+        )
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert snapshot is not None
+        anomalies = snapshot.split("OPEN ANOMALIES")[1].split("\n\n")[0]
+        assert NOTE_TEXT not in anomalies
+
+    @pytest.mark.asyncio
+    async def test_yesterdays_headline_comes_back_as_memory(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """Without this the analyst re-describes the same state every day,
+        because it cannot see what it already said."""
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+        await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 19)
+        )
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20)
+        )
+
+        assert "YOUR PREVIOUS NOTE" in snapshot
+        assert NOTE_TEXT in snapshot
+
+    @pytest.mark.asyncio
+    async def test_a_run_records_the_day_for_tomorrow_to_diff(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+
+        await analyst.run_analyst_note(
+            async_db_session, owner_user_id=OWNER, today=date(2026, 7, 19)
+        )
+
+        baseline = await analyst.snapshot_before(
+            async_db_session, owner_user_id=OWNER, day=date(2026, 7, 20)
+        )
+        assert baseline is not None
+        assert baseline[0] == date(2026, 7, 19)
+
+    @pytest.mark.asyncio
+    async def test_a_failed_run_leaves_no_baseline(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session
+    ) -> None:
+        """Otherwise tomorrow diffs against a day nobody ever read."""
+        use_test_session(async_db_session)
+        _fake_model(monkeypatch, headline="   ")
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+
+        assert (
+            await analyst.run_analyst_note(
+                async_db_session, owner_user_id=OWNER, today=date(2026, 7, 19)
+            )
+            is None
+        )
+        assert (
+            await analyst.snapshot_before(
+                async_db_session, owner_user_id=OWNER, day=date(2026, 7, 20)
+            )
+            is None
+        )
+
+
+class TestSchedulerRegistration:
+    """The job has to be registered, or the nightly note simply never happens."""
+
+    def test_the_nightly_note_job_is_registered_after_the_rules(self) -> None:
+        from app.components.scheduler import main as scheduler_main
+
+        source = scheduler_main.__file__
+        with open(source) as handle:
+            text = handle.read()
+        assert "finance_analyst_note_job" in text
+        assert 'id="finance_analyst_note"' in text
+
+
+class TestFixturesReachTheRegistry:
+    def test_seeding_makes_the_agent_resolvable(self, db_session: Session) -> None:
+        analyst.load_finance_agent_fixtures(db_session)
+
+        rows = db_session.exec(
+            select(analyst.Agent).where(
+                analyst.Agent.slug == analyst.ANALYST_AGENT_SLUG
+            )
+        ).all()
+
+        assert len(rows) == 1
+        assert rows[0].is_active is True
+{% endif %}

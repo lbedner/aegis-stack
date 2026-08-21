@@ -433,6 +433,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "認証",
     "projectmap.ai": "AI チャット",
     "projectmap.comms": "コミュニケーション",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "ドキュメント",
     # ── 生成後：フッター ───────────────────────────────────────────────
     "postgen.docs_link": "ドキュメント：https://docs.aegis-stack.io",
@@ -594,6 +598,12 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   目標テンプレート：  {version}",
     "update.already_at_version": "プロジェクトは既に指定バージョンです",
     "update.already_at_commit": "プロジェクトは既に目標コミットです",
+    "update.ahead_of_target": (
+        "プロジェクトはターゲットのテンプレートバージョンより新しいです"
+    ),
+    "update.ahead_of_target_hint": (
+        "更新はありません。特定のバージョンを指定するには --to-version を使用してください。"
+    ),
     "update.downgrade_blocked": "ダウングレード非対応",
     "update.downgrade_reason": (
         "Copier は古いテンプレートバージョンへのダウングレードに対応していません。"
@@ -612,6 +622,11 @@ MESSAGES: dict[str, str] = {
     "update.synced_files": "   {count} テンプレート変更を同期",
     "update.merge_conflicts": (
         "   {count} ファイルにマージコンフリクトがあります（<<<<<<< を検索して解決）："
+    ),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
     ),
     "update.running_postgen": "生成後タスクを実行中...",
     "update.skipping_postgen_conflicts": (
@@ -863,6 +878,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "サービスを対話形式で選択",
     "common.help_force": "バージョン不一致の警告を無視して強制実行",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "作成する新しい Aegis Stack プロジェクト名",
     "init.help_opt_components": "コンポーネントのリスト、カンマ区切り（redis、worker、scheduler、database）",
     "init.help_opt_python": "生成プロジェクトの Python バージョン（3.11、3.12、3.13、または 3.14）",

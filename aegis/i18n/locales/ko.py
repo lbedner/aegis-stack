@@ -420,6 +420,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "인증",
     "projectmap.ai": "AI 대화",
     "projectmap.comms": "통신",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "문서",
     # ── Post-generation: footer ───────────────────────────────────────
     "postgen.docs_link": "문서: https://docs.aegis-stack.io",
@@ -575,6 +579,10 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   대상 템플릿:  {version}",
     "update.already_at_version": "프로젝트가 이미 요청한 버전입니다",
     "update.already_at_commit": "프로젝트가 이미 대상 커밋에 있습니다",
+    "update.ahead_of_target": ("프로젝트가 대상 템플릿 버전보다 최신입니다"),
+    "update.ahead_of_target_hint": (
+        "업데이트할 항목이 없습니다. 특정 버전을 지정하려면 --to-version 옵션을 사용하세요."
+    ),
     "update.downgrade_blocked": "다운그레이드 불가",
     "update.downgrade_reason": (
         "Copier는 이전 템플릿 버전으로의 다운그레이드를 지원하지 않습니다."
@@ -593,6 +601,11 @@ MESSAGES: dict[str, str] = {
     "update.synced_files": "   {count}개 템플릿 변경 사항 동기화 완료",
     "update.merge_conflicts": (
         "   {count}개 파일에 병합 충돌 있음 (<<<<<<< 검색으로 해결):"
+    ),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
     ),
     "update.running_postgen": "후처리 작업 실행 중...",
     "update.skipping_postgen_conflicts": (
@@ -831,6 +844,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "대화형 서비스 선택",
     "common.help_force": "버전 불일치 경고를 무시하고 강제로 진행",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "새로 생성할 Aegis Stack 프로젝트 이름",
     "init.help_opt_components": "쉼표로 구분된 컴포넌트 목록 (redis, worker, scheduler, database)",
     "init.help_opt_python": "생성되는 프로젝트의 Python 버전 (3.11, 3.12, 3.13 또는 3.14)",

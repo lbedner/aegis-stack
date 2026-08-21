@@ -443,6 +443,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "Authentifizierung",
     "projectmap.ai": "AI-Konversationen",
     "projectmap.comms": "Kommunikation",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "Dokumentation",
     # ── Post-generation: footer ───────────────────────────────────────
     "postgen.docs_link": "Doku: https://docs.aegis-stack.io",
@@ -608,6 +612,10 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Ziel-Template:      {version}",
     "update.already_at_version": "Projekt ist bereits auf der angeforderten Version",
     "update.already_at_commit": "Projekt ist bereits auf dem Ziel-Commit",
+    "update.ahead_of_target": ("Projekt ist neuer als die Ziel-Template-Version"),
+    "update.ahead_of_target_hint": (
+        "Nichts zu aktualisieren. Mit --to-version eine bestimmte Version wählen."
+    ),
     "update.downgrade_blocked": "Downgrade nicht unterstützt",
     "update.downgrade_reason": (
         "Copier unterstützt kein Downgrade auf ältere Template-Versionen."
@@ -626,6 +634,11 @@ MESSAGES: dict[str, str] = {
     "update.synced_files": "   {count} Template-Änderungen synchronisiert",
     "update.merge_conflicts": (
         "   {count} Datei(en) haben Merge-Konflikte (nach <<<<<<< suchen):"
+    ),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
     ),
     "update.running_postgen": "Führe Nachgenerierungsaufgaben aus...",
     "update.skipping_postgen_conflicts": (
@@ -880,6 +893,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "Services interaktiv wählen",
     "common.help_force": "Versions-Inkompatibilitätswarnungen erzwingen ignorieren",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "Name des neu zu erstellenden Aegis Stack Projekts",
     "init.help_opt_components": "Kommagetrennte Liste von Komponenten (redis,worker,scheduler,database)",
     "init.help_opt_python": "Python-Version für das generierte Projekt (3.11, 3.12, 3.13 oder 3.14)",

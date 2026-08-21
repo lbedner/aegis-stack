@@ -1,15 +1,15 @@
 """Shared fixtures for LLM ETL service tests."""
 
-from collections.abc import Generator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy import Engine
+from sqlmodel import Session
+
 from app.services.ai.etl.clients.litellm_client import LiteLLMModel
 from app.services.ai.etl.clients.openrouter_client import OpenRouterModel
 from app.services.ai.models.llm import LargeLanguageModel, LLMVendor
-from sqlalchemy import Engine
-from sqlmodel import Session, SQLModel, create_engine
 
 # =============================================================================
 # Database Fixtures
@@ -17,20 +17,22 @@ from sqlmodel import Session, SQLModel, create_engine
 
 
 @pytest.fixture
-def etl_db_engine() -> Generator[Engine]:
-    """Create an in-memory SQLite database engine for ETL service tests."""
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    SQLModel.metadata.create_all(engine)
-    yield engine
-    SQLModel.metadata.drop_all(engine)
-    engine.dispose()
+def etl_db_engine(engine: Engine) -> Engine:
+    """The root conftest's schema-attached engine.
+
+    A bare local ``create_engine`` cannot ``create_all`` this project's
+    metadata: the root conftest imports every service's models, so tables
+    live in named schemas (finance, scheduler, ...) that only the shared
+    engine attaches in-memory databases for.
+    """
+    return engine
 
 
 @pytest.fixture
-def etl_session(etl_db_engine: Engine) -> Generator[Session]:
-    """Create a database session for ETL service tests."""
-    with Session(etl_db_engine) as session:
-        yield session
+def etl_session(db_session: Session) -> Session:
+    """The root conftest's transactional session (rolled back per test),
+    riding the same connection as ``etl_db_engine``."""
+    return db_session
 
 
 @pytest.fixture

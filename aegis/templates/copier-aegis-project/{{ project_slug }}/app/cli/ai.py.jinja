@@ -44,6 +44,16 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
 }
 
 
+def _use_streaming(provider: AIProvider, requested: bool = True) -> bool:
+    """Whether to stream responses for this provider.
+
+    Follows the provider capabilities matrix: keyless endpoints
+    (public/LLM7.io, pollinations) reject or fake ``stream=true``, so
+    their responses render non-streaming.
+    """
+    return requested and get_provider_capabilities(provider).supports_streaming
+
+
 def get_provider_display_name(provider: AIProvider | str) -> str:
     """Get display name for a provider, with aliases for branding."""
     value = provider.value if isinstance(provider, AIProvider) else provider
@@ -1658,10 +1668,7 @@ async def _send_message(
 {% endif %}
 ) -> None:
     """Send a single message and display the response."""
-    # Disable streaming for PUBLIC provider (fake streaming causes duplicates)
-    use_streaming = stream
-    if ai_service.config.provider == AIProvider.PUBLIC:
-        use_streaming = False
+    use_streaming = _use_streaming(ai_service.config.provider, requested=stream)
 
     if use_streaming:
         await _stream_chat_response(
@@ -1997,10 +2004,7 @@ async def _interactive_chat_session(
 
             console.print()  # Blank line between You: and Illiana:
 
-            # Disable streaming for PUBLIC provider
-            use_streaming = True
-            if ai_service.config.provider == AIProvider.PUBLIC:
-                use_streaming = False
+            use_streaming = _use_streaming(ai_service.config.provider)
 
             try:
                 if use_streaming:

@@ -72,7 +72,7 @@ class AIServiceConfig(BaseModel):
     enabled: bool = True
     provider: AIProvider = (
         AIProvider.PUBLIC
-    )  # Default to public endpoints (no API key required)
+    )  # Default to public endpoints (LLM7.io free anonymous tier)
     model: str = "gpt-3.5-turbo"  # Default to widely supported model
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     # Anthropic-only: thinking depth / output-token spend. None = the API
@@ -116,7 +116,8 @@ class AIServiceConfig(BaseModel):
             AIProvider.MISTRAL: getattr(settings, "MISTRAL_API_KEY", None),
             AIProvider.COHERE: getattr(settings, "COHERE_API_KEY", None),
             AIProvider.OLLAMA: None,  # Local provider, no API key required
-            AIProvider.PUBLIC: None,  # No API key required for public endpoints
+            AIProvider.PUBLIC: None,  # LLM7 key read directly in the provider path
+            AIProvider.POLLINATIONS: None,  # Key read directly in the provider path
         }
 
         return ProviderConfig(
@@ -144,8 +145,12 @@ class AIServiceConfig(BaseModel):
         if not capabilities:
             errors.append(f"Unsupported provider: {self.provider}")
 
-        # Check API key requirement (LOCAL providers don't need API keys)
-        local_providers = {AIProvider.PUBLIC, AIProvider.OLLAMA}
+        # Check API key requirement (keyless providers don't need API keys)
+        local_providers = {
+            AIProvider.PUBLIC,
+            AIProvider.OLLAMA,
+            AIProvider.POLLINATIONS,
+        }
         provider_config = self.get_provider_config(settings)
 
         if self.provider not in local_providers and not provider_config.api_key:

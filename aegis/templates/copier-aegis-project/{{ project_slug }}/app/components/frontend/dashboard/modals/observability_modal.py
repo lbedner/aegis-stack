@@ -6,6 +6,7 @@ overview metrics, slowest spans, recent exceptions, and configuration.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     DataTable,
@@ -17,14 +18,14 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableDataTable,
     ExpandableRow,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.formatting import format_relative_time
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
-from app.core.formatting import format_relative_time
-
 from .modal_sections import PIE_CHART_COLORS, EmptyStatePlaceholder, MetricCard
 
 # Number of spans to show in the overview bar chart
@@ -622,9 +623,8 @@ class ObservabilityDetailDialog(BaseDetailPopup):
             f"Slowest Spans ({spans_count})" if spans_count > 0 else "Slowest Spans"
         )
 
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=[
                 ft.Tab(
                     text="Overview",
@@ -644,9 +644,6 @@ class ObservabilityDetailDialog(BaseDetailPopup):
                 ),
             ],
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         super().__init__(

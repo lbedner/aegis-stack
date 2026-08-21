@@ -54,3 +54,12 @@ class TestMemoryContext:
         prompt = build_system_prompt(_settings())
 
         assert "## Saved User Memory" not in prompt
+
+    def test_catalog_context_renders_as_body_under_heading(self) -> None:
+        """The catalog payload is body text, never part of the heading line."""
+        catalog = "- gpt-x: fast\n- gpt-y: smart"
+        prompt = build_system_prompt(_settings(), catalog_context=catalog)
+
+        assert catalog in prompt
+        first_line = next(line for line in prompt.splitlines() if "gpt-x" in line)
+        assert not first_line.startswith("#")

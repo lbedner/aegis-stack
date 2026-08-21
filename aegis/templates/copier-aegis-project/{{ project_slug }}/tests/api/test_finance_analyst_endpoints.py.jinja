@@ -1,0 +1,268 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}"""API tests for the analyst note surface.
+
+The model is always a ``TestModel``; what is under test is the routing, the
+filtering that keeps notes out of the anomaly list, and the force/no-force
+contract that decides whether a local model is spun up at all.
+"""
+
+from contextlib import asynccontextmanager
+from datetime import date
+
+from fastapi.testclient import TestClient
+from pydantic_ai.models.test import TestModel
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai import module_context
+from app.services.ai.agent_loader import invalidate_agent_cache
+from app.services.finance.domains.detection import analyst
+from app.services.finance.models import FinanceInsight
+from app.services.finance.service import FinanceService
+
+NOTE_TEXT = "Nothing unusual this month. Your balances are where you left them."
+RUN_URL = "/api/v1/finance/analyst/run"
+INSIGHTS_URL = "/api/v1/finance/insights"
+
+
+@pytest.fixture(autouse=True)
+def _clean_agent_cache():
+    invalidate_agent_cache()
+    yield
+    invalidate_agent_cache()
+
+
+@pytest.fixture
+def analyst_ready(monkeypatch):
+    """Register the agent, point module rendering at the test session, and
+    hand out a TestModel. Returns the list of model handouts."""
+
+    async def _setup(session: AsyncSession, owner_user_id: int | None) -> list[str]:
+        @asynccontextmanager
+        async def _session():
+            yield session
+
+        monkeypatch.setattr(module_context, "get_async_session", _session)
+
+        calls: list[str] = []
+
+        def _model_for(config, settings):
+            # Vary the text per handout so "was the model actually re-run?"
+            # is answerable from the response rather than from a row id
+            # (SQLite reuses the freed rowid, so ids prove nothing here).
+            calls.append(config.model)
+            text = f"{NOTE_TEXT} Run {len(calls)}."
+            return TestModel(custom_output_args={"headline": text}), "test-model"
+
+        monkeypatch.setattr("app.services.ai.providers.model_for", _model_for)
+
+        session.add(analyst.MemoryModule(**analyst.snapshot_module_definition()))
+        session.add(analyst.Agent(**analyst.analyst_agent_definition()))
+        service = FinanceService(session)
+        await service.create_manual_account(
+            owner_user_id=owner_user_id,
+            name="Chase Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=125_000,
+        )
+        await session.commit()
+        return calls
+
+    return _setup
+
+
+@pytest.mark.asyncio
+async def test_run_writes_and_returns_a_note(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    analyst_ready,
+) -> None:
+    calls = await analyst_ready(async_db_session, acting_owner_user_id)
+
+    response = authenticated_client.post(RUN_URL)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["insight_type"] == analyst.ANALYST_NOTE_INSIGHT_TYPE
+    assert body["body"].startswith(NOTE_TEXT)
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_running_again_returns_the_same_note_without_a_model_call(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    analyst_ready,
+) -> None:
+    calls = await analyst_ready(async_db_session, acting_owner_user_id)
+
+    first = authenticated_client.post(RUN_URL).json()
+    second = authenticated_client.post(RUN_URL).json()
+
+    assert second["body"] == first["body"]
+    assert len(calls) == 1, "the second request must not spin up a model"
+
+
+@pytest.mark.asyncio
+async def test_force_regenerates_todays_note(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    analyst_ready,
+) -> None:
+    """The demo path: ask again and actually get a fresh answer."""
+    calls = await analyst_ready(async_db_session, acting_owner_user_id)
+
+    first = authenticated_client.post(RUN_URL).json()
+    second = authenticated_client.post(RUN_URL, params={"force": "true"}).json()
+
+    assert second["body"] != first["body"], "force must produce a fresh answer"
+    assert len(calls) == 2
+    rows = (await async_db_session.exec(_notes_query())).all()
+    assert len(rows) == 1, "force must replace today's note, not accumulate"
+
+
+def _notes_query():
+    from sqlmodel import select
+
+    return select(FinanceInsight).where(
+        FinanceInsight.insight_type == analyst.ANALYST_NOTE_INSIGHT_TYPE
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_unavailable_model_is_a_503_not_an_empty_note(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    monkeypatch,
+) -> None:
+    from app.services.ai.providers import ProviderError
+
+    def _explode(config, settings):
+        raise ProviderError("Ollama is not running")
+
+    monkeypatch.setattr("app.services.ai.providers.model_for", _explode)
+    service = FinanceService(async_db_session)
+    await service.create_manual_account(
+        owner_user_id=acting_owner_user_id,
+        name="Chase Checking",
+        account_type="checking",
+        classification="asset",
+    )
+    async_db_session.add(analyst.Agent(**analyst.analyst_agent_definition()))
+    await async_db_session.commit()
+
+    response = authenticated_client.post(RUN_URL)
+
+    assert response.status_code == 503
+    assert (await async_db_session.exec(_notes_query())).all() == []
+
+
+@pytest.mark.asyncio
+async def test_insights_can_exclude_the_notes(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """The Insights tab asks for findings only; a note is not a finding."""
+    store_owner = 0 if acting_owner_user_id is None else acting_owner_user_id
+    async_db_session.add(
+        FinanceInsight(
+            owner_user_id=store_owner,
+            insight_type=analyst.ANALYST_NOTE_INSIGHT_TYPE,
+            severity="info",
+            title=f"Analyst note - {date.today().isoformat()}",
+            body=NOTE_TEXT,
+            dedup_key="note:test",
+        )
+    )
+    async_db_session.add(
+        FinanceInsight(
+            owner_user_id=store_owner,
+            insight_type="fee_charged",
+            severity="warning",
+            title="Fee charged: $35.00",
+            body="A fee.",
+            dedup_key="fee:test",
+        )
+    )
+    await async_db_session.commit()
+
+    findings = authenticated_client.get(
+        INSIGHTS_URL,
+        params={"exclude_type": analyst.ANALYST_NOTE_INSIGHT_TYPE},
+    ).json()
+    notes = authenticated_client.get(
+        INSIGHTS_URL,
+        params={"insight_type": analyst.ANALYST_NOTE_INSIGHT_TYPE},
+    ).json()
+
+    assert [i["insight_type"] for i in findings["items"]] == ["fee_charged"]
+    assert [i["insight_type"] for i in notes["items"]] == [
+        analyst.ANALYST_NOTE_INSIGHT_TYPE
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_badge_ignores_notes(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    store_owner = 0 if acting_owner_user_id is None else acting_owner_user_id
+    async_db_session.add(
+        FinanceInsight(
+            owner_user_id=store_owner,
+            insight_type=analyst.ANALYST_NOTE_INSIGHT_TYPE,
+            severity="info",
+            title="Analyst note",
+            body=NOTE_TEXT,
+            dedup_key="note:badge",
+        )
+    )
+    await async_db_session.commit()
+
+    health = authenticated_client.get("/api/v1/finance/health").json()
+
+    assert health["status"] == "ok"
+    summary = authenticated_client.get(INSIGHTS_URL).json()
+    assert summary["total"] == 1  # the note is listed when nothing filters it
+
+
+@pytest.mark.asyncio
+async def test_background_run_writes_the_note_as_a_job(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    analyst_ready,
+    monkeypatch,
+) -> None:
+    """``background=true``: 202 + job id; the terminal event carries the note."""
+    import time
+
+    from app.components.backend.api.finance import analyst as finance_analyst_module
+
+    calls = await analyst_ready(async_db_session, acting_owner_user_id)
+
+    @asynccontextmanager
+    async def _session():
+        yield async_db_session
+
+    monkeypatch.setattr(finance_analyst_module, "_job_session", _session)
+
+    response = authenticated_client.post(RUN_URL, params={"background": "true"})
+    assert response.status_code == 202
+    job_id = response.json()["job_id"]
+
+    for _ in range(100):
+        body = authenticated_client.get(f"/api/v1/jobs/{job_id}").json()
+        if body["status"] != "running":
+            break
+        time.sleep(0.05)
+    assert body["status"] == "done"
+    assert body["result"]["body"].startswith(NOTE_TEXT)
+    assert len(calls) == 1
+{% endif %}

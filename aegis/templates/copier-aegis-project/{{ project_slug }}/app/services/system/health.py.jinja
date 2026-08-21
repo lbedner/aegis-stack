@@ -1851,10 +1851,7 @@ async def check_ollama_health() -> ComponentStatus:
         ComponentStatus indicating Ollama infrastructure health with model info
     """
     try:
-        from app.services.ai.ollama import (
-            OllamaClient,
-            OLLAMA_DEFAULT_URL,
-        )
+        from app.services.ai.ollama import OllamaClient
 
         # Get Ollama URL from settings (uses effective URL for Docker/local auto-detection)
         ollama_url = settings.ollama_base_url_effective
@@ -1877,13 +1874,35 @@ async def check_ollama_health() -> ComponentStatus:
                 },
             )
 
+        # Feed the activity tracker: diffing the running set on every poll
+        # is how idle evictions and externally triggered loads get noticed
+        # (Ollama has no event API).
+        from app.services.ai.ollama_activity import get_ollama_activity
+
+        get_ollama_activity().observe(
+            {m.name: m.size_vram_gb for m in server_status.running_models}
+        )
+
         # Use Pydantic's model_dump for clean serialization
         running_models_info = [
             m.model_dump(include={"name", "size_vram_gb", "is_warm", "context_length", "details"})
             for m in server_status.running_models
         ]
         installed_models_info = [
-            m.model_dump(include={"name", "size_gb", "details"})
+            m.model_dump(
+                include={
+                    "name",
+                    "size_gb",
+                    "details",
+                    # What `ollama list` prints and the table could not show:
+                    # the digest tells two pulls of one tag apart, and the
+                    # timestamp is how you spot a model that has gone stale.
+                    "digest",
+                    "modified_at",
+                    "capabilities",
+                },
+                mode="json",
+            )
             for m in server_status.installed_models
         ]
 

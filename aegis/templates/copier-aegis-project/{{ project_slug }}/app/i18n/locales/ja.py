@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "入力価格：",
     "llm.output_price_label": "出力価格：",
     "llm.model_not_in_catalog": "モデルがカタログに見つかりません。'llm sync' を実行してください。",
+    "llm.source_label": "ソース:",
+    "llm.source_override": "保存された選択(.env を上書き。'llm reset' で解除)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env の既定:",
+    "llm.help_reset": "保存されたモデルの上書きを削除し、.env が再びモデルを決定するようにします。",
+    "llm.reset_done": "上書きを解除しました。アクティブモデルは .env から取得されます: {model}",
+    "llm.reset_none": "上書きは保存されていません。アクティブモデルはすでに .env から取得されています: {model}",
     # 切り替え
     "llm.switching_model": "{model_id} に切り替え中",
     # 情報
@@ -695,49 +702,49 @@ MESSAGES: dict[str, str] = {
     "ai.rag_step_query": "2. コレクションを指定してクエリ：",
     "ai.rag_list_hint": "ヒント：'{app} rag list' で既存コレクションを確認できます。",
     # Sentiment stats (CLI)
-    "ai.help_sentiment": "Show conversation sentiment statistics from the analysis job.",
-    "ai.sentiment_title": "Conversation Sentiment",
-    "ai.sentiment_disabled_hint": "Sentiment analysis is disabled. Set AI_SENTIMENT_ENABLED=true to score conversations.",
-    "ai.sentiment_empty": "No conversations scored yet.",
-    "ai.sentiment_distribution": "Sentiment Distribution",
-    "ai.sentiment_avg_score": "Average score:",
-    "ai.sentiment_performance": "Assistant performance:",
-    "ai.sentiment_recent_negatives": "Recent Negative Conversations",
+    "ai.help_sentiment": "分析ジョブによる会話のセンチメント統計を表示します。",
+    "ai.sentiment_title": "会話のセンチメント",
+    "ai.sentiment_disabled_hint": "センチメント分析は無効です。会話を評価するには AI_SENTIMENT_ENABLED=true を設定してください。",
+    "ai.sentiment_empty": "評価済みの会話がまだありません。",
+    "ai.sentiment_distribution": "センチメント分布",
+    "ai.sentiment_avg_score": "平均スコア:",
+    "ai.sentiment_performance": "アシスタントの評価:",
+    "ai.sentiment_recent_negatives": "最近のネガティブな会話",
     # Agent registry (CLI)
-    "agents.help": "Inspect and test the agent registry.",
-    "agents.help_list": "List all agents in the registry.",
-    "agents.help_show": "Show one agent's full definition.",
-    "agents.help_test": "Run one test turn through an agent's resolved config.",
-    "agents.opt_message": "Message to send for the test turn",
-    "agents.list_title": "Agents",
-    "agents.empty": "No agents in the registry yet.",
-    "agents.not_found": "Agent '{slug}' not found.",
-    "agents.default_model": "(active default)",
-    "agents.none": "(none)",
-    "agents.col_slug": "Slug",
-    "agents.col_name": "Name",
-    "agents.col_model": "Model",
-    "agents.col_active": "Active",
-    "agents.col_tools": "Tools",
-    "agents.col_modules": "Modules",
-    "agents.col_kind": "Kind",
-    "agents.col_priority": "Priority",
-    "agents.show_prompt": "System prompt:",
-    "agents.show_tools": "Tools:",
-    "agents.show_modules": "Memory modules:",
-    "agents.show_kbs": "Knowledge bases:",
-    "agents.test_running": "Running a test turn through agent '{slug}'...",
-    "agents.test_reply_title": "Reply from '{slug}'",
-    "agents.modules_help": "Inspect memory modules (agent context blocks).",
-    "agents.modules_help_list": "List all memory modules.",
-    "agents.modules_help_show": "Show one memory module's definition.",
-    "agents.modules_title": "Memory Modules",
-    "agents.modules_empty": "No memory modules defined yet.",
-    "agents.module_not_found": "Memory module '{slug}' not found.",
-    "agents.module_static": "static",
-    "agents.module_dynamic": "dynamic",
-    "agents.module_hybrid": "hybrid",
-    "agents.module_content": "Static content:",
+    "agents.help": "エージェントレジストリを確認・テストします。",
+    "agents.help_list": "レジストリ内のすべてのエージェントを表示します。",
+    "agents.help_show": "エージェントの完全な定義を表示します。",
+    "agents.help_test": "解決済みの設定でエージェントのテスト実行を1回行います。",
+    "agents.opt_message": "テスト実行で送信するメッセージ",
+    "agents.list_title": "エージェント",
+    "agents.empty": "レジストリにエージェントがまだありません。",
+    "agents.not_found": "エージェント '{slug}' が見つかりません。",
+    "agents.default_model": "(有効なデフォルト)",
+    "agents.none": "(なし)",
+    "agents.col_slug": "スラッグ",
+    "agents.col_name": "名前",
+    "agents.col_model": "モデル",
+    "agents.col_active": "有効",
+    "agents.col_tools": "ツール",
+    "agents.col_modules": "モジュール",
+    "agents.col_kind": "種類",
+    "agents.col_priority": "優先度",
+    "agents.show_prompt": "システムプロンプト:",
+    "agents.show_tools": "ツール:",
+    "agents.show_modules": "メモリモジュール:",
+    "agents.show_kbs": "ナレッジベース:",
+    "agents.test_running": "エージェント '{slug}' でテスト実行中...",
+    "agents.test_reply_title": "'{slug}' からの返信",
+    "agents.modules_help": "メモリモジュール（エージェントのコンテキストブロック）を確認します。",
+    "agents.modules_help_list": "すべてのメモリモジュールを表示します。",
+    "agents.modules_help_show": "メモリモジュールの定義を表示します。",
+    "agents.modules_title": "メモリモジュール",
+    "agents.modules_empty": "メモリモジュールがまだ定義されていません。",
+    "agents.module_not_found": "メモリモジュール '{slug}' が見つかりません。",
+    "agents.module_static": "静的",
+    "agents.module_dynamic": "動的",
+    "agents.module_hybrid": "ハイブリッド",
+    "agents.module_content": "静的コンテンツ:",
     # スラッシュコマンド
     "slash.help_desc": "利用可能なコマンドを表示",
     "slash.clear_desc": "画面をクリア",
@@ -1127,6 +1134,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "ユーザーのロールを変更（例：管理者に昇格）。",
     "auth.opt_promote_email": "更新対象ユーザーのメールアドレス",
     "auth.opt_promote_role": "割り当てる新しいロール（user、moderator、admin）",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "ブログ記事とタグの確認・管理",
     "blog.help_status": "ブログ記事の件数と最近の活動を表示",

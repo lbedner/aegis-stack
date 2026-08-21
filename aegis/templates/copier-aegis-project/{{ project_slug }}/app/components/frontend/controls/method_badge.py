@@ -5,6 +5,7 @@ future route-centric tabs) can use the same color scheme.
 """
 
 import flet as ft
+
 from app.components.frontend.theme import AegisTheme as Theme
 
 from .text import LabelText

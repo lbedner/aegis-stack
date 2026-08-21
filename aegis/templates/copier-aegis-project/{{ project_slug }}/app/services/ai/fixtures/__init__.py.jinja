@@ -9,12 +9,20 @@ from sqlmodel import Session
 
 from app.services.ai.fixtures.agent_fixtures import load_agent_fixtures
 from app.services.ai.fixtures.llm_fixtures import load_all_llm_fixtures
+{% if include_finance %}
+from app.services.finance.domains.detection.analyst import load_finance_agent_fixtures
+{% endif %}
 
 
 def load_all_ai_fixtures(session: Session) -> dict[str, int]:
     """Load every AI seed set (LLM catalog + agent registry)."""
     counts = load_all_llm_fixtures(session)
     counts.update(load_agent_fixtures(session))
+{% if include_finance %}
+    # Service-owned agents seed alongside the default one: a project that has
+    # the finance service gets its analyst without a second seeding step.
+    counts.update(load_finance_agent_fixtures(session))
+{% endif %}
     return counts
 
 

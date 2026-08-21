@@ -1,15 +1,15 @@
 """Chat routes through the agent loader: persona, sampling, attribution."""
 {% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-import app.services.ai.service as service_module
 from app.services.ai.agent_loader import AgentConfig, default_agent_config
+import app.services.ai.service as service_module
 from app.services.ai.service import AIService
 
 
@@ -63,6 +63,14 @@ def harness(
     monkeypatch.setattr(AIService, "_build_health_context", no_health)
     monkeypatch.setattr(AIService, "_build_usage_context", lambda self: None)
     monkeypatch.setattr(AIService, "_build_catalog_context", lambda self: None)
+
+    # The user-memory block opens the app's REAL async engine. Left unstubbed
+    # it binds that engine's pool to whichever test loop touches it first,
+    # after which any later test on a fresh loop dies inside asyncpg.
+    async def no_memory(user_id: str, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(service_module, "build_user_memory_context", no_memory)
 
     recorder = MagicMock()
     monkeypatch.setattr(service, "_record_usage", recorder)

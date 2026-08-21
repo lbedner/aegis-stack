@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "Precio entrada:",
     "llm.output_price_label": "Precio salida:",
     "llm.model_not_in_catalog": "Modelo no encontrado en catálogo. Ejecuta 'llm sync' para poblar.",
+    "llm.source_label": "Fuente:",
+    "llm.source_override": "selección guardada (anula .env; 'llm reset' para borrarla)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": "Valor de .env:",
+    "llm.help_reset": "Elimina la anulación guardada del modelo para que .env vuelva a decidir.",
+    "llm.reset_done": "Anulación eliminada. El modelo activo ahora viene de .env: {model}",
+    "llm.reset_none": "No había anulación guardada. El modelo activo ya viene de .env: {model}",
     # Usar
     "llm.switching_model": "Cambiando a {model_id}",
     # Info
@@ -695,49 +702,49 @@ MESSAGES: dict[str, str] = {
     "ai.rag_step_query": "2. Consulta con la colección:",
     "ai.rag_list_hint": "Tip: Ejecuta '{app} rag list' para ver colecciones existentes.",
     # Sentiment stats (CLI)
-    "ai.help_sentiment": "Show conversation sentiment statistics from the analysis job.",
-    "ai.sentiment_title": "Conversation Sentiment",
-    "ai.sentiment_disabled_hint": "Sentiment analysis is disabled. Set AI_SENTIMENT_ENABLED=true to score conversations.",
-    "ai.sentiment_empty": "No conversations scored yet.",
-    "ai.sentiment_distribution": "Sentiment Distribution",
-    "ai.sentiment_avg_score": "Average score:",
-    "ai.sentiment_performance": "Assistant performance:",
-    "ai.sentiment_recent_negatives": "Recent Negative Conversations",
+    "ai.help_sentiment": "Mostrar estadísticas de sentimiento de las conversaciones de la tarea de análisis.",
+    "ai.sentiment_title": "Sentimiento de la conversación",
+    "ai.sentiment_disabled_hint": "El análisis de sentimiento está desactivado. Define AI_SENTIMENT_ENABLED=true para evaluar conversaciones.",
+    "ai.sentiment_empty": "Aún no se ha evaluado ninguna conversación.",
+    "ai.sentiment_distribution": "Distribución de sentimiento",
+    "ai.sentiment_avg_score": "Puntuación media:",
+    "ai.sentiment_performance": "Rendimiento del asistente:",
+    "ai.sentiment_recent_negatives": "Conversaciones negativas recientes",
     # Agent registry (CLI)
-    "agents.help": "Inspect and test the agent registry.",
-    "agents.help_list": "List all agents in the registry.",
-    "agents.help_show": "Show one agent's full definition.",
-    "agents.help_test": "Run one test turn through an agent's resolved config.",
-    "agents.opt_message": "Message to send for the test turn",
-    "agents.list_title": "Agents",
-    "agents.empty": "No agents in the registry yet.",
-    "agents.not_found": "Agent '{slug}' not found.",
-    "agents.default_model": "(active default)",
-    "agents.none": "(none)",
+    "agents.help": "Inspeccionar y probar el registro de agentes.",
+    "agents.help_list": "Listar todos los agentes del registro.",
+    "agents.help_show": "Mostrar la definición completa de un agente.",
+    "agents.help_test": "Ejecutar un turno de prueba con la configuración resuelta de un agente.",
+    "agents.opt_message": "Mensaje para el turno de prueba",
+    "agents.list_title": "Agentes",
+    "agents.empty": "Aún no hay agentes en el registro.",
+    "agents.not_found": "No se encontró el agente '{slug}'.",
+    "agents.default_model": "(predeterminado activo)",
+    "agents.none": "(ninguno)",
     "agents.col_slug": "Slug",
-    "agents.col_name": "Name",
-    "agents.col_model": "Model",
-    "agents.col_active": "Active",
-    "agents.col_tools": "Tools",
-    "agents.col_modules": "Modules",
-    "agents.col_kind": "Kind",
-    "agents.col_priority": "Priority",
-    "agents.show_prompt": "System prompt:",
-    "agents.show_tools": "Tools:",
-    "agents.show_modules": "Memory modules:",
-    "agents.show_kbs": "Knowledge bases:",
-    "agents.test_running": "Running a test turn through agent '{slug}'...",
-    "agents.test_reply_title": "Reply from '{slug}'",
-    "agents.modules_help": "Inspect memory modules (agent context blocks).",
-    "agents.modules_help_list": "List all memory modules.",
-    "agents.modules_help_show": "Show one memory module's definition.",
-    "agents.modules_title": "Memory Modules",
-    "agents.modules_empty": "No memory modules defined yet.",
-    "agents.module_not_found": "Memory module '{slug}' not found.",
-    "agents.module_static": "static",
-    "agents.module_dynamic": "dynamic",
-    "agents.module_hybrid": "hybrid",
-    "agents.module_content": "Static content:",
+    "agents.col_name": "Nombre",
+    "agents.col_model": "Modelo",
+    "agents.col_active": "Activo",
+    "agents.col_tools": "Herramientas",
+    "agents.col_modules": "Módulos",
+    "agents.col_kind": "Tipo",
+    "agents.col_priority": "Prioridad",
+    "agents.show_prompt": "Prompt del sistema:",
+    "agents.show_tools": "Herramientas:",
+    "agents.show_modules": "Módulos de memoria:",
+    "agents.show_kbs": "Bases de conocimiento:",
+    "agents.test_running": "Ejecutando un turno de prueba con el agente '{slug}'...",
+    "agents.test_reply_title": "Respuesta de '{slug}'",
+    "agents.modules_help": "Inspeccionar módulos de memoria (bloques de contexto del agente).",
+    "agents.modules_help_list": "Listar todos los módulos de memoria.",
+    "agents.modules_help_show": "Mostrar la definición de un módulo de memoria.",
+    "agents.modules_title": "Módulos de memoria",
+    "agents.modules_empty": "Aún no hay módulos de memoria definidos.",
+    "agents.module_not_found": "No se encontró el módulo de memoria '{slug}'.",
+    "agents.module_static": "estático",
+    "agents.module_dynamic": "dinámico",
+    "agents.module_hybrid": "híbrido",
+    "agents.module_content": "Contenido estático:",
     # Comandos slash
     "slash.help_desc": "Mostrar comandos disponibles",
     "slash.clear_desc": "Limpiar la pantalla",
@@ -1127,6 +1134,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "Cambiar el rol de un usuario (p. ej., promover a admin).",
     "auth.opt_promote_email": "Correo electrónico del usuario que se va a actualizar",
     "auth.opt_promote_role": "Nuevo rol que asignar (user, moderator, admin)",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "Inspeccionar y administrar publicaciones y etiquetas del blog",
     "blog.help_status": "Mostrar el recuento de publicaciones del blog y la actividad reciente",

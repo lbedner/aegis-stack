@@ -445,6 +445,10 @@ MESSAGES: dict[str, str] = {
     "projectmap.auth": "Autenticación",
     "projectmap.ai": "Conversaciones IA",
     "projectmap.comms": "Comunicaciones",
+    "projectmap.insights": "Adoption metrics",
+    "projectmap.payment": "Payments and subscriptions",
+    "projectmap.blog": "Markdown blog",
+    "projectmap.finance": "Personal finance",
     "projectmap.docs": "Documentación",
     # ── Post-generation: footer ───────────────────────────────────────
     "postgen.docs_link": "Docs: https://docs.aegis-stack.io",
@@ -610,6 +614,12 @@ MESSAGES: dict[str, str] = {
     "update.target_template": "   Plantilla destino: {version}",
     "update.already_at_version": "Proyecto ya está en la versión solicitada",
     "update.already_at_commit": "Proyecto ya está en el commit destino",
+    "update.ahead_of_target": (
+        "El proyecto es más reciente que la versión de plantilla de destino"
+    ),
+    "update.ahead_of_target_hint": (
+        "Nada que actualizar. Usa --to-version para elegir una versión concreta."
+    ),
     "update.downgrade_blocked": "Degradación no soportada",
     "update.downgrade_reason": (
         "Copier no soporta degradación a versiones anteriores de plantilla."
@@ -628,6 +638,11 @@ MESSAGES: dict[str, str] = {
     "update.synced_files": "   {count} cambios de plantilla sincronizados",
     "update.merge_conflicts": (
         "   {count} archivo(s) tienen conflictos de fusión (busca <<<<<<< para resolver):"
+    ),
+    "update.removed_files": "   Removed {count} file(s) the template no longer ships",
+    "update.stale_files": (
+        "   {count} customized file(s) are no longer part of the template.\n"
+        "   They were kept, but nothing loads them any more - review and delete:"
     ),
     "update.running_postgen": "Ejecutando tareas post-generación...",
     "update.skipping_postgen_conflicts": (
@@ -882,6 +897,14 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_services": "Seleccionar servicios interactivamente",
     "common.help_force": "Forzar pese a advertencias de incompatibilidad de versión",
     # ── init CLI help ──────────────────────────────────────────────────
+    "blueprints.title": "AVAILABLE BLUEPRINTS",
+    "blueprints.none_available": "No blueprints available.",
+    "blueprints.includes": "Includes: {names}",
+    "blueprints.usage_hint": "Start a project from one:",
+    "init.help_opt_blueprint": (
+        "Start from a named blueprint (a preset component/service selection)"
+    ),
+    "init.unknown_blueprint": "Unknown blueprint: {name}. Available: {available}",
     "init.help_arg_name": "Nombre del nuevo proyecto Aegis Stack que se va a crear",
     "init.help_opt_components": "Lista de componentes separada por comas (redis,worker,scheduler,database)",
     "init.help_opt_python": "Versión de Python para el proyecto generado (3.11, 3.12, 3.13 o 3.14)",

@@ -1,10 +1,8 @@
 """Tests for the agent registry models and seed fixtures."""
 {% if ai_backend != "memory" %}
 
-from collections.abc import Generator
-
 import pytest
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, select
 
 from app.services.ai.fixtures.agent_fixtures import (
     DEFAULT_AGENT_SLUG,
@@ -16,12 +14,14 @@ from app.services.ai.tools import register_tool, resolve_tools, unregister_tool
 
 
 @pytest.fixture
-def session() -> Generator[Session]:
-    """In-memory database session with the agent tables created."""
-    engine = create_engine("sqlite://")
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
+def session(db_session: Session) -> Session:
+    """The root conftest's transactional session (rolled back per test).
+
+    A bare local engine cannot ``create_all`` this project's metadata: the
+    root conftest imports every service's models, so tables live in named
+    schemas (finance, scheduler, ...) only the shared engine attaches.
+    """
+    return db_session
 
 
 class TestAgentSeed:

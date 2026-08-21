@@ -27,8 +27,21 @@ if [ "$run_command" = "webserver" ]; then
     # Web server (FastAPI + Flet)
     uv run python -m app.entrypoints.webserver
 elif [ "$run_command" = "scheduler" ]; then
-    # Scheduler component
-    uv run python -m app.entrypoints.scheduler
+    # Scheduler component. Dev auto-reload matters MORE here than for the
+    # webserver: a scheduler process running stale code has no requests to
+    # make the staleness visible - it just executes old job logic against
+    # new data, silently, for days (APP_ENV from .env or SCHEDULER_WATCH
+    # override, mirroring the worker branch below).
+    if { [ "$APP_ENV" = "dev" ] || [ "$SCHEDULER_WATCH" = "true" ]; } \
+        && uv run python -c "import watchfiles" 2>/dev/null; then
+        echo "Starting scheduler with auto-reload..."
+        exec uv run watchfiles --filter python \
+            "python -m app.entrypoints.scheduler" /code/app
+    else
+        # watchfiles ships via uvicorn[standard] (not guaranteed in every
+        # stack shape) - a missing watcher must not stop the scheduler.
+        exec uv run python -m app.entrypoints.scheduler
+    fi
 elif [ "$run_command" = "worker" ]; then
 {%- if worker_backend == "taskiq" %}
     # Worker component using TaskIQ

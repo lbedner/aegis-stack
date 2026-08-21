@@ -24,6 +24,7 @@ from app.components.frontend.controls.data_table import (
     DataTable,
     DataTableColumn,
 )
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.constants import COUNTRY_NAMES
 from app.services.insights.models import EVENT_TYPE_LABELS
@@ -3929,14 +3930,10 @@ class InsightsDetailDialog(BaseDetailPopup):
             ft.Tab(text="Settings", content=SettingsTab(metadata, db)),
         ]
 
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             tabs=tabs_list,
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         self._tabs_container.content = tabs

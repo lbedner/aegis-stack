@@ -3,7 +3,7 @@ Agents Tab Component
 
 Manages the database-driven agent registry: lists agents (click a row to
 edit its definition: persona, sampling, model pin, active flag). Backed
-by /ai/agents.
+by /api/v1/ai/agents.
 """
 
 from typing import Any
@@ -297,7 +297,7 @@ class AgentEditPopup(BasePopup):
             return
 
         api = get_session_state(self.page).api_client
-        updated = await api.patch(f"/ai/agents/{self._slug}", json=payload)
+        updated = await api.patch(f"/api/v1/ai/agents/{self._slug}", json=payload)
         if updated is None:
             ErrorSnackBar("The agent update was rejected.").launch(self.page)
             return
@@ -335,7 +335,7 @@ class AgentsTab(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        agents = await api.get("/ai/agents")
+        agents = await api.get("/api/v1/ai/agents")
         if agents is None:
             self._render_error("Could not load the agent registry.")
             return
@@ -368,7 +368,6 @@ class AgentsTab(ft.Container):
             rows=rows,
             empty_message="No agents in the registry yet.",
             on_row_click=self._on_row_click,
-            row_tooltips=["Click to edit" for _ in agents],
         )
 
         self._content_column.controls = [

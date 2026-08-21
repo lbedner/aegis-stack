@@ -8,7 +8,12 @@ import asyncio
 import time
 from typing import Annotated
 
+from rich.panel import Panel
+from rich.table import Table
+from rich.tree import Tree
+from sqlmodel import Session, delete
 import typer
+
 from app.cli import theme
 from app.core.db import engine
 from app.core.log import suppress_logs
@@ -16,6 +21,7 @@ from app.i18n import lazy_t, t
 from app.services.ai.etl import CatalogStats, SyncResult, get_catalog_stats
 from app.services.ai.etl.llm_sync_service import sync_llm_catalog
 from app.services.ai.llm_service import (
+    clear_active_model,
     get_current_config,
     get_model_info,
     list_modalities,
@@ -30,10 +36,6 @@ from app.services.ai.models.llm import (
     LLMPrice,
     LLMVendor,
 )
-from rich.panel import Panel
-from rich.table import Table
-from rich.tree import Tree
-from sqlmodel import Session, delete
 
 app = typer.Typer(help=lazy_t("llm.help"))
 console = theme.console()
@@ -126,7 +128,9 @@ def sync(
     if source == "ollama":
         status_msg = f"[bold {theme.ACCENT}]{t('llm.syncing_ollama')}..."
     elif source == "all":
-        status_msg = f"[bold {theme.ACCENT}]{t('llm.syncing_catalog_all', mode=mode)}..."
+        status_msg = (
+            f"[bold {theme.ACCENT}]{t('llm.syncing_catalog_all', mode=mode)}..."
+        )
     else:
         status_msg = f"[bold {theme.ACCENT}]{t('llm.syncing_catalog', mode=mode)}..."
 
@@ -290,14 +294,22 @@ def current() -> None:
     tree = Tree(f"[bold]{t('llm.current_config')}[/bold]")
     tree.add(f"[dim]{t('llm.provider_label')}[/dim] {config.provider}")
     tree.add(f"[dim]{t('llm.model_label')}[/dim] {config.model}")
+    source = (
+        t("llm.source_override") if config.source == "override" else t("llm.source_env")
+    )
+    tree.add(f"[dim]{t('llm.source_label')}[/dim] {source}")
+    if config.source == "override" and config.env_model != config.model:
+        tree.add(f"[dim]{t('llm.env_model_label')}[/dim] {config.env_model}")
     tree.add(f"[dim]{t('llm.temperature_label')}[/dim] {config.temperature}")
     tree.add(f"[dim]{t('llm.max_tokens_label')}[/dim] {config.max_tokens:,}")
 
     console.print(tree)
     console.print()
 
-    # Show catalog enrichment if available
-    if config.context_window:
+    # Show catalog enrichment if available. Gate on catalog membership, not on
+    # the context window: a local Ollama model has a row but no window, and
+    # telling the user to run a sync they already ran sends them in circles.
+    if config.in_catalog and config.context_window:
         catalog_tree = Tree(f"[bold]{t('llm.model_details')}[/bold]")
         catalog_tree.add(
             f"[dim]{t('llm.context_window_label')}[/dim] {config.context_window:,}"
@@ -319,8 +331,10 @@ def current() -> None:
             )
 
         console.print(catalog_tree)
-    else:
+    elif not config.in_catalog:
         console.print(f"[dim]{t('llm.model_not_in_catalog')}[/dim]")
+    # In the catalog but carrying no window or pricing (a local model) prints
+    # nothing: there is simply nothing extra to say about it.
 
 
 @app.command(help=lazy_t("llm.help_use"))
@@ -352,6 +366,14 @@ def use(
     else:
         console.print(f"[{theme.ERROR}]\u2717[/] {result.message}")
         raise typer.Exit(1)
+
+
+@app.command(help=lazy_t("llm.help_reset"))
+async def reset() -> None:
+    cleared = await clear_active_model()
+    config = await get_current_config()
+    key = "llm.reset_done" if cleared else "llm.reset_none"
+    console.print(f"[{theme.ACCENT}]\u2713[/] {t(key, model=config.model)}")
 
 
 @app.command(help=lazy_t("llm.help_info"))
@@ -476,9 +498,7 @@ def _display_sync_result(result: SyncResult, dry_run: bool, duration: float) -> 
     table.add_row(t("llm.duration_row"), f"{duration:.2f}s")
 
     if result.errors:
-        table.add_row(
-            t("llm.errors_row"), f"[{theme.ERROR}]{len(result.errors)}[/]"
-        )
+        table.add_row(t("llm.errors_row"), f"[{theme.ERROR}]{len(result.errors)}[/]")
 
     console.print(table)
 

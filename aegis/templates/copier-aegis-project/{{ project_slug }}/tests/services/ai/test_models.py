@@ -56,6 +56,20 @@ class TestProviderFunctions:
         assert "public" in providers_list
         assert "ollama" in providers_list
 
+    def test_pollinations_is_free_provider(self) -> None:
+        """Pollinations advertises a genuinely keyless anonymous tier."""
+        free_providers = get_free_providers()
+        assert AIProvider.POLLINATIONS in free_providers
+
+    def test_get_provider_capabilities_pollinations(self) -> None:
+        """Test capabilities for POLLINATIONS provider."""
+        caps = get_provider_capabilities(AIProvider.POLLINATIONS)
+
+        assert caps.provider == AIProvider.POLLINATIONS
+        assert caps.free_tier_available is True
+        # The anonymous tier rejects stream=true.
+        assert caps.supports_streaming is False
+
     def test_get_provider_capabilities_public(self) -> None:
         """Test capabilities for PUBLIC provider."""
         caps = get_provider_capabilities(AIProvider.PUBLIC)

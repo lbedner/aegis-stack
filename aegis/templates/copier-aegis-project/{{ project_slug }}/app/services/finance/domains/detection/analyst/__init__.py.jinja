@@ -1,0 +1,118 @@
+{% if include_ai and ai_backend != "memory" %}"""The finance analyst, split by concern.
+
+``prompts`` is seed content only - the database agent rows are the
+runtime source (``resolve_agent`` is DB-first; dashboard edits win).
+``sections``/``activity``/``context``/``facts``/``report`` are pure
+finance math; ``seeds`` is the database handoff; ``note`` and the
+deep-dive runner exist only on the pydantic-ai framework. Importing this
+package registers the snapshot fetcher (``report``), exactly as
+importing the old module did.
+"""
+
+from app.services.ai.models.agents import (
+    Agent,
+    MemoryModule,
+)
+from app.services.finance.constants import (
+    ANALYST_NOTE_INSIGHT_TYPE,
+)
+from app.services.finance.domains.detection.analyst.activity import (
+    MAX_ANOMALY_LINES,
+    _ranked_spending,
+)
+from app.services.finance.domains.detection.analyst.deep_dive import (
+    DeepDive,
+    findings_digest,
+    render_deep_dive,
+)
+from app.services.finance.domains.detection.analyst.facts import (
+    ReportFacts,
+    SectionCommentary,
+    _spending_movers,
+    build_report_facts,
+    diff_facts,
+    save_snapshot,
+    snapshot_before,
+    snapshot_series,
+)
+from app.services.finance.domains.detection.analyst.prompts import (
+    ANALYST_RULES,
+    ANALYST_SYSTEM_PROMPT,
+    DEEP_DIVE_SYSTEM_PROMPT,
+)
+from app.services.finance.domains.detection.analyst.report import (
+    build_finance_snapshot,
+    render_report,
+)
+from app.services.finance.domains.detection.analyst.sections import (
+    _accounts_section,
+    context_label,
+)
+from app.services.finance.domains.detection.analyst.seeds import (
+    analyst_agent_definition,
+    load_finance_agent_fixtures,
+    snapshot_module_definition,
+)
+from app.services.finance.domains.detection.analyst.shared import (
+    ANALYST_AGENT_SLUG,
+    DEEP_DIVE_AGENT_SLUG,
+    DEEP_DIVE_INSIGHT_TYPE,
+    SNAPSHOT_MODULE_SLUG,
+    STANDALONE_USER_ID,
+    owner_user_id_for,
+    user_id_for,
+)
+
+{% if ai_framework == "pydantic-ai" %}
+from app.services.finance.domains.detection.analyst.deep_dive import (
+    build_deep_dive_context,
+)
+from app.services.finance.domains.detection.analyst.note import (
+    existing_note,
+    run_analyst_note,
+)
+{%- endif %}
+
+__all__ = [
+    "ANALYST_AGENT_SLUG",
+    "ANALYST_NOTE_INSIGHT_TYPE",
+    "ANALYST_RULES",
+    "ANALYST_SYSTEM_PROMPT",
+    "Agent",
+    "DEEP_DIVE_AGENT_SLUG",
+    "DEEP_DIVE_INSIGHT_TYPE",
+    "DEEP_DIVE_SYSTEM_PROMPT",
+    "DeepDive",
+    "MAX_ANOMALY_LINES",
+    "MemoryModule",
+    "ReportFacts",
+    "SNAPSHOT_MODULE_SLUG",
+    "STANDALONE_USER_ID",
+    "SectionCommentary",
+    "_accounts_section",
+    "_ranked_spending",
+    "_spending_movers",
+    "analyst_agent_definition",
+    "build_finance_snapshot",
+    "build_report_facts",
+    "context_label",
+    "diff_facts",
+    "findings_digest",
+    "load_finance_agent_fixtures",
+    "owner_user_id_for",
+    "render_deep_dive",
+    "render_report",
+    "save_snapshot",
+    "snapshot_before",
+    "snapshot_module_definition",
+    "snapshot_series",
+    "user_id_for",
+]
+{% if ai_framework == "pydantic-ai" %}
+__all__ += [
+    "build_deep_dive_context",
+    "existing_note",
+    "run_analyst_note",
+]
+{%- endif %}
+{% endif %}

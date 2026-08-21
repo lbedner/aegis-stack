@@ -6,6 +6,7 @@ and conversation metrics with a clean layout.
 """
 
 import flet as ft
+
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer

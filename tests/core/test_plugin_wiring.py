@@ -302,6 +302,50 @@ class TestInTreeWiringShape:
 
 
 # ---------------------------------------------------------------------
+# Plugin CLI verb
+# ---------------------------------------------------------------------
+
+
+class TestCliName:
+    """``cli_name`` lets a plugin register a subcommand in the generated
+    project's typer app.
+
+    Decoupled from ``name`` so the install identifier (``crawl4ai``) and
+    the user-facing verb (``crawl``) can differ.
+    """
+
+    def _spec(self, **kwargs: object) -> PluginSpec:
+        return PluginSpec(
+            name="crawl4ai",
+            kind=PluginKind.SERVICE,
+            description="x",
+            version="0.1.0",
+            verified=False,
+            **kwargs,  # type: ignore[arg-type]
+        )
+
+    def test_defaults_to_none(self) -> None:
+        """Plugins without a CLI surface leave the verb unset."""
+        assert self._spec().cli_name is None
+
+    def test_serialized_when_set(self) -> None:
+        result = serialize_plugin_to_answer(self._spec(cli_name="crawl"))
+        assert result["cli_name"] == "crawl"
+
+    def test_serialized_as_none_when_unset(self) -> None:
+        """The key is always present so templates can test it directly."""
+        assert serialize_plugin_to_answer(self._spec())["cli_name"] is None
+
+    def test_decoupled_from_install_name(self) -> None:
+        result = serialize_plugin_to_answer(self._spec(cli_name="crawl"))
+        assert result["name"] == "crawl4ai"
+        assert result["cli_name"] == "crawl"
+
+    def test_serialized_output_stays_json_safe(self) -> None:
+        json.dumps(serialize_plugin_to_answer(self._spec(cli_name="crawl")))
+
+
+# ---------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------
 

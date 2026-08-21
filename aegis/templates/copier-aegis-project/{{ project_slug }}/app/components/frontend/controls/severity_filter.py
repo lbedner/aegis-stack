@@ -8,6 +8,7 @@ Fixed-width pills avoid the layout shift caused by SegmentedButton checkmarks.
 from collections.abc import Callable
 
 import flet as ft
+
 from app.components.frontend.theme import AegisTheme as Theme
 
 # Severity levels: (label, min_severity, color)

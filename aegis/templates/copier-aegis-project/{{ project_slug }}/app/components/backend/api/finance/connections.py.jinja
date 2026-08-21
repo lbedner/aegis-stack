@@ -1,0 +1,348 @@
+{% if finance_plaid or finance_snaptrade %}
+"""Provider connections: Plaid link/exchange/sync/webhooks, SnapTrade connect, disconnect.
+
+One sub-router of the finance API (see ``router.py``, the aggregator).
+"""
+
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    status,
+)
+from app.services.finance.deps import (
+    get_finance_service,
+    get_owner_user_id,
+)
+from app.services.finance.schemas import (
+    ConnectionListResponse,
+    ConnectionResponse,
+    HostedLinkCompleteRequest,
+    HostedLinkResponse,
+    LinkTokenResponse,
+    PlaidExchangeRequest,
+    SnapTradeConnectResponse,
+    SyncResultResponse,
+    SyncSummaryResponse,
+    WebhookAckResult,
+)
+from app.services.finance.service import FinanceService
+
+router = APIRouter()
+
+
+# -- Provider connectivity (shared) --------------------------------------------
+
+
+def _sync_dto(result: object) -> SyncResultResponse:
+    return SyncResultResponse(
+        connection_id=result.connection_id,
+        accounts=result.accounts,
+        added=result.added,
+        updated=result.updated,
+        removed=result.removed,
+        holdings=result.holdings,
+        trades=result.trades,
+    )
+
+
+@router.post("/connections/sync", response_model=SyncSummaryResponse)
+async def sync_connections(
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SyncSummaryResponse:
+    """Refresh every provider connection for the caller (all providers)."""
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.plaid import PlaidError
+    from app.services.finance.adapters.providers.snaptrade import SnapTradeError
+
+    try:
+        results = await connections.sync_owner_connections(
+            service.db, owner_user_id=owner_user_id
+        )
+    except (PlaidError, SnapTradeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return SyncSummaryResponse(
+        connections=len(results), results=[_sync_dto(r) for r in results]
+    )
+{%- if finance_plaid %}
+
+
+# -- Plaid connectivity ------------------------------------------------------
+
+
+@router.post("/plaid/link-token", response_model=LinkTokenResponse)
+async def plaid_link_token(
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> LinkTokenResponse:
+    """Create a Plaid Link token for the frontend to open Plaid Link."""
+    from app.services.finance.adapters.providers.plaid import PlaidClient, PlaidError
+
+    try:
+        token = await PlaidClient().create_link_token(
+            user_id=owner_user_id if owner_user_id is not None else "standalone"
+        )
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return LinkTokenResponse(link_token=token)
+
+
+@router.post("/plaid/exchange", response_model=SyncResultResponse)
+async def plaid_exchange(
+    body: PlaidExchangeRequest,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SyncResultResponse:
+    """Exchange a Plaid public token, persist the connection, and sync it."""
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.plaid import PlaidClient, PlaidError
+
+    client = PlaidClient()
+    try:
+        access_token, item_id = await client.exchange_public_token(body.public_token)
+        connection = await connections.create_plaid_connection(
+            service.db,
+            owner_user_id=owner_user_id,
+            access_token=access_token,
+            item_id=item_id,
+            label=body.label,
+            environment=client.environment,
+        )
+        result = await connections.sync_plaid_connection(
+            service.db, connection, client=client
+        )
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return _sync_dto(result)
+
+
+@router.post("/plaid/sync", response_model=SyncSummaryResponse)
+async def plaid_sync(
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SyncSummaryResponse:
+    """Refresh every Plaid connection for the caller."""
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.plaid import PlaidError
+
+    try:
+        results = await connections.sync_owner_connections(
+            service.db, owner_user_id=owner_user_id
+        )
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return SyncSummaryResponse(
+        connections=len(results), results=[_sync_dto(r) for r in results]
+    )
+
+
+@router.post("/plaid/hosted-link", response_model=HostedLinkResponse)
+async def plaid_hosted_link(
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> HostedLinkResponse:
+    """Start a Plaid Hosted Link session. The frontend opens ``hosted_link_url``
+    (Plaid hosts the whole connect UI — no browser-side auth) and polls
+    ``/plaid/hosted-link/complete`` with the ``link_token``."""
+    from app.services.finance.adapters.providers.plaid import PlaidClient, PlaidError
+
+    try:
+        url, link_token = await PlaidClient().create_hosted_link(
+            user_id=owner_user_id if owner_user_id is not None else "standalone",
+            products=["transactions", "investments"],
+        )
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return HostedLinkResponse(hosted_link_url=url, link_token=link_token)
+
+
+@router.post("/plaid/hosted-link/complete", response_model=SyncSummaryResponse)
+async def plaid_hosted_link_complete(
+    body: HostedLinkCompleteRequest,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SyncSummaryResponse:
+    """Finish a Hosted Link session: exchange any public tokens the user
+    produced and sync them. Returns zero connections while still pending, so
+    the frontend can poll this until it comes back non-empty."""
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.plaid import PlaidError
+
+    try:
+        results = await connections.complete_hosted_link(
+            service.db, body.link_token, owner_user_id=owner_user_id
+        )
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return SyncSummaryResponse(
+        connections=len(results), results=[_sync_dto(r) for r in results]
+    )
+{%- endif %}
+
+
+@router.get("/connections", response_model=ConnectionListResponse)
+async def list_connections(
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> ConnectionListResponse:
+    """Every active provider connection for the caller. Match a connection's
+    accounts client-side via ``account.connection_id``."""
+    from app.services.finance.adapters.providers import connections
+
+    connection_rows = await connections.list_provider_connections(
+        service.db, owner_user_id=owner_user_id
+    )
+    return ConnectionListResponse(
+        items=[ConnectionResponse.from_row(c) for c in connection_rows],
+        total=len(connection_rows),
+    )
+
+
+@router.delete("/connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_connection(
+    connection_id: int,
+    background_tasks: BackgroundTasks,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> None:
+    """Disconnect a connection: soft-delete it and its accounts immediately;
+    the provider-side revoke (the slow network round trip) runs after the
+    response as a background task. History rows are kept."""
+    from app.services.finance.adapters.providers import connections
+
+    removed, revoke = await connections.disconnect_connection(
+        service.db, connection_id, owner_user_id=owner_user_id
+    )
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found"
+        )
+    if revoke is not None:
+        background_tasks.add_task(revoke)
+{%- if finance_plaid %}
+
+
+@router.post("/webhook/plaid", status_code=status.HTTP_200_OK)
+async def plaid_webhook(
+    request: Request,
+    service: FinanceService = Depends(get_finance_service),
+) -> WebhookAckResult:
+    """Inbound Plaid webhook (real-time nudge). Unauthenticated but VERIFIED:
+    the ``Plaid-Verification`` ES256 JWT must sign the raw body, or the request
+    is rejected before anything touches the database. Verified deliveries are
+    logged idempotently; a TRANSACTIONS update syncs its item, ITEM lifecycle
+    codes flip the connection's health."""
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.plaid import PlaidClient, PlaidError
+
+    verification_jwt = request.headers.get("Plaid-Verification")
+    if not verification_jwt:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Plaid-Verification header",
+        )
+    raw_body = await request.body()
+    client = PlaidClient()
+    try:
+        payload = await client.verify_webhook(raw_body, verification_jwt)
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Webhook verification failed: {exc}",
+        ) from None
+    result = await connections.process_plaid_webhook(service.db, payload, client=client)
+    return WebhookAckResult(status=result)
+
+
+@router.post("/connections/{connection_id}/relink", response_model=HostedLinkResponse)
+async def relink_connection(
+    connection_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> HostedLinkResponse:
+    """Update-mode Hosted Link to re-authenticate a connection flagged
+    ``needs_user_action``; the next successful sync returns it to healthy."""
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.plaid import PlaidError
+
+    try:
+        session = await connections.relink_connection(
+            service.db, connection_id, owner_user_id=owner_user_id
+        )
+    except PlaidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found"
+        )
+    hosted_link_url, link_token = session
+    return HostedLinkResponse(hosted_link_url=hosted_link_url, link_token=link_token)
+{%- endif %}
+{%- if finance_snaptrade %}
+
+
+# -- SnapTrade connectivity (brokerages — the Fidelity path) --------------------
+
+
+@router.post("/snaptrade/connect", response_model=SnapTradeConnectResponse)
+async def snaptrade_connect(
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SnapTradeConnectResponse:
+    """Start a SnapTrade brokerage connect: register (or reuse) the caller's
+    SnapTrade user and return the connection-portal URL. The frontend opens it
+    in a new tab (it expires in ~5 minutes) and polls
+    ``/snaptrade/connect/complete`` until the new connection appears."""
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.snaptrade import SnapTradeError
+
+    try:
+        connection, url = await connections.start_snaptrade_connect(
+            service.db, owner_user_id=owner_user_id
+        )
+    except SnapTradeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return SnapTradeConnectResponse(redirect_uri=url, connection_id=connection.id)
+
+
+@router.post("/snaptrade/connect/complete", response_model=SyncSummaryResponse)
+async def snaptrade_connect_complete(
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SyncSummaryResponse:
+    """Finish a SnapTrade connect: adopt any brokerage authorizations the user
+    produced in the portal and sync them. Returns zero connections while still
+    pending, so the frontend can poll this until it comes back non-empty."""
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.snaptrade import SnapTradeError
+
+    try:
+        results = await connections.complete_snaptrade_connect(
+            service.db, owner_user_id=owner_user_id
+        )
+    except SnapTradeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return SyncSummaryResponse(
+        connections=len(results), results=[_sync_dto(r) for r in results]
+    )
+{%- endif %}
+{% endif %}

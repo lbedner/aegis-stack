@@ -501,6 +501,7 @@ class TemplateGenerator:
             # Providers using OpenAI-compatible APIs map to "openai" extra
             pydantic_extra_mapping = {
                 "public": "openai",  # LLM7.io uses OpenAI-compatible API
+                "pollinations": "openai",  # Pollinations uses OpenAI-compatible API
                 "openrouter": "openai",  # OpenRouter uses OpenAI-compatible API
                 # Future OpenAI-compatible providers go here:
                 # "together": "openai",
@@ -538,8 +539,11 @@ class TemplateGenerator:
                 provider = provider.strip()
                 if provider in langchain_packages:
                     deps.append(langchain_packages[provider])
-                elif provider == "public" and "langchain-openai>=1.1.0" not in deps:
-                    # Public provider uses OpenAI-compatible endpoint
+                elif (
+                    provider in ("public", "pollinations")
+                    and "langchain-openai>=1.1.0" not in deps
+                ):
+                    # Keyless providers use OpenAI-compatible endpoints
                     deps.append("langchain-openai>=1.1.0")
 
             return deps

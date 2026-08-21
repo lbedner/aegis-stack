@@ -1256,3 +1256,162 @@ class TestRuffExecutableResolution:
         assert not Path(resolved).is_relative_to(tmp_path)
         # ...but exactly the tool's own answer.
         assert resolved == ruff_executable(None)
+
+
+class TestSyncRemovesFilesTheTemplateDropped:
+    """The deletion pass.
+
+    The sync loop walks the NEW render, so a file the template deleted is
+    invisible to it and survives forever. Renaming a module to a package
+    (``models.py`` -> ``models/``) leaves the old file shadowed but present:
+    valid code nobody runs, which is worse than a break because nothing
+    reports it.
+    """
+
+    @staticmethod
+    def _renders(
+        project_slug: str,
+        old: dict[str, str],
+        new: dict[str, str],
+    ):
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            root = Path(dst_path) / project_slug
+            files = old if "/old" in dst_path else new
+            for rel, content in files.items():
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
+            root.mkdir(parents=True, exist_ok=True)
+
+        return mock_run_copy
+
+    def test_untouched_file_dropped_by_the_template_is_deleted(
+        self, tmp_path: Path
+    ) -> None:
+        answers = {"project_slug": "my-project"}
+        stale = tmp_path / "app" / "models.py"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("# models")
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project",
+                old={"app/models.py": "# models"},
+                new={"app/models/__init__.py": "# package"},
+            ),
+        ):
+            result = sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v1.0.0", old_commit="abc123"
+            )
+
+        assert not stale.exists()
+        assert "app/models.py" in result.removed
+
+    def test_customized_file_dropped_by_the_template_is_kept_and_reported(
+        self, tmp_path: Path
+    ) -> None:
+        answers = {"project_slug": "my-project"}
+        stale = tmp_path / "app" / "models.py"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("# models\n# my own column")
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project",
+                old={"app/models.py": "# models"},
+                new={"app/models/__init__.py": "# package"},
+            ),
+        ):
+            result = sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v1.0.0", old_commit="abc123"
+            )
+
+        assert stale.exists()
+        assert stale.read_text() == "# models\n# my own column"
+        assert "app/models.py" in result.stale
+        assert "app/models.py" not in result.removed
+
+    def test_a_file_the_user_added_is_never_touched(self, tmp_path: Path) -> None:
+        """The template never shipped it, so it is absent from BOTH renders and
+        must not look like a deletion."""
+        answers = {"project_slug": "my-project"}
+        mine = tmp_path / "app" / "my_helper.py"
+        mine.parent.mkdir(parents=True)
+        mine.write_text("# mine")
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project",
+                old={"app/main.py": "# main"},
+                new={"app/main.py": "# main"},
+            ),
+        ):
+            result = sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v1.0.0", old_commit="abc123"
+            )
+
+        assert mine.exists()
+        assert result.removed == []
+
+    def test_without_an_old_render_nothing_is_deleted(self, tmp_path: Path) -> None:
+        """No base render means "template deleted it" and "user added it" are
+        indistinguishable, so the pass must not run at all."""
+        answers = {"project_slug": "my-project"}
+        stale = tmp_path / "app" / "models.py"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("# models")
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project", old={}, new={"app/models/__init__.py": "# package"}
+            ),
+        ):
+            result = sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v1.0.0", old_commit=None
+            )
+
+        assert stale.exists()
+        assert result.removed == []
+
+    def test_skip_patterns_are_never_deletion_candidates(self, tmp_path: Path) -> None:
+        answers = {"project_slug": "my-project"}
+        env = tmp_path / ".env"
+        env.write_text("SECRET=1")
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project", old={".env": "SECRET=1"}, new={"app/main.py": "# main"}
+            ),
+        ):
+            result = sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v1.0.0", old_commit="abc123"
+            )
+
+        assert env.exists()
+        assert result.removed == []
+
+    def test_emptied_directories_are_pruned(self, tmp_path: Path) -> None:
+        answers = {"project_slug": "my-project"}
+        stale = tmp_path / "app" / "legacy" / "old.py"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("# old")
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project",
+                old={"app/legacy/old.py": "# old"},
+                new={"app/main.py": "# main"},
+            ),
+        ):
+            sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v1.0.0", old_commit="abc123"
+            )
+
+        assert not (tmp_path / "app" / "legacy").exists()

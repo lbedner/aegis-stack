@@ -180,7 +180,8 @@ The following code was retrieved from THIS project's codebase.
 
     if catalog_context:
         prompt += f"""
-## {catalog_context}
+## LLM Catalog (LIVE DATA)
+{catalog_context}
 """
 
     if memory_context:

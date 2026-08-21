@@ -555,7 +555,9 @@ class ManualUpdater:
             if not alembic_dir.exists():
                 bootstrap_alembic(self.project_path, self.jinja_env, self.answers)
             if not service_has_migration(self.project_path, service):
-                generate_migration(self.project_path, service)
+                # Answers carry the project's database engine, which decides
+                # whether a spec's Postgres schema survives — SQLite has none.
+                generate_migration(self.project_path, service, self.answers)
             # run_migrations failure is non-fatal — match
             # add_service_command's behaviour. The user can ``alembic
             # upgrade head`` manually later.

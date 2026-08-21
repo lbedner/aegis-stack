@@ -1,0 +1,277 @@
+{% if ollama_mode != "none" %}
+"""The Models table shows what ``ollama list`` shows, plus what decides
+whether a model is usable for agent work.
+
+``ollama list`` prints NAME / ID / SIZE / MODIFIED; the table showed
+neither ID nor MODIFIED, so there was no way to tell two pulls of the
+same tag apart or to see which models had gone stale. Capabilities and
+context length are the other half: tool-calling support is what decides
+whether a model can drive an agent at all, and a 256K window and a 4K
+window are very different machines behind the same parameter count.
+"""
+
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+
+from app.components.frontend.controls.data_table import (
+    PICKER_GUTTER_WIDTH,
+    style_cell,
+)
+from app.components.frontend.controls.text import NumericText
+from app.components.frontend.dashboard.modals.modal_constants import ModalLayout
+from app.components.frontend.dashboard.modals.ollama_modal import (
+    CAPABILITIES,
+    MODEL_COLUMNS,
+    MODEL_TABLE_WIDTH,
+    MODELS_MODAL_WIDTH,
+    capability_cell,
+    format_context_length,
+    format_model_id,
+    model_cell,
+    table_width,
+)
+from app.components.frontend.theme import AegisTheme as Theme
+
+
+def _headers() -> list[str]:
+    return [c.header for c in MODEL_COLUMNS]
+
+
+class TestTheColumns:
+    def test_it_carries_the_columns_ollama_list_prints(self) -> None:
+        headers = _headers()
+        for header in ("Model", "ID", "Size", "Modified"):
+            assert header in headers
+
+    def test_the_agent_relevant_columns_are_present(self) -> None:
+        headers = _headers()
+        assert "Context" in headers
+        assert "Tools" in headers
+
+    def test_every_capability_gets_its_own_column(self) -> None:
+        """One "Caps" cell reading "tools · thinking · vision" could not
+        be sorted or scanned; a column each can be. CAPABILITIES is the
+        single source, so a capability added there cannot end up with a
+        column and no cell (or the reverse)."""
+        headers = _headers()
+        for cap in CAPABILITIES:
+            assert cap.header in headers
+
+    def test_the_merged_caps_column_is_gone(self) -> None:
+        assert "Caps" not in _headers()
+
+    def test_identity_columns_stay_out_of_the_column_picker(self) -> None:
+        """The model name is what every other cell describes - hiding it
+        leaves a table of orphaned numbers."""
+        by_header = {c.header: c for c in MODEL_COLUMNS}
+        assert by_header["Model"].hideable is False
+
+    def test_action_columns_are_not_sortable(self) -> None:
+        """Status and Active hold buttons, not values."""
+        by_header = {c.header: c for c in MODEL_COLUMNS}
+        assert by_header["Status"].sortable is False
+        assert by_header["Active"].sortable is False
+
+
+class TestTheWidthBudget:
+    def test_the_columns_fit_inside_the_modal(self) -> None:
+        """A flex or overflowing column silently renders at ZERO width
+        rather than wrapping (confirmed live on the finance ledger's Name
+        column), and no control-tree assertion can see it. So the
+        arithmetic is the guard: every fixed width plus the inter-column
+        gutters has to fit the width the modal actually opens at.
+        """
+        assert MODEL_TABLE_WIDTH <= MODELS_MODAL_WIDTH
+
+    def test_every_column_is_explicitly_sized(self) -> None:
+        """One flex column (width=None) among fixed siblings is exactly
+        the zero-width collapse this budget exists to prevent."""
+        assert all(c.width for c in MODEL_COLUMNS)
+
+    def test_the_budget_counts_the_tables_own_chrome(self) -> None:
+        """The first cut summed columns and gutters only, and the last
+        column spilled out past the table's right border - the DataTable
+        also spends MD of padding on each side and a whole gutter on the
+        column-picker button, none of which is a column.
+        """
+        visible = [c for c in MODEL_COLUMNS if c.visible]
+        bare = sum(c.width or 0 for c in visible) + Theme.Spacing.MD * (len(visible) - 1)
+
+        assert MODEL_TABLE_WIDTH >= bare + PICKER_GUTTER_WIDTH + Theme.Spacing.MD * 3
+
+    def test_the_modal_leaves_room_for_its_own_padding(self) -> None:
+        """The dialog's content container takes its padding INSIDE the
+        declared width, so the table's usable space is the modal width
+        minus that padding, not the modal width."""
+        assert (
+            MODELS_MODAL_WIDTH - ModalLayout.CONTENT_PADDING * 2 >= MODEL_TABLE_WIDTH
+        )
+
+    def test_hidden_columns_cost_no_width(self) -> None:
+        """A column shipped hidden-by-default is one picker click away
+        but must not widen the modal for everyone who never clicks."""
+        assert any(not c.visible for c in MODEL_COLUMNS), "no hidden column to check"
+
+        forced_visible = [replace(c, visible=True) for c in MODEL_COLUMNS]
+        assert table_width(MODEL_COLUMNS) < table_width(forced_visible)
+
+
+class TestTheCellStyling:
+    """Cells here are built controls, not plain values, so they bypass
+    ``style_cell`` and have to carry its treatment themselves."""
+
+    def test_cells_ellipse_rather_than_wrap(self) -> None:
+        """A wrapping cell grows its row to two lines while every
+        plain-value cell beside it truncates - confirmed live, on Caps
+        and Modified.
+
+        Anchored against ``style_cell``'s own output rather than a fixed
+        list of attributes: the requirement is "styled like every other
+        table", so if the shared treatment changes this should follow it
+        rather than pin yesterday's copy of it.
+        """
+        text = "tools · thinking · vision"
+        mine = model_cell(text)
+        theirs = style_cell(text, "secondary")
+
+        for attr in ("max_lines", "overflow", "size", "color"):
+            assert getattr(mine, attr) == getattr(theirs, attr), attr
+
+    def test_numeric_cells_ellipse_too(self) -> None:
+        mine = model_cell("256K", numeric=True)
+        theirs = style_cell("256K", "secondary")
+
+        for attr in ("max_lines", "overflow", "size", "color"):
+            assert getattr(mine, attr) == getattr(theirs, attr), attr
+
+    def test_numeric_cells_use_the_tabular_face(self) -> None:
+        """Right-aligned figures shift sideways in a proportional face."""
+        assert isinstance(model_cell("22.3G", numeric=True), NumericText)
+
+    def test_cells_are_not_dimmed(self) -> None:
+        """The table used to paint every COLD model at half opacity. With
+        nothing loaded - the normal state - that dimmed the entire table
+        and read as a rendering fault rather than as information. Warmth
+        is already carried by the VRAM figure and the Load/Unload button.
+        """
+        assert model_cell("qwen3.6:35b").opacity == 1.0
+        assert model_cell("22.3G", numeric=True).opacity == 1.0
+
+    def test_it_matches_the_body_size_plain_cells_get(self) -> None:
+        """``style_cell`` stamps BODY on every plain value; a built
+        control that defaults to something else reads as a different
+        table."""
+        assert model_cell("x").size == Theme.Typography.BODY
+
+
+class TestTheModelId:
+    def test_it_truncates_the_digest_the_way_ollama_list_does(self) -> None:
+        digest = "07d35212591fc27746f0a317c975a6d68754fb38e9053d82e25f06057af28522"
+        assert format_model_id(digest) == "07d35212591f"
+
+    def test_a_missing_digest_reads_as_no_value(self) -> None:
+        assert format_model_id("") == "—"
+
+    def test_a_short_digest_is_left_alone(self) -> None:
+        assert format_model_id("abc123") == "abc123"
+
+
+class TestTheContextWindow:
+    def test_it_reads_in_k_not_raw_tokens(self) -> None:
+        """262144 is a number you have to stop and divide; 256K is not."""
+        assert format_context_length(262144) == "256K"
+        assert format_context_length(4096) == "4K"
+
+    def test_a_non_round_window_keeps_one_decimal(self) -> None:
+        assert format_context_length(40960) == "40K"
+        assert format_context_length(1536) == "1.5K"
+
+    def test_a_small_window_stays_in_tokens(self) -> None:
+        assert format_context_length(512) == "512"
+
+    def test_an_unknown_window_reads_as_no_value(self) -> None:
+        assert format_context_length(0) == "—"
+
+
+class TestTheCapabilities:
+    def test_a_present_capability_reads_yes(self) -> None:
+        assert capability_cell(True).value == "Yes"
+
+    def test_an_absent_capability_reads_no(self) -> None:
+        """"No" rather than a blank: a dash would be indistinguishable
+        from "Ollama did not tell us", and these are known facts."""
+        assert capability_cell(False).value == "No"
+
+    def test_yes_and_no_sort_into_two_blocks(self) -> None:
+        """The point of splitting the column up. Sorting is what stands
+        in for filtering here, and it only groups if the two values are
+        plain, stable text."""
+        assert capability_cell(True).value != capability_cell(False).value
+
+    def test_yes_carries_the_emphasis(self) -> None:
+        """Monochrome-first: the present capability reads in primary ink
+        and the absent one recedes, rather than spending a hue on it."""
+        assert capability_cell(True).color == Theme.Colors.TEXT_PRIMARY
+        assert capability_cell(False).color == Theme.Colors.TEXT_SECONDARY
+
+    def test_completion_is_not_given_a_column(self) -> None:
+        """Every generative model has it, so a column of "Yes" tells you
+        nothing and costs real width."""
+        assert "completion" not in {c.key for c in CAPABILITIES}
+
+    def test_tools_comes_first(self) -> None:
+        """Tool-calling gates agent use at all, so it is the leftmost of
+        the capability columns rather than sorted alphabetically."""
+        assert CAPABILITIES[0].key == "tools"
+
+
+class TestTheModifiedColumn:
+    """Displays "6 months ago" but must SORT chronologically - the whole
+    reason DataTable reads ``.data`` ahead of ``.value``."""
+
+    def test_it_stamps_an_iso_sort_key_behind_the_relative_text(self) -> None:
+        from app.components.frontend.dashboard.modals.ollama_modal import (
+            build_modified_cell,
+        )
+
+        # Relative to now, not a pinned date: a fixed timestamp would
+        # drift into a different branch as the calendar moves and fail
+        # for a reason that has nothing to do with this code.
+        moment = datetime.now(UTC) - timedelta(days=190)
+        cell = build_modified_cell(moment.isoformat())
+
+        assert cell.data == moment.isoformat()
+        assert "ago" in cell.value
+        assert cell.value != moment.isoformat()
+
+    def test_a_months_old_model_reads_in_months(self) -> None:
+        """What ``ollama list`` prints, and the reason the coarse mode
+        exists - every installed model is months old."""
+        from app.components.frontend.dashboard.modals.ollama_modal import (
+            build_modified_cell,
+        )
+
+        moment = datetime.now(UTC) - timedelta(days=190)
+        assert build_modified_cell(moment.isoformat()).value == "6 months ago"
+
+    def test_relative_text_alone_would_sort_wrong(self) -> None:
+        """Guards the property, not the format: two timestamps whose
+        pretty text collates backwards must still order by real time."""
+        from app.components.frontend.dashboard.modals.ollama_modal import (
+            build_modified_cell,
+        )
+
+        now = datetime.now(UTC)
+        older = build_modified_cell((now - timedelta(days=200)).isoformat())
+        newer = build_modified_cell((now - timedelta(days=3)).isoformat())
+
+        assert older.data < newer.data
+
+    def test_a_missing_timestamp_reads_as_no_value(self) -> None:
+        from app.components.frontend.dashboard.modals.ollama_modal import (
+            build_modified_cell,
+        )
+
+        cell = build_modified_cell("")
+        assert cell.value == "—"
+{% endif %}

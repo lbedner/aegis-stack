@@ -185,6 +185,25 @@ _SERVICE_OPTION_HANDLERS: dict[str, tuple[str, Callable[[str], None]]] = {
 }
 
 
+def apply_service_option_handlers(selected_services: list[str]) -> None:
+    """Run the bracket-syntax handler for every service that has one.
+
+    Shared by the ``--services`` callback and the ``--blueprint`` expansion
+    so both paths store service config (AI provider/framework, auth level,
+    ...) identically.
+    """
+    for service in selected_services:
+        entry = _SERVICE_OPTION_HANDLERS.get(extract_base_service_name(service))
+        if entry is None or not is_spec_with_options(service):
+            continue
+        label, handler = entry
+        try:
+            handler(service)
+        except ValueError as e:
+            brand.error(f"Invalid {label} service syntax: {e}", err=True)
+            raise typer.Exit(1) from None
+
+
 def validate_and_resolve_services(
     ctx: typer.Context, param: typer.CallbackParam, value: str | None
 ) -> list[str] | None:
@@ -222,16 +241,7 @@ def validate_and_resolve_services(
 
     # Parse bracket-syntax options and store config, one handler per service
     # (see _SERVICE_OPTION_HANDLERS above). Handlers run in user-typed order.
-    for service in selected_services:
-        entry = _SERVICE_OPTION_HANDLERS.get(extract_base_service_name(service))
-        if entry is None or not is_spec_with_options(service):
-            continue
-        label, handler = entry
-        try:
-            handler(service)
-        except ValueError as e:
-            brand.error(f"Invalid {label} service syntax: {e}", err=True)
-            raise typer.Exit(1)
+    apply_service_option_handlers(selected_services)
 
     # Resolve services to components
     resolved_components, service_added = ServiceResolver.resolve_service_dependencies(

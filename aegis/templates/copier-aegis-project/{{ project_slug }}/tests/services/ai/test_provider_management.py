@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from app.services.ai.models import AIProvider
 from app.services.ai.provider_management import (
     PROVIDER_API_KEY_URLS,
@@ -221,7 +222,11 @@ class TestProviderApiKeyUrls:
     def test_all_paid_providers_have_urls(self) -> None:
         """All paid providers should have API key URLs."""
         # PUBLIC and OLLAMA don't need API keys
-        no_api_key_providers = {AIProvider.PUBLIC, AIProvider.OLLAMA}
+        no_api_key_providers = {
+            AIProvider.PUBLIC,
+            AIProvider.OLLAMA,
+            AIProvider.POLLINATIONS,
+        }
         for provider in AIProvider:
             if provider not in no_api_key_providers:
                 url = get_provider_api_key_url(provider.value)

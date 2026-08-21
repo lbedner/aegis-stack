@@ -6,6 +6,7 @@ Uses Flet's Canvas with bezier curves for smooth connection rendering.
 
 import flet as ft
 import flet.canvas as cv
+
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 

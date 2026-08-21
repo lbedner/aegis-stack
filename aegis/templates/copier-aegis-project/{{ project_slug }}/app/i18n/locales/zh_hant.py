@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "輸入費用：",
     "llm.output_price_label": "輸出費用：",
     "llm.model_not_in_catalog": "目錄中未找到該模型，請運行 'llm sync' 導入數據。",
+    "llm.source_label": "來源:",
+    "llm.source_override": "已儲存的選擇(覆寫 .env;用 'llm reset' 清除)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env 預設值:",
+    "llm.help_reset": "移除已儲存的模型覆寫,讓 .env 重新決定模型。",
+    "llm.reset_done": "已清除覆寫。目前作用中的模型來自 .env:{model}",
+    "llm.reset_none": "未儲存任何覆寫。目前作用中的模型已來自 .env:{model}",
     # 切換模型
     "llm.switching_model": "正在切換到 {model_id}",
     # 模型訊息
@@ -694,49 +701,49 @@ MESSAGES: dict[str, str] = {
     "ai.rag_step_query": "2. 使用集合查詢：",
     "ai.rag_list_hint": "提示：運行 '{app} rag list' 查看現有集合。",
     # Sentiment stats (CLI)
-    "ai.help_sentiment": "Show conversation sentiment statistics from the analysis job.",
-    "ai.sentiment_title": "Conversation Sentiment",
-    "ai.sentiment_disabled_hint": "Sentiment analysis is disabled. Set AI_SENTIMENT_ENABLED=true to score conversations.",
-    "ai.sentiment_empty": "No conversations scored yet.",
-    "ai.sentiment_distribution": "Sentiment Distribution",
-    "ai.sentiment_avg_score": "Average score:",
-    "ai.sentiment_performance": "Assistant performance:",
-    "ai.sentiment_recent_negatives": "Recent Negative Conversations",
+    "ai.help_sentiment": "顯示分析工作產生的對話情感統計。",
+    "ai.sentiment_title": "對話情感",
+    "ai.sentiment_disabled_hint": "情感分析已停用。設定 AI_SENTIMENT_ENABLED=true 即可為對話評分。",
+    "ai.sentiment_empty": "尚無已評分的對話。",
+    "ai.sentiment_distribution": "情感分布",
+    "ai.sentiment_avg_score": "平均分數：",
+    "ai.sentiment_performance": "助理表現：",
+    "ai.sentiment_recent_negatives": "最近的負面對話",
     # Agent registry (CLI)
-    "agents.help": "Inspect and test the agent registry.",
-    "agents.help_list": "List all agents in the registry.",
-    "agents.help_show": "Show one agent's full definition.",
-    "agents.help_test": "Run one test turn through an agent's resolved config.",
-    "agents.opt_message": "Message to send for the test turn",
-    "agents.list_title": "Agents",
-    "agents.empty": "No agents in the registry yet.",
-    "agents.not_found": "Agent '{slug}' not found.",
-    "agents.default_model": "(active default)",
-    "agents.none": "(none)",
-    "agents.col_slug": "Slug",
-    "agents.col_name": "Name",
-    "agents.col_model": "Model",
-    "agents.col_active": "Active",
-    "agents.col_tools": "Tools",
-    "agents.col_modules": "Modules",
-    "agents.col_kind": "Kind",
-    "agents.col_priority": "Priority",
-    "agents.show_prompt": "System prompt:",
-    "agents.show_tools": "Tools:",
-    "agents.show_modules": "Memory modules:",
-    "agents.show_kbs": "Knowledge bases:",
-    "agents.test_running": "Running a test turn through agent '{slug}'...",
-    "agents.test_reply_title": "Reply from '{slug}'",
-    "agents.modules_help": "Inspect memory modules (agent context blocks).",
-    "agents.modules_help_list": "List all memory modules.",
-    "agents.modules_help_show": "Show one memory module's definition.",
-    "agents.modules_title": "Memory Modules",
-    "agents.modules_empty": "No memory modules defined yet.",
-    "agents.module_not_found": "Memory module '{slug}' not found.",
-    "agents.module_static": "static",
-    "agents.module_dynamic": "dynamic",
-    "agents.module_hybrid": "hybrid",
-    "agents.module_content": "Static content:",
+    "agents.help": "查看並測試智慧體註冊表。",
+    "agents.help_list": "列出註冊表中的所有智慧體。",
+    "agents.help_show": "顯示某個智慧體的完整定義。",
+    "agents.help_test": "使用智慧體的最終設定執行一次測試對話。",
+    "agents.opt_message": "測試對話要傳送的訊息",
+    "agents.list_title": "智慧體",
+    "agents.empty": "註冊表中尚無智慧體。",
+    "agents.not_found": "找不到智慧體 '{slug}'。",
+    "agents.default_model": "(目前預設)",
+    "agents.none": "(無)",
+    "agents.col_slug": "識別碼",
+    "agents.col_name": "名稱",
+    "agents.col_model": "模型",
+    "agents.col_active": "啟用",
+    "agents.col_tools": "工具",
+    "agents.col_modules": "模組",
+    "agents.col_kind": "類型",
+    "agents.col_priority": "優先順序",
+    "agents.show_prompt": "系統提示詞：",
+    "agents.show_tools": "工具：",
+    "agents.show_modules": "記憶模組：",
+    "agents.show_kbs": "知識庫：",
+    "agents.test_running": "正在透過智慧體 '{slug}' 執行測試對話...",
+    "agents.test_reply_title": "'{slug}' 的回覆",
+    "agents.modules_help": "查看記憶模組（智慧體的內容區塊）。",
+    "agents.modules_help_list": "列出所有記憶模組。",
+    "agents.modules_help_show": "顯示某個記憶模組的定義。",
+    "agents.modules_title": "記憶模組",
+    "agents.modules_empty": "尚未定義記憶模組。",
+    "agents.module_not_found": "找不到記憶模組 '{slug}'。",
+    "agents.module_static": "靜態",
+    "agents.module_dynamic": "動態",
+    "agents.module_hybrid": "混合",
+    "agents.module_content": "靜態內容：",
     # 斜槓命令
     "slash.help_desc": "查看可用命令",
     "slash.clear_desc": "清屏",
@@ -1123,6 +1130,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "變更使用者角色（例如提升為 admin）。",
     "auth.opt_promote_email": "要更新的使用者電子郵件",
     "auth.opt_promote_role": "要指派的新角色（user、moderator、admin）",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "檢視及管理部落格文章與標籤",
     "blog.help_status": "顯示部落格文章數量與最近活動",

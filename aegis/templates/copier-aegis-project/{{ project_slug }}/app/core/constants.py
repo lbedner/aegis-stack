@@ -9,6 +9,9 @@ Following 12-Factor App principles:
 - Configuration = environment (varies between dev/staging/production)
 """
 
+from pathlib import Path
+import tempfile
+
 
 class APIEndpoints:
     """API endpoint paths - immutable across all environments."""
@@ -16,8 +19,8 @@ class APIEndpoints:
     HEALTH_BASIC = "/health/"
     HEALTH_DETAILED = "/health/detailed"
     HEALTH_DASHBOARD = "/health/dashboard"
-    AI_USAGE_STATS = "/ai/usage/stats"
-    AI_SENTIMENT_STATS = "/ai/sentiment/stats"
+    AI_USAGE_STATS = "/api/v1/ai/usage/stats"
+    AI_SENTIMENT_STATS = "/api/v1/ai/sentiment/stats"
 
 
 class Defaults:
@@ -34,6 +37,17 @@ class Defaults:
     # Health check intervals (seconds)
     HEALTH_CHECK_INTERVAL = 30
     COMPONENT_CHECK_TIMEOUT = 2.0
+
+
+def dashboard_upload_dir() -> Path:
+    """Directory where the dashboard's FilePicker uploads land.
+
+    In web mode a browser-picked file streams to the server via flet's
+    signed upload URL; the consuming feature (e.g. the finance file import)
+    reads it once and deletes it. Tempdir keeps that churn out of the
+    project tree and survives nothing - which is the point.
+    """
+    return Path(tempfile.gettempdir()) / "overseer-uploads"
 
 
 def country_flag(code: str) -> str:

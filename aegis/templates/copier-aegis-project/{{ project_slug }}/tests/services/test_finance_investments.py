@@ -9,8 +9,10 @@ CLI, and dashboard use.
 from datetime import date
 
 import pytest
-from app.services.finance.finance_service import FinanceService, market_value_cents
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.finance.domains.investments.securities import market_value_cents
+from app.services.finance.service import FinanceService
 
 _E8 = 10**8  # quantity scale: shares stored as shares * 1e8
 
@@ -31,9 +33,7 @@ class TestMarketValue:
         # 1,000,000 shares @ $1,234.5678 (scale 4). Float division of the
         # ~1e22 numerator would lose integer precision; integer math is exact.
         # value = 1_000_000 * 1234.5678 * 100 cents = 123_456_780_000
-        assert (
-            market_value_cents(1_000_000 * _E8, 12_345_678, 4) == 123_456_780_000
-        )
+        assert market_value_cents(1_000_000 * _E8, 12_345_678, 4) == 123_456_780_000
 
     def test_negative_quantity_rounds_symmetrically(self) -> None:
         # Short position: 3 shares @ $10.005 (price=10005, scale=3) = $30.015.

@@ -5,11 +5,12 @@ Tests the core AIService and ConversationManager classes to ensure
 conversation memory works correctly for both streaming and non-streaming modes.
 """
 
-import uuid
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+import uuid
 
 import pytest
+
 from app.services.ai.conversation import ConversationManager
 from app.services.ai.models import (
     AIProvider,
@@ -34,6 +35,22 @@ def mock_settings():
     settings.RAG_CHAT_TOP_K = 10
     settings.RAG_CHAT_MIN_SCORE = 0.1
     return settings
+
+
+@pytest.fixture(autouse=True)
+def _no_user_memory_db(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the guarded user-memory block out of ``AIService.chat``.
+
+    It opens the app's REAL async engine, which binds that engine's pool to
+    whichever test loop touches it first - after which any later test on a
+    fresh loop dies inside asyncpg. These tests are about conversation
+    persistence, not memory.
+    """
+
+    async def no_memory(user_id: str, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr("app.services.ai.service.build_user_memory_context", no_memory)
 
 
 @pytest.fixture

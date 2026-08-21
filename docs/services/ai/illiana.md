@@ -221,12 +221,12 @@ Illiana is also accessible via the REST API:
 
 ```bash
 # Chat
-curl -X POST http://localhost:8000/ai/chat \
+curl -X POST http://localhost:8000/api/v1/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What is the health of my system?"}'
 
 # Stream
-curl -X POST http://localhost:8000/ai/chat/stream \
+curl -X POST http://localhost:8000/api/v1/ai/chat/stream \
   -H "Content-Type: application/json" \
   -d '{"message": "Explain the auth service"}' \
   --no-buffer

@@ -1,0 +1,395 @@
+{% if include_ai and ai_backend != "memory" %}"""Snapshot sections for standing money: accounts, net worth, debt, portfolio -
+plus the tuning constants and tiny formatters every section shares.
+"""
+
+from datetime import date
+from typing import Any
+from app.services.finance.domains.detection.insights import format_usd
+from app.services.finance.models import (
+    FinanceAccount,
+    FinanceLiabilityDetail,
+    FinanceNetWorthSnapshot,
+)
+from datetime import timedelta
+from app.services.finance.domains.detection.insights import (
+    card_apr_bps,
+    format_apr,
+)
+from pydantic import BaseModel, ConfigDict
+
+from app.services.finance.models import (
+    FinanceInsight,
+    FinanceRecurringStream,
+    FinanceTransaction,
+)
+from app.services.finance.schemas import CashflowMonth, ProjectionResponse
+
+
+_SPENDING_RANK_POOL = 100  # categories considered before the mover filter
+
+
+class ReportContext(BaseModel):
+    """Every base read the snapshot and the report share, loaded ONCE.
+
+    ``build_finance_snapshot``, ``build_report_facts``, and the section
+    builders all draw from this - accounts, streams, series, holdings and
+    friends are fetched once per run instead of once per consumer (the
+    old shape re-fetched accounts three times in a single note run).
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    today: date
+    accounts: list[FinanceAccount]
+    goal_accounts: list[FinanceAccount]
+    envelope_accounts: list[FinanceAccount]
+    liability_details: dict[int, FinanceLiabilityDetail]
+    series: list[FinanceNetWorthSnapshot]
+    projection: ProjectionResponse
+    holdings: list[tuple[Any, Any, int]]
+    new_insights: list[FinanceInsight]
+    streams: list[FinanceRecurringStream]
+    cashflow: list[CashflowMonth]
+    ranked_spending: list[tuple[str, int, int | None]]
+    recent_transactions: list[FinanceTransaction]
+    transactions_total: int
+    goal_rates: dict[int, int | None]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_NET_WORTH_WINDOW_DAYS = 90
+
+
+
+
+
+
+
+
+_ACCOUNT_PAGE_SIZE = 200
+
+
+
+
+
+
+
+
+_TOP_HOLDINGS = 5
+
+
+
+
+
+
+
+
+_PROJECTION_DAYS = 60
+
+
+
+
+
+
+
+
+
+
+def _at_or_before(
+    series: list[FinanceNetWorthSnapshot], cutoff: date
+) -> FinanceNetWorthSnapshot | None:
+    """The most recent snapshot on or before ``cutoff`` (series is oldest first)."""
+    for snapshot in reversed(series):
+        if snapshot.as_of_date <= cutoff:
+            return snapshot
+    return None
+
+
+
+
+
+
+
+
+
+
+def _signed(cents: int) -> str:
+    """Money with an explicit direction, for deltas the model must not compute."""
+    return f"{'+' if cents >= 0 else '-'}{format_usd(cents)}"
+
+
+
+
+
+
+
+
+
+
+def _amount(cents: int) -> str:
+    """Money that may legitimately be negative (a projected balance)."""
+    return f"-{format_usd(cents)}" if cents < 0 else format_usd(cents)
+
+
+
+
+
+
+
+
+
+
+# Findings whose live version is ALWAYS a computed section of the same
+# context. An insight row freezes its figures on the day it is raised, so
+# feeding the model both produced a note whose headline quoted the stale
+# trigger while its own facts bullet named the live one (confirmed on a
+# real note: "$216.25 Anthropic" against "Central Hudson"). The projection
+# section owns the concept; the row stays in the UI but out of the prompt.
+_PROJECTION_OWNED_TYPES = frozenset({"cash_runway"})
+
+
+
+
+
+
+
+
+
+# Context lines are read by a model, not grepped - past this length a
+# title is descriptor garbage (ACH trace codes), not information.
+_CONTEXT_LABEL_LIMIT = 64
+
+
+
+
+
+
+
+
+
+
+def context_label(text: str, *, limit: int = _CONTEXT_LABEL_LIMIT) -> str:
+    """A title fit for the model's context: whitespace collapsed, hard cap.
+
+    Cleans for READING, nothing more - naming raw descriptors properly is
+    the payee system's job, and doing it here would hide that gap.
+    """
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 3].rstrip() + "..."
+
+
+
+
+
+
+
+
+
+
+def _accounts_section(accounts: list[Any]) -> str:
+    """Balances the model may quote, and only those.
+
+    An account without a tracked balance used to render as "$0.00" -
+    "Citizens Bank Mortgage: $0.00 owed" is not a balance, it is a gap in
+    the data dressed as a fact, and a model told the mortgage stands at
+    zero will eventually say so. Untracked accounts are listed by name
+    under one honest line instead.
+    """
+    lines = [f"ACCOUNTS ({len(accounts)})"]
+    untracked: list[str] = []
+    for account in accounts:
+        if not account.current_balance:
+            untracked.append(account.name)
+            continue
+        owed = " owed" if account.classification == "liability" else ""
+        lines.append(
+            f"- {account.name} ({account.account_type}, "
+            f"{account.classification}): {format_usd(account.current_balance)}{owed}"
+        )
+    if untracked:
+        lines.append(
+            f"- {len(untracked)} with no recorded balance: {', '.join(untracked)}"
+        )
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+def _net_worth_section(ctx: ReportContext) -> str | None:
+    series = ctx.series
+    today = ctx.today
+    if not series:
+        return None
+    latest = series[-1]
+    lines = [
+        "NET WORTH",
+        f"- today ({latest.as_of_date}): {format_usd(latest.net_worth_amount)} "
+        f"(assets {format_usd(latest.total_assets_amount)}, "
+        f"liabilities {format_usd(latest.total_liabilities_amount)})",
+    ]
+    for label, days in (("30 days ago", 30), ("90 days ago", 90)):
+        past = _at_or_before(series, today - timedelta(days=days))
+        if past is None or past.as_of_date == latest.as_of_date:
+            continue
+        change = latest.net_worth_amount - past.net_worth_amount
+        lines.append(
+            f"- {label} ({past.as_of_date}): "
+            f"{format_usd(past.net_worth_amount)}, change {_signed(change)}"
+        )
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+def _liability_lines(
+    accounts: list[FinanceAccount],
+    details: dict[int, FinanceLiabilityDetail],
+) -> list[str]:
+    """One pre-rendered line per credit/loan account that has real detail.
+
+    APR, minimum payment, due date, and limit are what turn "you owe money"
+    into "this card needs attention". The checks in ``detection/insights/rules.py``
+    read the same fields through the same helpers, so alerts, the snapshot,
+    and the rendered report always quote the same figures. Accounts with
+    nothing beyond their balance are skipped - ACCOUNTS already covers them.
+    """
+    liabilities = [a for a in accounts if a.classification == "liability"]
+    if not liabilities:
+        return []
+    lines: list[str] = []
+    for account in liabilities:
+        detail = details.get(account.id)
+        if detail is None and not account.credit_limit:
+            continue
+        parts = [f"{format_usd(account.current_balance or 0)} owed"]
+        if account.credit_limit:
+            balance = abs(account.current_balance or 0)
+            pct = int(round(balance / account.credit_limit * 100))
+            parts.append(f"limit {format_usd(account.credit_limit)} ({pct}% used)")
+        if detail is not None:
+            apr = card_apr_bps(detail)
+            if apr is not None:
+                parts.append(f"APR {format_apr(apr)}")
+            if detail.minimum_payment_amount:
+                due = (
+                    f" due {detail.next_payment_due_date}"
+                    if detail.next_payment_due_date
+                    else ""
+                )
+                parts.append(
+                    f"minimum payment {format_usd(detail.minimum_payment_amount)}{due}"
+                )
+            if detail.is_overdue:
+                parts.append("PAST DUE")
+        lines.append(f"- {account.name} ({account.account_type}): " + ", ".join(parts))
+    return lines
+
+
+
+
+
+
+
+
+
+
+def _liabilities_section(ctx: ReportContext) -> str | None:
+    """Credit cards and loans with the detail the ACCOUNTS list cannot show."""
+    lines = _liability_lines(ctx.accounts, ctx.liability_details)
+    if not lines:
+        return None
+    return "\n".join(["CREDIT CARDS & LOANS", *lines])
+
+
+
+
+
+
+
+
+
+
+def _portfolio_section(ctx: ReportContext) -> str | None:
+    """Current investment positions, largest first, pre-valued in cents."""
+    holdings = ctx.holdings
+    if not holdings:
+        return None
+    total = sum(value for _holding, _security, value in holdings)
+    lines = [f"PORTFOLIO ({format_usd(total)} across {len(holdings)} positions)"]
+    for holding, security, value in holdings[:_TOP_HOLDINGS]:
+        if security is None:
+            label = f"security {holding.security_id}"
+        elif security.ticker and security.name:
+            label = f"{security.ticker} ({security.name})"
+        else:
+            label = (
+                security.ticker or security.name or f"security {holding.security_id}"
+            )
+        lines.append(f"- {label}: {format_usd(value)}")
+    remainder = len(holdings) - _TOP_HOLDINGS
+    if remainder > 0:
+        lines.append(f"- plus {remainder} smaller positions")
+    return "\n".join(lines)
+
+
+
+
+
+
+
+
+
+
+def _projection_section(ctx: ReportContext) -> str | None:
+    """The cash forecast, pre-walked so the model never does date math.
+
+    The same projection the Forecast surface and the cash-runway rule use;
+    all three always agree about when the money runs out.
+    """
+    projection = ctx.projection
+    if not projection.points:
+        return None
+    low = min(projection.points, key=lambda point: point.balance)
+    end = projection.points[-1]
+    lines = [
+        f"CASH PROJECTION (NEXT {_PROJECTION_DAYS} DAYS)",
+        f"- cash on hand today: {_amount(projection.start_balance)}",
+        f"- after scheduled bills and income, projected balance on "
+        f"{end.date}: {_amount(end.balance)}",
+        f"- lowest projected point: {_amount(low.balance)} on {low.date} "
+        f"(after {low.name})",
+    ]
+    crossing = next((p for p in projection.points if p.balance < 0), None)
+    if crossing is not None and projection.start_balance >= 0:
+        lines.append(
+            f"- balance first goes below zero on {crossing.date} "
+            f"({crossing.name}, {_signed(crossing.amount)})"
+        )
+    return "\n".join(lines)
+{% endif %}

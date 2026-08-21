@@ -1,10 +1,16 @@
 name: Stack Matrix
 
-# Runs the full 13-stack generate → install → lint → typecheck → pytest
-# pipeline. This is the slow tier — gated off the default ``ci.yml`` run so
-# day-to-day PRs stay fast, but it fires on any PR touching template or
-# core-engine code (where drift lands) and nightly to catch anything that
-# merged without touching a gated path.
+# Runs the full stack generate → install → lint → typecheck → pytest pipeline,
+# one runner per stack combination. This is the slow tier — gated off the
+# default ``ci.yml`` run so day-to-day PRs stay fast, but it fires on any PR
+# touching template or core-engine code (where drift lands) and nightly to
+# catch anything that merged without touching a gated path.
+#
+# Fan-out over fan-in: the repo is public, so standard runners are free —
+# splitting 18 serial stacks across 18 machines costs nothing and cuts wall
+# clock from ~16-20 min to the longest single stack. The failed job's NAME
+# says which stack broke, one venv per runner means no disk-space triage,
+# and a flaky stack re-runs alone instead of replaying the whole matrix.
 
 on:
   pull_request:
@@ -37,22 +43,13 @@ env:
   UV_LINK_MODE: "copy"  # Avoid broken cache hardlinks (partial-install errors)
 
 jobs:
-  stack-matrix:
+  # Phase 1: every combination generates. In-process and cheap — one job
+  # covers all 18 in a couple of minutes, and a generation break fails fast
+  # here before 18 validation runners spin up on it.
+  generation:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
-      # ubuntu-latest ships ~14 GB free on /, but this job generates every
-      # stack combination and `uv sync`s each into its own .venv (UV_LINK_MODE
-      # copy, so no hardlink dedup) — they coexist for the whole run and can
-      # exhaust the disk (the runner then can't even write its own _diag logs).
-      # Reclaim ~15 GB by dropping preinstalled toolchains this Python repo
-      # never uses. df before/after so the logs show the headroom.
-      - name: Free disk space
-        run: |
-          echo "== disk before =="; df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          echo "== disk after =="; df -h /
-
       - uses: actions/checkout@v7
 
       - name: Install uv
@@ -67,5 +64,130 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
-      - name: Run full stack matrix
-        run: make test-stacks-full
+      - name: Test all stack combinations generate
+        run: make test-stacks
+
+  # Phase 2: full validation (generate → uv sync → lint → typecheck →
+  # pytest), one stack per runner. The list mirrors STACK_COMBINATIONS in
+  # tests/cli/test_stack_generation.py — the guard job below fails if the
+  # two ever drift. Node-id selection (not -k) so ``base`` can never
+  # substring-match ``base_htmx``.
+  validate:
+    needs: generation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - base
+          - scheduler
+          - worker
+          - full
+          - auth_basic
+          - auth_org
+          - ai_service
+          - insights
+          - insights_per_user
+          - payment
+          - blog
+          - finance
+          - finance_auth
+          - comms
+          - base_htmx
+          - htmx_auth
+          - htmx_with_components
+          - everything
+    name: validate (${{ matrix.stack }})
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Validate ${{ matrix.stack }}
+        run: >
+          uv run pytest
+          "tests/cli/test_stack_validation.py::test_stack_full_validation[${{ matrix.stack }}]"
+          -v -m slow --tb=short
+
+  # The non-parametrized slow tests: the representative end-to-end pipeline
+  # (worker stack + CLI smoke) and the validation performance benchmarks.
+  validate-extras:
+    needs: generation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run pipeline + benchmark tests
+        run: >
+          uv run pytest
+          tests/cli/test_stack_validation.py::test_full_stack_validation_pipeline
+          tests/cli/test_stack_validation.py::test_validation_performance_benchmarks
+          -v -m slow --tb=short
+
+  # Guard: the matrix list above is hand-maintained. If STACK_COMBINATIONS
+  # gains or loses a name, this fails with the diff instead of a stack
+  # silently never running in CI again.
+  matrix-complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Matrix covers every combination
+        run: |
+          uv run python - <<'PY'
+          import re, sys, pathlib
+
+          from tests.cli.test_stack_generation import STACK_COMBINATIONS
+
+          code = {c.name for c in STACK_COMBINATIONS}
+          wf = pathlib.Path(".github/workflows/stack-matrix.yml").read_text()
+          block = wf.split("stack:\n", 1)[1]
+          listed = set()
+          for line in block.splitlines():
+              m = re.match(r"\s+- ([\w-]+)$", line)
+              if not m:
+                  break
+              listed.add(m.group(1))
+          missing = sorted(code - listed)
+          extra = sorted(listed - code)
+          if missing or extra:
+              sys.exit(f"matrix drift - missing: {missing} extra: {extra}")
+          print(f"matrix covers all {len(code)} combinations")
+          PY

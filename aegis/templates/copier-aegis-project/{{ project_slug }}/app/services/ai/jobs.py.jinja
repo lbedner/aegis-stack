@@ -7,7 +7,7 @@ from app.core.log import logger
 async def sync_llm_catalog_job() -> None:
     """Scheduled job for syncing LLM catalog from public APIs.
 
-    Runs every 5 minutes to keep the LLM catalog up-to-date with
+    Runs every 6 hours to keep the LLM catalog up-to-date with
     the latest models, pricing, and capabilities from vendors.
     """
     from sqlmodel import Session

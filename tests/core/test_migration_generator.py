@@ -8,6 +8,9 @@ Alembic migration files on-demand for services like auth and AI.
 import ast
 from pathlib import Path
 
+import pytest
+
+from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 from aegis.core.migration_generator import (
     AI_MIGRATION,
     AUTH_MIGRATION,
@@ -676,9 +679,10 @@ class TestMigrationSpecs:
         """Test AI migration spec is defined."""
         assert "ai" in MIGRATION_SPECS
         assert AI_MIGRATION.service_name == "ai"
-        assert len(AI_MIGRATION.tables) == 8
-
         table_names = [t.name for t in AI_MIGRATION.tables]
+        assert len(AI_MIGRATION.tables) == len(set(table_names)), (
+            "duplicate table in the AI spec"
+        )
         # LLM catalog tables
         assert "llm_vendor" in table_names
         assert "large_language_model" in table_names
@@ -686,6 +690,7 @@ class TestMigrationSpecs:
         assert "llm_modality" in table_names
         assert "llm_price" in table_names
         assert "llm_usage" in table_names
+        assert "llm_active_selection" in table_names
         # Conversation tables
         assert "conversation" in table_names
         assert "conversation_message" in table_names
@@ -1551,7 +1556,12 @@ class TestSchedulerComponentMigration:
         assert "scheduler" not in get_services_needing_migrations(context)
 
     def test_generates_valid_schema_migration(self, tmp_path: Path) -> None:
-        """The generated file creates scheduler.job_execution and compiles."""
+        """The generated file creates scheduler.job_execution and compiles.
+
+        No context means "engine unknown", which renders the spec exactly as
+        declared. The engine-gated variants are covered by
+        ``TestSchemaEngineGating``.
+        """
         migration_path = generate_migration(tmp_path, "scheduler")
         assert migration_path is not None
         content = migration_path.read_text()
@@ -1561,3 +1571,122 @@ class TestSchedulerComponentMigration:
         assert "schema='scheduler'" in content
         # composite index for "last N runs of one job"
         assert "ix_job_execution_job_started" in content
+
+
+class TestSchemaEngineGating:
+    """Postgres schemas are stripped for engines that have no schemas.
+
+    Gating used to be a hardcoded per-service if-chain (finance only), so
+    component- and plugin-declared schemas leaked ``CREATE SCHEMA`` into
+    SQLite migrations, which SQLite rejects. Resolution is now generic:
+    any spec's ``schema`` is dropped when the target engine isn't Postgres.
+    """
+
+    def _generate(self, tmp_path: Path, service: str, engine: str) -> str:
+        (tmp_path / "alembic" / "versions").mkdir(parents=True, exist_ok=True)
+        path = generate_migration(
+            tmp_path, service, {AnswerKeys.DATABASE_ENGINE: engine}
+        )
+        assert path is not None
+        return path.read_text()
+
+    # ----- component-declared schema (scheduler) -----
+
+    def test_scheduler_sqlite_has_no_schema(self, tmp_path: Path) -> None:
+        """SQLite has no schemas; CREATE SCHEMA there is invalid SQL."""
+        content = self._generate(
+            tmp_path, ComponentNames.SCHEDULER, StorageBackends.SQLITE
+        )
+        ast.parse(content)
+        assert "CREATE SCHEMA" not in content
+        assert "schema='scheduler'" not in content
+        # The table itself must still be created, just unqualified.
+        assert "'job_execution'" in content
+
+    def test_scheduler_postgres_keeps_schema(self, tmp_path: Path) -> None:
+        content = self._generate(
+            tmp_path, ComponentNames.SCHEDULER, StorageBackends.POSTGRES
+        )
+        assert 'CREATE SCHEMA IF NOT EXISTS "scheduler"' in content
+        assert "schema='scheduler'" in content
+
+    def test_scheduler_memory_backend_has_no_schema(self, tmp_path: Path) -> None:
+        """Any non-Postgres engine, not just SQLite, drops the schema."""
+        content = self._generate(
+            tmp_path, ComponentNames.SCHEDULER, StorageBackends.MEMORY
+        )
+        assert "CREATE SCHEMA" not in content
+
+    # ----- plugin-declared schema (third-party) -----
+
+    def _register_plugin_spec(
+        self, monkeypatch: pytest.MonkeyPatch, schema: str
+    ) -> str:
+        """Register a throwaway plugin migration spec in the registry."""
+        import aegis.core.migration_generator as mg
+
+        spec = ServiceMigrationSpec(
+            service_name="crawler",
+            description="Crawler documents store",
+            schema=schema,
+            tables=[
+                TableSpec(
+                    name="documents",
+                    columns=[
+                        ColumnSpec(
+                            "id", "sa.Integer()", nullable=False, primary_key=True
+                        ),
+                        ColumnSpec("source_url", "sa.Text()", nullable=False),
+                    ],
+                ),
+            ],
+        )
+        monkeypatch.setattr(
+            mg, "_MIGRATION_SPECS_CACHE", {**mg._get_migration_specs(), "crawler": spec}
+        )
+        return "crawler"
+
+    def test_plugin_schema_stripped_on_sqlite(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A third-party plugin gets the same gating in-tree services get."""
+        service = self._register_plugin_spec(monkeypatch, "crawler")
+        content = self._generate(tmp_path, service, StorageBackends.SQLITE)
+        ast.parse(content)
+        assert "CREATE SCHEMA" not in content
+        assert "schema='crawler'" not in content
+        assert "'documents'" in content
+
+    def test_plugin_schema_kept_on_postgres(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        service = self._register_plugin_spec(monkeypatch, "crawler")
+        content = self._generate(tmp_path, service, StorageBackends.POSTGRES)
+        assert 'CREATE SCHEMA IF NOT EXISTS "crawler"' in content
+        assert "schema='crawler'" in content
+
+    def test_schemaless_plugin_unaffected_on_postgres(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Gating only removes schemas; it never invents one."""
+        import aegis.core.migration_generator as mg
+
+        spec = ServiceMigrationSpec(
+            service_name="plain",
+            description="No schema",
+            tables=[
+                TableSpec(
+                    name="thing",
+                    columns=[
+                        ColumnSpec(
+                            "id", "sa.Integer()", nullable=False, primary_key=True
+                        )
+                    ],
+                )
+            ],
+        )
+        monkeypatch.setattr(
+            mg, "_MIGRATION_SPECS_CACHE", {**mg._get_migration_specs(), "plain": spec}
+        )
+        content = self._generate(tmp_path, "plain", StorageBackends.POSTGRES)
+        assert "CREATE SCHEMA" not in content

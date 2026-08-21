@@ -14,18 +14,21 @@ Provides commonly used section patterns across component detail modals:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 import contextlib  # noqa: I001
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
     LabelText,
+    NumericText,
     PrimaryText,
     SecondaryText,
+    StatusDot,
     Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
@@ -158,8 +161,12 @@ class MetricCard(ft.Container):
             spacing=6,
         )
 
-        # Value text — stored as instance attribute for live updates
-        self.value_text = ft.Text(
+        # Value text — stored as instance attribute for live updates.
+        # Deliberately NOT tinted by ``color``: that argument colours the
+        # icon and is a per-card accent, and applying it to the number
+        # turned every metric across the dashboard into coloured text.
+        # A card that wants a coloured value calls ``set_value(v, color)``.
+        self.value_text = NumericText(
             value,
             size=24,
             weight=ft.FontWeight.W_600,
@@ -427,7 +434,13 @@ PIE_CHART_COLORS = [
     "#EC4899",  # Pink
     "#6366F1",  # Indigo
     "#14B8A6",  # Cyan
+    "#84CC16",  # Lime
+    "#F97316",  # Deep orange
 ]
+
+# The tail bucket ("Other") is semantically muted, not another category, so
+# it gets a fixed neutral instead of the next palette hue.
+PIE_CHART_TAIL_COLOR = "#64748B"
 
 
 class PieChartCard(ft.Container):
@@ -438,14 +451,22 @@ class PieChartCard(ft.Container):
     Features interactive hover effects with segment expansion and tooltips.
     """
 
-    # Segment radius constants (must fit within chart container)
+    # Segment radius constants at the DEFAULT 130px chart_size - scaled
+    # proportionally in __init__ for any other size (see _normal_radius/
+    # _hover_radius), so a caller asking for a bigger chart doesn't also
+    # have to work out matching radii by hand.
     NORMAL_RADIUS = 45
     HOVER_RADIUS = 52
+    _DEFAULT_CHART_SIZE = 130
+    _DEFAULT_CENTER_SPACE_RADIUS = 28
 
     def __init__(
         self,
         title: str,
         sections: list[dict[str, Any]],
+        value_formatter: Callable[[float], str] | None = None,
+        on_slice_click: Callable[[int], None] | None = None,
+        chart_size: int = _DEFAULT_CHART_SIZE,
     ) -> None:
         """
         Initialize pie chart card.
@@ -454,12 +475,47 @@ class PieChartCard(ft.Container):
             title: Card title
             sections: List of dicts with keys: value, label (color is auto-assigned)
                       Example: [{"value": 100, "label": "Input (50%)"}]
+            value_formatter: Renders a section's value in the hover readout
+                             (e.g. as dollars). Default: thousands-separated.
+            on_slice_click: Called with a section's index when its LEGEND
+                entry is clicked - not the pie wedge itself (see
+                ``_legend_item``'s docstring: PieChart's own touch
+                handling fully owns pointer events over the chart area in
+                this Flet/fl_chart build, confirmed by testing three
+                different ways to intercept a click there, none of which
+                ever reached Python). The section's own data (what it
+                represents beyond a label) isn't this control's business -
+                the caller already built ``sections`` and can look its
+                own index back up.
+            chart_size: Pixel diameter of the donut (default 130, this
+                control's original fixed size - AI Analytics' pies keep
+                that unless they opt into a change). The Finance Overview
+                spending pie passes a larger value: its card is stretched
+                to ``_OVERVIEW_CARD_HEIGHT`` (320px) by the Row it sits in
+                (``vertical_alignment=STRETCH``) regardless of this card's
+                own declared ``height`` below, which left a small 130px
+                donut floating in a much taller card with dead space above
+                and below it.
         """
         super().__init__()
 
         self._section_labels: list[str] = []
         self._section_values: list[float] = []
         self._hovered_index: int | None = None
+        self._value_formatter = value_formatter or (lambda value: f"{value:,.2f}")
+        self._on_slice_click = on_slice_click
+        self._chart_size = chart_size
+        # Proportional to the 130px baseline the constants above were
+        # tuned at, not a second set of magic numbers.
+        scale = chart_size / self._DEFAULT_CHART_SIZE
+        self._normal_radius = self.NORMAL_RADIUS * scale
+        self._hover_radius = self.HOVER_RADIUS * scale
+        self._center_space_radius = self._DEFAULT_CENTER_SPACE_RADIUS * scale
+        # Hover readout: the hovered slice's label, value, and share, in the
+        # card's title row so nothing jumps when it appears. Primary (white)
+        # text, not secondary gray - it is the answer being asked for, not a
+        # caption.
+        self._readout = PrimaryText("", size=Theme.Typography.BODY_SMALL)
 
         if not sections:
             self.content = ft.Column(
@@ -479,7 +535,7 @@ class PieChartCard(ft.Container):
 
         # Build pie chart sections with auto-assigned colors
         self._pie_sections: list[ft.PieChartSection] = []
-        legend_items: list[ft.Row] = []
+        legend_items: list[ft.Control] = []
 
         for i, section in enumerate(sections):
             value = float(section.get("value", 0))
@@ -496,24 +552,37 @@ class PieChartCard(ft.Container):
                     value=value,
                     title="",
                     color=color,
-                    radius=self.NORMAL_RADIUS,
+                    radius=self._normal_radius,
                 )
             )
-            legend_items.append(self._legend_item(label, color))
+            legend_items.append(self._legend_item(label, color, i))
 
         # Donut chart with hover interaction
         self._pie_chart = ft.PieChart(
             sections=self._pie_sections,
             sections_space=2,
-            center_space_radius=28,
+            center_space_radius=self._center_space_radius,
             on_chart_event=self._on_chart_event,
         )
 
-        # Legend column
-        legend = ft.Column(
-            legend_items,
-            spacing=Theme.Spacing.XS,
-            alignment=ft.MainAxisAlignment.CENTER,
+        # Legend: always ONE vertical column - a second column steals width
+        # from labels that are already long ("Food & Dining:Groceries") and
+        # clips them at the card edge. Bounded to the chart's own height and
+        # scrollable rather than left to grow unbounded: the card itself
+        # has a FIXED height (_setup_card_style) with HARD_EDGE clipping,
+        # so an unbounded legend on a caller with many sections (the
+        # finance spending pie, once its "Other" slice fix meant more
+        # named categories) would silently clip rows off the bottom
+        # instead of visibly failing - scroll makes every entry reachable
+        # instead.
+        legend = ft.Container(
+            content=ft.Column(
+                legend_items,
+                spacing=Theme.Spacing.XS,
+                alignment=ft.MainAxisAlignment.CENTER,
+                scroll=ft.ScrollMode.AUTO,
+            ),
+            height=self._chart_size,
         )
 
         # Layout: chart + legend horizontal, centered
@@ -521,8 +590,8 @@ class PieChartCard(ft.Container):
             [
                 ft.Container(
                     content=self._pie_chart,
-                    width=130,
-                    height=130,
+                    width=self._chart_size,
+                    height=self._chart_size,
                 ),
                 legend,
             ],
@@ -534,7 +603,14 @@ class PieChartCard(ft.Container):
         # Column layout with chart pushed down to avoid overlap
         self.content = ft.Column(
             [
-                SecondaryText(title),
+                ft.Row(
+                    [
+                        SecondaryText(title),
+                        ft.Container(expand=True),
+                        self._readout,
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
                 ft.Container(
                     content=chart_row,
                     expand=True,
@@ -558,34 +634,72 @@ class PieChartCard(ft.Container):
             top=Theme.Spacing.SM,
             bottom=Theme.Spacing.SM,
         )
-        self.height = 210
+        # 80px of title/margin/padding around the chart itself at any size
+        # (the original 210 = 130 + 80) - not just the DEFAULT size, so a
+        # caller asking for a bigger chart_size gets a card sized to fit
+        # it instead of one that clips or floats the chart in dead space.
+        self.height = self._chart_size + 80
         self.expand = True
         self.clip_behavior = ft.ClipBehavior.HARD_EDGE
 
     def _on_chart_event(self, e: ft.PieChartEvent) -> None:
-        """Handle hover events - expand hovered segment."""
+        """Handle hover - expand the segment and show its value."""
+        idx = e.section_index
+
         # Reset all sections to normal radius
         for section in self._pie_sections:
-            section.radius = self.NORMAL_RADIUS
+            section.radius = self._normal_radius
 
         # Check if hovering over a section (section_index is -1 when not hovering)
-        idx = e.section_index
         if idx is not None and idx >= 0 and idx < len(self._pie_sections):
-            self._pie_sections[idx].radius = self.HOVER_RADIUS
+            self._pie_sections[idx].radius = self._hover_radius
             self._hovered_index = idx
+            value = self._section_values[idx]
+            total = sum(self._section_values)
+            share = f" · {value / total * 100:.0f}%" if total else ""
+            self._readout.value = (
+                f"{self._section_labels[idx]} · {self._value_formatter(value)}{share}"
+            )
         else:
             self._hovered_index = None
+            self._readout.value = ""
 
         self._pie_chart.update()
+        if self._readout.page is not None:
+            self._readout.update()
 
-    def _legend_item(self, label: str, color: str) -> ft.Row:
-        """Create a legend item with color dot and label."""
-        return ft.Row(
+    def _legend_item(self, label: str, color: str, index: int) -> ft.Control:
+        """Create a legend item with color dot and label.
+
+        Clickable when ``on_slice_click`` is set - NOT the pie wedge
+        itself. Three different ways of detecting a click ON the chart
+        (PieChartEvent's own ``type`` field, a wrapping GestureDetector,
+        an opaque ``ink`` Container around it) all failed to reach Python
+        at all when tested live: PieChart's own internal touch handling
+        for hover fully owns pointer events in its bounds in this
+        Flet/fl_chart build, with no exposed way to disable that or let
+        events fall through. A legend row has no such competing pointer
+        owner - same plain ``Container(ink=True, on_click=...)`` already
+        proven reliable elsewhere in this codebase (e.g. the account
+        filter menu's own row entries).
+        """
+        row = ft.Row(
             [
                 ft.Container(width=10, height=10, bgcolor=color, border_radius=5),
                 SecondaryText(label, size=Theme.Typography.BODY_SMALL),
             ],
             spacing=8,
+        )
+        on_click = self._on_slice_click
+        if on_click is None:
+            return row
+        return ft.Container(
+            content=row,
+            on_click=lambda _e, i=index: on_click(i),
+            ink=True,
+            border_radius=4,
+            padding=ft.padding.symmetric(horizontal=2),
+            tooltip="View transactions",
         )
 
 
@@ -659,6 +773,11 @@ class DateRangeChips(ft.Container):
 
     def _handle_click(self, days: int) -> None:
         self.set_selected(days)
+        # Paint the selection NOW, before the (possibly slow) data reload
+        # the callback triggers - otherwise the chip looks frozen until the
+        # whole tab repaints and the click feels like it did nothing.
+        if self.page is not None:
+            self.update()
         self._on_change(days)
 
     @staticmethod
@@ -821,10 +940,455 @@ class LineSeries:
     stroke_width: int = 2
     tooltips: list[str] | None = None
     show_in_legend: bool = True
+    # Polarity split: colour the stroke ``color`` above this y and
+    # ``split_below_color`` below it (hard stop, no blend), with the fill
+    # tinting the area between the line and the split on each side. One
+    # series, so tooltips and hover are untouched. ``None`` = plain line.
+    split_y: float | None = None
+    split_below_color: str = "#EF4444"  # ChartColors.ERROR - self-contained
     highlighted_indices: frozenset[int] = field(default_factory=frozenset)
     highlight_color: str = (
         "#F59E0B"  # ChartColors.AMBER - keep dataclass self-contained
     )
+
+
+def headline_stat(label: str, value: str, color: str) -> ft.Control:
+    """A bare headline figure: small label over a big number, no card.
+
+    The card-shaped ``MetricCard`` is for a grid of metrics that IS the
+    content. When the figures ride along a tab's header - beside a title,
+    above a chart that owns the space - the chrome costs a card's height
+    and adds a second box competing with the chart's own. This is the
+    header form: right-aligned so a row of them ends on a clean edge.
+    """
+    return ft.Column(
+        [
+            SecondaryText(label),
+            NumericText(value, size=24, weight=ft.FontWeight.W_600, color=color),
+        ],
+        spacing=2,
+        horizontal_alignment=ft.CrossAxisAlignment.END,
+    )
+
+
+def headline_stat_color(cents: int) -> str:
+    """Red once a figure goes negative; otherwise the primary text colour.
+
+    Deliberately NOT green-for-positive: when every healthy number is
+    coloured, colour stops meaning anything and the one number in trouble
+    no longer stands out.
+    """
+    return Theme.Colors.ERROR if cents < 0 else Theme.Colors.TEXT_PRIMARY
+
+
+def row_matches(query: str, values: Iterable[object]) -> bool:
+    """Does this row match a search box, looking at EVERY column?
+
+    The tabs that hold their whole dataset (Bills & Income, Payees) filter
+    in memory, and each of them used to match its name column alone while
+    rendering five or six. Searching a category or an account then came
+    back empty, which reads as "no such row" rather than "that column is
+    not searched".
+
+    Callers pass the same values they render, so the rule stays "if you
+    can see it, you can search it" without this needing to know their
+    shapes. The register is not a caller: it pages, so it searches
+    server-side (``transaction_search_filter``).
+    """
+    needle = (query or "").strip().casefold()
+    if not needle:
+        return True
+    return any(needle in str(value).casefold() for value in values if value is not None)
+
+
+def date_cell(value: object, control: type[ft.Text] | None = None) -> ft.Control:
+    """A human-readable date cell that still sorts chronologically.
+
+    DataTable sorts on a cell's text (controls/data_table.py), so a
+    rendered "Aug 19, 2026" would sort alphabetically - August before
+    January, 2024 beside 2026. ``.data`` is the documented escape hatch
+    that ``_cell_text`` falls back to, so the ISO value rides along
+    invisibly and the column keeps sorting by actual date.
+    """
+    from app.components.frontend.controls.table import TableCellText
+    from app.core.formatting import format_date
+
+    factory = control or TableCellText
+    cell = factory(format_date(value))
+    # Sort key: the original ISO string, which is lexicographically
+    # chronological.
+    cell.data = str(value or "")
+    return cell
+
+
+def status_dot(label: str, color: str, tooltip: str) -> StatusDot:
+    """Status as the house dot: a circle + colored label, no pill
+    background. The tooltip carries what the state actually MEANS -
+    "Detected" is a question the detector is asking, and a bare word does
+    not say so.
+
+    Kept as a name the finance tabs already call; the recipe itself lives
+    in ``controls.StatusDot`` so a surface can reach for the control
+    directly.
+    """
+    return StatusDot(label, color, tooltip)
+
+
+@dataclass
+class BarSeries:
+    """One measure across the grouped bars (e.g. income, or spend)."""
+
+    label: str
+    color: str
+    values: list[float]
+
+
+class BarChartCard(ft.Container):
+    """Grouped bars over a shared category axis, styled like the line card.
+
+    ONE y-axis, always: two measures at different scales belong in two
+    charts, never on twin axes. A legend is present whenever there are two
+    or more series, so identity never rests on colour alone.
+
+    Example::
+
+        BarChartCard(
+            x_labels=["Feb", "Mar"],
+            series=[
+                BarSeries("Income", ChartColors.TEAL, [30948.0, 17089.0]),
+                BarSeries("Spending", ChartColors.VIOLET, [25910.0, 32760.0]),
+            ],
+            value_format=lambda v: f"${v:,.0f}",
+        )
+    """
+
+    _BAR_RADIUS = 4  # rounded data-end, anchored square to the baseline
+
+    @staticmethod
+    def _bar_width(groups: int, rods_per_group: int) -> int:
+        """Rod width scaled to how much of the axis each group owns.
+
+        The chart is fluid, so there are no pixels to measure against; this
+        divides a fixed width budget by the bar count. One month of cashflow
+        gets substantial bars instead of two toothpicks on an empty axis,
+        while a year keeps a slim profile that fits twelve groups.
+        """
+        budget = 220 // max(groups, 1) // max(rods_per_group, 1)
+        return max(10, min(48, budget))
+
+    def __init__(
+        self,
+        *,
+        x_labels: list[str],
+        series: list[BarSeries],
+        height: int = 214,
+        value_format: Callable[[float], str] | None = None,
+    ) -> None:
+        super().__init__()
+        fmt = value_format or (lambda v: f"{v:,.0f}")
+
+        bar_width = self._bar_width(len(x_labels), len(series))
+        groups: list[ft.BarChartGroup] = []
+        for index, label in enumerate(x_labels):
+            rods = [
+                ft.BarChartRod(
+                    from_y=0,
+                    to_y=s.values[index] if index < len(s.values) else 0,
+                    width=bar_width,
+                    color=s.color,
+                    border_radius=ft.border_radius.vertical(top=self._BAR_RADIUS),
+                    tooltip=f"{label}\n{s.label}: {fmt(s.values[index])}"
+                    if index < len(s.values)
+                    else None,
+                )
+                for s in series
+            ]
+            groups.append(
+                ft.BarChartGroup(x=index, bar_rods=rods, group_vertically=False)
+            )
+
+        peak = max(
+            (value for s in series for value in s.values),
+            default=0.0,
+        )
+        step = LineChartCard._smart_step(peak) if peak else 1
+        max_y = int((peak // step + 1) * step) if step else int(peak + 1)
+
+        chart = ft.BarChart(
+            bar_groups=groups,
+            left_axis=ft.ChartAxis(
+                labels_size=50,
+                labels=[
+                    ft.ChartAxisLabel(
+                        value=tick,
+                        label=NumericText(
+                            f"{int(tick):,}",
+                            size=9,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    )
+                    for tick in range(0, max_y + 1, step or 1)
+                ],
+            ),
+            bottom_axis=ft.ChartAxis(
+                labels_size=24,
+                labels=[
+                    ft.ChartAxisLabel(
+                        value=index,
+                        label=NumericText(
+                            label, size=9, color=ft.Colors.ON_SURFACE_VARIANT
+                        ),
+                    )
+                    for index, label in enumerate(x_labels)
+                ],
+            ),
+            horizontal_grid_lines=ft.ChartGridLines(
+                interval=step,
+                color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                width=1,
+            ),
+            **chart_tooltip_kwargs(),
+            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            interactive=True,
+            max_y=max_y,
+            # A 2px surface gap between adjacent bars so two fills never
+            # touch and read as one block.
+            groups_space=2,
+            height=height,
+            expand=True,
+        )
+
+        controls: list[ft.Control] = [chart]
+        if len(series) > 1:
+            controls.append(
+                ft.Row(
+                    [
+                        ft.Row(
+                            [
+                                ft.Container(
+                                    width=10,
+                                    height=10,
+                                    bgcolor=s.color,
+                                    border_radius=5,
+                                ),
+                                SecondaryText(
+                                    s.label, size=Theme.Typography.BODY_SMALL
+                                ),
+                            ],
+                            spacing=4,
+                        )
+                        for s in series
+                    ],
+                    spacing=16,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                )
+            )
+        self.content = ft.Column(controls, spacing=Theme.Spacing.SM)
+        self.padding = Theme.Spacing.MD
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
+        self.border_radius = Theme.Components.CARD_RADIUS
+        # NOTE: no ``self.expand`` here. In a Column that would mean fill
+        # the HEIGHT. A caller putting this card in a Row must bound its
+        # width (wrap it in an expanding Container) - the inner chart is
+        # ``expand=True``, and unbounded width makes fl_chart divide an
+        # infinity by its label size, after which the card renders as
+        # nothing at all.
+
+
+@dataclass
+class RankedBar:
+    """One row of a ranked bar list: what, how much, and an aside."""
+
+    label: str
+    value: float
+    display: str
+    meta: str = ""
+
+
+class RankedBarCard(ft.Container):
+    """Horizontal bars for a ranked list - "who took the most".
+
+    Horizontal, not vertical, because the labels are names: a payee or a
+    bill reads along the bar instead of being rotated under a column.
+    Built from Containers rather than a chart widget - there is no axis to
+    speak of, every bar is directly labelled with its own value, and the
+    ranking IS the axis.
+
+    One hue for every bar: this compares magnitude, and magnitude is a
+    sequential job. Giving each row its own colour would imply the rows
+    are different KINDS of thing, which they are not.
+    """
+
+    _BAR_HEIGHT = 8
+    _MIN_FRACTION = 0.02  # a bar that rounds to nothing still shows a sliver
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        rows: list[RankedBar],
+        color: str | None = None,
+        empty_message: str = "Nothing to show yet.",
+    ) -> None:
+        super().__init__()
+        bar_color = color or ChartColors.TEAL
+        peak = max((row.value for row in rows), default=0.0)
+
+        controls: list[ft.Control] = [
+            SecondaryText(title, size=Theme.Typography.BODY_SMALL)
+        ]
+        if not rows:
+            controls.append(EmptyStatePlaceholder(message=empty_message))
+        for row in rows:
+            fraction = (row.value / peak) if peak > 0 else 0.0
+            controls.append(
+                ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Container(
+                                    content=ft.Text(
+                                        row.label,
+                                        size=Theme.Typography.BODY_SMALL,
+                                        color=Theme.Colors.TEXT_PRIMARY,
+                                        max_lines=1,
+                                        overflow=ft.TextOverflow.ELLIPSIS,
+                                    ),
+                                    expand=True,
+                                ),
+                                *(
+                                    [
+                                        SecondaryText(
+                                            row.meta, size=Theme.Typography.BODY_SMALL
+                                        )
+                                    ]
+                                    if row.meta
+                                    else []
+                                ),
+                                NumericText(
+                                    row.display,
+                                    size=Theme.Typography.BODY_SMALL,
+                                    color=Theme.Colors.TEXT_PRIMARY,
+                                ),
+                            ],
+                            spacing=Theme.Spacing.SM,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        # The track shows what "full" means, so a short bar
+                        # reads as a small share rather than a rendering gap.
+                        # Fill and remainder are flex weights in a Row - the
+                        # bar cannot be a width, because the card's width is
+                        # only known at layout time.
+                        ft.Container(
+                            content=ft.Row(
+                                [
+                                    ft.Container(
+                                        bgcolor=bar_color,
+                                        border_radius=self._BAR_HEIGHT / 2,
+                                        expand=max(
+                                            1,
+                                            int(
+                                                max(fraction, self._MIN_FRACTION) * 1000
+                                            ),
+                                        ),
+                                    ),
+                                    ft.Container(
+                                        expand=max(
+                                            1,
+                                            int(
+                                                (1 - max(fraction, self._MIN_FRACTION))
+                                                * 1000
+                                            ),
+                                        ),
+                                    ),
+                                ],
+                                spacing=0,
+                            ),
+                            bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.ON_SURFACE),
+                            border_radius=self._BAR_HEIGHT / 2,
+                            height=self._BAR_HEIGHT,
+                        ),
+                    ],
+                    spacing=4,
+                    tight=True,
+                )
+            )
+        self.content = ft.Column(
+            controls, spacing=Theme.Spacing.SM, scroll=ft.ScrollMode.AUTO
+        )
+        self.padding = Theme.Spacing.MD
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
+        self.border_radius = Theme.Components.CARD_RADIUS
+
+
+def ledger_amount_color(cents: int) -> str:
+    """Colour for a money amount in a TABLE row.
+
+    The opposite of ``headline_stat_color``, on purpose. A ledger is
+    mostly spending, so an outflow is the assumption and takes no colour -
+    tinting nearly every row points at nothing. Money coming IN is the
+    exception, and that is what teal marks.
+    """
+    return Theme.Colors.SUCCESS if cents > 0 else Theme.Colors.TEXT_PRIMARY
+
+
+def diverging_stop(*, floor: float, ceiling: float, split: float) -> float:
+    """How far DOWN the plot (0=top, 1=bottom) a split line sits.
+
+    The fraction feeds a vertical gradient's hard stop, so the stroke
+    changes colour exactly where it crosses ``split``. Clamped results
+    carry meaning: >= 1 means the whole range is above the split (no
+    gradient needed), <= 0 means all of it is below.
+    """
+    span = ceiling - floor
+    if span <= 0:
+        return 1.0
+    return (ceiling - split) / span
+
+
+def chart_floor(values: list[float]) -> float:
+    """A y-axis floor that lets a trend read as a trend.
+
+    Anchoring at zero is only right when zero is near the data. A series that
+    lives in a tight band far above it - net worth wandering between $287k and
+    $300k - gets squashed into the top few percent of the plot, and a filled
+    series then draws the remaining 96% as a solid block. Sit the floor just
+    under the low point instead.
+
+    Clamped at zero for an all-positive series, so padding below a small low
+    never draws a chart implying the balance went into the red.
+    """
+    if not values:
+        return 0.0
+    low, high = min(values), max(values)
+    span = high - low
+    # A dead-flat series has no span to take a fraction of, but still needs a
+    # band, or the line is drawn along the axis itself.
+    pad = span * 0.1 if span else max(abs(high) * 0.05, 1.0)
+    floor = low - pad
+    return max(0.0, floor) if low >= 0 else floor
+
+
+def axis_label_positions(count: int, ticks: int = 8) -> list[int]:
+    """Evenly spaced x-positions to label, always including the last one.
+
+    The final date is the one people look for, so it is always labelled. The
+    tick before it is dropped when the two would land on top of each other:
+    90 days on an 8-tick grid puts a tick at index 88 and the last at 89, which
+    renders as two dates overprinted on each other.
+    """
+    if count <= 0:
+        return []
+    step = max(1, count // ticks)
+    positions = list(range(0, count, step))
+    last = count - 1
+    if positions and last - positions[-1] < step:
+        positions.pop()
+    if not positions or positions[-1] != last:
+        positions.append(last)
+    return positions
 
 
 class LineChartCard(ft.Container):
@@ -862,13 +1426,21 @@ class LineChartCard(ft.Container):
         series: list[LineSeries],
         x_labels: list[str],
         subtitle: str = "",
-        height: int = 240,
+        # 214 + the 24px bottom-label band = the same plot area the old
+        # 240 gave when the band was 50px of mostly dead space.
+        height: int = 214,
         min_y: float = 0,
         event_annotations: list[list[str]] | None = None,
     ) -> None:
         super().__init__()
 
-        chart_data: list[ft.LineChartData] = [self._make_series(s) for s in series]
+        # The y-ceiling every series shares: fl_chart's auto max is the
+        # data max, and the diverging split needs the same number to place
+        # its gradient stop.
+        ceiling = max((y for s in series for _x, y in s.points), default=0.0)
+        chart_data: list[ft.LineChartData] = [
+            self._make_series(s, floor=min_y, ceiling=ceiling) for s in series
+        ]
 
         # Event-annotation overlay. When the parent tab passes a list of
         # event labels per x-position, we render a transparent series at
@@ -920,14 +1492,16 @@ class LineChartCard(ft.Container):
 
         # Bottom-axis labels: reuse just the date strings; the parent
         # owns the x-coordinate semantics.
+        labelled = set(axis_label_positions(len(x_labels)))
         bottom_labels = [
             ft.ChartAxisLabel(
                 value=i,
-                label=ft.Text(label[-5:], size=9, color=ft.Colors.ON_SURFACE_VARIANT),
+                label=NumericText(
+                    label[-5:], size=9, color=ft.Colors.ON_SURFACE_VARIANT
+                ),
             )
             for i, label in enumerate(x_labels)
-            # Show ~8 ticks evenly distributed plus the last day.
-            if i % max(1, len(x_labels) // 8) == 0 or i == len(x_labels) - 1
+            if i in labelled
         ]
 
         # Y-axis ticks rendered explicitly so they pick up the same
@@ -941,7 +1515,7 @@ class LineChartCard(ft.Container):
                 left_labels.append(
                     ft.ChartAxisLabel(
                         value=tick,
-                        label=ft.Text(
+                        label=NumericText(
                             f"{int(tick):,}",
                             size=9,
                             color=ft.Colors.ON_SURFACE_VARIANT,
@@ -950,10 +1524,21 @@ class LineChartCard(ft.Container):
                 )
                 tick += step
 
+        # A polarity-split chart must not run fl_chart's implicit data
+        # animation: on an in-place update the lerp interpolates the axis
+        # bounds and the gradient stops out of sync, and for ~150ms the
+        # red below-zero band paints across the top of the plot before
+        # settling (confirmed live on the Projected tab). Plain charts
+        # have a single colour, so their lerp has nothing to mis-blend
+        # and they keep the default animation.
+        has_split = any(s.split_y is not None for s in series)
         chart = ft.LineChart(
+            animate=ft.Animation(duration=0) if has_split else None,
             data_series=chart_data,
             left_axis=ft.ChartAxis(labels_size=50, labels=left_labels),
-            bottom_axis=ft.ChartAxis(labels_size=50, labels=bottom_labels),
+            # 24px hugs the 9px date labels; 50 left a dead band between
+            # the labels and whatever sits under the chart.
+            bottom_axis=ft.ChartAxis(labels_size=24, labels=bottom_labels),
             horizontal_grid_lines=ft.ChartGridLines(
                 interval=step,
                 color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
@@ -1005,7 +1590,9 @@ class LineChartCard(ft.Container):
         self.border_radius = Theme.Components.CARD_RADIUS
 
     @staticmethod
-    def _make_series(s: LineSeries) -> ft.LineChartData:
+    def _make_series(
+        s: LineSeries, *, floor: float = 0.0, ceiling: float = 0.0
+    ) -> ft.LineChartData:
         """Build a `LineChartData` with the project's standard line
         styling - curved, radius-3 circle points, rounded stroke caps -
         plus an optional 15%-opacity below-line fill.
@@ -1052,6 +1639,25 @@ class LineChartCard(ft.Container):
             "stroke_width": s.stroke_width,
             "color": s.color,
         }
+        # Polarity split: a hard-stop vertical gradient on the stroke at
+        # the split's fraction of the y-range, so the line is one colour
+        # above it and another below - one series, tooltips intact. A
+        # window entirely on one side degrades to the plain line (the 7d
+        # view of a healthy week must look exactly like it always has).
+        split_fraction = None
+        if s.split_y is not None:
+            fraction = diverging_stop(floor=floor, ceiling=ceiling, split=s.split_y)
+            if fraction <= 0.0:
+                kwargs["color"] = s.split_below_color
+            elif fraction < 1.0:
+                split_fraction = fraction
+                kwargs.pop("color")
+                kwargs["gradient"] = ft.LinearGradient(
+                    begin=ft.alignment.top_center,
+                    end=ft.alignment.bottom_center,
+                    colors=[s.color, s.color, s.split_below_color, s.split_below_color],
+                    stops=[0.0, fraction, fraction, 1.0],
+                )
         # Visible-line styling only applies when the series actually
         # draws a stroke. For annotation overlays (stroke_width=0) this
         # block is intentionally skipped - they're invisible tooltip
@@ -1063,20 +1669,47 @@ class LineChartCard(ft.Container):
             kwargs["point"] = ChartPoint.dot(
                 s.color if s.fill else ft.Colors.ON_SURFACE
             )
-            if s.fill:
+            if s.fill and split_fraction is not None:
+                # Two-sided fill meeting at the split: below-line down to
+                # the split tints the positive area, above-line up to the
+                # split tints the negative one - so the tint always sits
+                # between the line and the axis, the area that IS the
+                # money.
+                kwargs["below_line_bgcolor"] = ft.Colors.with_opacity(0.15, s.color)
+                kwargs["below_line_cutoff_y"] = s.split_y
+                kwargs["above_line_bgcolor"] = ft.Colors.with_opacity(
+                    0.15, s.split_below_color
+                )
+                kwargs["above_line_cutoff_y"] = s.split_y
+            elif s.fill:
                 kwargs["below_line_bgcolor"] = ft.Colors.with_opacity(0.15, s.color)
         return ft.LineChartData(**kwargs)
 
     @staticmethod
     def _smart_step(value_range: float) -> int:
-        """Pick a nice y-axis interval based on the data magnitude."""
+        """Pick a round y-axis interval that scales with the data magnitude.
+
+        Above the fixed rungs the interval climbs 1/2/5 per decade, aiming for
+        about five gridlines. A flat ceiling here is what turned a $300,000
+        range into a 100-unit step: three thousand tick labels, and a top value
+        of 299,800 instead of 300,000.
+        """
         if value_range <= 20:
             return 5
         if value_range <= 100:
             return 10
         if value_range <= 500:
             return 50
-        return 100
+
+        target = value_range / 5
+        magnitude = 1
+        while magnitude * 10 <= target:
+            magnitude *= 10
+        for multiple in (1, 2, 5):
+            step = multiple * magnitude
+            if step >= target:
+                return step
+        return 10 * magnitude
 
 
 class FlowConnector(ft.Container):

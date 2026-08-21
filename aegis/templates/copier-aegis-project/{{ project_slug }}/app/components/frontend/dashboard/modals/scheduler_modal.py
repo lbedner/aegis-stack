@@ -19,6 +19,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -257,13 +258,9 @@ class SchedulerDetailDialog(BaseDetailPopup):
             expand=True,
         )
 
-        tabs = ft.Tabs(
+        tabs = PulseTabs(
             selected_index=0,
-            animation_duration=200,
             expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
             tabs=[
                 ft.Tab(text="Jobs", content=jobs_tab),
                 ft.Tab(text="History", content=history_tab),

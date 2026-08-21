@@ -6,6 +6,7 @@ Top-down layout matching the service card pattern.
 """
 
 import flet as ft
+
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer

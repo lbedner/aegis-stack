@@ -12,7 +12,8 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend import styles
-from app.components.frontend.controls.text import BodyText, H3Text
+from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.text import BodyText
 
 AsyncClickCallable = Callable[[], Awaitable[None]]
 
@@ -140,6 +141,18 @@ class ElevatedRefreshButton(BaseElevatedButton):
         )
 
 
+# PulseButton's own geometry, exported rather than inlined: a control that
+# has to READ as one of these buttons but can't BE one takes its numbers
+# from here instead of re-picking them. (``BulkActionTrigger`` in
+# controls/pickers.py is the case - it needs ``on_tap_down`` to position a
+# popup, which ElevatedButton doesn't expose, so it's a Container wearing
+# this look. Hand-picked copies drift the first time the button changes.)
+PULSE_BUTTON_HEIGHT = 40
+PULSE_BUTTON_COMPACT_HEIGHT = 28
+PULSE_BUTTON_COMPACT_RADIUS = 6
+PULSE_BUTTON_COMPACT_PADDING = ft.padding.symmetric(horizontal=10, vertical=2)
+
+
 class PulseButton(BaseElevatedButton):
     """Flat, accent-tinted button matching the Aegis Pulse web frontend look.
 
@@ -181,7 +194,7 @@ class PulseButton(BaseElevatedButton):
         )
         # Match Pulse's vertical rhythm (py-2.5 + text-sm → ~40px line box).
         # Compact uses a 28px line box for in-header use.
-        self.height = 28 if compact else 40
+        self.height = PULSE_BUTTON_COMPACT_HEIGHT if compact else PULSE_BUTTON_HEIGHT
 
     def _build_style(self, variant: str) -> ft.ButtonStyle:
         base_style = self._VARIANTS.get(variant)
@@ -199,8 +212,8 @@ class PulseButton(BaseElevatedButton):
             color=base_style.color,
             bgcolor=base_style.bgcolor,
             side=base_style.side,
-            shape=ft.RoundedRectangleBorder(radius=6),
-            padding=ft.padding.symmetric(horizontal=10, vertical=2),
+            shape=ft.RoundedRectangleBorder(radius=PULSE_BUTTON_COMPACT_RADIUS),
+            padding=PULSE_BUTTON_COMPACT_PADDING,
             elevation=0,
             overlay_color=ft.Colors.TRANSPARENT,
             animation_duration=150,
@@ -333,7 +346,7 @@ class IconDeleteButton(BaseIconButton):
         )
 
 
-class ConfirmDialog(ft.AlertDialog):
+class ConfirmDialog(StyledAlertDialog):
     """
     Reusable confirmation dialog with consistent styling.
 
@@ -378,15 +391,20 @@ class ConfirmDialog(ft.AlertDialog):
         self._on_confirm = on_confirm
         self._on_secondary = on_secondary
 
+        # Compact buttons: dialog actions sit on a dense strip, and the
+        # full 40px line box reads heavy there (same call BaseDetailPopup
+        # makes for its Close button).
         cancel_button = PulseButton(
             on_click_callable=self._handle_cancel,
             text=cancel_text,
             variant="muted",
+            compact=True,
         )
         confirm_button = PulseButton(
             on_click_callable=self._handle_confirm,
             text=confirm_text,
             variant="stop" if destructive else "teal",
+            compact=True,
         )
 
         actions: list[ft.Control] = [cancel_button]
@@ -395,17 +413,16 @@ class ConfirmDialog(ft.AlertDialog):
                 on_click_callable=self._handle_secondary,
                 text=secondary_text,
                 variant="stop" if secondary_destructive else "muted",
+                compact=True,
             )
             actions.append(secondary_button)
         actions.append(confirm_button)
 
         super().__init__(
-            modal=True,
-            title=H3Text(title),
-            content=BodyText(message),
+            title=title,
+            body=BodyText(message),
             actions=actions,
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            width=420,
         )
 
     async def _handle_cancel(self) -> None:

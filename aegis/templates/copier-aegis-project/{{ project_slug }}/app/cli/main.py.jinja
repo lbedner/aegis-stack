@@ -159,6 +159,19 @@ try:
 except ImportError:
     # Agent registry not available, skip agents commands
     pass
+{%- for p in _plugins | default([]) %}
+{%- if p.cli_name %}
+{%- set cli_module = p.cli_name | replace("-", "_") %}
+
+# Conditionally register the {{ p.name }} plugin CLI as "{{ p.cli_name }}"
+try:
+    {{ cli_module }}_module = importlib.import_module("app.cli.{{ cli_module }}")
+    app.add_typer({{ cli_module }}_module.app, name="{{ p.cli_name }}")
+except ImportError:
+    # {{ p.name }} plugin CLI module not present, skip {{ p.cli_name }} commands
+    pass
+{%- endif %}
+{%- endfor %}
 
 
 def main() -> None:

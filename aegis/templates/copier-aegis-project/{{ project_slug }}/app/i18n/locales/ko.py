@@ -289,6 +289,13 @@ MESSAGES: dict[str, str] = {
     "llm.input_price_label": "입력 가격:",
     "llm.output_price_label": "출력 가격:",
     "llm.model_not_in_catalog": "카탈로그에서 모델을 찾을 수 없습니다. 'llm sync'를 실행하여 카탈로그를 채우세요.",
+    "llm.source_label": "소스:",
+    "llm.source_override": "저장된 선택 (.env보다 우선, 'llm reset'으로 해제)",
+    "llm.source_env": ".env",
+    "llm.env_model_label": ".env 기본값:",
+    "llm.help_reset": "저장된 모델 오버라이드를 제거하여 .env가 다시 모델을 결정하게 합니다.",
+    "llm.reset_done": "오버라이드를 해제했습니다. 활성 모델은 이제 .env에서 가져옵니다: {model}",
+    "llm.reset_none": "저장된 오버라이드가 없습니다. 활성 모델은 이미 .env에서 가져옵니다: {model}",
     # Use
     "llm.switching_model": "{model_id}(으)로 전환 중",
     # Info
@@ -695,49 +702,49 @@ MESSAGES: dict[str, str] = {
     "ai.rag_step_query": "2. 컬렉션으로 쿼리하세요:",
     "ai.rag_list_hint": "팁: '{app} rag list'로 기존 컬렉션을 확인하세요.",
     # Sentiment stats (CLI)
-    "ai.help_sentiment": "Show conversation sentiment statistics from the analysis job.",
-    "ai.sentiment_title": "Conversation Sentiment",
-    "ai.sentiment_disabled_hint": "Sentiment analysis is disabled. Set AI_SENTIMENT_ENABLED=true to score conversations.",
-    "ai.sentiment_empty": "No conversations scored yet.",
-    "ai.sentiment_distribution": "Sentiment Distribution",
-    "ai.sentiment_avg_score": "Average score:",
-    "ai.sentiment_performance": "Assistant performance:",
-    "ai.sentiment_recent_negatives": "Recent Negative Conversations",
+    "ai.help_sentiment": "분석 작업의 대화 감정 통계를 표시합니다.",
+    "ai.sentiment_title": "대화 감정",
+    "ai.sentiment_disabled_hint": "감정 분석이 비활성화되어 있습니다. 대화를 평가하려면 AI_SENTIMENT_ENABLED=true로 설정하세요.",
+    "ai.sentiment_empty": "평가된 대화가 아직 없습니다.",
+    "ai.sentiment_distribution": "감정 분포",
+    "ai.sentiment_avg_score": "평균 점수:",
+    "ai.sentiment_performance": "어시스턴트 성능:",
+    "ai.sentiment_recent_negatives": "최근 부정적인 대화",
     # Agent registry (CLI)
-    "agents.help": "Inspect and test the agent registry.",
-    "agents.help_list": "List all agents in the registry.",
-    "agents.help_show": "Show one agent's full definition.",
-    "agents.help_test": "Run one test turn through an agent's resolved config.",
-    "agents.opt_message": "Message to send for the test turn",
-    "agents.list_title": "Agents",
-    "agents.empty": "No agents in the registry yet.",
-    "agents.not_found": "Agent '{slug}' not found.",
-    "agents.default_model": "(active default)",
-    "agents.none": "(none)",
-    "agents.col_slug": "Slug",
-    "agents.col_name": "Name",
-    "agents.col_model": "Model",
-    "agents.col_active": "Active",
-    "agents.col_tools": "Tools",
-    "agents.col_modules": "Modules",
-    "agents.col_kind": "Kind",
-    "agents.col_priority": "Priority",
-    "agents.show_prompt": "System prompt:",
-    "agents.show_tools": "Tools:",
-    "agents.show_modules": "Memory modules:",
-    "agents.show_kbs": "Knowledge bases:",
-    "agents.test_running": "Running a test turn through agent '{slug}'...",
-    "agents.test_reply_title": "Reply from '{slug}'",
-    "agents.modules_help": "Inspect memory modules (agent context blocks).",
-    "agents.modules_help_list": "List all memory modules.",
-    "agents.modules_help_show": "Show one memory module's definition.",
-    "agents.modules_title": "Memory Modules",
-    "agents.modules_empty": "No memory modules defined yet.",
-    "agents.module_not_found": "Memory module '{slug}' not found.",
-    "agents.module_static": "static",
-    "agents.module_dynamic": "dynamic",
-    "agents.module_hybrid": "hybrid",
-    "agents.module_content": "Static content:",
+    "agents.help": "에이전트 레지스트리를 확인하고 테스트합니다.",
+    "agents.help_list": "레지스트리의 모든 에이전트를 표시합니다.",
+    "agents.help_show": "에이전트의 전체 정의를 표시합니다.",
+    "agents.help_test": "확정된 설정으로 에이전트 테스트를 한 번 실행합니다.",
+    "agents.opt_message": "테스트 실행에 보낼 메시지",
+    "agents.list_title": "에이전트",
+    "agents.empty": "레지스트리에 에이전트가 아직 없습니다.",
+    "agents.not_found": "에이전트 '{slug}'을(를) 찾을 수 없습니다.",
+    "agents.default_model": "(활성 기본값)",
+    "agents.none": "(없음)",
+    "agents.col_slug": "슬러그",
+    "agents.col_name": "이름",
+    "agents.col_model": "모델",
+    "agents.col_active": "활성",
+    "agents.col_tools": "도구",
+    "agents.col_modules": "모듈",
+    "agents.col_kind": "종류",
+    "agents.col_priority": "우선순위",
+    "agents.show_prompt": "시스템 프롬프트:",
+    "agents.show_tools": "도구:",
+    "agents.show_modules": "메모리 모듈:",
+    "agents.show_kbs": "지식 베이스:",
+    "agents.test_running": "에이전트 '{slug}'로 테스트 실행 중...",
+    "agents.test_reply_title": "'{slug}'의 응답",
+    "agents.modules_help": "메모리 모듈(에이전트 컨텍스트 블록)을 확인합니다.",
+    "agents.modules_help_list": "모든 메모리 모듈을 표시합니다.",
+    "agents.modules_help_show": "메모리 모듈의 정의를 표시합니다.",
+    "agents.modules_title": "메모리 모듈",
+    "agents.modules_empty": "정의된 메모리 모듈이 아직 없습니다.",
+    "agents.module_not_found": "메모리 모듈 '{slug}'을(를) 찾을 수 없습니다.",
+    "agents.module_static": "정적",
+    "agents.module_dynamic": "동적",
+    "agents.module_hybrid": "하이브리드",
+    "agents.module_content": "정적 콘텐츠:",
     # Slash commands
     "slash.help_desc": "사용 가능한 명령어 표시",
     "slash.clear_desc": "화면 지우기",
@@ -1126,6 +1133,40 @@ MESSAGES: dict[str, str] = {
     "auth.help_promote_user": "사용자의 역할 변경 (예: 관리자로 승격).",
     "auth.opt_promote_email": "업데이트할 사용자의 이메일",
     "auth.opt_promote_role": "새로 부여할 역할 (user, moderator, admin)",
+    # ── Finance ──────────────────────────────────────────────────────
+    # Commands
+    "finance.help_seed_demo": (
+        "Populate a demo finance dataset for dashboards, docs, and "
+        "screenshots (dev only). Creates accounts, months of transactions, "
+        "investments, and a net-worth history through the real service layer."
+    ),
+    # Options
+    "finance.opt_seed_demo_reset": "Delete previously seeded demo rows, then reseed.",
+    "finance.opt_seed_demo_clear": "Remove seeded demo rows and stop; do not reseed.",
+    "finance.opt_seed_demo_months": "Months of history to generate.",
+    "finance.opt_seed_demo_yes": "Skip the confirmation prompt.",
+    # Seed demo
+    "finance.seed_demo_confirm_existing": (
+        "This install already has {accounts} finance account(s). Seeding mixes "
+        "demo accounts into the same net-worth history; removing them later "
+        "recomputes those days and cannot restore history for accounts without "
+        "a valuation series. Continue?"
+    ),
+    "finance.seed_demo_aborted": "Aborted; nothing was seeded.",
+    "finance.seed_demo_done": "Seeded demo finance data.",
+    "finance.seed_demo_skipped": (
+        "Demo data already present. Re-run with --reset to rebuild it."
+    ),
+    "finance.seed_demo_cleared": "Removed demo finance data ({accounts} accounts).",
+    "finance.seed_demo_nothing_to_clear": "No demo finance data to remove.",
+    "finance.seed_demo_counts_ledger": (
+        "Accounts {accounts}   Transactions {transactions} "
+        "({imported} imported)   Splits {splits}"
+    ),
+    "finance.seed_demo_counts_derived": (
+        "Transfers {transfers}   Recurring {recurring}   "
+        "Trades {trades}   Net-worth days {days}"
+    ),
     # ── Blog ────────────────────────────────────────────────────────
     "blog.help": "블로그 게시물과 태그 확인 및 관리",
     "blog.help_status": "블로그 게시물 개수와 최근 활동 표시",

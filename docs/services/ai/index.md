@@ -4,8 +4,8 @@ The **AI Service** brings a complete AI platform to your Aegis Stack project: mu
 
 ![AI Service Demo](../../images/aegis-ai-demo.gif)
 
-!!! info "Start Chatting in 30 Seconds"
-    Generate a project with AI service and start chatting with Illiana immediately:
+!!! info "Chat Out of the Box"
+    Generate a project with the AI service and start chatting with Illiana right away:
 
     ```bash
     uvx aegis-stack init my-app --services ai
@@ -14,7 +14,12 @@ The **AI Service** brings a complete AI platform to your Aegis Stack project: mu
     my-app ai chat "Hello! What can you tell me about my system?"
     ```
 
-    No API key required with the PUBLIC provider - perfect for testing!
+    No API key needed to start: the default PUBLIC provider (LLM7.io) serves
+    free open-weight models anonymously (with tight rate limits). For premium
+    models and higher limits, create a free account key at
+    [dash.llm7.io](https://dash.llm7.io) and set `LLM7_API_KEY` in your `.env`.
+    A second keyless option, `AI_PROVIDER=pollinations`, works the same way -
+    see [Providers](providers.md).
 
     *Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) installed. See [Installation](../../installation.md) for other options.*
 
@@ -143,7 +148,7 @@ my-app llm use claude-sonnet-4-20250514
 make serve
 
 # Chat endpoint
-curl -X POST http://localhost:8000/ai/chat \
+curl -X POST http://localhost:8000/api/v1/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello from the API!"}'
 
@@ -151,7 +156,7 @@ curl -X POST http://localhost:8000/ai/chat \
 curl http://localhost:8000/llm/models?pattern=gpt-4
 
 # Check usage stats
-curl http://localhost:8000/ai/usage/stats
+curl http://localhost:8000/api/v1/ai/usage/stats
 ```
 
 ## Configuration

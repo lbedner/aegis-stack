@@ -7,13 +7,14 @@ Complete setup guide for all supported AI providers.
 The AI service supports multiple providers through either [Pydantic AI](https://ai.pydantic.dev/) or [LangChain](https://python.langchain.com/) (see [Engines](engines.md)), giving you flexibility to choose based on your needs: cost, speed, features, or specific model capabilities.
 
 !!! tip "All Providers Work with Both Engines"
-    Whether you chose Pydantic AI or LangChain as your engine, all 7 providers are fully supported with identical configuration.
+    Whether you chose Pydantic AI or LangChain as your engine, every provider below is fully supported with identical configuration.
 
 **Quick comparison:**
 
 | Provider | API Key Required | Speed | Best For |
 |----------|------------------|-------|----------|
-| **PUBLIC** | No | Basic | Instant testing, no setup |
+| **PUBLIC** | Optional (anonymous tier) | Basic | Instant testing, zero setup |
+| **Pollinations** | Optional (anonymous tier) | Basic | Keyless fallback, open-weight models |
 | **Ollama** | No (local) | Varies | Privacy, offline, no API costs |
 | **Google Gemini** | Yes (free tier) | Good | Development, prototyping |
 | **Groq** | Yes (free tier) | Very fast | Production, low cost |
@@ -23,7 +24,7 @@ The AI service supports multiple providers through either [Pydantic AI](https://
 | **Cohere** | Yes (free tier) | Good | Command models |
 
 !!! tip "Recommendation"
-    **Start:** PUBLIC (no API key, instant) → **Develop:** Google Gemini (free tier) → **Production:** Groq (very fast, low cost)
+    **Start:** PUBLIC (keyless anonymous tier) → **Develop:** Google Gemini (free tier) → **Production:** Groq (very fast, low cost)
 
 ## Configuration
 
@@ -32,13 +33,15 @@ All providers are configured through environment variables in your `.env` file:
 ```bash
 # Core AI Service Settings
 AI_ENABLED=true                    # Enable/disable service
-AI_PROVIDER=public                 # Provider: openai, anthropic, google, groq, mistral, cohere, ollama, public
-AI_MODEL=auto                      # Model name (varies by provider, "auto" for PUBLIC)
+AI_PROVIDER=public                 # Provider: openai, anthropic, google, groq, mistral, cohere, ollama, public, pollinations
+AI_MODEL=auto                      # Model name (varies by provider, "auto" for PUBLIC and Pollinations)
 AI_TEMPERATURE=0.7                 # Response creativity (0.0-2.0)
 AI_MAX_TOKENS=1000                 # Maximum response length
 AI_TIMEOUT_SECONDS=30.0            # Request timeout
 
-# Provider API Keys (only needed for non-PUBLIC providers)
+# Provider API Keys
+LLM7_API_KEY=...                   # Optional: unlocks LLM7 premium models (dash.llm7.io)
+POLLINATIONS_API_KEY=...           # Optional: Pollinations account tier
 OPENAI_API_KEY=sk-...              # OpenAI API key
 ANTHROPIC_API_KEY=sk-ant-...       # Anthropic API key
 GOOGLE_API_KEY=...                 # Google API key
@@ -51,16 +54,56 @@ COHERE_API_KEY=...                 # Cohere API key
 
 === "PUBLIC (Free)"
 
-    **No setup required!** Works out of the box with zero configuration.
+    Free access through LLM7.io. The anonymous tier works with **no key at
+    all**: open-weight models (GPT-OSS, Codestral, ...) with strict per-IP
+    rate limits. An optional free account key unlocks their premium models
+    (GPT-5.x, Claude, billed per token) and higher limits.
 
-    **Setup:**
+    **Setup (anonymous):**
 
     ```bash
-    # Already configured by default - just start chatting
+    # Nothing to configure - just start chatting
     my-app ai chat "Hello! Can you help me?"
     ```
 
-    **Best for:** Instant testing, demos, getting started without any setup
+    **Setup (premium models):**
+
+    1. Create a free account key at [dash.llm7.io](https://dash.llm7.io)
+    2. Set it in your environment:
+
+    ```bash
+    # .env
+    LLM7_API_KEY=your-key
+    ```
+
+    `AI_MODEL=auto` resolves against LLM7's live catalog and is tier-aware:
+    keyless projects pick an anonymous-tier model, keyed projects a premium
+    one - you never chase their model rotation.
+
+    **Best for:** Instant testing, demos, getting started with zero setup
+
+=== "Pollinations (Free)"
+
+    A second keyless option with an active community, served through an
+    OpenAI-compatible API. The anonymous tier needs **no key at all**:
+    open-weight models (GPT-OSS 20B) with per-IP rate limits and
+    non-streaming responses.
+
+    **Setup (anonymous):**
+
+    ```bash
+    # .env
+    AI_PROVIDER=pollinations
+
+    my-app ai chat "Hello! Can you help me?"
+    ```
+
+    `AI_MODEL=auto` resolves against Pollinations' live catalog: keyless
+    projects only pick anonymous-tier models. Anonymous requests must not
+    carry a key; the service handles that automatically.
+
+    **Best for:** A drop-in keyless fallback when the PUBLIC provider is
+    unavailable, or trying open-weight models with zero setup
 
 === "Groq (Production)"
 

@@ -1,0 +1,434 @@
+{% if include_ai and ai_backend != "memory" %}"""Report facts and their history: snapshots, diffs, the movers.
+"""
+
+from datetime import (
+    date,
+    timedelta,
+)
+from pydantic import (
+    BaseModel,
+    Field,
+)
+from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.finance.domains.detection.analyst.sections import _SPENDING_RANK_POOL
+from app.services.finance.domains.detection import queries
+from app.services.finance.domains.detection.insights import pace_day
+from app.services.finance.models import FinanceInsight, FinanceAnalystSnapshot
+from app.services.finance.domains.detection.analyst.context import (
+    load_report_context,
+)
+from app.services.finance.domains.detection.analyst.sections import (
+    ReportContext,
+    _amount,
+    _at_or_before,
+    _liability_lines,
+    _signed,
+)
+from app.services.finance.domains.detection.analyst.shared import note_dedup_key, _NOTE_INSIGHT_TYPES
+
+
+
+
+class SectionCommentary(BaseModel):
+    """The model's entire contribution to the report: prose, never figures.
+
+    The report layout and every number in it are computed by code; the model
+    fills these fields and nothing else. A wrong number in the report is
+    therefore always a facts bug with one place to fix, never a hallucination
+    to argue with.
+    """
+
+    headline: str = Field(
+        description=(
+            "Short paragraph on what needs attention first; OPEN ANOMALIES "
+            "lead. Two plain sentences on a quiet day."
+        )
+    )
+    what_changed: str = Field(
+        default="",
+        description=(
+            "1-3 sentences on what MOVED since the last note and whether it "
+            "matters. Empty when nothing moved."
+        ),
+    )
+    cash_and_bills: str = Field(
+        default="", description="1-3 sentences on cash and upcoming bills."
+    )
+    credit: str = Field(
+        default="", description="1-3 sentences on credit cards and loans."
+    )
+    spending: str = Field(
+        default="", description="1-3 sentences on this month's spending."
+    )
+    investments: str = Field(
+        default="", description="1-3 sentences on investments and net worth."
+    )
+
+
+
+
+class ReportFacts(BaseModel):
+    """Code-owned figures for the report skeleton, all pre-formatted upstream.
+
+    Everything here comes from the same service reads the snapshot uses, so
+    the context the model saw and the numbers the reader sees can never
+    disagree.
+    """
+
+    net_worth: int | None = None
+    net_worth_change_30d: int | None = None
+    cash_today: int | None = None
+    projection_end: tuple[date, int] | None = None
+    projection_low: tuple[date, int] | None = None
+    first_negative: tuple[date, str] | None = None
+    credit_lines: list[str] = Field(default_factory=list)
+    spending: list[tuple[str, int, int | None]] = Field(default_factory=list)
+    # Day of month the spending norms were measured to, or None for a
+    # finished month. The report says so, or a part-month "typical" reads
+    # as a monthly one.
+    spending_through_day: int | None = None
+    portfolio_total: int | None = None
+    positions: int = 0
+    open_critical: int = 0
+    open_warning: int = 0
+    # Sum of goal balances - the trended "saved toward dreams" figure.
+    goals_total_saved: int | None = None
+    # Pre-rendered "what moved since the last note" lines. Computed by
+    # ``diff_facts`` against the previous day's snapshot, so the model is
+    # handed the comparison already made and never does the arithmetic.
+    changes: list[str] = Field(default_factory=list)
+
+
+
+
+_REPORT_SPENDING_LINES = 3
+
+
+# A spending line earns its place by MOVING, not by being big: a fixed bill
+# that lands exactly on its median (rent, a mortgage) is the definition of
+# unremarkable, and "spent $2,553.23, typical $2,553.23" is a report line
+# that says nothing. Floor + ratio, so tiny wobbles on tiny categories and
+# rounding drift on huge ones both stay out.
+_SPENDING_MOVER_FLOOR = 5_000  # cents; a move smaller than this never shows
+
+
+_SPENDING_MOVER_RATIO = 0.10  # and it must be >= 10% of the category's norm
+
+
+
+
+
+
+def _spending_movers(
+    ranked: list[tuple[str, int, int | None]],
+    *,
+    limit: int = _REPORT_SPENDING_LINES,
+) -> list[tuple[str, int, int | None]]:
+    """The categories whose month actually moved, biggest move first.
+
+    A category with no prior months is a move by definition - its whole
+    amount is new spend - but still has to clear the floor.
+    """
+    movers: list[tuple[int, str, int, int | None]] = []
+    for name, this_month, typical in ranked:
+        if typical is None:
+            if this_month >= _SPENDING_MOVER_FLOOR:
+                movers.append((this_month, name, this_month, typical))
+            continue
+        delta = abs(this_month - typical)
+        if delta < _SPENDING_MOVER_FLOOR:
+            continue
+        if typical > 0 and delta / typical < _SPENDING_MOVER_RATIO:
+            continue
+        movers.append((delta, name, this_month, typical))
+    movers.sort(key=lambda mover: mover[0], reverse=True)
+    return [
+        (name, this_month, typical)
+        for _delta, name, this_month, typical in movers[:limit]
+    ]
+
+
+
+
+# How far back a ranged read looks by default. The delta only needs
+# yesterday; this is for the trend questions the table exists to allow.
+SNAPSHOT_SERIES_DAYS = 90
+
+
+
+
+def _days_apart(earlier: date, later: date) -> str:
+    """ "3 days later" / "3 days earlier", computed here so the model never
+    does date arithmetic on a figure a reader will check."""
+    delta = (later - earlier).days
+    if delta == 0:
+        return "same day"
+    unit = "day" if abs(delta) == 1 else "days"
+    return f"{abs(delta)} {unit} {'later' if delta > 0 else 'earlier'}"
+
+
+
+
+def diff_facts(
+    previous: ReportFacts | None, current: ReportFacts, *, since: date
+) -> list[str]:
+    """What moved between two days, as finished lines.
+
+    Deterministic and code-owned for the same reason every other figure is:
+    a wrong number here is a bug with one place to fix, not a model to argue
+    with. Returns ``[]`` when nothing moved, and the caller omits the section
+    entirely - a report that says "no change" every quiet day trains the
+    reader to skip it.
+    """
+    if previous is None:
+        return []
+
+    lines: list[str] = []
+
+    # The runway first: of everything here, the date the money runs out is
+    # the one a reader feels, and its MOVEMENT is the thing a standing
+    # figure can never show.
+    was = previous.first_negative
+    now = current.first_negative
+    if was is not None and now is not None and was[0] != now[0]:
+        lines.append(
+            f"- cash now goes below zero on {now[0]} ({now[1]}), "
+            f"was {was[0]} - {_days_apart(was[0], now[0])}"
+        )
+    elif was is not None and now is None:
+        lines.append(f"- cash no longer goes below zero (was {was[0]}, {was[1]})")
+    elif was is None and now is not None:
+        lines.append(f"- cash is now projected below zero on {now[0]} ({now[1]})")
+
+    if previous.cash_today is not None and current.cash_today is not None:
+        moved = current.cash_today - previous.cash_today
+        if moved:
+            lines.append(f"- cash on hand {_signed(moved)} since {since}")
+
+    if previous.projection_low is not None and current.projection_low is not None:
+        low_moved = current.projection_low[1] - previous.projection_low[1]
+        if low_moved:
+            lines.append(
+                f"- projected low {_signed(low_moved)} "
+                f"to {_amount(current.projection_low[1])} on {current.projection_low[0]}"
+            )
+
+    if previous.net_worth is not None and current.net_worth is not None:
+        moved = current.net_worth - previous.net_worth
+        if moved:
+            lines.append(f"- net worth {_signed(moved)} since {since}")
+
+    if previous.goals_total_saved is not None and current.goals_total_saved is not None:
+        moved = current.goals_total_saved - previous.goals_total_saved
+        if moved:
+            lines.append(f"- goal savings {_signed(moved)} since {since}")
+
+    for label, before, after in (
+        ("critical", previous.open_critical, current.open_critical),
+        ("warning", previous.open_warning, current.open_warning),
+    ):
+        moved = after - before
+        if moved > 0:
+            lines.append(f"- {moved} new {label} finding{'s' if moved != 1 else ''}")
+        elif moved < 0:
+            count = abs(moved)
+            lines.append(
+                f"- {count} {label} finding{'s' if count != 1 else ''} resolved"
+            )
+
+    return lines
+
+
+
+
+def _snapshot_to_facts(row: FinanceAnalystSnapshot) -> ReportFacts:
+    """The trended columns back as facts. Credit lines and spending are
+    prose inputs rather than figures worth diffing, so they do not round
+    trip and the delta never refers to them."""
+
+    def pair(day: date | None, amount: int | None) -> tuple[date, int] | None:
+        return None if day is None or amount is None else (day, amount)
+
+    return ReportFacts(
+        net_worth=row.net_worth,
+        cash_today=row.cash_today,
+        projection_end=pair(row.projection_end_date, row.projection_end_amount),
+        projection_low=pair(row.projection_low_date, row.projection_low_amount),
+        first_negative=(
+            None
+            if row.first_negative_date is None
+            else (row.first_negative_date, row.first_negative_name or "")
+        ),
+        portfolio_total=row.portfolio_total,
+        positions=row.positions,
+        open_critical=row.open_critical,
+        open_warning=row.open_warning,
+        goals_total_saved=row.goals_total_saved,
+    )
+
+
+
+
+async def save_snapshot(
+    db: AsyncSession, *, owner_user_id: int | None, day: date, facts: ReportFacts
+) -> FinanceAnalystSnapshot:
+    """Record the day's figures, replacing that day if it already exists.
+
+    One row per owner per day, the same rule the note follows: a forced
+    re-run must not leave two versions of one day for tomorrow to diff.
+    """
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    row = await queries.analyst_snapshot_on(db, store_owner=store_owner, day=day)
+    if row is None:
+        row = FinanceAnalystSnapshot(owner_user_id=store_owner, as_of_date=day)
+
+    row.net_worth = facts.net_worth
+    row.cash_today = facts.cash_today
+    row.portfolio_total = facts.portfolio_total
+    row.positions = facts.positions
+    row.projection_end_date = facts.projection_end[0] if facts.projection_end else None
+    row.projection_end_amount = (
+        facts.projection_end[1] if facts.projection_end else None
+    )
+    row.projection_low_date = facts.projection_low[0] if facts.projection_low else None
+    row.projection_low_amount = (
+        facts.projection_low[1] if facts.projection_low else None
+    )
+    row.first_negative_date = facts.first_negative[0] if facts.first_negative else None
+    row.first_negative_name = facts.first_negative[1] if facts.first_negative else None
+    row.open_critical = facts.open_critical
+    row.open_warning = facts.open_warning
+    row.goals_total_saved = facts.goals_total_saved
+
+    db.add(row)
+    await db.flush()
+    return row
+
+
+
+
+async def snapshot_before(
+    db: AsyncSession, *, owner_user_id: int | None, day: date
+) -> tuple[date, ReportFacts] | None:
+    """The most recent snapshot STRICTLY before ``day``, with its date.
+
+    Strictly, or a forced re-run would diff today against itself and always
+    report that nothing moved. Notes are not guaranteed daily either, so a
+    gap falls back to the last good day rather than giving up.
+    """
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    row = await queries.analyst_snapshot_before(db, store_owner=store_owner, day=day)
+    return None if row is None else (row.as_of_date, _snapshot_to_facts(row))
+
+
+
+
+async def snapshot_series(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    days: int = SNAPSHOT_SERIES_DAYS,
+    today: date | None = None,
+) -> list[tuple[date, ReportFacts]]:
+    """The window's snapshots, oldest first.
+
+    The reason these figures are columns rather than a blob on the note: a
+    ranged read answers "has the runway slipped every week this month",
+    which a one-step delta cannot.
+    """
+    today = today or date.today()
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    rows = await queries.analyst_snapshots_between(
+        db,
+        store_owner=store_owner,
+        start=today - timedelta(days=days),
+        end=today,
+    )
+    return [(row.as_of_date, _snapshot_to_facts(row)) for row in rows]
+
+
+
+
+async def build_report_facts(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    today: date | None = None,
+    context: ReportContext | None = None,
+) -> ReportFacts:
+    """Assemble the skeleton's figures from one shared ``ReportContext``.
+
+    Pass ``context`` when the caller already loaded one (the note run
+    shares a single context between the snapshot and the facts); without
+    it, one is loaded here.
+    """
+    ctx = context or await load_report_context(
+        db, owner_user_id=owner_user_id, today=today
+    )
+
+    net_worth = None
+    change_30d = None
+    if ctx.series:
+        latest = ctx.series[-1]
+        net_worth = latest.net_worth_amount
+        past = _at_or_before(ctx.series, ctx.today - timedelta(days=30))
+        if past is not None and past.as_of_date != latest.as_of_date:
+            change_30d = latest.net_worth_amount - past.net_worth_amount
+
+    projection = ctx.projection
+    cash_today = projection.start_balance if ctx.accounts else None
+    projection_end = None
+    projection_low = None
+    first_negative = None
+    if projection.points:
+        end = projection.points[-1]
+        low = min(projection.points, key=lambda point: point.balance)
+        projection_end = (end.date, end.balance)
+        projection_low = (low.date, low.balance)
+        crossing = next((p for p in projection.points if p.balance < 0), None)
+        if crossing is not None and projection.start_balance >= 0:
+            first_negative = (crossing.date, crossing.name)
+
+    portfolio_total = (
+        sum(value for _holding, _security, value in ctx.holdings)
+        if ctx.holdings
+        else None
+    )
+
+    flagged = [i for i in ctx.new_insights if i.insight_type not in _NOTE_INSIGHT_TYPES]
+
+    return ReportFacts(
+        net_worth=net_worth,
+        net_worth_change_30d=change_30d,
+        cash_today=cash_today,
+        projection_end=projection_end,
+        projection_low=projection_low,
+        first_negative=first_negative,
+        credit_lines=_liability_lines(ctx.accounts, ctx.liability_details),
+        spending=_spending_movers(ctx.ranked_spending),
+        spending_through_day=pace_day(ctx.today),
+        portfolio_total=portfolio_total,
+        positions=len(ctx.holdings),
+        open_critical=sum(1 for i in flagged if i.severity == "critical"),
+        open_warning=sum(1 for i in flagged if i.severity == "warning"),
+        goals_total_saved=(
+            sum(a.current_balance or 0 for a in ctx.goal_accounts)
+            if ctx.goal_accounts
+            else None
+        ),
+    )
+
+
+async def _note_on(
+    db: AsyncSession, *, owner_user_id: int | None, day: date
+) -> FinanceInsight | None:
+    """The note written on a given day, if there is one."""
+    store_owner = 0 if owner_user_id is None else owner_user_id
+    return await queries.insight_first_where(
+        db,
+        [
+            FinanceInsight.owner_user_id == store_owner,
+            FinanceInsight.dedup_key == note_dedup_key(day),
+        ],
+    )
+{% endif %}

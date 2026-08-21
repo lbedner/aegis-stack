@@ -1,0 +1,96 @@
+{%- if include_finance %}
+"""Tests for the finance modal's account balance display rule.
+
+``current_balance`` starts at 0 for every created account, so a bare zero
+is "nobody ever set a balance", not "the balance is zero" - unless a
+``balance_as_of`` stamp says a real balance write happened (provider sync,
+statement import, valuation). Without that distinction a freshly imported
+register full of transactions renders $0.00 on every account.
+"""
+
+from app.components.frontend.dashboard.modals.finance_modal import (
+    _account_display_balance,
+)
+
+
+class TestAccountDisplayBalance:
+    def test_stamped_balance_is_authoritative(self) -> None:
+        account = {
+            "current_balance": 12_345,
+            "activity_balance": 99,
+            "balance_as_of": "2026-07-01T00:00:00",
+            "classification": "asset",
+        }
+        assert _account_display_balance(account) == 12_345
+
+    def test_stamped_zero_stays_zero(self) -> None:
+        """A provider-synced account that is genuinely empty shows $0."""
+        account = {
+            "current_balance": 0,
+            "activity_balance": -24_200,
+            "balance_as_of": "2026-07-01T00:00:00",
+            "classification": "asset",
+        }
+        assert _account_display_balance(account) == 0
+
+    def test_unstamped_zero_falls_back_to_the_register_sum(self) -> None:
+        """The imported-file case: default 0, never written, but the
+        register has real activity."""
+        account = {
+            "current_balance": 0,
+            "activity_balance": -24_200,
+            "balance_as_of": None,
+            "classification": "asset",
+        }
+        assert _account_display_balance(account) == -24_200
+
+    def test_manual_opening_balance_without_stamp_still_wins(self) -> None:
+        """A hand-entered opening balance has no stamp but is not the
+        untouched default; it must not be ignored."""
+        account = {
+            "current_balance": 500_000,
+            "activity_balance": -1_000,
+            "balance_as_of": None,
+            "classification": "asset",
+        }
+        assert _account_display_balance(account) == 500_000
+
+    def test_liability_balance_shows_as_owed(self) -> None:
+        account = {
+            "current_balance": 90_000,
+            "activity_balance": 0,
+            "balance_as_of": "2026-07-01T00:00:00",
+            "classification": "liability",
+        }
+        assert _account_display_balance(account) == -90_000
+
+    def test_no_balance_and_no_activity_is_zero(self) -> None:
+        account = {
+            "current_balance": None,
+            "activity_balance": 0,
+            "classification": "asset",
+        }
+        assert _account_display_balance(account) == 0
+{%- endif %}
+
+
+class TestANegativeBalanceIsNeverPlain:
+    """An overdrawn account must read as trouble at every level.
+
+    The sidebar reserved colour for totals so it would not become a wall
+    of accent - right for teal, wrong for red: TOTAL CHECKING (CHASE) at
+    -$222.56 rendered in plain white and read as an ordinary number.
+    headline_stat_color's own rule: colour the number in trouble, never
+    every healthy one.
+    """
+
+    def test_a_negative_row_balance_is_red(self) -> None:
+        import inspect
+
+        from app.components.frontend.dashboard.modals.finance_modal import sidebar
+
+        source = inspect.getsource(sidebar)
+        start = source.index("Individual account rows read in the primary")
+        block = source[start : start + 800]
+        assert "balance < 0" in block
+        assert "Theme.Colors.ERROR" in block

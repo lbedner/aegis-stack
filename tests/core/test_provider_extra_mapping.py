@@ -36,6 +36,28 @@ class TestPydanticAIProviderExtraMapping:
             assert any("pydantic-ai-slim[openai]" in dep for dep in deps)
             assert not any("pydantic-ai-slim[public]" in dep for dep in deps)
 
+    def test_pollinations_provider_maps_to_openai_extra(self) -> None:
+        """Pollinations provider should map to openai extra (OpenAI-compatible API)."""
+        with (
+            patch(
+                "aegis.cli.interactive.get_ai_provider_selection",
+                return_value=["pollinations"],
+            ),
+            patch(
+                "aegis.cli.interactive.get_ai_framework_selection",
+                return_value="pydantic-ai",
+            ),
+        ):
+            generator = TemplateGenerator(
+                project_name="test",
+                selected_components=[],
+                selected_services=["ai"],
+            )
+            deps = generator._get_ai_framework_deps()
+
+            assert any("pydantic-ai-slim[openai]" in dep for dep in deps)
+            assert not any("pydantic-ai-slim[pollinations]" in dep for dep in deps)
+
     def test_openrouter_provider_maps_to_openai_extra(self) -> None:
         """OpenRouter provider should map to openai extra."""
         with (

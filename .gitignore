@@ -156,3 +156,10 @@ docs/plans/
 
 # Editor workspace files
 *.code-workspace
+
+# pi local dir
+.pi/
+
+# Screenshot/demo stack (generated, disposable)
+finance-app/
+finance-blueprint/

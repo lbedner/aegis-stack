@@ -34,6 +34,16 @@ editing (accidental `aegis init` nesting has produced `my-app/my-app/my-app`).
 files are stack-specific so edit surgically. See memory
 `project-my-app-disposable`.
 
+### Module size budget
+Logic modules cap at **500 lines**; declaration modules (models, schemas,
+locales, seeds, fixtures) at **900**. No module may be both >40% of its
+package and >400 lines - that shape is one file wearing a folder. Enforced by
+`tests/core/test_module_size_budget.py`, whose `BUDGET` dict is a ratchet: it
+records existing debt at current size, so nothing gets worse and anything new
+must meet the cap outright. Shrink a file under its limit and the test tells
+you to delete its entry. The reader being protected is an agent: 500 lines is
+~7k tokens, and past ~2000 the Read tool pages instead of loading.
+
 ### Scope control
 Fix exactly what is asked. No scope creep, no unrequested test suites, minimal
 viable change, and verify it works.
@@ -41,6 +51,16 @@ viable change, and verify it works.
 ### DRY
 Before writing new code, look for existing logic used elsewhere; prefer a single
 shared function over duplicating it.
+
+### Don't narrate self-caught-and-fixed issues
+If a mistake (lint slip, wrong approach, even a real bug) is found and fully
+fixed within the same turn, before the user ever saw or acted on the bad
+outcome, fix it silently and say nothing about it - not in the summary, not
+as a closing "worth being straight about" aside. Severity does not matter;
+exposure does. Only report: issues that already reached a prior turn's
+output (the user saw/relied on the wrong thing), and anything still
+unverified that the user needs to check themselves. This is deliberate -
+the user wants minimal context, not a transparency log.
 
 ## Coding standards
 
@@ -75,6 +95,14 @@ non-Python files, or when the LSP is unavailable.
 
 The Makefile documents the rest (per-component template tests, the full stack
 matrix, release targets).
+
+## Generated-app CLI commands (template + my-app)
+
+New `@app.command` handlers in `app/cli/` are `async def` with plain `await` -
+NEVER `asyncio.run` inside a command. The harness in `app/cli/main.py`
+(`standalone_mode=False` + `iscoroutine` + one `asyncio.run`) owns the loop.
+Legacy commands in the same files still wrap with `asyncio.run`; do not copy
+them. Exemplars: `cli/insights.py:collect`, `cli/security.py:rotate_encryption_key`.
 
 ## Skills index
 

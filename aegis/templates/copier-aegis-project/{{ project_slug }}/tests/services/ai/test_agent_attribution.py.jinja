@@ -8,8 +8,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.ai.agent_loader import AgentConfig, default_agent_config
-import app.services.ai.service as service_module
+from app.services.ai.domains.chat.agent_loader import AgentConfig, default_agent_config
+import app.services.ai.service.chat as chat_module
+import app.services.ai.service.prompt as prompt_module
+import app.services.ai.service.streaming as streaming_module
 from app.services.ai.service import AIService
 
 
@@ -70,7 +72,8 @@ def harness(
     async def no_memory(user_id: str, **kwargs: object) -> None:
         return None
 
-    monkeypatch.setattr(service_module, "build_user_memory_context", no_memory)
+    monkeypatch.setattr(chat_module, "build_user_memory_context", no_memory)
+    monkeypatch.setattr(streaming_module, "build_user_memory_context", no_memory)
 
     recorder = MagicMock()
     monkeypatch.setattr(service, "_record_usage", recorder)
@@ -82,7 +85,7 @@ def harness(
         captured["system_prompt"] = system_prompt
         return _FakeAgent()
 
-    monkeypatch.setattr(service_module, "get_agent", fake_get_agent)
+    monkeypatch.setattr(prompt_module, "get_agent", fake_get_agent)
     return service, recorder, captured, monkeypatch
 
 
@@ -92,7 +95,8 @@ def _stub_resolve(
     async def resolve(slug: str = "assistant", **kwargs: object) -> AgentConfig:
         return config
 
-    monkeypatch.setattr(service_module, "resolve_agent", resolve)
+    monkeypatch.setattr(chat_module, "resolve_agent", resolve)
+    monkeypatch.setattr(streaming_module, "resolve_agent", resolve)
 
 
 class TestChatAttribution:
@@ -145,7 +149,8 @@ class TestUserMemoryInjection:
             assert user_id == "u9"
             return "<user_memory>\n- [food] allergic to peanuts\n</user_memory>"
 
-        monkeypatch.setattr(service_module, "build_user_memory_context", fake_memory)
+        monkeypatch.setattr(chat_module, "build_user_memory_context", fake_memory)
+        monkeypatch.setattr(streaming_module, "build_user_memory_context", fake_memory)
 
         await service.chat("hello", user_id="u9")
 

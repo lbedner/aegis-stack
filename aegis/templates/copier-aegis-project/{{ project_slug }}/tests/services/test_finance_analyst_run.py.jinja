@@ -17,11 +17,11 @@ import pytest
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai import module_context
-from app.services.ai.agent_loader import invalidate_agent_cache
+from app.services.ai.domains.chat import module_context
+from app.services.ai.domains.chat.agent_loader import invalidate_agent_cache
 from app.services.ai.config import AIServiceConfig
 from app.services.ai.models import AIProvider
-from app.services.ai.providers import ProviderError, model_for
+from app.services.ai.domains.llm.providers import ProviderError, model_for
 from app.services.finance.domains.detection import analyst
 from app.services.finance.models import FinanceInsight
 from app.services.finance.seeds import demo_seed
@@ -68,7 +68,7 @@ def _fake_model(monkeypatch, headline: str = NOTE_TEXT) -> list[str]:
         calls.append(config.model)
         return TestModel(custom_output_args={"headline": headline}), "test-model"
 
-    monkeypatch.setattr("app.services.ai.providers.model_for", _model_for)
+    monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _model_for)
     return calls
 
 
@@ -102,9 +102,9 @@ class TestModelFor:
         settings.ollama_base_url_effective = "http://localhost:11434"
 
         with (
-            patch("app.services.ai.providers.AsyncOpenAI") as client,
-            patch("app.services.ai.providers.OpenAIChatModel") as chat_model,
-            patch("app.services.ai.providers.OpenAIProvider"),
+            patch("app.services.ai.domains.llm.providers.AsyncOpenAI") as client,
+            patch("app.services.ai.domains.llm.providers.OpenAIChatModel") as chat_model,
+            patch("app.services.ai.domains.llm.providers.OpenAIProvider"),
         ):
             model, model_name = model_for(config, settings)
 
@@ -181,7 +181,7 @@ class TestRunAnalystNote:
             )
 
         monkeypatch.setattr(
-            "app.services.ai.providers.model_for",
+            "app.services.ai.domains.llm.providers.model_for",
             lambda config, settings: (
                 FunctionModel(_respond),
                 "function-model",
@@ -271,7 +271,7 @@ class TestRunAnalystNote:
         def _explode(config, settings):
             raise ProviderError("Ollama connection failed")
 
-        monkeypatch.setattr("app.services.ai.providers.model_for", _explode)
+        monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _explode)
         await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
         await _seed_agent(async_db_session)
 

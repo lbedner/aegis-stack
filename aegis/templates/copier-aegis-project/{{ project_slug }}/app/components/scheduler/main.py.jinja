@@ -163,7 +163,7 @@ async def _apply_active_model() -> None:
     """
     from app.core.config import settings
     from app.core.db import get_async_session
-    from app.services.ai import active_model
+    from app.services.ai.domains.llm import active_model
 
     try:
         async with get_async_session() as session:

@@ -10,8 +10,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.models.conversation import Conversation, ConversationMessage
 from app.services.ai.jobs import analyze_sentiment_job
 from app.services.ai.models.sentiment import SentimentAnalysis
-import app.services.ai.sentiment as sentiment_module
-from app.services.ai.sentiment import (
+import app.services.ai.domains.chat.sentiment as sentiment_module
+from app.services.ai.domains.chat.sentiment import (
     score_unscored_conversations,
     sentiment_stats,
 )

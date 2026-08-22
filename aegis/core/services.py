@@ -537,7 +537,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 ],
                 "ai_voice": [
                     "app/components/backend/api/voice",
-                    "app/services/ai/voice",
+                    "app/services/ai/domains/voice",
                     "tests/services/ai/voice",
                     "tests/api/test_voice_endpoints.py",
                     "app/components/frontend/dashboard/modals/voice_settings_tab.py",

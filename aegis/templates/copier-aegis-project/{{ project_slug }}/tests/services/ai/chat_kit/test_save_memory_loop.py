@@ -9,11 +9,11 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.chat_kit import ChatScope, DoneFrame, ToolChatAgent
+from app.services.ai.domains.chat.chat_kit import ChatScope, DoneFrame, ToolChatAgent
 from app.services.ai.models.agents import AgentUserMemory
-from app.services.ai.tools import resolve_tools
-import app.services.ai.user_memory as user_memory_module
-from app.services.ai.user_memory import current_user_id
+from app.services.ai.domains.chat.tools import resolve_tools
+import app.services.ai.domains.chat.user_memory as user_memory_module
+from app.services.ai.domains.chat.user_memory import current_user_id
 
 
 @dataclass

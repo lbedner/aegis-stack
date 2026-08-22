@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 
-from app.services.ai.chat_kit import (
+from app.services.ai.domains.chat.chat_kit import (
     DeltaFrame,
     DoneFrame,
     StaticContextProvider,
@@ -14,7 +14,7 @@ from app.services.ai.chat_kit import (
     ndjson_line,
     ndjson_response,
 )
-from app.services.ai.chat_kit.models import BlockedFrame, ErrorFrame
+from app.services.ai.domains.chat.chat_kit.models import BlockedFrame, ErrorFrame
 
 
 @dataclass

@@ -5,7 +5,7 @@ from datetime import date
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.fetchers import FetchContext, register_fetcher
+from app.services.ai.domains.chat.fetchers import FetchContext, register_fetcher
 from app.services.finance.domains.detection.insights import format_usd
 from app.services.finance.domains.detection.analyst.context import (
     load_report_context,

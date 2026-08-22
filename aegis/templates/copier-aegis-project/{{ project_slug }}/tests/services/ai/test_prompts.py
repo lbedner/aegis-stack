@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from app.services.ai.prompts import build_system_prompt
+from app.services.ai.domains.chat.prompts import build_system_prompt
 
 
 def _settings() -> MagicMock:

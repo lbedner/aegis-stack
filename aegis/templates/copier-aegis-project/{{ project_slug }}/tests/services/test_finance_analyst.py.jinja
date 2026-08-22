@@ -10,7 +10,7 @@ import pytest
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.fetchers import FetchContext, registered_fetcher_names, run_fetcher
+from app.services.ai.domains.chat.fetchers import FetchContext, registered_fetcher_names, run_fetcher
 from app.services.ai.models.agents import Agent, MemoryModule
 from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
 from app.services.finance.domains.detection import analyst, generate_insights

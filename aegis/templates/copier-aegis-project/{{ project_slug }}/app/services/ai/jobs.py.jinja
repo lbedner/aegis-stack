@@ -13,7 +13,7 @@ async def sync_llm_catalog_job() -> None:
     from sqlmodel import Session
 
     from app.core.db import engine
-    from app.services.ai.etl import sync_llm_catalog
+    from app.services.ai.domains.llm.etl import sync_llm_catalog
 
     try:
         with Session(engine) as session:
@@ -38,7 +38,7 @@ async def analyze_sentiment_job() -> None:
         logger.debug("Sentiment analysis disabled; skipping job")
         return
 
-    from app.services.ai.sentiment import score_unscored_conversations
+    from app.services.ai.domains.chat.sentiment import score_unscored_conversations
 
     try:
         counts = await score_unscored_conversations()

@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-import app.services.ai.agent_registry as agent_registry_module
-from app.services.ai.agent_registry import (
+import app.services.ai.domains.chat.agent_registry as agent_registry_module
+from app.services.ai.domains.chat.agent_registry import (
     AgentNotFoundError,
     InvalidAgentUpdateError,
     list_agents,

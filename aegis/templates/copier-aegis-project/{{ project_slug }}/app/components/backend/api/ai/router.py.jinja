@@ -21,7 +21,7 @@ from app.services.ai.service import (
     ProviderError,
 )
 {% if ai_voice %}
-from app.services.ai.voice import (
+from app.services.ai.domains.voice import (
     AudioFormat,
     AudioInput,
     SpeechRequest,
@@ -55,7 +55,7 @@ async def sync_active_model() -> None:
     running server without a restart.
     """
     from app.core.db import get_async_session
-    from app.services.ai import active_model
+    from app.services.ai.domains.llm import active_model
 
     try:
         async with get_async_session() as session:
@@ -469,7 +469,7 @@ async def get_sentiment_stats() -> dict[str, Any]:
     the most recent negative conversations, plus whether the scoring job
     is enabled. Zero-filled when nothing has been scored yet.
     """
-    from app.services.ai.sentiment import sentiment_stats
+    from app.services.ai.domains.chat.sentiment import sentiment_stats
 
     try:
         return await sentiment_stats()
@@ -496,7 +496,7 @@ class AgentUpdateRequest(BaseModel):
 @router.get("/agents")
 async def list_registry_agents() -> list[dict[str, Any]]:
     """List all agents in the registry with their tool/module grants."""
-    from app.services.ai.agent_registry import list_agents, serialize_agent
+    from app.services.ai.domains.chat.agent_registry import list_agents, serialize_agent
 
     try:
         return [serialize_agent(agent) for agent in await list_agents()]
@@ -510,7 +510,7 @@ async def update_registry_agent(
     slug: str, request: AgentUpdateRequest
 ) -> dict[str, Any]:
     """Apply a partial agent update (invalidates its cached config)."""
-    from app.services.ai.agent_registry import (
+    from app.services.ai.domains.chat.agent_registry import (
         AgentNotFoundError,
         InvalidAgentUpdateError,
         serialize_agent,
@@ -550,7 +550,7 @@ class MemoryModuleUpdateRequest(BaseModel):
 async def list_registry_memory_modules() -> list[dict[str, Any]]:
     """Every memory module, active or not, in render order."""
     from app.core.db import get_async_session
-    from app.services.ai.memory_modules import (
+    from app.services.ai.domains.chat.memory_modules import (
         list_memory_modules,
         serialize_memory_module,
     )
@@ -572,7 +572,7 @@ async def update_registry_memory_module(
 ) -> dict[str, Any]:
     """Apply a partial memory-module update."""
     from app.core.db import get_async_session
-    from app.services.ai.memory_modules import (
+    from app.services.ai.domains.chat.memory_modules import (
         InvalidMemoryModuleError,
         serialize_memory_module,
         update_memory_module,
@@ -606,7 +606,7 @@ async def preview_registry_memory_module(
     dashboard can display what the model would actually be handed, which is
     the only way to tell a working module from a silently empty one.
     """
-    from app.services.ai.module_context import render_memory_modules
+    from app.services.ai.domains.chat.module_context import render_memory_modules
 
     try:
         rendered = await render_memory_modules([slug], user_id=user_id)

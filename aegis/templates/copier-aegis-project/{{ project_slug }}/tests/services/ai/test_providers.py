@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services.ai.models import AIProvider
-from app.services.ai.providers import (
+from app.services.ai.domains.llm.providers import (
     ProviderError,
     _get_model_class,
     get_agent,
@@ -180,10 +180,10 @@ class TestGetSupportedProviders:
 class TestGetAgentOllama:
     """Tests for agent creation with Ollama provider."""
 
-    @patch("app.services.ai.providers.AsyncOpenAI")
-    @patch("app.services.ai.providers.OpenAIProvider")
-    @patch("app.services.ai.providers.OpenAIChatModel")
-    @patch("app.services.ai.providers.Agent")
+    @patch("app.services.ai.domains.llm.providers.AsyncOpenAI")
+    @patch("app.services.ai.domains.llm.providers.OpenAIProvider")
+    @patch("app.services.ai.domains.llm.providers.OpenAIChatModel")
+    @patch("app.services.ai.domains.llm.providers.Agent")
     def test_get_agent_ollama_creates_agent(
         self,
         mock_agent_class: MagicMock,
@@ -218,10 +218,10 @@ class TestGetAgentOllama:
         # Verify agent was created
         assert result == mock_agent_instance
 
-    @patch("app.services.ai.providers.AsyncOpenAI")
-    @patch("app.services.ai.providers.OpenAIProvider")
-    @patch("app.services.ai.providers.OpenAIChatModel")
-    @patch("app.services.ai.providers.Agent")
+    @patch("app.services.ai.domains.llm.providers.AsyncOpenAI")
+    @patch("app.services.ai.domains.llm.providers.OpenAIProvider")
+    @patch("app.services.ai.domains.llm.providers.OpenAIChatModel")
+    @patch("app.services.ai.domains.llm.providers.Agent")
     def test_get_agent_ollama_uses_model_name(
         self,
         mock_agent_class: MagicMock,
@@ -247,7 +247,7 @@ class TestGetAgentOllama:
         call_kwargs = mock_model_class.call_args[1]
         assert call_kwargs["model_name"] == "mistral:7b"
 
-    @patch("app.services.ai.providers.AsyncOpenAI")
+    @patch("app.services.ai.domains.llm.providers.AsyncOpenAI")
     def test_get_agent_ollama_connection_error(
         self,
         mock_openai_class: MagicMock,
@@ -282,10 +282,10 @@ class TestGetAgentOllama:
 class TestOllamaBaseUrlConfiguration:
     """Tests for Ollama base URL configuration."""
 
-    @patch("app.services.ai.providers.AsyncOpenAI")
-    @patch("app.services.ai.providers.OpenAIProvider")
-    @patch("app.services.ai.providers.OpenAIChatModel")
-    @patch("app.services.ai.providers.Agent")
+    @patch("app.services.ai.domains.llm.providers.AsyncOpenAI")
+    @patch("app.services.ai.domains.llm.providers.OpenAIProvider")
+    @patch("app.services.ai.domains.llm.providers.OpenAIChatModel")
+    @patch("app.services.ai.domains.llm.providers.Agent")
     def test_ollama_uses_effective_base_url(
         self,
         mock_agent_class: MagicMock,

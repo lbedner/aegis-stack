@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.chat_kit import BudgetGuard
+from app.services.ai.domains.chat.chat_kit import BudgetGuard
 from app.services.ai.models.llm import LLMUsage
 
 

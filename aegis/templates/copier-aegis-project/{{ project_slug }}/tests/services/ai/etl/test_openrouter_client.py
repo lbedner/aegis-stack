@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from app.services.ai.etl.clients.openrouter_client import (
+from app.services.ai.domains.llm.etl.clients.openrouter_client import (
     OpenRouterClient,
     OpenRouterModel,
     OpenRouterModelIndex,
@@ -33,7 +33,7 @@ class TestOpenRouterClient:
     @pytest.mark.asyncio
     async def test_fetch_models_http_error(self) -> None:
         """Test that HTTP errors are propagated."""
-        with patch("app.services.ai.etl.clients.openrouter_client.httpx") as mock_httpx:
+        with patch("app.services.ai.domains.llm.etl.clients.openrouter_client.httpx") as mock_httpx:
             mock_response = MagicMock()
             mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
                 "Server error",
@@ -56,7 +56,7 @@ class TestOpenRouterClient:
     @pytest.mark.asyncio
     async def test_fetch_models_handles_parse_errors(self) -> None:
         """Test that invalid model entries are skipped with warning."""
-        with patch("app.services.ai.etl.clients.openrouter_client.httpx") as mock_httpx:
+        with patch("app.services.ai.domains.llm.etl.clients.openrouter_client.httpx") as mock_httpx:
             mock_response = MagicMock()
             mock_response.json.return_value = {
                 "data": [

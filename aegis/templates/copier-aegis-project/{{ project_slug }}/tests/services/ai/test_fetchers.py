@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.ai.fetchers import (
+from app.services.ai.domains.chat.fetchers import (
     FetchContext,
     register_fetcher,
     registered_fetcher_names,
@@ -60,7 +60,7 @@ class TestRunFetcher:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A stale fetch_function on a module row degrades, never raises."""
-        import app.services.ai.fetchers as fetchers_module
+        import app.services.ai.domains.chat.fetchers as fetchers_module
 
         warned = MagicMock()
         monkeypatch.setattr(fetchers_module.logger, "warning", warned)
@@ -77,7 +77,7 @@ class TestRunFetcher:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A fetcher crash degrades that one module, never the turn."""
-        import app.services.ai.fetchers as fetchers_module
+        import app.services.ai.domains.chat.fetchers as fetchers_module
 
         warned = MagicMock()
         monkeypatch.setattr(fetchers_module.logger, "warning", warned)

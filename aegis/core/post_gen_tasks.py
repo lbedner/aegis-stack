@@ -369,27 +369,27 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_dir(project_path, "app/services/ai/models/agents")
         remove_file(project_path, "tests/services/ai/test_agent_models.py")
         # Per-user memory needs the agent_user_memory table + async DB.
-        remove_file(project_path, "app/services/ai/user_memory.py")
+        remove_file(project_path, "app/services/ai/domains/chat/user_memory.py")
         remove_file(project_path, "tests/services/ai/test_user_memory.py")
         # Memory modules are DB rows (the memory_module table).
-        remove_file(project_path, "app/services/ai/memory_modules.py")
+        remove_file(project_path, "app/services/ai/domains/chat/memory_modules.py")
         remove_file(project_path, "tests/services/ai/test_memory_modules.py")
         # Reference fetchers query the conversation tables (removed above).
         # The fetcher registry itself (fetchers.py) stays: it is DB-free.
-        remove_file(project_path, "app/services/ai/builtin_fetchers.py")
+        remove_file(project_path, "app/services/ai/domains/chat/builtin_fetchers.py")
         remove_file(project_path, "tests/services/ai/test_builtin_fetchers.py")
         # Module context assembly reads memory_module rows.
-        remove_file(project_path, "app/services/ai/module_context.py")
+        remove_file(project_path, "app/services/ai/domains/chat/module_context.py")
         remove_file(project_path, "tests/services/ai/test_module_context.py")
         # Sentiment scoring reads/writes conversation + sentiment tables.
-        remove_file(project_path, "app/services/ai/sentiment.py")
+        remove_file(project_path, "app/services/ai/domains/chat/sentiment.py")
         remove_file(project_path, "app/services/ai/models/sentiment.py")
         remove_file(project_path, "tests/services/ai/test_sentiment.py")
         # Agent registry CLI inspects DB rows.
         remove_file(project_path, "app/cli/agents.py")
         remove_file(project_path, "tests/cli/test_agents_cli.py")
         # Agent registry admin surface (API service + dashboard tab).
-        remove_file(project_path, "app/services/ai/agent_registry.py")
+        remove_file(project_path, "app/services/ai/domains/chat/agent_registry.py")
         remove_file(
             project_path,
             "app/components/frontend/dashboard/modals/agents_tab.py",
@@ -401,15 +401,15 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/rag/test_knowledge_models.py")
         # chat_kit + usage_recording ledger the LLM catalog + conversation
         # tables removed above, so they only work with a persistent backend.
-        remove_dir(project_path, "app/services/ai/chat_kit")
+        remove_dir(project_path, "app/services/ai/domains/chat/chat_kit")
         remove_file(project_path, "app/services/ai/usage_recording.py")
         remove_dir(project_path, "tests/services/ai/chat_kit")
-        remove_dir(project_path, "app/services/ai/etl")
+        remove_dir(project_path, "app/services/ai/domains/llm/etl")
         remove_dir(project_path, "app/services/ai/fixtures")
         # Remove persistence-related contexts (keep usage_context.py - no DB deps)
-        remove_file(project_path, "app/services/ai/llm_catalog_context.py")
-        remove_file(project_path, "app/services/ai/llm_service.py")
-        remove_file(project_path, "app/services/ai/provider_management.py")
+        remove_file(project_path, "app/services/ai/domains/chat/llm_catalog_context.py")
+        remove_file(project_path, "app/services/ai/domains/llm/llm_service.py")
+        remove_file(project_path, "app/services/ai/domains/llm/provider_management.py")
         # Remove persistence-related tests
         remove_dir(project_path, "tests/services/ai/etl")
         remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
@@ -446,8 +446,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/cli/rag.py")
         remove_dir(project_path, "tests/services/rag")
         # Remove RAG-related files within AI service
-        remove_file(project_path, "app/services/ai/rag_context.py")
-        remove_file(project_path, "app/services/ai/rag_stats_context.py")
+        remove_file(project_path, "app/services/ai/domains/chat/rag_context.py")
+        remove_file(project_path, "app/services/ai/domains/chat/rag_stats_context.py")
         remove_file(project_path, "tests/services/ai/test_rag_stats_context.py")
         remove_file(project_path, "app/components/frontend/dashboard/modals/rag_tab.py")
 
@@ -457,14 +457,14 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         is_enabled(AnswerKeys.AI)
         and context.get(AnswerKeys.AI_FRAMEWORK) != AIFrameworks.PYDANTIC_AI
     ):
-        remove_dir(project_path, "app/services/ai/chat_kit")
+        remove_dir(project_path, "app/services/ai/domains/chat/chat_kit")
         remove_file(project_path, "app/services/ai/usage_recording.py")
         remove_dir(project_path, "tests/services/ai/chat_kit")
 
     # Remove voice (TTS/STT) if not enabled
     if not is_enabled(AnswerKeys.AI_VOICE):
         remove_dir(project_path, "app/components/backend/api/voice")
-        remove_dir(project_path, "app/services/ai/voice")
+        remove_dir(project_path, "app/services/ai/domains/voice")
         remove_dir(project_path, "tests/services/ai/voice")
         remove_file(project_path, "tests/api/test_voice_endpoints.py")
         remove_file(

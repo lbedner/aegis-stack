@@ -1,6 +1,6 @@
 """Tests for RAG stats context model."""
 
-from app.services.ai.rag_stats_context import RAGStatsContext
+from app.services.ai.domains.chat.rag_stats_context import RAGStatsContext
 
 
 class TestRAGStatsContext:

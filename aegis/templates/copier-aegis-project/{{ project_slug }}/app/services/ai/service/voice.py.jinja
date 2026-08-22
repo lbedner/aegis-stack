@@ -1,0 +1,187 @@
+{% if ai_voice %}
+"""The voice pipeline: transcribe, chat, optionally speak the answer."""
+
+from app.core.log import logger
+from app.services.ai.domains.voice import (
+    AudioInput,
+    SpeechRequest,
+    VoiceChatResponse,
+)
+from app.services.ai.service.base import AIServiceError
+from app.services.ai.service.streaming import StreamingMixin
+
+
+class VoiceMixin(StreamingMixin):
+    """STT -> chat -> TTS orchestration on top of the chat mixins."""
+
+    async def voice_chat(
+        self,
+        audio: AudioInput,
+        conversation_id: str | None = None,
+        user_id: str = "default",
+        voice_mode: bool = False,
+        return_audio: bool = False,
+{% if ai_rag %}
+        use_rag: bool = False,
+        rag_collection: str | None = None,
+        rag_top_k: int | None = None,
+{% endif %}
+    ) -> VoiceChatResponse:
+        """
+        Process voice input: transcribe → chat → return response.
+
+        This method implements the voice pipeline:
+        1. STT - Transcribe audio to text using configured provider
+        2. Agent - Pass transcription to AI chat for processing
+        3. Response - Return both full and voice-optimized responses
+        4. TTS - Optionally synthesize voice response (if return_audio=True)
+
+        Args:
+            audio: AudioInput containing raw audio bytes and metadata
+            conversation_id: Optional conversation ID (creates new if None)
+            user_id: User identifier for conversation ownership
+            voice_mode: When True, summarize response for spoken output
+            return_audio: When True, synthesize response to audio using TTS
+{% if ai_rag %}
+            use_rag: Enable RAG context injection from indexed codebase
+            rag_collection: Collection to search (uses config default if None)
+            rag_top_k: Number of results to retrieve (uses config default if None)
+{% endif %}
+
+        Returns:
+            VoiceChatResponse: Contains transcription, full response,
+            voice-optimized response, and optional audio response
+
+        Raises:
+            AIServiceError: If service is disabled or transcription/chat fails
+            ProviderError: If AI provider fails
+        """
+        if not self.config.enabled:
+            raise AIServiceError("AI service is disabled")
+
+        try:
+            # 1. Transcribe audio to text
+            logger.info(
+                "voice_chat.transcribe_start",
+                audio_size=len(audio.content),
+                format=audio.format.value,
+            )
+            transcription = await self.stt.transcribe(audio)
+            logger.info(
+                "voice_chat.transcribe_complete",
+                text_length=len(transcription.text),
+                language=transcription.language,
+            )
+
+            # 2. Pass transcription to chat
+            response = await self.chat(
+                message=transcription.text,
+                conversation_id=conversation_id,
+                user_id=user_id,
+{% if ai_rag %}
+                use_rag=use_rag,
+                rag_collection=rag_collection,
+                rag_top_k=rag_top_k,
+{% endif %}
+            )
+
+            # 3. Get the full response content
+            full_response = response.content
+
+            # 4. Optionally convert for voice output
+            voice_response = full_response
+            if voice_mode:
+                # Always convert to natural speech when voice_mode is enabled
+                voice_response = await self.prepare_for_voice(full_response)
+
+            # 5. Optionally synthesize voice response
+            audio_response: bytes | None = None
+            if return_audio:
+                logger.info("voice_chat.tts_start", text_length=len(voice_response))
+                speech_request = SpeechRequest(text=voice_response)
+                speech_result = await self.tts.synthesize(speech_request)
+                audio_response = speech_result.audio
+                logger.info(
+                    "voice_chat.tts_complete",
+                    audio_size=len(audio_response),
+                    format=speech_result.format.value,
+                )
+
+            return VoiceChatResponse(
+                transcription=transcription,
+                full_response=full_response,
+                voice_response=voice_response,
+                conversation_id=response.metadata.get("conversation_id"),
+                audio_response=audio_response,
+            )
+
+        except AIServiceError:
+            # ProviderError / ConversationError subclasses carry meaning for
+            # callers (the API router maps them to distinct status codes);
+            # wrapping them here would collapse that distinction.
+            raise
+        except Exception as e:
+            error_msg = f"Voice chat processing failed: {e}"
+            logger.exception(error_msg)
+            raise AIServiceError(error_msg) from e
+
+    async def prepare_for_voice(self, text: str, max_chars: int = 4096) -> str:
+        """
+        Convert a response to natural spoken format.
+
+        Transforms any response (markdown, code, lists) into conversational
+        text that's natural to speak aloud. Always applies the transformation,
+        not just for long responses.
+
+        Args:
+            text: The full response text to convert
+            max_chars: Maximum characters for TTS output (default: 4096)
+
+        Returns:
+            A voice-optimized, conversational version of the response
+        """
+        # Leave buffer for safety
+        target_chars = max_chars - 100
+
+        conversion_prompt = (
+            "Convert the following response into natural spoken language. "
+            "Remove markdown formatting, bullet points, code blocks, and technical symbols. "
+            "Make it conversational and natural to speak aloud. "
+            "Keep the key information but phrase it as you would say it in conversation. "
+            f"Stay under {target_chars} characters:\n\n"
+            f"{text}"
+        )
+
+        # Runs as a one-off conversation owned by the internal
+        # ``system_voice_convert`` user, so it never touches the caller's
+        # conversation. Note it IS persisted like any chat turn, just under
+        # that internal user.
+        try:
+            # Create a lightweight chat call for conversion
+            result = await self.chat(
+                message=conversion_prompt,
+                conversation_id=None,  # New conversation
+                user_id="system_voice_convert",
+            )
+            return result.content
+        except Exception as e:
+            logger.warning(f"Voice conversion failed, using truncated original: {e}")
+            # Fallback: return truncated text
+            if len(text) > target_chars:
+                truncated = text[:target_chars]
+                # Try to end at a sentence boundary
+                for end_char in [". ", "! ", "? ", "\n"]:
+                    last_idx = truncated.rfind(end_char)
+                    if last_idx > target_chars // 2:
+                        return truncated[:last_idx + 1].strip()
+                return truncated.strip() + "..."
+            return text
+{% else %}
+"""Voice pipeline placeholder: ships only when the voice option is enabled."""
+
+from app.services.ai.service.streaming import StreamingMixin
+
+
+class VoiceMixin(StreamingMixin):
+    """Empty link in the mixin chain; the voice option is off."""
+{% endif %}

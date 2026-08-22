@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from app.services.ai.voice.models import STTProvider
-from app.services.ai.voice.stt import STTConfig, STTService
+from app.services.ai.domains.voice.models import STTProvider
+from app.services.ai.domains.voice.stt import STTConfig, STTService
 
 
 class TestSTTServiceInitialization:

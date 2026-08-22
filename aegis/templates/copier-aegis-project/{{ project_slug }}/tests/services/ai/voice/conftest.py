@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from app.services.ai.voice import (
+from app.services.ai.domains.voice import (
     AudioFormat,
     ModelInfo,
     OpenAIVoice,

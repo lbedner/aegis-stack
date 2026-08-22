@@ -1,0 +1,357 @@
+"""Per-request context builders: health, usage, catalog{% if ai_rag %}, RAG{% endif %}.
+
+Each ``_build_*`` method assembles one "what's true right now" block that
+the prompt layer injects into the system prompt. Failures degrade to
+``None`` rather than failing the chat turn.
+"""
+
+from datetime import datetime
+from typing import Any
+{% if ai_rag %}
+from collections.abc import Sequence
+{% endif %}
+
+{% if ai_backend != "memory" %}
+from sqlmodel import Session
+
+from app.core.db import engine
+from app.services.ai.domains.chat.llm_catalog_context import get_llm_catalog_context
+{% endif %}
+from app.core.log import logger
+# Module-level import for the forward reference used in ``_parse_http_health``
+# (``SystemStatus``). ``ty`` / pyright can't resolve string-forward refs when
+# the symbol is only imported lazily inside a method body.
+from app.services.system.models import SystemStatus as SystemStatus
+
+from app.services.ai.domains.chat.health_context import HealthContext
+from app.services.ai.domains.chat.usage_context import UsageContext
+from app.services.ai.service.usage import UsageMixin
+{% if ai_rag %}
+from app.services.ai.domains.chat.rag_context import RAGContext
+from app.services.ai.domains.chat.rag_stats_context import RAGStatsContext
+from app.services.ai.service.base import AIServiceError
+{% endif %}
+
+
+{% if ai_rag %}
+def _is_test_or_fixture_file(source_path: str) -> bool:
+    """
+    Check if a file path indicates a test file or fixture.
+
+    Used in RAG pipeline to deprioritize test files in search results.
+    Source files are returned before test files to improve context quality.
+
+    Args:
+        source_path: File path from RAG search result metadata
+
+    Returns:
+        True if the path matches test/fixture patterns, False otherwise
+
+    Pipeline position:
+        RAG Search → Score Filter → Dedupe → **This Filter** → Top-K Selection
+
+    Examples:
+        >>> _is_test_or_fixture_file("app/services/ai/llm_usage.py")
+        False
+        >>> _is_test_or_fixture_file("tests/test_llm_usage.py")
+        True
+        >>> _is_test_or_fixture_file("tests/fixtures/llm_fixtures.py")
+        True
+        >>> _is_test_or_fixture_file("app/components/conftest.py")
+        True
+    """
+    if not source_path:
+        return False
+
+    path_lower = source_path.lower()
+
+    # Test file patterns - ordered by specificity
+    test_patterns = [
+        "/tests/",          # tests directory
+        "/test_",           # test_something.py
+        "_test.py",         # something_test.py
+        "/fixtures/",       # fixtures directory
+        "_fixtures.py",     # fixture files
+        "/conftest.py",     # pytest conftest
+    ]
+
+    return any(pattern in path_lower for pattern in test_patterns)
+
+
+{% endif %}
+class ContextsMixin(UsageMixin):
+    """Builders for the dynamic context blocks injected per request."""
+
+{% if ai_rag %}
+    async def _build_rag_context(
+        self,
+        query: str,
+        collection: str | None = None,
+        top_k: int | None = None,
+        allowed_collections: Sequence[str] | None = None,
+    ) -> RAGContext:
+        """
+        Build RAG context by searching the vector store.
+
+        Args:
+            query: Search query (usually the user's message)
+            collection: Collection to search (uses config default if None)
+            top_k: Number of results (uses config default if None)
+            allowed_collections: The agent's knowledge-base scope. Empty
+                or None keeps the single-collection behavior; a non-empty
+                scope restricts search to those collections (an explicit
+                ``collection`` inside the scope narrows to just it).
+
+        Returns:
+            RAGContext with search results
+
+        Raises:
+            AIServiceError: If no collection is specified
+        """
+        # Determine top_k
+        k = top_k or self.config.rag_top_k
+
+        scope = [c for c in (allowed_collections or []) if c]
+        if scope:
+            # Agent-scoped retrieval. An explicit in-scope collection
+            # narrows to it; anything outside the scope is refused.
+            if collection and collection in scope:
+                scope = [collection]
+            elif collection:
+                logger.warning(
+                    "Requested RAG collection is outside the agent's scope; "
+                    f"searching scope instead (collection={collection})"
+                )
+            target_collection = ",".join(scope)
+            results = await self.rag_service.search_scoped(
+                query,
+                allowed_collections=scope,
+                top_k=k,
+            )
+        else:
+            # Unscoped: existing single-collection behavior.
+            target_collection = collection or self.config.rag_default_collection
+            if not target_collection:
+                raise AIServiceError(
+                    "No RAG collection specified. Either pass rag_collection "
+                    "parameter or set RAG_CHAT_DEFAULT_COLLECTION in config."
+                )
+            results = await self.rag_service.search(
+                query=query,
+                collection_name=target_collection,
+                top_k=k,
+            )
+
+        # Filter by minimum score
+        filtered_results = [
+            r for r in results if r.score >= self.config.rag_min_score
+        ]
+
+        # Deduplicate by source + start_line (same chunk can appear multiple times)
+        seen: set[str] = set()
+        deduped_results = []
+        for r in filtered_results:
+            key = f"{r.metadata.get('source', '')}:{r.metadata.get('start_line', 0)}"
+            if key not in seen:
+                seen.add(key)
+                deduped_results.append(r)
+
+        # Prioritize source files over test/fixture files
+        # Pipeline: Score Filter → Dedupe → Separate → Prioritize → Top-K
+        source_results = []
+        test_results = []
+        for r in deduped_results:
+            if _is_test_or_fixture_file(r.metadata.get("source", "")):
+                test_results.append(r)
+            else:
+                source_results.append(r)
+
+        # Return source files first, fill remaining slots with test files
+        results_to_use = source_results[:k]
+        if len(results_to_use) < k:
+            results_to_use.extend(test_results[: k - len(results_to_use)])
+
+        return RAGContext(
+            query=query,
+            collection=target_collection,
+            results=results_to_use,
+        )
+
+    async def _build_rag_stats_context(self) -> RAGStatsContext | None:
+        """
+        Build RAG stats context from RAG service status.
+
+        Gives Illiana awareness about indexed collections, document counts,
+        and RAG configuration.
+
+        Returns:
+            RAGStatsContext with current stats, or None if unavailable
+        """
+        try:
+            status = self.rag_service.get_service_status()
+            collections = await self.rag_service.list_collections()
+
+            collection_info = []
+            for name in collections:
+                stats = await self.rag_service.get_collection_stats(name)
+                if stats:
+                    collection_info.append({
+                        "name": name,
+                        "count": stats.get("count", 0),
+                    })
+
+            return RAGStatsContext(
+                enabled=status.get("enabled", False),
+                collection_count=len(collections),
+                collections=collection_info,
+                embedding_model=status.get("embedding_model"),
+                chunk_size=status.get("chunk_size"),
+                chunk_overlap=status.get("chunk_overlap"),
+                default_top_k=status.get("default_top_k"),
+                last_activity=status.get("last_activity"),
+            )
+        except Exception as e:
+            logger.debug(f"Failed to build RAG stats context: {e}")
+            return None
+
+{% endif %}
+    async def _build_health_context(
+        self,
+    ) -> tuple[HealthContext | None, str | None]:
+        """
+        Build health context by fetching current system status.
+
+        Tries HTTP endpoint first (has all registered components from FastAPI),
+        falls back to local get_system_status() if server not running.
+
+        Returns:
+            Tuple of (HealthContext, warning_message):
+            - HealthContext with system status, or None if complete failure
+            - Warning message if server unreachable, otherwise None
+        """
+        # Try HTTP endpoint first - has all registered components
+        try:
+            import httpx
+
+            base_url = getattr(self.settings, "API_BASE_URL", "http://localhost:8000")
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{base_url}/health/detailed")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    status = self._parse_http_health(data)
+                    return HealthContext(status=status), None  # Success, no warning
+        except Exception as e:
+            # Server not running or other error, falling back to local
+            logger.debug(
+                "ai_service.http_health_check_failed",
+                exc_type=type(e).__name__,
+                exc_message=str(e),
+            )
+
+        # HTTP failed - note this for the prompt
+        warning = (
+            "Backend webserver is not running. I can't check full system health. "
+            "Start it with the run command to get complete status."
+        )
+
+        # Fallback to local (limited components without FastAPI startup)
+        try:
+            from app.services.system.health import get_system_status
+
+            status = await get_system_status()
+            return HealthContext(status=status), warning
+        except Exception as e:
+            logger.warning(f"Failed to build health context: {e}")
+            return None, warning
+
+    def _parse_http_health(self, data: dict[str, Any]) -> SystemStatus:
+        """Parse HTTP health response into SystemStatus model."""
+        # ``SystemStatus`` is module-level imported above; ``ComponentStatus``
+        # is only used inside this method so we keep it local.
+        from app.services.system.models import ComponentStatus
+
+        def parse_component(comp: dict[str, Any]) -> ComponentStatus:
+            # ``healthy`` is a ``@computed_field`` on ``ComponentStatus`` derived
+            # from ``status``, not a constructor input — drop the kwarg and
+            # let the property compute itself from the status enum value.
+            return ComponentStatus(
+                name=comp["name"],
+                status=comp["status"],
+                message=comp["message"],
+                response_time_ms=comp.get("response_time_ms"),
+                metadata=comp.get("metadata", {}),
+                sub_components={
+                    k: parse_component(v)
+                    for k, v in comp.get("sub_components", {}).items()
+                },
+            )
+
+        return SystemStatus(
+            overall_healthy=data["healthy"],
+            components={
+                k: parse_component(v) for k, v in data["components"].items()
+            },
+            timestamp=datetime.now(),
+        )
+
+    def _build_usage_context(self) -> UsageContext | None:
+        """
+        Build usage context from AI service statistics.
+
+        Gives Illiana self-awareness about her own usage patterns,
+        token consumption, costs, and success rates.
+
+        Returns:
+            UsageContext with current stats, or None if unavailable
+        """
+{% if ai_backend != "memory" %}
+        try:
+            stats = self.get_usage_stats(recent_limit=5)
+
+            # Find top model by request count
+            top_model = None
+            top_pct = 0.0
+            models = stats.get("models", [])
+            if models:
+                top = max(models, key=lambda m: m.get("requests", 0))
+                top_model = top.get("model_title")
+                top_pct = top.get("percentage", 0.0)
+
+            return UsageContext(
+                total_tokens=stats.get("total_tokens", 0),
+                total_requests=stats.get("total_requests", 0),
+                total_cost=stats.get("total_cost", 0.0),
+                success_rate=stats.get("success_rate", 100.0),
+                top_model=top_model,
+                top_model_percentage=top_pct,
+                recent_requests=len(stats.get("recent_activity", [])),
+            )
+        except Exception as e:
+            logger.debug(f"Failed to build usage context: {e}")
+            return None
+{% else %}
+        # Usage tracking requires database backend
+        return None
+{% endif %}
+
+    def _build_catalog_context(self) -> str | None:
+        """
+        Build LLM catalog context from database.
+
+        Provides Illiana with awareness of available LLM models,
+        their pricing, and capabilities.
+
+        Returns:
+            Formatted catalog context string, or None if unavailable
+        """
+{% if ai_backend != "memory" %}
+        try:
+            with Session(engine) as session:
+                return get_llm_catalog_context(session)
+        except Exception as e:
+            logger.debug(f"Failed to build catalog context: {e}")
+            return None
+{% else %}
+        # Catalog context requires database backend
+        return None
+{% endif %}

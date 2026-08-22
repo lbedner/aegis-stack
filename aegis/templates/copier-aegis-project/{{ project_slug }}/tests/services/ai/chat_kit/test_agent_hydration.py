@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from pydantic_ai.models.test import TestModel
 import pytest
 
-from app.services.ai.agent_loader import AgentConfig, build_chat_agent
-from app.services.ai.chat_kit import ChatScope, DoneFrame
-from app.services.ai.tools import register_tool, unregister_tool
+from app.services.ai.domains.chat.agent_loader import AgentConfig, build_chat_agent
+from app.services.ai.domains.chat.chat_kit import ChatScope, DoneFrame
+from app.services.ai.domains.chat.tools import register_tool, unregister_tool
 
 
 @dataclass
@@ -75,7 +75,7 @@ async def test_config_tools_run_in_the_loop(registered_lookup: str) -> None:
 
 def test_module_scope_wires_a_context_provider() -> None:
     """An agent config with modules gets the module provider automatically."""
-    from app.services.ai.module_context import MemoryModuleContextProvider
+    from app.services.ai.domains.chat.module_context import MemoryModuleContextProvider
 
     agent = build_chat_agent(
         _config(memory_modules=("diet", "house-rules")),

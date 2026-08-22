@@ -1,0 +1,312 @@
+"""Prompt assembly: agent config overlay, persona, and per-request
+{% if ai_framework == "pydantic-ai" %}agent construction{% else %}LLM + message-list construction{% endif %}.
+
+Sits between the context builders (below it in the mixin chain) and the
+chat/stream entrypoints (above it): everything here turns resolved
+contexts + the agent row into something the framework can run.
+"""
+
+from typing import Any
+
+from app.core.log import logger
+from app.services.ai.config import AIServiceConfig
+from app.services.ai.domains.chat.agent_loader import AgentConfig
+from app.services.ai.domains.chat.prompts import (
+    DEFAULT_SYSTEM_PROMPT,
+    build_system_prompt,
+)
+{% if ai_framework == "pydantic-ai" %}
+from app.services.ai.domains.llm.providers import get_agent
+{% else %}
+from app.services.ai.domains.llm.providers import get_llm
+{% endif %}
+from app.services.ai.domains.chat.health_context import HealthContext
+from app.services.ai.domains.chat.usage_context import UsageContext
+from app.services.ai.models import Conversation, MessageRole
+from app.services.ai.service.contexts import ContextsMixin
+{% if ai_rag %}
+from app.services.ai.domains.chat.rag_context import RAGContext
+from app.services.ai.domains.chat.rag_stats_context import RAGStatsContext
+{% endif %}
+
+
+class PromptMixin(ContextsMixin):
+    """Agent-config overlay and per-request prompt/runtime construction."""
+
+    def _apply_agent_config(
+        self, config: AIServiceConfig, agent_config: AgentConfig | None
+    ) -> AIServiceConfig:
+        """Overlay the resolved agent's sampling (and optional model pin).
+
+        The default agent carries the same values as settings, so this is
+        an identity transform until an agent row is edited. A ``model_id``
+        pin assumes the current provider serves that model.
+        """
+        if agent_config is None:
+            return config
+        update: dict[str, Any] = {
+            "temperature": agent_config.temperature,
+            "max_tokens": agent_config.max_tokens,
+        }
+        if agent_config.model_id:
+            update["model"] = agent_config.model_id
+        return config.model_copy(update=update)
+
+    def _agent_persona(self, agent_config: AgentConfig | None) -> str | None:
+        """The persona override for this request, or None for the built-in.
+
+        ``DEFAULT_SYSTEM_PROMPT`` is the seeded marker meaning "use the
+        service's dynamic persona"; any other prompt text (an edited agent
+        row) is used verbatim as the persona base.
+        """
+        if agent_config is None:
+            return None
+        if agent_config.system_prompt == DEFAULT_SYSTEM_PROMPT:
+            return None
+        return agent_config.system_prompt
+
+{% if ai_framework == "pydantic-ai" %}
+    def _prepare_agent_and_context(
+        self,
+        conversation: Conversation,
+{% if ai_rag %}
+        rag_context: RAGContext | None = None,
+        rag_stats_context: RAGStatsContext | None = None,
+{% endif %}
+        health_context: HealthContext | None = None,
+        health_warning: str | None = None,
+        usage_context: UsageContext | None = None,
+        catalog_context: str | None = None,
+        agent_config: AgentConfig | None = None,
+        memory_context: str | None = None,
+    ) -> tuple[Any, str]:
+        """
+        Create agent for request and build conversation context.
+
+        Args:
+            conversation: The conversation to prepare context from
+{% if ai_rag %}
+            rag_context: Optional RAG context to inject into system prompt
+            rag_stats_context: Optional RAG stats context for collection awareness
+{% endif %}
+            health_context: Optional health context to inject into system prompt
+            health_warning: Optional warning if server is down
+            usage_context: Optional usage context for self-awareness
+            catalog_context: Optional LLM catalog context for model awareness
+            agent_config: Resolved agent definition; supplies sampling
+                parameters, an optional model pin, and an optional persona
+
+        Returns:
+            tuple[Any, str]: (agent instance, conversation context string)
+        """
+        # Build system prompt with project context and optional contexts
+        # Get fresh config for current model/provider
+        config = self._apply_agent_config(self.config, agent_config)
+
+        # Use compact mode for Ollama (smaller context for better instruction following)
+        is_compact = config.provider.value == "ollama"
+        logger.debug(f"Compact mode: {is_compact} (provider={config.provider.value})")
+
+        formatted_rag = None
+{% if ai_rag %}
+        if rag_context and rag_context.results:
+            formatted_rag = rag_context.format_for_prompt(include_metadata=True)
+
+        formatted_rag_stats = None
+        if rag_stats_context:
+            formatted_rag_stats = rag_stats_context.format_for_prompt(compact=is_compact)
+{% endif %}
+
+        formatted_health = None
+        if health_context:
+            formatted_health = health_context.format_for_prompt(compact=is_compact)
+            logger.debug(f"Health context for prompt:\n{formatted_health}")
+
+        formatted_usage = None
+        if usage_context:
+            formatted_usage = usage_context.format_for_prompt(compact=is_compact)
+
+        system_prompt_override = build_system_prompt(
+            self.settings,
+            rag_context=formatted_rag,
+{% if ai_rag %}
+            rag_stats_context=formatted_rag_stats,
+{% endif %}
+            health_context=formatted_health,
+            usage_context=formatted_usage,
+            catalog_context=catalog_context,
+            use_rag=formatted_rag is not None,
+            current_model=config.model,
+            current_provider=config.provider.value,
+            persona=self._agent_persona(agent_config),
+            memory_context=memory_context,
+        )
+
+        # Add server-down warning if applicable
+        if health_warning:
+            system_prompt_override += f"\n\n**NOTICE**: {health_warning}"
+
+        # Create agent for this request
+        agent = get_agent(config, self.settings, system_prompt_override)
+
+        # Build conversation context for AI
+        conversation_context = self._build_conversation_context(conversation)
+
+        return agent, conversation_context
+
+    def _build_conversation_context(self, conversation: Conversation) -> str:
+        """
+        Build conversation context for AI from message history.
+
+        Args:
+            conversation: The conversation with message history
+
+        Returns:
+            str: Formatted conversation context for AI
+        """
+        if not conversation.messages:
+            return ""
+
+        # For continuous conversation, include recent message history
+        # Limit to last 10 messages to manage context window
+        recent_messages = conversation.messages[-10:]
+
+        # Format messages for context
+        context_parts = []
+        for msg in recent_messages[:-1]:  # Exclude the latest message (just added)
+            if msg.role == MessageRole.USER:
+                context_parts.append(f"User: {msg.content}")
+            elif msg.role == MessageRole.ASSISTANT:
+                context_parts.append(f"Assistant: {msg.content}")
+
+        # Add the current user message
+        latest_message = conversation.get_last_message()
+        if latest_message and latest_message.role == MessageRole.USER:
+            if context_parts:
+                # Include conversation history + current message
+                return "\n".join(context_parts) + f"\n\nUser: {latest_message.content}"
+            else:
+                # First message in conversation
+                return latest_message.content
+
+        return ""
+{% else %}
+    def _prepare_llm_and_messages(
+        self,
+        conversation: Conversation,
+{% if ai_rag %}
+        rag_context: RAGContext | None = None,
+        rag_stats_context: RAGStatsContext | None = None,
+{% else %}
+        rag_context: Any | None = None,
+        rag_stats_context: Any | None = None,
+{% endif %}
+        health_context: HealthContext | None = None,
+        health_warning: str | None = None,
+        usage_context: UsageContext | None = None,
+        catalog_context: str | None = None,
+        agent_config: AgentConfig | None = None,
+        memory_context: str | None = None,
+    ) -> tuple[Any, list]:
+        """
+        Create LLM instance and build message list for LangChain.
+
+        Args:
+            conversation: The conversation to prepare messages from
+            rag_context: Optional RAG context with code search results
+            rag_stats_context: Optional RAG stats context for collection awareness
+            health_context: Optional health context with system status
+            health_warning: Optional warning if server is down
+            usage_context: Optional usage context with AI stats
+            catalog_context: Optional LLM catalog context for model awareness
+            agent_config: Resolved agent definition; supplies sampling
+                parameters, an optional model pin, and an optional persona
+
+        Returns:
+            tuple[Any, list]: (LLM instance, list of message tuples)
+        """
+        # Create LLM for this request (agent sampling/model overlaid)
+        llm = get_llm(self._apply_agent_config(self.config, agent_config), self.settings)
+
+        # Build messages list for LangChain
+        messages = self._build_langchain_messages(
+            conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config, memory_context=memory_context
+        )
+
+        return llm, messages
+
+    def _build_langchain_messages(
+        self,
+        conversation: Conversation,
+{% if ai_rag %}
+        rag_context: RAGContext | None = None,
+        rag_stats_context: RAGStatsContext | None = None,
+{% else %}
+        rag_context: Any | None = None,
+        rag_stats_context: Any | None = None,
+{% endif %}
+        health_context: HealthContext | None = None,
+        health_warning: str | None = None,
+        usage_context: UsageContext | None = None,
+        catalog_context: str | None = None,
+        agent_config: AgentConfig | None = None,
+        memory_context: str | None = None,
+    ) -> list:
+        """
+        Build LangChain message list from conversation history.
+
+        Args:
+            conversation: The conversation with message history
+            rag_context: Optional RAG context with code search results
+            rag_stats_context: Optional RAG stats context for collection awareness
+            health_context: Optional health context with system status
+            health_warning: Optional warning if server is down
+            usage_context: Optional usage context with AI stats
+            catalog_context: Optional LLM catalog context for model awareness
+
+        Returns:
+            list: List of message tuples for LangChain
+        """
+        # Use compact mode for Ollama (smaller context for better instruction following)
+        is_compact = self.config.provider.value == "ollama"
+
+        # Build dynamic system prompt with Illiana's persona
+        rag_str = rag_context.format_for_prompt() if rag_context else None
+        rag_stats_str = rag_stats_context.format_for_prompt(compact=is_compact) if rag_stats_context else None
+        health_str = health_context.format_for_prompt(compact=is_compact) if health_context else None
+        usage_str = usage_context.format_for_prompt(compact=is_compact) if usage_context else None
+
+        system_prompt = build_system_prompt(
+            settings=self.settings,
+            rag_context=rag_str,
+            rag_stats_context=rag_stats_str,
+            health_context=health_str,
+            usage_context=usage_str,
+            catalog_context=catalog_context,
+            use_rag=rag_context is not None,
+            persona=self._agent_persona(agent_config),
+            memory_context=memory_context,
+        )
+
+        # Add server-down warning if applicable
+        if health_warning:
+            system_prompt += f"\n\n**NOTICE**: {health_warning}"
+
+        messages = [("system", system_prompt)]
+
+        if not conversation.messages:
+            return messages
+
+        # For continuous conversation, include recent message history
+        # Limit to last 10 messages to manage context window
+        recent_messages = conversation.messages[-10:]
+
+        # Format messages for LangChain
+        for msg in recent_messages:
+            if msg.role == MessageRole.USER:
+                messages.append(("human", msg.content))
+            elif msg.role == MessageRole.ASSISTANT:
+                messages.append(("assistant", msg.content))
+
+        return messages
+{% endif %}

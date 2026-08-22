@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import Engine
 from sqlmodel import Session
 
-from app.services.ai.llm_service import (
+from app.services.ai.domains.llm.llm_service import (
     get_current_config,
     get_model_info,
     list_modalities,
@@ -241,7 +241,7 @@ class TestListVendors:
 
     def test_empty_catalog(self, llm_session: Session, llm_db_engine: Engine) -> None:
         """Should return empty list when no vendors exist."""
-        with patch("app.services.ai.llm_service.engine", llm_db_engine):
+        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
             results = list_vendors()
         assert results == []
 
@@ -252,7 +252,7 @@ class TestListVendors:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should return vendors with correct model counts."""
-        with patch("app.services.ai.llm_service.engine", llm_db_engine):
+        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
             results = list_vendors()
 
         assert len(results) == 2
@@ -266,7 +266,7 @@ class TestListVendors:
         self, llm_session: Session, llm_db_engine: Engine, anthropic_vendor: LLMVendor
     ) -> None:
         """Should include vendors with zero models."""
-        with patch("app.services.ai.llm_service.engine", llm_db_engine):
+        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
             results = list_vendors()
 
         assert len(results) == 1
@@ -279,7 +279,7 @@ class TestListModalities:
 
     def test_empty_catalog(self, llm_session: Session, llm_db_engine: Engine) -> None:
         """Should return empty list when no modalities exist."""
-        with patch("app.services.ai.llm_service.engine", llm_db_engine):
+        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
             results = list_modalities()
         assert results == []
 
@@ -290,7 +290,7 @@ class TestListModalities:
         sample_modalities: list[LLMModality],
     ) -> None:
         """Should return modalities with distinct model counts."""
-        with patch("app.services.ai.llm_service.engine", llm_db_engine):
+        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
             results = list_modalities()
 
         assert len(results) == 2  # text and image
@@ -339,7 +339,7 @@ class TestListModels:
 
     async def test_empty_catalog(self, mock_async_session) -> None:
         """Should return empty list when no models exist."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(pattern="test")
         assert results == []
 
@@ -350,7 +350,7 @@ class TestListModels:
         sample_prices: list[LLMPrice],
     ) -> None:
         """Should filter by model_id pattern."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(pattern="claude")
 
         assert len(results) == 2
@@ -362,7 +362,7 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should filter by title pattern."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(pattern="Opus")
 
         assert len(results) == 1
@@ -374,7 +374,7 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should filter by vendor name."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(vendor="openai")
 
         assert len(results) == 1  # Only gpt-4o (gpt-3.5-turbo is disabled)
@@ -386,7 +386,7 @@ class TestListModels:
         sample_modalities: list[LLMModality],
     ) -> None:
         """Should filter by modality."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(modality=Modality.IMAGE)
 
         assert len(results) == 1
@@ -398,12 +398,12 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should respect limit parameter."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(pattern="", limit=2, include_disabled=True)
 
         # Note: pattern="" won't match anything, need at least pattern/vendor/modality
         # Let's use vendor instead
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(vendor="anthropic", limit=1)
 
         assert len(results) == 1
@@ -414,7 +414,7 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should include disabled models when flag is set."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(vendor="openai", include_disabled=True)
 
         assert len(results) == 2  # Both gpt-4o and gpt-3.5-turbo
@@ -425,7 +425,7 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should exclude disabled models by default."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(vendor="openai")
 
         assert len(results) == 1  # Only gpt-4o
@@ -438,7 +438,7 @@ class TestListModels:
         sample_prices: list[LLMPrice],
     ) -> None:
         """Should include pricing data when available."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             results = await list_models(pattern="gpt-4o")
 
         assert len(results) == 1
@@ -465,8 +465,8 @@ class TestGetCurrentConfig:
         mock_settings.AI_MAX_TOKENS = 4096
 
         with (
-            patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch("app.services.ai.llm_service.settings", mock_settings),
+            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
+            patch("app.services.ai.domains.llm.llm_service.settings", mock_settings),
         ):
             config = await get_current_config()
 
@@ -493,8 +493,8 @@ class TestGetCurrentConfig:
         mock_settings.AI_MAX_TOKENS = 2000
 
         with (
-            patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch("app.services.ai.llm_service.settings", mock_settings),
+            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
+            patch("app.services.ai.domains.llm.llm_service.settings", mock_settings),
         ):
             config = await get_current_config()
 
@@ -522,8 +522,8 @@ class TestSetActiveModel:
         need to seed prior env state.
         """
         with (
-            patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch("app.services.ai.llm_service.update_env_file") as mock_update,
+            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
+            patch("app.services.ai.domains.llm.llm_service.update_env_file") as mock_update,
         ):
             result = await set_active_model("claude-sonnet-4-20250514")
 
@@ -539,7 +539,7 @@ class TestSetActiveModel:
         mock_async_session,
     ) -> None:
         """Should fail when model not in catalog and force=False."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             result = await set_active_model("nonexistent-model")
 
         assert result.success is False
@@ -552,8 +552,8 @@ class TestSetActiveModel:
     ) -> None:
         """Should succeed with force=True even if model not in catalog."""
         with (
-            patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch("app.services.ai.llm_service.update_env_file") as mock_update,
+            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
+            patch("app.services.ai.domains.llm.llm_service.update_env_file") as mock_update,
         ):
             result = await set_active_model("custom-model", force=True)
 
@@ -568,8 +568,8 @@ class TestSetActiveModel:
     ) -> None:
         """Should update provider when switching to different vendor."""
         with (
-            patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch("app.services.ai.llm_service.update_env_file") as mock_update,
+            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
+            patch("app.services.ai.domains.llm.llm_service.update_env_file") as mock_update,
         ):
             result = await set_active_model("gpt-4o")
 
@@ -608,7 +608,7 @@ class TestGetModelInfo:
         sample_modalities: list[LLMModality],
     ) -> None:
         """Should return full details when model exists."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             details = await get_model_info("gpt-4o")
 
         assert details is not None
@@ -629,7 +629,7 @@ class TestGetModelInfo:
         mock_async_session,
     ) -> None:
         """Should return None when model not in catalog."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             details = await get_model_info("nonexistent-model")
 
         assert details is None
@@ -640,7 +640,7 @@ class TestGetModelInfo:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should handle models without pricing data."""
-        with patch("app.services.ai.llm_service.get_async_session", mock_async_session):
+        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
             # gpt-3.5-turbo has no price in sample_prices
             details = await get_model_info("gpt-3.5-turbo")
 

@@ -9,8 +9,8 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.conversation import Conversation
-import app.services.ai.builtin_fetchers as builtin_fetchers_module
-from app.services.ai.fetchers import FetchContext, registered_fetcher_names, run_fetcher
+import app.services.ai.domains.chat.builtin_fetchers as builtin_fetchers_module
+from app.services.ai.domains.chat.fetchers import FetchContext, registered_fetcher_names, run_fetcher
 
 
 @pytest.fixture

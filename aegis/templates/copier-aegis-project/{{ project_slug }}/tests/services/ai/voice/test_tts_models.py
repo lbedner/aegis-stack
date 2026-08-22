@@ -1,7 +1,7 @@
 """Tests for TTS models."""
 
 import pytest
-from app.services.ai.voice.models import (
+from app.services.ai.domains.voice.models import (
     AudioFormat,
     OpenAIVoice,
     SpeechRequest,

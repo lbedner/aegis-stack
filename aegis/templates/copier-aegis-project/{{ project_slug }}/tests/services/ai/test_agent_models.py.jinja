@@ -9,8 +9,8 @@ from app.services.ai.fixtures.agent_fixtures import (
     load_agent_fixtures,
 )
 from app.services.ai.models import Agent, AgentTool, Tool
-from app.services.ai.prompts import get_default_system_prompt
-from app.services.ai.tools import register_tool, resolve_tools, unregister_tool
+from app.services.ai.domains.chat.prompts import get_default_system_prompt
+from app.services.ai.domains.chat.tools import register_tool, resolve_tools, unregister_tool
 
 
 @pytest.fixture

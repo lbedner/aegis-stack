@@ -6,7 +6,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.conversation import Conversation, ConversationMessage
-from app.services.ai.chat_kit import ConversationStore
+from app.services.ai.domains.chat.chat_kit import ConversationStore
 
 
 async def test_append_then_load_round_trips_in_order(

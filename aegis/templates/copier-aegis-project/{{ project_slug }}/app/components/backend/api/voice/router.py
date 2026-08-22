@@ -8,7 +8,7 @@ as well as managing voice settings and generating voice previews.
 from app.core.config import settings
 from app.core.log import logger
 from app.services.ai.service import AIService
-from app.services.ai.voice import (
+from app.services.ai.domains.voice import (
     ModelInfo,
     ProviderInfo,
     SpeechRequest,

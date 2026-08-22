@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.ai.tools import (
+from app.services.ai.domains.chat.tools import (
     register_tool,
     registered_tool_names,
     resolve_tools,
@@ -60,7 +60,7 @@ class TestResolution:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A DB row naming a missing callable degrades, never crashes."""
-        import app.services.ai.tools as tools_module
+        import app.services.ai.domains.chat.tools as tools_module
 
         warned = MagicMock()
         monkeypatch.setattr(tools_module.logger, "warning", warned)

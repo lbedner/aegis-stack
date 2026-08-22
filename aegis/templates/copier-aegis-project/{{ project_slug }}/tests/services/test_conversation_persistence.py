@@ -11,7 +11,7 @@ import uuid
 
 import pytest
 
-from app.services.ai.conversation import ConversationManager
+from app.services.ai.domains.chat.conversation import ConversationManager
 from app.services.ai.models import (
     AIProvider,
     MessageRole,
@@ -50,7 +50,12 @@ def _no_user_memory_db(monkeypatch: pytest.MonkeyPatch) -> None:
     async def no_memory(user_id: str, **kwargs: object) -> None:
         return None
 
-    monkeypatch.setattr("app.services.ai.service.build_user_memory_context", no_memory)
+    monkeypatch.setattr(
+        "app.services.ai.service.chat.build_user_memory_context", no_memory
+    )
+    monkeypatch.setattr(
+        "app.services.ai.service.streaming.build_user_memory_context", no_memory
+    )
 
 
 @pytest.fixture
@@ -217,7 +222,7 @@ class TestAIServiceConversationMemory:
         """Test that chat creates new conversation when none provided."""
         with (
             patch("app.services.ai.config.get_ai_config") as mock_config,
-            patch("app.services.ai.service.get_agent") as mock_get_agent,
+            patch("app.services.ai.service.prompt.get_agent") as mock_get_agent,
         ):
             # Setup mocks
             mock_config.return_value.enabled = True
@@ -250,7 +255,7 @@ class TestAIServiceConversationMemory:
         """Test that chat uses existing conversation when provided."""
         with (
             patch("app.services.ai.config.get_ai_config") as mock_config,
-            patch("app.services.ai.service.get_agent") as mock_get_agent,
+            patch("app.services.ai.service.prompt.get_agent") as mock_get_agent,
         ):
             # Setup mocks
             mock_config.return_value.enabled = True

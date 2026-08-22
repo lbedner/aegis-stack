@@ -26,6 +26,12 @@ from app.services.ai.service.prompt import PromptMixin
 {%- if ai_backend != "memory" %}
 from app.services.ai.domains.chat.user_memory import build_user_memory_context
 {%- endif %}
+{%- if include_finance and ai_backend != "memory" %}
+# Importing registers the finance host tools (ledger_summary, positions,
+# quote, ...) so DB-granted names resolve in every process that serves
+# chat - the API, the CLI, and code-mode agents alike.
+import app.services.finance.ai_tools  # noqa: F401
+{%- endif %}
 {% if ai_rag %}
 from app.services.ai.domains.chat.rag_context import RAGContext
 {% endif %}

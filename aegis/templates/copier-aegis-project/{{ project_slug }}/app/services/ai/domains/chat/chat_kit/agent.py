@@ -85,6 +85,7 @@ class ToolChatAgent(Generic[DepsT]):
         tool_calls_limit: int = 4,
         action: str = "chat:generic",
         recorder: Callable[..., float] = record_usage,
+        capabilities: Sequence[Any] = (),
     ) -> None:
         """
         Args:
@@ -100,13 +101,20 @@ class ToolChatAgent(Generic[DepsT]):
                 latency — the whole reason the design is briefing-first).
             action: Ledger action family for these turns (e.g. "chat:metrics").
             recorder: Usage-recording hook; injected in tests to assert cost.
+            capabilities: pydantic-ai capabilities (e.g. code mode). Passed to
+                the ``Agent`` only when non-empty, so stacks pinned to
+                pre-capability pydantic-ai versions never see the kwarg.
         """
+        agent_kwargs: dict[str, Any] = {}
+        if capabilities:
+            agent_kwargs["capabilities"] = list(capabilities)
         self._agent: Agent[DepsT] = Agent(
             model,
             instructions=instructions,
             deps_type=deps_type,
             tools=list(tools),
             model_settings=model_settings,
+            **agent_kwargs,
         )
         self._model_name = model_name
         self._providers = tuple(context_providers)

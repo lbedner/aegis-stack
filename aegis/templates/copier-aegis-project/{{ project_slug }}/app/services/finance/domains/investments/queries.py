@@ -86,6 +86,20 @@ async def security_price_by_key(
     ).first()
 
 
+async def latest_price_for_security(
+    db: AsyncSession, security_id: int
+) -> FinanceSecurityPrice | None:
+    """The most recent stored price row for a security, any source."""
+    return (
+        await db.exec(
+            select(FinanceSecurityPrice)
+            .where(FinanceSecurityPrice.security_id == security_id)
+            .order_by(FinanceSecurityPrice.price_date.desc())  # type: ignore[union-attr]
+            .limit(1)
+        )
+    ).first()
+
+
 async def holding_by_key(
     db: AsyncSession, *, account_id: int, security_id: int, as_of_date: date
 ) -> FinanceHolding | None:

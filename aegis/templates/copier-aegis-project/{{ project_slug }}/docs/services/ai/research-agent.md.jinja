@@ -1,0 +1,92 @@
+{% if include_finance %}# Building a Finance Research Agent
+
+A research agent answers open-ended questions about your money by writing
+code over your real data: "does my allocation still make sense given my
+envelope commitments?" is a novel computation, not a lookup, and code mode
+lets the agent compose it on the fly.
+
+## The pieces
+
+Three things make an agent a research agent:
+
+1. **The `code_mode` flag** on its agent row, which grants sandboxed
+   script execution (see [Code Mode](code-mode.md)).
+2. **The finance host tools**, registered by the finance service and
+   seeded as grantable rows: `ledger_summary`, `positions`,
+   `envelope_state`, `goals_state`, and `quote`.
+3. **Tool attachments** connecting that agent to those tools.
+
+## Setting one up
+
+Flag an agent and attach the finance tools. With the seeded default agent:
+
+```python
+from sqlmodel import select
+
+from app.core.db import get_async_session
+from app.services.ai.domains.chat.agent_registry import update_agent
+from app.services.ai.models.agents import Agent, AgentTool, Tool
+
+FINANCE_TOOLS = [
+    "ledger_summary",
+    "positions",
+    "envelope_state",
+    "goals_state",
+    "quote",
+]
+
+async with get_async_session() as session:
+    await update_agent("assistant", {"code_mode": True}, session=session)
+    agent = (
+        await session.exec(select(Agent).where(Agent.slug == "assistant"))
+    ).one()
+    tools = (
+        await session.exec(select(Tool).where(Tool.name.in_(FINANCE_TOOLS)))
+    ).all()
+    for tool in tools:
+        session.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
+    await session.commit()
+```
+
+The tool rows exist because fixture seeding syncs every registered tool
+into a grantable row; if a name is missing, re-run the database seed.
+
+## What a turn looks like
+
+Ask the flagged agent an analysis question through any chat surface. The
+model sees a single `run_code` tool plus typed stubs for the granted
+finance tools, writes a script such as:
+
+```python
+holdings = await positions()
+total = sum(p["market_value_cents"] for p in holdings)
+by_ticker = {
+    p["ticker"]: round(100 * p["market_value_cents"] / total, 1)
+    for p in holdings
+}
+envelopes = await envelope_state()
+committed = sum(e["monthly_credit_cents"] or 0 for e in envelopes)
+{"allocation_pct": by_ticker, "monthly_committed_cents": committed}
+```
+
+and narrates the result. Data the app already holds is pushed into the
+script through the tools; the model never re-fetches what your code
+already knows. `quote` is the one dynamic lookup, for prices the model
+decides it needs mid-analysis.
+
+If a script fails (bad syntax, an unsupported Python feature), the
+traceback returns to the model as the tool result and it rewrites the
+script inside the same turn. Usage lands in the ledger as one row per
+turn under the agent's slug.
+
+## Owner scoping
+
+The finance tools read unscoped, matching the single-tenant default-open
+posture of generated stacks. Before granting these tools in a
+multi-tenant deployment, thread your user context into
+`app/services/finance/ai_tools.py`.
+{% else %}# Building a Finance Research Agent
+
+This guide applies to stacks generated with the finance service. Add it
+with the stack tooling, then regenerate the docs.
+{% endif %}

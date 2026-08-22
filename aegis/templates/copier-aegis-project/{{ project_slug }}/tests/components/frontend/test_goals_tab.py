@@ -5,6 +5,9 @@ both row kinds, the linkable-account options, and the dollars parser -
 everything the tab renders that can be tested without a page.
 """
 
+from app.components.frontend.dashboard.modals.finance_modal.budget_panel.goal_editor import (
+    _months_or_zero,
+)
 from app.components.frontend.theme import AegisTheme as Theme
 from app.components.frontend.dashboard.modals.finance_modal import (
     close_gap_row_copy,
@@ -287,3 +290,16 @@ class TestGoalShortfallCaption:
         assert goal_shortfall_caption(140_500) == (
             "Goals ask $1,405.00 more than this month has."
         )
+
+
+class TestMonthsParser:
+    """The months field, parsed once for both the preview and the save."""
+
+    def test_plain_and_decimal_forms_agree(self) -> None:
+        assert _months_or_zero("3") == 3
+        assert _months_or_zero("3.0") == 3
+        assert _months_or_zero(" 6 ") == 6
+
+    def test_junk_is_zero_not_a_crash(self) -> None:
+        for raw in ("", "soon", "three", "-"):
+            assert _months_or_zero(raw) == 0

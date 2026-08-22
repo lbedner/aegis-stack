@@ -2923,6 +2923,17 @@ class TestDerivedGoalTargets:
         assert created.json()["target_amount"] == preview.json()["target_amount"]
 
     @pytest.mark.asyncio
+    async def test_an_unknown_rule_is_refused_not_answered_with_zero(
+        self, authenticated_client: TestClient
+    ) -> None:
+        """A preview that silently returns 0 reads as 'nothing to size
+        against' - a real answer to a question nobody asked."""
+        refused = authenticated_client.get(
+            "/api/v1/finance/goals/target-preview?factor=3&rule=vibes"
+        )
+        assert refused.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_a_scoped_goal_ignores_another_accounts_bills(
         self,
         authenticated_client: TestClient,

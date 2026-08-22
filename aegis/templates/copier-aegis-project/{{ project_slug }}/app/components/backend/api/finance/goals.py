@@ -11,7 +11,7 @@ from datetime import (
     date,
     datetime,
 )
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import (
     APIRouter,
@@ -187,8 +187,8 @@ async def _goal_response(
 @router.get("/goals/target-preview", response_model=GoalTargetPreview)
 async def preview_goal_target(
     factor: int = Query(gt=0, le=120),
-    rule: str = Query(default="months_of_expenses"),
-    scope: list[int] = Query(default=[]),
+    rule: Literal["months_of_expenses"] = Query(default="months_of_expenses"),
+    scope: list[int] | None = Query(default=None),
     service: FinanceService = Depends(get_finance_service),
     owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> GoalTargetPreview:
@@ -197,6 +197,7 @@ async def preview_goal_target(
     of the same function, so they cannot disagree."""
     from app.services.finance.domains.planning.allocation import target_for_rule
 
+    scope = scope or []
     figures = await service.goal_month_figures(
         owner_user_id=owner_user_id, today=datetime.now(UTC).date()
     )

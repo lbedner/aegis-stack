@@ -43,6 +43,16 @@ from app.components.frontend.theme import AegisTheme as Theme
 CASH_ACCOUNT_TYPES = frozenset({"checking", "savings", "cash"})
 
 
+def _months_or_zero(raw: str) -> int:
+    """The months field as an int, 0 when it is not a number. One parser
+    for the preview and the save, so the dialog cannot refuse to preview
+    a value it would happily store."""
+    try:
+        return int(float(raw.strip()))
+    except ValueError:
+        return 0
+
+
 class GoalEditorMixin(BudgetPanelState):
     """Create and edit dialogs for one goal."""
 
@@ -107,8 +117,11 @@ class GoalEditorMixin(BudgetPanelState):
             rule = target_rule_dd.value or "fixed"
             months = (factor_field.value or "").strip()
             resolved: int | None = None
-            if rule == "months_of_expenses" and months.isdigit() and int(months) > 0:
-                params = f"factor={int(months)}&rule={rule}"
+            # Parsed the way _save parses it, so the preview cannot say
+            # "nothing to size against" about a value the form accepts.
+            factor = _months_or_zero(months)
+            if rule == "months_of_expenses" and factor > 0:
+                params = f"factor={factor}&rule={rule}"
                 for account_id in _chosen_scope():
                     params += f"&scope={account_id}"
                 api = get_session_state(self.page).api_client
@@ -232,10 +245,7 @@ class GoalEditorMixin(BudgetPanelState):
             target = dollars_to_cents(target_field.value)
             factor: int | None = None
             if target_rule == "months_of_expenses":
-                try:
-                    factor = int(float((factor_field.value or "").strip()))
-                except ValueError:
-                    factor = 0
+                factor = _months_or_zero(factor_field.value or "")
                 if not 0 < factor <= 120:
                     factor_field.set_error("A number of months, 1 to 120.")
                     return

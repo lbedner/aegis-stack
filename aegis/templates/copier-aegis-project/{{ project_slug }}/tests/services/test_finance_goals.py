@@ -1070,9 +1070,10 @@ class TestExpenseBaseExcludesCardPaymentsOnly:
         figures = await month_figures(
             async_db_session, owner_user_id=1, today=date(2026, 8, 20)
         )
-        # The mortgage counts, the card payment does not.
-        assert figures.expenses_for() == 250_000
-        assert figures.expenses_for((checking.id,)) == 250_000
+        # The DECLARED base: the mortgage counts, the card payment does
+        # not. (What the measured path does with the same two payments is
+        # TestLoanPaymentsSurviveTheMeasuredPath.)
+        assert figures.expense_base_by_account == {checking.id: 250_000}
 
 
 class TestObservedRunRate:
@@ -1311,3 +1312,129 @@ class TestGoalShortfall:
         meta = GoalMeta(target_amount=10_000_000, monthly_contribution=140_500)
         asks = allocate_month(figures, [("Emergency", meta, 0)])
         assert asks["Emergency"] == 140_500
+
+
+class TestLoanPaymentsSurviveTheMeasuredPath:
+    """The measured path drops every transfer, and a matched mortgage IS
+    a transfer - so once an account has any other spending, observed wins
+    and the mortgage silently stops counting. It is an expense either
+    way; only the card payment is a double count."""
+
+    async def _payment(
+        self,
+        session: AsyncSession,
+        *,
+        cash_id: int,
+        liability_id: int,
+        amount: int,
+        name: str,
+    ) -> None:
+        """A confirmed transfer from cash into a liability, wearing a
+        recurring stream - the shape ``payment_stream_ids`` recognises."""
+        service = FinanceService(session)
+        stream = await service.create_recurring_stream(
+            owner_user_id=1,
+            name=name,
+            direction="outflow",
+            frequency="monthly",
+            expected_amount=amount,
+            next_expected_date=date(2026, 8, 5),
+            account_id=cash_id,
+        )
+        out_txn = FinanceTransaction(
+            owner_user_id=1,
+            account_id=cash_id,
+            date_=date(2026, 8, 5),
+            amount=-amount,
+            description=name,
+            source="manual",
+            recurring_stream_id=stream.id,
+        )
+        in_txn = FinanceTransaction(
+            owner_user_id=1,
+            account_id=liability_id,
+            date_=date(2026, 8, 5),
+            amount=amount,
+            description=name,
+            source="manual",
+        )
+        session.add(out_txn)
+        session.add(in_txn)
+        await session.flush()
+        session.add(
+            FinanceTransfer(
+                owner_user_id=1,
+                from_account_id=cash_id,
+                to_account_id=liability_id,
+                from_transaction_id=out_txn.id,
+                to_transaction_id=in_txn.id,
+                amount=amount,
+                currency="usd",
+                transfer_date=date(2026, 8, 5),
+                match_method="auto_amount_date",
+                confidence=90,
+                status="confirmed",
+            )
+        )
+        await session.flush()
+        # The cash leg wears the transfer flag, the way matching leaves it.
+        out_txn.is_transfer = True
+        session.add(out_txn)
+        await session.flush()
+
+    @pytest.mark.asyncio
+    async def test_a_matched_mortgage_still_counts_once_observed_wins(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        checking = await service.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        mortgage = await service.create_manual_account(
+            owner_user_id=1,
+            name="Mortgage",
+            account_type="loan",
+            classification="liability",
+            current_balance=0,
+        )
+        card = await service.create_manual_account(
+            owner_user_id=1,
+            name="AMEX",
+            account_type="credit_card",
+            classification="liability",
+            current_balance=0,
+        )
+        for liability, amount, name in (
+            (mortgage, 250_000, "Citizens Bank Mortgage"),
+            (card, 98_300, "American Express"),
+        ):
+            await self._payment(
+                async_db_session,
+                cash_id=checking.id,
+                liability_id=liability.id,
+                amount=amount,
+                name=name,
+            )
+        # Ordinary spending, so the measured path has something and wins.
+        async_db_session.add(
+            FinanceTransaction(
+                owner_user_id=1,
+                account_id=checking.id,
+                date_=date(2026, 7, 12),
+                amount=-30_000,
+                description="Groceries",
+                source="manual",
+            )
+        )
+        await async_db_session.commit()
+
+        figures = await month_figures(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 20)
+        )
+        # $2,500 mortgage + $300 groceries over three months = $933.33/mo,
+        # and not one cent of the card payment.
+        assert figures.observed_by_account == {checking.id: 93_333}

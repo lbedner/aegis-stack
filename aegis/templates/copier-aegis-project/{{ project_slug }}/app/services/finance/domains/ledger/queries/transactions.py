@@ -392,6 +392,7 @@ async def outflow_by_account_in_window(
     start: date,
     end: date,
     exclude_stream_ids: Sequence[int] | None = None,
+    include_transfer_stream_ids: Sequence[int] | None = None,
 ) -> list[tuple[int, int]]:
     """(account_id, money out as positive cents) over the window.
 
@@ -403,17 +404,33 @@ async def outflow_by_account_in_window(
     matched still looks like spending. ``exclude_stream_ids`` drops whole
     streams for that case: the stream knows it is a card payment even
     when one of its transactions was never paired.
+
+    ``include_transfer_stream_ids`` is the opposite door, for transfers
+    that ARE expenses. A matched mortgage payment is a transfer into a
+    liability, so the blanket transfer filter would drop it - and unlike
+    a card payment, nothing else in the ledger records that money
+    leaving.
     """
     filters = [
         FinanceTransaction.deleted_at.is_(None),
         FinanceTransaction.dedup_status != "duplicate",
         FinanceTransaction.excluded_from_reports.is_(False),
-        FinanceTransaction.is_transfer.is_(False),
         FinanceTransaction.account_id.in_(live_account_ids()),
         FinanceTransaction.amount < 0,
         FinanceTransaction.date_ >= start,
         FinanceTransaction.date_ <= end,
     ]
+    if include_transfer_stream_ids:
+        filters.append(
+            or_(
+                FinanceTransaction.is_transfer.is_(False),
+                FinanceTransaction.recurring_stream_id.in_(
+                    list(include_transfer_stream_ids)
+                ),
+            )
+        )
+    else:
+        filters.append(FinanceTransaction.is_transfer.is_(False))
     if owner_user_id is not None:
         filters.append(FinanceTransaction.owner_user_id == owner_user_id)
     if exclude_stream_ids:

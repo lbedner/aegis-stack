@@ -115,8 +115,9 @@ def resolve_target(meta: GoalMeta, figures: MonthlyFigures) -> int:
     """The goal's target in cents as of this month's figures.
 
     ``months_of_expenses`` is the factor times the month's run rate on
-    the accounts the goal names - bills monthly-equivalent, minus card
-    and loan payments, plus the budget lines. A book with nothing to
+    the accounts the goal names: what actually left them, minus CARD
+    payments (the swipes they settle are already counted) but including
+    loan payments, which nothing else records. A book with nothing to
     measure yet falls back to the stored cents rather than resolving to
     zero: a brand-new plan must not render a $0 target it never asked
     for.
@@ -218,15 +219,20 @@ async def observed_run_rate(
     # never matched carries no transfer flag, and counting it puts the
     # payment on top of the swipes it settles.
     streams = await recurring.list_recurring(db, owner_user_id=owner_user_id)
-    card_streams = await recurring.card_payment_stream_ids(
-        db, [s.id for s in streams if s.id is not None]
-    )
+    stream_ids = [s.id for s in streams if s.id is not None]
+    card_streams = await recurring.card_payment_stream_ids(db, stream_ids)
+    # A matched loan payment is a transfer, and the blanket transfer
+    # filter would drop it - but nothing else records that money leaving,
+    # so it has to come back through. Card payments stay out: the swipes
+    # they settle are already in the window.
+    loan_streams = await recurring.payment_stream_ids(db, stream_ids) - card_streams
     rows = await ledger_queries.outflow_by_account_in_window(
         db,
         owner_user_id=owner_user_id,
         start=start,
         end=today,
         exclude_stream_ids=list(card_streams),
+        include_transfer_stream_ids=list(loan_streams),
     )
     return {
         account_id: total // OBSERVED_WINDOW_MONTHS

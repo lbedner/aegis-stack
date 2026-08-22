@@ -354,8 +354,11 @@ class AgentsTab(ft.Container):
 
     def _render_agents(self, agents: list[dict[str, Any]]) -> None:
         columns = [
-            DataTableColumn("Agent", width=170, style="primary"),
-            DataTableColumn("Model", width=170, style="secondary"),
+            # Width-less = expand: the name column absorbs all free table
+            # width, so long agent names render whole and the fixed-width
+            # data columns sit together at the table's right edge.
+            DataTableColumn("Agent", style="primary"),
+            DataTableColumn("Model", width=200, style="secondary"),
             DataTableColumn("Tools", width=70, alignment="right", style="body"),
             DataTableColumn("Modules", width=80, alignment="right", style="body"),
             DataTableColumn("Status", width=60, alignment="center", style=None),

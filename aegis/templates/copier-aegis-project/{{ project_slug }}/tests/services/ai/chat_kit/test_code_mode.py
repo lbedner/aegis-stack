@@ -100,6 +100,30 @@ def test_build_chat_agent_forwards_capabilities(recording_agent: type) -> None:
     assert recording_agent.captured.get("capabilities") == [cap]
 
 
+def test_kit_names_the_agent_for_telemetry(recording_agent: type) -> None:
+    """The name lands on the pydantic-ai Agent (gen_ai.agent.name in traces)."""
+    ToolChatAgent(
+        model=TestModel(),
+        model_name="test",
+        instructions="persona",
+        deps_type=_Deps,
+        name="support",
+    )
+    assert recording_agent.captured.get("name") == "support"
+
+
+def test_build_chat_agent_names_the_agent_after_its_slug(
+    recording_agent: type,
+) -> None:
+    build_chat_agent(
+        _config(slug="finance-assistant"),
+        model=TestModel(),
+        model_name="test",
+        deps_type=_Deps,
+    )
+    assert recording_agent.captured.get("name") == "finance-assistant"
+
+
 def _build(config: AgentConfig, **kwargs: Any) -> Any:
     return build_chat_agent(
         config,
@@ -110,16 +134,45 @@ def _build(config: AgentConfig, **kwargs: Any) -> Any:
     )
 
 
+def _caps_by_type(recording_agent: type) -> dict[str, Any]:
+    """Capabilities keyed by every class in their MRO, so a guarding
+    subclass still answers to its harness base name."""
+    caps = recording_agent.captured.get("capabilities") or []
+    return {base.__name__: cap for cap in caps for base in type(cap).__mro__}
+
+
 def test_code_mode_config_grants_scoped_code_execution(
     recording_agent: type,
 ) -> None:
     """A code_mode row yields a CodeMode capability scoped to granted tools."""
     _build(_config(code_mode=True, tool_names=("lookup", "quote")))
 
-    caps = recording_agent.captured.get("capabilities")
-    assert caps is not None and len(caps) == 1
-    assert type(caps[0]).__name__ == "CodeMode"
-    assert list(caps[0].tools) == ["lookup", "quote"]
+    caps = _caps_by_type(recording_agent)
+    assert list(caps["CodeMode"].tools) == ["lookup", "quote"]
+
+
+def test_code_mode_config_caps_run_code_output_only(
+    recording_agent: type,
+) -> None:
+    """Code mode's cap scopes to run_code alone: the sandbox must receive
+    every dispatched tool's full payload (slicing it in code is the whole
+    point); only the surface that reaches the model gets clamped."""
+    _build(_config(code_mode=True, tool_names=("lookup",)))
+
+    limits = _caps_by_type(recording_agent)["ToolOutputLimits"]
+    assert limits.tool_filter == ["run_code"]
+
+
+def test_tool_granted_config_caps_all_tool_output_without_code_mode(
+    recording_agent: type,
+) -> None:
+    """Plain tool grants cap every tool - a direct tool call returns
+    straight into the model's context."""
+    _build(_config(tool_names=("lookup",)))
+
+    caps = _caps_by_type(recording_agent)
+    assert caps["ToolOutputLimits"].tool_filter == "all"
+    assert "CodeMode" not in caps
 
 
 def test_code_mode_raises_the_default_tool_call_budget(
@@ -214,6 +267,67 @@ async def test_failing_script_recovers_inside_one_turn(
     assert any(isinstance(f, DeltaFrame) for f in frames)
     assert len(requests) == 3  # broken script, fixed script, final answer
     assert len(recorded) == 1  # one usage row for the whole turn
+
+
+async def test_preamble_before_a_tool_call_keeps_the_turn_alive(
+    registered_lookup: str,
+) -> None:
+    """Narration before run_code must not end the turn (local models love
+    "let me pull that together" before the tool call)."""
+    requests: list[int] = []
+
+    async def scripted(messages: Any, info: AgentInfo) -> Any:
+        requests.append(len(messages))
+        if len(requests) == 1:
+            yield "On it. "
+            yield {0: DeltaToolCall(name="run_code", json_args=FIXED_SCRIPT)}
+        else:
+            yield "the value is val-a"
+
+    agent = build_chat_agent(
+        _config(code_mode=True, tool_names=(registered_lookup,)),
+        model=FunctionModel(stream_function=scripted),
+        model_name="scripted",
+        deps_type=_Deps,
+        recorder=lambda **kwargs: 0.0,
+    )
+
+    frames = await _drain(agent, "look up a for me")
+
+    assert isinstance(frames[-1], DoneFrame)
+    assert frames[-1].answer == "On it. the value is val-a"
+    assert len(requests) == 2
+
+
+async def test_class_valued_script_result_does_not_kill_the_turn(
+    registered_lookup: str,
+) -> None:
+    """A script ending on ``type(x)`` makes run_code return a live Python
+    class; the output cap must pass it through, not crash the turn."""
+
+    async def scripted(messages: Any, info: AgentInfo) -> Any:
+        if len(messages) == 1:
+            yield {
+                0: DeltaToolCall(
+                    name="run_code",
+                    json_args='{"code": "v = await lookup(key=\\"a\\")\\ntype(v)"}',
+                )
+            }
+        else:
+            yield "it is a string"
+
+    agent = build_chat_agent(
+        _config(code_mode=True, tool_names=(registered_lookup,)),
+        model=FunctionModel(stream_function=scripted),
+        model_name="scripted",
+        deps_type=_Deps,
+        recorder=lambda **kwargs: 0.0,
+    )
+
+    frames = await _drain(agent, "what type is it")
+
+    assert isinstance(frames[-1], DoneFrame)
+    assert frames[-1].answer == "it is a string"
 
 
 async def test_unrecoverable_script_surfaces_an_error_frame(

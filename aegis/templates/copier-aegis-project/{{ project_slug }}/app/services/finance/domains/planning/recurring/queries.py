@@ -222,9 +222,7 @@ async def stream_member_category_votes(
     return list(rows)
 
 
-async def stream_member_category_id(
-    db: AsyncSession, stream_id: int
-) -> int | None:
+async def stream_member_category_id(db: AsyncSession, stream_id: int) -> int | None:
     """The member transactions' most common category id.
 
     The id-flavored twin of ``stream_member_category_votes`` (which

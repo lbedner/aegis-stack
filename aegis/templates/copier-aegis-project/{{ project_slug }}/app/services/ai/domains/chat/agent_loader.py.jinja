@@ -194,6 +194,75 @@ DEFAULT_TOOL_CALLS_LIMIT = 4
 CODE_MODE_TOOL_CALLS_LIMIT = 16
 
 
+# A tool return (or a sandbox print) larger than this is clamped before it
+# reaches the model, with an elision marker telling it to slice instead.
+# ~4k tokens: a dumped payload once flooded a 32k local model past its HTTP
+# read timeout.
+TOOL_OUTPUT_CHAR_LIMIT = 16_000
+
+
+def agent_capabilities(config: AgentConfig) -> list[Any]:
+    """The pydantic-ai capabilities a config grants; shared by BOTH chat
+    runtimes (chat_kit's ``build_chat_agent`` and the service's
+    ``get_agent`` path) so a grant can never work in one and not the other.
+
+    The harness (and the Monty interpreter it embeds) imports lazily:
+    unflagged agents never load or pay for the sandbox.
+    """
+    capabilities: list[Any] = []
+    if config.code_mode:
+        from pydantic_ai_harness import CodeMode
+
+        capabilities.append(CodeMode(tools=list(config.tool_names)))
+    if config.code_mode or config.tool_names:
+        capabilities.append(_tool_output_limits(code_mode=config.code_mode))
+    return capabilities
+
+
+def _tool_output_limits(*, code_mode: bool = False) -> Any:
+    """An output cap that degrades safely on unmeasurable returns.
+
+    In code mode the cap scopes to ``run_code`` alone: the sandbox must
+    receive every dispatched tool's FULL payload (slicing it in code is
+    the whole point), and only the printed/returned surface that reaches
+    the model gets clamped. Reducing an inner tool would hand the script
+    a truncated string where it expects a dict.
+
+    A sandbox script can also end on an expression like ``type(result)``,
+    making the tool return a live Python class; the harness's size
+    measurement raises on such values, which would kill the whole turn.
+    Those returns are coerced to their ``repr`` instead.
+    """
+    from pydantic_ai_harness import ToolOutputLimits
+    from pydantic_ai_harness.tool_output_limits import Band, Truncate
+
+    class _SafeToolOutputLimits(ToolOutputLimits):  # type: ignore[misc]
+        async def after_tool_execute(self, ctx: Any, **kwargs: Any) -> Any:
+            try:
+                return await super().after_tool_execute(ctx, **kwargs)
+            except Exception as exc:
+                # Coerce, don't pass through: a live class would go on to
+                # crash every downstream serializer (observability
+                # instrumentation, message history) the same way it
+                # crashed the measurement here.
+                logger.warning(
+                    "tool_output_limits.unmeasurable_return",
+                    tool=kwargs.get("call") and kwargs["call"].tool_name,
+                    error=str(exc),
+                )
+                return repr(kwargs.get("result"))[:TOOL_OUTPUT_CHAR_LIMIT]
+
+    return _SafeToolOutputLimits(
+        bands=[
+            Band(
+                over=TOOL_OUTPUT_CHAR_LIMIT,
+                action=Truncate(max_chars=TOOL_OUTPUT_CHAR_LIMIT),
+            )
+        ],
+        tool_filter=["run_code"] if code_mode else "all",
+    )
+
+
 def build_chat_agent(
     config: AgentConfig,
     *,
@@ -230,16 +299,10 @@ def build_chat_agent(
             )
         )
     effective_capabilities: list[Any] = list(capabilities)
+    effective_capabilities.extend(agent_capabilities(config))
     effective_limit = tool_calls_limit
-    if config.code_mode:
-        # Lazy import: the harness (and the Monty interpreter it embeds)
-        # loads only for flagged agents, so unflagged installs never pay
-        # for or expose the capability.
-        from pydantic_ai_harness import CodeMode
-
-        effective_capabilities.append(CodeMode(tools=list(config.tool_names)))
-        if effective_limit is None:
-            effective_limit = CODE_MODE_TOOL_CALLS_LIMIT
+    if config.code_mode and effective_limit is None:
+        effective_limit = CODE_MODE_TOOL_CALLS_LIMIT
     if effective_limit is None:
         effective_limit = DEFAULT_TOOL_CALLS_LIMIT
     return ToolChatAgent(
@@ -257,5 +320,6 @@ def build_chat_agent(
         action=f"chat:{config.slug}",
         recorder=recorder,
         capabilities=effective_capabilities,
+        name=config.slug,
     )
 {% endif %}

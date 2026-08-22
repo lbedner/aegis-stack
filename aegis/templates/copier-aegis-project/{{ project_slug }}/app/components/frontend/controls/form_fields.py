@@ -92,6 +92,12 @@ def _input_kwargs(
     return kwargs
 
 
+# Public alias: the one input recipe, importable by non-form surfaces
+# (e.g. the chat composer) so every text input shares the same border,
+# background, and focus colors instead of re-deriving them.
+input_field_kwargs = _input_kwargs
+
+
 class FormTextField(ft.Container):
     """
     Reusable text input with label and error state.

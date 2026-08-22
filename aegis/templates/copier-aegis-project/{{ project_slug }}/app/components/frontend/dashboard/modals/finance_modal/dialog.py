@@ -49,6 +49,7 @@ from app.components.frontend.dashboard.modals.finance_modal.filters import (
 from app.components.frontend.dashboard.modals.finance_modal.overview_tab import (
     OverviewTab,
 )
+from app.components.frontend.controls.chat import ChatPanel
 from app.components.frontend.dashboard.modals.finance_modal.review_tab import ReviewTab
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
@@ -178,14 +179,45 @@ class FinanceDetailDialog(BaseDetailPopup):
                 ),
                 None,
             ),
+        ]
+        # Chat rides the AI service: without it there is no chat API to
+        # speak to, so the tab simply does not exist rather than erroring.
+        if analyst_enabled:
+            # The snapshot memory module maps chat user ids to finance
+            # owners; the analyst's standalone id ("0" = unscoped owner)
+            # is the one id that resolves in a single-tenant install. The
+            # generic default ("api-user") is unparseable and would skip
+            # the briefing entirely.
+            from app.services.finance.domains.detection.analyst.shared import (
+                STANDALONE_USER_ID,
+            )
+
+            factories.append(
+                (
+                    "Chat",
+                    lambda: ChatPanel(
+                        agent_slug="finance-assistant",
+                        surface="finance",
+                        agent_name="Finance Assistant",
+                        user_id=STANDALONE_USER_ID,
+                        placeholder=(
+                            "Ask about your accounts, spending, envelopes, "
+                            "goals, or holdings. Answers that need math are "
+                            "computed from your real data."
+                        ),
+                    ),
+                    None,
+                )
+            )
+        factories.append(
             (
                 "",
                 lambda: SettingsTab(
                     page, self._account_filter, self.register_filter_listener
                 ),
                 ft.Icons.SETTINGS_OUTLINED,
-            ),
-        ]
+            )
+        )
 
         self._lazy_contents = [_LazyTabContent(factory) for _, factory, _ in factories]
         tab_list = [

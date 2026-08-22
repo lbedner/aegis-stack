@@ -7,6 +7,13 @@ vendor information, and current configuration status.
 
 from typing import Any
 
+from fastapi import APIRouter, HTTPException, Query
+{%- if include_ai and include_auth %}
+from fastapi import Depends
+{%- endif %}
+from pydantic import BaseModel
+from sqlmodel import Session
+
 from app.core.db import engine
 from app.services.ai.domains.llm.etl import CatalogStats, get_catalog_stats
 from app.services.ai.domains.llm.llm_service import (
@@ -22,19 +29,13 @@ from app.services.ai.domains.llm.llm_service import (
     list_vendors,
     set_active_model,
 )
-from fastapi import APIRouter, HTTPException, Query
 {%- if include_ai and include_auth %}
-from fastapi import Depends
-{%- endif %}
-from pydantic import BaseModel
-from sqlmodel import Session
-{% if include_ai and include_auth %}
 {%- if include_auth_rbac %}
 from app.services.auth.auth_service import require_role
 {%- else %}
 from app.services.auth.deps import get_current_active_user
 {%- endif %}
-{% endif %}
+{%- endif %}
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 {% if include_ai and include_auth %}
@@ -65,13 +66,75 @@ class VendorResponse(BaseModel):
 
     name: str
     model_count: int
+    color: str | None = None
+    icon_b64: str | None = None
+
+
+# The vendors the shipped provider layer can actually drive, mapped to
+# the settings field that unlocks each; None means keyless (local).
+# Catalog vendors outside this map cannot be called at all, so a
+# ``usable`` listing never shows them.
+_CALLABLE_VENDORS: dict[str, str | None] = {
+    "ollama": None,
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "cohere": "COHERE_API_KEY",
+}
+
+# Brand domains, stated outright: the merchant-icon guess would coin
+# "mistral.com" and miss.
+_VENDOR_ICON_DOMAINS: dict[str, str] = {
+    "ollama": "ollama.com",
+    "openai": "openai.com",
+    "anthropic": "anthropic.com",
+    "google": "google.com",
+    "groq": "groq.com",
+    "mistral": "mistral.ai",
+    "cohere": "cohere.com",
+}
+
+
+def _usable_vendor_names() -> set[str]:
+    """Vendors whose models the running install can answer with."""
+    from app.core.config import settings
+
+    return {
+        vendor
+        for vendor, key in _CALLABLE_VENDORS.items()
+        if key is None or getattr(settings, key, None)
+    }
+
+
+async def _vendor_icons(names: list[str]) -> dict[str, str]:
+    """``{vendor: base64 png}`` via the merchant icon cache; misses
+    resolve on a later request once the background fill lands."""
+{% if include_finance %}
+    from app.core.db import get_async_session
+    from app.services.finance.domains.ledger.merchant_icon import icons_for_names
+
+    wanted = [n for n in names if n in _VENDOR_ICON_DOMAINS]
+    if not wanted:
+        return {}
+    async with get_async_session() as session:
+        return await icons_for_names(
+            session, wanted, domains_by_name=_VENDOR_ICON_DOMAINS
+        )
+{% else %}
+    return {}
+{% endif %}
 
 
 class ModelResponse(BaseModel):
     """Model list response."""
 
     model_id: str
+    title: str = ""
     vendor: str
+    family: str | None = None
+    color: str = ""
     context_window: int
     input_price: float | None
     output_price: float | None
@@ -170,15 +233,32 @@ def get_catalog_status() -> CatalogStatsResponse:
 
 
 @router.get("/vendors", response_model=list[VendorResponse])
-def get_vendors() -> list[VendorResponse]:
+async def get_vendors(
+    usable: bool = Query(
+        False, description="Only vendors this install can call (key configured)"
+    ),
+) -> list[VendorResponse]:
     """
-    List all LLM vendors with model counts.
+    List LLM vendors with model counts.
 
-    Returns vendors sorted alphabetically by name.
+    Returns vendors sorted alphabetically by name. With ``usable`` the
+    list is cut to callable vendors and enriched with brand icons.
     """
     try:
         results: list[VendorListResult] = list_vendors()
-        return [VendorResponse(name=v.name, model_count=v.model_count) for v in results]
+        icons: dict[str, str] = {}
+        if usable:
+            allowed = _usable_vendor_names()
+            results = [v for v in results if v.name in allowed and v.model_count]
+            icons = await _vendor_icons([v.name for v in results])
+        return [
+            VendorResponse(
+                name=v.name,
+                model_count=v.model_count,
+                icon_b64=icons.get(v.name),
+            )
+            for v in results
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list vendors: {e}")
 
@@ -209,24 +289,48 @@ async def get_models(
     modality: str | None = Query(None, description="Filter by modality"),
     limit: int = Query(50, ge=1, le=200, description="Maximum results"),
     include_disabled: bool = Query(False, description="Include disabled models"),
+    usable: bool = Query(
+        False, description="Only models this install can call (key configured)"
+    ),
 ) -> list[ModelResponse]:
     """
     List/search LLM models from catalog.
 
-    Supports filtering by pattern, vendor, and modality.
+    Supports filtering by pattern, vendor, and modality. With ``usable``
+    only callable vendors' models return, the limit applying per vendor
+    so one large catalog cannot crowd the others out.
     """
     try:
-        results: list[LLMListResult] = await list_models(
-            pattern=pattern,
-            vendor=vendor,
-            modality=modality,
-            limit=limit,
-            include_disabled=include_disabled,
-        )
+        if usable:
+            allowed = _usable_vendor_names()
+            if vendor is not None:
+                allowed &= {vendor}
+            results: list[LLMListResult] = []
+            for name in sorted(allowed):
+                results.extend(
+                    await list_models(
+                        pattern=pattern,
+                        vendor=name,
+                        modality=modality,
+                        limit=limit,
+                        include_disabled=include_disabled,
+                    )
+                )
+        else:
+            results = await list_models(
+                pattern=pattern,
+                vendor=vendor,
+                modality=modality,
+                limit=limit,
+                include_disabled=include_disabled,
+            )
         return [
             ModelResponse(
                 model_id=m.model_id,
+                title=m.title,
                 vendor=m.vendor,
+                family=m.family,
+                color=m.color,
                 context_window=m.context_window,
                 input_price=m.input_price,
                 output_price=m.output_price,

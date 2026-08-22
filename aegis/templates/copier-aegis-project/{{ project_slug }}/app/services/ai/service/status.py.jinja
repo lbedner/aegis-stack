@@ -13,9 +13,11 @@ class StatusMixin(AIServiceBase):
         """Get a conversation by ID."""
         return self.conversation_manager.get_conversation(conversation_id)
 
-    def list_conversations(self, user_id: str = "default") -> list[Conversation]:
-        """List all conversations for a user."""
-        return self.conversation_manager.list_conversations(user_id)
+    def list_conversations(
+        self, user_id: str = "default", surface: str | None = None
+    ) -> list[Conversation]:
+        """List conversations for a user, optionally scoped to one surface."""
+        return self.conversation_manager.list_conversations(user_id, surface=surface)
 
     def get_service_status(self) -> dict[str, Any]:
         """Get current service status and metrics."""

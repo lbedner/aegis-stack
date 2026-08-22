@@ -9,10 +9,12 @@ from sqlmodel import (
 from app.core.log import logger
 from app.services.ai.models.agents import (
     Agent,
+    AgentTool,
     MemoryModule,
+    Tool,
 )
-from app.services.finance.domains.detection.analyst.prompts import ANALYST_MAX_TOKENS, ANALYST_SYSTEM_PROMPT, ANALYST_TEMPERATURE, DEEP_DIVE_MAX_TOKENS, DEEP_DIVE_SYSTEM_PROMPT, DEEP_DIVE_TEMPERATURE
-from app.services.finance.domains.detection.analyst.shared import ANALYST_AGENT_SLUG, DEEP_DIVE_AGENT_SLUG, SNAPSHOT_MODULE_SLUG
+from app.services.finance.domains.detection.analyst.prompts import ANALYST_MAX_TOKENS, ANALYST_SYSTEM_PROMPT, ANALYST_TEMPERATURE, DEEP_DIVE_MAX_TOKENS, DEEP_DIVE_SYSTEM_PROMPT, DEEP_DIVE_TEMPERATURE, FINANCE_CHAT_MAX_TOKENS, FINANCE_CHAT_SYSTEM_PROMPT, FINANCE_CHAT_TEMPERATURE
+from app.services.finance.domains.detection.analyst.shared import ANALYST_AGENT_SLUG, DEEP_DIVE_AGENT_SLUG, FINANCE_CHAT_AGENT_SLUG, SNAPSHOT_MODULE_SLUG
 
 
 SNAPSHOT_TOKEN_ESTIMATE = 1_200
@@ -90,13 +92,75 @@ def deep_dive_agent_definition() -> dict[str, Any]:
 
 
 
-def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
-    """Seed the analyst agent and its memory module, skipping existing rows.
+# The chat agent's data surface: the finance host tools registered by
+# ``app.services.finance.ai_tools``. Attachment is by name against the
+# tool rows the fixture sync seeds; a missing row is skipped, never an
+# error, so seed order cannot brick the chat tab.
+FINANCE_CHAT_TOOL_NAMES = (
+    "ledger",
+    "accounts",
+    "quote",
+)
 
-    Idempotent, and never mutates a row that is already there: both are
-    editable from the dashboard, and a re-seed must not undo that.
+
+def finance_chat_agent_definition() -> dict[str, Any]:
+    """The seed row for the conversational finance assistant.
+
+    Same snapshot briefing as the analyst, warmer sampling, and
+    ``code_mode`` on: chat questions that need arithmetic are computed in
+    the sandbox over the finance tools rather than estimated in prose.
     """
-    counts = {"finance_agents": 0, "finance_memory_modules": 0}
+    return {
+        "slug": FINANCE_CHAT_AGENT_SLUG,
+        "name": "Finance Assistant",
+        "description": "Conversational finance chat with computed answers",
+        "category": "finance",
+        "model_id": None,
+        "system_prompt": FINANCE_CHAT_SYSTEM_PROMPT,
+        "temperature": FINANCE_CHAT_TEMPERATURE,
+        "max_tokens": FINANCE_CHAT_MAX_TOKENS,
+        "memory_modules": [SNAPSHOT_MODULE_SLUG],
+        "knowledge_base_ids": [],
+        "is_active": True,
+        "code_mode": True,
+    }
+
+
+def _attach_chat_tools(session: Session) -> int:
+    """Link the chat agent to the finance tool rows, idempotently."""
+    agent = session.exec(
+        select(Agent).where(Agent.slug == FINANCE_CHAT_AGENT_SLUG)
+    ).first()
+    if agent is None or agent.id is None:
+        return 0
+    linked = {link.tool_id for link in session.exec(
+        select(AgentTool).where(AgentTool.agent_id == agent.id)
+    ).all()}
+    attached = 0
+    for name in FINANCE_CHAT_TOOL_NAMES:
+        tool = session.exec(select(Tool).where(Tool.name == name)).first()
+        if tool is None or tool.id is None:
+            logger.warning(f"Finance chat tool row missing, skipping: {name}")
+            continue
+        if tool.id in linked:
+            continue
+        session.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
+        attached += 1
+    return attached
+
+
+def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
+    """Seed the finance agents and their memory module, skipping existing rows.
+
+    Idempotent, and never mutates a row that is already there: all of it is
+    editable from the dashboard, and a re-seed must not undo that. Tool
+    attachments for the chat agent are additive by name.
+    """
+    counts = {
+        "finance_agents": 0,
+        "finance_memory_modules": 0,
+        "finance_tool_links": 0,
+    }
 
     module = snapshot_module_definition()
     if (
@@ -109,7 +173,11 @@ def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
         counts["finance_memory_modules"] = 1
         logger.info(f"Seeded memory module '{module['slug']}'")
 
-    for definition in (analyst_agent_definition(), deep_dive_agent_definition()):
+    for definition in (
+        analyst_agent_definition(),
+        deep_dive_agent_definition(),
+        finance_chat_agent_definition(),
+    ):
         if (
             session.exec(select(Agent).where(Agent.slug == definition["slug"])).first()
             is not None
@@ -121,5 +189,12 @@ def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
 
     if any(counts.values()):
         session.commit()
+
+    counts["finance_tool_links"] = _attach_chat_tools(session)
+    if counts["finance_tool_links"]:
+        session.commit()
+        logger.info(
+            f"Attached {counts['finance_tool_links']} tool(s) to the chat agent"
+        )
     return counts
 {% endif %}

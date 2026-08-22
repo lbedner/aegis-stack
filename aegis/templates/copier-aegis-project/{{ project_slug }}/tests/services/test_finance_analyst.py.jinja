@@ -238,6 +238,10 @@ class TestSnapshot:
         assert "EXPECTED IN THE NEXT" in snapshot
         assert "RENT" in snapshot
         assert "-$2,000.00" in snapshot
+        # The account rides the line: an expectation without one reads as
+        # account-less, and a model scoping to a subset of accounts then
+        # calls the payment "missing" instead of "expected elsewhere".
+        assert "(Checking)" in snapshot
 
 
 class TestSnapshotDetailSections:
@@ -584,11 +588,13 @@ class TestFetcherRegistration:
 
 
 class TestFixtures:
-    def test_seeds_the_agent_and_its_module(self, db_session: Session) -> None:
+    def test_seeds_the_agents_and_their_module(self, db_session: Session) -> None:
         counts = analyst.load_finance_agent_fixtures(db_session)
 
-        # Two agents now: the nightly note and the on-request deep dive.
-        assert counts == {"finance_agents": 2, "finance_memory_modules": 1}
+        # Three agents: the nightly note, the deep dive, and the chat
+        # assistant behind the dashboard's Chat tab.
+        assert counts["finance_agents"] == 3
+        assert counts["finance_memory_modules"] == 1
         agent = db_session.exec(
             select(Agent).where(Agent.slug == analyst.ANALYST_AGENT_SLUG)
         ).one()
@@ -605,11 +611,37 @@ class TestFixtures:
         analyst.load_finance_agent_fixtures(db_session)
         again = analyst.load_finance_agent_fixtures(db_session)
 
-        assert again == {"finance_agents": 0, "finance_memory_modules": 0}
+        assert again["finance_agents"] == 0
+        assert again["finance_memory_modules"] == 0
+        assert again["finance_tool_links"] == 0
         agents = db_session.exec(
             select(Agent).where(Agent.slug == analyst.ANALYST_AGENT_SLUG)
         ).all()
         assert len(agents) == 1
+
+    def test_chat_agent_gets_code_mode_and_its_tools(
+        self, db_session: Session
+    ) -> None:
+        """The chat agent seeds flagged for code mode with the finance
+        tools attached, provided the tool rows exist (registry sync)."""
+        import app.services.finance.ai_tools  # noqa: F401 - registers tools
+        from app.services.ai.fixtures.agent_fixtures import load_agent_fixtures
+        from app.services.finance.domains.detection.analyst.seeds import (
+            FINANCE_CHAT_TOOL_NAMES,
+        )
+        from app.services.finance.domains.detection.analyst.shared import (
+            FINANCE_CHAT_AGENT_SLUG,
+        )
+
+        load_agent_fixtures(db_session)  # seeds tool rows from the registry
+        counts = analyst.load_finance_agent_fixtures(db_session)
+
+        assert counts["finance_tool_links"] == len(FINANCE_CHAT_TOOL_NAMES)
+        chat_agent = db_session.exec(
+            select(Agent).where(Agent.slug == FINANCE_CHAT_AGENT_SLUG)
+        ).one()
+        assert chat_agent.code_mode is True
+        assert {t.name for t in chat_agent.tools} == set(FINANCE_CHAT_TOOL_NAMES)
 
     def test_an_edited_agent_survives_reseeding(self, db_session: Session) -> None:
         """Both rows are editable from the dashboard; a re-seed must not
@@ -1374,14 +1406,18 @@ class TestAccountLinesAreNotFakeFacts:
     untracked balance rendered as a fact - and a model told the mortgage
     stands at zero will eventually say so."""
 
+    _next_id = iter(range(1, 100))
+
     def _account(self, name, balance, classification="asset", type_="checking"):
         from types import SimpleNamespace
 
         return SimpleNamespace(
+            id=next(self._next_id),
             name=name,
             account_type=type_,
             classification=classification,
             current_balance=balance,
+            balance_as_of=None,
         )
 
     def test_tracked_balances_render_as_before(self) -> None:
@@ -1400,6 +1436,17 @@ class TestAccountLinesAreNotFakeFacts:
         assert "no recorded balance" in section
         assert "Citizens Mortgage" in section
         assert "CHASE SAVINGS" in section
+
+    def test_register_balance_fills_never_written_accounts(self) -> None:
+        """A CSV-imported account (current_balance 0, no stamp) has a real
+        balance - the transaction sum - and must brief as one, not hide in
+        the untracked list telling the model the cash is $0."""
+        account = self._account("CHASE SAVINGS", 0, type_="savings")
+        section = analyst._accounts_section(
+            [account], {account.id: 65_930}
+        )
+        assert "- CHASE SAVINGS (savings, asset): $659.30" in section
+        assert "no recorded balance" not in section
 
     def test_the_count_still_covers_every_account(self) -> None:
         section = analyst._accounts_section(
@@ -1545,6 +1592,12 @@ class TestEnvelopesSection:
         await service.spend_from_envelope(
             allowance.id, amount=1_000, owner_user_id=OWNER, when=date(2026, 8, 5)
         )
+        await service.create_envelope(
+            owner_user_id=OWNER,
+            name="Pocket Money",
+            monthly_credit=1_000,
+            cadence="weekly",
+        )
         await async_db_session.commit()
 
         snapshot = await analyst.build_finance_snapshot(
@@ -1554,6 +1607,10 @@ class TestEnvelopesSection:
         assert "ENVELOPES" in snapshot
         assert "Allowance" in snapshot
         assert "overdrawn" in snapshot  # negative balance called out
+        # The credit line states the actual cadence: a weekly allowance
+        # briefed as "/mo" had the model misreporting it.
+        assert "$40.00/mo" in snapshot
+        assert "$10.00/wk" in snapshot
 
     @pytest.mark.asyncio
     async def test_no_envelopes_no_section(

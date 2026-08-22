@@ -188,7 +188,7 @@ async def build_finance_snapshot(
     )
 
     sections = [
-        _accounts_section(ctx.accounts),
+        _accounts_section(ctx.accounts, ctx.activity_totals),
         _net_worth_section(ctx),
         _liabilities_section(ctx),
         _portfolio_section(ctx),

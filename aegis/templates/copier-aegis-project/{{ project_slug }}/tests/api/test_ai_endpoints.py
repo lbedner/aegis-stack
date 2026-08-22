@@ -1,11 +1,14 @@
 """Tests for AI service API endpoints."""
 
+import importlib
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-import pytest
-from app.integrations.main import create_integrated_app
 from fastapi.testclient import TestClient
+import pytest
+
+from app.integrations.main import create_integrated_app
+from app.services.ai.models import ConversationMessage, MessageRole
 
 
 @pytest.fixture
@@ -164,3 +167,154 @@ class TestUsageStatsEndpoint:
         assert data["total_tokens"] == 0
         assert data["models"] == []
         assert data["recent_activity"] == []
+
+
+class TestChatAgentSlug:
+    """The chat endpoints thread agent_slug through to the service."""
+
+    def _reply(self) -> ConversationMessage:
+        return ConversationMessage(
+            id="m1",
+            role=MessageRole.ASSISTANT,
+            content="hi",
+            metadata={"conversation_id": "c1", "response_time_ms": 1.0},
+        )
+
+    def test_chat_passes_agent_slug(self, client: TestClient) -> None:
+        with patch(
+            "app.components.backend.api.ai.router.ai_service.chat",
+            new=AsyncMock(return_value=self._reply()),
+        ) as mock_chat:
+            response = client.post(
+                "/api/v1/ai/chat",
+                json={"message": "hello", "agent_slug": "support"},
+            )
+
+        assert response.status_code == 200
+        assert mock_chat.call_args.kwargs["agent_slug"] == "support"
+
+    def test_chat_defaults_agent_slug_to_none(self, client: TestClient) -> None:
+        with patch(
+            "app.components.backend.api.ai.router.ai_service.chat",
+            new=AsyncMock(return_value=self._reply()),
+        ) as mock_chat:
+            response = client.post("/api/v1/ai/chat", json={"message": "hello"})
+
+        assert response.status_code == 200
+        assert mock_chat.call_args.kwargs["agent_slug"] is None
+
+
+class TestLLMPickerGating:
+    """The picker's usable filter: no key, no models."""
+
+    def _vendor_rows(self) -> list[Any]:
+        from app.services.ai.domains.llm.llm_service import VendorListResult
+
+        return [
+            VendorListResult(name="ollama", model_count=26),
+            VendorListResult(name="openai", model_count=96),
+            VendorListResult(name="fireworks", model_count=296),
+        ]
+
+    def test_usable_vendors_hide_unkeyed_and_uncallable(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fireworks has no provider at all; openai has one but no key
+        is configured - only keyless ollama survives."""
+        # The llm package re-exports its APIRouter under the same name,
+        # shadowing the module attribute - import the module directly.
+        llm_router = importlib.import_module(
+            "app.components.backend.api.llm.router"
+        )
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
+        monkeypatch.setattr(
+            llm_router, "list_vendors", lambda: self._vendor_rows()
+        )
+
+        response = client.get("/api/v1/llm/vendors", params={"usable": True})
+
+        assert response.status_code == 200
+        assert [v["name"] for v in response.json()] == ["ollama"]
+
+    def test_usable_vendors_include_keyed_ones_with_icons(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The llm package re-exports its APIRouter under the same name,
+        # shadowing the module attribute - import the module directly.
+        llm_router = importlib.import_module(
+            "app.components.backend.api.llm.router"
+        )
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-test")
+        monkeypatch.setattr(
+            llm_router, "list_vendors", lambda: self._vendor_rows()
+        )
+
+        async def fake_icons(names: list[str]) -> dict[str, str]:
+            return {"openai": "iVBORfake"}
+
+        monkeypatch.setattr(llm_router, "_vendor_icons", fake_icons)
+
+        response = client.get("/api/v1/llm/vendors", params={"usable": True})
+
+        assert response.status_code == 200
+        by_name = {v["name"]: v for v in response.json()}
+        assert set(by_name) == {"ollama", "openai"}
+        assert by_name["openai"]["icon_b64"] == "iVBORfake"
+        assert by_name["ollama"]["icon_b64"] is None
+
+    def test_usable_models_come_per_callable_vendor(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The limit applies per vendor, and only callable vendors are
+        queried at all."""
+        # The llm package re-exports its APIRouter under the same name,
+        # shadowing the module attribute - import the module directly.
+        llm_router = importlib.import_module(
+            "app.components.backend.api.llm.router"
+        )
+        from app.core.config import settings
+        from app.services.ai.domains.llm.llm_service import LLMListResult
+
+        monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-test")
+        for key in (
+            "ANTHROPIC_API_KEY",
+            "GOOGLE_API_KEY",
+            "GROQ_API_KEY",
+            "MISTRAL_API_KEY",
+            "COHERE_API_KEY",
+        ):
+            monkeypatch.setattr(settings, key, None)
+        queried: list[str] = []
+
+        async def fake_list_models(**kwargs: Any) -> list[LLMListResult]:
+            queried.append(kwargs["vendor"])
+            return [
+                LLMListResult(
+                    model_id=f"{kwargs['vendor']}-model",
+                    title=kwargs["vendor"].title(),
+                    vendor=kwargs["vendor"],
+                    family=None,
+                    color="",
+                    context_window=8192,
+                    input_price=None,
+                    output_price=None,
+                    released_on=None,
+                )
+            ]
+
+        monkeypatch.setattr(llm_router, "list_models", fake_list_models)
+
+        response = client.get(
+            "/api/v1/llm/models", params={"usable": True, "limit": 200}
+        )
+
+        assert response.status_code == 200
+        assert queried == ["ollama", "openai"]
+        assert [m["model_id"] for m in response.json()] == [
+            "ollama-model",
+            "openai-model",
+        ]

@@ -21,6 +21,7 @@ from app.services.finance.domains.ledger.queries.filters import (
     uncategorized_catchall_ids,
 )
 from app.services.finance.models import (
+    FinanceMerchant,
     FinanceTag,
     FinanceTransaction,
     FinanceTransactionSplit,
@@ -173,6 +174,48 @@ async def transactions_page(
         .limit(page_size)
     )
     return list((await db.exec(query_obj)).all()), total
+
+
+async def transactions_window_with_payees(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    from_date: date | None = None,
+    limit: int = 1000,
+) -> tuple[list[tuple[FinanceTransaction, str | None]], int]:
+    """A date-windowed register slice with the CURATED payee resolved.
+
+    One LEFT JOIN to ``finance_merchant`` (no second query, no ``IN``):
+    each row pairs the transaction with the user-curated merchant name -
+    the name the register displays - or ``None`` when no merchant is
+    assigned. A renamed payee that only lived in the curation layer was
+    invisible to consumers reading the raw descriptor columns.
+    """
+    filters = [
+        FinanceTransaction.deleted_at.is_(None),
+        FinanceTransaction.dedup_status != "duplicate",
+        FinanceTransaction.account_id.in_(live_account_ids()),
+        FinanceTransaction.is_transfer.is_(False),
+    ]
+    if owner_user_id is not None:
+        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    if from_date is not None:
+        filters.append(FinanceTransaction.date_ >= from_date)
+    count_query = select(func.count()).select_from(FinanceTransaction).where(*filters)
+    total = (await db.exec(count_query)).one()
+    query = (
+        select(FinanceTransaction, FinanceMerchant.name)
+        .join(
+            FinanceMerchant,
+            FinanceMerchant.id == FinanceTransaction.merchant_id,
+            isouter=True,
+        )
+        .where(*filters)
+        .order_by(FinanceTransaction.date_.desc(), FinanceTransaction.id.desc())
+        .limit(limit)
+    )
+    rows = (await db.exec(query)).all()
+    return [(txn, name) for txn, name in rows], total
 
 
 async def uncategorized_page(

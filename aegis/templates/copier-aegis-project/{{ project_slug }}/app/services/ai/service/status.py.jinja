@@ -1,0 +1,79 @@
+"""Conversation lookups plus service status and validation."""
+
+from typing import Any
+
+from app.services.ai.models import Conversation
+from app.services.ai.service.base import AIServiceBase
+
+
+class StatusMixin(AIServiceBase):
+    """Read-only surface: conversations, status, configuration checks."""
+
+    def get_conversation(self, conversation_id: str) -> Conversation | None:
+        """Get a conversation by ID."""
+        return self.conversation_manager.get_conversation(conversation_id)
+
+    def list_conversations(self, user_id: str = "default") -> list[Conversation]:
+        """List all conversations for a user."""
+        return self.conversation_manager.list_conversations(user_id)
+
+    def get_service_status(self) -> dict[str, Any]:
+        """Get current service status and metrics."""
+        # Use get_stats() which works for both memory and SQLite backends
+        stats = self.conversation_manager.get_stats()
+        total_conversations = stats["total_conversations"]
+
+        return {
+            "enabled": self.config.enabled,
+            "provider": self.config.provider,
+            "model": self.config.model,
+            "agent_initialized": True,  # Agents created per request, always available
+            "total_conversations": total_conversations,
+            "configuration_valid": len(
+                self.config.validate_configuration(self.settings)
+            )
+            == 0,
+        }
+
+    def validate_service(self) -> list[str]:
+        """Validate service configuration and return any issues."""
+        errors = []
+
+        # Check provider dependencies first
+        dep_errors = self._validate_provider_dependencies()
+        errors.extend(dep_errors)
+
+        # Check configuration
+        config_errors = self.config.validate_configuration(self.settings)
+        errors.extend(config_errors)
+
+        return errors
+
+    def _validate_provider_dependencies(self) -> list[str]:
+        """
+        Validate that required dependencies are installed for configured provider.
+
+        Returns:
+            list[str]: List of error messages if dependencies are missing
+        """
+{%- if ai_backend != "memory" %}
+        from app.services.ai.domains.llm.provider_management import (
+            check_provider_dependency_installed,
+        )
+
+        errors = []
+        provider_value = self.config.provider.value
+
+        if not check_provider_dependency_installed(provider_value):
+            errors.append(
+                f"Missing dependency for {provider_value} provider. "
+                f"Run: {{ project_slug }} ai add-provider {provider_value}"
+            )
+
+        return errors
+{%- else %}
+        # ``provider_management`` (dependency introspection) ships only with a
+        # persistent AI backend; the memory backend omits it, so there is no
+        # dependency check to run here.
+        return []
+{%- endif %}

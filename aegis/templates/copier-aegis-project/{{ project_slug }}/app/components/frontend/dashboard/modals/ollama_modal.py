@@ -33,7 +33,7 @@ from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_relative_time as format_relative_iso
 from app.core.log import logger
-from app.services.ai.ollama_activity import get_ollama_activity
+from app.services.ai.domains.llm.ollama_activity import get_ollama_activity
 from app.services.system.models import ComponentStatus
 
 from ..activity_feed import format_relative_time
@@ -396,7 +396,7 @@ class LoadModelButton(ft.Container):
 
         # Load the model asynchronously
         try:
-            from app.services.ai.ollama import OllamaClient
+            from app.services.ai.domains.llm.ollama import OllamaClient
 
             client = OllamaClient(base_url=self._ollama_url)
             success = await client.load_model(self._model_name)
@@ -477,7 +477,7 @@ class UnloadModelButton(ft.Container):
 
         # Unload the model asynchronously
         try:
-            from app.services.ai.ollama import OllamaClient
+            from app.services.ai.domains.llm.ollama import OllamaClient
 
             client = OllamaClient(base_url=self._ollama_url)
             success = await client.unload_model(self._model_name)

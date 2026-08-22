@@ -2,12 +2,12 @@
 
 from datetime import UTC, datetime
 
-from app.services.ai.etl.clients.litellm_client import LiteLLMModel
-from app.services.ai.etl.clients.openrouter_client import (
+from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMModel
+from app.services.ai.domains.llm.etl.clients.openrouter_client import (
     OpenRouterModel,
     OpenRouterModelIndex,
 )
-from app.services.ai.etl.mappers.llm_mapper import (
+from app.services.ai.domains.llm.etl.mappers.llm_mapper import (
     MergedLLMData,
     extract_family,
     extract_vendor,

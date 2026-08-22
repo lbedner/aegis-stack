@@ -14,7 +14,7 @@ from rich.table import Table
 
 from app.cli import theme
 from app.i18n import lazy_t, t
-from app.services.ai.agent_loader import AgentConfig
+from app.services.ai.domains.chat.agent_loader import AgentConfig
 from app.services.ai.models.agents import Agent, MemoryModule
 
 app = typer.Typer(help=lazy_t("agents.help"))
@@ -44,7 +44,7 @@ async def _load_agent(slug: str) -> Agent | None:
 
 async def _load_modules() -> list[MemoryModule]:
     from app.core.db import get_async_session
-    from app.services.ai.memory_modules import list_memory_modules
+    from app.services.ai.domains.chat.memory_modules import list_memory_modules
 
     async with get_async_session() as session:
         return await list_memory_modules(session, active_only=False)
@@ -53,7 +53,7 @@ async def _load_modules() -> list[MemoryModule]:
 async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
     """One turn through the loader: resolved config -> configured model."""
     from app.core.config import settings
-    from app.services.ai.agent_loader import resolve_agent
+    from app.services.ai.domains.chat.agent_loader import resolve_agent
     from app.services.ai.config import AIServiceConfig
 
     config = await resolve_agent(slug)
@@ -66,13 +66,13 @@ async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
         update["model"] = config.model_id
     service_config = service_config.model_copy(update=update)
 {% if ai_framework == "pydantic-ai" %}
-    from app.services.ai.providers import get_agent
+    from app.services.ai.domains.llm.providers import get_agent
 
     agent = get_agent(service_config, settings, config.system_prompt)
     result = await agent.run(message)
     return config, str(result.output)
 {% else %}
-    from app.services.ai.providers import get_llm
+    from app.services.ai.domains.llm.providers import get_llm
 
     llm = get_llm(service_config, settings)
     result = await llm.ainvoke(

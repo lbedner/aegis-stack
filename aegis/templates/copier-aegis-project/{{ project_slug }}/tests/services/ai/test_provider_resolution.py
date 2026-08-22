@@ -12,7 +12,7 @@ import pytest
 
 from app.services.ai.config import AIServiceConfig, _resolve_effort, _resolve_provider
 from app.services.ai.models import AIProvider
-from app.services.ai.providers import _model_settings, _supports_custom_temperature
+from app.services.ai.domains.llm.providers import _model_settings, _supports_custom_temperature
 
 
 class TestCustomTemperatureSupport:

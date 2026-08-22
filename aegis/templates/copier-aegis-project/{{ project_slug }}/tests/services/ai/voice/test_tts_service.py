@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from app.services.ai.voice.models import TTSProvider
-from app.services.ai.voice.tts import TTSService
+from app.services.ai.domains.voice.models import TTSProvider
+from app.services.ai.domains.voice.tts import TTSService
 
 
 class TestTTSServiceInit:

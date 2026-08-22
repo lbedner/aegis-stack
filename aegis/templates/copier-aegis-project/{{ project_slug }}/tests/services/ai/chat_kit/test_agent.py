@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pydantic_ai import RunContext
 from pydantic_ai.models.test import TestModel
 
-from app.services.ai.chat_kit import (
+from app.services.ai.domains.chat.chat_kit import (
     ChatMessage,
     ChatScope,
     DeltaFrame,

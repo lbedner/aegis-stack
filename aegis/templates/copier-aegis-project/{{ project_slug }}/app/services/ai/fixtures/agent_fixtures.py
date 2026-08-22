@@ -12,7 +12,7 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.core.log import logger
-from app.services.ai.agent_loader import DEFAULT_AGENT_SLUG, default_agent_config
+from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG, default_agent_config
 from app.services.ai.models.agents import Agent
 
 __all__ = ["DEFAULT_AGENT_SLUG", "default_agent_definition", "load_agent_fixtures"]

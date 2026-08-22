@@ -13,8 +13,8 @@ from pydantic_ai.models.test import TestModel
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai import module_context
-from app.services.ai.agent_loader import invalidate_agent_cache
+from app.services.ai.domains.chat import module_context
+from app.services.ai.domains.chat.agent_loader import invalidate_agent_cache
 from app.services.finance.domains.detection import analyst
 from app.services.finance.models import FinanceInsight
 from app.services.finance.service import FinanceService
@@ -53,7 +53,7 @@ def analyst_ready(monkeypatch):
             text = f"{NOTE_TEXT} Run {len(calls)}."
             return TestModel(custom_output_args={"headline": text}), "test-model"
 
-        monkeypatch.setattr("app.services.ai.providers.model_for", _model_for)
+        monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _model_for)
 
         session.add(analyst.MemoryModule(**analyst.snapshot_module_definition()))
         session.add(analyst.Agent(**analyst.analyst_agent_definition()))
@@ -139,12 +139,12 @@ async def test_an_unavailable_model_is_a_503_not_an_empty_note(
     acting_owner_user_id: int | None,
     monkeypatch,
 ) -> None:
-    from app.services.ai.providers import ProviderError
+    from app.services.ai.domains.llm.providers import ProviderError
 
     def _explode(config, settings):
         raise ProviderError("Ollama is not running")
 
-    monkeypatch.setattr("app.services.ai.providers.model_for", _explode)
+    monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _explode)
     service = FinanceService(async_db_session)
     await service.create_manual_account(
         owner_user_id=acting_owner_user_id,

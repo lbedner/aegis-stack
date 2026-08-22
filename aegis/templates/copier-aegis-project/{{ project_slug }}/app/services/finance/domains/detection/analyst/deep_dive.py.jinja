@@ -198,9 +198,9 @@ async def run_deep_dive(
     from pydantic_ai.settings import ModelSettings
 
     from app.core.config import settings
-    from app.services.ai.agent_loader import resolve_agent
+    from app.services.ai.domains.chat.agent_loader import resolve_agent
     from app.services.ai.config import AIServiceConfig
-    from app.services.ai.providers import model_for
+    from app.services.ai.domains.llm.providers import model_for
     from app.services.ai.usage_recording import extract_usage, record_usage
 
     agent_config = await resolve_agent(DEEP_DIVE_AGENT_SLUG, session=db)

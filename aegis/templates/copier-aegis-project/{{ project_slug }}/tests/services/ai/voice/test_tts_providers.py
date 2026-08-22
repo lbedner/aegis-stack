@@ -1,7 +1,7 @@
 """Tests for TTS providers."""
 
-from app.services.ai.voice.models import TTSProvider
-from app.services.ai.voice.tts import (
+from app.services.ai.domains.voice.models import TTSProvider
+from app.services.ai.domains.voice.tts import (
     BaseTTSProvider,
     OpenAITTSProvider,
     get_tts_provider,

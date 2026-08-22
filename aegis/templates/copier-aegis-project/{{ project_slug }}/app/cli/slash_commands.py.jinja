@@ -178,7 +178,7 @@ class SlashCommandHandler:
 
         # Check for Ollama models (local, no API key needed)
         try:
-            from app.services.ai.ollama import OllamaClient
+            from app.services.ai.domains.llm.ollama import OllamaClient
 
             ollama_client = OllamaClient()
             if await ollama_client.is_available():
@@ -190,9 +190,9 @@ class SlashCommandHandler:
 {% if ai_backend != "memory" %}
 
         # Check for cloud providers with API keys (requires LLM catalog)
-        from app.services.ai.llm_service import list_models
+        from app.services.ai.domains.llm.llm_service import list_models
         from app.services.ai.models import AIProvider
-        from app.services.ai.provider_management import (
+        from app.services.ai.domains.llm.provider_management import (
             check_provider_dependency_installed,
             get_existing_api_key,
         )
@@ -347,7 +347,7 @@ class SlashCommandHandler:
 {% if ai_backend != "memory" %}
         # Use set_active_model which auto-detects provider from model
         # (requires LLM catalog)
-        from app.services.ai.llm_service import set_active_model
+        from app.services.ai.domains.llm.llm_service import set_active_model
 
         result = await set_active_model(model)
 
@@ -388,7 +388,7 @@ class SlashCommandHandler:
         # Check if model is available in Ollama
         if model in self._model_cache:
             try:
-                from app.services.ai.ollama import OllamaClient
+                from app.services.ai.domains.llm.ollama import OllamaClient
 
                 ollama_client = OllamaClient()
                 if await ollama_client.is_available():

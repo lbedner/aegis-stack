@@ -118,7 +118,7 @@ async def check_ai_service_health() -> ComponentStatus:
             # costs.
             if current_config.provider == AIProvider.OLLAMA:
                 try:
-                    from app.services.ai.ollama import OllamaClient
+                    from app.services.ai.domains.llm.ollama import OllamaClient
 
                     ollama_url = settings.ollama_base_url_effective
                     ollama_client = OllamaClient(base_url=ollama_url)

@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-import app.services.ai.pollinations_provider as pollinations_provider_module
-from app.services.ai.pollinations_provider import (
+import app.services.ai.domains.llm.pollinations_provider as pollinations_provider_module
+from app.services.ai.domains.llm.pollinations_provider import (
     POLLINATIONS_FALLBACK_MODEL,
     anonymous_async_http_client,
     pollinations_api_key,

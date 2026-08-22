@@ -1,0 +1,41 @@
+"""AI service facade.
+
+``AIService`` is composed from one mixin per concern, chained so each
+layer may call the ones beneath it:
+
+    AIServiceBase        state: settings, config, conversation manager
+      └─ UsageMixin      token extraction, pricing, usage rollups
+         └─ ContextsMixin   health/usage/catalog{% if ai_rag %}/RAG{% endif %} context builders
+            └─ PromptMixin    persona overlay + per-request runtime construction
+               └─ ChatMixin      the non-streaming turn
+                  └─ StreamingMixin  the streaming turn
+                     └─ VoiceMixin     {% if ai_voice %}STT -> chat -> TTS{% else %}empty (voice off){% endif %}
+    StatusMixin          conversations, status, validation (base only)
+
+The composition below is the whole class - it declares no methods of its
+own, and this package keeps the historical import path working:
+``from app.services.ai.service import AIService``.
+"""
+
+from app.services.ai.service.base import (
+    AIServiceError,
+    ConversationError,
+    ProviderError,
+)
+from app.services.ai.service.status import StatusMixin
+from app.services.ai.service.voice import VoiceMixin
+
+__all__ = [
+    "AIService",
+    "AIServiceError",
+    "ConversationError",
+    "ProviderError",
+]
+
+
+class AIService(VoiceMixin, StatusMixin):
+    """
+    Core AI service for chat functionality.
+
+    Handles chat completions, conversation management, and provider abstraction.
+    """

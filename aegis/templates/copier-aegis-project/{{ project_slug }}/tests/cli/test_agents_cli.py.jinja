@@ -4,7 +4,7 @@
 from unittest.mock import patch
 
 from app.cli.main import app
-from app.services.ai.agent_loader import AgentConfig
+from app.services.ai.domains.chat.agent_loader import AgentConfig
 from app.services.ai.models.agents import Agent, MemoryModule, Tool
 from typer.testing import CliRunner
 

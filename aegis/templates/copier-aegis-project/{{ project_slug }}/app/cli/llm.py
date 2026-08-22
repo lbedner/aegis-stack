@@ -18,9 +18,9 @@ from app.cli import theme
 from app.core.db import engine
 from app.core.log import suppress_logs
 from app.i18n import lazy_t, t
-from app.services.ai.etl import CatalogStats, SyncResult, get_catalog_stats
-from app.services.ai.etl.llm_sync_service import sync_llm_catalog
-from app.services.ai.llm_service import (
+from app.services.ai.domains.llm.etl import CatalogStats, SyncResult, get_catalog_stats
+from app.services.ai.domains.llm.etl.llm_sync_service import sync_llm_catalog
+from app.services.ai.domains.llm.llm_service import (
     clear_active_model,
     get_current_config,
     get_model_info,

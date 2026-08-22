@@ -7,8 +7,8 @@ import pytest
 from sqlalchemy import Engine
 from sqlmodel import Session
 
-from app.services.ai.etl.clients.litellm_client import LiteLLMModel
-from app.services.ai.etl.clients.openrouter_client import OpenRouterModel
+from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMModel
+from app.services.ai.domains.llm.etl.clients.openrouter_client import OpenRouterModel
 from app.services.ai.models.llm import LargeLanguageModel, LLMVendor
 
 # =============================================================================
@@ -257,7 +257,7 @@ def sample_litellm_model() -> LiteLLMModel:
 @pytest.fixture
 def mock_httpx_openrouter(mock_openrouter_response: dict[str, Any]):
     """Mock httpx for OpenRouter API calls."""
-    with patch("app.services.ai.etl.clients.openrouter_client.httpx") as mock_httpx:
+    with patch("app.services.ai.domains.llm.etl.clients.openrouter_client.httpx") as mock_httpx:
         mock_response = MagicMock()
         mock_response.json.return_value = mock_openrouter_response
         mock_response.raise_for_status = MagicMock()
@@ -275,7 +275,7 @@ def mock_httpx_openrouter(mock_openrouter_response: dict[str, Any]):
 @pytest.fixture
 def mock_httpx_litellm(mock_litellm_response: dict[str, Any]):
     """Mock httpx for LiteLLM API calls."""
-    with patch("app.services.ai.etl.clients.litellm_client.httpx") as mock_httpx:
+    with patch("app.services.ai.domains.llm.etl.clients.litellm_client.httpx") as mock_httpx:
         mock_response = MagicMock()
         mock_response.json.return_value = mock_litellm_response
         mock_response.raise_for_status = MagicMock()
@@ -350,7 +350,7 @@ def mock_ollama_response_minimal() -> dict[str, Any]:
 @pytest.fixture
 def mock_httpx_ollama(mock_ollama_response: dict[str, Any]):
     """Mock httpx for Ollama API calls."""
-    with patch("app.services.ai.ollama.httpx") as mock_httpx:
+    with patch("app.services.ai.domains.llm.ollama.httpx") as mock_httpx:
         mock_response = MagicMock()
         mock_response.json.return_value = mock_ollama_response
         mock_response.raise_for_status = MagicMock()

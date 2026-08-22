@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services.ai.models import AIProvider
-from app.services.ai.provider_management import (
+from app.services.ai.domains.llm.provider_management import (
     PROVIDER_API_KEY_URLS,
     PROVIDER_DEPENDENCIES,
     PROVIDER_MODULE_CHECKS,
@@ -82,14 +82,14 @@ class TestCheckProviderDependencyInstalled:
 class TestGetMissingDependency:
     """Tests for getting missing dependency package name."""
 
-    @patch("app.services.ai.provider_management.check_provider_dependency_installed")
+    @patch("app.services.ai.domains.llm.provider_management.check_provider_dependency_installed")
     def test_returns_package_when_not_installed(self, mock_check: MagicMock) -> None:
         """Returns package name when dependency is not installed."""
         mock_check.return_value = False
         result = get_missing_dependency("google")
         assert result == "pydantic-ai-slim[google]"
 
-    @patch("app.services.ai.provider_management.check_provider_dependency_installed")
+    @patch("app.services.ai.domains.llm.provider_management.check_provider_dependency_installed")
     def test_returns_none_when_installed(self, mock_check: MagicMock) -> None:
         """Returns None when dependency is already installed."""
         mock_check.return_value = True

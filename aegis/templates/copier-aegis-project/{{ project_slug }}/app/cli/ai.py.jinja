@@ -32,7 +32,7 @@ from ..services.ai.models import (
     get_free_providers,
     get_provider_capabilities,
 )
-from ..services.ai.providers import ProviderNotInstalledError
+from ..services.ai.domains.llm.providers import ProviderNotInstalledError
 
 # Initialize logging at module load
 setup_logging()
@@ -134,7 +134,7 @@ def status() -> None:
 
 @app.command(help=lazy_t("ai.help_providers"))
 def providers() -> None:
-    from ..services.ai.provider_management import check_provider_dependency_installed
+    from ..services.ai.domains.llm.provider_management import check_provider_dependency_installed
 
     ai_config = get_ai_config(settings)
     available = ai_config.get_available_providers(settings)
@@ -238,7 +238,7 @@ def add_provider(
 ) -> None:
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
-    from ..services.ai.provider_management import (
+    from ..services.ai.domains.llm.provider_management import (
         PROVIDER_API_KEY_URLS,
         get_env_var_name,
         get_existing_api_key,
@@ -358,7 +358,7 @@ def use_provider(
         help=lazy_t("ai.arg_provider_switch"),
     ),
 ) -> None:
-    from ..services.ai.provider_management import (
+    from ..services.ai.domains.llm.provider_management import (
         check_provider_dependency_installed,
         get_env_var_name,
         get_existing_api_key,
@@ -649,7 +649,7 @@ def voice(
     from pathlib import Path
 
     from app.services.ai.service import AIService
-    from app.services.ai.voice import AudioFormat, AudioInput
+    from app.services.ai.domains.voice import AudioFormat, AudioInput
 
     async def run_voice() -> None:
         try:
@@ -806,7 +806,7 @@ def record(
         raise typer.Exit(1)
 
     from app.services.ai.service import AIService
-    from app.services.ai.voice import AudioFormat, AudioInput, SpeechRequest, get_tts_models
+    from app.services.ai.domains.voice import AudioFormat, AudioInput, SpeechRequest, get_tts_models
 
     async def run_record() -> None:
         try:
@@ -1077,7 +1077,7 @@ def transcribe(
     from pathlib import Path
 
     from app.services.ai.service import AIService
-    from app.services.ai.voice import AudioFormat, AudioInput
+    from app.services.ai.domains.voice import AudioFormat, AudioInput
 
     async def run_transcribe() -> None:
         try:
@@ -1216,7 +1216,7 @@ def speak(
     from pathlib import Path
 
     from app.services.ai.service import AIService
-    from app.services.ai.voice import SpeechRequest
+    from app.services.ai.domains.voice import SpeechRequest
 
     async def run_speak() -> None:
         try:
@@ -1801,7 +1801,7 @@ async def _interactive_chat_session(
         end="",
     )
     # Warm up the agent (lazy imports, model initialization)
-    from app.services.ai.providers import get_agent
+    from app.services.ai.domains.llm.providers import get_agent
     _ = get_agent(ai_config, settings)
     console.print(f" [{theme.ACCENT}]{t('ai.ok')}[/{theme.ACCENT}]")
 

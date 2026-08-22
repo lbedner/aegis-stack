@@ -1,6 +1,6 @@
 """Tests for voice catalog functions."""
 
-from app.services.ai.voice import (
+from app.services.ai.domains.voice import (
     OpenAIVoice,
     STTProvider,
     TTSProvider,
@@ -12,7 +12,7 @@ from app.services.ai.voice import (
     get_tts_voices,
     get_voice,
 )
-from app.services.ai.voice.models import ModelInfo, ProviderInfo, VoiceInfo
+from app.services.ai.domains.voice.models import ModelInfo, ProviderInfo, VoiceInfo
 
 
 class TestGetTtsProviders:

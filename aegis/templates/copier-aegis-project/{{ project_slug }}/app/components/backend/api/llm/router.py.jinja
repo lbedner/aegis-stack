@@ -8,8 +8,8 @@ vendor information, and current configuration status.
 from typing import Any
 
 from app.core.db import engine
-from app.services.ai.etl import CatalogStats, get_catalog_stats
-from app.services.ai.llm_service import (
+from app.services.ai.domains.llm.etl import CatalogStats, get_catalog_stats
+from app.services.ai.domains.llm.llm_service import (
     CurrentLLMConfig,
     LLMListResult,
     ModalityListResult,

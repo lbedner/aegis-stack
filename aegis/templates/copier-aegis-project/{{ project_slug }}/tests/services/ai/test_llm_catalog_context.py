@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import Engine
 from sqlmodel import Session
 
-from app.services.ai.llm_catalog_context import (
+from app.services.ai.domains.chat.llm_catalog_context import (
     FEATURED_VENDORS,
     TOP_MODELS_PER_VENDOR,
     FlagshipModel,

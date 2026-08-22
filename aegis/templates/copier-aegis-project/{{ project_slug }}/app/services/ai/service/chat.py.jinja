@@ -1,0 +1,281 @@
+"""The chat entrypoint: one non-streaming turn, end to end.
+
+``chat()`` orchestrates the full request: resolve agent row, set up the
+conversation, gather contexts (from the mixin chain below), run the
+model, record usage, persist. Streaming lives in ``streaming.py``.
+"""
+
+import uuid
+from datetime import UTC, datetime
+
+{% if ai_framework == "pydantic-ai" %}
+from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
+{% endif %}
+from app.core.log import logger
+from app.services.ai.config import AIServiceConfig
+from app.services.ai.domains.chat.agent_loader import resolve_agent
+from app.services.ai.models import Conversation, ConversationMessage, MessageRole
+from app.services.ai.service.base import (
+    AIServiceError,
+    ConversationError,
+{% if ai_framework == "pydantic-ai" %}
+    ProviderError,
+{% endif %}
+)
+from app.services.ai.service.prompt import PromptMixin
+{%- if ai_backend != "memory" %}
+from app.services.ai.domains.chat.user_memory import build_user_memory_context
+{%- endif %}
+{% if ai_rag %}
+from app.services.ai.domains.chat.rag_context import RAGContext
+{% endif %}
+
+
+class ChatMixin(PromptMixin):
+    """Non-streaming chat turn plus conversation setup/teardown."""
+
+    async def chat(
+        self,
+        message: str,
+        conversation_id: str | None = None,
+        user_id: str = "default",
+{% if ai_rag %}
+        use_rag: bool = False,
+        rag_collection: str | None = None,
+        rag_top_k: int | None = None,
+{% endif %}
+    ) -> ConversationMessage:
+        """
+        Send a chat message and get AI response.
+
+        Args:
+            message: The user's message
+            conversation_id: Optional conversation ID (creates new if None)
+            user_id: User identifier for conversation ownership
+{% if ai_rag %}
+            use_rag: Enable RAG context injection from indexed codebase
+            rag_collection: Collection to search (uses config default if None)
+            rag_top_k: Number of results to retrieve (uses config default if None)
+{% endif %}
+
+        Returns:
+            ConversationMessage: The AI's response message
+
+        Raises:
+            AIServiceError: If service is disabled or not configured
+            ProviderError: If AI provider fails
+            ConversationError: If conversation management fails
+        """
+        if not self.config.enabled:
+            raise AIServiceError("AI service is disabled")
+
+        try:
+            # Get fresh config for metadata (reflects current .env after use-provider)
+            current = self.config
+
+            # Resolve the active agent definition (DB row or code default)
+            agent_config = await resolve_agent()
+
+            # Setup conversation and add user message
+            conversation = self._setup_conversation(
+                message, conversation_id, user_id, config=current
+            )
+
+{% if ai_rag %}
+            # Build RAG context if enabled
+            rag_context: RAGContext | None = None
+            if use_rag:
+                rag_context = await self._build_rag_context(
+                    query=message,
+                    collection=rag_collection,
+                    top_k=rag_top_k,
+                    allowed_collections=agent_config.knowledge_base_ids,
+                )
+
+{% endif %}
+            # Build health context (always included, refreshed per message)
+            health_context, health_warning = await self._build_health_context()
+
+            # Build usage context for self-awareness
+            usage_context = self._build_usage_context()
+
+            # Build LLM catalog context
+            catalog_context = self._build_catalog_context()
+
+{% if ai_backend != "memory" %}
+            # Guarded per-user memory block (saved via the save_memory tool)
+            memory_context = await build_user_memory_context(user_id)
+
+{% endif %}
+{% if ai_rag %}
+            # Build RAG stats context (always included when RAG enabled)
+            rag_stats_context = await self._build_rag_stats_context()
+
+{% endif %}
+{% if ai_framework == "pydantic-ai" %}
+            # Prepare agent and conversation context
+            agent, conversation_context = self._prepare_agent_and_context(
+                conversation,
+{% if ai_rag %}
+                rag_context=rag_context,
+                rag_stats_context=rag_stats_context,
+{% endif %}
+                health_context=health_context,
+                health_warning=health_warning,
+                usage_context=usage_context,
+                catalog_context=catalog_context,
+                agent_config=agent_config,
+{% if ai_backend != "memory" %}
+                memory_context=memory_context,
+{% endif %}
+            )
+
+            # Get AI response
+            start_time = datetime.now(UTC)
+            result = await agent.run(conversation_context)
+            end_time = datetime.now(UTC)
+            response_time_ms = (end_time - start_time).total_seconds() * 1000
+
+            # Add AI response to conversation
+            ai_message = conversation.add_message(
+                MessageRole.ASSISTANT, result.output, message_id=str(uuid.uuid4())
+            )
+{% else %}
+            # Prepare LLM and messages with full context
+            llm, messages = self._prepare_llm_and_messages(
+{% if ai_rag %}
+                conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
+{% else %}
+                conversation, None, None, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
+{% endif %}
+            )
+
+            # Get AI response
+            start_time = datetime.now(UTC)
+            result = await llm.ainvoke(messages)
+            end_time = datetime.now(UTC)
+            response_time_ms = (end_time - start_time).total_seconds() * 1000
+
+            # Add AI response to conversation
+            ai_message = conversation.add_message(
+                MessageRole.ASSISTANT, result.content, message_id=str(uuid.uuid4())
+            )
+{% endif %}
+
+            # Store conversation ID in message metadata for easy lookup
+            ai_message.metadata["conversation_id"] = conversation.id
+            ai_message.metadata["response_time_ms"] = response_time_ms
+
+{% if ai_rag %}
+            # Add RAG sources to response metadata if RAG was used
+            if rag_context and rag_context.results:
+                ai_message.metadata["rag_sources"] = rag_context.to_metadata()
+                ai_message.metadata["rag_collection"] = rag_context.collection
+
+{% endif %}
+{% if ai_backend != "memory" %}
+            # Record usage tracking, attributed to the resolved agent
+            usage = self._extract_usage(result)
+            self._record_usage(f"chat:{agent_config.slug}", usage, user_id)
+
+            # Add TPS (tokens per second) to metadata for performance monitoring
+            output_tokens = usage.get("output_tokens", 0)
+            if output_tokens > 0 and response_time_ms > 0:
+                ai_message.metadata["gen_tps"] = round(
+                    output_tokens * 1000 / response_time_ms, 1
+                )
+            ai_message.metadata["input_tokens"] = usage.get("input_tokens", 0)
+            ai_message.metadata["output_tokens"] = output_tokens
+{% endif %}
+
+            # Finalize conversation (update metadata and save)
+            self._finalize_conversation(conversation, response_time_ms)
+
+            return ai_message
+
+{% if ai_framework == "pydantic-ai" %}
+        except (ModelRetry, UnexpectedModelBehavior) as e:
+            error_msg = f"AI provider error: {e}"
+            logger.error(error_msg)
+            raise ProviderError(error_msg) from e
+{% endif %}
+        except AIServiceError:
+            # ConversationError and friends carry meaning for callers (the
+            # API router maps them to distinct status codes); wrapping them
+            # would collapse that distinction.
+            raise
+        except Exception as e:
+            error_msg = f"Chat processing failed: {e}"
+            logger.exception(error_msg)
+            raise AIServiceError(error_msg) from e
+
+    def _setup_conversation(
+        self,
+        message: str,
+        conversation_id: str | None,
+        user_id: str,
+        config: AIServiceConfig | None = None,
+    ) -> Conversation:
+        """
+        Get or create conversation and add user message.
+
+        Args:
+            message: The user's message
+            conversation_id: Optional conversation ID (creates new if None)
+            user_id: User identifier for conversation ownership
+            config: Optional fresh config (uses self.config if not provided)
+
+        Returns:
+            Conversation: The conversation with user message added
+
+        Raises:
+            ConversationError: If conversation_id provided but not found
+        """
+        # Use provided config or fall back to cached
+        cfg = config or self.config
+
+        # Get or create conversation
+        if conversation_id:
+            conversation = self.conversation_manager.get_conversation(conversation_id)
+            if not conversation:
+                raise ConversationError(f"Conversation {conversation_id} not found")
+        else:
+            conversation = self.conversation_manager.create_conversation(
+                provider=cfg.provider,
+                model=cfg.model,
+                user_id=user_id,
+            )
+
+        # Add user message to conversation
+        conversation.add_message(MessageRole.USER, message)
+
+        return conversation
+
+    def _finalize_conversation(
+        self,
+        conversation: Conversation,
+        response_time_ms: float,
+        is_streaming: bool = False,
+    ) -> None:
+        """
+        Update conversation metadata and save.
+
+        Args:
+            conversation: The conversation to finalize
+            response_time_ms: Response time in milliseconds
+            is_streaming: Whether this was a streaming response
+        """
+        # Update conversation metadata
+        metadata_update = {
+            "last_response_time_ms": response_time_ms,
+            "total_messages": conversation.get_message_count(),
+            "last_activity": datetime.now(UTC).isoformat(),
+        }
+
+        if is_streaming:
+            metadata_update["streaming"] = True
+
+        conversation.metadata.update(metadata_update)
+
+        # Save conversation
+        self.conversation_manager.save_conversation(conversation)

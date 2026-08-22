@@ -83,7 +83,7 @@ class TestRecordUsage:
         # path) and from the shared ``usage_recording`` module (the pydantic-ai
         # delegation target). Patch it wherever it lives; ``usage_recording`` is
         # absent in LangChain/memory builds, so tolerate its absence.
-        targets = ["app.services.ai.service.db_session"]
+        targets = ["app.services.ai.service.usage.db_session"]
         try:
             import app.services.ai.usage_recording  # noqa: F401
 
@@ -276,7 +276,7 @@ class TestRecordUsage:
 
         # Patch wherever the record path opens a session (service inline for
         # LangChain, the shared module for the pydantic-ai delegation).
-        targets = ["app.services.ai.service.db_session"]
+        targets = ["app.services.ai.service.usage.db_session"]
         try:
             import app.services.ai.usage_recording  # noqa: F401
 
@@ -314,7 +314,7 @@ class TestGetUsageStats:
         def mock_session_cm() -> Generator[Session, None, None]:
             yield session
 
-        with patch("app.services.ai.service.db_session", mock_session_cm):
+        with patch("app.services.ai.service.usage.db_session", mock_session_cm):
             yield
 
     def test_get_usage_stats_empty_database(

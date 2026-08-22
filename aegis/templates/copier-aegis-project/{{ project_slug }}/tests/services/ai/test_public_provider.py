@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import app.services.ai.public_provider as public_provider_module
-from app.services.ai.public_provider import (
+import app.services.ai.domains.llm.public_provider as public_provider_module
+from app.services.ai.domains.llm.public_provider import (
     ANONYMOUS_FALLBACK_MODEL,
     KEYED_FALLBACK_MODEL,
     public_api_key,

@@ -4,8 +4,8 @@ import re
 from unittest.mock import MagicMock, patch
 
 from app.cli.main import app
-from app.services.ai.etl.llm_sync_service import SyncResult
-from app.services.ai.llm_service import ModalityListResult, VendorListResult
+from app.services.ai.domains.llm.etl.llm_sync_service import SyncResult
+from app.services.ai.domains.llm.llm_service import ModalityListResult, VendorListResult
 from typer.testing import CliRunner
 
 runner = CliRunner()

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from app.integrations.main import create_integrated_app
-from app.services.ai.voice import (
+from app.services.ai.domains.voice import (
     AudioFormat,
     OpenAIVoice,
     SpeechResult,

@@ -8,14 +8,14 @@ from unittest.mock import MagicMock
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.fetchers import (
+from app.services.ai.domains.chat.fetchers import (
     FetchContext,
     register_fetcher,
     registered_fetcher_names,
     unregister_fetcher,
 )
-from app.services.ai.memory_modules import create_memory_module
-from app.services.ai.module_context import (
+from app.services.ai.domains.chat.memory_modules import create_memory_module
+from app.services.ai.domains.chat.module_context import (
     MemoryModuleContextProvider,
     render_memory_modules,
 )
@@ -202,7 +202,7 @@ class TestDegradation:
     async def test_unknown_module_slug_is_skipped(
         self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import app.services.ai.module_context as module_context_module
+        import app.services.ai.domains.chat.module_context as module_context_module
 
         warned = MagicMock()
         monkeypatch.setattr(module_context_module.logger, "warning", warned)
@@ -229,7 +229,7 @@ class TestDegradation:
         """Without a caller session, ONE session serves the whole render."""
         from contextlib import asynccontextmanager
 
-        import app.services.ai.module_context as module_context_module
+        import app.services.ai.domains.chat.module_context as module_context_module
 
         seen: list[object] = []
 
@@ -268,7 +268,7 @@ class TestProvider:
     ) -> None:
         from contextlib import asynccontextmanager
 
-        import app.services.ai.module_context as module_context_module
+        import app.services.ai.domains.chat.module_context as module_context_module
 
         await create_memory_module(
             slug="rules", name="Rules", prompt_content="THE RULES", session=session

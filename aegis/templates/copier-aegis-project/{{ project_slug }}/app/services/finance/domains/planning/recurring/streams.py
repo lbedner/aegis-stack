@@ -442,3 +442,10 @@ async def delete_recurring(
     db.add(stream)
     await db.flush()
     return True
+
+
+async def card_payment_stream_ids(
+    db: AsyncSession, stream_ids: Sequence[int]
+) -> set[int]:
+    """The card-only subset of ``payment_stream_ids`` - see the query."""
+    return await queries.card_payment_stream_ids(db, stream_ids)

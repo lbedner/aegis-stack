@@ -15,6 +15,8 @@ from app.components.frontend.dashboard.modals.finance_modal import (
     goal_eta_caption,
     linkable_account_options,
     savings_goal_card,
+    goal_shortfall_caption,
+    target_note_copy,
 )
 
 GOAL = {
@@ -247,3 +249,41 @@ def _walk_controls(control):
     content = getattr(control, "content", None)
     if content is not None:
         yield from _walk_controls(content)
+
+
+class TestTargetNoteCopy:
+    """GL-16: the goal dialog's line under a relative target. The number
+    comes from the server; this only decides how to say it."""
+
+    def test_a_fixed_target_says_nothing(self) -> None:
+        assert target_note_copy("fixed", "", 300_000) == ""
+
+    def test_it_renders_the_servers_answer(self) -> None:
+        assert (
+            target_note_copy("months_of_expenses", "3", 900_000)
+            == "3 months of expenses = $9,000.00"
+        )
+
+    def test_nothing_to_size_against_says_why_instead_of_zero(self) -> None:
+        line = target_note_copy("months_of_expenses", "3", 0)
+        assert "Nothing to size against" in line
+        assert "$0.00" not in line
+
+    def test_junk_months_ask_for_a_number(self) -> None:
+        for raw in ("", "soon", "0", "-3"):
+            assert target_note_copy("months_of_expenses", raw, 900_000) == (
+                "Enter a number of months, e.g. 3"
+            )
+
+
+class TestGoalShortfallCaption:
+    """#961: what the Goals tab says when the plan outruns the month."""
+
+    def test_a_plan_that_fits_says_nothing(self) -> None:
+        assert goal_shortfall_caption(0) == ""
+        assert goal_shortfall_caption(-500) == ""
+
+    def test_it_names_the_gap(self) -> None:
+        assert goal_shortfall_caption(140_500) == (
+            "Goals ask $1,405.00 more than this month has."
+        )

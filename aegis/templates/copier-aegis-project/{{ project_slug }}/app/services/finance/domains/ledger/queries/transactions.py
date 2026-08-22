@@ -8,7 +8,7 @@ transaction surfaces are built from.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
 
 from sqlalchemy import func
@@ -383,3 +383,56 @@ async def tags_by_transaction(
     for txn_id, tag in rows:
         by_txn[txn_id].append(tag)
     return by_txn
+
+
+async def outflow_by_account_in_window(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    start: date,
+    end: date,
+    exclude_stream_ids: Sequence[int] | None = None,
+) -> list[tuple[int, int]]:
+    """(account_id, money out as positive cents) over the window.
+
+    What actually left, rather than what was declared: the measured
+    denominator a fund sized in months of expenses needs. Transfers are
+    excluded by the same filter every other spending read uses, which is
+    also what keeps a card payment from counting on top of the swipes it
+    settles - but ``is_transfer`` is set by matching, so a payment nobody
+    matched still looks like spending. ``exclude_stream_ids`` drops whole
+    streams for that case: the stream knows it is a card payment even
+    when one of its transactions was never paired.
+    """
+    filters = [
+        FinanceTransaction.deleted_at.is_(None),
+        FinanceTransaction.dedup_status != "duplicate",
+        FinanceTransaction.excluded_from_reports.is_(False),
+        FinanceTransaction.is_transfer.is_(False),
+        FinanceTransaction.account_id.in_(live_account_ids()),
+        FinanceTransaction.amount < 0,
+        FinanceTransaction.date_ >= start,
+        FinanceTransaction.date_ <= end,
+    ]
+    if owner_user_id is not None:
+        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    if exclude_stream_ids:
+        filters.append(
+            or_(
+                FinanceTransaction.recurring_stream_id.is_(None),
+                FinanceTransaction.recurring_stream_id.notin_(
+                    list(exclude_stream_ids)
+                ),
+            )
+        )
+    rows = (
+        await db.exec(
+            select(
+                FinanceTransaction.account_id,
+                func.sum(FinanceTransaction.amount),
+            )
+            .where(*filters)
+            .group_by(FinanceTransaction.account_id)
+        )
+    ).all()
+    return [(int(account_id), -int(total or 0)) for account_id, total in rows]

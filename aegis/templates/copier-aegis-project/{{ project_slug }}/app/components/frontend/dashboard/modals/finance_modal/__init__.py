@@ -71,6 +71,8 @@ from app.components.frontend.dashboard.modals.finance_modal.formatting import (
     _refresh_row,
     _usd,
     dollars_to_cents,
+    goal_shortfall_caption,
+    target_note_copy,
 )
 from app.components.frontend.dashboard.modals.finance_modal.import_preview import (
     import_preview_body,
@@ -168,6 +170,8 @@ __all__ = [
     "contribution_preview",
     "create_category",
     "dollars_to_cents",
+    "goal_shortfall_caption",
+    "target_note_copy",
     "envelope_card",
     "equation_rows",
     "fetch_tag_options",

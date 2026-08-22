@@ -13,7 +13,6 @@ from datetime import date, timedelta
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.constants import (
     CASH_ACCOUNT_TYPES,
     ONE_TIME_FREQUENCY,
@@ -25,7 +24,7 @@ from app.services.finance.domains.detection.insights.commitments import (
 )
 from app.services.finance.domains.ledger import accounts
 from app.services.finance.domains.ledger import queries as ledger_queries
-from app.services.finance.domains.planning import budgets, goals, queries
+from app.services.finance.domains.planning import allocation, budgets, goals, queries
 from app.services.finance.domains.planning.recurring.streams import (
     list_recurring,
     payment_stream_ids,
@@ -273,7 +272,7 @@ async def goal_drawdowns(
         )
         for account_id, when in transfers:
             booked_months.setdefault(account_id, set()).add((when.year, when.month))
-    allocations = await goals.goal_allocations(
+    allocations = await allocation.goal_allocations(
         db, owner_user_id=owner_user_id, today=today
     )
     out: list[tuple[date, str, int, dict[str, Any]]] = []

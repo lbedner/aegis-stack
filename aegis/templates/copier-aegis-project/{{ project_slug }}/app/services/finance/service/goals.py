@@ -9,9 +9,11 @@ from __future__ import annotations
 from datetime import date
 
 from app.services.finance.domains.planning import (
+    allocation,
     envelopes,
     goals,
 )
+from app.services.finance.domains.planning.allocation import MonthlyFigures
 from app.services.finance.domains.planning.goals import DEFAULT_PRIORITY
 from app.services.finance.models import FinanceAccount
 from app.services.finance.service.base import FinanceServiceBase
@@ -26,12 +28,24 @@ class GoalsMixin(FinanceServiceBase):
         return await goals.list_goals(self.db, owner_user_id=owner_user_id)
 
     async def goal_allocations(
-        self, *, owner_user_id: int | None, today: date
+        self,
+        *,
+        owner_user_id: int | None,
+        today: date,
+        figures: MonthlyFigures | None = None,
     ) -> dict[int, int]:
-        return await goals.goal_allocations(
+        return await allocation.goal_allocations(
             self.db,
             owner_user_id=owner_user_id,
             today=today,
+            figures=figures,
+        )
+
+    async def goal_month_figures(
+        self, *, owner_user_id: int | None, today: date
+    ) -> MonthlyFigures:
+        return await allocation.month_figures(
+            self.db, owner_user_id=owner_user_id, today=today
         )
 
     async def goal_rate(self, account: FinanceAccount, *, today: date) -> int | None:
@@ -53,6 +67,9 @@ class GoalsMixin(FinanceServiceBase):
         contribution_kind: str = "fixed",
         contribution_bps: int | None = None,
         priority: int = DEFAULT_PRIORITY,
+        target_rule: str = "fixed",
+        target_factor: int | None = None,
+        target_scope: list[int] | None = None,
     ) -> FinanceAccount:
         return await goals.create_virtual_goal(
             self.db,
@@ -64,6 +81,9 @@ class GoalsMixin(FinanceServiceBase):
             contribution_kind=contribution_kind,
             contribution_bps=contribution_bps,
             priority=priority,
+            target_rule=target_rule,
+            target_factor=target_factor,
+            target_scope=target_scope,
         )
 
     async def flag_account_as_goal(
@@ -77,6 +97,9 @@ class GoalsMixin(FinanceServiceBase):
         contribution_kind: str = "fixed",
         contribution_bps: int | None = None,
         priority: int = DEFAULT_PRIORITY,
+        target_rule: str = "fixed",
+        target_factor: int | None = None,
+        target_scope: list[int] | None = None,
     ) -> FinanceAccount | None:
         return await goals.flag_account_as_goal(
             self.db,
@@ -88,6 +111,9 @@ class GoalsMixin(FinanceServiceBase):
             contribution_kind=contribution_kind,
             contribution_bps=contribution_bps,
             priority=priority,
+            target_rule=target_rule,
+            target_factor=target_factor,
+            target_scope=target_scope,
         )
 
     async def unflag_goal(

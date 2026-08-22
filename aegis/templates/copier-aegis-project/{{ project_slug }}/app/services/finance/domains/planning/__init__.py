@@ -7,6 +7,7 @@ package delegates here.
 """
 
 from app.services.finance.domains.planning import (
+    allocation,
     budgets,
     envelopes,
     goals,
@@ -16,6 +17,7 @@ from app.services.finance.domains.planning import (
 )
 
 __all__ = [
+    "allocation",
     "budgets",
     "envelopes",
     "goals",

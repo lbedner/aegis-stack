@@ -82,6 +82,7 @@ from app.services.finance.domains.ledger.queries.networth import (
 )
 from app.services.finance.domains.ledger.queries.transactions import (
     dated_amounts_in_window,
+    outflow_by_account_in_window,
     dedup_match,
     live_transactions_by_ids,
     splits_for_parents,
@@ -122,6 +123,7 @@ __all__ = [
     "currency_by_code",
     "daily_register_deltas",
     "dated_amounts_in_window",
+    "outflow_by_account_in_window",
     "dedup_match",
     "filters",
     "has_nonreconcile_register",

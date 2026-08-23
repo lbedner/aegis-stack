@@ -265,3 +265,34 @@ def _refresh_row(
         alignment=ft.MainAxisAlignment.END,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
+
+
+def target_note_copy(rule: str, raw_factor: str, resolved: int | None) -> str:
+    """The goal dialog's line under a relative target - "3 months of
+    expenses = $9,000.00". ``resolved`` is the server's answer, never a
+    number this side computed: the question "3 months of WHAT" now has
+    one authority, and the preview cannot disagree with the saved goal.
+    Empty for a fixed target: the field already IS the answer."""
+    if rule != "months_of_expenses":
+        return ""
+    try:
+        months = int(float((raw_factor or "").strip()))
+    except ValueError:
+        months = 0
+    if months <= 0:
+        return "Enter a number of months, e.g. 3"
+    if not resolved:
+        return (
+            "Nothing to size against on those accounts yet - add bills or "
+            "budget lines, or set a fixed amount."
+        )
+    return f"{months} months of expenses = {_usd(resolved)}"
+
+
+def goal_shortfall_caption(shortfall: int) -> str:
+    """What the Budget header says when goals ask for money the month
+    does not have. Names the gap rather than scolding: the plan is the
+    user's, and a stretch goal is a legitimate thing to set."""
+    if shortfall <= 0:
+        return ""
+    return f"Goals ask {_usd(shortfall)} more than this month has."

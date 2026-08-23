@@ -13,11 +13,18 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.finance.models import FinanceTransaction, FinanceTransfer
+from app.services.finance.domains.planning.allocation import (
+    MonthlyFigures,
+    goal_shortfall,
+    month_figures,
+    allocate_month,
+    resolve_target,
+    resolved_meta,
+)
 from app.services.finance.domains.planning.goals import (
     GOAL_ACCOUNT_TYPE,
     GoalMeta,
-    MonthlyFigures,
-    allocate_month,
     clear_goal_metadata,
     goal_eta,
     goal_metadata,
@@ -62,6 +69,9 @@ class TestMetadataContract:
             "goal_contribution_kind": "fixed",
             "goal_contribution_bps": None,
             "goal_priority": 100,
+            "goal_target_rule": "fixed",
+            "goal_target_factor": None,
+            "goal_target_scope": [],
         }
 
     def test_minimal_goal_defaults(self) -> None:
@@ -737,3 +747,694 @@ class TestConsumersReadTheEngine:
         assert meta is not None
         assert meta.contribution_kind == "percent_income"
         assert meta.contribution_bps == 1_000
+
+
+class TestDerivedTargets:
+    """GL-16: a target expressed as N months of expenses, resolved from
+    the month's committed figure every time it is read. The stored cents
+    are a last-resolved fallback, never the authority."""
+
+    def _fund(self, **kw: object) -> GoalMeta:
+        defaults: dict[str, object] = dict(
+            target_amount=1_000_000,
+            target_rule="months_of_expenses",
+            target_factor=6,
+        )
+        defaults.update(kw)
+        return GoalMeta(**defaults)  # type: ignore[arg-type]
+
+    def _figures(self, run_rate: int) -> MonthlyFigures:
+        """A book whose whole run rate sits on one account."""
+        return MonthlyFigures(
+            income_total=820_000,
+            committed=run_rate,
+            expense_base_by_account={1: run_rate},
+        )
+
+    def test_months_of_expenses_multiplies_the_run_rate(self) -> None:
+        # $3,000/month of bills, six months of it.
+        assert resolve_target(self._fund(), self._figures(300_000)) == 1_800_000
+
+    def test_a_derived_target_moves_when_the_figure_moves(self) -> None:
+        fund = self._fund()
+        assert resolve_target(fund, self._figures(300_000)) == 1_800_000
+        assert resolve_target(fund, self._figures(420_000)) == 2_520_000
+
+    def test_a_fixed_target_ignores_the_figures(self) -> None:
+        fixed = GoalMeta(target_amount=300_000)
+        assert fixed.target_rule == "fixed"
+        assert resolve_target(fixed, self._figures(999_999)) == 300_000
+
+    def test_no_figure_yet_falls_back_to_the_stored_cents(self) -> None:
+        """A brand-new book with no bills and no budgets must not render a
+        $0 target - the last resolved value stands until a figure exists."""
+        figures = MonthlyFigures(income_total=0, committed=0)
+        assert resolve_target(self._fund(target_amount=1_800_000), figures) == 1_800_000
+
+    def test_a_card_payment_is_not_an_expense(self) -> None:
+        """The run rate excludes payment streams upstream, so a book whose
+        only outflow is a card autopay has nothing to size against."""
+        settle_only = MonthlyFigures(
+            income_total=820_000, committed=98_300, expense_base_by_account={}
+        )
+        assert resolve_target(self._fund(target_amount=1_000_000), settle_only) == (
+            1_000_000
+        )
+
+    def test_resolved_meta_swaps_the_target_and_keeps_the_rest(self) -> None:
+        fund = self._fund(priority=3, contribution_kind="surplus")
+        out = resolved_meta(fund, self._figures(300_000))
+        assert out.target_amount == 1_800_000
+        assert out.target_rule == "months_of_expenses"
+        assert out.target_factor == 6
+        assert out.priority == 3
+        assert out.contribution_kind == "surplus"
+        assert fund.target_amount == 1_000_000  # the input is frozen, not mutated
+
+    def test_the_engine_asks_against_the_resolved_target(self) -> None:
+        """The cap is remaining-to-RESOLVED-target: a fund whose stored
+        cents say it is full still asks when expenses have grown."""
+        figures = self._figures(300_000)
+        fund = self._fund(target_amount=1_000_000, monthly_contribution=50_000)
+        asks = allocate_month(figures, [("Emergency", fund, 1_000_000)])
+        assert asks["Emergency"] == 50_000
+
+    def test_metadata_round_trips_the_derived_rule(self) -> None:
+        written = set_goal_metadata(
+            None,
+            target_amount=1_800_000,
+            target_rule="months_of_expenses",
+            target_factor=6,
+        )
+        assert written["goal_target_rule"] == "months_of_expenses"
+        assert written["goal_target_factor"] == 6
+        read = goal_metadata(written)
+        assert read is not None
+        assert read.target_rule == "months_of_expenses"
+        assert read.target_factor == 6
+
+    def test_a_fixed_goal_stores_no_rule_noise(self) -> None:
+        written = set_goal_metadata(None, target_amount=300_000)
+        read = goal_metadata(written)
+        assert read is not None
+        assert read.target_rule == "fixed"
+        assert read.target_factor is None
+
+    def test_bad_derived_rules_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="months_of_expenses"):
+            set_goal_metadata(
+                None, target_amount=1_000_000, target_rule="months_of_expenses"
+            )
+        with pytest.raises(ValueError, match="months_of_expenses"):
+            set_goal_metadata(
+                None,
+                target_amount=1_000_000,
+                target_rule="months_of_expenses",
+                target_factor=0,
+            )
+        with pytest.raises(ValueError, match="target rule"):
+            set_goal_metadata(
+                None, target_amount=1_000_000, target_rule="vibes", target_factor=6
+            )
+        with pytest.raises(ValueError, match="factor"):
+            set_goal_metadata(None, target_amount=1_000_000, target_factor=6)
+
+    def test_corrupt_stored_rule_raises_not_swallows(self) -> None:
+        with pytest.raises(ValueError):
+            goal_metadata({"goal_target_amount": 100, "goal_target_rule": "nonsense"})
+
+    @pytest.mark.asyncio
+    async def test_pausing_keeps_the_derived_rule(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """set_goal_status rebuilds the metadata; it must not flatten a
+        derived target back to the fixed cents it last resolved to."""
+        service = FinanceService(async_db_session)
+        goal = await service.create_virtual_goal(
+            owner_user_id=1,
+            name="Emergency Fund",
+            target_amount=1_800_000,
+            target_rule="months_of_expenses",
+            target_factor=6,
+        )
+        await service.set_goal_status(goal.id, "paused", owner_user_id=1)
+        refreshed = await service.get_account(goal.id, owner_user_id=1)
+        meta = goal_metadata(refreshed.metadata_)
+        assert meta is not None
+        assert meta.target_rule == "months_of_expenses"
+        assert meta.target_factor == 6
+
+
+class TestScopedExpenseBase:
+    """GL-16 follow-on: which accounts a months-of-expenses target is
+    measured on. A second checking account's bills are not this
+    household's run rate, and a card payment is not an expense - the
+    swipes it settles already are."""
+
+    def _figures(self, **kw: object) -> MonthlyFigures:
+        defaults: dict[str, object] = dict(
+            income_total=1_000_000,
+            committed=1_780_862,
+            expense_base_by_account={45: 1_095_700, 46: 0, 44: 49_301},
+            budget_allocated=289_439,
+        )
+        defaults.update(kw)
+        return MonthlyFigures(**defaults)  # type: ignore[arg-type]
+
+    def test_no_scope_counts_every_account(self) -> None:
+        # 10,957.00 + 0 + 493.01 of bills, plus the budget lines.
+        assert self._figures().expenses_for() == 1_434_440
+
+    def test_one_account_counts_only_its_own_bills(self) -> None:
+        # Chase alone, still carrying the household's budget lines.
+        assert self._figures().expenses_for((45,)) == 1_385_139
+
+    def test_a_scope_naming_nothing_known_is_budget_lines_only(self) -> None:
+        assert self._figures().expenses_for((999,)) == 289_439
+
+    def test_the_target_resolves_against_the_scope(self) -> None:
+        figures = self._figures()
+        scoped = GoalMeta(
+            target_amount=1,
+            target_rule="months_of_expenses",
+            target_factor=3,
+            target_scope=[45],
+        )
+        wide = GoalMeta(
+            target_amount=1, target_rule="months_of_expenses", target_factor=3
+        )
+        assert resolve_target(scoped, figures) == 4_155_417
+        assert resolve_target(wide, figures) == 4_303_320
+        # Narrowing the scope must lower the target, never raise it.
+        assert resolve_target(scoped, figures) < resolve_target(wide, figures)
+
+    def test_scope_round_trips_through_the_metadata(self) -> None:
+        written = set_goal_metadata(
+            None,
+            target_amount=1_000_000,
+            target_rule="months_of_expenses",
+            target_factor=3,
+            target_scope=[45, 46],
+        )
+        assert written["goal_target_scope"] == [45, 46]
+        read = goal_metadata(written)
+        assert read is not None
+        assert read.target_scope == [45, 46]
+
+    def test_a_fixed_target_takes_no_scope(self) -> None:
+        with pytest.raises(ValueError, match="no factor or scope"):
+            set_goal_metadata(None, target_amount=1_000_000, target_scope=[45])
+
+    def test_a_goal_without_a_scope_reads_as_all_accounts(self) -> None:
+        read = goal_metadata(set_goal_metadata(None, target_amount=1_000_000))
+        assert read is not None
+        assert read.target_scope == []
+
+    def test_bills_with_no_account_count_for_the_whole_book(self) -> None:
+        """They cannot answer a question about one account, but leaving
+        them out of the unscoped figure would understate the run rate."""
+        figures = self._figures(expense_base_unattached=100_000)
+        assert figures.expenses_for() == 1_534_440
+        assert figures.expenses_for((45,)) == 1_385_139
+
+
+class TestExpenseBaseExcludesCardPaymentsOnly:
+    """A card payment settles swipes the run rate already counts, so
+    counting it doubles them. A loan payment is the only record its
+    expense has - drop that one and a mortgage costs nothing."""
+
+    async def _payment(
+        self,
+        session: AsyncSession,
+        *,
+        cash_id: int,
+        liability_id: int,
+        amount: int,
+        name: str,
+    ) -> None:
+        """A confirmed transfer from cash into a liability, wearing a
+        recurring stream - the shape ``payment_stream_ids`` recognises."""
+        service = FinanceService(session)
+        stream = await service.create_recurring_stream(
+            owner_user_id=1,
+            name=name,
+            direction="outflow",
+            frequency="monthly",
+            expected_amount=amount,
+            next_expected_date=date(2026, 8, 5),
+            account_id=cash_id,
+        )
+        out_txn = FinanceTransaction(
+            owner_user_id=1,
+            account_id=cash_id,
+            date_=date(2026, 8, 5),
+            amount=-amount,
+            description=name,
+            source="manual",
+            recurring_stream_id=stream.id,
+        )
+        in_txn = FinanceTransaction(
+            owner_user_id=1,
+            account_id=liability_id,
+            date_=date(2026, 8, 5),
+            amount=amount,
+            description=name,
+            source="manual",
+        )
+        session.add(out_txn)
+        session.add(in_txn)
+        await session.flush()
+        session.add(
+            FinanceTransfer(
+                owner_user_id=1,
+                from_account_id=cash_id,
+                to_account_id=liability_id,
+                from_transaction_id=out_txn.id,
+                to_transaction_id=in_txn.id,
+                amount=amount,
+                currency="usd",
+                transfer_date=date(2026, 8, 5),
+                match_method="auto_amount_date",
+                confidence=90,
+                status="confirmed",
+            )
+        )
+        await session.flush()
+        # The cash leg wears the transfer flag, the way matching leaves it.
+        out_txn.is_transfer = True
+        session.add(out_txn)
+        await session.flush()
+
+    @pytest.mark.asyncio
+    async def test_a_card_payment_drops_out_and_a_loan_payment_stays(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        checking = await service.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        card = await service.create_manual_account(
+            owner_user_id=1,
+            name="AMEX",
+            account_type="credit_card",
+            classification="liability",
+            current_balance=0,
+        )
+        mortgage = await service.create_manual_account(
+            owner_user_id=1,
+            name="Mortgage",
+            account_type="loan",
+            classification="liability",
+            current_balance=0,
+        )
+        await self._payment(
+            async_db_session,
+            cash_id=checking.id,
+            liability_id=card.id,
+            amount=98_300,
+            name="American Express",
+        )
+        await self._payment(
+            async_db_session,
+            cash_id=checking.id,
+            liability_id=mortgage.id,
+            amount=250_000,
+            name="Citizens Bank Mortgage",
+        )
+        await async_db_session.commit()
+
+        figures = await month_figures(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 20)
+        )
+        # The DECLARED base: the mortgage counts, the card payment does
+        # not. (What the measured path does with the same two payments is
+        # TestLoanPaymentsSurviveTheMeasuredPath.)
+        assert figures.expense_base_by_account == {checking.id: 250_000}
+
+
+class TestObservedRunRate:
+    """The denominator measured instead of declared: what actually left
+    the account, transfers and card payments excluded by construction."""
+
+    @pytest.mark.asyncio
+    async def test_observed_spending_beats_the_declared_base(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A book whose spending is real transactions rather than
+        declared bills must still produce a run rate."""
+        service = FinanceService(async_db_session)
+        checking = await service.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        today = date(2026, 8, 20)
+        # $600 a month out the door for three months, nothing declared.
+        for month, day in ((6, 10), (7, 10), (8, 10)):
+            async_db_session.add(
+                FinanceTransaction(
+                    owner_user_id=1,
+                    account_id=checking.id,
+                    date_=date(2026, month, day),
+                    amount=-60_000,
+                    description="Groceries",
+                    source="manual",
+                )
+            )
+        await async_db_session.commit()
+
+        figures = await month_figures(
+            async_db_session, owner_user_id=1, today=today
+        )
+        assert figures.expenses_for() == 60_000
+        assert figures.expenses_for((checking.id,)) == 60_000
+
+    @pytest.mark.asyncio
+    async def test_transfers_never_count_as_spending(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        checking = await service.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        for month in (6, 7, 8):
+            async_db_session.add(
+                FinanceTransaction(
+                    owner_user_id=1,
+                    account_id=checking.id,
+                    date_=date(2026, month, 10),
+                    amount=-90_000,
+                    description="Card payment",
+                    source="manual",
+                    is_transfer=True,
+                )
+            )
+        await async_db_session.commit()
+
+        figures = await month_figures(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 20)
+        )
+        assert figures.observed_by_account == {}
+        assert figures.expenses_for() == 0
+
+    @pytest.mark.asyncio
+    async def test_money_coming_in_is_not_spending(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        checking = await service.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        for month, amount in ((6, 500_000), (7, -60_000), (8, 500_000)):
+            async_db_session.add(
+                FinanceTransaction(
+                    owner_user_id=1,
+                    account_id=checking.id,
+                    date_=date(2026, month, 10),
+                    amount=amount,
+                    description="Movement",
+                    source="manual",
+                )
+            )
+        await async_db_session.commit()
+
+        figures = await month_figures(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 20)
+        )
+        assert figures.expenses_for() == 20_000  # $600 over three months
+
+
+class TestUnmatchedPaymentsDoNotInflateTheRunRate:
+    """#962: ``is_transfer`` is set by MATCHING, so a payment nobody
+    matched reads as ordinary spending and lands on top of the swipes it
+    settles. The stream knows what it is even when one transaction does
+    not."""
+
+    @pytest.mark.asyncio
+    async def test_an_unmatched_card_payment_is_still_not_spending(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        checking = await service.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        card = await service.create_manual_account(
+            owner_user_id=1,
+            name="AMEX",
+            account_type="credit_card",
+            classification="liability",
+            current_balance=0,
+        )
+        stream = await service.create_recurring_stream(
+            owner_user_id=1,
+            name="American Express",
+            direction="outflow",
+            frequency="monthly",
+            expected_amount=100_000,
+            next_expected_date=date(2026, 8, 5),
+            account_id=checking.id,
+        )
+        legs = []
+        for month in (6, 7, 8):
+            out_txn = FinanceTransaction(
+                owner_user_id=1,
+                account_id=checking.id,
+                date_=date(2026, month, 5),
+                amount=-100_000,
+                description="American Express",
+                source="manual",
+                recurring_stream_id=stream.id,
+            )
+            in_txn = FinanceTransaction(
+                owner_user_id=1,
+                account_id=card.id,
+                date_=date(2026, month, 5),
+                amount=100_000,
+                description="Payment received",
+                source="manual",
+            )
+            async_db_session.add(out_txn)
+            async_db_session.add(in_txn)
+            legs.append((out_txn, in_txn))
+        # Real grocery spending on the same account, for contrast.
+        async_db_session.add(
+            FinanceTransaction(
+                owner_user_id=1,
+                account_id=checking.id,
+                date_=date(2026, 7, 12),
+                amount=-30_000,
+                description="Groceries",
+                source="manual",
+            )
+        )
+        await async_db_session.flush()
+        # ONE of the three months got matched; the other two never did.
+        out_txn, in_txn = legs[0]
+        async_db_session.add(
+            FinanceTransfer(
+                owner_user_id=1,
+                from_account_id=checking.id,
+                to_account_id=card.id,
+                from_transaction_id=out_txn.id,
+                to_transaction_id=in_txn.id,
+                amount=100_000,
+                currency="usd",
+                transfer_date=date(2026, 6, 5),
+                match_method="auto_amount_date",
+                confidence=90,
+                status="confirmed",
+            )
+        )
+        await async_db_session.flush()
+        out_txn.is_transfer = True
+        async_db_session.add(out_txn)
+        await async_db_session.commit()
+
+        figures = await month_figures(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 20)
+        )
+        # $300 of groceries over three months, and not one cent of the
+        # $3,000 of payments - matched or not.
+        assert figures.observed_by_account == {checking.id: 10_000}
+
+
+class TestGoalShortfall:
+    """#961: fixed and percent goals ask whether or not the month has
+    room, so a plan can go red silently. The engine keeps its arithmetic;
+    the shortfall is a fact ABOUT the result, surfaced, never clamped."""
+
+    def _figures(self, income: int, committed: int) -> MonthlyFigures:
+        return MonthlyFigures(income_total=income, committed=committed)
+
+    def test_a_plan_that_fits_reports_nothing(self) -> None:
+        figures = self._figures(820_000, 300_000)
+        assert goal_shortfall(figures, {"Fund": 100_000}) == 0
+
+    def test_the_gap_is_what_the_goals_cannot_cover(self) -> None:
+        # $2,000 of room, $3,405 of asks -> $1,405 short.
+        figures = self._figures(820_000, 620_000)
+        asks = {"Emergency": 140_500, "Retire": 200_000}
+        assert goal_shortfall(figures, asks) == 140_500
+
+    def test_a_month_already_underwater_counts_the_whole_ask(self) -> None:
+        """No room at all: every cent a goal asks is borrowed."""
+        figures = self._figures(1_405_028, 1_837_056)
+        assert goal_shortfall(figures, {"Emergency": 140_500}) == 140_500
+
+    def test_a_surplus_goal_can_never_be_short(self) -> None:
+        figures = self._figures(820_000, 700_000)
+        sweep = GoalMeta(target_amount=10_000_000, contribution_kind="surplus")
+        asks = allocate_month(figures, [("Sweep", sweep, 0)])
+        assert goal_shortfall(figures, asks) == 0
+
+    def test_the_engine_still_asks_the_full_amount(self) -> None:
+        """The signal must not become a clamp: a goal that says $1,405
+        books $1,405, and the deficit is the thing worth seeing."""
+        figures = self._figures(1_405_028, 1_837_056)
+        meta = GoalMeta(target_amount=10_000_000, monthly_contribution=140_500)
+        asks = allocate_month(figures, [("Emergency", meta, 0)])
+        assert asks["Emergency"] == 140_500
+
+
+class TestLoanPaymentsSurviveTheMeasuredPath:
+    """The measured path drops every transfer, and a matched mortgage IS
+    a transfer - so once an account has any other spending, observed wins
+    and the mortgage silently stops counting. It is an expense either
+    way; only the card payment is a double count."""
+
+    async def _payment(
+        self,
+        session: AsyncSession,
+        *,
+        cash_id: int,
+        liability_id: int,
+        amount: int,
+        name: str,
+    ) -> None:
+        """A confirmed transfer from cash into a liability, wearing a
+        recurring stream - the shape ``payment_stream_ids`` recognises."""
+        service = FinanceService(session)
+        stream = await service.create_recurring_stream(
+            owner_user_id=1,
+            name=name,
+            direction="outflow",
+            frequency="monthly",
+            expected_amount=amount,
+            next_expected_date=date(2026, 8, 5),
+            account_id=cash_id,
+        )
+        out_txn = FinanceTransaction(
+            owner_user_id=1,
+            account_id=cash_id,
+            date_=date(2026, 8, 5),
+            amount=-amount,
+            description=name,
+            source="manual",
+            recurring_stream_id=stream.id,
+        )
+        in_txn = FinanceTransaction(
+            owner_user_id=1,
+            account_id=liability_id,
+            date_=date(2026, 8, 5),
+            amount=amount,
+            description=name,
+            source="manual",
+        )
+        session.add(out_txn)
+        session.add(in_txn)
+        await session.flush()
+        session.add(
+            FinanceTransfer(
+                owner_user_id=1,
+                from_account_id=cash_id,
+                to_account_id=liability_id,
+                from_transaction_id=out_txn.id,
+                to_transaction_id=in_txn.id,
+                amount=amount,
+                currency="usd",
+                transfer_date=date(2026, 8, 5),
+                match_method="auto_amount_date",
+                confidence=90,
+                status="confirmed",
+            )
+        )
+        await session.flush()
+        # The cash leg wears the transfer flag, the way matching leaves it.
+        out_txn.is_transfer = True
+        session.add(out_txn)
+        await session.flush()
+
+    @pytest.mark.asyncio
+    async def test_a_matched_mortgage_still_counts_once_observed_wins(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        service = FinanceService(async_db_session)
+        checking = await service.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        mortgage = await service.create_manual_account(
+            owner_user_id=1,
+            name="Mortgage",
+            account_type="loan",
+            classification="liability",
+            current_balance=0,
+        )
+        card = await service.create_manual_account(
+            owner_user_id=1,
+            name="AMEX",
+            account_type="credit_card",
+            classification="liability",
+            current_balance=0,
+        )
+        for liability, amount, name in (
+            (mortgage, 250_000, "Citizens Bank Mortgage"),
+            (card, 98_300, "American Express"),
+        ):
+            await self._payment(
+                async_db_session,
+                cash_id=checking.id,
+                liability_id=liability.id,
+                amount=amount,
+                name=name,
+            )
+        # Ordinary spending, so the measured path has something and wins.
+        async_db_session.add(
+            FinanceTransaction(
+                owner_user_id=1,
+                account_id=checking.id,
+                date_=date(2026, 7, 12),
+                amount=-30_000,
+                description="Groceries",
+                source="manual",
+            )
+        )
+        await async_db_session.commit()
+
+        figures = await month_figures(
+            async_db_session, owner_user_id=1, today=date(2026, 8, 20)
+        )
+        # $2,500 mortgage + $300 groceries over three months = $933.33/mo,
+        # and not one cent of the card payment.
+        assert figures.observed_by_account == {checking.id: 93_333}

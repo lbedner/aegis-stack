@@ -11,8 +11,17 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
-
 from app.services.finance.constants import CadenceKey
+# Re-exported: goal_schemas owns the definitions, this module stays the
+# one import path every caller already uses.
+from app.services.finance.goal_schemas import (  # noqa: F401
+    GoalContribute,
+    GoalCreate,
+    GoalListResponse,
+    GoalResponse,
+    GoalTargetPreview,
+    GoalUpdate,
+)
 
 if TYPE_CHECKING:
     from app.services.finance.models import (
@@ -621,65 +630,6 @@ class HoldingListResponse(BaseModel):
     items: list[HoldingResponse]
     total: int
     portfolio_value: int  # cents
-
-
-class GoalCreate(BaseModel):
-    """POST /goals: a virtual goal by ``name``, or flag an existing real
-    account as a linked goal by ``account_id`` - exactly one of the two."""
-
-    name: str | None = Field(default=None, min_length=1, max_length=255)
-    account_id: int | None = None
-    target_amount: int = Field(gt=0)
-    target_date: date | None = None
-    monthly_contribution: int | None = Field(default=None, ge=0)
-    contribution_kind: Literal["fixed", "percent_income", "surplus"] = "fixed"
-    contribution_pct_bps: int | None = Field(default=None, gt=0, le=10_000)
-    priority: int = 100
-    auto_contribute: bool = False
-
-
-class GoalUpdate(BaseModel):
-    """PATCH /goals/{id} - only provided fields change."""
-
-    target_amount: int | None = Field(default=None, gt=0)
-    target_date: date | None = None
-    monthly_contribution: int | None = Field(default=None, ge=0)
-    status: Literal["active", "paused", "reached"] | None = None
-    auto_contribute: bool | None = None
-    contribution_kind: Literal["fixed", "percent_income", "surplus"] | None = None
-    contribution_pct_bps: int | None = Field(default=None, gt=0, le=10_000)
-    priority: int | None = None
-
-
-class GoalContribute(BaseModel):
-    amount: int = Field(gt=0)
-    when: date | None = None
-
-
-class GoalResponse(BaseModel):
-    """A goal with its derived trio precomputed server-side - clients and
-    the analyst render these, never recompute them."""
-
-    account_id: int
-    name: str
-    funding: Literal["virtual", "linked"]
-    status: str
-    target_amount: int
-    target_date: date | None
-    monthly_contribution: int | None
-    balance: int
-    progress: float
-    monthly_need: int
-    eta: date | None  # None renders as "never"
-    auto_contribute: bool
-    contribution_kind: str
-    contribution_pct_bps: int | None
-    priority: int
-
-
-class GoalListResponse(BaseModel):
-    items: list[GoalResponse]
-    total: int
 
 
 class BudgetMonthOutlook(BaseModel):
@@ -1596,6 +1546,9 @@ class BudgetStatsResponse(BaseModel):
     # the Budgets cell captions it.
     goals_total: int = 0
     goals_count: int = 0
+    # What the goals ask for and the month does not have. Only fixed and
+    # percent rules can produce one; a surplus sweep cannot overspend.
+    goals_shortfall: int = 0
     envelopes_total: int = 0
     envelopes_count: int = 0
     # Observed spending no bill and no limit covers (trailing 3-month

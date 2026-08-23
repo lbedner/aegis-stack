@@ -23,18 +23,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.finance.constants import (
     add_months,
 )
-from app.services.finance.domains.detection.insights.commitments import (
-    commitment_rollup,
-)
 from app.services.finance.domains.ledger import accounts
 from app.services.finance.domains.ledger import queries as ledger_queries
-from app.services.finance.domains.planning import budgets, recurring
 from app.services.finance.models import (
     FinanceAccount,
 )
 from app.services.finance.utils import (
-    current_period_month,
-    monthly_income,
     utcnow,
 )
 
@@ -48,6 +42,9 @@ _STATUS_KEY = "goal_status"
 _KIND_KEY = "goal_contribution_kind"
 _BPS_KEY = "goal_contribution_bps"
 _PRIORITY_KEY = "goal_priority"
+_RULE_KEY = "goal_target_rule"
+_FACTOR_KEY = "goal_target_factor"
+_SCOPE_KEY = "goal_target_scope"
 _GOAL_KEYS = (
     _TARGET_KEY,
     _DATE_KEY,
@@ -56,10 +53,18 @@ _GOAL_KEYS = (
     _KIND_KEY,
     _BPS_KEY,
     _PRIORITY_KEY,
+    _RULE_KEY,
+    _FACTOR_KEY,
+    _SCOPE_KEY,
 )
 
 
 CONTRIBUTION_KINDS = ("fixed", "percent_income", "surplus")
+# How the finish line is expressed. ``fixed`` is a pile of cents;
+# ``months_of_expenses`` is a multiple of the month's committed figure,
+# re-resolved on every read (see ``allocation.resolve_target``).
+TARGET_RULES = ("fixed", "months_of_expenses")
+MAX_TARGET_FACTOR = 120
 DEFAULT_PRIORITY = 100
 
 
@@ -86,6 +91,14 @@ class GoalMeta(BaseModel):
     # basis points, percent kind only
     contribution_bps: int | None = Field(default=None, alias=_BPS_KEY)
     priority: int = Field(default=DEFAULT_PRIORITY, alias=_PRIORITY_KEY)  # lower first
+    # How ``target_amount`` was arrived at. Under a relative rule the
+    # stored cents are the last resolved value, kept as the fallback for
+    # a book with no figures yet; the rule plus factor are the truth.
+    target_rule: str = Field(default="fixed", alias=_RULE_KEY)
+    target_factor: int | None = Field(default=None, alias=_FACTOR_KEY)  # months
+    # Which cash accounts the run rate is measured on. Empty means all
+    # of them - a book with one checking account never has to care.
+    target_scope: list[int] = Field(default_factory=list, alias=_SCOPE_KEY)
 
 
 def goal_metadata(metadata: dict[str, Any] | None) -> GoalMeta | None:
@@ -112,6 +125,9 @@ def set_goal_metadata(
     contribution_kind: str = "fixed",
     contribution_bps: int | None = None,
     priority: int = DEFAULT_PRIORITY,
+    target_rule: str = "fixed",
+    target_factor: int | None = None,
+    target_scope: list[int] | None = None,
 ) -> dict[str, Any]:
     """A new metadata dict with the goal keys written (neighbours kept)."""
     meta = _validated(
@@ -123,6 +139,9 @@ def set_goal_metadata(
             contribution_kind=contribution_kind,
             contribution_bps=contribution_bps,
             priority=priority,
+            target_rule=target_rule,
+            target_factor=target_factor,
+            target_scope=list(target_scope or []),
         )
     )
     return {**(metadata or {}), **meta.model_dump(mode="json", by_alias=True)}
@@ -194,57 +213,6 @@ def goal_eta(
     return add_months(today, months)
 
 
-class MonthlyFigures(BaseModel):
-    """The month's code-owned inputs the engine evaluates against.
-
-    ``income_total`` is the confirmed-commitment monthly income (the same
-    gate budget_summary applies); ``committed`` is what the month already
-    owes before goals - bills monthly-equivalent plus budget allocations.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    income_total: int
-    committed: int
-
-
-def allocate_month(
-    figures: MonthlyFigures,
-    goals: list[tuple[str, GoalMeta, int]],
-    *,
-    today: date | None = None,
-) -> dict[str, int]:
-    """This month's ask per goal, evaluated in priority order.
-
-    ``goals`` rows are (key, meta, balance). Rules: ``fixed`` keeps the
-    original per-goal logic (target-date derived, else declared);
-    ``percent_income`` is income x bps/10000; ``surplus`` sweeps what the
-    month has left AFTER committed spending and every allocation above
-    it, floored at zero. Every ask caps at remaining-to-target;
-    paused/reached goals ask nothing. Deterministic: priority then key.
-    """
-    today = today or date.today()
-    asks: dict[str, int] = {}
-    room = figures.income_total - figures.committed
-    for key, meta, balance in sorted(
-        goals, key=lambda row: (row[1].priority, row[0].casefold())
-    ):
-        remaining = meta.target_amount - balance
-        if meta.status != "active" or remaining <= 0:
-            asks[key] = 0
-            continue
-        if meta.contribution_kind == "percent_income":
-            ask = figures.income_total * (meta.contribution_bps or 0) // 10_000
-        elif meta.contribution_kind == "surplus":
-            ask = max(0, room)
-        else:
-            ask = goal_monthly_need(meta, balance=balance, today=today)
-        ask = max(0, min(ask, remaining))
-        asks[key] = ask
-        room -= ask
-    return asks
-
-
 def _validated(meta: GoalMeta) -> GoalMeta:
     if meta.target_amount <= 0:
         raise ValueError(
@@ -262,6 +230,24 @@ def _validated(meta: GoalMeta) -> GoalMeta:
         raise ValueError(
             f"Unknown contribution kind {meta.contribution_kind!r}. "
             f"Known: {', '.join(CONTRIBUTION_KINDS)}."
+        )
+    if meta.target_rule not in TARGET_RULES:
+        raise ValueError(
+            f"Unknown target rule {meta.target_rule!r}. Known: {', '.join(TARGET_RULES)}."
+        )
+    if meta.target_rule == "months_of_expenses" and not (
+        meta.target_factor is not None and 0 < meta.target_factor <= MAX_TARGET_FACTOR
+    ):
+        raise ValueError(
+            "months_of_expenses needs a factor in "
+            f"(0, {MAX_TARGET_FACTOR}] months; got {meta.target_factor!r}."
+        )
+    if meta.target_rule == "fixed" and (
+        meta.target_factor is not None or meta.target_scope
+    ):
+        raise ValueError(
+            "A fixed target takes no factor or scope; set target_rule to "
+            "express one."
         )
     if meta.contribution_kind == "percent_income" and not (
         meta.contribution_bps is not None and 0 < meta.contribution_bps <= 10_000
@@ -284,41 +270,6 @@ async def list_goals(
         db, owner_user_id=owner_user_id
     )
     return [a for a in accounts if goal_metadata(a.metadata_) is not None]
-
-
-async def goal_allocations(
-    db: AsyncSession, *, owner_user_id: int | None, today: date
-) -> dict[int, int]:
-    """This month's evaluated ask per goal account id - the engine run
-    once over the whole goal set, against the same income/committed
-    figures the budget header shows."""
-    goal_accounts = await list_goals(db, owner_user_id=owner_user_id)
-    if not goal_accounts:
-        return {}
-    streams = await recurring.list_recurring(db, owner_user_id=owner_user_id)
-    income_total, _count = monthly_income(streams)
-    rollup = commitment_rollup(streams, today=today)
-    budget = await budgets.get_or_create_budget(
-        db, owner_user_id=owner_user_id, period_month=current_period_month()
-    )
-    allocated = sum(
-        line.allocated_amount
-        for line in await budgets.queries.budget_lines_for_period(
-            db, budget.id, current_period_month()
-        )
-    )
-    figures = MonthlyFigures(
-        income_total=income_total,
-        committed=rollup["monthly_total"] + allocated,
-    )
-    rows = [
-        (str(account.id), meta, account.current_balance or 0)
-        for account in goal_accounts
-        if (meta := goal_metadata(account.metadata_)) is not None
-    ]
-    return {
-        int(key): ask for key, ask in allocate_month(figures, rows, today=today).items()
-    }
 
 
 def _observed_rate(snapshots: list[Any]) -> int | None:
@@ -388,6 +339,9 @@ async def create_virtual_goal(
     contribution_kind: str = "fixed",
     contribution_bps: int | None = None,
     priority: int = DEFAULT_PRIORITY,
+    target_rule: str = "fixed",
+    target_factor: int | None = None,
+    target_scope: list[int] | None = None,
 ) -> FinanceAccount:
     """A virtual goal: hidden manual account (its money already sits in
     a cash account, so it must not count twice in net worth)."""
@@ -407,6 +361,9 @@ async def create_virtual_goal(
         contribution_kind=contribution_kind,
         contribution_bps=contribution_bps,
         priority=priority,
+        target_rule=target_rule,
+        target_factor=target_factor,
+        target_scope=target_scope,
     )
     db.add(account)
     await db.flush()
@@ -424,6 +381,9 @@ async def flag_account_as_goal(
     contribution_kind: str = "fixed",
     contribution_bps: int | None = None,
     priority: int = DEFAULT_PRIORITY,
+    target_rule: str = "fixed",
+    target_factor: int | None = None,
+    target_scope: list[int] | None = None,
 ) -> FinanceAccount | None:
     """A linked goal: an existing real account starts wearing goal
     metadata. It stays visible and keeps counting in net worth - the
@@ -439,6 +399,9 @@ async def flag_account_as_goal(
         contribution_kind=contribution_kind,
         contribution_bps=contribution_bps,
         priority=priority,
+        target_rule=target_rule,
+        target_factor=target_factor,
+        target_scope=target_scope,
     )
     db.add(account)
     await db.flush()
@@ -512,6 +475,9 @@ async def set_goal_status(
         contribution_kind=meta.contribution_kind,
         contribution_bps=meta.contribution_bps,
         priority=meta.priority,
+        target_rule=meta.target_rule,
+        target_factor=meta.target_factor,
+        target_scope=meta.target_scope,
     )
     db.add(account)
     await db.flush()
@@ -542,6 +508,10 @@ async def auto_contribute_goals(
     source makes "already booked" a precise existence check, not a
     note-string match. Linked goals never book - reality does.
     """
+    # Local import: the engine reads this module's contract, so it can
+    # only depend one way and the booking path asks it at call time.
+    from app.services.finance.domains.planning.allocation import goal_allocations
+
     first = date(today.year, today.month, 1)
     allocations = await goal_allocations(db, owner_user_id=owner_user_id, today=today)
     booked = 0

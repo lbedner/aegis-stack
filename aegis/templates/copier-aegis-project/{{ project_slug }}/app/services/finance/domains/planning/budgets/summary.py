@@ -14,7 +14,6 @@ from typing import Any, Literal
 
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.constants import CADENCES, add_months
 from app.services.finance.domains.detection.insights.commitments import (
     MONTHLY_FACTOR,
@@ -338,27 +337,27 @@ async def budget_summary(
     # Goals ask their monthly need of the month, the same
     # commitment-gate discipline bills ride:
     # paused/reached goals ask nothing, by the pure-math contract.
+    # Local: the engine reaches back into budgets, so they meet at call time.
+    from app.services.finance.domains.planning import allocation
+
     goal_accounts = await goals.list_goals(db, owner_user_id=owner_user_id)
-    figures = goals.MonthlyFigures(
-        income_total=income_total,
-        committed=fixed_total + flexible_allocated,
+    figures = allocation.MonthlyFigures(
+        income_total=income_total, committed=fixed_total + flexible_allocated
     )
-    engine_rows = [
-        (str(account.id), meta, account.current_balance or 0)
-        for account in goal_accounts
-        if (meta := goals.goal_metadata(account.metadata_)) is not None
-    ]
-    asks = goals.allocate_month(figures, engine_rows, today=today)
+    asks = allocation.asks_by_account(goal_accounts, figures, today=today)
     goal_asks = [
         GoalAsk(
             account_id=account.id,
             label=account.name,
-            monthly_need=asks.get(str(account.id), 0),
+            monthly_need=asks.get(account.id, 0),
         )
         for account in goal_accounts
         if goals.goal_metadata(account.metadata_) is not None
     ]
     goals_total = sum(g.monthly_need for g in goal_asks)
+    goals_shortfall = allocation.goal_shortfall(
+        figures, {str(g.account_id): g.monthly_need for g in goal_asks}
+    )
 
     # Auto-credit envelopes are spoken-for money too: the allowance
     # leaves the spendable month whether or not anyone clicks. Manual
@@ -417,6 +416,7 @@ async def budget_summary(
         income_count=income_count,
         goals_total=goals_total,
         goals_count=sum(1 for g in goal_asks if g.monthly_need > 0),
+        goals_shortfall=goals_shortfall,
         envelopes_total=envelopes_total,
         envelopes_count=len(envelope_credits),
         everything_else=everything_else,

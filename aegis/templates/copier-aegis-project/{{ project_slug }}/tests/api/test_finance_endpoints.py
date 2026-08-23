@@ -2737,3 +2737,263 @@ async def test_review_queue_ignores_ids_that_are_not_yours(
     response = authenticated_client.get(f"{REVIEW_QUEUE_URL}?ids=999999")
     assert response.status_code == 200
     assert response.json()["items"] == []
+
+
+class TestDerivedGoalTargets:
+    """GL-16: a goal whose finish line is N months of expenses. The
+    target is resolved from the month's committed figure on every read,
+    so it moves when the bills do, without anyone editing the goal."""
+
+    async def _bill(
+        self,
+        session: AsyncSession,
+        owner_user_id: int | None,
+        *,
+        name: str,
+        amount: int,
+    ) -> None:
+        await FinanceService(session).create_recurring_stream(
+            owner_user_id=owner_user_id,
+            name=name,
+            direction="outflow",
+            frequency="monthly",
+            expected_amount=amount,
+            next_expected_date=date(2026, 8, 1),
+        )
+        await session.commit()
+
+    @pytest.mark.asyncio
+    async def test_a_months_of_expenses_goal_sizes_itself(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        await self._bill(
+            async_db_session, acting_owner_user_id, name="Rent", amount=300_000
+        )
+        created = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Emergency Fund",
+                "target_rule": "months_of_expenses",
+                "target_factor": 6,
+            },
+        )
+        assert created.status_code == 201
+        body = created.json()
+        # Six months of a $3,000 month, computed server-side: the client
+        # never sent an amount.
+        assert body["target_amount"] == 1_800_000
+        assert body["target_rule"] == "months_of_expenses"
+        assert body["target_factor"] == 6
+
+    @pytest.mark.asyncio
+    async def test_the_target_moves_when_the_bills_do(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        await self._bill(
+            async_db_session, acting_owner_user_id, name="Rent", amount=300_000
+        )
+        authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Emergency Fund",
+                "target_rule": "months_of_expenses",
+                "target_factor": 6,
+            },
+        )
+        await self._bill(
+            async_db_session, acting_owner_user_id, name="Car", amount=50_000
+        )
+        listed = authenticated_client.get("/api/v1/finance/goals").json()
+        goal = listed["items"][0]
+        # $3,500 a month now, and nobody touched the goal.
+        assert goal["target_amount"] == 2_100_000
+        assert goal["progress"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_a_fixed_goal_ignores_the_bills(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        created = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={"name": "Vacation", "target_amount": 300_000},
+        )
+        assert created.status_code == 201
+        assert created.json()["target_rule"] == "fixed"
+        assert created.json()["target_factor"] is None
+        await self._bill(
+            async_db_session, acting_owner_user_id, name="Rent", amount=300_000
+        )
+        listed = authenticated_client.get("/api/v1/finance/goals").json()
+        assert listed["items"][0]["target_amount"] == 300_000
+
+    @pytest.mark.asyncio
+    async def test_a_relative_goal_with_nothing_to_size_against_is_refused(
+        self, authenticated_client: TestClient
+    ) -> None:
+        """No bills, no budget lines: the target would be zero. Say why
+        instead of storing a goal that reads as already reached."""
+        refused = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Emergency Fund",
+                "target_rule": "months_of_expenses",
+                "target_factor": 6,
+            },
+        )
+        assert refused.status_code == 400
+        assert "bills" in refused.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_switching_a_fixed_goal_to_a_relative_one(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        await self._bill(
+            async_db_session, acting_owner_user_id, name="Rent", amount=300_000
+        )
+        created = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={"name": "Emergency Fund", "target_amount": 500_000},
+        )
+        goal_id = created.json()["account_id"]
+        patched = authenticated_client.patch(
+            f"/api/v1/finance/goals/{goal_id}",
+            json={"target_rule": "months_of_expenses", "target_factor": 3},
+        )
+        assert patched.status_code == 200
+        assert patched.json()["target_amount"] == 900_000
+        # And back again: the fixed amount rules, the factor is dropped.
+        back = authenticated_client.patch(
+            f"/api/v1/finance/goals/{goal_id}",
+            json={"target_rule": "fixed", "target_amount": 500_000},
+        )
+        assert back.json()["target_amount"] == 500_000
+        assert back.json()["target_factor"] is None
+
+    @pytest.mark.asyncio
+    async def test_a_bad_factor_is_refused(
+        self, authenticated_client: TestClient
+    ) -> None:
+        refused = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={"name": "Fund", "target_rule": "months_of_expenses"},
+        )
+        assert refused.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_the_preview_endpoint_answers_what_the_save_would_store(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        """The dialog previews through the same helper the write path
+        uses, so the number on screen is the number that gets stored."""
+        await self._bill(
+            async_db_session, acting_owner_user_id, name="Rent", amount=300_000
+        )
+        preview = authenticated_client.get(
+            "/api/v1/finance/goals/target-preview?factor=3&rule=months_of_expenses"
+        )
+        assert preview.status_code == 200
+        assert preview.json() == {
+            "expenses": 300_000,
+            "target_amount": 900_000,
+            "scope": [],
+        }
+        created = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Emergency Fund",
+                "target_rule": "months_of_expenses",
+                "target_factor": 3,
+            },
+        )
+        assert created.json()["target_amount"] == preview.json()["target_amount"]
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_rule_is_refused_not_answered_with_zero(
+        self, authenticated_client: TestClient
+    ) -> None:
+        """A preview that silently returns 0 reads as 'nothing to size
+        against' - a real answer to a question nobody asked."""
+        refused = authenticated_client.get(
+            "/api/v1/finance/goals/target-preview?factor=3&rule=vibes"
+        )
+        assert refused.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_a_scoped_goal_ignores_another_accounts_bills(
+        self,
+        authenticated_client: TestClient,
+        async_db_session: AsyncSession,
+        acting_owner_user_id: int | None,
+    ) -> None:
+        """The reason scope exists: a second checking account's bills are
+        not this household's run rate."""
+        service = FinanceService(async_db_session)
+        ours = await service.create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="TOTAL CHECKING",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        theirs = await service.create_manual_account(
+            owner_user_id=acting_owner_user_id,
+            name="OTHER CHECKING",
+            account_type="checking",
+            classification="asset",
+            current_balance=0,
+        )
+        await async_db_session.commit()
+        for account, amount, name in (
+            (ours, 300_000, "Rent"),
+            (theirs, 900_000, "Not ours"),
+        ):
+            await service.create_recurring_stream(
+                owner_user_id=acting_owner_user_id,
+                name=name,
+                direction="outflow",
+                frequency="monthly",
+                expected_amount=amount,
+                next_expected_date=date(2026, 8, 1),
+                account_id=account.id,
+            )
+        await async_db_session.commit()
+
+        scoped = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Emergency Fund",
+                "target_rule": "months_of_expenses",
+                "target_factor": 3,
+                "target_scope": [ours.id],
+            },
+        )
+        assert scoped.status_code == 201
+        body = scoped.json()
+        assert body["target_amount"] == 900_000  # 3 x $3,000, not 3 x $12,000
+        assert body["target_scope"] == [ours.id]
+
+        wide = authenticated_client.post(
+            "/api/v1/finance/goals",
+            json={
+                "name": "Everything Fund",
+                "target_rule": "months_of_expenses",
+                "target_factor": 3,
+            },
+        )
+        assert wide.json()["target_amount"] == 3_600_000
+        assert wide.json()["target_scope"] == []

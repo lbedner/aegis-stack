@@ -1,6 +1,9 @@
 """
 Tests for APIClient.
 
+SSE parsing (``stream_sse_post``) is covered at the bottom with a scripted
+line stream standing in for the chat endpoint.
+
 The client owns a long-lived ``httpx.AsyncClient`` (cookie jar lives on
 that instance), so tests patch ``client._client.request`` /
 ``client._client.stream`` directly instead of patching the constructor.
@@ -19,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.core.client import APIClient
+from app.core.sse import stream_sse_post
 
 
 def _mock_response(
@@ -881,3 +885,101 @@ class TestGetCache:
         await client.get("/api/v1/finance/accounts")
 
         assert fetch.await_count == 2
+
+
+class TestStreamSsePost:
+    """SSE parsing: event/data line pairs become (event, payload) tuples."""
+
+    def _streaming_response(self, lines: list[str]) -> MagicMock:
+        response = MagicMock()
+        response.status_code = 200
+
+        async def aiter_lines() -> AsyncIterator[str]:
+            for line in lines:
+                yield line
+
+        response.aiter_lines = aiter_lines
+        return response
+
+    def _wire(self, client: APIClient, response: MagicMock) -> None:
+        stream_ctx = AsyncMock()
+        stream_ctx.__aenter__ = AsyncMock(return_value=response)
+        stream_ctx.__aexit__ = AsyncMock(return_value=None)
+        client._client.stream = MagicMock(return_value=stream_ctx)  # type: ignore[method-assign]
+
+    @pytest.mark.asyncio
+    async def test_parses_sse_event_data_pairs(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        self._wire(
+            client,
+            self._streaming_response(
+                [
+                    "event: connect",
+                    'data: {"status": "connected"}',
+                    "",
+                    "event: chunk",
+                    'data: {"content": "Hel", "is_final": false}',
+                    "",
+                    "event: chunk",
+                    'data: {"content": "lo", "is_final": false}',
+                    "",
+                    "event: final",
+                    'data: {"content": "Hello", "is_final": true}',
+                    "",
+                ]
+            ),
+        )
+
+        events = [
+            (event, payload)
+            async for event, payload in stream_sse_post(
+                client, "/api/v1/ai/chat/stream", {"message": "hi"}
+            )
+        ]
+
+        assert [event for event, _payload in events] == [
+            "connect",
+            "chunk",
+            "chunk",
+            "final",
+        ]
+        assert events[1][1]["content"] == "Hel"
+        assert events[3][1]["is_final"] is True
+
+    @pytest.mark.asyncio
+    async def test_bad_json_lines_are_skipped(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        self._wire(
+            client,
+            self._streaming_response(
+                [
+                    "event: chunk",
+                    "data: {not json",
+                    "event: chunk",
+                    'data: {"content": "ok"}',
+                ]
+            ),
+        )
+
+        events = [pair async for pair in stream_sse_post(client, "/x", {})]
+
+        assert len(events) == 1
+        assert events[0][1]["content"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_http_error_status_ends_stream_with_last_error(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        client = make_client()
+        response = self._streaming_response([])
+        response.status_code = 500
+        self._wire(client, response)
+
+        events = [pair async for pair in stream_sse_post(client, "/x", {})]
+
+        assert events == []
+        assert client.last_error == "HTTP 500"

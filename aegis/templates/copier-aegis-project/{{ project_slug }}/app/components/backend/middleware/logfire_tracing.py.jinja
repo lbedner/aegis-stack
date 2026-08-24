@@ -12,7 +12,13 @@ difference between healthy and OOM-flapping.
 Set ``LOGFIRE_TOKEN`` in ``.env`` to enable.
 """
 
+{%- if include_ai and ai_framework == "pydantic-ai" %}
+import json
+{%- endif %}
 import os
+{%- if include_ai and ai_framework == "pydantic-ai" %}
+from typing import Any
+{%- endif %}
 
 import logfire
 from fastapi import FastAPI
@@ -95,9 +101,57 @@ def configure_logfire() -> bool:
         logger.warning(f"Logfire: Could not instrument Redis: {e}")
 {%- endif %}
 
+{%- if include_ai and ai_framework == "pydantic-ai" %}
+
+    # Instrument Pydantic AI (ai service enabled): agent runs emit GenAI
+    # spans, so agents appear on observability agent views by name
+    try:
+        logfire.instrument_pydantic_ai()
+        _harden_pydantic_ai_result_serializer()
+        logger.info("Logfire: Pydantic AI instrumented")
+    except Exception as e:
+        logger.warning(f"Logfire: Could not instrument Pydantic AI: {e}")
+{%- endif %}
+
     logger.info("Logfire observability active (sending to Logfire cloud)")
     _configured = True
     return True
+
+{%- if include_ai and ai_framework == "pydantic-ai" %}
+
+
+def _harden_pydantic_ai_result_serializer() -> None:
+    """Compatibility shim: keep exotic tool returns from killing agent runs.
+
+    pydantic-ai's instrumentation serializes every tool result into its
+    span with a bare ``TypeAdapter(Any)`` and no fallback, so a value like
+    a live class (a sandbox script ending on ``type(x)``) raises
+    ``PydanticSerializationError`` and aborts the whole turn. Rebind the
+    instrumentation module's adapter alias to one that degrades to
+    ``repr`` instead. Remove once upstream serializes with a fallback.
+    """
+    try:
+        from pydantic_ai.capabilities import instrumentation as _instr
+
+        original = _instr.tool_return_ta
+
+        class _SafeAdapter:
+            def dump_json(self, value: Any, *args: Any, **kwargs: Any) -> bytes:
+                try:
+                    return original.dump_json(value, *args, **kwargs)
+                except Exception:
+                    logger.warning(
+                        "Logfire: unserializable tool result coerced to repr"
+                    )
+                    return json.dumps({"repr": repr(value)[:2000]}).encode()
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(original, name)
+
+        _instr.tool_return_ta = _SafeAdapter()  # type: ignore[assignment]
+    except Exception as e:
+        logger.warning(f"Logfire: result-serializer shim not applied: {e}")
+{%- endif %}
 
 
 def install_auto_tracing() -> None:

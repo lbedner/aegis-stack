@@ -502,6 +502,41 @@ async def _missed_recurring(
             ),
         ],
     )
+    # Retraction sweep, batched (one query, never one per stream). An
+    # alert stops describing a missed bill when its stream has since:
+    # - RECOVERED: the payment landed with a later import ("fresh" with a
+    #   last_date), so "hasn't been paid" is now false; or
+    # - LEFT THE FETCH: paused, muted, deactivated or deleted - the user
+    #   said stop expecting this, and the stream never re-enters this
+    #   rule to clear its own leftovers.
+    # Left alone, either kind sits "new" forever, telling every reader
+    # (and every AI briefing) the bill is still missed.
+    fetched_by_id = {s.id: s for s in streams if s.id is not None}
+    open_alerts = await queries.insight_rows_where(
+        db,
+        [
+            FinanceInsight.owner_user_id == store_owner,
+            FinanceInsight.insight_type == "missed_recurring",
+            FinanceInsight.related_stream_id.is_not(None),
+        ],
+    )
+    retracted_any = False
+    for alert in open_alerts:
+        stream = fetched_by_id.get(alert.related_stream_id)
+        if stream is None:
+            retract = True  # paused / muted / deactivated / deleted
+        else:
+            retract = (
+                stream.last_date is not None
+                and stream_staleness(stream, today, floor) == "fresh"
+            )
+        if retract:
+            await db.delete(alert)
+            retracted_any = True
+    if retracted_any:
+        await db.flush()
+
+
     if not streams:
         return 0
 
@@ -512,6 +547,20 @@ async def _missed_recurring(
     transfer_stream_ids = await recurring_queries.transfer_flagged_stream_ids(
         db, [s.id for s in streams]
     )
+
+    # Payee lifelines: the latest arrival per (payee, direction) across ALL
+    # accounts. A commitment that migrates accounts (a card bill moved to
+    # checking) leaves its old stream permanently "overdue" - the lifeline
+    # proves the bill is alive elsewhere, so the old stream is superseded,
+    # not missed.
+    payee_lifelines: dict[tuple[str, str], date] = {}
+    for candidate in streams:
+        if candidate.last_date is None:
+            continue
+        key = (candidate.normalized_payee, candidate.direction)
+        current = payee_lifelines.get(key)
+        if current is None or candidate.last_date > current:
+            payee_lifelines[key] = candidate.last_date
 
     created = 0
     for stream in streams:
@@ -537,11 +586,37 @@ async def _missed_recurring(
         if not inflow and not is_commitment(stream):
             continue  # a merchant-visit rhythm, not a commitment
         due = stream.next_expected_date
+        lifeline = payee_lifelines.get((stream.normalized_payee, stream.direction))
+        if (
+            stream_staleness(stream, today, floor) == "overdue"
+            and due is not None
+            and lifeline is not None
+            and lifeline >= due
+        ):
+            # Superseded, not missed: the same commitment kept arriving on
+            # another account after this stream's due date (an overdue
+            # stream's own last_date is < due, so the lifeline is a
+            # sibling's). Like the transfer case above, a later pass can
+            # learn this AFTER an earlier pass already alerted, so also
+            # retract - the alert was wrong.
+            stale = await queries.insight_rows_where(
+                db,
+                [
+                    FinanceInsight.owner_user_id == store_owner,
+                    FinanceInsight.insight_type == "missed_recurring",
+                    FinanceInsight.related_stream_id == stream.id,
+                ],
+            )
+            for insight in stale:
+                await db.delete(insight)
+            if stale:
+                await db.flush()
+            continue
         if stream_staleness(stream, today, floor) != "overdue":
-            # "fresh" (not due yet, or arrived) or "stale" (a zombie
-            # stream out of imported history - a cancelled subscription,
-            # a closed account, not a live bill that just went missing)
-            # - only "overdue" is worth an alert.
+            # "fresh" (not due yet, or arrived - retracted in the batch
+            # below) or "stale" (a zombie stream out of imported history -
+            # a cancelled subscription, a closed account, not a live bill
+            # that just went missing) - only "overdue" is worth an alert.
             continue
         amount = stream.expected_amount or stream.average_amount or 0
         title = (

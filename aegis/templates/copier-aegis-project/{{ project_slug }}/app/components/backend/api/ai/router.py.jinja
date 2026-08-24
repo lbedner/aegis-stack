@@ -85,6 +85,8 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: str | None = None
     user_id: str = "api-user"
+    agent_slug: str | None = None
+    surface: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -166,6 +168,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
             message=request.message,
             conversation_id=request.conversation_id,
             user_id=request.user_id,
+            agent_slug=request.agent_slug,
+            surface=request.surface,
         )
 
         # Get updated conversation for metadata
@@ -222,7 +226,19 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 conversation_id=request.conversation_id,
                 user_id=request.user_id,
                 stream_delta=True,
+                agent_slug=request.agent_slug,
+                surface=request.surface,
             ):
+                # Tool-use notice: no content, just which tool started, so
+                # the frontend can caption the pause in the token stream.
+                if (chunk.metadata or {}).get("event") == "tool":
+                    tool_data = {
+                        "tool": chunk.metadata.get("tool", ""),
+                        "args": chunk.metadata.get("args", ""),
+                    }
+                    yield f"event: tool\ndata: {json.dumps(tool_data)}\n\n"
+                    continue
+
                 # Format chunk as SSE event
                 event_data = {
                     "content": chunk.content,
@@ -277,20 +293,21 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
 @router.get("/conversations", response_model=list[ConversationSummary])
 async def list_conversations(
-    user_id: str = "api-user", limit: int = 50
+    user_id: str = "api-user", surface: str | None = None, limit: int = 50
 ) -> list[ConversationSummary]:
     """
-    List conversations for a user.
+    List conversations for a user, optionally scoped to one chat surface.
 
     Args:
         user_id: User identifier
+        surface: Originating surface to filter by (e.g. "finance")
         limit: Maximum number of conversations to return
 
     Returns:
         List of conversation summaries
     """
     try:
-        conversations = ai_service.list_conversations(user_id)[:limit]
+        conversations = ai_service.list_conversations(user_id, surface=surface)[:limit]
 
         return [
             ConversationSummary(
@@ -351,6 +368,7 @@ async def get_conversation(
                     "role": msg.role.value,
                     "content": msg.content,
                     "timestamp": msg.timestamp.isoformat(),
+                    "metadata": msg.metadata,
                 }
                 for msg in conversation.messages
             ],

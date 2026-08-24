@@ -1,12 +1,12 @@
 {% if include_ai and ai_backend != "memory" %}"""Finance host tools: the data surface code-mode agents compute over.
 
-Thin, fully-typed wrappers over existing domain queries, registered into
-the agent tool registry at import time. A code-mode agent granted these
-names can call them as functions from inside its sandboxed script; a
-plain agent can call them as ordinary tools. Owned data is pushed by
-code - each tool reads the ledger directly - so the model never has to
-"fetch" what the app already knows; ``quote`` is the one genuinely
-dynamic lookup.
+Deliberately few and wide: results land in the code-mode sandbox rather
+than the prompt, so a broad payload the model slices in code beats a
+catalog of narrow question-shaped tools. Each tool is a thin, fully-typed
+composition of existing domain queries, registered into the agent tool
+registry at import time. A code-mode agent granted these names calls them
+as functions from inside its sandboxed script; a plain agent calls them
+as ordinary tools.
 
 Returns are plain JSON-safe dicts (cents-integer money, ISO dates) so
 values traverse the sandbox boundary without model-object baggage.
@@ -17,7 +17,7 @@ multi-tenant deployment should thread its user context here before
 granting these tools to shared agents.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from app.core.db import get_async_session
@@ -26,91 +26,247 @@ from app.services.finance.domains.investments import queries as investment_queri
 from app.services.finance.domains.investments.securities import (
     list_current_holdings,
 )
-from app.services.finance.domains.ledger.transactions import monthly_cashflow
-from app.services.finance.domains.planning.envelopes import (
-    envelope_metadata,
-    list_envelopes,
+from app.services.finance.domains.ledger.accounts import (
+    account_transaction_totals,
+    effective_balance,
+    liability_details,
 )
-from app.services.finance.domains.planning.goals import goal_metadata, list_goals
+from app.services.finance.domains.ledger.queries.accounts import accounts_page
+from app.services.finance.domains.ledger.queries.categories import (
+    category_names_by_id,
+)
+from app.services.finance.domains.ledger.queries.transactions import (
+    transactions_window_with_payees,
+)
+from app.services.finance.domains.ledger.transactions import monthly_cashflow
+from app.services.finance.domains.planning.envelopes import envelope_metadata
+from app.services.finance.domains.planning.goals import goal_metadata
+from app.services.finance.domains.planning.recurring import (
+    queries as recurring_queries,
+)
+
+# Sized for years of a personal ledger (a few thousand rows/year); rows
+# land in the code-mode sandbox, not the model's context, so the cost of
+# a big window is a few ms of marshaling. ``total`` in the payload still
+# exposes truncation, so a capped result never reads as complete.
+_TRANSACTIONS_ROW_CAP = 5000
+
+# How far ahead accounts() reports scheduled flows: one full monthly
+# cycle with margin, so a mid-month plan sees next month's rent.
+_UPCOMING_WINDOW_DAYS = 35
 
 
-async def ledger_summary(months: int = 3) -> dict[str, Any]:
-    """Income, spend and net per calendar month, oldest first.
+def _months_back_start(today: date, span: int) -> date:
+    """First day of the month ``span - 1`` calendar months before today."""
+    total_months = today.year * 12 + today.month - 1 - (span - 1)
+    return date(total_months // 12, total_months % 12 + 1, 1)
+
+
+async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
+    """Cash flow from the transaction ledger.
 
     Args:
         months: How many months back to include (1-24).
+        detail: "monthly" or "transactions".
+
+    Monthly detail returns a dict with key 'months': a list, oldest
+    first, of entries carrying 'month', 'income_cents', 'spend_cents'
+    and 'net_cents'. Transaction detail returns keys 'total', 'returned'
+    and 'transactions': a list, newest first, of entries carrying
+    'date', 'payee', 'amount_cents' (signed, negative = outflow),
+    'category', 'account' and 'pending'; fewer returned rows than
+    'total' means the page was capped.
     """
+    if detail == "monthly":
+        span = max(1, min(int(months), 24))
+        async with get_async_session() as session:
+            rows = await monthly_cashflow(session, months=span)
+        return {
+            "months": [
+                {
+                    "month": row.month,
+                    "income_cents": row.income,
+                    "spend_cents": row.expense,
+                    "net_cents": row.net,
+                }
+                for row in rows
+            ]
+        }
+    if detail != "transactions":
+        raise ValueError('detail must be "monthly" or "transactions"')
+
     span = max(1, min(int(months), 24))
+    from_date = _months_back_start(date.today(), span)
     async with get_async_session() as session:
-        rows = await monthly_cashflow(session, months=span)
+        rows, total = await transactions_window_with_payees(
+            session,
+            from_date=from_date,
+            limit=_TRANSACTIONS_ROW_CAP,
+        )
+        category_names = await category_names_by_id(
+            session,
+            {t.category_id for t, _name in rows if t.category_id is not None},
+        )
+        account_rows, _count = await accounts_page(
+            session,
+            owner_user_id=None,
+            include_hidden=True,
+            page=1,
+            page_size=500,
+        )
+    account_names = {account.id: account.name for account in account_rows}
     return {
-        "months": [
+        "total": total,
+        "returned": len(rows),
+        "transactions": [
             {
-                "month": row.month,
-                "income_cents": row.income,
-                "spend_cents": row.expense,
-                "net_cents": row.net,
+                "date": txn.date_.isoformat(),
+                # Curated merchant name first - what the register shows -
+                # then the provider's merchant string, then the raw
+                # descriptor. A renamed payee that only lived in the
+                # curation layer was invisible to the assistant.
+                "payee": curated_name or txn.merchant_name or txn.name,
+                "amount_cents": txn.amount,
+                "category": category_names.get(txn.category_id),
+                "account": account_names.get(txn.account_id),
+                "pending": txn.pending,
             }
-            for row in rows
-        ]
+            for txn, curated_name in rows
+        ],
     }
 
 
-async def positions() -> list[dict[str, Any]]:
-    """Current investment holdings with quantity and market value."""
+async def accounts() -> dict[str, Any]:
+    """The full balance sheet: every account with its balance and role.
+
+    Returns a dict with key 'accounts': a list where every entry
+    carries 'id', 'name', 'account_type', 'classification',
+    'balance_cents' (liabilities are negative = owed) and 'hidden'.
+    Investment accounts add 'holdings', a list of entries with 'ticker',
+    'name', 'quantity' and 'market_value_cents'. Envelope accounts add
+    'envelope' with 'credit_cents', 'cadence' and 'auto_credit'. Goal
+    accounts add 'goal' with 'target_cents', 'status',
+    'monthly_contribution_cents' and 'priority'. Liability accounts add
+    'liability' with 'type', 'interest_rate_bps',
+    'minimum_payment_cents', 'next_payment_due',
+    'last_statement_balance_cents', 'last_payment_cents',
+    'last_payment_date', 'ytd_interest_paid_cents' and
+    'ytd_principal_paid_cents' when card terms are on file. Accounts
+    with scheduled activity inside the next 35 days add 'upcoming': a
+    date-ordered list of entries with 'name', 'date' and 'amount_cents'
+    (signed - inflows positive, bills negative), from the same recurring
+    streams the briefing's EXPECTED section reads. Use it to check that
+    a plan survives every touched account's near-term debits.
+    """
     async with get_async_session() as session:
+        account_rows, _count = await accounts_page(
+            session,
+            owner_user_id=None,
+            include_hidden=True,
+            page=1,
+            page_size=500,
+        )
         holdings = await list_current_holdings(session)
-    return [
-        {
-            "ticker": security.ticker if security else None,
-            "name": security.name if security else None,
-            "account_id": holding.account_id,
-            "quantity": holding.quantity_e8 / 1e8,
-            "market_value_cents": market_value_cents,
-        }
-        for holding, security, market_value_cents in holdings
-    ]
-
-
-async def envelope_state() -> list[dict[str, Any]]:
-    """Every envelope (virtual sub-account) with its allowance settings."""
-    async with get_async_session() as session:
-        envelopes = await list_envelopes(session)
-    out: list[dict[str, Any]] = []
-    for account in envelopes:
-        meta = envelope_metadata(account.metadata_)
-        out.append(
-            {
-                "name": account.name,
-                "balance_cents": account.current_balance or 0,
-                "monthly_credit_cents": meta.monthly_credit if meta else None,
-                "cadence": meta.cadence if meta else None,
-                "auto_credit": meta.auto_credit if meta else False,
-            }
+        account_ids = [account.id for account in account_rows]
+        activity_totals = await account_transaction_totals(
+            session, account_ids=account_ids
         )
-    return out
+        liabilities = await liability_details(session, account_ids)
+        streams = await recurring_queries.active_streams(session)
 
-
-async def goals_state() -> list[dict[str, Any]]:
-    """Every savings goal with target, progress and contribution plan."""
-    async with get_async_session() as session:
-        goals = await list_goals(session)
-    out: list[dict[str, Any]] = []
-    for account in goals:
-        meta = goal_metadata(account.metadata_)
-        if meta is None:
+    today = date.today()
+    horizon = today + timedelta(days=_UPCOMING_WINDOW_DAYS)
+    upcoming_by_account: dict[int, list[dict[str, Any]]] = {}
+    for stream in streams:
+        when = stream.next_expected_date
+        if stream.account_id is None or when is None:
             continue
-        out.append(
+        if not today <= when <= horizon:
+            continue
+        amount = stream.expected_amount or stream.average_amount or 0
+        sign = 1 if stream.direction == "inflow" else -1
+        upcoming_by_account.setdefault(stream.account_id, []).append(
             {
-                "name": account.name,
-                "saved_cents": account.current_balance or 0,
-                "target_cents": meta.target_amount,
-                "status": meta.status,
-                "monthly_contribution_cents": meta.monthly_contribution,
-                "priority": meta.priority,
+                "name": stream.name,
+                "date": when.isoformat(),
+                "amount_cents": sign * abs(amount),
             }
         )
-    return out
+
+    holdings_by_account: dict[int, list[dict[str, Any]]] = {}
+    for holding, security, market_value_cents in holdings:
+        holdings_by_account.setdefault(holding.account_id, []).append(
+            {
+                "ticker": security.ticker if security else None,
+                "name": security.name if security else None,
+                "quantity": holding.quantity_e8 / 1e8,
+                "market_value_cents": market_value_cents,
+            }
+        )
+
+    out: list[dict[str, Any]] = []
+    for account in account_rows:
+        entry: dict[str, Any] = {
+            "id": account.id,
+            "name": account.name,
+            "account_type": account.account_type,
+            "classification": account.classification,
+            # Same rule the accounts tab renders: authoritative balance
+            # writes win; a never-written 0 falls back to the register sum.
+            "balance_cents": effective_balance(
+                current_balance=account.current_balance,
+                balance_as_of=account.balance_as_of,
+                classification=account.classification,
+                activity_balance=activity_totals.get(account.id, 0),
+            ),
+            "hidden": account.is_hidden,
+        }
+        envelope_meta = envelope_metadata(account.metadata_)
+        if envelope_meta is not None:
+            # The domain field is named monthly_credit, but the amount is
+            # booked once per cadence period - a "monthly" key next to
+            # cadence="weekly" reads as a contradiction, and models have
+            # mis-stated the allowance because of it.
+            entry["envelope"] = {
+                "credit_cents": envelope_meta.monthly_credit,
+                "cadence": envelope_meta.cadence,
+                "auto_credit": envelope_meta.auto_credit,
+            }
+        goal_meta = goal_metadata(account.metadata_)
+        if goal_meta is not None:
+            entry["goal"] = {
+                "target_cents": goal_meta.target_amount,
+                "status": goal_meta.status,
+                "monthly_contribution_cents": goal_meta.monthly_contribution,
+                "priority": goal_meta.priority,
+            }
+        if account.id in holdings_by_account:
+            entry["holdings"] = holdings_by_account[account.id]
+        if account.id in upcoming_by_account:
+            entry["upcoming"] = upcoming_by_account[account.id]
+        detail = liabilities.get(account.id)
+        if detail is not None:
+            entry["liability"] = {
+                "type": detail.liability_type,
+                "interest_rate_bps": detail.interest_rate_bps,
+                "minimum_payment_cents": detail.minimum_payment_amount,
+                "next_payment_due": (
+                    detail.next_payment_due_date.isoformat()
+                    if detail.next_payment_due_date
+                    else None
+                ),
+                "last_statement_balance_cents": detail.last_statement_balance,
+                "last_payment_cents": detail.last_payment_amount,
+                "last_payment_date": (
+                    detail.last_payment_date.isoformat()
+                    if detail.last_payment_date
+                    else None
+                ),
+                "ytd_interest_paid_cents": detail.ytd_interest_paid,
+                "ytd_principal_paid_cents": detail.ytd_principal_paid,
+            }
+        out.append(entry)
+    return {"accounts": out}
 
 
 async def quote(ticker: str) -> dict[str, Any]:
@@ -149,27 +305,15 @@ async def quote(ticker: str) -> dict[str, Any]:
 # Built-in registration: importing this module makes the tools grantable
 # via the agent registry. replace=True keeps re-imports idempotent.
 register_tool(
-    "ledger_summary",
-    ledger_summary,
-    description="Monthly income, spend and net over recent months",
+    "ledger",
+    ledger,
+    description="Cash flow: monthly rollups or individual transactions",
     replace=True,
 )
 register_tool(
-    "positions",
-    positions,
-    description="Current investment holdings with market values",
-    replace=True,
-)
-register_tool(
-    "envelope_state",
-    envelope_state,
-    description="Envelope balances and allowance settings",
-    replace=True,
-)
-register_tool(
-    "goals_state",
-    goals_state,
-    description="Savings goals with targets and progress",
+    "accounts",
+    accounts,
+    description="All accounts with balances, holdings, envelopes and goals",
     replace=True,
 )
 register_tool(

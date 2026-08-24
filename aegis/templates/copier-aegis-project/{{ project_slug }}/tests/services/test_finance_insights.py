@@ -798,6 +798,141 @@ class TestMissedRecurring:
         assert await _insights_of(async_db_session, "missed_recurring") == []
 
     @pytest.mark.asyncio
+    async def test_alert_is_retracted_once_the_payment_arrives(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The rule fires while a bill is overdue; when the payment then
+        lands (a later import, detection advances the stream), the alert
+        is factually wrong and must be retracted - it used to sit as
+        'new' forever, telling every reader the bill was still missed."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        stream = await _stream(
+            async_db_session,
+            is_user_confirmed=True,
+            account_id=account.id,
+            last_date=date(2026, 6, 1),
+            next_expected_date=date(2026, 7, 1),
+        )
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 10)
+        )
+        assert len(await _insights_of(async_db_session, "missed_recurring")) == 1
+
+        # The payment arrives late; detection advances the stream.
+        stream.last_date = date(2026, 7, 12)
+        stream.next_expected_date = date(2026, 8, 12)
+        async_db_session.add(stream)
+        await async_db_session.flush()
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 13)
+        )
+
+        assert await _insights_of(async_db_session, "missed_recurring") == []
+
+    @pytest.mark.asyncio
+    async def test_pausing_a_stream_retracts_its_outstanding_alert(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Pausing means "stop expecting this for a while" - an alert
+        left over from before the pause keeps claiming the bill is
+        missed, and the paused stream never re-enters the rule's fetch
+        to clear it."""
+        svc = FinanceService(async_db_session)
+        account = await _account(svc)
+        stream = await _stream(
+            async_db_session,
+            is_user_confirmed=True,
+            account_id=account.id,
+            last_date=date(2026, 6, 1),
+            next_expected_date=date(2026, 7, 1),
+        )
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 10)
+        )
+        assert len(await _insights_of(async_db_session, "missed_recurring")) == 1
+
+        stream.paused_until = date(9999, 12, 31)
+        async_db_session.add(stream)
+        await async_db_session.flush()
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 11)
+        )
+
+        assert await _insights_of(async_db_session, "missed_recurring") == []
+
+    @pytest.mark.asyncio
+    async def test_a_bill_that_moved_accounts_does_not_ghost_alert(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A commitment migrating accounts (card bill moved to checking)
+        leaves the old stream permanently 'overdue'; a live sibling stream
+        with the same payee proves the bill is still being paid."""
+        svc = FinanceService(async_db_session)
+        old_card = await _account(svc, name="AMEX", account_type="credit_card")
+        checking = await _account(svc)
+        # The ghost: last seen in May on the card, due June, never again.
+        await _stream(
+            async_db_session,
+            is_user_confirmed=True,
+            account_id=old_card.id,
+            name="ELEANOR",
+            last_date=date(2026, 6, 1),
+            next_expected_date=date(2026, 7, 1),
+        )
+        # The living stream: same payee, now paid from checking.
+        await _stream(
+            async_db_session,
+            is_user_confirmed=True,
+            account_id=checking.id,
+            name="ELEANOR",
+            last_date=date(2026, 7, 3),
+            next_expected_date=date(2026, 8, 3),
+        )
+
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 15)
+        )
+
+        assert await _insights_of(async_db_session, "missed_recurring") == []
+
+    @pytest.mark.asyncio
+    async def test_supersession_retracts_an_earlier_ghost_alert(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The living sibling can be detected AFTER a pass already alerted
+        (a later import); the wrong alert is retracted, not merely left."""
+        svc = FinanceService(async_db_session)
+        old_card = await _account(svc, name="AMEX", account_type="credit_card")
+        await _stream(
+            async_db_session,
+            is_user_confirmed=True,
+            account_id=old_card.id,
+            name="ELEANOR",
+            last_date=date(2026, 6, 1),
+            next_expected_date=date(2026, 7, 1),
+        )
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 15)
+        )
+        assert len(await _insights_of(async_db_session, "missed_recurring")) == 1
+
+        checking = await _account(svc)
+        await _stream(
+            async_db_session,
+            is_user_confirmed=True,
+            account_id=checking.id,
+            name="ELEANOR",
+            last_date=date(2026, 7, 3),
+            next_expected_date=date(2026, 8, 3),
+        )
+        await generate_insights(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 16)
+        )
+
+        assert await _insights_of(async_db_session, "missed_recurring") == []
+
+    @pytest.mark.asyncio
     async def test_rerun_does_not_duplicate(
         self, async_db_session: AsyncSession
     ) -> None:

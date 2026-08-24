@@ -16,6 +16,7 @@ Uses LangChain chat models with support for multiple providers.
 
 import json
 import os
+from collections.abc import Sequence
 from typing import Any
 
 import httpx
@@ -63,9 +64,13 @@ OpenAIProvider: Any = None
 def _get_model_class(provider: AIProvider):
     """Get model class for provider with lazy import to avoid dependency issues."""
     if provider == AIProvider.OPENAI:
-        from pydantic_ai.models.openai import OpenAIChatModel
+        # The Responses API, not Chat Completions: OpenAI's reasoning
+        # models (gpt-5.x, o-series) reject function tools on
+        # /v1/chat/completions ("use /v1/responses"), and pydantic-ai's
+        # Responses model speaks tools + streaming for the whole lineup.
+        from pydantic_ai.models.openai import OpenAIResponsesModel
 
-        return OpenAIChatModel
+        return OpenAIResponsesModel
     elif provider == AIProvider.ANTHROPIC:
         from pydantic_ai.models.anthropic import AnthropicModel
 
@@ -161,9 +166,18 @@ def _ollama_model(config: AIServiceConfig, settings: Any) -> Any:
         api_key="ollama",  # Ollama needs no auth; the client demands something
         base_url=f"{settings.ollama_base_url_effective}/v1",
     )
+    # Ollama's OpenAI-compat endpoint silently DROPS the modern
+    # ``max_completion_tokens`` field (only ``max_tokens`` maps to
+    # num_predict), so route the cap to the legacy field or every
+    # generation runs uncapped.
+    from pydantic_ai.profiles.openai import OpenAIModelProfile
+
     return OpenAIChatModel(
         model_name=config.model,
         provider=OpenAIProvider(openai_client=openai_client),
+        profile=OpenAIModelProfile(
+            openai_chat_supports_max_completion_tokens=False
+        ),
     )
 
 
@@ -205,10 +219,32 @@ def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
     return _get_model_class(config.provider)(**model_kwargs), config.model
 
 
+def _grant_kwargs(
+    tools: Sequence[Any] = (),
+    capabilities: Sequence[Any] = (),
+    agent_name: str | None = None,
+) -> dict[str, Any]:
+    """Agent kwargs for an agent row's grants, omitted when empty so
+    pydantic-ai versions without capability support never see the kwarg.
+    The name rides along so traces carry ``gen_ai.agent.name``."""
+    kwargs: dict[str, Any] = {}
+    if tools:
+        kwargs["tools"] = list(tools)
+    if capabilities:
+        kwargs["capabilities"] = list(capabilities)
+    if agent_name:
+        kwargs["name"] = agent_name
+    return kwargs
+
+
 def get_agent(
     config: AIServiceConfig,
     settings: Any,
     system_prompt_override: str | None = None,
+    *,
+    tools: Sequence[Any] = (),
+    capabilities: Sequence[Any] = (),
+    agent_name: str | None = None,
 ) -> Agent:
     """
     Create a PydanticAI Agent for the configured provider.
@@ -219,6 +255,9 @@ def get_agent(
         config: AI service configuration
         settings: Application settings for API keys
         system_prompt_override: Optional custom system prompt (for RAG mode)
+        tools: Registry-resolved tools granted to the requesting agent row
+        capabilities: pydantic-ai capabilities (e.g. code mode) for the row
+        agent_name: Agent name stamped on traces (``gen_ai.agent.name``)
 
     Returns:
         Agent: Configured PydanticAI Agent
@@ -230,16 +269,35 @@ def get_agent(
         # Special handling for PUBLIC provider (anonymous tier works keyless;
         # LLM7_API_KEY unlocks premium models)
         if config.provider == AIProvider.PUBLIC:
-            return _create_public_agent(config, system_prompt_override)
+            return _create_public_agent(
+                config,
+                system_prompt_override,
+                tools=tools,
+                capabilities=capabilities,
+                agent_name=agent_name,
+            )
 
         # Special handling for POLLINATIONS provider (anonymous tier works
         # keyless; POLLINATIONS_API_KEY selects an account tier)
         if config.provider == AIProvider.POLLINATIONS:
-            return _create_pollinations_agent(config, system_prompt_override)
+            return _create_pollinations_agent(
+                config,
+                system_prompt_override,
+                tools=tools,
+                capabilities=capabilities,
+                agent_name=agent_name,
+            )
 
         # Special handling for OLLAMA provider (local, no API key required)
         if config.provider == AIProvider.OLLAMA:
-            return _create_ollama_agent(config, settings, system_prompt_override)
+            return _create_ollama_agent(
+                config,
+                settings,
+                system_prompt_override,
+                tools=tools,
+                capabilities=capabilities,
+                agent_name=agent_name,
+            )
 
         # Key check, env-var handoff, and model construction all live in
         # ``model_for`` so agent-building and model-only callers cannot drift.
@@ -251,11 +309,12 @@ def get_agent(
             "and concise responses. Be friendly and professional."
         )
 
-        # Create agent with system prompt and model settings
+        # Create agent with system prompt, model settings, and grants
         agent = Agent(
             model=model,
             model_settings=_model_settings(config),
             system_prompt=system_prompt,
+            **_grant_kwargs(tools, capabilities, agent_name),
         )
 
         return agent
@@ -280,6 +339,10 @@ def get_agent(
 def _create_public_agent(
     config: AIServiceConfig,
     system_prompt_override: str | None = None,
+    *,
+    tools: Sequence[Any] = (),
+    capabilities: Sequence[Any] = (),
+    agent_name: str | None = None,
 ) -> Agent:
     """
     Create agent for PUBLIC provider using free public endpoints.
@@ -375,11 +438,12 @@ def _create_public_agent(
             "Be friendly and professional."
         )
 
-        # Create agent with system prompt and model settings
+        # Create agent with system prompt, model settings, and grants
         agent = Agent(
             model=model,
             model_settings=_model_settings(config),
             system_prompt=system_prompt,
+            **_grant_kwargs(tools, capabilities, agent_name),
         )
 
         return agent
@@ -403,6 +467,10 @@ def _create_public_agent(
 def _create_pollinations_agent(
     config: AIServiceConfig,
     system_prompt_override: str | None = None,
+    *,
+    tools: Sequence[Any] = (),
+    capabilities: Sequence[Any] = (),
+    agent_name: str | None = None,
 ) -> Agent:
     """
     Create agent for the POLLINATIONS provider (keyless anonymous tier).
@@ -457,6 +525,7 @@ def _create_pollinations_agent(
             model=model,
             model_settings=_model_settings(config),
             system_prompt=system_prompt,
+            **_grant_kwargs(tools, capabilities, agent_name),
         )
 
     except Exception as e:
@@ -473,6 +542,10 @@ def _create_ollama_agent(
     config: AIServiceConfig,
     settings: Any,
     system_prompt_override: str | None = None,
+    *,
+    tools: Sequence[Any] = (),
+    capabilities: Sequence[Any] = (),
+    agent_name: str | None = None,
 ) -> Agent:
     """
     Create agent for OLLAMA provider using local Ollama server.
@@ -494,11 +567,12 @@ def _create_ollama_agent(
             "Be friendly and professional."
         )
 
-        # Create agent with system prompt and model settings
+        # Create agent with system prompt, model settings, and grants
         agent = Agent(
             model=model,
             model_settings=_model_settings(config),
             system_prompt=system_prompt,
+            **_grant_kwargs(tools, capabilities, agent_name),
         )
 
         return agent

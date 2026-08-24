@@ -29,6 +29,7 @@ from app.components.frontend.controls import (
     Tag,
 )
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.markdown import markdown_control
 from app.components.frontend.controls.snack_bar import SuccessSnackBar
 from app.components.frontend.controls.table import TableCellText, TableNameText
 from app.components.frontend.dashboard.modals.finance_panel import (
@@ -67,23 +68,7 @@ def _note_body(body: str) -> ft.Control:
     """
     if not _MARKDOWN_RE.search(body):
         return SecondaryText(body)
-    return ft.Markdown(
-        body,
-        selectable=True,
-        extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED,
-        md_style_sheet=ft.MarkdownStyleSheet(
-            p_text_style=ft.TextStyle(
-                font_family="Roboto",
-                size=Theme.Typography.BODY,
-                color=Theme.Colors.TEXT_SECONDARY,
-            ),
-            list_bullet_text_style=ft.TextStyle(
-                font_family="Roboto",
-                size=Theme.Typography.BODY,
-                color=Theme.Colors.TEXT_SECONDARY,
-            ),
-        ),
-    )
+    return markdown_control(body)
 
 
 class AttentionTab(FinancePanel):

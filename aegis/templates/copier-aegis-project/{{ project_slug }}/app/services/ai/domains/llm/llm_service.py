@@ -27,7 +27,10 @@ class LLMListResult(BaseModel):
     """Result for a single model in list output."""
 
     model_id: str
+    title: str
     vendor: str
+    family: str | None
+    color: str
     context_window: int
     input_price: float | None
     output_price: float | None
@@ -179,7 +182,10 @@ async def list_models(
             results.append(
                 LLMListResult(
                     model_id=model.model_id,
+                    title=model.title,
                     vendor=model.llm_vendor.name if model.llm_vendor else "Unknown",
+                    family=model.family,
+                    color=model.color,
                     context_window=model.context_window,
                     input_price=price.input_cost_per_token * 1_000_000
                     if price

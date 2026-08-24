@@ -23,6 +23,17 @@ from app.services.finance.goal_schemas import (  # noqa: F401
     GoalUpdate,
 )
 
+# Re-exported: goal_schemas owns the definitions, this module stays the
+# one import path every caller already uses.
+from app.services.finance.goal_schemas import (  # noqa: F401
+    GoalContribute,
+    GoalCreate,
+    GoalListResponse,
+    GoalResponse,
+    GoalTargetPreview,
+    GoalUpdate,
+)
+
 if TYPE_CHECKING:
     from app.services.finance.models import (
         FinanceAccount,

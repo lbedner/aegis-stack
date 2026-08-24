@@ -73,6 +73,7 @@ class AgentConfig:
     tool_names: tuple[str, ...] = ()
     memory_modules: tuple[str, ...] = ()
     knowledge_base_ids: tuple[str, ...] = ()
+    code_mode: bool = False
 
 
 def default_agent_config() -> AgentConfig:
@@ -115,6 +116,7 @@ def _to_config(row: Agent) -> AgentConfig:
         tool_names=tuple(t.name for t in row.tools if t.is_active),
         memory_modules=tuple(row.memory_modules),
         knowledge_base_ids=tuple(row.knowledge_base_ids),
+        code_mode=row.code_mode,
     )
 
 
@@ -185,6 +187,13 @@ async def resolve_agent(
 {% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 
 
+# Per-turn tool-call budgets. Chat stays briefing-first and snappy; code
+# mode's loop is script -> observe -> script, so its budget must cover a
+# real investigation without letting a runaway loop stack latency forever.
+DEFAULT_TOOL_CALLS_LIMIT = 4
+CODE_MODE_TOOL_CALLS_LIMIT = 16
+
+
 def build_chat_agent(
     config: AgentConfig,
     *,
@@ -193,8 +202,9 @@ def build_chat_agent(
     deps_type: type[Any],
     context_providers: Sequence[ContextProvider[Any]] = (),
     module_token_budget: int | None = None,
-    tool_calls_limit: int = 4,
+    tool_calls_limit: int | None = None,
     recorder: Callable[..., float] = record_usage,
+    capabilities: Sequence[Any] = (),
 ) -> ToolChatAgent[Any]:
     """Hydrate a ``ToolChatAgent`` from a resolved agent config.
 
@@ -204,7 +214,13 @@ def build_chat_agent(
     in as a context provider when non-empty; deps must expose
     ``user_id`` for module fetchers to see the user). The caller
     supplies the runtime pieces the config doesn't know about (model
-    instance, deps type, extra context providers).
+    instance, deps type, extra context providers, capabilities).
+
+    A ``code_mode`` config additionally grants a ``CodeMode`` capability
+    scoped to exactly the agent's granted tool names: the model writes
+    Python that calls those tools as functions, executed in the Monty
+    sandbox. ``tool_calls_limit=None`` means "pick the right default" -
+    4 for chat, 16 for code mode; an explicit value always wins.
     """
     providers: list[ContextProvider[Any]] = list(context_providers)
     if config.memory_modules:
@@ -213,6 +229,19 @@ def build_chat_agent(
                 config.memory_modules, token_budget=module_token_budget
             )
         )
+    effective_capabilities: list[Any] = list(capabilities)
+    effective_limit = tool_calls_limit
+    if config.code_mode:
+        # Lazy import: the harness (and the Monty interpreter it embeds)
+        # loads only for flagged agents, so unflagged installs never pay
+        # for or expose the capability.
+        from pydantic_ai_harness import CodeMode
+
+        effective_capabilities.append(CodeMode(tools=list(config.tool_names)))
+        if effective_limit is None:
+            effective_limit = CODE_MODE_TOOL_CALLS_LIMIT
+    if effective_limit is None:
+        effective_limit = DEFAULT_TOOL_CALLS_LIMIT
     return ToolChatAgent(
         model=model,
         model_name=model_name,
@@ -224,8 +253,9 @@ def build_chat_agent(
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         ),
-        tool_calls_limit=tool_calls_limit,
+        tool_calls_limit=effective_limit,
         action=f"chat:{config.slug}",
         recorder=recorder,
+        capabilities=effective_capabilities,
     )
 {% endif %}

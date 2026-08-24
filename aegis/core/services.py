@@ -480,6 +480,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 # copies the dir and the modal's catalog tab 404s (issue #814).
                 "app/components/backend/api/llm",
                 "app/services/ai",
+                "docs/services/ai",
                 "app/cli/ai.py",
                 "app/cli/agents.py",
                 "app/cli/ai_rendering.py",

@@ -592,6 +592,9 @@ AGENTS_MIGRATION = ServiceMigrationSpec(
                     "knowledge_base_ids", "sa.JSON()", nullable=False, default="[]"
                 ),
                 ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec(
+                    "code_mode", "sa.Boolean()", nullable=False, default="False"
+                ),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
                 ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
             ],

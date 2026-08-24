@@ -13,7 +13,8 @@ from sqlmodel import Session, select
 
 from app.core.log import logger
 from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG, default_agent_config
-from app.services.ai.models.agents import Agent
+from app.services.ai.domains.chat.tools import get_tool, registered_tool_names
+from app.services.ai.models.agents import Agent, Tool
 
 __all__ = ["DEFAULT_AGENT_SLUG", "default_agent_definition", "load_agent_fixtures"]
 
@@ -38,6 +39,7 @@ def default_agent_definition() -> dict[str, Any]:
         "memory_modules": list(config.memory_modules),
         "knowledge_base_ids": list(config.knowledge_base_ids),
         "is_active": True,
+        "code_mode": config.code_mode,
     }
 
 
@@ -51,7 +53,7 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
         session: Database session
 
     Returns:
-        dict with counts: {"agents": N added}
+        dict with counts: {"agents": N added, "tools": N added}
     """
     added = 0
     definition = default_agent_definition()
@@ -66,4 +68,22 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
     else:
         logger.debug(f"Default agent '{definition['slug']}' already present")
 
-    return {"agents": added}
+    # Sync registered tools into grantable rows: every callable in the
+    # Python registry gets a matching ``tool`` row (by name) so the agent
+    # CRUD can attach it. Rows are never mutated or deleted here - a
+    # stale row degrades to a skipped-name warning at resolve time.
+    tools_added = 0
+    present = set(session.exec(select(Tool.name)).all())
+    for name in registered_tool_names():
+        if name in present:
+            continue
+        entry = get_tool(name)
+        session.add(
+            Tool(name=name, description=entry.description if entry else None)
+        )
+        tools_added += 1
+    if tools_added:
+        session.commit()
+        logger.info(f"Seeded {tools_added} tool row(s) from the registry")
+
+    return {"agents": added, "tools": tools_added}

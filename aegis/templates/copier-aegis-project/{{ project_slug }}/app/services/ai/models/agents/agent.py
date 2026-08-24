@@ -35,6 +35,11 @@ class Agent(SQLModel, table=True):
     memory_modules: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     knowledge_base_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     is_active: bool = Field(default=True)
+    # Grants this agent sandboxed code execution (code mode): the model
+    # writes Python that calls the agent's granted tools as functions and
+    # runs it in the Monty interpreter. Off by default; flipping it is a
+    # capability grant, deliberately DB-driven like tool attachments.
+    code_mode: bool = Field(default=False)
     created_at: datetime = Field(default_factory=utcnow_naive)
     updated_at: datetime = Field(default_factory=utcnow_naive)
 

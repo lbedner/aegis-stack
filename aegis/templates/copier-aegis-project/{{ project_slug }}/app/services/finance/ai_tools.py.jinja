@@ -1,0 +1,182 @@
+{% if include_ai and ai_backend != "memory" %}"""Finance host tools: the data surface code-mode agents compute over.
+
+Thin, fully-typed wrappers over existing domain queries, registered into
+the agent tool registry at import time. A code-mode agent granted these
+names can call them as functions from inside its sandboxed script; a
+plain agent can call them as ordinary tools. Owned data is pushed by
+code - each tool reads the ledger directly - so the model never has to
+"fetch" what the app already knows; ``quote`` is the one genuinely
+dynamic lookup.
+
+Returns are plain JSON-safe dicts (cents-integer money, ISO dates) so
+values traverse the sandbox boundary without model-object baggage.
+
+Owner scoping: tools read unscoped (``owner_user_id=None``), matching
+the single-tenant default-open posture of generated stacks. A
+multi-tenant deployment should thread its user context here before
+granting these tools to shared agents.
+"""
+
+from datetime import date
+from typing import Any
+
+from app.core.db import get_async_session
+from app.services.ai.domains.chat.tools import register_tool
+from app.services.finance.domains.investments import queries as investment_queries
+from app.services.finance.domains.investments.securities import (
+    list_current_holdings,
+)
+from app.services.finance.domains.ledger.transactions import monthly_cashflow
+from app.services.finance.domains.planning.envelopes import (
+    envelope_metadata,
+    list_envelopes,
+)
+from app.services.finance.domains.planning.goals import goal_metadata, list_goals
+
+
+async def ledger_summary(months: int = 3) -> dict[str, Any]:
+    """Income, spend and net per calendar month, oldest first.
+
+    Args:
+        months: How many months back to include (1-24).
+    """
+    span = max(1, min(int(months), 24))
+    async with get_async_session() as session:
+        rows = await monthly_cashflow(session, months=span)
+    return {
+        "months": [
+            {
+                "month": row.month,
+                "income_cents": row.income,
+                "spend_cents": row.expense,
+                "net_cents": row.net,
+            }
+            for row in rows
+        ]
+    }
+
+
+async def positions() -> list[dict[str, Any]]:
+    """Current investment holdings with quantity and market value."""
+    async with get_async_session() as session:
+        holdings = await list_current_holdings(session)
+    return [
+        {
+            "ticker": security.ticker if security else None,
+            "name": security.name if security else None,
+            "account_id": holding.account_id,
+            "quantity": holding.quantity_e8 / 1e8,
+            "market_value_cents": market_value_cents,
+        }
+        for holding, security, market_value_cents in holdings
+    ]
+
+
+async def envelope_state() -> list[dict[str, Any]]:
+    """Every envelope (virtual sub-account) with its allowance settings."""
+    async with get_async_session() as session:
+        envelopes = await list_envelopes(session)
+    out: list[dict[str, Any]] = []
+    for account in envelopes:
+        meta = envelope_metadata(account.metadata_)
+        out.append(
+            {
+                "name": account.name,
+                "balance_cents": account.current_balance or 0,
+                "monthly_credit_cents": meta.monthly_credit if meta else None,
+                "cadence": meta.cadence if meta else None,
+                "auto_credit": meta.auto_credit if meta else False,
+            }
+        )
+    return out
+
+
+async def goals_state() -> list[dict[str, Any]]:
+    """Every savings goal with target, progress and contribution plan."""
+    async with get_async_session() as session:
+        goals = await list_goals(session)
+    out: list[dict[str, Any]] = []
+    for account in goals:
+        meta = goal_metadata(account.metadata_)
+        if meta is None:
+            continue
+        out.append(
+            {
+                "name": account.name,
+                "saved_cents": account.current_balance or 0,
+                "target_cents": meta.target_amount,
+                "status": meta.status,
+                "monthly_contribution_cents": meta.monthly_contribution,
+                "priority": meta.priority,
+            }
+        )
+    return out
+
+
+async def quote(ticker: str) -> dict[str, Any]:
+    """Latest stored closing price for a ticker in the security catalog.
+
+    Args:
+        ticker: The security's ticker symbol, case-insensitive.
+    """
+    symbol = ticker.strip().upper()
+    async with get_async_session() as session:
+        security = await investment_queries.security_by_ticker(session, symbol)
+        if security is None or security.id is None:
+            return {"found": False, "ticker": symbol}
+        price = await investment_queries.latest_price_for_security(
+            session, security.id
+        )
+    if price is None:
+        return {"found": False, "ticker": symbol}
+    # Normalize to cents in integer arithmetic regardless of the row's
+    # stored scale; float exponents would drift on sub-cent scales.
+    if price.price_scale > 2:
+        divisor = 10 ** (price.price_scale - 2)
+        close_cents = (price.close_price + divisor // 2) // divisor
+    else:
+        close_cents = price.close_price * 10 ** (2 - price.price_scale)
+    as_of: date = price.price_date
+    return {
+        "found": True,
+        "ticker": symbol,
+        "name": security.name,
+        "close_cents": close_cents,
+        "as_of": as_of.isoformat(),
+    }
+
+
+# Built-in registration: importing this module makes the tools grantable
+# via the agent registry. replace=True keeps re-imports idempotent.
+register_tool(
+    "ledger_summary",
+    ledger_summary,
+    description="Monthly income, spend and net over recent months",
+    replace=True,
+)
+register_tool(
+    "positions",
+    positions,
+    description="Current investment holdings with market values",
+    replace=True,
+)
+register_tool(
+    "envelope_state",
+    envelope_state,
+    description="Envelope balances and allowance settings",
+    replace=True,
+)
+register_tool(
+    "goals_state",
+    goals_state,
+    description="Savings goals with targets and progress",
+    replace=True,
+)
+register_tool(
+    "quote",
+    quote,
+    description="Latest stored closing price for a ticker",
+    replace=True,
+)
+{% else %}"""Finance host tools ship only with the AI service on a persistent backend."""
+{% endif %}

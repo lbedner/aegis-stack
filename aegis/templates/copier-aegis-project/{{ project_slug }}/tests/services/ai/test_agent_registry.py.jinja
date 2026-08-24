@@ -164,4 +164,37 @@ class TestSerializeAgent:
         assert payload["memory_modules"] == ["diet"]
         assert payload["knowledge_base_ids"] == ["kb-food"]
         assert payload["system_prompt"] == "You are helpful."
+
+
+class TestCodeModeField:
+    async def test_update_accepts_code_mode_and_invalidates(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        await _add_agent(session, "assistant")
+        invalidated = MagicMock()
+        monkeypatch.setattr(
+            agent_registry_module, "invalidate_agent_cache", invalidated
+        )
+
+        updated = await update_agent(
+            "assistant", {"code_mode": True}, session=session
+        )
+
+        assert updated.code_mode is True
+        invalidated.assert_called_once_with("assistant")
+
+    async def test_code_mode_rejects_null(self, session: AsyncSession) -> None:
+        await _add_agent(session, "assistant")
+
+        with pytest.raises(InvalidAgentUpdateError):
+            await update_agent("assistant", {"code_mode": None}, session=session)
+
+    async def test_serialize_includes_code_mode(
+        self, session: AsyncSession
+    ) -> None:
+        await _add_agent(session, "assistant", code_mode=True)
+
+        agents = await list_agents(session=session)
+
+        assert serialize_agent(agents[0])["code_mode"] is True
 {% endif %}

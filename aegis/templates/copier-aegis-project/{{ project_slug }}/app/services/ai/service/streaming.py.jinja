@@ -5,18 +5,41 @@ Same turn shape as ``chat()`` one file over, but yielding
 captured after the stream drains.
 """
 
-import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-{% if ai_rag %}
+{%- if ai_rag or ai_framework == "pydantic-ai" %}
 from typing import Any
-{% endif %}
+{%- endif %}
+import uuid
 
-{% if ai_framework == "pydantic-ai" %}
+{%- if ai_framework == "pydantic-ai" %}
+
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
-{% endif %}
+from pydantic_ai.messages import (
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    PartDeltaEvent,
+    PartStartEvent,
+    TextPart,
+    TextPartDelta,
+)
+from pydantic_ai.run import AgentRunResultEvent
+{%- endif %}
+
 from app.core.log import logger
-from app.services.ai.domains.chat.agent_loader import resolve_agent
+from app.services.ai.domains.chat.agent_loader import (
+    DEFAULT_AGENT_SLUG,
+    resolve_agent,
+)
+{%- if ai_backend != "memory" %}
+from app.services.ai.domains.chat.module_context import render_memory_modules
+{%- endif %}
+{%- if ai_rag %}
+from app.services.ai.domains.chat.rag_context import RAGContext
+{%- endif %}
+{%- if ai_backend != "memory" %}
+from app.services.ai.domains.chat.user_memory import build_user_memory_context
+{%- endif %}
 from app.services.ai.domains.llm.providers import ProviderNotInstalledError
 from app.services.ai.models import (
     MessageRole,
@@ -25,21 +48,44 @@ from app.services.ai.models import (
 )
 from app.services.ai.service.base import (
     AIServiceError,
-{% if ai_framework == "pydantic-ai" %}
+{%- if ai_framework == "pydantic-ai" %}
     ProviderError,
-{% endif %}
+{%- endif %}
 )
 from app.services.ai.service.chat import ChatMixin
-{%- if ai_backend != "memory" %}
-from app.services.ai.domains.chat.user_memory import build_user_memory_context
+{%- if ai_framework == "pydantic-ai" %}
+from app.services.ai.service.trace import (
+    call_args_preview,
+    nested_tool_calls,
+    record_tool_call,
+    record_tool_result,
+)
 {%- endif %}
-{% if ai_rag %}
-from app.services.ai.domains.chat.rag_context import RAGContext
-{% endif %}
 
 
 class StreamingMixin(ChatMixin):
     """Streaming variant of the chat turn."""
+{% if ai_framework == "pydantic-ai" %}
+
+    @staticmethod
+    def _tool_notice(
+        tool_name: str,
+        *,
+        message_id: str,
+        conversation_id: str | None,
+        stream_delta: bool,
+        args: str = "",
+    ) -> StreamingMessage:
+        """A content-free chunk naming a tool call, for the UI trail."""
+        return StreamingMessage(
+            content="",
+            is_final=False,
+            is_delta=stream_delta,
+            message_id=message_id,
+            conversation_id=conversation_id,
+            metadata={"event": "tool", "tool": tool_name, "args": args},
+        )
+{% endif %}
 
     async def stream_chat(
         self,
@@ -47,6 +93,8 @@ class StreamingMixin(ChatMixin):
         conversation_id: str | None = None,
         user_id: str = "default",
         stream_delta: bool = False,
+        agent_slug: str | None = None,
+        surface: str | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -61,6 +109,7 @@ class StreamingMixin(ChatMixin):
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
             stream_delta: Whether to stream delta changes or full content
+            agent_slug: Agent row to speak as (None = the default agent)
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -82,12 +131,15 @@ class StreamingMixin(ChatMixin):
             # Get fresh config for metadata (reflects current .env after use-provider)
             current = self.config
 
-            # Resolve the active agent definition (DB row or code default)
-            agent_config = await resolve_agent()
+            # Resolve the requested agent definition (DB row or code default)
+            if agent_slug:
+                agent_config = await resolve_agent(agent_slug)
+            else:
+                agent_config = await resolve_agent()
 
             # Setup conversation and add user message
             conversation = self._setup_conversation(
-                message, conversation_id, user_id, config=current
+                message, conversation_id, user_id, config=current, surface=surface
             )
 
             # Create streaming conversation wrapper
@@ -109,11 +161,17 @@ class StreamingMixin(ChatMixin):
             # Build health context (always included, refreshed per message)
             health_context, health_warning = await self._build_health_context()
 
-            # Build usage context for self-awareness
-            usage_context = self._build_usage_context()
-
-            # Build LLM catalog context
-            catalog_context = self._build_catalog_context()
+            # Usage and model-catalog self-awareness belong to the
+            # default ops assistant; custom agents (a finance analyst,
+            # say) would pay their token cost every turn without ever
+            # using them.
+            is_default_agent = (
+                agent_config is None or agent_config.slug == DEFAULT_AGENT_SLUG
+            )
+            usage_context = self._build_usage_context() if is_default_agent else None
+            catalog_context = (
+                self._build_catalog_context() if is_default_agent else None
+            )
 
 {% if ai_rag %}
             # Build RAG stats context (always included when RAG enabled)
@@ -123,6 +181,11 @@ class StreamingMixin(ChatMixin):
 {% if ai_backend != "memory" %}
             # Guarded per-user memory block (saved via the save_memory tool)
             memory_context = await build_user_memory_context(user_id)
+
+            # The agent row's memory modules (e.g. the finance snapshot)
+            agent_modules_context = await render_memory_modules(
+                agent_config.memory_modules, user_id=user_id
+            )
 
 {% endif %}
 {% if ai_framework == "pydantic-ai" %}
@@ -140,6 +203,7 @@ class StreamingMixin(ChatMixin):
                 agent_config=agent_config,
 {% if ai_backend != "memory" %}
                 memory_context=memory_context,
+                agent_modules_context=agent_modules_context,
 {% endif %}
             )
 {% else %}
@@ -160,16 +224,79 @@ class StreamingMixin(ChatMixin):
             message_id = str(uuid.uuid4())
 
 {% if ai_framework == "pydantic-ai" %}
-            # Use PydanticAI's run_stream method for streaming
+            # Event-based streaming: unlike ``run_stream`` (which treats the
+            # first text output as THE answer and stops), the event stream
+            # crosses tool boundaries, so a model that narrates before
+            # calling a tool - "let me pull that together" then run_code -
+            # streams its preamble, runs the tool, and keeps talking.
 {% if ai_backend != "memory" %}
             stream_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 {% endif %}
-            async with agent.run_stream(conversation_context) as result:
-                # Stream text chunks
-                async for text_chunk in result.stream_text(delta=stream_delta):
+            tool_trace: list[dict[str, Any]] = []
+            async with agent.run_stream_events(conversation_context) as events:
+                async for event in events:
+                    text_chunk = ""
+                    if isinstance(event, PartStartEvent) and isinstance(
+                        event.part, TextPart
+                    ):
+                        text_chunk = event.part.content
+                    elif isinstance(event, PartDeltaEvent) and isinstance(
+                        event.delta, TextPartDelta
+                    ):
+                        text_chunk = event.delta.content_delta
+                    elif isinstance(event, FunctionToolCallEvent):
+                        # Text streamed before a tool call is running
+                        # commentary ("let me check..."), not the answer.
+                        # Reset accumulation so the saved message and final
+                        # chunk carry only what follows the last tool call,
+                        # and notify the UI which tool is running.
+                        streaming_conv.accumulated_content = ""
+                        record_tool_call(tool_trace, event)
+                        yield self._tool_notice(
+                            event.part.tool_name,
+                            args=call_args_preview(event.part.args),
+                            message_id=message_id,
+                            conversation_id=conversation.id,
+                            stream_delta=stream_delta,
+                        )
+                        continue
+                    elif isinstance(event, FunctionToolResultEvent):
+                        # A completing run_code call carries its sandbox-
+                        # dispatched calls as metadata; surface each one so
+                        # the UI trail shows what the script actually did.
+                        record_tool_result(tool_trace, event)
+                        for name, args in nested_tool_calls(event):
+                            yield self._tool_notice(
+                                name,
+                                args=args,
+                                message_id=message_id,
+                                conversation_id=conversation.id,
+                                stream_delta=stream_delta,
+                            )
+                        continue
+                    elif isinstance(event, AgentRunResultEvent):
+{% if ai_backend != "memory" %}
+                        usage_obj = (
+                            event.result.usage()
+                            if callable(getattr(event.result, "usage", None))
+                            else getattr(event.result, "usage", None)
+                        )
+                        if usage_obj:
+                            stream_usage = {
+                                "input_tokens": getattr(usage_obj, "input_tokens", 0)
+                                or 0,
+                                "output_tokens": getattr(usage_obj, "output_tokens", 0)
+                                or 0,
+                            }
+{% else %}
+                        pass
+{% endif %}
+                    if not text_chunk:
+                        continue
+
                     # Accumulate content
                     total_content = streaming_conv.accumulate_content(
-                        text_chunk, is_delta=stream_delta
+                        text_chunk, is_delta=True
                     )
 
                     # Yield streaming message chunk
@@ -185,17 +312,6 @@ class StreamingMixin(ChatMixin):
                             "stream_delta": stream_delta,
                         },
                     )
-
-{% if ai_backend != "memory" %}
-                # Capture usage after streaming completes (still inside async with)
-                if hasattr(result, "usage") and callable(result.usage):
-                    usage_obj = result.usage()
-                    if usage_obj:
-                        stream_usage = {
-                            "input_tokens": usage_obj.request_tokens or 0,
-                            "output_tokens": usage_obj.response_tokens or 0,
-                        }
-{% endif %}
 {% else %}
             # Use LangChain's astream method for streaming
             async for chunk in llm.astream(messages):
@@ -235,6 +351,10 @@ class StreamingMixin(ChatMixin):
 
             # Store conversation metadata
             ai_message.metadata["conversation_id"] = conversation.id
+            if tool_trace:
+                # Persisted with the message, so a conversation reopened
+                # from history can still expand what each run did.
+                ai_message.metadata["tool_trace"] = tool_trace
 
 {% if ai_rag %}
             # Add RAG sources to response metadata if RAG was used
@@ -278,7 +398,7 @@ class StreamingMixin(ChatMixin):
                 gen_tps = round(output_tokens * 1000 / response_time_ms, 1)
 {% endif %}
 
-            final_metadata = {
+            final_metadata: dict[str, Any] = {
                 "provider": current.provider,
                 "model": current.model,
                 "response_time_ms": response_time_ms,
@@ -295,6 +415,8 @@ class StreamingMixin(ChatMixin):
 {% if ai_rag %}
             final_metadata.update(rag_metadata)
 {% endif %}
+            if tool_trace:
+                final_metadata["tool_trace"] = tool_trace
             yield StreamingMessage(
                 content=final_content,
                 is_final=True,

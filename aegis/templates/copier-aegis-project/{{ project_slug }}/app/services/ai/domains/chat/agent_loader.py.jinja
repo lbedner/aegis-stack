@@ -73,6 +73,7 @@ class AgentConfig:
     tool_names: tuple[str, ...] = ()
     memory_modules: tuple[str, ...] = ()
     knowledge_base_ids: tuple[str, ...] = ()
+    code_mode: bool = False
 
 
 def default_agent_config() -> AgentConfig:
@@ -115,6 +116,7 @@ def _to_config(row: Agent) -> AgentConfig:
         tool_names=tuple(t.name for t in row.tools if t.is_active),
         memory_modules=tuple(row.memory_modules),
         knowledge_base_ids=tuple(row.knowledge_base_ids),
+        code_mode=row.code_mode,
     )
 
 
@@ -185,6 +187,82 @@ async def resolve_agent(
 {% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 
 
+# Per-turn tool-call budgets. Chat stays briefing-first and snappy; code
+# mode's loop is script -> observe -> script, so its budget must cover a
+# real investigation without letting a runaway loop stack latency forever.
+DEFAULT_TOOL_CALLS_LIMIT = 4
+CODE_MODE_TOOL_CALLS_LIMIT = 16
+
+
+# A tool return (or a sandbox print) larger than this is clamped before it
+# reaches the model, with an elision marker telling it to slice instead.
+# ~4k tokens: a dumped payload once flooded a 32k local model past its HTTP
+# read timeout.
+TOOL_OUTPUT_CHAR_LIMIT = 16_000
+
+
+def agent_capabilities(config: AgentConfig) -> list[Any]:
+    """The pydantic-ai capabilities a config grants; shared by BOTH chat
+    runtimes (chat_kit's ``build_chat_agent`` and the service's
+    ``get_agent`` path) so a grant can never work in one and not the other.
+
+    The harness (and the Monty interpreter it embeds) imports lazily:
+    unflagged agents never load or pay for the sandbox.
+    """
+    capabilities: list[Any] = []
+    if config.code_mode:
+        from pydantic_ai_harness import CodeMode
+
+        capabilities.append(CodeMode(tools=list(config.tool_names)))
+    if config.code_mode or config.tool_names:
+        capabilities.append(_tool_output_limits(code_mode=config.code_mode))
+    return capabilities
+
+
+def _tool_output_limits(*, code_mode: bool = False) -> Any:
+    """An output cap that degrades safely on unmeasurable returns.
+
+    In code mode the cap scopes to ``run_code`` alone: the sandbox must
+    receive every dispatched tool's FULL payload (slicing it in code is
+    the whole point), and only the printed/returned surface that reaches
+    the model gets clamped. Reducing an inner tool would hand the script
+    a truncated string where it expects a dict.
+
+    A sandbox script can also end on an expression like ``type(result)``,
+    making the tool return a live Python class; the harness's size
+    measurement raises on such values, which would kill the whole turn.
+    Those returns are coerced to their ``repr`` instead.
+    """
+    from pydantic_ai_harness import ToolOutputLimits
+    from pydantic_ai_harness.tool_output_limits import Band, Truncate
+
+    class _SafeToolOutputLimits(ToolOutputLimits):  # type: ignore[misc]
+        async def after_tool_execute(self, ctx: Any, **kwargs: Any) -> Any:
+            try:
+                return await super().after_tool_execute(ctx, **kwargs)
+            except Exception as exc:
+                # Coerce, don't pass through: a live class would go on to
+                # crash every downstream serializer (observability
+                # instrumentation, message history) the same way it
+                # crashed the measurement here.
+                logger.warning(
+                    "tool_output_limits.unmeasurable_return",
+                    tool=kwargs.get("call") and kwargs["call"].tool_name,
+                    error=str(exc),
+                )
+                return repr(kwargs.get("result"))[:TOOL_OUTPUT_CHAR_LIMIT]
+
+    return _SafeToolOutputLimits(
+        bands=[
+            Band(
+                over=TOOL_OUTPUT_CHAR_LIMIT,
+                action=Truncate(max_chars=TOOL_OUTPUT_CHAR_LIMIT),
+            )
+        ],
+        tool_filter=["run_code"] if code_mode else "all",
+    )
+
+
 def build_chat_agent(
     config: AgentConfig,
     *,
@@ -193,8 +271,9 @@ def build_chat_agent(
     deps_type: type[Any],
     context_providers: Sequence[ContextProvider[Any]] = (),
     module_token_budget: int | None = None,
-    tool_calls_limit: int = 4,
+    tool_calls_limit: int | None = None,
     recorder: Callable[..., float] = record_usage,
+    capabilities: Sequence[Any] = (),
 ) -> ToolChatAgent[Any]:
     """Hydrate a ``ToolChatAgent`` from a resolved agent config.
 
@@ -204,7 +283,13 @@ def build_chat_agent(
     in as a context provider when non-empty; deps must expose
     ``user_id`` for module fetchers to see the user). The caller
     supplies the runtime pieces the config doesn't know about (model
-    instance, deps type, extra context providers).
+    instance, deps type, extra context providers, capabilities).
+
+    A ``code_mode`` config additionally grants a ``CodeMode`` capability
+    scoped to exactly the agent's granted tool names: the model writes
+    Python that calls those tools as functions, executed in the Monty
+    sandbox. ``tool_calls_limit=None`` means "pick the right default" -
+    4 for chat, 16 for code mode; an explicit value always wins.
     """
     providers: list[ContextProvider[Any]] = list(context_providers)
     if config.memory_modules:
@@ -213,6 +298,13 @@ def build_chat_agent(
                 config.memory_modules, token_budget=module_token_budget
             )
         )
+    effective_capabilities: list[Any] = list(capabilities)
+    effective_capabilities.extend(agent_capabilities(config))
+    effective_limit = tool_calls_limit
+    if config.code_mode and effective_limit is None:
+        effective_limit = CODE_MODE_TOOL_CALLS_LIMIT
+    if effective_limit is None:
+        effective_limit = DEFAULT_TOOL_CALLS_LIMIT
     return ToolChatAgent(
         model=model,
         model_name=model_name,
@@ -224,8 +316,10 @@ def build_chat_agent(
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         ),
-        tool_calls_limit=tool_calls_limit,
+        tool_calls_limit=effective_limit,
         action=f"chat:{config.slug}",
         recorder=recorder,
+        capabilities=effective_capabilities,
+        name=config.slug,
     )
 {% endif %}

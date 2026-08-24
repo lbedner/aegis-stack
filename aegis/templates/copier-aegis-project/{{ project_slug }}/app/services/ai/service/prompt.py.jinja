@@ -10,7 +10,12 @@ from typing import Any
 
 from app.core.log import logger
 from app.services.ai.config import AIServiceConfig
+{% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+from app.services.ai.domains.chat.agent_loader import AgentConfig, agent_capabilities
+from app.services.ai.domains.chat.tools import resolve_tools
+{% else %}
 from app.services.ai.domains.chat.agent_loader import AgentConfig
+{% endif %}
 from app.services.ai.domains.chat.prompts import (
     DEFAULT_SYSTEM_PROMPT,
     build_system_prompt,
@@ -28,6 +33,12 @@ from app.services.ai.service.contexts import ContextsMixin
 from app.services.ai.domains.chat.rag_context import RAGContext
 from app.services.ai.domains.chat.rag_stats_context import RAGStatsContext
 {% endif %}
+
+
+# Conversation history carried into each model call, in characters
+# (~1.5k tokens). Newest messages first; the oldest drop when a thread
+# outgrows the budget - prefill cost is paid on EVERY call of a turn.
+HISTORY_CHAR_BUDGET = 6_000
 
 
 class PromptMixin(ContextsMixin):
@@ -79,6 +90,7 @@ class PromptMixin(ContextsMixin):
         catalog_context: str | None = None,
         agent_config: AgentConfig | None = None,
         memory_context: str | None = None,
+        agent_modules_context: str | None = None,
     ) -> tuple[Any, str]:
         """
         Create agent for request and build conversation context.
@@ -146,8 +158,30 @@ class PromptMixin(ContextsMixin):
         if health_warning:
             system_prompt_override += f"\n\n**NOTICE**: {health_warning}"
 
-        # Create agent for this request
-        agent = get_agent(config, self.settings, system_prompt_override)
+        # The agent row's memory modules (e.g. the finance snapshot): the
+        # same briefing the chat_kit runtime injects via its provider.
+        if agent_modules_context:
+            system_prompt_override += f"\n\n{agent_modules_context}"
+
+        # Create agent for this request, carrying the agent row's grants:
+        # its attached tools resolve through the registry, and a code_mode
+        # row gets the sandboxed-execution capability. Same grants as the
+        # chat_kit path, so an agent behaves identically on both runtimes.
+        tools: list[Any] = []
+        capabilities: list[Any] = []
+{% if ai_backend != "memory" %}
+        if agent_config is not None:
+            tools = resolve_tools(agent_config.tool_names)
+            capabilities = agent_capabilities(agent_config)
+{% endif %}
+        agent = get_agent(
+            config,
+            self.settings,
+            system_prompt_override,
+            tools=tools,
+            capabilities=capabilities,
+            agent_name=agent_config.slug if agent_config is not None else None,
+        )
 
         # Build conversation context for AI
         conversation_context = self._build_conversation_context(conversation)
@@ -167,17 +201,23 @@ class PromptMixin(ContextsMixin):
         if not conversation.messages:
             return ""
 
-        # For continuous conversation, include recent message history
-        # Limit to last 10 messages to manage context window
-        recent_messages = conversation.messages[-10:]
-
-        # Format messages for context
-        context_parts = []
-        for msg in recent_messages[:-1]:  # Exclude the latest message (just added)
+        # Budget history by SIZE, newest first, rather than by message
+        # count: one agent's answers can run 1k+ tokens each, so "last 10
+        # messages" re-prefills an essay collection on every model call.
+        # Oldest messages drop first; the current message always rides.
+        context_parts: list[str] = []
+        used = 0
+        for msg in reversed(conversation.messages[:-1]):
             if msg.role == MessageRole.USER:
-                context_parts.append(f"User: {msg.content}")
+                line = f"User: {msg.content}"
             elif msg.role == MessageRole.ASSISTANT:
-                context_parts.append(f"Assistant: {msg.content}")
+                line = f"Assistant: {msg.content}"
+            else:
+                continue
+            if used + len(line) > HISTORY_CHAR_BUDGET:
+                break
+            context_parts.insert(0, line)
+            used += len(line) + 1
 
         # Add the current user message
         latest_message = conversation.get_last_message()

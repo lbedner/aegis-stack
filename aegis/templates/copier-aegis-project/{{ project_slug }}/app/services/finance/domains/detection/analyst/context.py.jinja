@@ -68,6 +68,10 @@ async def load_report_context(
     return ReportContext(
         today=today,
         accounts=accounts,
+        activity_totals=await service.account_transaction_totals(
+            owner_user_id=owner_user_id,
+            account_ids=[a.id for a in accounts if a.id is not None],
+        ),
         goal_accounts=goal_accounts,
         envelope_accounts=envelope_accounts,
         liability_details=await service.liability_details([a.id for a in liabilities]),

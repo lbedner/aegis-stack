@@ -94,6 +94,10 @@ dependencies = [
 {#- Several providers collapse to "openai"; dedupe so the extras list stays clean (e.g. openai + mistral -> [openai], not [openai,openai]). #}
 {%- set pydantic_extras = _mapped_extras.split(",") | map("trim") | unique | join(",") %}
     "pydantic-ai-slim[{{ pydantic_extras }}]>=1.0.10",
+{#- Code mode: sandboxed Monty execution for agents flagged code_mode.
+    The capability only constructs for flagged agent rows, so unflagged
+    installs carry the dependency but never touch it. #}
+    "pydantic-ai-harness[codemode]>=0.24.0",
     "httpx>=0.27.0",
 {%- else %}
     # LangChain framework dependencies

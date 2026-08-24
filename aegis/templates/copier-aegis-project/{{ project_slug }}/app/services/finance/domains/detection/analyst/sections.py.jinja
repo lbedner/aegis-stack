@@ -5,6 +5,7 @@ plus the tuning constants and tiny formatters every section shares.
 from datetime import date
 from typing import Any
 from app.services.finance.domains.detection.insights import format_usd
+from app.services.finance.domains.ledger.accounts import effective_balance
 from app.services.finance.models import (
     FinanceAccount,
     FinanceLiabilityDetail,
@@ -41,6 +42,9 @@ class ReportContext(BaseModel):
 
     today: date
     accounts: list[FinanceAccount]
+    # Register-style transaction sums per account id, for the effective-
+    # balance fallback on never-written (e.g. CSV-imported) accounts.
+    activity_totals: dict[int, int]
     goal_accounts: list[FinanceAccount]
     envelope_accounts: list[FinanceAccount]
     liability_details: dict[int, FinanceLiabilityDetail]
@@ -200,25 +204,36 @@ def context_label(text: str, *, limit: int = _CONTEXT_LABEL_LIMIT) -> str:
 
 
 
-def _accounts_section(accounts: list[Any]) -> str:
+def _accounts_section(
+    accounts: list[Any], activity_totals: dict[int, int] | None = None
+) -> str:
     """Balances the model may quote, and only those.
 
     An account without a tracked balance used to render as "$0.00" -
     "Citizens Bank Mortgage: $0.00 owed" is not a balance, it is a gap in
     the data dressed as a fact, and a model told the mortgage stands at
-    zero will eventually say so. Untracked accounts are listed by name
-    under one honest line instead.
+    zero will eventually say so. A never-written account whose register
+    still sums to something (a CSV import) briefs that sum - the same
+    effective-balance rule the accounts tab renders; only accounts with
+    genuinely no data land in the honest untracked line.
     """
+    totals = activity_totals or {}
     lines = [f"ACCOUNTS ({len(accounts)})"]
     untracked: list[str] = []
     for account in accounts:
-        if not account.current_balance:
+        balance = effective_balance(
+            current_balance=account.current_balance,
+            balance_as_of=account.balance_as_of,
+            classification=account.classification,
+            activity_balance=totals.get(account.id, 0),
+        )
+        if not balance:
             untracked.append(account.name)
             continue
         owed = " owed" if account.classification == "liability" else ""
         lines.append(
             f"- {account.name} ({account.account_type}, "
-            f"{account.classification}): {format_usd(account.current_balance)}{owed}"
+            f"{account.classification}): {format_usd(abs(balance))}{owed}"
         )
     if untracked:
         lines.append(

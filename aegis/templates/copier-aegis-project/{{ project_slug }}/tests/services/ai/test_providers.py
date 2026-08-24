@@ -36,11 +36,13 @@ class TestGetModelClass:
         # Ollama uses OpenAI-compatible API, so it should return OpenAIChatModel
         assert model_class.__name__ == "OpenAIChatModel"
 
-    def test_openai_returns_openai_model(self) -> None:
-        """Verify OpenAI provider uses OpenAIChatModel."""
+    def test_openai_returns_responses_model(self) -> None:
+        """OpenAI proper rides the Responses API: reasoning models
+        (gpt-5.x, o-series) reject function tools on /v1/chat/completions.
+        Compat providers (ollama, public, ...) stay on the Chat model."""
         pytest.importorskip("openai")
         model_class = _get_model_class(AIProvider.OPENAI)
-        assert model_class.__name__ == "OpenAIChatModel"
+        assert model_class.__name__ == "OpenAIResponsesModel"
 
     def test_anthropic_returns_anthropic_model(self) -> None:
         """Verify Anthropic provider uses AnthropicModel."""
@@ -277,6 +279,38 @@ class TestGetAgentOllama:
 # =============================================================================
 # TestOllamaBaseUrlConfiguration
 # =============================================================================
+
+
+class TestOllamaMaxTokensWireFormat:
+    """Ollama's OpenAI-compat endpoint silently DROPS the modern
+    ``max_completion_tokens`` field (only ``max_tokens`` maps to
+    num_predict), so the model profile must route the cap to the legacy
+    field - measured live: a cap of 50 generated 11,186 tokens."""
+
+    def test_ollama_model_routes_the_cap_to_the_legacy_field(self) -> None:
+        pytest.importorskip("openai")
+        import app.services.ai.domains.llm.providers as providers_module
+        from app.services.ai.domains.llm.providers import _ollama_model
+
+        if providers_module.AsyncOpenAI is None:
+            pytest.skip("openai-backed providers not in this render")
+
+        mock_settings = MagicMock()
+        mock_settings.ollama_base_url_effective = "http://localhost:11434"
+        mock_config = MagicMock()
+        mock_config.model = "llama3.2:latest"
+
+        model = _ollama_model(mock_config, mock_settings)
+
+        # The runtime reads the profile dict-style (models/openai.py), so
+        # assert the same way; older versions expose an attribute.
+        profile = model.profile
+        value = (
+            profile.get("openai_chat_supports_max_completion_tokens")
+            if isinstance(profile, dict)
+            else profile.openai_chat_supports_max_completion_tokens
+        )
+        assert value is False
 
 
 class TestOllamaBaseUrlConfiguration:

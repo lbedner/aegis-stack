@@ -430,3 +430,88 @@ class TestConversationMemoryEdgeCases:
         assert cleaned_count >= 1  # At least our old conversation should be cleaned
         assert conversation_manager.get_conversation(old_conversation.id) is None
         assert conversation_manager.get_conversation(recent_conversation.id) is not None
+
+
+class TestSurfaceScopingAndTitles:
+    """New conversations carry a surface tag and a first-message title."""
+
+    def _service(self, mock_settings) -> "AIService":
+        return AIService(mock_settings)
+
+    async def _chat(
+        self, ai_service, message: str, surface: str | None, user_id: str
+    ) -> str:
+        response = await ai_service.chat(
+            message=message, user_id=user_id, surface=surface
+        )
+        return response.metadata["conversation_id"]
+
+    @pytest.mark.asyncio
+    async def test_new_conversation_records_surface_and_title(self, mock_settings):
+        with (
+            patch("app.services.ai.config.get_ai_config") as mock_config,
+            patch("app.services.ai.service.prompt.get_agent") as mock_get_agent,
+        ):
+            mock_config.return_value.enabled = True
+            mock_config.return_value.provider = AIProvider.OPENAI
+            mock_config.return_value.model = "gpt-4"
+            mock_agent = AsyncMock()
+            mock_agent.run = AsyncMock(return_value=MagicMock(output="ok"))
+            mock_get_agent.return_value = mock_agent
+            ai_service = self._service(mock_settings)
+
+            user = f"scoped-{uuid.uuid4().hex[:8]}"
+            conv_id = await self._chat(
+                ai_service, "What is my burn rate this month?", "finance", user
+            )
+
+            conversation = ai_service.get_conversation(conv_id)
+            assert conversation.metadata.get("surface") == "finance"
+            assert conversation.title == "What is my burn rate this month?"
+
+    @pytest.mark.asyncio
+    async def test_long_first_message_truncates_into_the_title(self, mock_settings):
+        with (
+            patch("app.services.ai.config.get_ai_config") as mock_config,
+            patch("app.services.ai.service.prompt.get_agent") as mock_get_agent,
+        ):
+            mock_config.return_value.enabled = True
+            mock_config.return_value.provider = AIProvider.OPENAI
+            mock_config.return_value.model = "gpt-4"
+            mock_agent = AsyncMock()
+            mock_agent.run = AsyncMock(return_value=MagicMock(output="ok"))
+            mock_get_agent.return_value = mock_agent
+            ai_service = self._service(mock_settings)
+
+            user = f"scoped-{uuid.uuid4().hex[:8]}"
+            conv_id = await self._chat(ai_service, "x" * 100, None, user)
+
+            conversation = ai_service.get_conversation(conv_id)
+            assert len(conversation.title) == 60
+            assert conversation.title.endswith("...")
+
+    @pytest.mark.asyncio
+    async def test_list_conversations_filters_by_surface(self, mock_settings):
+        with (
+            patch("app.services.ai.config.get_ai_config") as mock_config,
+            patch("app.services.ai.service.prompt.get_agent") as mock_get_agent,
+        ):
+            mock_config.return_value.enabled = True
+            mock_config.return_value.provider = AIProvider.OPENAI
+            mock_config.return_value.model = "gpt-4"
+            mock_agent = AsyncMock()
+            mock_agent.run = AsyncMock(return_value=MagicMock(output="ok"))
+            mock_get_agent.return_value = mock_agent
+            ai_service = self._service(mock_settings)
+
+            user = f"scoped-{uuid.uuid4().hex[:8]}"
+            finance_id = await self._chat(
+                ai_service, "finance question", "finance", user
+            )
+            await self._chat(ai_service, "general question", None, user)
+
+            scoped = ai_service.list_conversations(user, surface="finance")
+            assert [c.id for c in scoped] == [finance_id]
+
+            all_convos = ai_service.list_conversations(user)
+            assert len(all_convos) == 2

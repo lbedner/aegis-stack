@@ -154,6 +154,37 @@ async def liability_details(
     return await queries.liability_details_by_account(db, account_ids)
 
 
+def effective_balance(
+    *,
+    current_balance: int | None,
+    balance_as_of: object | None,
+    classification: str,
+    activity_balance: int,
+) -> int:
+    """The balance an account is actually worth right now.
+
+    Prefer the authoritative ``current_balance`` (provider/statement/
+    valuation); for liabilities that figure is the amount owed, so it
+    reads negative. Fall back to the transaction-sum activity balance
+    when no balance was ever set (e.g. a CSV import with no running
+    balance).
+
+    "Never set" is subtle: accounts are CREATED with ``current_balance=0``,
+    so a bare zero only counts as a real balance when ``balance_as_of``
+    says a balance write actually happened. A nonzero value is trusted
+    even unstamped (a hand-entered opening balance has no stamp).
+    """
+    authoritative = current_balance is not None and (
+        current_balance != 0 or balance_as_of is not None
+    )
+    if authoritative:
+        assert current_balance is not None
+        if classification == "liability":
+            return -abs(current_balance)
+        return current_balance
+    return activity_balance
+
+
 async def account_transaction_totals(
     db: AsyncSession,
     *,

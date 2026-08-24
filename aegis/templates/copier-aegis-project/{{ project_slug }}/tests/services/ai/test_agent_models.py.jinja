@@ -30,7 +30,7 @@ class TestAgentSeed:
     def test_seeds_default_agent(self, session: Session) -> None:
         counts = load_agent_fixtures(session)
 
-        assert counts == {"agents": 1}
+        assert counts["agents"] == 1
         agent = session.exec(
             select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
         ).one()
@@ -43,9 +43,27 @@ class TestAgentSeed:
         load_agent_fixtures(session)
         counts = load_agent_fixtures(session)
 
-        assert counts == {"agents": 0}
+        assert counts["agents"] == 0
+        assert counts["tools"] == 0
         agents = session.exec(select(Agent)).all()
         assert len(agents) == 1
+
+    def test_registered_tools_get_grantable_rows(self, session: Session) -> None:
+        """Every name in the Python tool registry gets a ``tool`` row."""
+
+        async def probe() -> str:
+            """Probe tool."""
+            return "ok"
+
+        register_tool("cm_probe", probe, description="Probe tool", replace=True)
+        try:
+            counts = load_agent_fixtures(session)
+            assert counts["tools"] >= 1
+            rows = {t.name: t for t in session.exec(select(Tool)).all()}
+            assert "cm_probe" in rows
+            assert rows["cm_probe"].description == "Probe tool"
+        finally:
+            unregister_tool("cm_probe")
 
     def test_seed_never_overwrites_edited_agent(self, session: Session) -> None:
         load_agent_fixtures(session)
@@ -72,9 +90,8 @@ class TestAgentToolLink:
         agent = session.exec(
             select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
         ).one()
-        tool = Tool(name="save_memory", description="Persist a user fact")
-        session.add(tool)
-        session.commit()
+        # The registry sync seeded the row; attaching reuses it by name.
+        tool = session.exec(select(Tool).where(Tool.name == "save_memory")).one()
         session.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
         session.commit()
 
@@ -96,9 +113,8 @@ class TestAgentToolLink:
             agent = session.exec(
                 select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
             ).one()
-            tool = Tool(name="greet")
-            session.add(tool)
-            session.commit()
+            # Registered before the seed ran, so the sync created its row.
+            tool = session.exec(select(Tool).where(Tool.name == "greet")).one()
             session.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
             session.commit()
 

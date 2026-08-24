@@ -28,9 +28,13 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
+    PartDeltaEvent,
+    PartStartEvent,
     TextPart,
+    TextPartDelta,
     UserPromptPart,
 )
+from pydantic_ai.run import AgentRunResultEvent
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
 
@@ -85,6 +89,8 @@ class ToolChatAgent(Generic[DepsT]):
         tool_calls_limit: int = 4,
         action: str = "chat:generic",
         recorder: Callable[..., float] = record_usage,
+        capabilities: Sequence[Any] = (),
+        name: str | None = None,
     ) -> None:
         """
         Args:
@@ -100,13 +106,23 @@ class ToolChatAgent(Generic[DepsT]):
                 latency — the whole reason the design is briefing-first).
             action: Ledger action family for these turns (e.g. "chat:metrics").
             recorder: Usage-recording hook; injected in tests to assert cost.
+            name: Agent name stamped on traces (``gen_ai.agent.name``), so
+                instrumented runs group per agent on observability views.
+            capabilities: pydantic-ai capabilities (e.g. code mode). Passed to
+                the ``Agent`` only when non-empty, so stacks pinned to
+                pre-capability pydantic-ai versions never see the kwarg.
         """
+        agent_kwargs: dict[str, Any] = {}
+        if capabilities:
+            agent_kwargs["capabilities"] = list(capabilities)
         self._agent: Agent[DepsT] = Agent(
             model,
+            name=name,
             instructions=instructions,
             deps_type=deps_type,
             tools=list(tools),
             model_settings=model_settings,
+            **agent_kwargs,
         )
         self._model_name = model_name
         self._providers = tuple(context_providers)
@@ -135,21 +151,35 @@ class ToolChatAgent(Generic[DepsT]):
 
         answer_parts: list[str] = []
         try:
-            async with self._agent.run_stream(
+            # Event-based streaming rather than ``run_stream``: the event
+            # stream crosses tool boundaries, so a model that narrates
+            # before calling a tool keeps streaming after the tool returns
+            # instead of the early text ending the turn.
+            result: Any = None
+            async with self._agent.run_stream_events(
                 message,
                 instructions=run_instructions,
                 deps=deps,
                 message_history=model_history,
                 usage_limits=self._limits,
-            ) as result:
-                # debounce_by=None: pydantic-ai's default (0.1s) batches tokens
-                # into 100ms clumps, which reads as stutter in the UI. Emit the
-                # provider's chunks as they arrive; the client smooths display.
-                async for delta in result.stream_text(delta=True, debounce_by=None):
-                    answer_parts.append(delta)
-                    yield DeltaFrame(delta)
-                usage = extract_usage(result)
-                tool_calls = _count_tool_calls(result)
+            ) as events:
+                async for event in events:
+                    delta = ""
+                    if isinstance(event, PartStartEvent) and isinstance(
+                        event.part, TextPart
+                    ):
+                        delta = event.part.content
+                    elif isinstance(event, PartDeltaEvent) and isinstance(
+                        event.delta, TextPartDelta
+                    ):
+                        delta = event.delta.content_delta
+                    elif isinstance(event, AgentRunResultEvent):
+                        result = event.result
+                    if delta:
+                        answer_parts.append(delta)
+                        yield DeltaFrame(delta)
+                usage = extract_usage(result) if result is not None else {}
+                tool_calls = _count_tool_calls(result) if result is not None else 0
         except Exception as exc:  # noqa: BLE001 - surface as a frame, never raise
             logger.warning(
                 "chat turn failed",

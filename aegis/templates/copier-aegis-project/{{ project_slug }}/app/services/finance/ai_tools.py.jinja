@@ -1,0 +1,326 @@
+{% if include_ai and ai_backend != "memory" %}"""Finance host tools: the data surface code-mode agents compute over.
+
+Deliberately few and wide: results land in the code-mode sandbox rather
+than the prompt, so a broad payload the model slices in code beats a
+catalog of narrow question-shaped tools. Each tool is a thin, fully-typed
+composition of existing domain queries, registered into the agent tool
+registry at import time. A code-mode agent granted these names calls them
+as functions from inside its sandboxed script; a plain agent calls them
+as ordinary tools.
+
+Returns are plain JSON-safe dicts (cents-integer money, ISO dates) so
+values traverse the sandbox boundary without model-object baggage.
+
+Owner scoping: tools read unscoped (``owner_user_id=None``), matching
+the single-tenant default-open posture of generated stacks. A
+multi-tenant deployment should thread its user context here before
+granting these tools to shared agents.
+"""
+
+from datetime import date, timedelta
+from typing import Any
+
+from app.core.db import get_async_session
+from app.services.ai.domains.chat.tools import register_tool
+from app.services.finance.domains.investments import queries as investment_queries
+from app.services.finance.domains.investments.securities import (
+    list_current_holdings,
+)
+from app.services.finance.domains.ledger.accounts import (
+    account_transaction_totals,
+    effective_balance,
+    liability_details,
+)
+from app.services.finance.domains.ledger.queries.accounts import accounts_page
+from app.services.finance.domains.ledger.queries.categories import (
+    category_names_by_id,
+)
+from app.services.finance.domains.ledger.queries.transactions import (
+    transactions_window_with_payees,
+)
+from app.services.finance.domains.ledger.transactions import monthly_cashflow
+from app.services.finance.domains.planning.envelopes import envelope_metadata
+from app.services.finance.domains.planning.goals import goal_metadata
+from app.services.finance.domains.planning.recurring import (
+    queries as recurring_queries,
+)
+
+# Sized for years of a personal ledger (a few thousand rows/year); rows
+# land in the code-mode sandbox, not the model's context, so the cost of
+# a big window is a few ms of marshaling. ``total`` in the payload still
+# exposes truncation, so a capped result never reads as complete.
+_TRANSACTIONS_ROW_CAP = 5000
+
+# How far ahead accounts() reports scheduled flows: one full monthly
+# cycle with margin, so a mid-month plan sees next month's rent.
+_UPCOMING_WINDOW_DAYS = 35
+
+
+def _months_back_start(today: date, span: int) -> date:
+    """First day of the month ``span - 1`` calendar months before today."""
+    total_months = today.year * 12 + today.month - 1 - (span - 1)
+    return date(total_months // 12, total_months % 12 + 1, 1)
+
+
+async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
+    """Cash flow from the transaction ledger.
+
+    Args:
+        months: How many months back to include (1-24).
+        detail: "monthly" or "transactions".
+
+    Monthly detail returns a dict with key 'months': a list, oldest
+    first, of entries carrying 'month', 'income_cents', 'spend_cents'
+    and 'net_cents'. Transaction detail returns keys 'total', 'returned'
+    and 'transactions': a list, newest first, of entries carrying
+    'date', 'payee', 'amount_cents' (signed, negative = outflow),
+    'category', 'account' and 'pending'; fewer returned rows than
+    'total' means the page was capped.
+    """
+    if detail == "monthly":
+        span = max(1, min(int(months), 24))
+        async with get_async_session() as session:
+            rows = await monthly_cashflow(session, months=span)
+        return {
+            "months": [
+                {
+                    "month": row.month,
+                    "income_cents": row.income,
+                    "spend_cents": row.expense,
+                    "net_cents": row.net,
+                }
+                for row in rows
+            ]
+        }
+    if detail != "transactions":
+        raise ValueError('detail must be "monthly" or "transactions"')
+
+    span = max(1, min(int(months), 24))
+    from_date = _months_back_start(date.today(), span)
+    async with get_async_session() as session:
+        rows, total = await transactions_window_with_payees(
+            session,
+            from_date=from_date,
+            limit=_TRANSACTIONS_ROW_CAP,
+        )
+        category_names = await category_names_by_id(
+            session,
+            {t.category_id for t, _name in rows if t.category_id is not None},
+        )
+        account_rows, _count = await accounts_page(
+            session,
+            owner_user_id=None,
+            include_hidden=True,
+            page=1,
+            page_size=500,
+        )
+    account_names = {account.id: account.name for account in account_rows}
+    return {
+        "total": total,
+        "returned": len(rows),
+        "transactions": [
+            {
+                "date": txn.date_.isoformat(),
+                # Curated merchant name first - what the register shows -
+                # then the provider's merchant string, then the raw
+                # descriptor. A renamed payee that only lived in the
+                # curation layer was invisible to the assistant.
+                "payee": curated_name or txn.merchant_name or txn.name,
+                "amount_cents": txn.amount,
+                "category": category_names.get(txn.category_id),
+                "account": account_names.get(txn.account_id),
+                "pending": txn.pending,
+            }
+            for txn, curated_name in rows
+        ],
+    }
+
+
+async def accounts() -> dict[str, Any]:
+    """The full balance sheet: every account with its balance and role.
+
+    Returns a dict with key 'accounts': a list where every entry
+    carries 'id', 'name', 'account_type', 'classification',
+    'balance_cents' (liabilities are negative = owed) and 'hidden'.
+    Investment accounts add 'holdings', a list of entries with 'ticker',
+    'name', 'quantity' and 'market_value_cents'. Envelope accounts add
+    'envelope' with 'credit_cents', 'cadence' and 'auto_credit'. Goal
+    accounts add 'goal' with 'target_cents', 'status',
+    'monthly_contribution_cents' and 'priority'. Liability accounts add
+    'liability' with 'type', 'interest_rate_bps',
+    'minimum_payment_cents', 'next_payment_due',
+    'last_statement_balance_cents', 'last_payment_cents',
+    'last_payment_date', 'ytd_interest_paid_cents' and
+    'ytd_principal_paid_cents' when card terms are on file. Accounts
+    with scheduled activity inside the next 35 days add 'upcoming': a
+    date-ordered list of entries with 'name', 'date' and 'amount_cents'
+    (signed - inflows positive, bills negative), from the same recurring
+    streams the briefing's EXPECTED section reads. Use it to check that
+    a plan survives every touched account's near-term debits.
+    """
+    async with get_async_session() as session:
+        account_rows, _count = await accounts_page(
+            session,
+            owner_user_id=None,
+            include_hidden=True,
+            page=1,
+            page_size=500,
+        )
+        holdings = await list_current_holdings(session)
+        account_ids = [account.id for account in account_rows]
+        activity_totals = await account_transaction_totals(
+            session, account_ids=account_ids
+        )
+        liabilities = await liability_details(session, account_ids)
+        streams = await recurring_queries.active_streams(session)
+
+    today = date.today()
+    horizon = today + timedelta(days=_UPCOMING_WINDOW_DAYS)
+    upcoming_by_account: dict[int, list[dict[str, Any]]] = {}
+    for stream in streams:
+        when = stream.next_expected_date
+        if stream.account_id is None or when is None:
+            continue
+        if not today <= when <= horizon:
+            continue
+        amount = stream.expected_amount or stream.average_amount or 0
+        sign = 1 if stream.direction == "inflow" else -1
+        upcoming_by_account.setdefault(stream.account_id, []).append(
+            {
+                "name": stream.name,
+                "date": when.isoformat(),
+                "amount_cents": sign * abs(amount),
+            }
+        )
+
+    holdings_by_account: dict[int, list[dict[str, Any]]] = {}
+    for holding, security, market_value_cents in holdings:
+        holdings_by_account.setdefault(holding.account_id, []).append(
+            {
+                "ticker": security.ticker if security else None,
+                "name": security.name if security else None,
+                "quantity": holding.quantity_e8 / 1e8,
+                "market_value_cents": market_value_cents,
+            }
+        )
+
+    out: list[dict[str, Any]] = []
+    for account in account_rows:
+        entry: dict[str, Any] = {
+            "id": account.id,
+            "name": account.name,
+            "account_type": account.account_type,
+            "classification": account.classification,
+            # Same rule the accounts tab renders: authoritative balance
+            # writes win; a never-written 0 falls back to the register sum.
+            "balance_cents": effective_balance(
+                current_balance=account.current_balance,
+                balance_as_of=account.balance_as_of,
+                classification=account.classification,
+                activity_balance=activity_totals.get(account.id, 0),
+            ),
+            "hidden": account.is_hidden,
+        }
+        envelope_meta = envelope_metadata(account.metadata_)
+        if envelope_meta is not None:
+            # The domain field is named monthly_credit, but the amount is
+            # booked once per cadence period - a "monthly" key next to
+            # cadence="weekly" reads as a contradiction, and models have
+            # mis-stated the allowance because of it.
+            entry["envelope"] = {
+                "credit_cents": envelope_meta.monthly_credit,
+                "cadence": envelope_meta.cadence,
+                "auto_credit": envelope_meta.auto_credit,
+            }
+        goal_meta = goal_metadata(account.metadata_)
+        if goal_meta is not None:
+            entry["goal"] = {
+                "target_cents": goal_meta.target_amount,
+                "status": goal_meta.status,
+                "monthly_contribution_cents": goal_meta.monthly_contribution,
+                "priority": goal_meta.priority,
+            }
+        if account.id in holdings_by_account:
+            entry["holdings"] = holdings_by_account[account.id]
+        if account.id in upcoming_by_account:
+            entry["upcoming"] = upcoming_by_account[account.id]
+        detail = liabilities.get(account.id)
+        if detail is not None:
+            entry["liability"] = {
+                "type": detail.liability_type,
+                "interest_rate_bps": detail.interest_rate_bps,
+                "minimum_payment_cents": detail.minimum_payment_amount,
+                "next_payment_due": (
+                    detail.next_payment_due_date.isoformat()
+                    if detail.next_payment_due_date
+                    else None
+                ),
+                "last_statement_balance_cents": detail.last_statement_balance,
+                "last_payment_cents": detail.last_payment_amount,
+                "last_payment_date": (
+                    detail.last_payment_date.isoformat()
+                    if detail.last_payment_date
+                    else None
+                ),
+                "ytd_interest_paid_cents": detail.ytd_interest_paid,
+                "ytd_principal_paid_cents": detail.ytd_principal_paid,
+            }
+        out.append(entry)
+    return {"accounts": out}
+
+
+async def quote(ticker: str) -> dict[str, Any]:
+    """Latest stored closing price for a ticker in the security catalog.
+
+    Args:
+        ticker: The security's ticker symbol, case-insensitive.
+    """
+    symbol = ticker.strip().upper()
+    async with get_async_session() as session:
+        security = await investment_queries.security_by_ticker(session, symbol)
+        if security is None or security.id is None:
+            return {"found": False, "ticker": symbol}
+        price = await investment_queries.latest_price_for_security(
+            session, security.id
+        )
+    if price is None:
+        return {"found": False, "ticker": symbol}
+    # Normalize to cents in integer arithmetic regardless of the row's
+    # stored scale; float exponents would drift on sub-cent scales.
+    if price.price_scale > 2:
+        divisor = 10 ** (price.price_scale - 2)
+        close_cents = (price.close_price + divisor // 2) // divisor
+    else:
+        close_cents = price.close_price * 10 ** (2 - price.price_scale)
+    as_of: date = price.price_date
+    return {
+        "found": True,
+        "ticker": symbol,
+        "name": security.name,
+        "close_cents": close_cents,
+        "as_of": as_of.isoformat(),
+    }
+
+
+# Built-in registration: importing this module makes the tools grantable
+# via the agent registry. replace=True keeps re-imports idempotent.
+register_tool(
+    "ledger",
+    ledger,
+    description="Cash flow: monthly rollups or individual transactions",
+    replace=True,
+)
+register_tool(
+    "accounts",
+    accounts,
+    description="All accounts with balances, holdings, envelopes and goals",
+    replace=True,
+)
+register_tool(
+    "quote",
+    quote,
+    description="Latest stored closing price for a ticker",
+    replace=True,
+)
+{% else %}"""Finance host tools ship only with the AI service on a persistent backend."""
+{% endif %}

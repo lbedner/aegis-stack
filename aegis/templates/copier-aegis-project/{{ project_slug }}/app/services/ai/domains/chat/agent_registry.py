@@ -37,6 +37,7 @@ EDITABLE_FIELDS = frozenset(
         "max_tokens",
         "system_prompt",
         "is_active",
+        "code_mode",
     }
 )
 
@@ -44,7 +45,7 @@ EDITABLE_FIELDS = frozenset(
 # Editable fields whose columns reject NULL; description/category/model_id
 # stay nullable (model_id None = follow the active default).
 _NON_NULLABLE_FIELDS = frozenset(
-    {"name", "temperature", "max_tokens", "system_prompt", "is_active"}
+    {"name", "temperature", "max_tokens", "system_prompt", "is_active", "code_mode"}
 )
 
 
@@ -140,6 +141,7 @@ def serialize_agent(agent: Agent) -> dict[str, Any]:
         "max_tokens": agent.max_tokens,
         "system_prompt": agent.system_prompt,
         "is_active": agent.is_active,
+        "code_mode": agent.code_mode,
         "tools": [tool.name for tool in agent.tools],
         "memory_modules": list(agent.memory_modules),
         "knowledge_base_ids": list(agent.knowledge_base_ids),

@@ -253,7 +253,8 @@ def _envelopes_section(ctx: ReportContext) -> str | None:
         balance = account.current_balance or 0
         line = f"- {account.name}: {_amount(balance)}"
         if meta.monthly_credit:
-            line += f", credits {_amount(meta.monthly_credit)}/mo"
+            per = "/wk" if meta.cadence == "weekly" else "/mo"
+            line += f", credits {_amount(meta.monthly_credit)}{per}"
             line += " automatically" if meta.auto_credit else " by hand"
         if balance < 0:
             line += " (overdrawn - borrowed against next month)"
@@ -330,13 +331,24 @@ def _upcoming_section(ctx: ReportContext) -> str | None:
     ]
     if not upcoming:
         return None
+    # The account rides every line: an expectation without one reads as
+    # account-less, and a model scoping its analysis to a subset of
+    # accounts then calls the payment "missing" instead of "expected
+    # elsewhere".
+    account_names = {
+        account.id: account.name
+        for account in ctx.accounts
+        if account.id is not None
+    }
     lines = [f"EXPECTED IN THE NEXT {_UPCOMING_DAYS} DAYS"]
     for stream in upcoming:
         amount = stream.expected_amount or stream.average_amount or 0
         direction = 1 if stream.direction == "inflow" else -1
+        where = account_names.get(stream.account_id)
+        suffix = f" ({where})" if where else ""
         lines.append(
             f"- {stream.name}: {_signed(direction * abs(amount))} "
-            f"on {stream.next_expected_date}"
+            f"on {stream.next_expected_date}{suffix}"
         )
     return "\n".join(lines)
 

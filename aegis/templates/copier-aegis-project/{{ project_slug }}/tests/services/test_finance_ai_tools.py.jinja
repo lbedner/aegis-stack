@@ -1,0 +1,335 @@
+{% if include_finance and include_ai and ai_backend != "memory" %}"""Finance host tools: the data surface code-mode agents compute over.
+
+Each tool opens its own session in production; tests point that at the
+transactional test session so factory-seeded rows are visible and rolled
+back per test.
+"""
+
+from contextlib import asynccontextmanager
+from datetime import date, timedelta
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai.domains.chat.tools import registered_tool_names
+import app.services.finance.ai_tools as ai_tools
+from app.services.finance.domains.planning.envelopes import create_envelope
+from app.services.finance.domains.planning.goals import set_goal_metadata
+from app.services.finance.models.accounts import FinanceLiabilityDetail
+from app.services.finance.models.investments import (
+    FinanceHolding,
+    FinanceSecurity,
+    FinanceSecurityPrice,
+)
+from app.services.finance.models.reference import FinanceCurrency
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account, seed_category, seed_txn
+
+EXPECTED_TOOLS = {"ledger", "accounts", "quote"}
+
+
+@pytest.fixture
+def session(async_db_session: AsyncSession) -> AsyncSession:
+    return async_db_session
+
+
+@pytest.fixture
+def svc(session: AsyncSession) -> FinanceService:
+    return FinanceService(session)
+
+
+@pytest.fixture(autouse=True)
+def _tools_use_test_session(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    @asynccontextmanager
+    async def test_session():
+        yield session
+
+    monkeypatch.setattr(ai_tools, "get_async_session", test_session)
+
+
+def test_finance_tools_register_on_import() -> None:
+    """Importing the module makes every finance tool grantable by name."""
+    assert EXPECTED_TOOLS <= set(registered_tool_names())
+
+
+async def test_ledger_monthly_detail_reports_cashflow(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    account = await seed_account(svc)
+    today = date.today()
+    await seed_txn(svc, account.id, 250_00, today)
+    await seed_txn(svc, account.id, -100_00, today)
+
+    summary = await ai_tools.ledger(months=1)
+
+    assert len(summary["months"]) == 1
+    month = summary["months"][0]
+    assert month["income_cents"] == 250_00
+    assert month["spend_cents"] == 100_00
+    assert month["net_cents"] == 150_00
+
+
+async def test_ledger_transactions_detail_lists_line_items(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    account = await seed_account(svc)
+    category = await seed_category(session, "Coffee")
+    today = date.today()
+    await seed_txn(
+        svc, account.id, -4_50, today, name="Starbucks", category_id=category.id
+    )
+    await seed_txn(svc, account.id, 250_00, today, name="Paycheck")
+
+    result = await ai_tools.ledger(months=1, detail="transactions")
+
+    assert result["total"] == 2
+    starbucks = next(
+        t for t in result["transactions"] if t["payee"] == "Starbucks"
+    )
+    assert starbucks["amount_cents"] == -4_50
+    assert starbucks["category"] == "Coffee"
+    assert starbucks["account"] == "Checking"
+    assert starbucks["date"] == today.isoformat()
+
+
+async def test_ledger_transactions_use_the_curated_payee(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """A merchant the user named (a curated FinanceMerchant row) wins over
+    the raw bank descriptor - what the register shows is what the AI sees.
+    A renamed payee was invisible to the assistant's searches."""
+    account = await seed_account(svc)
+    today = date.today()
+    txn = await seed_txn(
+        svc, account.id, -108_50, today, name="NON-CHASE ATM WITHDRAW XX2488"
+    )
+    merchant = await svc.create_merchant("Hudson Valley Grounded", owner_user_id=1)
+    txn.merchant_id = merchant.id
+    session.add(txn)
+    await session.commit()
+
+    result = await ai_tools.ledger(months=1, detail="transactions")
+
+    payees = [t["payee"] for t in result["transactions"]]
+    assert payees == ["Hudson Valley Grounded"]
+
+
+async def test_ledger_rejects_unknown_detail() -> None:
+    with pytest.raises(ValueError):
+        await ai_tools.ledger(detail="weekly")
+
+
+async def test_accounts_returns_the_full_balance_sheet(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """One call: cash balances, holdings, envelope and goal metadata."""
+    await seed_account(svc, current_balance=5_000_00)
+    brokerage = await seed_account(
+        svc, name="Brokerage", account_type="investment"
+    )
+    security = FinanceSecurity(ticker="NVDA", name="NVIDIA Corp")
+    session.add(security)
+    await session.flush()
+    session.add(
+        FinanceHolding(
+            owner_user_id=1,
+            account_id=brokerage.id,
+            security_id=security.id,
+            as_of_date=date.today(),
+            quantity_e8=4 * 10**8,
+            price=100_00,
+        )
+    )
+    await create_envelope(
+        session, owner_user_id=1, name="Groceries", monthly_credit=300_00
+    )
+    goal_account = await seed_account(
+        svc, name="Emergency Fund", account_type="savings"
+    )
+    goal_account.metadata_ = set_goal_metadata(
+        goal_account.metadata_, target_amount=10_000_00
+    )
+    session.add(goal_account)
+    await session.commit()
+
+    result = await ai_tools.accounts()
+
+    by_name = {a["name"]: a for a in result["accounts"]}
+    assert by_name["Checking"]["balance_cents"] == 5_000_00
+    assert by_name["Checking"]["account_type"] == "checking"
+    assert by_name["Groceries"]["envelope"]["credit_cents"] == 300_00
+    assert by_name["Emergency Fund"]["goal"]["target_cents"] == 10_000_00
+    holdings = by_name["Brokerage"]["holdings"]
+    assert holdings[0]["ticker"] == "NVDA"
+    assert holdings[0]["quantity"] == 4.0
+    assert holdings[0]["market_value_cents"] == 400_00
+
+
+async def test_accounts_uses_register_balance_when_none_was_written(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """A CSV-imported account carries current_balance=0 with no stamp; its
+    real balance is the transaction sum - the same rule the accounts tab
+    renders. A liability's balance reads negative (amount owed)."""
+    checking = await seed_account(svc)
+    today = date.today()
+    await seed_txn(svc, checking.id, 250_00, today)
+    await seed_txn(svc, checking.id, -100_00, today)
+    await seed_account(
+        svc,
+        name="AMEX",
+        account_type="credit_card",
+        classification="liability",
+        current_balance=29_090_86,
+    )
+    await session.commit()
+
+    result = await ai_tools.accounts()
+
+    by_name = {a["name"]: a for a in result["accounts"]}
+    assert by_name["Checking"]["balance_cents"] == 150_00
+    assert by_name["AMEX"]["balance_cents"] == -29_090_86
+
+
+async def test_accounts_carries_upcoming_scheduled_flows(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """Each account lists its scheduled flows inside the planning window,
+    signed like the briefing (inflows positive) - a transfer plan can
+    check every touched account's near-term debits without guessing."""
+    checking = await seed_account(svc)
+    await svc.create_recurring_stream(
+        owner_user_id=1,
+        name="Eleanor Care",
+        direction="outflow",
+        frequency="monthly",
+        expected_amount=2_200_00,
+        next_expected_date=date.today() + timedelta(days=9),
+        account_id=checking.id,
+    )
+    await svc.create_recurring_stream(
+        owner_user_id=1,
+        name="NYS Deposit",
+        direction="inflow",
+        frequency="monthly",
+        expected_amount=1_004_93,
+        next_expected_date=date.today() + timedelta(days=60),
+        account_id=checking.id,
+    )
+    await session.commit()
+
+    result = await ai_tools.accounts()
+
+    entry = next(a for a in result["accounts"] if a["name"] == "Checking")
+    assert entry["upcoming"] == [
+        {
+            "name": "Eleanor Care",
+            "date": (date.today() + timedelta(days=9)).isoformat(),
+            "amount_cents": -2_200_00,
+        }
+    ]
+
+
+async def test_accounts_carries_liability_card_terms(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """Interest rate, minimum payment and statement figures ride the
+    liability entry, so interest-cost math computes instead of estimating."""
+    amex = await seed_account(
+        svc,
+        name="AMEX",
+        account_type="credit_card",
+        classification="liability",
+        current_balance=29_090_86,
+    )
+    session.add(
+        FinanceLiabilityDetail(
+            owner_user_id=1,
+            account_id=amex.id,
+            liability_type="credit",
+            interest_rate_bps=2_899,
+            minimum_payment_amount=580_00,
+            next_payment_due_date=date(2026, 9, 5),
+            last_statement_balance=28_500_00,
+            ytd_interest_paid=1_240_55,
+        )
+    )
+    await session.commit()
+
+    result = await ai_tools.accounts()
+
+    amex_entry = next(a for a in result["accounts"] if a["name"] == "AMEX")
+    liability = amex_entry["liability"]
+    assert liability["interest_rate_bps"] == 2_899
+    assert liability["minimum_payment_cents"] == 580_00
+    assert liability["next_payment_due"] == "2026-09-05"
+    assert liability["last_statement_balance_cents"] == 28_500_00
+    assert liability["ytd_interest_paid_cents"] == 1_240_55
+
+
+async def test_quote_returns_latest_stored_price(session: AsyncSession) -> None:
+    session.add(FinanceCurrency(code="usd", name="USD", decimals=2, kind="fiat"))
+    security = FinanceSecurity(ticker="VTI", name="Vanguard Total")
+    session.add(security)
+    await session.commit()
+    await session.refresh(security)
+    session.add(
+        FinanceSecurityPrice(
+            security_id=security.id,
+            price_date=date(2026, 1, 2),
+            close_price=200_00,
+            source="manual",
+        )
+    )
+    session.add(
+        FinanceSecurityPrice(
+            security_id=security.id,
+            price_date=date(2026, 2, 2),
+            close_price=210_00,
+            source="manual",
+        )
+    )
+    await session.commit()
+
+    result = await ai_tools.quote("vti")
+
+    assert result["found"] is True
+    assert result["ticker"] == "VTI"
+    assert result["close_cents"] == 210_00
+    assert result["as_of"] == "2026-02-02"
+
+
+async def test_quote_normalizes_sub_cent_scales_in_integer_math(
+    session: AsyncSession,
+) -> None:
+    """A scale-8 (crypto-style) price reaches cents without float drift."""
+    session.add(FinanceCurrency(code="usd", name="USD", decimals=2, kind="fiat"))
+    security = FinanceSecurity(ticker="SATS", name="Sub-cent Asset")
+    session.add(security)
+    await session.commit()
+    await session.refresh(security)
+    session.add(
+        FinanceSecurityPrice(
+            security_id=security.id,
+            price_date=date(2026, 3, 1),
+            close_price=123_456_789,  # 1.23456789 units at scale 8
+            price_scale=8,
+            source="manual",
+        )
+    )
+    await session.commit()
+
+    result = await ai_tools.quote("SATS")
+
+    assert result["close_cents"] == 123  # 123.456789 cents, rounded half up
+
+
+async def test_quote_unknown_ticker_reports_not_found(
+    session: AsyncSession,
+) -> None:
+    result = await ai_tools.quote("ZZZZ")
+
+    assert result["found"] is False
+{% endif %}

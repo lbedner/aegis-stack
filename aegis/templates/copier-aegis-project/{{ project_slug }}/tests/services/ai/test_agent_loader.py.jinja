@@ -63,6 +63,22 @@ class TestResolveFromDb:
             max_tokens=512,
         )
 
+    async def test_code_mode_flag_survives_resolution(
+        self, session: AsyncSession
+    ) -> None:
+        await _add_agent(session, code_mode=True)
+
+        config = await resolve_agent("support", session=session)
+
+        assert config.code_mode is True
+
+    async def test_code_mode_defaults_off(self, session: AsyncSession) -> None:
+        await _add_agent(session)
+
+        config = await resolve_agent("support", session=session)
+
+        assert config.code_mode is False
+
     async def test_only_active_tools_are_exposed(self, session: AsyncSession) -> None:
         agent = await _add_agent(session)
         active = Tool(name="lookup")

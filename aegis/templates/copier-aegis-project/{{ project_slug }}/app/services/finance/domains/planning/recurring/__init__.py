@@ -25,6 +25,7 @@ from app.services.finance.domains.planning.recurring.streams import (
     _STREAM_DIRECTIONS,
     _STREAM_FREQUENCIES,
     attach_transaction_to_stream,
+    card_payment_stream_ids,
     confirm_recurring,
     create_recurring_stream,
     delete_recurring,

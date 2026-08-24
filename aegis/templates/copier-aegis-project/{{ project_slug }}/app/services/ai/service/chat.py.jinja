@@ -13,7 +13,10 @@ from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 {% endif %}
 from app.core.log import logger
 from app.services.ai.config import AIServiceConfig
-from app.services.ai.domains.chat.agent_loader import resolve_agent
+from app.services.ai.domains.chat.agent_loader import (
+    DEFAULT_AGENT_SLUG,
+    resolve_agent,
+)
 from app.services.ai.models import Conversation, ConversationMessage, MessageRole
 from app.services.ai.service.base import (
     AIServiceError,
@@ -24,7 +27,14 @@ from app.services.ai.service.base import (
 )
 from app.services.ai.service.prompt import PromptMixin
 {%- if ai_backend != "memory" %}
+from app.services.ai.domains.chat.module_context import render_memory_modules
 from app.services.ai.domains.chat.user_memory import build_user_memory_context
+{%- endif %}
+{%- if include_finance and ai_backend != "memory" %}
+# Importing registers the finance host tools (ledger, accounts, quote)
+# so DB-granted names resolve in every process that serves chat - the
+# API, the CLI, and code-mode agents alike.
+import app.services.finance.ai_tools  # noqa: F401
 {%- endif %}
 {% if ai_rag %}
 from app.services.ai.domains.chat.rag_context import RAGContext
@@ -39,6 +49,8 @@ class ChatMixin(PromptMixin):
         message: str,
         conversation_id: str | None = None,
         user_id: str = "default",
+        agent_slug: str | None = None,
+        surface: str | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -52,6 +64,7 @@ class ChatMixin(PromptMixin):
             message: The user's message
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
+            agent_slug: Agent row to speak as (None = the default agent)
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -73,12 +86,15 @@ class ChatMixin(PromptMixin):
             # Get fresh config for metadata (reflects current .env after use-provider)
             current = self.config
 
-            # Resolve the active agent definition (DB row or code default)
-            agent_config = await resolve_agent()
+            # Resolve the requested agent definition (DB row or code default)
+            if agent_slug:
+                agent_config = await resolve_agent(agent_slug)
+            else:
+                agent_config = await resolve_agent()
 
             # Setup conversation and add user message
             conversation = self._setup_conversation(
-                message, conversation_id, user_id, config=current
+                message, conversation_id, user_id, config=current, surface=surface
             )
 
 {% if ai_rag %}
@@ -96,15 +112,26 @@ class ChatMixin(PromptMixin):
             # Build health context (always included, refreshed per message)
             health_context, health_warning = await self._build_health_context()
 
-            # Build usage context for self-awareness
-            usage_context = self._build_usage_context()
-
-            # Build LLM catalog context
-            catalog_context = self._build_catalog_context()
+            # Usage and model-catalog self-awareness belong to the
+            # default ops assistant; custom agents (a finance analyst,
+            # say) would pay their token cost every turn without ever
+            # using them.
+            is_default_agent = (
+                agent_config is None or agent_config.slug == DEFAULT_AGENT_SLUG
+            )
+            usage_context = self._build_usage_context() if is_default_agent else None
+            catalog_context = (
+                self._build_catalog_context() if is_default_agent else None
+            )
 
 {% if ai_backend != "memory" %}
             # Guarded per-user memory block (saved via the save_memory tool)
             memory_context = await build_user_memory_context(user_id)
+
+            # The agent row's memory modules (e.g. the finance snapshot)
+            agent_modules_context = await render_memory_modules(
+                agent_config.memory_modules, user_id=user_id
+            )
 
 {% endif %}
 {% if ai_rag %}
@@ -127,6 +154,7 @@ class ChatMixin(PromptMixin):
                 agent_config=agent_config,
 {% if ai_backend != "memory" %}
                 memory_context=memory_context,
+                agent_modules_context=agent_modules_context,
 {% endif %}
             )
 
@@ -215,6 +243,7 @@ class ChatMixin(PromptMixin):
         conversation_id: str | None,
         user_id: str,
         config: AIServiceConfig | None = None,
+        surface: str | None = None,
     ) -> Conversation:
         """
         Get or create conversation and add user message.
@@ -224,6 +253,8 @@ class ChatMixin(PromptMixin):
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
             config: Optional fresh config (uses self.config if not provided)
+            surface: Originating chat surface, recorded on new conversations
+                so each embedded chat lists only its own history
 
         Returns:
             Conversation: The conversation with user message added
@@ -244,6 +275,12 @@ class ChatMixin(PromptMixin):
                 provider=cfg.provider,
                 model=cfg.model,
                 user_id=user_id,
+                surface=surface,
+            )
+            # First message names the conversation; history lists need a
+            # human hook, not a UUID.
+            conversation.title = (
+                message if len(message) <= 60 else f"{message[:57]}..."
             )
 
         # Add user message to conversation

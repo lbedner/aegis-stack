@@ -43,7 +43,7 @@ dependencies = [
     # references (e.g. ``cls: type[TyperCommand] | None``) that fail at
     # class-body evaluation on Python 3.11/3.12. CI runs on 3.11 — pin
     # below the regressed range until typer ships a fix.
-    "typer==0.27.0",
+    "typer==0.27.1",
     # 9.15.x relocates .copier-answers.yml out of the generated project dir
     # (with _subdirectory + {{ project_slug }} wrapper), which breaks
     # `aegis update`. The ceiling MUST stay below 9.15 — `<9.16`/`<9.17`

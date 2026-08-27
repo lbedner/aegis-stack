@@ -10,10 +10,10 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.chat_kit import ChatScope, DoneFrame, ToolChatAgent
-from app.services.ai.models.agents import AgentUserMemory
 from app.services.ai.domains.chat.tools import resolve_tools
 import app.services.ai.domains.chat.user_memory as user_memory_module
 from app.services.ai.domains.chat.user_memory import current_user_id
+from app.services.ai.models.agents import AgentUserMemory
 
 
 @dataclass
@@ -42,18 +42,19 @@ async def test_model_driven_save_memory_persists_a_fact(
         recorder=lambda **kwargs: 0.0,
     )
 
-    token = current_user_id.set("u7")
-    try:
-        frames = [
-            f
-            async for f in agent.stream_turn(
-                scope=ChatScope(user_id="u7", surface="test"),
-                deps=_Deps(1),
-                message="remember this",
-            )
-        ]
-    finally:
-        current_user_id.reset(token)
+    # The scope's user is the ONLY identity the turn is given: the runtime
+    # binds it for the tool. A test that set the ContextVar itself would
+    # pass against a runtime that never binds it - which is what shipped.
+    frames = [
+        f
+        async for f in agent.stream_turn(
+            scope=ChatScope(user_id="u7", surface="test"),
+            deps=_Deps(1),
+            message="remember this",
+        )
+    ]
+
+    assert current_user_id.get() is None  # restored after the turn
 
     done = frames[-1]
     assert isinstance(done, DoneFrame)

@@ -30,6 +30,7 @@ from app.components.frontend.controls.status_dot import status_dot
 from app.components.frontend.theme import AegisTheme as Theme
 
 from .base_popup import BasePopup
+from .user_facts_section import UserFactsSection
 
 STATIC_SOURCE = "static text"
 FETCHER_SOURCE = "fetcher"
@@ -289,11 +290,6 @@ class MemoryModuleEditPopup(BasePopup):
         if self._preview_box.page is not None:
             self._preview_box.update()
 
-    def _close(self) -> None:
-        self.open = False
-        if self.page is not None:
-            self.page.update()
-
     async def _handle_save(self) -> None:
         from app.components.frontend.state.session_state import get_session_state
 
@@ -325,12 +321,12 @@ class MemoryModuleEditPopup(BasePopup):
             ).launch(self._page)
             return
 
-        self._close()
+        self.close()
         if self._on_saved is not None:
             await self._on_saved()
 
     async def _handle_cancel(self) -> None:
-        self._close()
+        self.close()
 
 
 class MemoryModulesTab(ft.Container):
@@ -341,6 +337,7 @@ class MemoryModulesTab(ft.Container):
         self.expand = True
         self.padding = ft.padding.all(Theme.Spacing.LG)
         self._modules: list[dict[str, Any]] = []
+        self._facts_section = UserFactsSection()
         self._content_column = ft.Column(
             [SecondaryText("Loading memory modules...")],
             spacing=0,
@@ -400,9 +397,15 @@ class MemoryModulesTab(ft.Container):
             ),
             ft.Container(height=Theme.Spacing.SM),
             table,
+            ft.Container(height=Theme.Spacing.LG),
+            self._facts_section,
         ]
         self._content_column.scroll = ft.ScrollMode.AUTO
         self.update()
+        # Facts load after the modules table is on the page: the section
+        # renders into a mounted slot.
+        if self.page:
+            self.page.run_task(self._facts_section.load, self.page)
 
     def _on_row_click(self, index: int) -> None:
         if not 0 <= index < len(self._modules):

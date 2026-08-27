@@ -11,19 +11,17 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from tests.services._finance_factories import seed_account as _account
 from app.services.finance.domains.detection import detect_transfers
-from app.services.finance.service import FinanceService
 from app.services.finance.models import FinanceCategory, FinanceTransfer
-
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
 
 
 class TestTransferDetection:
     @pytest.mark.asyncio
     async def test_credit_card_payment_auto_pairs_and_excludes_spend(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         card = await _account(svc, "Card", "credit_card", "liability")
         category = FinanceCategory(
@@ -70,9 +68,8 @@ class TestTransferDetection:
 
     @pytest.mark.asyncio
     async def test_near_miss_is_suggested_not_hidden_then_confirm(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         savings = await _account(svc, "Savings", "savings", "asset")
         out = await svc.create_transaction(
@@ -108,9 +105,8 @@ class TestTransferDetection:
 
     @pytest.mark.asyncio
     async def test_reject_leaves_legs_and_never_resuggests(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         savings = await _account(svc, "Savings", "savings", "asset")
         out = await svc.create_transaction(
@@ -146,9 +142,8 @@ class TestTransferDetection:
 
     @pytest.mark.asyncio
     async def test_same_account_opposite_signs_not_paired(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         await svc.create_transaction(
             account_id=checking.id,
@@ -172,11 +167,10 @@ class TestTransferDetection:
 
     @pytest.mark.asyncio
     async def test_old_history_outside_the_lookback_is_left_alone(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A decade-deep import must not bury Review under ancient pairs;
         only activity inside the configured lookback window is considered."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         savings = await _account(svc, "Savings", "savings", "asset")
         await svc.create_transaction(
@@ -208,9 +202,8 @@ class TestTransferDetection:
 
     @pytest.mark.asyncio
     async def test_one_sided_stays_visible(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         out = await svc.create_transaction(
             account_id=checking.id,
@@ -257,9 +250,8 @@ class TestCategoryClassifiedTransfers:
 
     @pytest.mark.asyncio
     async def test_a_transfer_categorized_row_is_flagged_without_a_pair(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         category = await _transfer_category(async_db_session)
         txn = await svc.create_transaction(
@@ -281,11 +273,10 @@ class TestCategoryClassifiedTransfers:
 
     @pytest.mark.asyncio
     async def test_the_inflow_side_is_flagged_too(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """ "Transfer In" from an unseen account inflates income the same
         way the outflow side inflates spending."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         category = await _transfer_category(async_db_session, "Transfer In")
         txn = await svc.create_transaction(
@@ -305,9 +296,8 @@ class TestCategoryClassifiedTransfers:
 
     @pytest.mark.asyncio
     async def test_an_expense_categorized_row_is_untouched(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         groceries = FinanceCategory(
             owner_user_id=None,
@@ -335,12 +325,11 @@ class TestCategoryClassifiedTransfers:
 
     @pytest.mark.asyncio
     async def test_pairing_still_wins_when_both_legs_exist(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The category flag is the fallback, not a replacement: two legs
         that CAN pair still get the full pairing (cross-link, transfer
         row, credit-card detection), not two disconnected flags."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         card = await _account(svc, "Card", "credit_card", "liability")
         category = await _transfer_category(async_db_session)
@@ -371,14 +360,13 @@ class TestCategoryClassifiedTransfers:
 
     @pytest.mark.asyncio
     async def test_old_rows_are_flagged_despite_the_pairing_lookback(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Pairing has a lookback because deep history accumulates
         COINCIDENTAL amount matches. A category classification is not a
         coincidence - it is what the row says it is, at any age. The live
         rows this exists for span years, and the 6-month spending figures
         they inflate need all of them cleared, not the last 90 days."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         category = await _transfer_category(async_db_session)
         txn = await svc.create_transaction(
@@ -400,11 +388,10 @@ class TestCategoryClassifiedTransfers:
 class TestRecategorizeSyncsTheFlag:
     @pytest.mark.asyncio
     async def test_categorizing_as_a_transfer_flags_immediately(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Fixing a miscategorized card payment by hand must fix the
         numbers in the same gesture, not on the next import."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         category = await _transfer_category(async_db_session)
         txn = await svc.create_transaction(
@@ -422,10 +409,9 @@ class TestRecategorizeSyncsTheFlag:
 
     @pytest.mark.asyncio
     async def test_recategorizing_away_unflags_a_category_flag(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """ "Actually that was real spending" has to bring the money back."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         category = await _transfer_category(async_db_session)
         groceries = FinanceCategory(
@@ -456,12 +442,11 @@ class TestRecategorizeSyncsTheFlag:
 
     @pytest.mark.asyncio
     async def test_recategorizing_a_paired_leg_keeps_the_pairing(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A pairing is evidence from both sides of the money; a category
         edit on one leg must not dissolve it. Un-pairing is Review's
         reject, which restores both legs together."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         card = await _account(svc, "Card", "credit_card", "liability")
         groceries = FinanceCategory(
@@ -527,9 +512,8 @@ class TestAdjustmentPairs:
 
     @pytest.mark.asyncio
     async def test_an_adjustment_pair_drops_out_of_reports(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         card = await _account(svc, "Amex", "credit_card", "liability")
         debit, credit = await self._pair(
             svc,
@@ -554,11 +538,10 @@ class TestAdjustmentPairs:
 
     @pytest.mark.asyncio
     async def test_a_same_day_purchase_and_refund_is_left_alone(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The token gate is the safety: equal-and-opposite alone must not
         vanish a real purchase refunded the same day."""
-        svc = FinanceService(async_db_session)
         card = await _account(svc, "Amex", "credit_card", "liability")
         buy, refund = await self._pair(
             svc,
@@ -580,9 +563,8 @@ class TestAdjustmentPairs:
 
     @pytest.mark.asyncio
     async def test_unbalanced_amounts_never_flag(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         card = await _account(svc, "Amex", "credit_card", "liability")
         await svc.create_transaction(
             account_id=card.id,
@@ -607,11 +589,10 @@ class TestAdjustmentPairs:
 
     @pytest.mark.asyncio
     async def test_different_days_never_flag(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A reversal that lands the NEXT day is plausible but ambiguous;
         the rule stays strict and leaves it for a human."""
-        svc = FinanceService(async_db_session)
         card = await _account(svc, "Amex", "credit_card", "liability")
         await svc.create_transaction(
             account_id=card.id,
@@ -636,9 +617,8 @@ class TestAdjustmentPairs:
 
     @pytest.mark.asyncio
     async def test_a_rerun_is_idempotent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         card = await _account(svc, "Amex", "credit_card", "liability")
         await self._pair(
             svc,
@@ -661,11 +641,10 @@ class TestAdjustmentPairs:
 
     @pytest.mark.asyncio
     async def test_two_same_amount_pairs_flag_one_to_one(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Three debits against two credits of one amount: exactly two
         pairs form; the odd debit stays in reports."""
-        svc = FinanceService(async_db_session)
         card = await _account(svc, "Amex", "credit_card", "liability")
         day = date(2026, 7, 17)
         for _ in range(3):
@@ -693,12 +672,11 @@ class TestAdjustmentPairs:
 
     @pytest.mark.asyncio
     async def test_old_pairs_are_caught_without_a_lookback(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Same reasoning as the category phase: an offsetting adjustment
         pair is not a coincidence at any age, and a 2024 pair inflates
         every historical figure until it is neutralized."""
-        svc = FinanceService(async_db_session)
         card = await _account(svc, "Amex", "credit_card", "liability")
         debit, credit = await self._pair(
             svc,
@@ -742,8 +720,11 @@ class TestPaymentHistoryPairing:
             (card, cents, "AUTOPAY PAYMENT - THANK YOU"),
         ):
             txn = await svc.create_transaction(
-                account_id=account.id, amount=amount, txn_date=day,
-                owner_user_id=1, name=name,
+                account_id=account.id,
+                amount=amount,
+                txn_date=day,
+                owner_user_id=1,
+                name=name,
             )
             txn.is_transfer = True
             txn.excluded_from_reports = True
@@ -754,16 +735,17 @@ class TestPaymentHistoryPairing:
 
     @pytest.mark.asyncio
     async def test_old_flagged_payments_pair_confirmed(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking, card = await self._accounts(svc)
         out_leg, in_leg = await self._flagged_pair(
             svc, async_db_session, checking, card, date(2025, 6, 10), 170_490
         )
 
         result = await detect_transfers(
-            async_db_session, owner_user_id=1, today=date(2026, 8, 9),
+            async_db_session,
+            owner_user_id=1,
+            today=date(2026, 8, 9),
             lookback_days=90,
         )
 
@@ -784,22 +766,26 @@ class TestPaymentHistoryPairing:
 
     @pytest.mark.asyncio
     async def test_old_asset_to_asset_history_is_left_alone(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The precision comes FROM the liability destination; without it
         this is exactly the coincidental-match noise the lookback exists
         to prevent."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         savings = await _account(svc, "Savings", "savings", "asset")
         for account, amount in ((checking, -50_000), (savings, 50_000)):
             await svc.create_transaction(
-                account_id=account.id, amount=amount,
-                txn_date=date(2025, 6, 10), owner_user_id=1, name="TRANSFER",
+                account_id=account.id,
+                amount=amount,
+                txn_date=date(2025, 6, 10),
+                owner_user_id=1,
+                name="TRANSFER",
             )
 
         result = await detect_transfers(
-            async_db_session, owner_user_id=1, today=date(2026, 8, 9),
+            async_db_session,
+            owner_user_id=1,
+            today=date(2026, 8, 9),
             lookback_days=90,
         )
 
@@ -807,21 +793,25 @@ class TestPaymentHistoryPairing:
 
     @pytest.mark.asyncio
     async def test_amounts_must_match_exactly(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking, card = await self._accounts(svc)
         for account, amount, name in (
             (checking, -170_490, "American Express"),
             (card, 170_400, "AUTOPAY PAYMENT"),
         ):
             await svc.create_transaction(
-                account_id=account.id, amount=amount,
-                txn_date=date(2025, 6, 10), owner_user_id=1, name=name,
+                account_id=account.id,
+                amount=amount,
+                txn_date=date(2025, 6, 10),
+                owner_user_id=1,
+                name=name,
             )
 
         result = await detect_transfers(
-            async_db_session, owner_user_id=1, today=date(2026, 8, 9),
+            async_db_session,
+            owner_user_id=1,
+            today=date(2026, 8, 9),
             lookback_days=90,
         )
 
@@ -829,20 +819,23 @@ class TestPaymentHistoryPairing:
 
     @pytest.mark.asyncio
     async def test_a_rerun_pairs_nothing_twice(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking, card = await self._accounts(svc)
         await self._flagged_pair(
             svc, async_db_session, checking, card, date(2025, 6, 10), 170_490
         )
 
         first = await detect_transfers(
-            async_db_session, owner_user_id=1, today=date(2026, 8, 9),
+            async_db_session,
+            owner_user_id=1,
+            today=date(2026, 8, 9),
             lookback_days=90,
         )
         second = await detect_transfers(
-            async_db_session, owner_user_id=1, today=date(2026, 8, 9),
+            async_db_session,
+            owner_user_id=1,
+            today=date(2026, 8, 9),
             lookback_days=90,
         )
 

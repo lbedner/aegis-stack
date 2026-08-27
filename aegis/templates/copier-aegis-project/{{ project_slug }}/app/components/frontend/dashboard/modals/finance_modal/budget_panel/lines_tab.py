@@ -34,6 +34,9 @@ from app.components.frontend.dashboard.modals.finance_modal.budget_cards import 
 from app.components.frontend.dashboard.modals.finance_modal.budget_panel.base import (
     BudgetPanelState,
 )
+from app.components.frontend.dashboard.modals.finance_modal.budget_panel.one_time import (
+    one_time_section,
+)
 from app.components.frontend.dashboard.modals.finance_modal.formatting import (
     _parse_dollars,
     _usd,
@@ -58,19 +61,26 @@ class LinesTabMixin(BudgetPanelState):
             bucket = buckets.get(key) or {}
             lines = bucket.get("lines", []) or []
             rows += len(lines)
-            total += sum(line.get("amount", 0) or 0 for line in lines)
+            total += sum(line.get("allocated_amount", 0) or 0 for line in lines)
+        one_time_total = sum(
+            line.get("allocated_amount", 0) or 0
+            for line in (buckets.get("one_time") or {}).get("lines", []) or []
+        )
 
         def _toggle(_e: ft.ControlEvent) -> None:
             self._show_commitments = not self._show_commitments
             self._render()
 
+        label = (
+            f"{_usd(total)}/month already committed across "
+            f"{rows:,} bill{'s' if rows != 1 else ''}"
+        )
+        if one_time_total:
+            label += f", plus {_usd(one_time_total)} one-time"
         return ft.Container(
             content=ft.Row(
                 [
-                    SecondaryText(
-                        f"{_usd(total)}/month already committed across "
-                        f"{rows:,} bill{'s' if rows != 1 else ''}"
-                    ),
+                    SecondaryText(label),
                     ft.Container(expand=True),
                     SecondaryText(
                         "Hide bills" if self._show_commitments else "Show bills",
@@ -93,6 +103,27 @@ class LinesTabMixin(BudgetPanelState):
             ink=True,
             on_click=_toggle,
         )
+
+    def _commitment_sections(self, buckets: dict[str, Any]) -> list[ft.Control]:
+        """The sections behind the Show-bills toggle, in render order."""
+        sections: list[ft.Control] = [
+            self._commitment_section(
+                "Fixed",
+                "Recurring, same amount every cycle - nothing to decide here",
+                buckets.get("fixed"),
+                "Not budgeted, just shown",
+            ),
+            self._commitment_section(
+                "Non-monthly",
+                "Real, recurring, just not every cycle - set aside a "
+                "monthly slice so it doesn't ambush you",
+                buckets.get("non_monthly"),
+                "Set aside",
+            ),
+        ]
+        if one_time := one_time_section(buckets.get("one_time")):
+            sections.append(one_time)
+        return sections
 
     # -- Fixed / Non-monthly: context only, no limit to set or remove ----
 

@@ -247,9 +247,15 @@ class Dropdown(ft.Container):
         self._panel_frame.top = trigger_top + self._trigger_height + self._anchor_gap
         if self._align == "right":
             # Right edge of the panel meets the right edge of the trigger.
-            self._panel_frame.left = trigger_left + self._trigger_width - width
+            left = trigger_left + self._trigger_width - width
         else:
-            self._panel_frame.left = trigger_left
+            left = trigger_left
+        # A trigger near the screen's left edge pushes a right-aligned
+        # panel to negative x (confirmed live: the strip's leftmost cell
+        # opened its popup half off-screen). Clamping needs no page
+        # dimensions - it only ever moves the panel right - so it is
+        # safe in this coordinate space at any zoom.
+        self._panel_frame.left = max(float(Theme.Spacing.MD), left)
         self._panel_frame.right = None
         self._set_open(True)
 

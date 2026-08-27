@@ -16,26 +16,11 @@ from app.components.frontend.dashboard.modals.finance_modal import (
     transaction_tag_chips,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from tests.components.frontend._tree import texts as _texts
+from tests.components.frontend._tree import walk as _walk
 
 FLAGGED = {"id": 7, "name": "Flagged", "color": None}
 TAX = {"id": 8, "name": "Tax 2026", "color": "#F5A623"}
-
-
-def _walk(node):
-    if node is None:
-        return
-    yield node
-    for child in getattr(node, "controls", None) or []:
-        yield from _walk(child)
-    yield from _walk(getattr(node, "content", None))
-
-
-def _texts(node) -> list[str]:
-    return [
-        str(n.value)
-        for n in _walk(node)
-        if isinstance(getattr(n, "value", None), str) and n.value
-    ]
 
 
 class TestRowChips:

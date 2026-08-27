@@ -149,6 +149,153 @@ async def test_account_and_valuation_flow(
 
 
 @pytest.mark.asyncio
+async def test_bulk_valuation_ingest_from_a_pasted_series(
+    authenticated_client: TestClient,
+) -> None:
+    """FW-03 acceptance: a decade of monthly estimates arrives as one paste,
+    labelled with where it came from."""
+    created = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "House Bedner",
+            "account_type": "property",
+            "classification": "asset",
+        },
+    )
+    account_id = created.json()["id"]
+
+    ingested = authenticated_client.post(
+        f"/api/v1/finance/accounts/{account_id}/valuations/bulk",
+        json={
+            "text": "Date\tThis home\nAug 2026\t$711.2K\nJul 2026\t$708.5K\n",
+            "source": "zillow",
+            "is_estimate": True,
+        },
+    )
+
+    assert ingested.status_code == 200
+    assert ingested.json()["added"] == 2
+
+    series = authenticated_client.get(
+        f"/api/v1/finance/accounts/{account_id}/valuations"
+    )
+    assert series.json()["total"] == 2
+    assert {v["source"] for v in series.json()["items"]} == {"zillow"}
+
+    accounts = authenticated_client.get("/api/v1/finance/accounts")
+    house = next(a for a in accounts.json()["items"] if a["id"] == account_id)
+    assert house["current_balance"] == 71_120_000  # the newest row
+
+
+@pytest.mark.asyncio
+async def test_bulk_ingest_reports_an_unreadable_line(
+    authenticated_client: TestClient,
+) -> None:
+    """Rejecting the paste beats importing 118 of 121 rows silently."""
+    created = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "House",
+            "account_type": "property",
+            "classification": "asset",
+        },
+    )
+    account_id = created.json()["id"]
+
+    bad = authenticated_client.post(
+        f"/api/v1/finance/accounts/{account_id}/valuations/bulk",
+        json={"text": "Aug 2026\t$711.2K\nnonsense line\n", "source": "zillow"},
+    )
+
+    assert bad.status_code == 400
+    assert "nonsense" in bad.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_property_details_round_trip(
+    authenticated_client: TestClient,
+) -> None:
+    """FW-02 acceptance: a property carries how it was bought and where its
+    current number came from, and reads back on the account."""
+    created = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "House Bedner",
+            "account_type": "property",
+            "classification": "asset",
+        },
+    )
+    account_id = created.json()["id"]
+
+    saved = authenticated_client.patch(
+        f"/api/v1/finance/accounts/{account_id}/property",
+        json={
+            "purchase_price": 285_000_00,
+            "purchase_date": "2016-08-01",
+            "down_payment": 57_000_00,
+            "valuation_source": "user",
+            "valuation_as_of": "2026-08-01",
+            "address_label": "House Bedner",
+        },
+    )
+
+    assert saved.status_code == 200
+    body = saved.json()
+    assert body["property"]["purchase_price"] == 285_000_00
+    assert body["property"]["valuation_source"] == "user"
+
+    listed = authenticated_client.get("/api/v1/finance/accounts")
+    house = next(a for a in listed.json()["items"] if a["id"] == account_id)
+    assert house["property"]["down_payment"] == 57_000_00
+
+
+@pytest.mark.asyncio
+async def test_property_details_reject_a_bad_figure(
+    authenticated_client: TestClient,
+) -> None:
+    """The model is the boundary: a rejected write is a 400, not a stored
+    blob nobody validates again."""
+    created = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "House",
+            "account_type": "property",
+            "classification": "asset",
+        },
+    )
+    account_id = created.json()["id"]
+
+    bad = authenticated_client.patch(
+        f"/api/v1/finance/accounts/{account_id}/property",
+        json={"purchase_price": 100, "down_payment": 101},
+    )
+
+    assert bad.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_property_details_on_a_cash_account_are_refused(
+    authenticated_client: TestClient,
+) -> None:
+    created = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "Checking",
+            "account_type": "checking",
+            "classification": "asset",
+        },
+    )
+    account_id = created.json()["id"]
+
+    refused = authenticated_client.patch(
+        f"/api/v1/finance/accounts/{account_id}/property",
+        json={"purchase_price": 1},
+    )
+
+    assert refused.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_valuation_repost_updates_in_place(
     authenticated_client: TestClient,
 ) -> None:
@@ -2566,13 +2713,17 @@ class TestBudgetStatDetails:
             next_expected_date=date_cls(2026, 9, 1),
             account_id=account.id,
         )
-        await svc.create_transaction(
-            account_id=account.id,
-            amount=-9_000,
-            txn_date=date_cls(2026, 7, 2),
-            owner_user_id=acting_owner_user_id,
-            name="Cash",
-        )
+        # Two months of it: uncovered spending seen in only one month is
+        # reported as a one-off, not amortized into the rate this cell
+        # shows (see TestOneOffsDoNotBecomeARate).
+        for month in (6, 7):
+            await svc.create_transaction(
+                account_id=account.id,
+                amount=-9_000,
+                txn_date=date_cls(2026, month, 2),
+                owner_user_id=acting_owner_user_id,
+                name="Cash",
+            )
         await async_db_session.commit()
 
         response = authenticated_client.get("/api/v1/finance/budget/stat-details")

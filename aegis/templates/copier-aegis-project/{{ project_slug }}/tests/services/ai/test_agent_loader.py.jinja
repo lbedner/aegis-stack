@@ -9,6 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.ai.domains.chat.agent_loader import (
     DEFAULT_AGENT_SLUG,
     AgentConfig,
+    agent_capabilities,
     default_agent_config,
     invalidate_agent_cache,
     resolve_agent,
@@ -97,6 +98,54 @@ class TestResolveFromDb:
         config = await resolve_agent("support", session=session)
 
         assert config.tool_names == ("lookup",)
+
+
+class TestCodeModeSplitsReadsFromWrites:
+    """Code mode sandboxes the data tools, never the memory writes.
+
+    A tool inside the sandbox is called by generated Python; a write the
+    user should be able to see in the tool trail has to stay a native
+    call. This is also the seam the propose/approve queue needs later.
+    """
+
+    def _code_mode_tools(self, config: AgentConfig) -> list[str]:
+        capabilities = agent_capabilities(config)
+        code_mode = next(
+            cap for cap in capabilities if type(cap).__name__ == "CodeMode"
+        )
+        return list(code_mode.tools)
+
+    def test_write_tools_stay_native(self) -> None:
+        config = AgentConfig(
+            slug="finance-assistant",
+            name="Finance Assistant",
+            system_prompt="...",
+            model_id=None,
+            temperature=0.4,
+            max_tokens=900,
+            tool_names=("ledger", "accounts", "save_memory"),
+            code_mode=True,
+        )
+
+        sandboxed = self._code_mode_tools(config)
+
+        assert "ledger" in sandboxed
+        assert "accounts" in sandboxed
+        assert "save_memory" not in sandboxed
+
+    def test_read_only_agent_sandboxes_everything(self) -> None:
+        config = AgentConfig(
+            slug="reader",
+            name="Reader",
+            system_prompt="...",
+            model_id=None,
+            temperature=0.4,
+            max_tokens=900,
+            tool_names=("ledger", "accounts"),
+            code_mode=True,
+        )
+
+        assert self._code_mode_tools(config) == ["ledger", "accounts"]
 
 
 class TestFallback:

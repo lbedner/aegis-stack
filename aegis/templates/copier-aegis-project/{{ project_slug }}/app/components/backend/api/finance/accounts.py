@@ -20,8 +20,11 @@ from app.services.finance.schemas import (
     AccountResponse,
     AccountUpdate,
     ManualAccountCreate,
+    PropertyDetailsUpdate,
     ReconcileRequest,
     ReconcileResponse,
+    ValuationBulkRequest,
+    ValuationBulkResponse,
     ValuationCreateRequest,
     ValuationListResponse,
     ValuationResponse,
@@ -110,6 +113,34 @@ async def update_account(
     return AccountResponse.from_row(account)
 
 
+@router.patch("/accounts/{account_id}/property", response_model=AccountResponse)
+async def update_property_details(
+    account_id: int,
+    body: PropertyDetailsUpdate,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> AccountResponse:
+    """Write a property's purchase, ownership and valuation provenance.
+
+    The contract model validates: a down payment above the price, an
+    unknown source, or a non-property account is a 400 here rather than a
+    blob nobody checks again downstream.
+    """
+    try:
+        account = await service.set_property_details(
+            account_id,
+            owner_user_id=owner_user_id,
+            **body.model_dump(exclude_unset=True),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from None
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return AccountResponse.from_row(account)
+
+
 @router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_account(
     account_id: int,
@@ -187,6 +218,42 @@ async def add_valuation(
         note=body.note,
     )
     return ValuationResponse.from_row(valuation)
+
+
+@router.post(
+    "/accounts/{account_id}/valuations/bulk", response_model=ValuationBulkResponse
+)
+async def ingest_valuations(
+    account_id: int,
+    body: ValuationBulkRequest,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> ValuationBulkResponse:
+    """Ingest a pasted date/value series in one pass.
+
+    All-or-nothing on parse: a block where one line is unreadable is
+    rejected with that line in the message, rather than importing the rest
+    and leaving a hole nobody can see in the history.
+    """
+    from app.services.finance.domains.ledger.series_parsing import parse_series_lines
+
+    try:
+        rows = parse_series_lines(body.text)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from None
+    result = await service.ingest_valuations(
+        account_id,
+        rows=rows,
+        source=body.source,
+        is_estimate=body.is_estimate,
+        note=body.note,
+        owner_user_id=owner_user_id,
+    )
+    return ValuationBulkResponse(
+        added=result.added, updated=result.updated, total=result.total
+    )
 
 
 @router.get("/accounts/{account_id}/valuations", response_model=ValuationListResponse)

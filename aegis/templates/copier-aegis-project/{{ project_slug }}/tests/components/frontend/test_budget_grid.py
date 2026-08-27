@@ -11,6 +11,8 @@ import flet as ft
 from app.components.frontend.dashboard.modals.finance_modal import (
     budget_lines_grid,
 )
+from tests.components.frontend._tree import texts as _texts
+from tests.components.frontend._tree import walk as _walk
 
 
 class TestTheGrid:
@@ -27,19 +29,6 @@ class TestTheGrid:
         rows = [ft.Container() for _ in range(7)]
         grid = budget_lines_grid(rows)
         assert [c.content for c in grid.controls] == rows
-
-
-def _walk(control):
-    yield control
-    child = getattr(control, "content", None)
-    if child is not None:
-        yield from _walk(child)
-    for item in getattr(control, "controls", None) or []:
-        yield from _walk(item)
-
-
-def _texts(control):
-    return [c.value for c in _walk(control) if isinstance(c, ft.Text)]
 
 
 class TestTheCompactRow:
@@ -80,7 +69,9 @@ class TestTheCompactRow:
         from app.components.frontend.theme import AegisTheme as Theme
 
         critical = self._row(spent=179_882, status="critical")
-        pct = next(c for c in _walk(critical) if str(getattr(c, "value", "")).endswith("%"))
+        pct = next(
+            c for c in _walk(critical) if str(getattr(c, "value", "")).endswith("%")
+        )
         assert pct.color == Theme.Colors.ERROR
 
     def test_over_budget_shows_the_real_percent_on_a_full_bar(self) -> None:

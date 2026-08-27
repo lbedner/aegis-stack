@@ -1,16 +1,23 @@
 """Tests for the agent registry models and seed fixtures."""
 {% if ai_backend != "memory" %}
 
+import subprocess
+import sys
+
 import pytest
 from sqlmodel import Session, select
 
+from app.services.ai.domains.chat.prompts import get_default_system_prompt
+from app.services.ai.domains.chat.tools import (
+    register_tool,
+    resolve_tools,
+    unregister_tool,
+)
 from app.services.ai.fixtures.agent_fixtures import (
     DEFAULT_AGENT_SLUG,
     load_agent_fixtures,
 )
 from app.services.ai.models import Agent, AgentTool, Tool
-from app.services.ai.domains.chat.prompts import get_default_system_prompt
-from app.services.ai.domains.chat.tools import register_tool, resolve_tools, unregister_tool
 
 
 @pytest.fixture
@@ -80,6 +87,80 @@ class TestAgentSeed:
             select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
         ).one()
         assert refreshed.system_prompt == "Customized prompt"
+
+
+class TestStartupSeedsTheRegistry:
+    """Nothing in a running project used to call the fixture loaders, so a
+    deployed stack had agents without tools (or no agents at all). Startup
+    owns it now."""
+
+    def test_startup_helper_seeds_agents_and_tool_rows(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from contextlib import contextmanager
+
+        from app.components.backend.startup.agent_registry import seed_agent_registry
+        import app.core.db as core_db
+
+        @contextmanager
+        def _test_session(autocommit: bool = True):  # type: ignore[no-untyped-def]
+            yield session
+
+        monkeypatch.setattr(core_db, "db_session", _test_session)
+
+        counts = seed_agent_registry()
+
+        assert counts["agents"] >= 1
+        assert session.exec(
+            select(Tool).where(Tool.name == "save_memory")
+        ).first() is not None
+
+    def test_reseeding_changes_nothing(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from contextlib import contextmanager
+
+        from app.components.backend.startup.agent_registry import seed_agent_registry
+        import app.core.db as core_db
+
+        @contextmanager
+        def _test_session(autocommit: bool = True):  # type: ignore[no-untyped-def]
+            yield session
+
+        monkeypatch.setattr(core_db, "db_session", _test_session)
+
+        seed_agent_registry()
+        again = seed_agent_registry()
+
+        assert again["agents"] == 0
+        assert again["tools"] == 0
+
+
+class TestBuiltinToolRowsSeed:
+    """A grant is by NAME against a ``tool`` row, so a tool the registry
+    never saw cannot be granted to anything."""
+
+    def test_seeding_alone_registers_the_builtin_tools(self) -> None:
+        """Seeding runs in processes that never build a chat agent (a CLI,
+        a startup hook), and the registry only holds tools whose module was
+        imported. Without the fixtures module importing the built-ins, the
+        sync writes no rows and every later grant silently no-ops.
+
+        Subprocess on purpose: in-process the test suite has already
+        imported half the runtime, which hides exactly this failure.
+        """
+        script = (
+            "from app.services.ai.fixtures import agent_fixtures\n"
+            "from app.services.ai.domains.chat.tools import registered_tool_names\n"
+            "names = set(registered_tool_names())\n"
+            "missing = {'save_memory', 'replace_memory'} - names\n"
+            "assert not missing, f'unregistered: {sorted(missing)}'\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True
+        )
+
+        assert result.returncode == 0, result.stderr
 
 
 class TestAgentToolLink:

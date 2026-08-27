@@ -508,6 +508,9 @@ SERVICES: dict[str, ServiceSpec] = {
                 # so discovery skips it), but it has no business shipping in a
                 # stack that has no AI service.
                 "app/components/backend/startup/llm_active_model.py",
+                # Seeds the agent registry (agents, memory modules, tool
+                # rows) at boot. Pure AI surface, same as the module above.
+                "app/components/backend/startup/agent_registry.py",
                 "app/components/frontend/dashboard/cards/ai_card.py",
                 "app/components/frontend/dashboard/modals/ai_modal.py",
                 "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
@@ -1017,6 +1020,13 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_finance_attach.py",
                 "tests/services/test_finance_investment_import.py",
                 "tests/services/test_finance_goals.py",
+                "tests/services/test_finance_properties.py",
+                "tests/services/test_finance_valuation_history.py",
+                "tests/services/test_finance_series_parsing.py",
+                "tests/components/frontend/test_property_details_ui.py",
+                "tests/components/frontend/test_stat_details.py",
+                "tests/components/frontend/test_budget_panel_render.py",
+                "tests/components/frontend/_payloads.py",
                 "tests/services/test_finance_envelopes.py",
                 "tests/services/test_finance_tags.py",
                 "tests/services/test_finance_delete.py",

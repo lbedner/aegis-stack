@@ -10,7 +10,11 @@ import pytest
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.domains.chat.fetchers import FetchContext, registered_fetcher_names, run_fetcher
+from app.services.ai.domains.chat.fetchers import (
+    FetchContext,
+    registered_fetcher_names,
+    run_fetcher,
+)
 from app.services.ai.models.agents import Agent, MemoryModule
 from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
 from app.services.finance.domains.detection import analyst, generate_insights
@@ -74,18 +78,17 @@ class TestSnapshot:
 
     @pytest.mark.asyncio
     async def test_detected_anomalies_reach_the_agent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The rules' findings are the note's raw material; if they do not
         arrive, the agent has nothing to lead with."""
-        service = FinanceService(async_db_session)
-        account = await service.create_manual_account(
+        account = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
             classification="asset",
         )
-        await service.create_transaction(
+        await svc.create_transaction(
             owner_user_id=OWNER,
             account_id=account.id,
             amount=-3_500,
@@ -106,15 +109,14 @@ class TestSnapshot:
 
     @pytest.mark.asyncio
     async def test_an_anomaly_flood_is_capped_for_the_model(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A historical import can leave hundreds of open findings. A snapshot
         that lists them all outgrows the model's context window, and Ollama
         truncates from the front - discarding the system prompt, after which
         the model asks what it should write about. The section must show the
         most severe few and summarize the rest."""
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
@@ -161,12 +163,11 @@ class TestSnapshot:
 
     @pytest.mark.asyncio
     async def test_the_agents_own_notes_are_not_anomalies(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Notes live in the same table. Feeding yesterday's note back in as a
         finding would have the agent narrating itself."""
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
@@ -194,10 +195,9 @@ class TestSnapshot:
 
     @pytest.mark.asyncio
     async def test_upcoming_bills_are_listed_with_direction(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        account = await service.create_manual_account(
+        account = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
@@ -248,8 +248,8 @@ class TestSnapshotDetailSections:
     """The sections added so the agent stops flying blind on debt, holdings,
     cashflow, the register, and the forecast."""
 
-    async def _checking(self, service, balance: int = 100_000):
-        return await service.create_manual_account(
+    async def _checking(self, svc, balance: int = 100_000):
+        return await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
@@ -259,15 +259,14 @@ class TestSnapshotDetailSections:
 
     @pytest.mark.asyncio
     async def test_credit_card_detail_reaches_the_agent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """APR, minimum payment, due date, and limit are what turn "you owe
         money" into "this card needs attention"."""
         from app.services.finance.models import FinanceLiabilityDetail
 
-        service = FinanceService(async_db_session)
-        await self._checking(service)
-        card = await service.create_manual_account(
+        await self._checking(svc)
+        card = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Amex Gold",
             account_type="credit_card",
@@ -307,12 +306,11 @@ class TestSnapshotDetailSections:
 
     @pytest.mark.asyncio
     async def test_a_bare_liability_adds_no_detail_section(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A loan with only a balance has nothing beyond what ACCOUNTS already
         says; repeating it would just spend context."""
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Mortgage",
             account_type="loan",
@@ -329,12 +327,11 @@ class TestSnapshotDetailSections:
 
     @pytest.mark.asyncio
     async def test_recent_transactions_are_listed_and_capped(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        account = await self._checking(service)
+        account = await self._checking(svc)
         for i in range(15):
-            await service.create_transaction(
+            await svc.create_transaction(
                 owner_user_id=OWNER,
                 account_id=account.id,
                 amount=-1_000 - i,
@@ -357,13 +354,12 @@ class TestSnapshotDetailSections:
 
     @pytest.mark.asyncio
     async def test_holdings_reach_the_agent_pre_valued(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.models import FinanceHolding, FinanceSecurity
 
-        service = FinanceService(async_db_session)
-        await self._checking(service)
-        brokerage = await service.create_manual_account(
+        await self._checking(svc)
+        brokerage = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Fidelity Brokerage",
             account_type="brokerage",
@@ -401,12 +397,11 @@ class TestSnapshotDetailSections:
 
     @pytest.mark.asyncio
     async def test_the_forecast_warns_when_cash_runs_out(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.models import FinanceRecurringStream
 
-        service = FinanceService(async_db_session)
-        account = await self._checking(service, balance=100_000)
+        account = await self._checking(svc, balance=100_000)
         today = date(2026, 7, 20)
         async_db_session.add(
             FinanceRecurringStream(
@@ -510,32 +505,31 @@ class TestNotesStayOutOfTheAnomalySurfaces:
 
     @pytest.mark.asyncio
     async def test_the_badge_counts_findings_only(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         await self._note_and_finding(async_db_session)
-        service = FinanceService(async_db_session)
 
-        assert await service.count_new_insights(owner_user_id=OWNER) == 1
+        assert await svc.count_new_insights(owner_user_id=OWNER) == 1
 
     @pytest.mark.asyncio
     async def test_a_type_can_be_asked_for(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         await self._note_and_finding(async_db_session)
-        service = FinanceService(async_db_session)
 
-        notes = await service.list_insights(
+        notes = await svc.list_insights(
             owner_user_id=OWNER, insight_type=analyst.ANALYST_NOTE_INSIGHT_TYPE
         )
 
         assert [n.insight_type for n in notes] == [analyst.ANALYST_NOTE_INSIGHT_TYPE]
 
     @pytest.mark.asyncio
-    async def test_a_type_can_be_excluded(self, async_db_session: AsyncSession) -> None:
+    async def test_a_type_can_be_excluded(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
         await self._note_and_finding(async_db_session)
-        service = FinanceService(async_db_session)
 
-        findings = await service.list_insights(
+        findings = await svc.list_insights(
             owner_user_id=OWNER,
             exclude_types=[analyst.ANALYST_NOTE_INSIGHT_TYPE],
         )
@@ -544,13 +538,12 @@ class TestNotesStayOutOfTheAnomalySurfaces:
 
     @pytest.mark.asyncio
     async def test_unfiltered_listing_is_unchanged(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The new arguments are additive; existing callers keep their results."""
         await self._note_and_finding(async_db_session)
-        service = FinanceService(async_db_session)
 
-        everything = await service.list_insights(owner_user_id=OWNER)
+        everything = await svc.list_insights(owner_user_id=OWNER)
 
         assert len(everything) == 2
 
@@ -619,13 +612,11 @@ class TestFixtures:
         ).all()
         assert len(agents) == 1
 
-    def test_chat_agent_gets_code_mode_and_its_tools(
-        self, db_session: Session
-    ) -> None:
+    def test_chat_agent_gets_code_mode_and_its_tools(self, db_session: Session) -> None:
         """The chat agent seeds flagged for code mode with the finance
         tools attached, provided the tool rows exist (registry sync)."""
-        import app.services.finance.ai_tools  # noqa: F401 - registers tools
         from app.services.ai.fixtures.agent_fixtures import load_agent_fixtures
+        import app.services.finance.ai_tools  # noqa: F401 - registers tools
         from app.services.finance.domains.detection.analyst.seeds import (
             FINANCE_CHAT_TOOL_NAMES,
         )
@@ -642,6 +633,36 @@ class TestFixtures:
         ).one()
         assert chat_agent.code_mode is True
         assert {t.name for t in chat_agent.tools} == set(FINANCE_CHAT_TOOL_NAMES)
+        # The memory write: facts the user states (a property value, a bill
+        # the ledger cannot see) outlive the conversation they were said in.
+        assert "save_memory" in {t.name for t in chat_agent.tools}
+
+    def test_a_bare_seed_process_registers_the_chat_tools(self) -> None:
+        """Same trap as the ai built-ins: a seeding process imports the
+        fixture loaders and nothing else, so the finance tool modules must
+        pull themselves in. Unregistered tools get no rows, and every grant
+        against them resolves to nothing.
+
+        Subprocess on purpose - in-process, earlier tests have already
+        imported the tool modules and the hole is invisible.
+        """
+        import subprocess
+        import sys
+
+        script = (
+            "from app.services.ai import fixtures  # noqa: F401\n"
+            "from app.services.ai.domains.chat.tools import registered_tool_names\n"
+            "from app.services.finance.domains.detection.analyst.seeds import (\n"
+            "    FINANCE_CHAT_TOOL_NAMES,\n"
+            ")\n"
+            "missing = set(FINANCE_CHAT_TOOL_NAMES) - set(registered_tool_names())\n"
+            "assert not missing, f'unregistered: {sorted(missing)}'\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True
+        )
+
+        assert result.returncode == 0, result.stderr
 
     def test_an_edited_agent_survives_reseeding(self, db_session: Session) -> None:
         """Both rows are editable from the dashboard; a re-seed must not
@@ -1085,9 +1106,8 @@ class TestSpendingOnPace:
 
     @pytest.mark.asyncio
     async def test_the_norm_is_measured_to_the_same_day_of_month(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
@@ -1121,11 +1141,10 @@ class TestSpendingOnPace:
 
     @pytest.mark.asyncio
     async def test_a_finished_month_is_compared_whole(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """On the last day there is nothing to pro-rate, and truncating
         would understate the norm."""
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
@@ -1317,7 +1336,7 @@ class TestContextHygiene:
 
     @pytest.mark.asyncio
     async def test_the_projection_owns_cash_runway(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The cash_runway finding's BODY freezes the figures from the day
         it was raised; CASH PROJECTION is recomputed live on every build.
@@ -1325,14 +1344,15 @@ class TestContextHygiene:
         while its own bullet named the live one (confirmed on a real note:
         "$216.25 Anthropic" vs "Central Hudson"). One concept, one owner.
         """
-        svc = FinanceService(async_db_session)
         await svc.create_manual_account(
             name="Checking",
             account_type="checking",
             classification="asset",
             owner_user_id=OWNER,
         )
-        from app.services.finance.domains.detection.insights import create_insight_if_new
+        from app.services.finance.domains.detection.insights import (
+            create_insight_if_new,
+        )
 
         await create_insight_if_new(
             async_db_session,
@@ -1442,9 +1462,7 @@ class TestAccountLinesAreNotFakeFacts:
         balance - the transaction sum - and must brief as one, not hide in
         the untracked list telling the model the cash is $0."""
         account = self._account("CHASE SAVINGS", 0, type_="savings")
-        section = analyst._accounts_section(
-            [account], {account.id: 65_930}
-        )
+        section = analyst._accounts_section([account], {account.id: 65_930})
         assert "- CHASE SAVINGS (savings, asset): $659.30" in section
         assert "no recorded balance" not in section
 
@@ -1491,33 +1509,33 @@ class TestContextLabels:
         assert raw_title not in digest
         assert "X" * 61 + "..." in digest
 
+
 class TestGoalsSection:
-    """The analyst knows the goals: progress, ask, and a precomputed ETA
+    r"""The analyst knows the goals: progress, ask, and a precomputed ETA
     ("at \$0/mo: never" spelled out - the model never does the math).
     Absent entirely when no goals exist (context hygiene)."""
 
     @pytest.mark.asyncio
     async def test_goals_ride_the_snapshot(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
             classification="asset",
             current_balance=100_000,
         )
-        vacation = await service.create_virtual_goal(
+        vacation = await svc.create_virtual_goal(
             owner_user_id=OWNER,
             name="Vacation",
             target_amount=300_000,
             monthly_contribution=25_000,
         )
-        await service.contribute_to_goal(
+        await svc.contribute_to_goal(
             vacation.id, amount=120_000, owner_user_id=OWNER, when=date(2026, 8, 1)
         )
-        await service.create_virtual_goal(
+        await svc.create_virtual_goal(
             owner_user_id=OWNER, name="Someday", target_amount=500_000
         )
         await async_db_session.commit()
@@ -1535,10 +1553,9 @@ class TestGoalsSection:
 
     @pytest.mark.asyncio
     async def test_no_goals_no_section(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
@@ -1573,26 +1590,26 @@ class TestGoalsMemory:
         current = analyst.ReportFacts(goals_total_saved=120_000)
         assert analyst.diff_facts(None, current, since=date(2026, 8, 7)) == []
 
+
 class TestEnvelopesSection:
     @pytest.mark.asyncio
     async def test_envelopes_ride_the_snapshot_negative_called_out(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
             classification="asset",
             current_balance=100_000,
         )
-        allowance = await service.create_envelope(
+        allowance = await svc.create_envelope(
             owner_user_id=OWNER, name="Allowance", monthly_credit=4_000
         )
-        await service.spend_from_envelope(
+        await svc.spend_from_envelope(
             allowance.id, amount=1_000, owner_user_id=OWNER, when=date(2026, 8, 5)
         )
-        await service.create_envelope(
+        await svc.create_envelope(
             owner_user_id=OWNER,
             name="Pocket Money",
             monthly_credit=1_000,
@@ -1614,10 +1631,9 @@ class TestEnvelopesSection:
 
     @pytest.mark.asyncio
     async def test_no_envelopes_no_section(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",

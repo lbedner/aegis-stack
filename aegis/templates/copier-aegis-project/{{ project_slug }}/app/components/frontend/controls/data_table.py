@@ -129,18 +129,13 @@ CELL_ELLIPSIS_KWARGS = {
     "max_lines": 1,
     "overflow": ft.TextOverflow.ELLIPSIS,
     "no_wrap": True,
+    "selectable": False,  # the enclosing surface owns selection
 }
 
 
 def style_cell(value: Any, style: str | None) -> ft.Control:
-    """Apply column style to cell value.
-
-    Args:
-        value: Cell value - controls passed through, others converted to styled text
-        style: Column style ("primary", "secondary", "body", or None)
-
-    Returns:
-        Styled Flet control
+    """Apply a column's style to one cell value: controls pass through,
+    everything else becomes styled text.
 
     A value here truncates with an ellipsis rather than wrapping: the row
     it lands in has one fixed height, so a second line just gets clipped
@@ -331,8 +326,6 @@ class DataTableRow(ft.Container):
             # clickable (used for drill-through to a detail view).
             self.on_click = on_click
             self.ink = True
-        # Animation disabled for debugging
-        # self.animate = ft.Animation(150, ft.AnimationCurve.EASE_OUT)
 
     def _on_hover(self, e: ft.ControlEvent) -> None:
         """Handle hover state change.

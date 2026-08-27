@@ -18,8 +18,8 @@ from app.services.finance.constants import (
 DEFAULT_CURRENCY = "usd"
 
 
-def current_period_month() -> int:
-    today = date.today()
+def current_period_month(today: date | None = None) -> int:
+    today = today or date.today()
     return today.year * 100 + today.month
 
 

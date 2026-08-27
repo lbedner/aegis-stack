@@ -34,8 +34,10 @@ from app.services.finance.domains.detection.recurring.detect import (
     _payment_leg,
     _purge_orphaned_proposals,
     _resolve_payee_key,
-    _sibling_streams,
     _upsert_stream,
+)
+from app.services.finance.domains.detection.recurring.resolve import (
+    _sibling_streams,
 )
 from app.services.finance.models import (
     FinanceTransaction,

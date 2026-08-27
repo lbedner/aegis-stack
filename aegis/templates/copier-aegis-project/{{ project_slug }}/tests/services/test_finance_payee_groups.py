@@ -12,7 +12,6 @@ and sends the whole set together.
 from datetime import date
 
 import pytest
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.service import FinanceService
 from tests.services._finance_factories import seed_account as _account
@@ -37,12 +36,11 @@ async def _txn(svc: FinanceService, account_id: int, name: str, day: int):
 class TestPayeeGroups:
     @pytest.mark.asyncio
     async def test_one_brand_shatters_into_many_groups(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """The premise. If these ever collapse on their own the bulk tool
         below is unnecessary - so assert the split explicitly rather than
         assuming it."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         for i, descriptor in enumerate(_DOORDASH):
             await _txn(svc, account.id, descriptor, i + 1)
@@ -54,12 +52,11 @@ class TestPayeeGroups:
 
     @pytest.mark.asyncio
     async def test_totals_describe_the_backlog_not_the_page(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """``total`` used to be ``len(items)``, so a limit of 300 reported
         "300 groups" when there were 2,436 - a truncation that read as a
         complete count."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         for i, descriptor in enumerate(_DOORDASH):
             await _txn(svc, account.id, descriptor, i + 1)
@@ -74,9 +71,8 @@ class TestPayeeGroups:
 
     @pytest.mark.asyncio
     async def test_one_sweep_names_every_selected_group(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         for i, descriptor in enumerate(_DOORDASH):
             await _txn(svc, account.id, descriptor, i + 1)
@@ -92,12 +88,9 @@ class TestPayeeGroups:
         assert (remaining_groups, remaining_txns) == (0, 0)
 
     @pytest.mark.asyncio
-    async def test_unselected_groups_are_left_alone(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_unselected_groups_are_left_alone(self, svc: FinanceService) -> None:
         """A sweep must touch ONLY the checked keys - the whole reason the
         UI shows what it is about to assign."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         for i, descriptor in enumerate(_DOORDASH):
             await _txn(svc, account.id, descriptor, i + 1)
@@ -115,12 +108,9 @@ class TestPayeeGroups:
         assert (remaining_groups, remaining_txns) == (1, 1)  # Starbucks survives
 
     @pytest.mark.asyncio
-    async def test_empty_key_list_is_a_no_op(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_empty_key_list_is_a_no_op(self, svc: FinanceService) -> None:
         """Guards the bulk path: an empty selection must not fall through
         to "matches everything"."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         for i, descriptor in enumerate(_DOORDASH):
             await _txn(svc, account.id, descriptor, i + 1)

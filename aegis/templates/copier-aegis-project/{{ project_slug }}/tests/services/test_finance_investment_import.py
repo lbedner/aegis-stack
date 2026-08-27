@@ -13,7 +13,6 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.service import FinanceService
 from app.services.finance.domains.investments.activity import replay_positions
 from app.services.finance.domains.investments.loader import import_investment_activities
 from app.services.finance.domains.investments.optum import (
@@ -21,6 +20,7 @@ from app.services.finance.domains.investments.optum import (
     parse_optum_settled_transactions,
 )
 from app.services.finance.models import FinanceSecurity, FinanceTrade
+from app.services.finance.service import FinanceService
 
 _FIXTURES = Path(__file__).parent / "finance" / "fixtures"
 
@@ -229,13 +229,12 @@ class TestImportInvestmentActivities:
 class TestRemovedAccountLeavesNoTrace:
     @pytest.mark.asyncio
     async def test_a_removed_accounts_trades_leave_the_all_accounts_lane(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The safe-test-import promise: import into a scratch account,
         remove the account, and nothing of it shows anywhere - including
         the unscoped trades feed, which (unlike transactions) used to keep
         serving a soft-deleted account's rows."""
-        service = FinanceService(async_db_session)
         account_id = await _account(async_db_session)
         activities = parse_optum_settled_transactions(_sample_text())
         await import_investment_activities(
@@ -244,8 +243,8 @@ class TestRemovedAccountLeavesNoTrace:
             account_id=account_id,
             activities=activities,
         )
-        assert len(await service.list_trades(owner_user_id=1)) == 7
+        assert len(await svc.list_trades(owner_user_id=1)) == 7
 
-        assert await service.soft_delete_account(account_id, owner_user_id=1)
+        assert await svc.soft_delete_account(account_id, owner_user_id=1)
 
-        assert await service.list_trades(owner_user_id=1) == []
+        assert await svc.list_trades(owner_user_id=1) == []

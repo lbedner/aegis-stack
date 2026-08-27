@@ -134,12 +134,14 @@ class BudgetsMixin(FinanceServiceBase):
         owner_user_id: int | None = None,
         period_month: int | None = None,
         account_ids: list[int] | None = None,
+        today: date | None = None,
     ) -> BudgetSummaryResponse:
         return await budgets.budget_summary(
             self.db,
             owner_user_id=owner_user_id,
             period_month=period_month,
             account_ids=account_ids,
+            today=today,
         )
 
     async def uncovered_spending_rate(

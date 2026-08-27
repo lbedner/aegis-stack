@@ -44,6 +44,9 @@ from app.services.finance.domains.planning.budgets.summary import (
     budget_stat_details,
     budget_summary,
     plan_budget_trims,
+)
+from app.services.finance.domains.planning.budgets.uncovered import (
+    uncovered_spend,
     uncovered_spend_filters,
     uncovered_spending_rate,
 )
@@ -75,6 +78,7 @@ __all__ = [
     "suggest_budget_lines",
     "suggestions",
     "summary",
+    "uncovered_spend",
     "uncovered_spend_filters",
     "uncovered_spending_rate",
     "upsert_budget_line",

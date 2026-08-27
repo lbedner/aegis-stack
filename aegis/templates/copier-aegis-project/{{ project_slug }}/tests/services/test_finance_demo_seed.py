@@ -177,17 +177,16 @@ class TestSeedDemo:
 
     @pytest.mark.asyncio
     async def test_reset_leaves_real_rows_untouched(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """``--reset`` scopes its deletes to seeded rows, never the user's."""
-        service = FinanceService(async_db_session)
-        real = await service.create_manual_account(
+        real = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Chase Total Checking",  # same name as a demo account
             account_type="checking",
             classification="asset",
         )
-        real_txn = await service.create_transaction(
+        real_txn = await svc.create_transaction(
             owner_user_id=OWNER,
             account_id=real.id,
             amount=-1234,
@@ -199,7 +198,7 @@ class TestSeedDemo:
         await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER, reset=True)
         await async_db_session.commit()
 
-        survivor = await service.get_account(real.id, owner_user_id=OWNER)
+        survivor = await svc.get_account(real.id, owner_user_id=OWNER)
         assert survivor is not None, "reset deleted a real account"
         still_there = (
             await async_db_session.exec(
@@ -265,10 +264,9 @@ class TestForeignAccounts:
 
     @pytest.mark.asyncio
     async def test_counts_the_users_own_accounts(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Real Checking",
             account_type="checking",
@@ -325,21 +323,20 @@ class TestClearDemo:
 
     @pytest.mark.asyncio
     async def test_clear_unflags_surviving_transfer_legs(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A transfer pairing a real leg with a seeded one leaves the real
         transaction flagged out of reports; clearing must hand it back."""
-        service = FinanceService(async_db_session)
         await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
         await async_db_session.commit()
 
-        real_account = await service.create_manual_account(
+        real_account = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Real Checking",
             account_type="checking",
             classification="asset",
         )
-        real_leg = await service.create_transaction(
+        real_leg = await svc.create_transaction(
             owner_user_id=OWNER,
             account_id=real_account.id,
             amount=-75_000,

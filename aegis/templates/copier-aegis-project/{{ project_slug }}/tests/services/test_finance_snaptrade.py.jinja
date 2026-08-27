@@ -7,13 +7,14 @@ network: ``FakeSnapTradeClient`` stands in for ``SnapTradeClient``.
 """
 
 from datetime import date, timedelta
+from unittest.mock import MagicMock
 
 import pytest
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.models import FinanceSecurity
 from app.services.finance.adapters.providers import connections
+from app.services.finance.models import FinanceSecurity
 from app.services.finance.service import FinanceService
 
 _AAPL_FIGI = "BBG000B9XRY4"
@@ -55,14 +56,24 @@ _UNIVERSAL_AAPL = {
     "figi_code": _AAPL_FIGI,
 }
 
+# ``/positions/all`` rows: an ``instrument`` discriminated by ``kind``, with
+# the numeric fields serialized as strings.
 _POSITIONS = {
     "acct-roth": [
         {
-            # Positions nest the UniversalSymbol one level down.
-            "symbol": {"symbol": _UNIVERSAL_AAPL},
-            "units": 10.0,
-            "price": 150.0,
-            "average_purchase_price": 120.0,
+            "instrument": {
+                "kind": "stock",
+                "id": "sym-aapl",
+                "symbol": "AAPL",
+                "raw_symbol": "AAPL",
+                "description": "APPLE INC",
+                "currency": "USD",
+                "figi_instrument": {"figi_code": _AAPL_FIGI},
+            },
+            "units": "10.0",
+            "price": "150.0",
+            "cost_basis": "120.0",
+            "currency": "USD",
         }
     ]
 }
@@ -178,6 +189,32 @@ async def _connect_and_complete(db: AsyncSession, client: FakeSnapTradeClient):
     )
 
 
+class TestSnapTradeClientCalls:
+    """The fake client above cannot see a renamed SDK method - the real
+    client resolves those attributes only at call time, in production. A
+    ``spec``-ed mock of the SDK's own API class is the cheapest place to
+    catch it."""
+
+    @pytest.mark.asyncio
+    async def test_get_positions_hits_the_sdk_and_unwraps_results(self) -> None:
+        from snaptrade_client.apis.tags.account_information_api import (
+            AccountInformationApi,
+        )
+
+        from app.services.finance.adapters.providers.snaptrade import SnapTradeClient
+
+        row = {"instrument": {"id": "sym-aapl", "kind": "stock"}, "units": "10.0"}
+        api = MagicMock(spec=AccountInformationApi)
+        api.get_all_account_positions.return_value = MagicMock(body={"results": [row]})
+        client = SnapTradeClient(client_id="cid", consumer_key="key")
+        client._client = MagicMock(account_information=api)
+
+        assert await client.get_positions("u", "s", "acct-roth") == [row]
+        api.get_all_account_positions.assert_called_once_with(
+            user_id="u", user_secret="s", account_id="acct-roth"
+        )
+
+
 class TestSnapTradeConnect:
     @pytest.mark.asyncio
     async def test_start_creates_pending_row_with_encrypted_secret(
@@ -225,7 +262,7 @@ class TestSnapTradeConnect:
 
     @pytest.mark.asyncio
     async def test_complete_adopts_authorization_and_syncs(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         client = _client()
         results = await _connect_and_complete(async_db_session, client)
@@ -243,7 +280,6 @@ class TestSnapTradeConnect:
         assert connection.label == "Fidelity"
         assert connection.status == "healthy"
 
-        svc = FinanceService(async_db_session)
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         by_name = {a.name: a for a in accounts}
         roth = by_name["ROTH IRA"]
@@ -255,12 +291,11 @@ class TestSnapTradeConnect:
 
     @pytest.mark.asyncio
     async def test_sync_maps_positions_and_activity_signs(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         client = _client()
         await _connect_and_complete(async_db_session, client)
 
-        svc = FinanceService(async_db_session)
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         roth = next(a for a in accounts if a.name == "ROTH IRA")
 
@@ -286,11 +321,10 @@ class TestSnapTradeConnect:
 
     @pytest.mark.asyncio
     async def test_same_figi_as_plaid_lands_on_one_security_row(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """FIN-25 acceptance: a security held at a Plaid brokerage AND a
         SnapTrade brokerage resolves to ONE finance_security row (FIGI merge)."""
-        svc = FinanceService(async_db_session)
         plaid_row = await svc.upsert_provider_security(
             provider="plaid",
             provider_security_id="plaid-aapl",
@@ -347,7 +381,7 @@ class TestSnapTradeConnect:
 
     @pytest.mark.asyncio
     async def test_rewindowed_activities_dedup_by_id(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         client = _client()
         await _connect_and_complete(async_db_session, client)
@@ -361,7 +395,6 @@ class TestSnapTradeConnect:
         )
         assert second.trades == 2  # re-applied from the overlap window...
 
-        svc = FinanceService(async_db_session)
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         roth = next(a for a in accounts if a.name == "ROTH IRA")
         trades = await svc.list_trades(owner_user_id=1, account_id=roth.id)
@@ -369,7 +402,7 @@ class TestSnapTradeConnect:
 
     @pytest.mark.asyncio
     async def test_disconnect_revokes_authorization_and_soft_deletes(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         client = _client()
         await _connect_and_complete(async_db_session, client)
@@ -393,7 +426,6 @@ class TestSnapTradeConnect:
             async_db_session, provider="snaptrade", owner_user_id=1
         )
         assert remaining == []
-        svc = FinanceService(async_db_session)
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         assert accounts == []
 

@@ -382,18 +382,7 @@ class FormSecretField(ft.Container):
         disabled: bool = False,
         width: int | None = None,
     ) -> None:
-        """
-        Initialize form secret field.
-
-        Args:
-            label: Label text displayed above the field
-            value: Initial value for the field
-            hint: Placeholder/hint text when field is empty
-            on_change: Callback when field value changes
-            error: Error message to display below field (None = no error)
-            disabled: Whether the field is disabled
-            width: Optional fixed width for the field
-        """
+        """Initialize form secret field (same arguments as FormTextField)."""
         super().__init__()
 
         self._label = label
@@ -563,6 +552,10 @@ class FormDropdown(ft.Container):
                 "content_padding": ft.padding.symmetric(horizontal=12, vertical=10),
             }
 
+        # Width on the outer Container too (as FormTextField does it):
+        # without it the control collapses inside a Row.
+        if width is not None:
+            self.width = width
         self._dropdown = ft.Dropdown(
             value=initial,
             options=[ft.dropdown.Option(key=k, text=t) for k, t in options],

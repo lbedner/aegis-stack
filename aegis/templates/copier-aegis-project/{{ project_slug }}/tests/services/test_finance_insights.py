@@ -25,7 +25,7 @@ from app.services.finance.models import (
 from app.services.finance.seeds import demo_seed
 from app.services.finance.service import FinanceService
 from tests.services._finance_factories import seed_account as _account
-from tests.services._finance_factories import seed_txn
+from tests.services._finance_factories import seed_stream, seed_txn
 
 _MONTH_STARTS = [date(2026, m, 15) for m in range(1, 8)]  # Jan..Jul 15th
 _TODAY = date(2026, 7, 20)
@@ -101,9 +101,8 @@ class TestRecurringDetectionByPayee:
 
     @pytest.mark.asyncio
     async def test_drifting_descriptors_with_one_payee_are_one_stream(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         merchant = await svc.create_merchant("Google", owner_user_id=1)
         # The real shapes this failed on: a moved space, a changed card
@@ -120,7 +119,9 @@ class TestRecurringDetectionByPayee:
             async_db_session.add(txn)
         await async_db_session.flush()
 
-        detected = await detect_recurring(async_db_session, owner_user_id=1)
+        detected = await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
 
         assert detected.detected == 1
         stream = (await async_db_session.exec(select(FinanceRecurringStream))).one()
@@ -132,18 +133,19 @@ class TestRecurringDetectionByPayee:
 
     @pytest.mark.asyncio
     async def test_rekeying_retires_the_stream_it_left_behind(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The old descriptor-keyed row must not linger: it would show as a
         permanent duplicate in Bills & Income and double-count in the
         monthly rollup."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         txns = [
             await _txn(svc, account.id, -2299, day, "ACME SUBSCRIPTION")
             for day in _MONTH_STARTS[:4]
         ]
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
         original = (await async_db_session.exec(select(FinanceRecurringStream))).one()
 
         # Now name a payee for them - exactly what the register's picker does.
@@ -152,7 +154,9 @@ class TestRecurringDetectionByPayee:
             txn.merchant_id = merchant.id
             async_db_session.add(txn)
         await async_db_session.flush()
-        result = await detect_recurring(async_db_session, owner_user_id=1)
+        result = await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
 
         assert result.pruned == 1
         live = (
@@ -170,7 +174,7 @@ class TestRecurringDetectionByPayee:
 
     @pytest.mark.asyncio
     async def test_rekeying_keeps_the_curation_the_user_gave_it(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A CONFIRMED bill is off limits to detection entirely.
 
@@ -185,13 +189,14 @@ class TestRecurringDetectionByPayee:
         An UNCONFIRMED stream is still re-keyed and renamed freely - see
         test_rekeying_retires_the_stream_it_left_behind just above.
         """
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         txns = [
             await _txn(svc, account.id, -2299, day, "ACME SUBSCRIPTION")
             for day in _MONTH_STARTS[:4]
         ]
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
         original = (await async_db_session.exec(select(FinanceRecurringStream))).one()
         original.is_user_confirmed = True
         original.is_muted = True
@@ -203,7 +208,9 @@ class TestRecurringDetectionByPayee:
             txn.merchant_id = merchant.id
             async_db_session.add(txn)
         await async_db_session.flush()
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
 
         live = (
             await async_db_session.exec(
@@ -220,53 +227,53 @@ class TestRecurringDetectionByPayee:
 
     @pytest.mark.asyncio
     async def test_pruning_spares_a_hand_entered_bill(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A bill the user typed in has no matched transactions yet by
         design - retiring it would throw away something only they could
         recreate."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        manual = await svc.create_recurring_stream(
-            owner_user_id=1,
+        manual = await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=185000,
             next_expected_date=date(2026, 8, 1),
             account_id=account.id,
         )
 
-        result = await detect_recurring(async_db_session, owner_user_id=1)
+        result = await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
 
         assert result.pruned == 0
         kept = await async_db_session.get(FinanceRecurringStream, manual.id)
         assert kept.deleted_at is None
 
     @pytest.mark.asyncio
-    async def test_same_descriptors_without_a_payee_still_split(
-        self, async_db_session: AsyncSession
+    async def test_churned_descriptors_without_a_payee_now_group(
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        """The descriptor fallback is unchanged - this is the behavior the
-        payee assignment exists to fix, and it must still be what happens
-        for anything nobody has named a payee for."""
-        svc = FinanceService(async_db_session)
+        """The descriptor fallback strips embedded dates and reference
+        numbers before keying, so the exact case payee assignment was
+        built for - a statement date making every month a unique string -
+        detects on its own now. Assigning a payee is still the stronger
+        identity; it is just no longer the only way this bill exists."""
         account = await _account(svc)
         for day in _MONTH_STARTS[:4]:
             await _txn(svc, account.id, -2299, day, f"YouTubePremi CA {day:%m/%d}")
 
-        detected = await detect_recurring(async_db_session, owner_user_id=1)
+        detected = await detect_recurring(
+            async_db_session, owner_user_id=1, today=date(2026, 7, 20)
+        )
 
-        # Every descriptor unique -> no group reaches MIN_OCCURRENCES.
-        assert detected.detected == 0
+        assert detected.detected == 1
 
 
 class TestRecurringDetection:
     @pytest.mark.asyncio
     async def test_netflix_subscription_detected_with_price_hike(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         for day in _MONTH_STARTS[:6]:
             await _txn(svc, account.id, -1549, day, "NETFLIX")
@@ -301,9 +308,8 @@ class TestRecurringDetection:
 
     @pytest.mark.asyncio
     async def test_muting_suppresses_price_hike(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         for day in _MONTH_STARTS[:6]:
             await _txn(svc, account.id, -1549, day, "NETFLIX")
@@ -319,9 +325,8 @@ class TestRecurringDetection:
 
     @pytest.mark.asyncio
     async def test_irregular_payee_not_a_stream(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         # Three charges, but wildly irregular gaps -> no stable cadence.
         for day, amt in [
@@ -336,8 +341,9 @@ class TestRecurringDetection:
 
 class TestInsights:
     @pytest.mark.asyncio
-    async def test_fee_insight(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_fee_insight(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
         account = await _account(svc)
         await _txn(svc, account.id, -3500, date(2026, 7, 3), "MONTHLY SERVICE FEE")
         result = await generate_insights(
@@ -355,11 +361,10 @@ class TestInsights:
 
     @pytest.mark.asyncio
     async def test_an_old_fee_outside_the_lookback_stays_silent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A historical import carries years of old fees; alerting on all of
         them buries the real, recent ones."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _txn(svc, account.id, -3500, date(2026, 1, 5), "MONTHLY SERVICE FEE")
 
@@ -375,8 +380,9 @@ class TestInsights:
         assert result.created == 1
 
     @pytest.mark.asyncio
-    async def test_overspend_insight(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_overspend_insight(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
         account = await _account(svc)
         category = FinanceCategory(
             owner_user_id=1, name="Dining", slug="dining", classification="expense"
@@ -416,9 +422,8 @@ class TestInsights:
 
     @pytest.mark.asyncio
     async def test_insufficient_history_no_overspend(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         category = FinanceCategory(
             owner_user_id=1, name="Dining", slug="dining", classification="expense"
@@ -455,8 +460,9 @@ class TestInsights:
         assert overspend == []
 
     @pytest.mark.asyncio
-    async def test_dismiss_survives_rerun(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_dismiss_survives_rerun(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
         account = await _account(svc)
         await _txn(svc, account.id, -3500, date(2026, 7, 3), "SERVICE FEE")
         await generate_insights(
@@ -506,9 +512,8 @@ class TestLargeTransaction:
 
     @pytest.mark.asyncio
     async def test_outlier_against_a_solid_baseline_is_flagged(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account_id = await self._with_baseline(svc)
         await _txn(
             svc, account_id, -40_000, _TODAY - timedelta(days=5), "APPLIANCE WORLD"
@@ -524,9 +529,8 @@ class TestLargeTransaction:
 
     @pytest.mark.asyncio
     async def test_extreme_outlier_is_critical(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account_id = await self._with_baseline(svc)
         await _txn(
             svc, account_id, -60_000, _TODAY - timedelta(days=5), "APPLIANCE WORLD"
@@ -540,11 +544,10 @@ class TestLargeTransaction:
 
     @pytest.mark.asyncio
     async def test_ordinary_spend_stays_silent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Above the account's median but under the absolute floor: a $150
         charge is not news, however quiet the account usually is."""
-        svc = FinanceService(async_db_session)
         account_id = await self._with_baseline(svc)
         await _txn(
             svc, account_id, -15_000, _TODAY - timedelta(days=5), "APPLIANCE WORLD"
@@ -556,9 +559,8 @@ class TestLargeTransaction:
 
     @pytest.mark.asyncio
     async def test_thin_history_falls_back_to_the_absolute_floor(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account_id = await self._with_baseline(svc, count=3)
         # Four times the median, but too little history to trust that median.
         await _txn(svc, account_id, -30_000, _TODAY - timedelta(days=5), "FURNITURE")
@@ -575,10 +577,9 @@ class TestLargeTransaction:
 
     @pytest.mark.asyncio
     async def test_recurring_members_are_never_outliers(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A mortgage payment is large every month; price_hike owns streams."""
-        svc = FinanceService(async_db_session)
         account_id = await self._with_baseline(svc)
         big = await _txn(
             svc, account_id, -218_400, _TODAY - timedelta(days=5), "MORTGAGE"
@@ -601,9 +602,8 @@ class TestLargeTransaction:
 
     @pytest.mark.asyncio
     async def test_rerun_does_not_duplicate(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account_id = await self._with_baseline(svc)
         await _txn(
             svc, account_id, -40_000, _TODAY - timedelta(days=5), "APPLIANCE WORLD"
@@ -622,9 +622,8 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_overdue_outflow_fires_after_the_grace_window(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _stream(
             async_db_session,
@@ -648,9 +647,8 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_inside_the_grace_window_stays_silent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _stream(
             async_db_session,
@@ -667,9 +665,8 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_weekly_streams_get_a_tighter_grace(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _stream(
             async_db_session,
@@ -690,11 +687,10 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_a_stream_dead_since_before_the_lookback_is_not_chased(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Imported history leaves zombie streams whose expected date passed
         years ago. Those are cancelled subscriptions, not missed bills."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _stream(
             async_db_session,
@@ -711,11 +707,10 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_a_weekly_spending_habit_is_not_a_missed_bill(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Detection finds a weekly cadence in a coffee habit. "You have not
         been to Starbucks" is not an alert, however overdue it looks."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _stream(
             async_db_session,
@@ -734,9 +729,8 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_missing_income_is_critical(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _stream(
             async_db_session,
@@ -758,11 +752,10 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_a_stream_paid_on_time_never_fires(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Detection advances ``next_expected_date`` when a charge lands; a
         stream whose last charge is at or after the due date is current."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _stream(
             async_db_session,
@@ -779,9 +772,8 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_muted_streams_are_skipped(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _stream(
             async_db_session,
@@ -799,13 +791,12 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_alert_is_retracted_once_the_payment_arrives(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The rule fires while a bill is overdue; when the payment then
         lands (a later import, detection advances the stream), the alert
         is factually wrong and must be retracted - it used to sit as
         'new' forever, telling every reader the bill was still missed."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _stream(
             async_db_session,
@@ -832,13 +823,12 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_pausing_a_stream_retracts_its_outstanding_alert(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Pausing means "stop expecting this for a while" - an alert
         left over from before the pause keeps claiming the bill is
         missed, and the paused stream never re-enters the rule's fetch
         to clear it."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _stream(
             async_db_session,
@@ -863,12 +853,11 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_a_bill_that_moved_accounts_does_not_ghost_alert(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A commitment migrating accounts (card bill moved to checking)
         leaves the old stream permanently 'overdue'; a live sibling stream
         with the same payee proves the bill is still being paid."""
-        svc = FinanceService(async_db_session)
         old_card = await _account(svc, name="AMEX", account_type="credit_card")
         checking = await _account(svc)
         # The ghost: last seen in May on the card, due June, never again.
@@ -898,11 +887,10 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_supersession_retracts_an_earlier_ghost_alert(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The living sibling can be detected AFTER a pass already alerted
         (a later import); the wrong alert is retracted, not merely left."""
-        svc = FinanceService(async_db_session)
         old_card = await _account(svc, name="AMEX", account_type="credit_card")
         await _stream(
             async_db_session,
@@ -934,9 +922,8 @@ class TestMissedRecurring:
 
     @pytest.mark.asyncio
     async def test_rerun_does_not_duplicate(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _stream(
             async_db_session,
@@ -1072,9 +1059,8 @@ class TestMissedRecurringCommitmentGate:
 
     @pytest.mark.asyncio
     async def test_a_variable_amount_merchant_habit_is_not_chased(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _stream(
             async_db_session,
@@ -1097,10 +1083,9 @@ class TestMissedRecurringCommitmentGate:
 
     @pytest.mark.asyncio
     async def test_a_confirmed_variable_stream_is_chased_again(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """User confirmation outranks the variable-amount heuristic."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _stream(
             async_db_session,
@@ -1123,10 +1108,9 @@ class TestMissedRecurringCommitmentGate:
 
     @pytest.mark.asyncio
     async def test_a_user_created_bill_is_chased_at_any_cadence(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A hand-entered weekly bill must not be dismissed as a habit."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _stream(
             async_db_session,
@@ -1149,10 +1133,9 @@ class TestMissedRecurringCommitmentGate:
 
     @pytest.mark.asyncio
     async def test_an_internal_transfer_rhythm_is_never_a_missed_bill(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A monthly checking->savings sweep is money moved, not money owed."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _stream(
             async_db_session,
@@ -1238,10 +1221,9 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_minimum_payment_beyond_cash_is_critical(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The AmEx scenario: $1,801.11 due against $1,203.96 of cash."""
-        svc = FinanceService(async_db_session)
         await self._cash(svc, available=120_396)
         await self._card(
             async_db_session,
@@ -1261,9 +1243,8 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_a_covered_minimum_stays_silent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._cash(svc, available=500_000)
         await self._card(async_db_session, svc, minimum=180_111, due=date(2026, 7, 25))
 
@@ -1275,11 +1256,10 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_a_far_off_due_date_is_not_yet_a_gap(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A payday can land before a due date a month out; alerting now
         would be noise."""
-        svc = FinanceService(async_db_session)
         await self._cash(svc, available=100)
         await self._card(async_db_session, svc, minimum=180_111, due=date(2026, 9, 20))
 
@@ -1291,9 +1271,8 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_an_expensive_carried_balance_is_flagged(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._card(
             async_db_session,
             svc,
@@ -1316,10 +1295,9 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_a_card_paid_in_full_is_never_flagged_for_apr(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A 30% APR on a card that never carries a balance costs nothing."""
-        svc = FinanceService(async_db_session)
         await self._card(
             async_db_session,
             svc,
@@ -1336,11 +1314,10 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_an_unpaid_statement_is_proof_of_carrying(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """AMEX-style institutions omit balance_subject_to_apr; a statement
         not paid in full is the fallback proof."""
-        svc = FinanceService(async_db_session)
         await self._card(
             async_db_session,
             svc,
@@ -1357,9 +1334,8 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_a_cheap_rate_stays_silent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._card(
             async_db_session,
             svc,
@@ -1380,9 +1356,8 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_a_nearly_maxed_card_warns_then_goes_critical(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._card(async_db_session, svc, balance=85_000, credit_limit=100_000)
 
         await generate_insights(
@@ -1413,9 +1388,8 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_a_lightly_used_card_stays_silent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._card(async_db_session, svc, balance=20_000, credit_limit=100_000)
 
         await generate_insights(
@@ -1426,9 +1400,8 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_a_past_due_card_is_critical(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._card(
             async_db_session,
             svc,
@@ -1448,9 +1421,8 @@ class TestCreditCardRules:
 
     @pytest.mark.asyncio
     async def test_rerun_does_not_duplicate(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._cash(svc, available=100)
         await self._card(
             async_db_session,
@@ -1485,9 +1457,8 @@ class TestCreditCardRules:
 class TestCashRunway:
     @pytest.mark.asyncio
     async def test_bills_outrunning_cash_is_critical(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
@@ -1516,9 +1487,8 @@ class TestCashRunway:
 
     @pytest.mark.asyncio
     async def test_covered_bills_stay_silent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
@@ -1542,8 +1512,9 @@ class TestCashRunway:
         assert await _insights_of(async_db_session, "cash_runway") == []
 
     @pytest.mark.asyncio
-    async def test_one_alert_per_month(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_one_alert_per_month(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
         account = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
@@ -1598,11 +1569,10 @@ class TestSubscriptionCreep:
 
     @pytest.mark.asyncio
     async def test_a_new_service_on_top_of_the_pile_is_flagged(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """No single price hike, but the total drifted: a second streaming
         service appeared in July."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await self._subscribed_months(
             async_db_session,
@@ -1632,9 +1602,8 @@ class TestSubscriptionCreep:
 
     @pytest.mark.asyncio
     async def test_a_steady_pile_stays_silent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await self._subscribed_months(
             async_db_session,
@@ -1653,10 +1622,9 @@ class TestSubscriptionCreep:
 
     @pytest.mark.asyncio
     async def test_partial_history_never_trips_the_rule(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A brand-new subscriber has no norm to drift from."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await self._subscribed_months(
             async_db_session,
@@ -1702,12 +1670,11 @@ class TestOverspendOnPace:
 
     @pytest.mark.asyncio
     async def test_it_catches_a_month_going_wrong_while_it_can_still_matter(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """$100 by the 20th in a normal month, $250 this time. Against whole
         prior months ($300) this never crossed 1.5x and the reader heard
         nothing."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         category = await self._dining(async_db_session)
         for month in (4, 5, 6):
@@ -1744,11 +1711,10 @@ class TestOverspendOnPace:
 
     @pytest.mark.asyncio
     async def test_the_first_days_of_a_month_are_not_judged(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A baseline measured over three days is mostly noise, and one
         early grocery run would read as a spending emergency."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         category = await self._dining(async_db_session)
         for month in (4, 5, 6):
@@ -1777,10 +1743,9 @@ class TestOverspendOnPace:
 
     @pytest.mark.asyncio
     async def test_a_baseline_too_small_to_multiply_is_ignored(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Ratios against a few dollars are arithmetic, not information."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         category = await self._dining(async_db_session)
         for month in (4, 5, 6):

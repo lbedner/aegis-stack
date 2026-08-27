@@ -203,6 +203,27 @@ async def grouped_category_totals_where(db: AsyncSession, filters: list) -> list
     return list(rows)
 
 
+async def category_dated_amounts_where(
+    db: AsyncSession, filters: list
+) -> list[tuple[int | None, date, int]]:
+    """(category_id, date, amount) rows under caller-built predicates.
+
+    Row-level rather than grouped: whether a category's spending recurs
+    is a question about WHICH MONTHS it landed in, and grouping by month
+    in SQL means date functions that differ per dialect.
+    """
+    rows = (
+        await db.exec(
+            select(
+                FinanceTransaction.category_id,
+                FinanceTransaction.date_,
+                FinanceTransaction.amount,
+            ).where(*filters)
+        )
+    ).all()
+    return [(row[0], row[1], int(row[2])) for row in rows]
+
+
 async def allocated_budget_lines(
     db: AsyncSession, budget_id: int
 ) -> list[FinanceBudgetCategory]:
@@ -217,3 +238,31 @@ async def allocated_budget_lines(
             )
         ).all()
     )
+
+
+async def category_first_spend(
+    db: AsyncSession, category_ids: set[int | None]
+) -> dict[int, date]:
+    """The first-ever outflow date per category - the length of its
+    record. Deliberately unfiltered beyond "real spending": whether a
+    given month's charge ended up covered by a bill or a budget later
+    does not change when the category entered the user's life."""
+    ids = {cid for cid in category_ids if cid is not None}
+    if not ids:
+        return {}
+    rows = (
+        await db.exec(
+            select(
+                FinanceTransaction.category_id,
+                func.min(FinanceTransaction.date_),
+            )
+            .where(
+                FinanceTransaction.category_id.in_(ids),  # type: ignore[union-attr]
+                FinanceTransaction.deleted_at.is_(None),  # type: ignore[union-attr]
+                FinanceTransaction.amount < 0,
+                FinanceTransaction.is_transfer.is_(False),  # type: ignore[attr-defined]
+            )
+            .group_by(FinanceTransaction.category_id)
+        )
+    ).all()
+    return {cid: seen for cid, seen in rows if cid is not None and seen is not None}

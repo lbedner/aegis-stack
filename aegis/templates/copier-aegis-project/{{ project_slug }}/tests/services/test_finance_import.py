@@ -69,7 +69,7 @@ class TestParseOfx:
 class TestImportPipeline:
     @pytest.mark.asyncio
     async def test_import_inserts_with_correct_signs(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         account = await _account(async_db_session)
         result = await imports.ingest_transactions(
@@ -85,7 +85,7 @@ class TestImportPipeline:
         assert result.rows_inserted == 6
         assert result.rows_duplicate == 0
 
-        txns, total = await FinanceService(async_db_session).list_transactions(
+        txns, total = await svc.list_transactions(
             owner_user_id=1, account_id=account.id
         )
         assert total == 6
@@ -95,7 +95,7 @@ class TestImportPipeline:
 
     @pytest.mark.asyncio
     async def test_same_file_reimport_short_circuits(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         account = await _account(async_db_session)
         data = _qfx()
@@ -123,14 +123,12 @@ class TestImportPipeline:
         assert second.rows_duplicate == 6
         assert second.batch_id == first.batch_id  # short-circuited to prior
 
-        _, total = await FinanceService(async_db_session).list_transactions(
-            owner_user_id=1, account_id=account.id
-        )
+        _, total = await svc.list_transactions(owner_user_id=1, account_id=account.id)
         assert total == 6  # unchanged
 
     @pytest.mark.asyncio
     async def test_edited_row_updates_in_place_instead_of_duplicating(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """An edit in the source app (payee/category/memo) must UPDATE the
         existing transaction. The content hash covers those fields, so
@@ -148,7 +146,6 @@ class TestImportPipeline:
         )
         assert first.rows_inserted > 0
 
-        svc = FinanceService(async_db_session)
         before, total_before = await svc.list_transactions(
             owner_user_id=1, account_id=account.id
         )
@@ -254,7 +251,7 @@ class TestImportPipeline:
 
     @pytest.mark.asyncio
     async def test_overlapping_file_inserts_only_new_row(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         account = await _account(async_db_session)
         data = _qfx()
@@ -281,14 +278,12 @@ class TestImportPipeline:
         assert result.rows_inserted == 1
         assert result.rows_duplicate == 5
 
-        _, total = await FinanceService(async_db_session).list_transactions(
-            owner_user_id=1, account_id=account.id
-        )
+        _, total = await svc.list_transactions(owner_user_id=1, account_id=account.id)
         assert total == 7  # 6 original + 1 new
 
     @pytest.mark.asyncio
     async def test_ingest_query_count_is_flat_in_row_count(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Ingest preloads dedup lanes + memoizes categories, so its SELECT
         count does not grow with the number of rows (guards the old per-row
@@ -323,7 +318,7 @@ class TestImportPipeline:
                 selects["n"] += 1
 
         async def _ingest(label: str, n: int) -> int:
-            account = await FinanceService(async_db_session).create_manual_account(
+            account = await svc.create_manual_account(
                 owner_user_id=1,
                 name=f"Acct {label}",
                 account_type="checking",
@@ -432,7 +427,7 @@ async def _seed_dining_alias(session: AsyncSession) -> int:
 class TestQifImport:
     @pytest.mark.asyncio
     async def test_import_splits_ordinals_categories(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from sqlmodel import select
 
@@ -452,7 +447,6 @@ class TestQifImport:
         )
         assert result.rows_inserted == 8
 
-        svc = FinanceService(async_db_session)
         txns, total = await svc.list_transactions(
             owner_user_id=1, account_id=account.id
         )
@@ -699,7 +693,7 @@ class TestInferAccountKind:
 class TestCsvImport:
     @pytest.mark.asyncio
     async def test_import_records_profile_and_signs(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from sqlmodel import select
 
@@ -724,14 +718,12 @@ class TestCsvImport:
         ).one()
         assert batch.import_profile_id is not None  # detected profile recorded
 
-        txns, _ = await FinanceService(async_db_session).list_transactions(
-            owner_user_id=1, account_id=account.id
-        )
+        txns, _ = await svc.list_transactions(owner_user_id=1, account_id=account.id)
         assert any(t.amount == -12050 for t in txns)  # the AMEX charge
 
     @pytest.mark.asyncio
     async def test_scheduled_rows_are_recorded_but_never_ledgered(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Quicken can export SCHEDULED bills alongside posted ones. They are
         money that has not moved, so they must not reach the ledger - they
@@ -756,7 +748,6 @@ class TestCsvImport:
         assert result.rows_inserted == 2
         assert result.rows_skipped == 2
 
-        svc = FinanceService(async_db_session)
         txns, total = await svc.list_transactions(owner_user_id=1)
         assert total == 2
         names = {t.name for t in txns}
@@ -855,7 +846,7 @@ class TestCsvImport:
 
     @pytest.mark.asyncio
     async def test_import_sets_current_balance_from_running_balance(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A file with a running-balance column (Quicken Mac) sets the account's
         current_balance to the latest-dated row's balance — so net worth
@@ -871,9 +862,7 @@ class TestCsvImport:
             file_bytes=_csv("sample_quicken_mac.csv"),
             account_id=account.id,
         )
-        refreshed = await FinanceService(async_db_session).get_account(
-            account.id, owner_user_id=1
-        )
+        refreshed = await svc.get_account(account.id, owner_user_id=1)
         assert refreshed is not None
         # Latest date is 7/3/2026 (City Water), balance 5,925.35 — not file
         # order (the 8/1 rows come first) and not the largest balance.
@@ -883,7 +872,7 @@ class TestCsvImport:
 
     @pytest.mark.asyncio
     async def test_multi_account_csv_auto_creates_and_routes(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A multi-account report imports with no account_id: rows route to
         per-name accounts, auto-creating the ones that don't exist yet."""
@@ -897,7 +886,6 @@ class TestCsvImport:
         )
         assert result.rows_inserted == 5
 
-        svc = FinanceService(async_db_session)
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         by_name = {a.name: a for a in accounts}
         assert {"CHECKING", "AMEX CARD"} <= set(by_name)
@@ -933,7 +921,7 @@ class TestCsvImport:
 
     @pytest.mark.asyncio
     async def test_multi_account_reimport_dedups_without_duplicate_accounts(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Re-importing matches existing accounts by name (no duplicates) and
         the per-account LANE-2 hash catches every row as a duplicate."""
@@ -958,13 +946,12 @@ class TestCsvImport:
         assert result.rows_inserted == 0
         assert result.rows_duplicate == 5
 
-        svc = FinanceService(async_db_session)
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         assert sum(1 for a in accounts if a.name == "AMEX CARD") == 1
 
     @pytest.mark.asyncio
     async def test_unknown_header_marks_failed_batch(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from sqlmodel import select
 
@@ -989,9 +976,7 @@ class TestCsvImport:
             )
         ).all()
         assert failed and failed[0].rows_total == 0
-        _, total = await FinanceService(async_db_session).list_transactions(
-            owner_user_id=1, account_id=account.id
-        )
+        _, total = await svc.list_transactions(owner_user_id=1, account_id=account.id)
         assert total == 0  # nothing written on an unknown layout
 
     @pytest.mark.asyncio
@@ -1066,14 +1051,13 @@ class TestImportPreviewAndCategoryGuard:
 
     @pytest.mark.asyncio
     async def test_user_set_category_survives_lane3_edit(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from sqlmodel import select as sql_select
 
         from app.services.finance.models import FinanceImportBatchRow
 
         account, _ = await self._baseline(async_db_session)
-        svc = FinanceService(async_db_session)
         target = await self._blue_bottle(async_db_session)
         assert target is not None
         user_category = await svc.get_or_create_category_from_hint("Coffee Fund")
@@ -1243,12 +1227,11 @@ class TestDoubleSubmitLandsOnTheFirstBatch:
 
     @pytest.mark.asyncio
     async def test_the_racing_loser_returns_the_winners_batch(
-        self, async_db_session: AsyncSession, monkeypatch
+        self, svc: FinanceService, async_db_session: AsyncSession, monkeypatch
     ) -> None:
         from datetime import date as date_cls
 
-        service = FinanceService(async_db_session)
-        account = await service.create_manual_account(
+        account = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
@@ -1302,7 +1285,7 @@ class TestDoubleSubmitLandsOnTheFirstBatch:
         assert second.rows_inserted == 0
         assert second.rows_duplicate == second.rows_total
         # And nothing was double-written.
-        _rows, total = await service.list_transactions(owner_user_id=1)
+        _rows, total = await svc.list_transactions(owner_user_id=1)
         assert total == 1
 
 
@@ -1315,12 +1298,11 @@ class TestDeletedTransactionStaysDeleted:
 
     @pytest.mark.asyncio
     async def test_a_deleted_row_replans_as_ignored(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from datetime import date as date_cls
 
-        service = FinanceService(async_db_session)
-        account = await service.create_manual_account(
+        account = await svc.create_manual_account(
             owner_user_id=1,
             name="TOTAL CHECKING",
             account_type="checking",
@@ -1353,9 +1335,9 @@ class TestDeletedTransactionStaysDeleted:
         )
         assert first.rows_inserted == 2
 
-        rows, _total = await service.list_transactions(owner_user_id=1)
+        rows, _total = await svc.list_transactions(owner_user_id=1)
         coffee = next(r for r in rows if r.name == "Coffee")
-        await service.soft_delete_transactions([coffee.id], owner_user_id=1)
+        await svc.soft_delete_transactions([coffee.id], owner_user_id=1)
 
         plan = await imports.plan_transactions(
             async_db_session,
@@ -1384,7 +1366,7 @@ class TestDeletedTransactionStaysDeleted:
         )
         assert result.rows_inserted == 0
         assert result.rows_ignored == 1
-        _rows, total = await service.list_transactions(owner_user_id=1)
+        _rows, total = await svc.list_transactions(owner_user_id=1)
         assert total == 1
         assert account.id is not None
 
@@ -1397,22 +1379,21 @@ class TestRemovedAccountStaysRemoved:
 
     @pytest.mark.asyncio
     async def test_rows_for_a_removed_account_are_ignored(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        keep = await service.create_manual_account(
+        keep = await svc.create_manual_account(
             owner_user_id=1,
             name="TOTAL CHECKING",
             account_type="checking",
             classification="asset",
         )
-        audi = await service.create_manual_account(
+        audi = await svc.create_manual_account(
             owner_user_id=1,
             name="X017 AUDI A6",
             account_type="loan",
             classification="liability",
         )
-        await service.soft_delete_account(audi.id, owner_user_id=1)
+        await svc.soft_delete_account(audi.id, owner_user_id=1)
 
         from datetime import date as date_cls
 
@@ -1462,7 +1443,7 @@ class TestRemovedAccountStaysRemoved:
         )
         assert result.rows_inserted == 1
         assert result.rows_ignored == 1
-        accounts, total = await service.list_accounts(owner_user_id=1)
+        accounts, total = await svc.list_accounts(owner_user_id=1)
         assert [a.name for a in accounts] == ["TOTAL CHECKING"]
         assert keep.id is not None
 
@@ -1473,18 +1454,17 @@ class TestFacadeDelegation:
 
     @pytest.mark.asyncio
     async def test_preview_and_import_via_facade(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         account = await _account(async_db_session)
-        service = FinanceService(async_db_session)
-        plan = await service.preview_file(
+        plan = await svc.preview_file(
             owner_user_id=1,
             file_name="q.qif",
             file_bytes=_qif(),
             account_id=account.id,
         )
         assert plan.rows_total == 8
-        result = await service.import_file(
+        result = await svc.import_file(
             owner_user_id=1,
             file_name="q.qif",
             file_bytes=_qif(),

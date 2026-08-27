@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.domains.ledger import accounts
+from app.services.finance.domains.ledger import accounts, valuations
 from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.domains.planning import queries
 from app.services.finance.models import (
@@ -160,7 +160,7 @@ async def walk_envelope(
     account = await accounts.get_account(db, account_id, owner_user_id=owner_user_id)
     if account is None or envelope_metadata(account.metadata_) is None:
         raise ValueError(f"No envelope {account_id}.")
-    await accounts.upsert_valuation(
+    await valuations.upsert_valuation(
         db,
         account_id=account_id,
         as_of_date=when or utcnow().date(),
@@ -284,7 +284,7 @@ async def auto_credit_envelopes(
         )
         if already is not None:
             continue
-        await accounts.upsert_valuation(
+        await valuations.upsert_valuation(
             db,
             account_id=account.id,
             as_of_date=period_start,

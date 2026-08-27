@@ -17,7 +17,6 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from tests.services._finance_factories import seed_account as _account, seed_spend_series as _spend, live_streams as _live_streams
 from app.services.finance.domains.detection import detect_recurring
 from app.services.finance.domains.detection.recurring.cadence import (
     _frequency_for,
@@ -25,7 +24,9 @@ from app.services.finance.domains.detection.recurring.cadence import (
 )
 from app.services.finance.models import FinanceRecurringStream
 from app.services.finance.service import FinanceService
-
+from tests.services._finance_factories import live_streams as _live_streams
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_spend_series as _spend
 
 
 class TestCadenceTolerance:
@@ -64,9 +65,8 @@ class TestRhythmRatio:
 class TestDetectionEndToEnd:
     @pytest.mark.asyncio
     async def test_a_real_monthly_bill_is_still_found(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
 
@@ -76,10 +76,9 @@ class TestDetectionEndToEnd:
 
     @pytest.mark.asyncio
     async def test_random_visits_are_not_a_subscription(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The Stewart's shape, rebuilt: four visits, no rhythm."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         start = date(2019, 8, 26)
         days = [
@@ -96,9 +95,8 @@ class TestDetectionEndToEnd:
 
     @pytest.mark.asyncio
     async def test_a_genuine_yearly_bill_survives(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
             svc,
@@ -113,15 +111,11 @@ class TestDetectionEndToEnd:
 
     @pytest.mark.asyncio
     async def test_confidence_reflects_fit_not_just_count(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Stewart's scored 90 because confidence was 50 + 10 x occurrences
         - more random visits raised it."""
-        from sqlmodel import select
 
-        from app.services.finance.models import FinanceRecurringStream
-
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
         await detect_recurring(async_db_session, owner_user_id=1)
@@ -142,16 +136,12 @@ class TestStreamsThatNoLongerQualify:
 
     @pytest.mark.asyncio
     async def test_a_stream_that_fails_the_new_gates_is_retired(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        from sqlmodel import select
-
         from app.services.finance.models import (
-            FinanceRecurringStream,
             FinanceTransaction,
         )
 
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         # A clean monthly run, detected the normal way.
         txns = await _spend(
@@ -200,9 +190,8 @@ class TestDeadStreams:
 
     @pytest.mark.asyncio
     async def test_a_monthly_bill_that_stopped_years_ago_is_dropped(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
             svc,
@@ -219,9 +208,8 @@ class TestDeadStreams:
 
     @pytest.mark.asyncio
     async def test_a_monthly_bill_still_running_survives(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
             svc, account.id, [date(2026, m, 9) for m in range(3, 8)], name="ACME"
@@ -235,11 +223,10 @@ class TestDeadStreams:
 
     @pytest.mark.asyncio
     async def test_an_annual_bill_is_allowed_a_long_silence(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """11 months since the last charge is NORMAL for a yearly bill -
         a flat 12-month rule would delete every one of them."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
             svc,
@@ -269,13 +256,8 @@ class TestChurnSelfHeals:
 
     @pytest.mark.asyncio
     async def test_a_stale_proposal_resurrected_by_a_backdated_pass_dies_again(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        from sqlmodel import select
-
-        from app.services.finance.models import FinanceRecurringStream
-
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
             svc,
@@ -307,9 +289,8 @@ class TestTrivialAmounts:
 
     @pytest.mark.asyncio
     async def test_a_rounding_error_is_not_a_stream(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
             svc,
@@ -327,11 +308,10 @@ class TestTrivialAmounts:
 
     @pytest.mark.asyncio
     async def test_a_small_but_real_subscription_survives(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The floor has to sit below a real cheap subscription - $5.41
         CVS ExtraCare is a bill somebody chose to pay."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(
             svc,
@@ -363,9 +343,8 @@ class TestInflowsOnLiabilityAccounts:
 
     @pytest.mark.asyncio
     async def test_card_payments_are_not_income_streams(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         card = await svc.create_manual_account(
             name="AMEX",
             account_type="credit_card",
@@ -388,9 +367,8 @@ class TestInflowsOnLiabilityAccounts:
 
     @pytest.mark.asyncio
     async def test_a_real_paycheck_on_a_cash_account_still_counts(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
@@ -413,11 +391,10 @@ class TestInflowsOnLiabilityAccounts:
 
     @pytest.mark.asyncio
     async def test_spending_on_a_card_is_still_detected(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Only the INFLOW direction is structural - a subscription
         charged to the card is a normal bill."""
-        svc = FinanceService(async_db_session)
         card = await svc.create_manual_account(
             name="AMEX",
             account_type="credit_card",
@@ -456,9 +433,8 @@ class TestTwoMonthAndSixMonthRhythms:
 
     @pytest.mark.asyncio
     async def test_a_two_month_rhythm_is_detected(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         # Ending near ``today``: a rhythm that stopped two years ago is
         # correctly retired by the gone-quiet gate, which is a different
@@ -480,10 +456,9 @@ class TestTwoMonthAndSixMonthRhythms:
 
     @pytest.mark.asyncio
     async def test_a_six_month_rhythm_is_detected(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Geico: February and August, every year."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         days = [
             date(2024, 2, 25),
@@ -503,10 +478,9 @@ class TestTwoMonthAndSixMonthRhythms:
 
     @pytest.mark.asyncio
     async def test_a_detected_six_month_bill_reaches_the_forecast(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The point of naming the cadence at all."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         days = [
             date(2024, 2, 25),
@@ -596,9 +570,8 @@ class TestExcludedRowsFeedNoDetection:
 
     @pytest.mark.asyncio
     async def test_a_rhythmic_excluded_descriptor_is_never_a_bill(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         days = [date(2026, m, 16) for m in range(1, 7)]
         rows = await _spend(
@@ -615,10 +588,9 @@ class TestExcludedRowsFeedNoDetection:
 
     @pytest.mark.asyncio
     async def test_normal_rows_still_detect(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The gate must remove exactly the excluded rows, nothing else."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         days = [date(2026, m, 16) for m in range(1, 7)]
         await _spend(svc, account.id, days, cents=-3_080, name="NETFLIX")
@@ -666,11 +638,10 @@ class TestPaymentLegsAreDetectable:
 
     @pytest.mark.asyncio
     async def test_a_card_autopay_forms_a_stream_on_the_cash_side(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.domains.detection import detect_transfers
 
-        svc = FinanceService(async_db_session)
         checking = await _account(svc)
         card = await self._liability(svc)
         await self._payment_pairs(svc, checking, card, range(1, 7))
@@ -689,14 +660,13 @@ class TestPaymentLegsAreDetectable:
 
     @pytest.mark.asyncio
     async def test_an_asset_to_asset_transfer_still_forms_no_stream(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Moving money to savings every month is not a payment; letting
         it through re-creates the five-figure fiction the transfer
         exclusion exists to prevent."""
         from app.services.finance.domains.detection import detect_transfers
 
-        svc = FinanceService(async_db_session)
         checking = await _account(svc)
         savings = await svc.create_manual_account(
             name="Savings",
@@ -737,7 +707,10 @@ class TestPaymentStreamsReachTheForecast:
     """
 
     async def _payment_stream(self, svc, db):
-        from app.services.finance.domains.detection import detect_recurring, detect_transfers
+        from app.services.finance.domains.detection import (
+            detect_recurring,
+            detect_transfers,
+        )
 
         checking = await _account(svc)
         card = await svc.create_manual_account(
@@ -771,9 +744,8 @@ class TestPaymentStreamsReachTheForecast:
 
     @pytest.mark.asyncio
     async def test_the_classifier_knows_a_payment_stream(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         stream, _checking = await self._payment_stream(svc, async_db_session)
 
         payments = await svc.payment_stream_ids([stream.id])
@@ -782,9 +754,8 @@ class TestPaymentStreamsReachTheForecast:
 
     @pytest.mark.asyncio
     async def test_a_confirmed_payment_walks_the_cash_projection(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         stream, _checking = await self._payment_stream(svc, async_db_session)
         await svc.confirm_recurring(stream.id, owner_user_id=1)
         stream.expected_amount = 180_111
@@ -801,11 +772,10 @@ class TestPaymentStreamsReachTheForecast:
 
     @pytest.mark.asyncio
     async def test_an_unconfirmed_payment_stays_out_of_the_projection(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The $21,250 problem: an unpinned detector average must not
         walk the forecast just because the stream now exists."""
-        svc = FinanceService(async_db_session)
         stream, _checking = await self._payment_stream(svc, async_db_session)
         stream.next_expected_date = date(2026, 7, 13)
         async_db_session.add(stream)
@@ -819,13 +789,12 @@ class TestPaymentStreamsReachTheForecast:
 
     @pytest.mark.asyncio
     async def test_a_confirmed_payment_never_inflates_the_bills_total(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The other half of "payment first, transfer second": the cash
         walk charges it, but the Bills cell and month verdict must not -
         every dollar of it was already counted at the card swipes, and
         adding the payment double-counts the whole statement."""
-        svc = FinanceService(async_db_session)
         stream, _checking = await self._payment_stream(svc, async_db_session)
         await svc.confirm_recurring(stream.id, owner_user_id=1)
         stream.expected_amount = 180_111

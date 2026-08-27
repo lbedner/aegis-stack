@@ -7,7 +7,7 @@ deterministic matching, and a concrete N+1 check on ``budget_summary``.
 """
 
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import event
@@ -18,6 +18,7 @@ from app.services.finance.schemas import BudgetLineResponse, GoalAsk
 from app.services.finance.service import FinanceService
 from tests.services._finance_factories import seed_account as _account
 from tests.services._finance_factories import seed_category as _category
+from tests.services._finance_factories import seed_stream
 from tests.services._finance_factories import seed_txn as _txn
 
 
@@ -58,10 +59,7 @@ def _count_queries(async_engine):
 
 class TestGetOrCreateBudget:
     @pytest.mark.asyncio
-    async def test_idempotent_across_periods(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_idempotent_across_periods(self, svc: FinanceService) -> None:
         first = await svc.get_or_create_budget(owner_user_id=1, period_month=_MONTH)
         second = await svc.get_or_create_budget(
             owner_user_id=1, period_month=_MONTH + 1
@@ -71,8 +69,7 @@ class TestGetOrCreateBudget:
         assert first.period == "monthly"
 
     @pytest.mark.asyncio
-    async def test_scoped_per_owner(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_scoped_per_owner(self, svc: FinanceService) -> None:
         mine = await svc.get_or_create_budget(owner_user_id=1, period_month=_MONTH)
         theirs = await svc.get_or_create_budget(owner_user_id=2, period_month=_MONTH)
         assert mine.id != theirs.id
@@ -81,9 +78,8 @@ class TestGetOrCreateBudget:
 class TestUpsertBudgetLine:
     @pytest.mark.asyncio
     async def test_category_target_create_and_replace(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
 
         created = await svc.upsert_budget_line(
@@ -112,8 +108,7 @@ class TestUpsertBudgetLine:
         assert replaced.allocated_amount == 75_000
 
     @pytest.mark.asyncio
-    async def test_payee_target(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_payee_target(self, svc: FinanceService) -> None:
         line = await svc.upsert_budget_line(
             owner_user_id=1,
             period_month=_MONTH,
@@ -127,12 +122,9 @@ class TestUpsertBudgetLine:
         assert line.payee_label == "Starbucks"
 
     @pytest.mark.asyncio
-    async def test_both_targets_rejected_by_db_check(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_both_targets_rejected_by_db_check(self, svc: FinanceService) -> None:
         from sqlalchemy.exc import IntegrityError
 
-        svc = FinanceService(async_db_session)
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
         with pytest.raises(IntegrityError):
             await svc.upsert_budget_line(
@@ -147,8 +139,7 @@ class TestUpsertBudgetLine:
 
 class TestDeleteBudgetLine:
     @pytest.mark.asyncio
-    async def test_delete_removes_line(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_delete_removes_line(self, svc: FinanceService) -> None:
         line = await svc.upsert_budget_line(
             owner_user_id=1,
             period_month=_MONTH,
@@ -161,19 +152,13 @@ class TestDeleteBudgetLine:
         assert await svc.delete_budget_line(line.id, owner_user_id=1) is False
 
     @pytest.mark.asyncio
-    async def test_delete_missing_returns_false(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_delete_missing_returns_false(self, svc: FinanceService) -> None:
         assert await svc.delete_budget_line(999_999, owner_user_id=1) is False
 
 
 class TestBudgetSummary:
     @pytest.mark.asyncio
-    async def test_category_and_payee_spend_math(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_category_and_payee_spend_math(self, svc: FinanceService) -> None:
         checking = await _account(svc)
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
 
@@ -222,19 +207,16 @@ class TestBudgetSummary:
 
     @pytest.mark.asyncio
     async def test_recurring_streams_are_context_not_limits(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Fixed/Non-monthly show detected commitments for CONTEXT - never
         a spend-vs-allocation "critical" the way Flexible lines do, even
         when this period's actual charge equals (or exceeds) the typical
         amount. A bill isn't over budget on itself."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc)
-        rent = await svc.create_recurring_stream(
-            owner_user_id=1,
+        rent = await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=185_000,
             next_expected_date=date(2026, 8, 1),
         )
@@ -253,15 +235,12 @@ class TestBudgetSummary:
 
     @pytest.mark.asyncio
     async def test_commitment_flags_when_it_moves_vs_last_month(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc)
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="Streaming Bundle",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=6_100,
             next_expected_date=date(2026, 8, 1),
         )
@@ -280,15 +259,12 @@ class TestBudgetSummary:
 
     @pytest.mark.asyncio
     async def test_commitment_on_schedule_when_stable(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc)
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="Internet",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=8_000,
             next_expected_date=date(2026, 8, 1),
         )
@@ -306,8 +282,7 @@ class TestBudgetSummary:
         assert line.variance_amount == 0
 
     @pytest.mark.asyncio
-    async def test_stats_block(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_stats_block(self, svc: FinanceService) -> None:
         checking = await _account(svc)
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
         await _txn(
@@ -321,11 +296,9 @@ class TestBudgetSummary:
             payee_label=None,
             allocated_amount=10_000,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=185_000,
             next_expected_date=date(2026, 8, 1),
         )
@@ -343,11 +316,10 @@ class TestBudgetSummary:
 
     @pytest.mark.asyncio
     async def test_no_n_plus_1_as_line_count_grows(
-        self, async_db_session: AsyncSession, async_engine
+        self, svc: FinanceService, async_engine
     ) -> None:
         """Query count must not grow with the number of budget lines - the
         whole point of tallying spend in one fetch instead of per line."""
-        svc = FinanceService(async_db_session)
         categories = [
             await svc.get_or_create_category_from_hint(f"Test:Cat{i}")
             for i in range(10)
@@ -394,25 +366,22 @@ class TestAccountScoping:
 
     @pytest.mark.asyncio
     async def test_income_and_spend_are_scoped_to_selected_accounts(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking")
         savings = await _account(svc, "Savings")
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=500_000,
             next_expected_date=date(2026, 8, 15),
             account_id=checking.id,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Side income",
             direction="inflow",
-            frequency="monthly",
             expected_amount=100_000,
             next_expected_date=date(2026, 8, 15),
             account_id=savings.id,
@@ -442,26 +411,21 @@ class TestAccountScoping:
         assert flexible.lines[0].spent_amount == 20_000
 
     @pytest.mark.asyncio
-    async def test_no_filter_counts_every_account(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_no_filter_counts_every_account(self, svc: FinanceService) -> None:
         checking = await _account(svc, "Checking")
         savings = await _account(svc, "Savings")
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=500_000,
             next_expected_date=date(2026, 8, 15),
             account_id=checking.id,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Side income",
             direction="inflow",
-            frequency="monthly",
             expected_amount=100_000,
             next_expected_date=date(2026, 8, 15),
             account_id=savings.id,
@@ -476,9 +440,8 @@ class TestAccountScoping:
 class TestParseBudgetGoal:
     @pytest.mark.asyncio
     async def test_matches_payee_with_default_fifty_percent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc)
         for day in (1, 8, 15, 22):
             await _txn(
@@ -500,10 +463,7 @@ class TestParseBudgetGoal:
         assert result.suggested_limit == 400
 
     @pytest.mark.asyncio
-    async def test_explicit_percentage_in_text(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_explicit_percentage_in_text(self, svc: FinanceService) -> None:
         checking = await _account(svc)
         for day in (1, 8, 15, 22):
             await _txn(svc, checking.id, -1_000, date(2026, 7, day), name="Starbucks")
@@ -517,9 +477,8 @@ class TestParseBudgetGoal:
 
     @pytest.mark.asyncio
     async def test_matches_category_when_no_payee_hits(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc)
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
         for day in (1, 8, 15, 22):
@@ -540,9 +499,8 @@ class TestParseBudgetGoal:
 
     @pytest.mark.asyncio
     async def test_no_match_writes_nothing_and_reports_unmatched(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         result = await svc.parse_budget_goal(
             owner_user_id=1, text="something entirely unrelated"
         )
@@ -564,24 +522,20 @@ class TestTheMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_the_three_totals_and_the_net(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=500_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=200_000,
             next_expected_date=date(2026, 8, 1),
             account_id=account.id,
@@ -608,24 +562,20 @@ class TestTheMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_a_negative_month_says_so(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=300_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=250_000,
             next_expected_date=date(2026, 8, 1),
             account_id=account.id,
@@ -646,17 +596,15 @@ class TestTheMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_a_non_monthly_bill_counts_at_its_monthly_share(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """The Bills cell is captioned "/ month", so a quarterly $300 bill
         belongs there at $100 - its face value is what it costs when it
         lands, not what it costs this month."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Water",
-            direction="outflow",
             frequency="quarterly",
             expected_amount=30_000,
             next_expected_date=date(2026, 8, 1),
@@ -669,7 +617,7 @@ class TestTheMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_the_cells_reconcile_to_the_verdict(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The invariant behind the header strip: the three figures on
         display must subtract to the fourth. They were computed on
@@ -677,13 +625,11 @@ class TestTheMonthOutlook:
         the verdict subtracted monthly-equivalents - so the strip visibly
         failed its own arithmetic by the size of the non-monthly bills.
         """
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=500_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
@@ -693,10 +639,9 @@ class TestTheMonthOutlook:
             ("Water", "quarterly", 30_000),
             ("Insurance", "annually", 120_000),
         ):
-            await svc.create_recurring_stream(
-                owner_user_id=1,
+            await seed_stream(
+                svc,
                 name=name,
-                direction="outflow",
                 frequency=freq,
                 expected_amount=amount,
                 next_expected_date=date(2026, 8, 1),
@@ -721,17 +666,15 @@ class TestTheMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_unconfirmed_rhythms_count_for_nothing(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Same commitment gate as the forecast and the rollup: a
         detector guess is not income you can spend."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="Maybe refunds",
             direction="inflow",
-            frequency="monthly",
             expected_amount=900_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
@@ -813,28 +756,24 @@ class TestTrimPlan:
 
     @pytest.mark.asyncio
     async def test_a_negative_month_ships_its_trim_plan(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The package: stats say the month is negative, trims say which
         budgets to lower and to what - one payload, so the tab can offer
         the fix beside the verdict and a later AI layer reads the same
         structure."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=200_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=150_000,
             next_expected_date=date(2026, 8, 1),
             account_id=account.id,
@@ -865,11 +804,10 @@ class TestGoalsJoinTheEquation:
 
     async def _income_and_budget(self, svc: FinanceService) -> None:
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=500_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
@@ -877,9 +815,8 @@ class TestGoalsJoinTheEquation:
 
     @pytest.mark.asyncio
     async def test_active_goals_subtract_from_the_month(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._income_and_budget(svc)
         await svc.create_virtual_goal(
             owner_user_id=1,
@@ -902,9 +839,8 @@ class TestGoalsJoinTheEquation:
 
     @pytest.mark.asyncio
     async def test_paused_and_reached_goals_ask_nothing(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._income_and_budget(svc)
         paused = await svc.create_virtual_goal(
             owner_user_id=1,
@@ -931,16 +867,13 @@ class TestGoalsJoinTheEquation:
 
     @pytest.mark.asyncio
     async def test_the_equation_still_balances_by_hand(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._income_and_budget(svc)
         account_id = (await svc.list_accounts(owner_user_id=1))[0][0].id
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=200_000,
             next_expected_date=date(2026, 8, 1),
             account_id=account_id,
@@ -1030,20 +963,17 @@ class TestMonthOutlook:
 
     async def _base(self, svc: FinanceService) -> int:
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=500_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=200_000,
             next_expected_date=date(2026, 8, 1),
             account_id=account.id,
@@ -1052,14 +982,12 @@ class TestMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_an_annual_bill_lands_in_its_month_at_face_value(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account_id = await self._base(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Geico",
-            direction="outflow",
             frequency="annually",
             expected_amount=250_000,
             next_expected_date=date(2026, 10, 12),
@@ -1084,16 +1012,11 @@ class TestMonthOutlook:
         assert october.month_net < september.month_net
 
     @pytest.mark.asyncio
-    async def test_muted_and_paused_stay_out(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_muted_and_paused_stay_out(self, svc: FinanceService) -> None:
         account_id = await self._base(svc)
-        eleanor = await svc.create_recurring_stream(
-            owner_user_id=1,
+        eleanor = await seed_stream(
+            svc,
             name="Eleanor",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=220_000,
             next_expected_date=date(2026, 9, 1),
             account_id=account_id,
@@ -1107,9 +1030,8 @@ class TestMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_goals_and_budgets_ask_every_month(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._base(svc)
         groceries = await _category(async_db_session, "Groceries")
         await svc.upsert_budget_line(
@@ -1137,18 +1059,16 @@ class TestMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_the_outlook_honours_the_account_filter(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Same scoping rule as the header it pages: narrowed to one
         account, only that account's streams count."""
-        svc = FinanceService(async_db_session)
         checking_id = await self._base(svc)
         savings = await _account(svc, name="Savings")
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Side income",
             direction="inflow",
-            frequency="monthly",
             expected_amount=100_000,
             next_expected_date=date(2026, 9, 10),
             account_id=savings.id,
@@ -1169,13 +1089,12 @@ class TestMonthOutlook:
 
     @pytest.mark.asyncio
     async def test_the_outlook_carries_the_running_balance(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Rate without level lies: +$3,000/mo of net means nothing if the
         account holds $500 and a big bill lands first. Each month carries
         where cash STARTS and ENDS, compounding from today's real balance
         of the selected accounts."""
-        svc = FinanceService(async_db_session)
         account_id = await self._base(svc)
         account = await svc.get_account(account_id, owner_user_id=1)
         account.current_balance = 50_000  # $500 in the bank today
@@ -1203,42 +1122,35 @@ class TestStatDetails:
 
     @pytest.mark.asyncio
     async def test_income_and_bills_rows_mirror_the_cells(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=500_000,
             next_expected_date=date(2026, 9, 1),
             account_id=account.id,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Mortgage",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=220_000,
             next_expected_date=date(2026, 9, 1),
             account_id=account.id,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Car insurance",
-            direction="outflow",
             frequency="annually",
             expected_amount=120_000,
             next_expected_date=date(2027, 1, 1),
             account_id=account.id,
         )
-        muted = await svc.create_recurring_stream(
-            owner_user_id=1,
+        muted = await seed_stream(
+            svc,
             name="Old gym",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=5_000,
             next_expected_date=date(2026, 9, 1),
             account_id=account.id,
@@ -1265,9 +1177,8 @@ class TestStatDetails:
 
     @pytest.mark.asyncio
     async def test_everything_else_rows_group_the_bucket(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         for month in (5, 6, 7):
             await svc.create_transaction(
@@ -1323,13 +1234,18 @@ class TestEverythingElse:
 
     @pytest.mark.asyncio
     async def test_reconcile_adjustments_are_not_spending(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A reconciliation adjustment is bookkeeping (making the ledger
         agree with a statement), not money the user chose to spend - it
         must not inflate the observed run rate."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
+        # Two months of it, so the real spending qualifies as a rate at
+        # all (see TestOneOffsDoNotBecomeARate) and the adjustment's
+        # absence is what this test is actually measuring.
+        await self._spend(
+            svc, account.id, date(2026, 6, 12), 30_000, name="Real spending"
+        )
         await self._spend(
             svc, account.id, date(2026, 7, 12), 30_000, name="Real spending"
         )
@@ -1343,13 +1259,12 @@ class TestEverythingElse:
         rate = await svc.uncovered_spending_rate(
             owner_user_id=1, today=date(2026, 8, 10)
         )
-        assert rate == 10_000  # $300 over 3 months; the adjustment is invisible
+        assert rate == 20_000  # $600 over 3 months; the adjustment is invisible
 
     @pytest.mark.asyncio
     async def test_uncovered_spend_becomes_the_run_rate(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         # $600 of unbudgeted, unbilled spending in each of the 3 full
         # months before "today" (Aug 10) - May, June, July.
@@ -1367,9 +1282,8 @@ class TestEverythingElse:
 
     @pytest.mark.asyncio
     async def test_billed_and_budgeted_spend_is_covered(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         groceries = await _category(async_db_session, "Groceries")
         await svc.upsert_budget_line(
@@ -1380,11 +1294,9 @@ class TestEverythingElse:
             payee_label=None,
             allocated_amount=100_000,
         )
-        rent = await svc.create_recurring_stream(
-            owner_user_id=1,
+        rent = await seed_stream(
+            svc,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=200_000,
             next_expected_date=date(2026, 9, 1),
             account_id=account.id,
@@ -1413,15 +1325,13 @@ class TestEverythingElse:
 
     @pytest.mark.asyncio
     async def test_the_equation_and_outlook_subtract_it(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=500_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
@@ -1440,3 +1350,464 @@ class TestEverythingElse:
         )
         assert outlook[1].everything_else == 60_000
         assert outlook[1].month_net == 500_000 - 60_000
+
+
+def _commitment_lines(summary) -> dict[int, BudgetLineResponse]:
+    """Fixed/Non-monthly lines by stream id (a commitment line's ``id`` IS
+    its stream's - these are streams shown for context, not budget rows)."""
+    return {
+        line.id: line
+        for bucket in summary.buckets
+        if bucket.name in ("fixed", "non_monthly")
+        for line in bucket.lines
+    }
+
+
+class TestCommitmentLinesCarryTheirMonthlySlice:
+    """The Fixed/Non-monthly lines are rendered under a "/mo" heading, so
+    the number on each line has to BE a monthly number.
+
+    The aggregate always did this (``commitment_rollup`` multiplies by the
+    cadence factor) but the per-line field was the raw face value, so a
+    six-month insurance premium read as if it were charged every month -
+    and the card's total, being the sum of those lines, inherited it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_semi_annual_premium_reads_as_a_sixth(
+        self, svc: FinanceService
+    ) -> None:
+        account = await _account(svc)
+        geico = await seed_stream(
+            svc,
+            name="Geico",
+            frequency="semi_annually",
+            expected_amount=177_945,
+            next_expected_date=date(2026, 9, 1),
+            account_id=account.id,
+        )
+
+        summary = await svc.budget_summary(owner_user_id=1)
+
+        assert _commitment_lines(summary)[geico.id].allocated_amount == 29_658
+
+    @pytest.mark.asyncio
+    async def test_a_monthly_bill_is_untouched(self, svc: FinanceService) -> None:
+        account = await _account(svc)
+        rent = await seed_stream(
+            svc,
+            name="Rent",
+            expected_amount=200_000,
+            next_expected_date=date(2026, 9, 1),
+            account_id=account.id,
+        )
+
+        summary = await svc.budget_summary(owner_user_id=1)
+
+        assert _commitment_lines(summary)[rent.id].allocated_amount == 200_000
+
+    @pytest.mark.asyncio
+    async def test_the_lines_sum_to_the_headline_total(
+        self, svc: FinanceService
+    ) -> None:
+        """The card's header is the sum of its lines, and the header strip
+        uses the rollup. Two footings for one figure is what made the
+        Budget tab disagree with itself."""
+        account = await _account(svc)
+        for name, frequency, amount in (
+            ("Geico", "semi_annually", 177_945),
+            ("Garbage", "bimonthly", 12_622),
+            ("Rent", "monthly", 200_000),
+        ):
+            await seed_stream(
+                svc,
+                name=name,
+                frequency=frequency,
+                expected_amount=amount,
+                next_expected_date=date(2026, 9, 1),
+                account_id=account.id,
+            )
+
+        summary = await svc.budget_summary(owner_user_id=1)
+        commitment_total = sum(
+            line.allocated_amount
+            for bucket in summary.buckets
+            if bucket.name in ("fixed", "non_monthly")
+            for line in bucket.lines
+        )
+
+        assert commitment_total == summary.stats.fixed_total
+
+    @pytest.mark.asyncio
+    async def test_a_one_time_bill_is_not_a_commitment_line(
+        self, svc: FinanceService
+    ) -> None:
+        """A one-off has no monthly slice - its factor is zero, so it would
+        render as "$0.00 /mo", which is worse than absent. It already shows
+        on the forecast timeline and in the outlook at its real date.
+        """
+        account = await _account(svc)
+        dentist = await seed_stream(
+            svc,
+            name="Dentist",
+            frequency="once",
+            expected_amount=230_000,
+            next_expected_date=date(2026, 9, 10),
+            account_id=account.id,
+        )
+
+        summary = await svc.budget_summary(owner_user_id=1)
+
+        assert dentist.id not in _commitment_lines(summary)
+        assert summary.stats.fixed_total == 0
+
+
+def _one_time_lines(summary) -> dict[int, BudgetLineResponse]:
+    """One-time lines by stream id, same convention as ``_commitment_lines``."""
+    return {
+        line.id: line
+        for bucket in summary.buckets
+        if bucket.name == "one_time"
+        for line in bucket.lines
+    }
+
+
+class TestOneTimePlansGetTheirOwnGroup:
+    """A one-off stream is a deliberate entry - a dentist visit, a gift -
+    not detector noise. Dropping it from Fixed/Non-monthly was right (it
+    has no monthly share), but dropping it from the card entirely hid
+    plans the user typed in on purpose. It gets its own group: face
+    value and a date, never a "/mo"."""
+
+    @staticmethod
+    async def _one_off(svc: FinanceService, name: str, amount: int, due: date):
+        account = await _account(svc)
+        return await seed_stream(
+            svc,
+            name=name,
+            frequency="once",
+            expected_amount=amount,
+            next_expected_date=due,
+            account_id=account.id,
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_one_time_bill_lands_in_the_one_time_group(
+        self, svc: FinanceService
+    ) -> None:
+        dentist = await self._one_off(svc, "Dentist", 230_000, date(2026, 9, 10))
+
+        summary = await svc.budget_summary(owner_user_id=1)
+
+        line = _one_time_lines(summary)[dentist.id]
+        assert line.allocated_amount == 230_000  # face value, not a share
+        assert line.due_date == date(2026, 9, 10)
+        assert line.payee_label == "Dentist"
+
+    @pytest.mark.asyncio
+    async def test_the_group_total_is_face_value_and_stays_out_of_fixed(
+        self, svc: FinanceService
+    ) -> None:
+        """The group sums whole amounts, and none of it leaks into the
+        monthly commitment math - a one-off is not a rate at any weight."""
+        await self._one_off(svc, "Dentist", 230_000, date(2026, 9, 10))
+        await self._one_off(svc, "Mimi", 100_000, date(2026, 9, 20))
+        await self._one_off(svc, "School Clothes", 24_000, date(2026, 8, 30))
+
+        summary = await svc.budget_summary(owner_user_id=1)
+
+        one_time = next(b for b in summary.buckets if b.name == "one_time")
+        assert one_time.total_allocated == 354_000
+        assert summary.stats.fixed_total == 0
+
+    @pytest.mark.asyncio
+    async def test_the_group_lists_soonest_first(self, svc: FinanceService) -> None:
+        await self._one_off(svc, "Dentist", 230_000, date(2026, 9, 10))
+        await self._one_off(svc, "School Clothes", 24_000, date(2026, 8, 30))
+
+        summary = await svc.budget_summary(owner_user_id=1)
+
+        one_time = next(b for b in summary.buckets if b.name == "one_time")
+        assert [line.payee_label for line in one_time.lines] == [
+            "School Clothes",
+            "Dentist",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_muted_one_off_stays_hidden(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        dentist = await self._one_off(svc, "Dentist", 230_000, date(2026, 9, 10))
+        dentist.is_muted = True
+        async_db_session.add(dentist)
+        await async_db_session.commit()
+
+        summary = await svc.budget_summary(owner_user_id=1)
+
+        assert dentist.id not in _one_time_lines(summary)
+
+
+class TestTheSummaryClockIsInjectable:
+    """budget_summary was the one read API stuck on the real clock - which
+    is exactly where the suite's time bombs lived: a pause that expires
+    against date.today() flips assertions on a calendar day, and tests
+    could only dodge it with relative dates. The clock is a parameter
+    now; this pins both sides of a pause boundary on fixed days."""
+
+    @pytest.mark.asyncio
+    async def test_a_pause_boundary_reads_the_injected_clock(
+        self, svc: FinanceService
+    ) -> None:
+        account = await _account(svc)
+        stream = await seed_stream(
+            svc,
+            name="Rent",
+            expected_amount=200_000,
+            next_expected_date=date(2026, 8, 15),
+            account_id=account.id,
+        )
+        await svc.pause_recurring(stream.id, until=date(2026, 11, 1), owner_user_id=1)
+
+        paused = await svc.budget_summary(owner_user_id=1, today=date(2026, 10, 31))
+        resumed = await svc.budget_summary(owner_user_id=1, today=date(2026, 11, 1))
+
+        assert paused.stats.fixed_total == 0
+        assert resumed.stats.fixed_total == 200_000
+
+
+class TestOneOffsDoNotBecomeARate:
+    """Averaging the whole 3-month window asserts that all of it recurs:
+    a single car repair then reads as a monthly habit for three months.
+
+    A rate must be earned twice. History decides whether a habit exists
+    at all (active in at least half the months of the category's record,
+    12-month lookback); the window then sizes the rate, with each month
+    capped at 3x the median month and the excess split off. Whatever
+    fails either bar is still real money - it reports at face value as
+    a one-off instead of being amortized.
+    """
+
+    @staticmethod
+    def _month_in_window(months_back: int, day: int = 4) -> date:
+        """A day inside one of the three FULL months before this one -
+        the window the uncovered-spend rate measures."""
+        first = date.today().replace(day=1)
+        month_index = first.month - 1 - months_back
+        year = first.year + month_index // 12
+        return date(year, month_index % 12 + 1, day)
+
+    async def _uncovered(
+        self,
+        svc: FinanceService,
+        session: AsyncSession,
+        category: str,
+        rows: list[tuple[date, int]],
+    ) -> None:
+        account = await _account(svc)
+        cat = await _category(session, category)
+        for when, amount in rows:
+            await _txn(svc, account.id, amount, when, category_id=cat.id)
+
+    @pytest.mark.asyncio
+    async def test_a_repeated_category_still_amortizes(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """Two steady months of a two-month-old category: the habit bar
+        judges a category against its OWN record, so a young category
+        amortizes without needing a year of history first."""
+        await self._uncovered(
+            svc,
+            async_db_session,
+            "Home:Lawn & Garden",
+            [
+                (self._month_in_window(1), -30_000),
+                (self._month_in_window(2), -30_000),
+            ],
+        )
+
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+
+        assert stats.everything_else == 20_000  # $600 over three months
+        assert stats.one_off_total == 0
+
+    @pytest.mark.asyncio
+    async def test_a_single_month_category_is_a_one_off_not_a_rate(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """One active month means a median of zero, so nothing survives
+        the cap into the rate - but dropping it from the rate must not
+        hide it: the whole amount moves to the one-off side intact."""
+        await self._uncovered(
+            svc,
+            async_db_session,
+            "Auto & Transport:Service & Parts",
+            [(self._month_in_window(2, day=25), -173_467)],
+        )
+
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+
+        assert stats.everything_else == 0
+        assert stats.one_off_total == 173_467
+
+    @pytest.mark.asyncio
+    async def test_three_charges_in_one_month_are_still_one_month(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The unit of evidence is the MONTH, not the transaction:
+        three charges on consecutive days are one active month, and one
+        active month is a one-off however many rows it took."""
+        await self._uncovered(
+            svc,
+            async_db_session,
+            "Shopping:Hobbies",
+            [
+                (self._month_in_window(2, day=3), -10_000),
+                (self._month_in_window(2, day=4), -10_000),
+                (self._month_in_window(2, day=5), -10_000),
+            ],
+        )
+
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+
+        assert stats.everything_else == 0
+        assert stats.one_off_total == 30_000
+
+    @pytest.mark.asyncio
+    async def test_the_breakdown_lists_one_offs_separately(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The popup renders only the rate rows, so those must sum to
+        the cell they explain - and the one-offs must stay classified
+        separately in the payload, because that split is exactly what
+        keeps the rate honest."""
+        await self._uncovered(
+            svc,
+            async_db_session,
+            "Home:Lawn & Garden",
+            [
+                (self._month_in_window(1), -30_000),
+                (self._month_in_window(2), -30_000),
+            ],
+        )
+        await self._uncovered(
+            svc,
+            async_db_session,
+            "Auto & Transport:Service & Parts",
+            [(self._month_in_window(2, day=25), -173_467)],
+        )
+
+        details = await svc.budget_stat_details(owner_user_id=1)
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+
+        assert sum(r.value for r in details.everything_else) == stats.everything_else
+        one_offs = {r.label: r.value for r in details.one_offs}
+        assert one_offs["Auto & Transport:Service & Parts"] == 173_467
+        assert "Home:Lawn & Garden" not in one_offs
+
+    @pytest.mark.asyncio
+    async def test_a_sparse_history_disqualifies_the_rate_entirely(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The 3-month window has no memory: dental work that clustered
+        into the window's months read as a habit even though the category
+        had been quiet for most of a year. A rate needs a habit, and a
+        habit means active in at least half the months since the category
+        was first seen (12-month lookback) - the window only sizes it.
+        """
+        account = await _account(svc)
+        cat = await _category(async_db_session, "Health & Fitness:Dentist")
+        # A checkup 11 months ago, then the root-canal saga inside the
+        # window: 3 active months out of 11 is not a habit.
+        await _txn(
+            svc, account.id, -15_000, self._month_in_window(11), category_id=cat.id
+        )
+        for months_back, amount in ((3, -21_000), (2, -187_000), (1, -11_626)):
+            await _txn(
+                svc,
+                account.id,
+                amount,
+                self._month_in_window(months_back),
+                category_id=cat.id,
+            )
+
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+
+        assert stats.everything_else == 0
+        # Only the window's spending is the card's population - the old
+        # checkup is history, evidence but not a bill.
+        assert stats.one_off_total == 219_626
+
+    @pytest.mark.asyncio
+    async def test_an_old_category_is_judged_on_the_full_year(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The span is the category's RECORD, not its recent filtered
+        activity: toys bought since 2020 with a quiet year and two buys
+        in the window is still a sparse category, even though the last
+        twelve months' uncovered rows all fall inside the window."""
+        account = await _account(svc)
+        cat = await _category(async_db_session, "Kids:Toys")
+        old = date.today().replace(day=15)
+        for _ in range(20):
+            old = (old.replace(day=1) - timedelta(days=1)).replace(day=15)
+        await _txn(svc, account.id, -15_000, old, category_id=cat.id)
+        for months_back in (1, 2):
+            await _txn(
+                svc,
+                account.id,
+                -30_000,
+                self._month_in_window(months_back),
+                category_id=cat.id,
+            )
+
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+
+        assert stats.everything_else == 0
+        assert stats.one_off_total == 60_000
+
+    @pytest.mark.asyncio
+    async def test_a_spike_beside_a_small_month_is_not_averaged(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The case that survived the first rule: a $1,734 repair in one
+        month and a $36 charge in another are two months of evidence, so
+        the category qualified as a rate and both got averaged into
+        $590/mo. The typical month is $36; the repair is a one-off.
+        """
+        await self._uncovered(
+            svc,
+            async_db_session,
+            "Auto & Transport:Service & Parts",
+            [
+                (self._month_in_window(2, day=25), -173_467),
+                (self._month_in_window(1, day=20), -3_605),
+            ],
+        )
+
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+
+        # Median month is $36.05, so the spike contributes at most 3x that.
+        assert stats.everything_else == 4_807
+        assert stats.one_off_total == 162_652
+
+    @pytest.mark.asyncio
+    async def test_steady_months_are_left_alone(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The cap must only bite on outliers: three ordinary months of
+        groceries-shaped spending stay a plain average."""
+        await self._uncovered(
+            svc,
+            async_db_session,
+            "Home:Lawn & Garden",
+            [
+                (self._month_in_window(1), -30_000),
+                (self._month_in_window(2), -33_000),
+                (self._month_in_window(3), -27_000),
+            ],
+        )
+
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
+
+        assert stats.everything_else == 30_000
+        assert stats.one_off_total == 0

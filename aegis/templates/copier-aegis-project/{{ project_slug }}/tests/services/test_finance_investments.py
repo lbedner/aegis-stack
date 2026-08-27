@@ -9,7 +9,6 @@ CLI, and dashboard use.
 from datetime import date
 
 import pytest
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.domains.investments.securities import market_value_cents
 from app.services.finance.service import FinanceService
@@ -44,9 +43,8 @@ class TestMarketValue:
 class TestSecurities:
     @pytest.mark.asyncio
     async def test_get_or_create_is_idempotent_case_insensitive(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         first = await svc.get_or_create_security(ticker="aapl", name="Apple Inc.")
         again = await svc.get_or_create_security(ticker="AAPL")
         assert again.id == first.id  # same catalog row, not a duplicate
@@ -55,10 +53,7 @@ class TestSecurities:
 
 class TestProviderSecurityResolution:
     @pytest.mark.asyncio
-    async def test_same_provider_id_updates_in_place(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_same_provider_id_updates_in_place(self, svc: FinanceService) -> None:
         first = await svc.upsert_provider_security(
             provider="plaid",
             provider_security_id="plaid-vti",
@@ -82,12 +77,11 @@ class TestProviderSecurityResolution:
 
     @pytest.mark.asyncio
     async def test_partial_payload_does_not_erase_catalog_fields(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """An activities row often carries only the provider security id
         (no pricing, sometimes no descriptives). Re-upserting from such a
         partial payload must not erase what a fuller sync already stored."""
-        svc = FinanceService(async_db_session)
         full = await svc.upsert_provider_security(
             provider="snaptrade",
             provider_security_id="sym-aapl",
@@ -107,12 +101,9 @@ class TestProviderSecurityResolution:
         assert partial.close_price == 15_000
 
     @pytest.mark.asyncio
-    async def test_figi_merges_across_providers(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_figi_merges_across_providers(self, svc: FinanceService) -> None:
         """The FIN-25 contract: the same instrument reported by two
         aggregators resolves to ONE catalog row, keyed by FIGI."""
-        svc = FinanceService(async_db_session)
         plaid_row = await svc.upsert_provider_security(
             provider="plaid",
             provider_security_id="plaid-aapl",
@@ -135,10 +126,7 @@ class TestProviderSecurityResolution:
         assert snaptrade_row.name == "Apple Inc."  # not clobbered by None
 
     @pytest.mark.asyncio
-    async def test_cusip_fallback_when_figi_missing(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_cusip_fallback_when_figi_missing(self, svc: FinanceService) -> None:
         first = await svc.upsert_provider_security(
             provider="plaid",
             provider_security_id="plaid-bond",
@@ -154,11 +142,10 @@ class TestProviderSecurityResolution:
 
     @pytest.mark.asyncio
     async def test_no_identifiers_stays_provider_scoped(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Without a standard identifier there is nothing safe to merge on:
         two providers get two rows."""
-        svc = FinanceService(async_db_session)
         plaid_row = await svc.upsert_provider_security(
             provider="plaid", provider_security_id="plaid-mystery"
         )
@@ -171,9 +158,8 @@ class TestProviderSecurityResolution:
 class TestHoldings:
     @pytest.mark.asyncio
     async def test_upsert_creates_and_syncs_account_balance(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="Brokerage",
@@ -197,10 +183,7 @@ class TestHoldings:
         assert refreshed.current_balance == 150_000
 
     @pytest.mark.asyncio
-    async def test_upsert_is_idempotent_on_date(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_upsert_is_idempotent_on_date(self, svc: FinanceService) -> None:
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="B",
@@ -227,9 +210,8 @@ class TestHoldings:
 
     @pytest.mark.asyncio
     async def test_list_current_takes_latest_dated_snapshot(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="B",
@@ -261,11 +243,10 @@ class TestHoldings:
 
     @pytest.mark.asyncio
     async def test_excludes_holdings_of_soft_deleted_account(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         # Disconnecting a provider soft-deletes the account but leaves its
         # holding rows; those must not leak into portfolio listings/totals.
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="Brokerage",

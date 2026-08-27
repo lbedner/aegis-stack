@@ -13,6 +13,8 @@ the tool reads it when the model calls ``save_memory``. Without it the
 tool declines politely instead of guessing.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
@@ -22,8 +24,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.models.agents import AgentUserMemory
 from app.services.ai.domains.chat.tools import register_tool
+from app.services.ai.models.agents import AgentUserMemory
+from app.services.ai.models.agents.timestamps import utcnow_naive
 
 MEMORY_CATEGORIES = (
     "family",
@@ -32,12 +35,37 @@ MEMORY_CATEGORIES = (
     "health",
     "personal",
     "program",
+    "finance",
     "general",
 )
 
-current_user_id: ContextVar[str | None] = ContextVar(
-    "current_user_id", default=None
-)
+# Tools that WRITE memory. Code mode sandboxes an agent's tools behind
+# run_code; these stay native calls so a write is a visible tool call in
+# the trail rather than a line inside generated Python.
+MEMORY_WRITE_TOOL_NAMES: tuple[str, ...] = ("save_memory", "replace_memory")
+
+current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
+
+# The user a single-tenant install writes memory for. Chat turns without an
+# authenticated user (the dashboard's own surfaces) resolve to this, so the
+# facts the assistant saves and the facts the dashboard lists are one store.
+DEFAULT_MEMORY_USER_ID = "0"
+
+@contextmanager
+def memory_user(user_id: str) -> Iterator[None]:
+    """Bind the turn's user so ``save_memory`` knows who it is saving for.
+
+    Every chat runtime wraps its model call in this. Without it the tool
+    has no identity, declines the write, and returns a plain string the
+    model reads as success - the user is told a fact was stored while
+    nothing reached the database.
+    """
+    token = current_user_id.set(user_id)
+    try:
+        yield
+    finally:
+        current_user_id.reset(token)
+
 
 SAVE_MEMORY_GUIDANCE = (
     "When the user shares a durable personal fact (family, food "
@@ -101,7 +129,7 @@ async def save_user_fact(
         }
     )
     row.memory = {**row.memory, "structured_facts": facts}
-    row.updated_at = datetime.now(UTC)
+    row.updated_at = utcnow_naive()
     session.add(row)
     await session.commit()
     logger.info("Saved user fact", user_id=user_id, category=category)
@@ -125,11 +153,84 @@ async def replace_user_memory(
     if row is None:
         row = AgentUserMemory(user_id=user_id)
     row.memory = {**row.memory, "structured_facts": facts}
-    row.updated_at = datetime.now(UTC)
+    row.updated_at = utcnow_naive()
     session.add(row)
     await session.commit()
     logger.info("Replaced user memory", user_id=user_id, fact_count=len(facts))
     return f"Memory replaced with {len(facts)} fact(s)."
+
+
+async def list_user_facts(
+    user_id: str,
+    *,
+    session: AsyncSession,
+) -> list[dict[str, Any]]:
+    """Saved facts for a user, each carrying the ``index`` that addresses it.
+
+    Facts live in one JSON list, so position IS the identity: the dashboard
+    edits and deletes by it.
+    """
+    row = await get_user_memory(session, user_id)
+    if row is None:
+        return []
+    return [{**entry, "index": i} for i, entry in enumerate(_facts(row))]
+
+
+async def _rewrite_facts(
+    user_id: str,
+    facts: list[dict[str, Any]],
+    *,
+    session: AsyncSession,
+) -> None:
+    row = await get_user_memory(session, user_id)
+    if row is None:
+        raise IndexError(f"No saved memory for user {user_id}")
+    row.memory = {**row.memory, "structured_facts": facts}
+    row.updated_at = utcnow_naive()
+    session.add(row)
+    await session.commit()
+
+
+async def update_user_fact(
+    user_id: str,
+    index: int,
+    *,
+    fact: str | None = None,
+    category: str | None = None,
+    session: AsyncSession,
+) -> dict[str, Any]:
+    """Rewrite one saved fact in place; returns the updated entry."""
+    facts = [
+        {k: v for k, v in entry.items() if k != "index"}
+        for entry in await list_user_facts(user_id, session=session)
+    ]
+    if not 0 <= index < len(facts):
+        raise IndexError(f"No fact at index {index} for user {user_id}")
+    if fact is not None and fact.strip():
+        facts[index]["fact"] = fact.strip()
+    if category is not None:
+        facts[index]["category"] = _normalize_category(category)
+    await _rewrite_facts(user_id, facts, session=session)
+    logger.info("Updated user fact", user_id=user_id, index=index)
+    return {**facts[index], "index": index}
+
+
+async def delete_user_fact(
+    user_id: str,
+    index: int,
+    *,
+    session: AsyncSession,
+) -> None:
+    """Forget one saved fact."""
+    facts = [
+        {k: v for k, v in entry.items() if k != "index"}
+        for entry in await list_user_facts(user_id, session=session)
+    ]
+    if not 0 <= index < len(facts):
+        raise IndexError(f"No fact at index {index} for user {user_id}")
+    facts.pop(index)
+    await _rewrite_facts(user_id, facts, session=session)
+    logger.info("Deleted user fact", user_id=user_id, index=index)
 
 
 def format_user_memory(row: AgentUserMemory | None) -> str | None:

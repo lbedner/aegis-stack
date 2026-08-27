@@ -1,0 +1,18 @@
+{% if include_finance %}
+"""Shared fixtures for the service-layer suite."""
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.finance.service import FinanceService
+
+
+@pytest.fixture
+async def svc(async_db_session: AsyncSession) -> FinanceService:
+    """The finance service under test.
+
+    One construction site for ~450 tests: when FinanceService grows a
+    constructor argument, this is the only line that changes.
+    """
+    return FinanceService(async_db_session)
+{% endif %}

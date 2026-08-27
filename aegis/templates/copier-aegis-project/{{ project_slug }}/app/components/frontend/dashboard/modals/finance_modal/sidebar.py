@@ -19,11 +19,9 @@ import flet as ft
 
 from app.components.frontend.controls import (
     BaseIconButton,
-    H3Text,
     NumericText,
     PrimaryText,
     SecondaryText,
-    Tag,
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.dialog import StyledAlertDialog
@@ -64,14 +62,10 @@ from app.components.frontend.dashboard.modals.finance_modal.formatting import (
     _group_for,
     _liability_line,
     _parse_dollars,
-    _type_label,
     _usd,
 )
 from app.components.frontend.dashboard.modals.finance_modal.import_summary import (
     _import_menu,
-)
-from app.components.frontend.dashboard.modals.modal_sections import (
-    headline_stat_color,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 
@@ -435,73 +429,3 @@ class AccountsSidebar(ft.Container):
 
     async def _connect_brokerage(self) -> None:
         await _connect_brokerage_flow(self.page, self.reload)
-
-
-def _account_detail_header(
-    account: dict, *, on_rename, on_remove, on_reconcile
-) -> ft.Control:
-    """The header shown above an account's register: name, type, balance, and a
-    Manage menu (Rename and Reconcile always; Remove for manual accounts only —
-    provider accounts are owned by the bank connection)."""
-    balance = _account_display_balance(account)
-    is_manual = account.get("is_manual", False)
-    classification = (account.get("classification") or "asset").title()
-    source = "Manual" if is_manual else "Connected"
-    meta = f"{classification}  ·  {source}  ·  {(account.get('currency') or 'usd').upper()}"
-
-    menu_items = [
-        ft.PopupMenuItem(text="Rename", on_click=lambda _e: on_rename(account)),
-        ft.PopupMenuItem(text="Reconcile", on_click=lambda _e: on_reconcile(account)),
-    ]
-    if is_manual:
-        menu_items.append(
-            ft.PopupMenuItem(text="Remove", on_click=lambda _e: on_remove(account))
-        )
-    manage = ft.PopupMenuButton(
-        icon=ft.Icons.MORE_VERT,
-        # Explicit: without it the icon inherits the theme primary (teal),
-        # and accent means "act on me" - a quiet overflow trigger isn't that.
-        # Same ink as ActionMenu's kebab and every other muted icon button.
-        icon_color=ft.Colors.ON_SURFACE_VARIANT,
-        tooltip="Manage account",
-        items=menu_items,
-    )
-
-    left = ft.Column(
-        [
-            ft.Row(
-                [
-                    H3Text(
-                        account.get("name", ""),
-                        color=Theme.Colors.TEXT_PRIMARY,
-                    ),
-                    Tag(
-                        text=_type_label(account.get("account_type")),
-                        color=Theme.Colors.INFO,
-                    ),
-                ],
-                spacing=Theme.Spacing.SM,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            SecondaryText(
-                meta,
-                size=Theme.Typography.CAPTION,
-                color=Theme.Colors.TEXT_SECONDARY,
-            ),
-        ],
-        spacing=Theme.Spacing.XS,
-        expand=True,
-    )
-    right = NumericText(
-        _usd(balance),
-        size=Theme.Typography.H2,
-        color=headline_stat_color(balance),
-        weight=ft.FontWeight.W_700,
-    )
-    return ft.Container(
-        content=ft.Row(
-            [left, right, manage],
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        ),
-        padding=ft.padding.only(bottom=Theme.Spacing.SM),
-    )

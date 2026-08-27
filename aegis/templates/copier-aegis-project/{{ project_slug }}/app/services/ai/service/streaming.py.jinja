@@ -38,7 +38,10 @@ from app.services.ai.domains.chat.module_context import render_memory_modules
 from app.services.ai.domains.chat.rag_context import RAGContext
 {%- endif %}
 {%- if ai_backend != "memory" %}
-from app.services.ai.domains.chat.user_memory import build_user_memory_context
+from app.services.ai.domains.chat.user_memory import (
+    build_user_memory_context,
+    memory_user,
+)
 {%- endif %}
 from app.services.ai.domains.llm.providers import ProviderNotInstalledError
 from app.services.ai.models import (
@@ -110,6 +113,9 @@ class StreamingMixin(ChatMixin):
             user_id: User identifier for conversation ownership
             stream_delta: Whether to stream delta changes or full content
             agent_slug: Agent row to speak as (None = the default agent)
+            surface: Originating chat surface, recorded on new
+                conversations so each embedded chat lists only its own
+                history
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -233,86 +239,90 @@ class StreamingMixin(ChatMixin):
             stream_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 {% endif %}
             tool_trace: list[dict[str, Any]] = []
-            async with agent.run_stream_events(conversation_context) as events:
-                async for event in events:
-                    text_chunk = ""
-                    if isinstance(event, PartStartEvent) and isinstance(
-                        event.part, TextPart
-                    ):
-                        text_chunk = event.part.content
-                    elif isinstance(event, PartDeltaEvent) and isinstance(
-                        event.delta, TextPartDelta
-                    ):
-                        text_chunk = event.delta.content_delta
-                    elif isinstance(event, FunctionToolCallEvent):
-                        # Text streamed before a tool call is running
-                        # commentary ("let me check..."), not the answer.
-                        # Reset accumulation so the saved message and final
-                        # chunk carry only what follows the last tool call,
-                        # and notify the UI which tool is running.
-                        streaming_conv.accumulated_content = ""
-                        record_tool_call(tool_trace, event)
-                        yield self._tool_notice(
-                            event.part.tool_name,
-                            args=call_args_preview(event.part.args),
-                            message_id=message_id,
-                            conversation_id=conversation.id,
-                            stream_delta=stream_delta,
-                        )
-                        continue
-                    elif isinstance(event, FunctionToolResultEvent):
-                        # A completing run_code call carries its sandbox-
-                        # dispatched calls as metadata; surface each one so
-                        # the UI trail shows what the script actually did.
-                        record_tool_result(tool_trace, event)
-                        for name, args in nested_tool_calls(event):
+            # The turn's user rides a ContextVar for the whole stream:
+            # a memory write lands mid-stream, inside a tool call, and
+            # has no other way to know whose fact it is.
+            with memory_user(user_id):
+                async with agent.run_stream_events(conversation_context) as events:
+                    async for event in events:
+                        text_chunk = ""
+                        if isinstance(event, PartStartEvent) and isinstance(
+                            event.part, TextPart
+                        ):
+                            text_chunk = event.part.content
+                        elif isinstance(event, PartDeltaEvent) and isinstance(
+                            event.delta, TextPartDelta
+                        ):
+                            text_chunk = event.delta.content_delta
+                        elif isinstance(event, FunctionToolCallEvent):
+                            # Text streamed before a tool call is running
+                            # commentary ("let me check..."), not the answer.
+                            # Reset accumulation so the saved message and final
+                            # chunk carry only what follows the last tool call,
+                            # and notify the UI which tool is running.
+                            streaming_conv.accumulated_content = ""
+                            record_tool_call(tool_trace, event)
                             yield self._tool_notice(
-                                name,
-                                args=args,
+                                event.part.tool_name,
+                                args=call_args_preview(event.part.args),
                                 message_id=message_id,
                                 conversation_id=conversation.id,
                                 stream_delta=stream_delta,
                             )
-                        continue
-                    elif isinstance(event, AgentRunResultEvent):
-{% if ai_backend != "memory" %}
-                        usage_obj = (
-                            event.result.usage()
-                            if callable(getattr(event.result, "usage", None))
-                            else getattr(event.result, "usage", None)
+                            continue
+                        elif isinstance(event, FunctionToolResultEvent):
+                            # A completing run_code call carries its sandbox-
+                            # dispatched calls as metadata; surface each one so
+                            # the UI trail shows what the script actually did.
+                            record_tool_result(tool_trace, event)
+                            for name, args in nested_tool_calls(event):
+                                yield self._tool_notice(
+                                    name,
+                                    args=args,
+                                    message_id=message_id,
+                                    conversation_id=conversation.id,
+                                    stream_delta=stream_delta,
+                                )
+                            continue
+                        elif isinstance(event, AgentRunResultEvent):
+    {% if ai_backend != "memory" %}
+                            usage_obj = (
+                                event.result.usage()
+                                if callable(getattr(event.result, "usage", None))
+                                else getattr(event.result, "usage", None)
+                            )
+                            if usage_obj:
+                                stream_usage = {
+                                    "input_tokens": getattr(usage_obj, "input_tokens", 0)
+                                    or 0,
+                                    "output_tokens": getattr(usage_obj, "output_tokens", 0)
+                                    or 0,
+                                }
+    {% else %}
+                            pass
+    {% endif %}
+                        if not text_chunk:
+                            continue
+
+                        # Accumulate content
+                        total_content = streaming_conv.accumulate_content(
+                            text_chunk, is_delta=True
                         )
-                        if usage_obj:
-                            stream_usage = {
-                                "input_tokens": getattr(usage_obj, "input_tokens", 0)
-                                or 0,
-                                "output_tokens": getattr(usage_obj, "output_tokens", 0)
-                                or 0,
-                            }
-{% else %}
-                        pass
-{% endif %}
-                    if not text_chunk:
-                        continue
 
-                    # Accumulate content
-                    total_content = streaming_conv.accumulate_content(
-                        text_chunk, is_delta=True
-                    )
-
-                    # Yield streaming message chunk
-                    yield StreamingMessage(
-                        content=text_chunk if stream_delta else total_content,
-                        is_final=False,
-                        is_delta=stream_delta,
-                        message_id=message_id,
-                        conversation_id=conversation.id,
-                        metadata={
-                            "provider": current.provider,
-                            "model": current.model,
-                            "stream_delta": stream_delta,
-                        },
-                    )
-{% else %}
+                        # Yield streaming message chunk
+                        yield StreamingMessage(
+                            content=text_chunk if stream_delta else total_content,
+                            is_final=False,
+                            is_delta=stream_delta,
+                            message_id=message_id,
+                            conversation_id=conversation.id,
+                            metadata={
+                                "provider": current.provider,
+                                "model": current.model,
+                                "stream_delta": stream_delta,
+                            },
+                        )
+    {% else %}
             # Use LangChain's astream method for streaming
             async for chunk in llm.astream(messages):
                 # Get content from chunk

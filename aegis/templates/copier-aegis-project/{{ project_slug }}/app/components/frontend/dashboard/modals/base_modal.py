@@ -76,7 +76,9 @@ class BaseDetailDialog(ft.AlertDialog):
         super().__init__(
             modal=False,
             title=self._create_title(),
-            content=content,
+            # An AlertDialog is its own route: the page-level selection
+            # region cannot reach inside it, so it carries its own.
+            content=ft.SelectionArea(content=content),
             actions=[
                 ft.TextButton("Close", on_click=self._close),
             ],

@@ -13,18 +13,17 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from tests.services._finance_factories import seed_account as _account
 from app.services.finance.domains.detection.insights import commitment_rollup
 from app.services.finance.service import FinanceService
-
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_stream
 
 
 async def _once_bill(svc, *, due=date(2026, 8, 15), amount=50_000):
     account = await _account(svc)
-    return await svc.create_recurring_stream(
-        owner_user_id=1,
+    return await seed_stream(
+        svc,
         name="Pay back Bob",
-        direction="outflow",
         frequency="once",
         expected_amount=amount,
         next_expected_date=due,
@@ -34,20 +33,18 @@ async def _once_bill(svc, *, due=date(2026, 8, 15), amount=50_000):
 
 class TestAOneTimeBill:
     @pytest.mark.asyncio
-    async def test_it_can_be_created(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_it_can_be_created(self, svc: FinanceService) -> None:
         stream = await _once_bill(svc)
         assert stream.frequency == "once"
         assert stream.next_expected_date == date(2026, 8, 15)
 
     @pytest.mark.asyncio
     async def test_it_projects_exactly_one_occurrence(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """The whole point of putting it in Bills: the forecast dips by
         $500 on the 15th - once. A cadence bill would repeat to the
         horizon; this must not."""
-        svc = FinanceService(async_db_session)
         await _once_bill(svc)
 
         result = await svc.project_balances(
@@ -60,12 +57,9 @@ class TestAOneTimeBill:
         assert hits[0].amount == -50_000
 
     @pytest.mark.asyncio
-    async def test_a_past_one_is_not_recharged(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_a_past_one_is_not_recharged(self, svc: FinanceService) -> None:
         """Same rule every stream follows: the forecast never re-charges
         the past. Chasing a missed payment is the insight rules' job."""
-        svc = FinanceService(async_db_session)
         await _once_bill(svc, due=date(2026, 7, 1))
 
         result = await svc.project_balances(
@@ -76,13 +70,12 @@ class TestAOneTimeBill:
 
     @pytest.mark.asyncio
     async def test_it_stays_out_of_the_monthly_rollup(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        """"About $X/month in recurring bills" answers what life costs
+        """ "About $X/month in recurring bills" answers what life costs
         per month. A one-off debt is not a monthly cost, and folding
         $500 into that headline at any weight would be wrong at every
         weight."""
-        svc = FinanceService(async_db_session)
         stream = await _once_bill(svc)
 
         rollup = commitment_rollup([stream])
@@ -91,12 +84,11 @@ class TestAOneTimeBill:
 
     @pytest.mark.asyncio
     async def test_editing_to_once_does_not_invent_a_date(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The derive-on-edit rule steps a cadence forward from the last
         occurrence - "once" has no step, and inventing a due date for a
         debt would be guessing when you owe someone money."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         txn = await svc.create_transaction(
             account_id=account.id,

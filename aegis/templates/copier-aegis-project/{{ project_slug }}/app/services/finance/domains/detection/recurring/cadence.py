@@ -17,6 +17,7 @@ bill).
 from __future__ import annotations
 
 from datetime import date
+import re
 import statistics
 
 from app.services.finance.constants import CADENCES
@@ -24,6 +25,10 @@ from app.services.finance.models import FinanceTransaction
 from app.services.finance.utils import normalize_payee
 
 MIN_OCCURRENCES = 3
+
+# Key suffix separating "a second bill on the same payee" from the base
+# key ("anthropic", "anthropic#2", "anthropic#a2" for an amount band).
+SPLIT_MARK = "#"
 
 
 INTERVAL_TOLERANCE = 0.20  # +/- 20% of a canonical cadence
@@ -56,13 +61,20 @@ MIN_STREAM_AMOUNT = 200
 # and so were Wix, AES, TJX and Synchrony - they simply ended in 2019.
 # Scaled by cadence, because 11 months of silence is normal for an annual
 # bill and terminal for a monthly one.
-MAX_SILENCE_DAYS = 365
+MAX_SILENCE_DAYS = 120
 
 
 SILENCE_CADENCE_MULTIPLE = 2
 
 
 AMOUNT_TOLERANCE = 0.20  # within 20% of median => fixed amount
+
+# When a candidate group resembles a CONFIRMED bill (nested key tokens,
+# same cadence, same slot), this is how far its price may sit from the
+# bill's average and still be "that bill again" - wider than
+# AMOUNT_TOLERANCE because a bill's own history spans its price bumps
+# ($15.49 HBO era vs the $18.49 bill it became).
+BILL_RESEMBLANCE_TOLERANCE = 0.35
 
 
 # Canonical cadence (median-gap days) -> frequency label.
@@ -112,6 +124,25 @@ def _rhythm_ratio(gaps: list[int], canonical: int) -> float:
     return sum(1 for g in gaps if abs(g - canonical) <= slack) / len(gaps)
 
 
+# Descriptor churn the fallback key must survive: embedded statement
+# dates ("CA 05/25" becomes "CA 06/25" next month), masked card
+# references that reformat ("XXXX--X4013", "XXXX4013"), and long
+# reference numbers. Each makes one bill a parade of unique keys that
+# never reaches MIN_OCCURRENCES.
+_EMBEDDED_DATE = re.compile(r"\b\d{1,2}[/-]\d{2,4}\b")
+_KEY_NOISE = re.compile(r"\b(?:X{2,}\w*|\w*\d{3,}\w*)\b")
+_SPACES = re.compile(r"\s+")
+
+
+def _descriptor_key(raw: str) -> str:
+    """``normalize_payee`` minus the parts that change between charges.
+
+    Only the detection KEY - stored aliases and display names keep the
+    full normalization, so nothing already persisted re-keys."""
+    base = normalize_payee(_EMBEDDED_DATE.sub(" ", raw))
+    return _SPACES.sub(" ", _KEY_NOISE.sub(" ", base)).strip()
+
+
 def _payee_key(txn: FinanceTransaction) -> str:
     """Stable grouping key for one transaction.
 
@@ -130,11 +161,13 @@ def _payee_key(txn: FinanceTransaction) -> str:
     The normalized-descriptor fallback is what still auto-detects
     everything nobody has named a payee for - so assigning payees is an
     improvement you opt into per merchant, not a prerequisite for the
-    feature working at all.
+    feature working at all. The fallback strips descriptor churn first
+    (see ``_descriptor_key``): without that, the YouTube case above is
+    every unassigned vendor's fate.
     """
     if txn.merchant_id is not None:
         return f"merchant:{txn.merchant_id}"
-    return normalize_payee(
+    return _descriptor_key(
         txn.merchant_name or txn.original_description or txn.name or ""
     )
 
@@ -142,9 +175,11 @@ def _payee_key(txn: FinanceTransaction) -> str:
 def _has_gone_quiet(last_date: date, canonical: int | None, today: date) -> bool:
     """Has this stream been silent long enough to be over?
 
-    ``max`` of a flat year and twice the cadence: the flat floor kills a
-    monthly bill that stopped, the multiple keeps an annual one alive
-    through its normal 11-month gap.
+    ``max`` of a flat floor and twice the cadence: the floor gives a
+    monthly bill a few months' grace (a card swap, a skipped cycle)
+    before it reads as stopped, the multiple keeps an annual one alive
+    through its normal 11-month gap. A flat YEAR here meant a monthly
+    subscription dead since January was still proposed in August.
     """
     window = max(MAX_SILENCE_DAYS, SILENCE_CADENCE_MULTIPLE * (canonical or 0))
     return (today - last_date).days > window
@@ -173,3 +208,81 @@ def _declared_cadence(members: list[FinanceTransaction]) -> tuple[str, float | N
         return "unknown", None
     median_interval = statistics.median(gaps)
     return _frequency_for(median_interval) or "irregular", median_interval
+
+
+def _group_cadence(members: list[FinanceTransaction], today: date) -> str | None:
+    """The cadence this group would detect as, or None - the same gates
+    the main pass applies, shared so the amount-band fallback can never
+    disagree with it about what "fails"."""
+    if len(members) < MIN_OCCURRENCES:
+        return None
+    ordered = sorted(members, key=lambda t: (t.date_, t.id or 0))
+    gaps = [
+        (ordered[i].date_ - ordered[i - 1].date_).days for i in range(1, len(ordered))
+    ]
+    gaps = [g for g in gaps if g > 0]
+    if not gaps:
+        return None
+    frequency = _frequency_for(statistics.median(gaps))
+    if frequency is None:
+        return None
+    canonical = _canonical_days(frequency)
+    if not canonical or _rhythm_ratio(gaps, canonical) < MIN_RHYTHM_RATIO:
+        return None
+    if _has_gone_quiet(ordered[-1].date_, canonical, today):
+        return None
+    return frequency
+
+
+def _amount_bands(
+    members: list[FinanceTransaction],
+) -> list[list[FinanceTransaction]]:
+    """Greedy clustering by charge size (25%, floored at $3), largest
+    band first so the dominant subscription keeps the base key."""
+    bands: list[list[FinanceTransaction]] = []
+    for txn in sorted(members, key=lambda t: abs(t.amount)):
+        for band in bands:
+            anchor = abs(band[0].amount)
+            if abs(abs(txn.amount) - anchor) <= max(0.25 * anchor, 300):
+                band.append(txn)
+                break
+        else:
+            bands.append([txn])
+    bands.sort(key=len, reverse=True)
+    return bands
+
+
+def split_interleaved(
+    work: list[tuple[int, str, str, list[FinanceTransaction]]],
+    today: date,
+) -> tuple[
+    list[tuple[int, str, str, list[FinanceTransaction]]],
+    list[FinanceTransaction],
+]:
+    """Split a payee group into amount bands when the bands are the
+    truer story.
+
+    A group splits when at least TWO bands are independently viable
+    streams (enough members, own clean cadence) - authoritative, because
+    interleaved gaps can fake a shorter cadence for the whole group - or
+    when the whole group has no rhythm and exactly ONE band does: a live
+    subscription must not die with the dead sibling it used to share a
+    descriptor with. A variable bill (seasonal electric) reaches
+    neither: one viable band, but the whole group keeps its own clean
+    rhythm and stays whole. The dominant band keeps the base key;
+    members in no viable band are returned for release.
+    """
+    expanded: list[tuple[int, str, str, list[FinanceTransaction]]] = []
+    released: list[FinanceTransaction] = []
+    for account_id, direction, payee, members in work:
+        if len(members) >= 2 * MIN_OCCURRENCES:
+            bands = [b for b in _amount_bands(members) if _group_cadence(b, today)]
+            if bands and (len(bands) >= 2 or _group_cadence(members, today) is None):
+                for index, band in enumerate(bands):
+                    key = payee if index == 0 else f"{payee}{SPLIT_MARK}a{index + 1}"
+                    expanded.append((account_id, direction, key, band))
+                banded = {id(t) for b in bands for t in b}
+                released.extend(t for t in members if id(t) not in banded)
+                continue
+        expanded.append((account_id, direction, payee, members))
+    return expanded, released

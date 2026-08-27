@@ -7,6 +7,11 @@ from sqlmodel import (
     select,
 )
 from app.core.log import logger
+
+# Registers the finance host tools (ledger/accounts/quote) by import, so a
+# bare seeding process gets their ``tool`` rows and the grants below
+# resolve. Same reason the ai fixtures import their built-ins.
+import app.services.finance.ai_tools  # noqa: F401
 from app.services.ai.models.agents import (
     Agent,
     AgentTool,
@@ -100,6 +105,10 @@ FINANCE_CHAT_TOOL_NAMES = (
     "ledger",
     "accounts",
     "quote",
+    # The one write: durable facts the user states about their money
+    # (a property value, a bill no connection reports) outlive the
+    # conversation. Not a ledger write - that rides the approval queue.
+    "save_memory",
 )
 
 

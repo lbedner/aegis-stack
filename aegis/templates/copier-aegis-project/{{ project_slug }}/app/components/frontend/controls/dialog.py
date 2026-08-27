@@ -125,7 +125,9 @@ class StyledAlertDialog(ft.AlertDialog):
         )
         super().__init__(
             modal=True,
-            content=panel,
+            # Text controls are plain (see controls/text.py): selection is a
+            # property of the region, so every surface encloses its own.
+            content=ft.SelectionArea(content=panel),
             content_padding=0,
             bgcolor=ft.Colors.TRANSPARENT,
             elevation=0,

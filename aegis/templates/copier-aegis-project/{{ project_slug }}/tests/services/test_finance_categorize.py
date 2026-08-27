@@ -10,17 +10,15 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from tests.services._finance_factories import seed_account as _account
 from app.services.finance.service import FinanceService
-
+from tests.services._finance_factories import seed_account as _account
 
 
 class TestCategorizeTransaction:
     @pytest.mark.asyncio
     async def test_manual_categorize_sets_source_and_flags(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
         txn = await svc.create_transaction(
@@ -41,18 +39,12 @@ class TestCategorizeTransaction:
         assert result.is_reviewed is True
 
     @pytest.mark.asyncio
-    async def test_missing_transaction_returns_none(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_missing_transaction_returns_none(self, svc: FinanceService) -> None:
         result = await svc.categorize_transaction(999999, 1, owner_user_id=1)
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_wrong_owner_cannot_categorize(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_wrong_owner_cannot_categorize(self, svc: FinanceService) -> None:
         checking = await _account(svc, "Checking", "checking", "asset", owner_user_id=1)
         category = await svc.get_or_create_category_from_hint("Food:Groceries")
         txn = await svc.create_transaction(
@@ -74,9 +66,8 @@ class TestSuggestCategories:
 
     @pytest.mark.asyncio
     async def test_suggests_dominant_prior_category_by_payee_without_writing(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
 
@@ -115,8 +106,7 @@ class TestSuggestCategories:
         assert fresh.category_source == "unset"
 
     @pytest.mark.asyncio
-    async def test_no_history_is_skipped(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_no_history_is_skipped(self, svc: FinanceService) -> None:
         checking = await _account(svc, "Checking", "checking", "asset")
         await svc.create_transaction(
             account_id=checking.id,
@@ -132,9 +122,8 @@ class TestSuggestCategories:
 
     @pytest.mark.asyncio
     async def test_tied_precedent_is_skipped_not_guessed(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
         other = await svc.get_or_create_category_from_hint("Shopping:General")
@@ -172,13 +161,10 @@ class TestSuggestCategories:
         assert result.skipped == 1
 
     @pytest.mark.asyncio
-    async def test_transaction_ids_scopes_the_sweep(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_transaction_ids_scopes_the_sweep(self, svc: FinanceService) -> None:
         """A checkbox selection: candidates are narrowed to the given ids,
         but the precedent tally still draws on the owner's full history -
         a narrower selection isn't weaker evidence for the payees in it."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         groceries = await svc.get_or_create_category_from_hint("Food:Groceries")
         coffee = await svc.get_or_create_category_from_hint("Food:Coffee")
@@ -247,9 +233,8 @@ class TestExcludedRowsStayOutOfTheQueue:
 
     @pytest.mark.asyncio
     async def test_an_excluded_row_is_not_asked_about(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         card = await _account(svc, "Amex", "credit_card", "liability")
         excluded = await svc.create_transaction(
             account_id=card.id,
@@ -278,11 +263,10 @@ class TestExcludedRowsStayOutOfTheQueue:
 
     @pytest.mark.asyncio
     async def test_transfer_legs_are_not_asked_about_either(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Same reasoning: a paired card-payment leg is excluded from
         every figure, so categorizing it is busywork."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking", "checking", "asset")
         leg = await svc.create_transaction(
             account_id=checking.id,
@@ -296,6 +280,8 @@ class TestExcludedRowsStayOutOfTheQueue:
         async_db_session.add(leg)
         await async_db_session.flush()
 
-        _items, total = await svc.uncategorized_transactions(owner_user_id=1, limit=None)
+        _items, total = await svc.uncategorized_transactions(
+            owner_user_id=1, limit=None
+        )
 
         assert total == 0

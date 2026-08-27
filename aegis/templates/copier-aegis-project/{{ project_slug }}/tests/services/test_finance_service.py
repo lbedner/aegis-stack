@@ -17,9 +17,8 @@ from app.services.finance.service import FinanceService
 class TestFinanceAccounts:
     @pytest.mark.asyncio
     async def test_create_manual_account_and_net_worth(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
             owner_user_id=1,
             name="Chase Checking",
@@ -44,9 +43,8 @@ class TestFinanceAccounts:
 
     @pytest.mark.asyncio
     async def test_list_accounts_excludes_hidden(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await svc.create_manual_account(
             owner_user_id=1, name="A", account_type="checking", classification="asset"
         )
@@ -65,10 +63,7 @@ class TestFinanceAccounts:
         assert total == 2
 
     @pytest.mark.asyncio
-    async def test_net_worth_is_owner_scoped(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_net_worth_is_owner_scoped(self, svc: FinanceService) -> None:
         await svc.create_manual_account(
             owner_user_id=1,
             name="Mine",
@@ -87,8 +82,7 @@ class TestFinanceAccounts:
         assert (await svc.get_net_worth(owner_user_id=2)).total_assets_amount == 999
 
     @pytest.mark.asyncio
-    async def test_update_account_balance(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_update_account_balance(self, svc: FinanceService) -> None:
         acct = await svc.create_manual_account(
             owner_user_id=1,
             name="House",
@@ -105,18 +99,14 @@ class TestFinanceAccounts:
 
     @pytest.mark.asyncio
     async def test_update_missing_account_returns_none(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         assert await svc.update_account_balance(999_999, current_balance=1) is None
 
 
 class TestFinanceTransactions:
     @pytest.mark.asyncio
-    async def test_create_and_list_newest_first(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_create_and_list_newest_first(self, svc: FinanceService) -> None:
         acct = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -142,11 +132,8 @@ class TestFinanceTransactions:
         assert txns[0].name == "Payroll"  # newest first
 
     @pytest.mark.asyncio
-    async def test_account_transaction_totals(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_account_transaction_totals(self, svc: FinanceService) -> None:
         """Per-account register balance = sum of its transactions (one query)."""
-        svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -195,8 +182,7 @@ class TestFinanceTransactions:
         )
 
     @pytest.mark.asyncio
-    async def test_two_lane_dedup(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_two_lane_dedup(self, svc: FinanceService) -> None:
         acct = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -249,10 +235,7 @@ class TestFinanceTransactions:
 
 class TestFinanceStatusSummary:
     @pytest.mark.asyncio
-    async def test_summary_counts_and_net_worth(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_summary_counts_and_net_worth(self, svc: FinanceService) -> None:
         await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -275,7 +258,7 @@ class TestFinanceStatusSummary:
 
     @pytest.mark.asyncio
     async def test_card_path_folds_counts_and_respects_hidden(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """The dashboard card path issues one aggregate query per table
         (account, connection, insight rollups — no N+1), and the
@@ -284,7 +267,6 @@ class TestFinanceStatusSummary:
         from sqlalchemy import event
         from sqlalchemy.engine import Engine
 
-        svc = FinanceService(async_db_session)
         await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -338,10 +320,7 @@ class TestFinanceStatusSummary:
 
 class TestFinanceHealth:
     @pytest.mark.asyncio
-    async def test_health_empty_then_with_account(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_health_empty_then_with_account(self, svc: FinanceService) -> None:
         health = await svc.health(owner_user_id=1)
         assert health.status == "ok"
         assert health.accounts == 0
@@ -360,8 +339,7 @@ class TestFinanceHealth:
 
 class TestFinanceAccountEdits:
     @pytest.mark.asyncio
-    async def test_update_rename_hide(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_update_rename_hide(self, svc: FinanceService) -> None:
         acct = await svc.create_manual_account(
             owner_user_id=1,
             name="Old",
@@ -376,10 +354,7 @@ class TestFinanceAccountEdits:
         assert updated.is_hidden is True
 
     @pytest.mark.asyncio
-    async def test_soft_delete_hides_but_keeps_row(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_soft_delete_hides_but_keeps_row(self, svc: FinanceService) -> None:
         acct = await svc.create_manual_account(
             owner_user_id=1,
             name="Temp",
@@ -394,18 +369,12 @@ class TestFinanceAccountEdits:
         assert acct.deleted_at is not None
 
     @pytest.mark.asyncio
-    async def test_missing_account_edits_are_noops(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_missing_account_edits_are_noops(self, svc: FinanceService) -> None:
         assert await svc.update_account(999_999, name="x") is None
         assert await svc.soft_delete_account(999_999) is False
 
     @pytest.mark.asyncio
-    async def test_owner_scoping_blocks_other_user(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_owner_scoping_blocks_other_user(self, svc: FinanceService) -> None:
         acct = await svc.create_manual_account(
             owner_user_id=1,
             name="Mine",
@@ -420,9 +389,8 @@ class TestFinanceAccountEdits:
 class TestFinanceValuations:
     @pytest.mark.asyncio
     async def test_upsert_tracks_latest_as_current_balance(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         acct = await svc.create_manual_account(
             owner_user_id=1,
             name="My House",
@@ -449,9 +417,8 @@ class TestFinanceValuations:
 
     @pytest.mark.asyncio
     async def test_upsert_same_date_source_is_idempotent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         acct = await svc.create_manual_account(
             owner_user_id=1,
             name="House",
@@ -484,11 +451,10 @@ class TestFinanceNetWorth:
 
     @pytest.mark.asyncio
     async def test_recompute_series_liability_sign(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.domains.ledger import networth
 
-        svc = FinanceService(async_db_session)
         house = await svc.create_manual_account(
             owner_user_id=1,
             name="My House",
@@ -526,11 +492,12 @@ class TestFinanceNetWorth:
         assert latest.net_worth_amount == 20_500_000  # 50.5M - 30M
 
     @pytest.mark.asyncio
-    async def test_series_via_facade(self, async_db_session: AsyncSession) -> None:
+    async def test_series_via_facade(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
         """Routes read the series through the facade, so it must expose it."""
         from app.services.finance.domains.ledger import networth
 
-        svc = FinanceService(async_db_session)
         await svc.create_manual_account(
             owner_user_id=1,
             name="Cash",
@@ -545,14 +512,13 @@ class TestFinanceNetWorth:
 
     @pytest.mark.asyncio
     async def test_recompute_is_idempotent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from sqlmodel import func, select
 
         from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceNetWorthSnapshot
 
-        svc = FinanceService(async_db_session)
         await svc.create_manual_account(
             owner_user_id=1,
             name="Cash",
@@ -569,14 +535,13 @@ class TestFinanceNetWorth:
 
     @pytest.mark.asyncio
     async def test_gap_days_carry_forward_estimated(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from sqlmodel import select
 
         from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceBalanceSnapshot
 
-        svc = FinanceService(async_db_session)
         house = await svc.create_manual_account(
             owner_user_id=1,
             name="House",
@@ -607,7 +572,7 @@ class TestFinanceNetWorth:
 
     @pytest.mark.asyncio
     async def test_recompute_query_count_is_constant_in_accounts(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """recompute preloads in bulk, so SELECT count does not scale with the
         number of accounts (guards against the old O(accounts x days) N+1)."""
@@ -623,7 +588,6 @@ class TestFinanceNetWorth:
                 selects["n"] += 1
 
         async def _recompute_owner(owner: int, account_count: int) -> int:
-            svc = FinanceService(async_db_session)
             for i in range(account_count):
                 await svc.create_manual_account(
                     owner_user_id=owner,
@@ -660,11 +624,10 @@ class TestFinanceNetWorth:
 class TestTransactionVisibility:
     @pytest.mark.asyncio
     async def test_removed_account_transactions_hidden_from_register(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Soft-deleting an account keeps its transactions in the DB (history +
         re-link reconciliation) but hides them from the default register view."""
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -689,9 +652,8 @@ class TestTransactionVisibility:
 class TestCategorization:
     @pytest.mark.asyncio
     async def test_pfc_category_idempotent_and_classified(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         food = await svc.get_or_create_pfc_category("FOOD_AND_DRINK")
         again = await svc.get_or_create_pfc_category("food_and_drink")  # same slug
         assert again.id == food.id
@@ -706,9 +668,8 @@ class TestCategorization:
 
     @pytest.mark.asyncio
     async def test_spending_by_category_sums_outflows_largest_first(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -736,14 +697,13 @@ class TestCategorization:
 
     @pytest.mark.asyncio
     async def test_spending_by_category_rolls_up_to_the_parent_segment(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Two "Food & Dining:*" leaves combine into one "Food & Dining"
         total instead of each competing separately for a top-N pie slice -
         the fix for the Overview pie's "Other" slice fragmenting real
         spending across every sub-category (confirmed on live data: 30.7%
         "Other" leaf-grouped vs 16.3% parent-rolled-up, same window)."""
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -778,13 +738,12 @@ class TestCategorization:
 
     @pytest.mark.asyncio
     async def test_spending_transactions_matches_the_parent_categorys_leaves(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """The transactions behind a spending_by_category slice - passing
         the parent name pulls every leaf underneath it, so drilling into
         a pie slice shows exactly what summed to its total. A list of
         names (the "Other" drill-down case) matches any of them."""
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
@@ -849,13 +808,12 @@ class TestNetWorthSnapshotsFromRegister:
 
     @pytest.mark.asyncio
     async def test_imported_accounts_count_and_debt_subtracts(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from datetime import date, timedelta
 
         from app.services.finance.domains.ledger import networth
 
-        svc = FinanceService(async_db_session)
         # Neither account gets an authoritative balance: this is exactly a
         # CSV import, where ``current_balance`` stays 0 and the register is
         # the only source of truth.
@@ -995,9 +953,8 @@ class TestAccountScopedViews:
 
     @pytest.mark.asyncio
     async def test_spending_by_category_scopes_to_the_accounts(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking, card = await self._two_accounts(svc)
         food = await svc.get_or_create_pfc_category("FOOD_AND_DRINK")
         for account, amount in ((checking, -1_000), (card, -7_000)):
@@ -1019,10 +976,7 @@ class TestAccountScopedViews:
         assert only_checking == [("Food And Drink", 1_000)]
 
     @pytest.mark.asyncio
-    async def test_cashflow_scopes_to_the_accounts(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_cashflow_scopes_to_the_accounts(self, svc: FinanceService) -> None:
         checking, card = await self._two_accounts(svc)
         today = date.today()
         await svc.create_transaction(
@@ -1049,12 +1003,11 @@ class TestAccountScopedViews:
 
     @pytest.mark.asyncio
     async def test_net_worth_series_scopes_and_signs_by_classification(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceBalanceSnapshot
 
-        svc = FinanceService(async_db_session)
         checking, card = await self._two_accounts(svc)
         day = date.today()
         for account, balance in ((checking, 100_000), (card, -40_000)):
@@ -1088,14 +1041,13 @@ class TestAccountScopedViews:
 
     @pytest.mark.asyncio
     async def test_a_foreign_owners_account_id_contributes_nothing(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The join back to the owner's accounts is the tenancy guard: passing
         someone else's account id must not leak their series."""
         from app.services.finance.domains.ledger import networth
         from app.services.finance.models import FinanceBalanceSnapshot
 
-        svc = FinanceService(async_db_session)
         foreign = await svc.create_manual_account(
             owner_user_id=2,
             name="Not yours",

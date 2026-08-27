@@ -437,6 +437,21 @@ async def startup_database_init() -> None:
             logger.warning(f"Finance seed failed: {e}")
 {% endif %}
 
+{% if include_ai and ai_backend != "memory" %}
+        # Seed the agent registry: agents, memory modules, and one tool row
+        # per registered tool. Tool rows are what grants attach to by name,
+        # so an unseeded registry leaves every agent without its tools.
+        try:
+            from app.components.backend.startup.agent_registry import (
+                seed_agent_registry,
+            )
+
+            counts = seed_agent_registry()
+            logger.info(f"Agent registry verified: {counts}")
+        except Exception as e:
+            logger.warning(f"Agent registry seed failed: {e}")
+{% endif %}
+
 {% if include_ai and database_engine == "postgres" %}
         # Seed the LLM catalog if it is empty (postgres only - SQLite syncs
         # during generation). Once populated, the scheduler's periodic job

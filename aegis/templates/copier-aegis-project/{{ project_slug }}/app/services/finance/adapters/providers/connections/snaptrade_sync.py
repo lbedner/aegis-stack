@@ -22,6 +22,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.encryption import decrypt_secret, encrypt_secret
 from app.services.finance.adapters.providers import queries
+from app.services.finance.adapters.providers.connections import snaptrade_mapping
 from app.services.finance.adapters.providers.connections.common import (
     _SNAPTRADE_SECRET_CONTEXT,
     SyncResult,
@@ -52,65 +53,11 @@ _SNAPTRADE_LOOKBACK_DAYS = 730
 _SNAPTRADE_ACTIVITY_OVERLAP_DAYS = 7
 _SNAPTRADE_ACTIVITY_PAGE = 500
 
-# SnapTrade activity ``type`` -> canonical finance_trade type. TRANSFER is
-# resolved by cash direction below; anything unknown degrades to "other" so a
-# new provider type never breaks a sync.
-_SNAPTRADE_TRADE_TYPES: dict[str, str] = {
-    "BUY": "buy",
-    "SELL": "sell",
-    "DIVIDEND": "dividend",
-    "STOCK_DIVIDEND": "dividend",
-    "REI": "reinvest",
-    "INTEREST": "interest",
-    "FEE": "fee",
-    "TAX": "tax",
-    "CONTRIBUTION": "deposit",
-    "WITHDRAWAL": "withdrawal",
-    "SPLIT": "split",
-}
-
 
 def _snaptrade_user_id(owner_user_id: int | None) -> str:
     """The immutable SnapTrade ``userId`` for an app user. Deterministic so it
     never needs storing; SnapTrade scopes user ids to the partner app."""
     return "user-standalone" if owner_user_id is None else f"user-{owner_user_id}"
-
-
-def _map_snaptrade_trade_type(raw_type: str | None, amount: int | None) -> str:
-    kind = (raw_type or "").upper()
-    if kind == "TRANSFER":
-        return "transfer_in" if (amount or 0) >= 0 else "transfer_out"
-    return _SNAPTRADE_TRADE_TYPES.get(kind, "other")
-
-
-def _snaptrade_symbol_fields(symbol: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Flatten a SnapTrade symbol payload to upsert_provider_security kwargs.
-
-    Positions nest it as ``position.symbol.symbol`` (a UniversalSymbol);
-    activities carry the UniversalSymbol directly. Both are handled here.
-    """
-    if not symbol:
-        return None
-    inner = symbol.get("symbol")
-    if isinstance(inner, dict):  # PositionSymbol wrapper -> UniversalSymbol
-        symbol = inner
-    provider_security_id = symbol.get("id")
-    if not provider_security_id:
-        return None
-    security_type = symbol.get("type") or {}
-    currency = symbol.get("currency") or {}
-    return {
-        "provider_security_id": str(provider_security_id),
-        "ticker": symbol.get("raw_symbol") or symbol.get("symbol"),
-        "name": symbol.get("description"),
-        "security_type": security_type.get("code")
-        if isinstance(security_type, dict)
-        else security_type,
-        "figi": symbol.get("figi_code"),
-        "currency": (
-            currency.get("code", "usd") if isinstance(currency, dict) else currency
-        ).lower(),
-    }
 
 
 async def _snaptrade_user_secret(
@@ -343,20 +290,22 @@ async def _apply_snaptrade_positions(
     (``sync_account_balance=False``), mirroring the Plaid path."""
     count = 0
     for position in positions:
-        fields = _snaptrade_symbol_fields(position.get("symbol"))
+        fields = snaptrade_mapping.instrument_fields(
+            position.get("instrument"), position.get("currency")
+        )
         if fields is None:
             continue
-        units = position.get("units")
+        units = snaptrade_mapping.decimal_value(position.get("units"))
         if units is None:
             continue
-        price = position.get("price")
+        price = snaptrade_mapping.decimal_value(position.get("price"))
         price_cents = round(price * 100) if price is not None else None
         security = await service.upsert_provider_security(
             provider=Provider.SNAPTRADE,
             close_price=price_cents,
             **fields,
         )
-        average_cost = position.get("average_purchase_price")
+        average_cost = snaptrade_mapping.decimal_value(position.get("cost_basis"))
         await service.upsert_holding(
             owner_user_id=owner_user_id,
             account_id=account_id,
@@ -401,7 +350,7 @@ async def _apply_snaptrade_activities(
         trade_date = date.fromisoformat(str(raw_date)[:10])
         amount = activity.get("amount")
         amount_cents = round(amount * 100) if amount is not None else 0
-        fields = _snaptrade_symbol_fields(activity.get("symbol"))
+        fields = snaptrade_mapping.symbol_fields(activity.get("symbol"))
         security_id = None
         if fields is not None:
             security = await service.upsert_provider_security(
@@ -415,7 +364,9 @@ async def _apply_snaptrade_activities(
         await service.upsert_trade(
             owner_user_id=connection.owner_user_id,
             account_id=account_id,
-            trade_type=_map_snaptrade_trade_type(activity.get("type"), amount_cents),
+            trade_type=snaptrade_mapping.map_trade_type(
+                activity.get("type"), amount_cents
+            ),
             subtype=activity.get("option_type") or activity.get("type"),
             trade_date=trade_date,
             amount=amount_cents,

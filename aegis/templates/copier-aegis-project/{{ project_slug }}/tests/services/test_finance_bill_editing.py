@@ -17,7 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.domains.detection import declare_recurring
 from app.services.finance.service import FinanceService
-from tests.services._finance_factories import declare_bill
+from tests.services._finance_factories import declare_bill, seed_stream
 from tests.services._finance_factories import seed_account as _account
 from tests.services._finance_factories import seed_category as _category
 
@@ -31,11 +31,10 @@ async def _bill(svc: FinanceService, db: AsyncSession, account_id: int, name: st
 class TestBillCategory:
     @pytest.mark.asyncio
     async def test_a_stored_category_is_what_gets_shown(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Otherwise the edit saves and the table keeps showing the
         category derived from the transactions - a silent no-op."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         stream, txns = await _bill(svc, async_db_session, account.id, "ACME MART")
@@ -52,11 +51,10 @@ class TestBillCategory:
 
     @pytest.mark.asyncio
     async def test_the_derived_category_still_shows_when_none_is_stored(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The existing behaviour has to survive - most bills have no
         stored category and the derived one is all there is."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         stream, txns = await _bill(svc, async_db_session, account.id, "ACME MART")
@@ -70,9 +68,8 @@ class TestBillCategory:
 
     @pytest.mark.asyncio
     async def test_the_member_transactions_are_left_alone(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         stream, txns = await _bill(svc, async_db_session, account.id, "ACME MART")
@@ -92,11 +89,10 @@ class TestBillCategory:
 class TestCategoryAtDeclareTime:
     @pytest.mark.asyncio
     async def test_make_recurring_can_set_the_category(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.domains.detection import plan_recurring
 
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         household = await _category(async_db_session, "Home:Household")
         txns = [
@@ -137,11 +133,10 @@ class TestCategoryAtDeclareTime:
 
     @pytest.mark.asyncio
     async def test_declaring_with_a_category_leaves_transactions_alone(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.domains.detection import plan_recurring
 
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         household = await _category(async_db_session, "Home:Household")
         txns = [
@@ -198,11 +193,10 @@ class TestEditingTheCadence:
 
     @pytest.mark.asyncio
     async def test_every_offered_cadence_can_actually_be_saved(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The menu and the validator are two different lists. Offering a
         cadence the validator rejects turns a dropdown into a 422."""
-        svc = FinanceService(async_db_session)
         stream = await self._bill_with_no_cadence(svc, async_db_session)
 
         from app.components.frontend.dashboard.modals.finance_modal import (
@@ -217,11 +211,10 @@ class TestEditingTheCadence:
 
     @pytest.mark.asyncio
     async def test_setting_a_cadence_fills_in_the_missing_due_date(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Otherwise the bill is exactly as invisible as before, and the
         user has no way to know the edit did not take."""
-        svc = FinanceService(async_db_session)
         stream = await self._bill_with_no_cadence(svc, async_db_session)
 
         updated = await svc.update_recurring(
@@ -234,10 +227,9 @@ class TestEditingTheCadence:
 
     @pytest.mark.asyncio
     async def test_an_explicit_due_date_still_wins(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Deriving is the fallback, never an override."""
-        svc = FinanceService(async_db_session)
         stream = await self._bill_with_no_cadence(svc, async_db_session)
 
         updated = await svc.update_recurring(
@@ -252,17 +244,14 @@ class TestEditingTheCadence:
 
     @pytest.mark.asyncio
     async def test_a_bill_that_already_has_a_due_date_is_left_alone(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Changing the cadence on a healthy bill must not silently move
         the date it is due."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc, "Other")
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="Netflix",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=1_599,
             next_expected_date=date(2026, 9, 6),
             account_id=account.id,
@@ -277,10 +266,9 @@ class TestEditingTheCadence:
 
     @pytest.mark.asyncio
     async def test_the_repaired_bill_reaches_the_forecast(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The point of the whole exercise."""
-        svc = FinanceService(async_db_session)
         stream = await self._bill_with_no_cadence(svc, async_db_session)
         await svc.update_recurring(
             stream.id, owner_user_id=1, frequency="monthly", expected_amount=97_044

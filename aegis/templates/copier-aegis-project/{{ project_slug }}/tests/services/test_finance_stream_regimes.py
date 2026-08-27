@@ -19,14 +19,14 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from tests.services._finance_factories import seed_account as _account, seed_spend_series as _spend
 from app.services.finance.domains.detection import declare_recurring, detect_recurring
-from app.services.finance.service import FinanceService
 from app.services.finance.models import FinanceRecurringStream
+from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_spend_series as _spend
+from tests.services._finance_factories import seed_stream
 
 TODAY = date(2026, 8, 3)
-
-
 
 
 async def _rows(db: AsyncSession) -> list[FinanceRecurringStream]:
@@ -36,11 +36,10 @@ async def _rows(db: AsyncSession) -> list[FinanceRecurringStream]:
 class TestProposalsAreRebuilt:
     @pytest.mark.asyncio
     async def test_a_stale_proposal_is_hard_deleted_not_soft(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """No debris. A proposal that stops being justified does not linger
         as a soft-deleted ghost holding a unique key - it is GONE."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         txns = await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
@@ -57,9 +56,8 @@ class TestProposalsAreRebuilt:
 
     @pytest.mark.asyncio
     async def test_rebuild_is_idempotent(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
 
@@ -72,11 +70,10 @@ class TestProposalsAreRebuilt:
 
     @pytest.mark.asyncio
     async def test_a_proposal_keeps_its_identity_across_rebuilds(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Same evidence -> same row updated in place, not a delete+insert
         churning ids (the UI holds ids across a reload)."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
@@ -90,9 +87,8 @@ class TestProposalsAreRebuilt:
 class TestDismissalsSurvive:
     @pytest.mark.asyncio
     async def test_a_muted_proposal_stays_muted_through_rebuilds(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
@@ -108,11 +104,10 @@ class TestDismissalsSurvive:
 
     @pytest.mark.asyncio
     async def test_a_deleted_proposal_does_not_come_back_loud(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """delete on a proposal = dismissal. The rhythm keeps firing, so
         the row is regenerated - but silent, never loud."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
@@ -126,10 +121,9 @@ class TestDismissalsSurvive:
 
     @pytest.mark.asyncio
     async def test_a_dismissal_whose_pattern_died_is_purged(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A dismissal of something no longer proposed is debris."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         txns = await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
@@ -149,16 +143,19 @@ class TestDismissalsSurvive:
 class TestTheRecordIsUntouchable:
     @pytest.mark.asyncio
     async def test_a_confirmed_row_survives_any_rebuild(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Even orphaned, even dead-quiet since 2020 - protection has no
         expiry, and rebuild only sweeps PROPOSALS."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1, name="Old Payroll", direction="inflow",
-            frequency="biweekly", expected_amount=13_463,
-            next_expected_date=date(2020, 4, 3), account_id=account.id,
+        stream = await seed_stream(
+            svc,
+            name="Old Payroll",
+            direction="inflow",
+            frequency="biweekly",
+            expected_amount=13_463,
+            next_expected_date=date(2020, 4, 3),
+            account_id=account.id,
         )
 
         for _ in range(2):
@@ -170,11 +167,10 @@ class TestTheRecordIsUntouchable:
 
     @pytest.mark.asyncio
     async def test_confirming_a_proposal_moves_it_across_the_line(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Confirm is THE door: the row flips regimes in place, keeps its
         id, and the next rebuild neither deletes nor duplicates it."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
@@ -191,16 +187,13 @@ class TestTheRecordIsUntouchable:
 
     @pytest.mark.asyncio
     async def test_declared_bills_are_record_not_proposal(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         txns = await _spend(
             svc, account.id, [date(2026, m, 3) for m in range(1, 5)], name="GYM"
         )
-        await declare_recurring(
-            async_db_session, [t.id for t in txns], owner_user_id=1
-        )
+        await declare_recurring(async_db_session, [t.id for t in txns], owner_user_id=1)
 
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
 
@@ -220,9 +213,8 @@ class TestOnlyTheRecordCounts:
 
     @pytest.mark.asyncio
     async def test_a_proposal_never_projects(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 8)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
@@ -233,11 +225,10 @@ class TestOnlyTheRecordCounts:
 
     @pytest.mark.asyncio
     async def test_a_proposal_costs_nothing_in_the_rollup(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.domains.detection import commitment_rollup
 
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 8)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)
@@ -247,11 +238,10 @@ class TestOnlyTheRecordCounts:
 
     @pytest.mark.asyncio
     async def test_confirming_makes_it_count(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.domains.detection import commitment_rollup
 
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 8)])
         await detect_recurring(async_db_session, owner_user_id=1, today=TODAY)

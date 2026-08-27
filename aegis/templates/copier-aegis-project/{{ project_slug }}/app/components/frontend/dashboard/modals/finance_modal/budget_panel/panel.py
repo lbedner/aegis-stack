@@ -321,23 +321,7 @@ class BudgetPanel(
         children.append(self._flexible_section(buckets.get("flexible")))
         children.append(self._commitments_toggle(buckets))
         if self._show_commitments:
-            children.append(
-                self._commitment_section(
-                    "Fixed",
-                    "Recurring, same amount every cycle - nothing to decide here",
-                    buckets.get("fixed"),
-                    "Not budgeted, just shown",
-                )
-            )
-            children.append(
-                self._commitment_section(
-                    "Non-monthly",
-                    "Real, recurring, just not every cycle - set aside a "
-                    "monthly slice so it doesn't ambush you",
-                    buckets.get("non_monthly"),
-                    "Set aside",
-                )
-            )
+            children.extend(self._commitment_sections(buckets))
         self._body.content = ft.Column(
             children,
             spacing=Theme.Spacing.LG,
@@ -390,8 +374,8 @@ class BudgetPanel(
     async def _open_stat_detail_async(self, key: str, e: ft.ControlEvent) -> None:
         """Rows for whichever cell was clicked. The verdict and Budgets
         build from the summary already on screen (zero fetch, cannot
-        disagree with the strip); Income/Bills/Everything else come from
-        one cached /budget/stat-details fetch."""
+        disagree with the strip); the rest come from one cached
+        /budget/stat-details fetch."""
         stats = (self._summary or {}).get("stats", {})
         if key == "This month":
             self._stat_detail.open_at(
@@ -443,10 +427,8 @@ class BudgetPanel(
                 e,
                 "Everything else",
                 _captioned(details["everything_else"]),
-                footer=(
-                    f"{stat_window_label(details)} - observed spending "
-                    "no bill or limit covers"
-                ),
+                footer=f"{stat_window_label(details)} - spending no bill "
+                "or limit covers",
             )
 
     def _month_pager(self) -> ft.Control:

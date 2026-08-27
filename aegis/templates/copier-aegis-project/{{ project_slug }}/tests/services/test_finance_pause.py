@@ -64,26 +64,24 @@ class TestTheMoneyMathAgrees:
 
     @pytest.mark.asyncio
     async def test_a_paused_bill_leaves_the_rollup_and_the_verdict(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
         await svc.pause_recurring(stream.id, until=date(2026, 11, 1), owner_user_id=1)
 
-        stats = (await svc.budget_summary(owner_user_id=1)).stats
+        stats = (await svc.budget_summary(owner_user_id=1, today=TODAY)).stats
 
         assert stats.fixed_total == 0
         assert stats.fixed_count == 0
 
     @pytest.mark.asyncio
     async def test_a_muted_bill_finally_leaves_the_rollup_too(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The pre-existing inconsistency: muting dropped a bill from the
         forecast but kept charging it in the Bills cell, so the header
         and Projected disagreed by the whole bill."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
         await svc.mute_recurring(stream.id, owner_user_id=1)
@@ -94,10 +92,7 @@ class TestTheMoneyMathAgrees:
         assert rollup["monthly_total"] == 0
 
     @pytest.mark.asyncio
-    async def test_a_paused_bill_leaves_the_forecast(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_a_paused_bill_leaves_the_forecast(self, svc: FinanceService) -> None:
         account = await _account(svc)
         stream = await _bill(svc, account)
         await svc.pause_recurring(stream.id, until=date(2026, 11, 1), owner_user_id=1)
@@ -108,11 +103,10 @@ class TestTheMoneyMathAgrees:
 
     @pytest.mark.asyncio
     async def test_the_pause_expires_into_the_forecast_by_itself(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """The whole point of a dated pause over mute: November arrives
         and the bill walks back in without anyone touching anything."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
         await svc.pause_recurring(stream.id, until=date(2026, 9, 1), owner_user_id=1)
@@ -124,27 +118,23 @@ class TestTheMoneyMathAgrees:
         assert len(projection.points) > 0
 
     @pytest.mark.asyncio
-    async def test_paused_income_stops_counting(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_paused_income_stops_counting(self, svc: FinanceService) -> None:
         account = await _account(svc)
         stream = await _bill(
             svc, account, name="Paycheck", amount=500_000, direction="inflow"
         )
         await svc.pause_recurring(stream.id, until=date(2026, 11, 1), owner_user_id=1)
 
-        stats = (await svc.budget_summary(owner_user_id=1)).stats
+        stats = (await svc.budget_summary(owner_user_id=1, today=TODAY)).stats
 
         assert stats.income_total == 0
 
     @pytest.mark.asyncio
     async def test_a_paused_bill_is_never_nagged_as_missed(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A pause is "I know, stop telling me" - the missed-payment rule
         firing about it would be the nag the pause exists to silence."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
         stream.status = "mature"
@@ -169,9 +159,8 @@ class TestTheMoneyMathAgrees:
 class TestPauseAndResume:
     @pytest.mark.asyncio
     async def test_pause_records_the_date_and_the_why(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
 
@@ -186,10 +175,9 @@ class TestPauseAndResume:
         assert paused.metadata_["pause_note"] == "waiting until the pool is paid off"
 
     @pytest.mark.asyncio
-    async def test_resume_clears_both(self, async_db_session: AsyncSession) -> None:
+    async def test_resume_clears_both(self, svc: FinanceService) -> None:
         """Future-you must not find a stale note explaining a pause that
         is no longer happening."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         stream = await _bill(svc, account)
         await svc.pause_recurring(
@@ -202,10 +190,7 @@ class TestPauseAndResume:
         assert "pause_note" not in resumed.metadata_
 
     @pytest.mark.asyncio
-    async def test_wrong_owner_touches_nothing(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_wrong_owner_touches_nothing(self, svc: FinanceService) -> None:
         account = await _account(svc)
         stream = await _bill(svc, account)
 

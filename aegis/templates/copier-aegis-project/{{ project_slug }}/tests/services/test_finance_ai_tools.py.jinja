@@ -13,6 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.tools import registered_tool_names
 import app.services.finance.ai_tools as ai_tools
+from app.services.finance.domains.ledger.properties import set_property_metadata
 from app.services.finance.domains.planning.envelopes import create_envelope
 from app.services.finance.domains.planning.goals import set_goal_metadata
 from app.services.finance.models.accounts import FinanceLiabilityDetail
@@ -23,7 +24,12 @@ from app.services.finance.models.investments import (
 )
 from app.services.finance.models.reference import FinanceCurrency
 from app.services.finance.service import FinanceService
-from tests.services._finance_factories import seed_account, seed_category, seed_txn
+from tests.services._finance_factories import (
+    seed_account,
+    seed_category,
+    seed_stream,
+    seed_txn,
+)
 
 EXPECTED_TOOLS = {"ledger", "accounts", "quote"}
 
@@ -85,9 +91,7 @@ async def test_ledger_transactions_detail_lists_line_items(
     result = await ai_tools.ledger(months=1, detail="transactions")
 
     assert result["total"] == 2
-    starbucks = next(
-        t for t in result["transactions"] if t["payee"] == "Starbucks"
-    )
+    starbucks = next(t for t in result["transactions"] if t["payee"] == "Starbucks")
     assert starbucks["amount_cents"] == -4_50
     assert starbucks["category"] == "Coffee"
     assert starbucks["account"] == "Checking"
@@ -126,9 +130,7 @@ async def test_accounts_returns_the_full_balance_sheet(
 ) -> None:
     """One call: cash balances, holdings, envelope and goal metadata."""
     await seed_account(svc, current_balance=5_000_00)
-    brokerage = await seed_account(
-        svc, name="Brokerage", account_type="investment"
-    )
+    brokerage = await seed_account(svc, name="Brokerage", account_type="investment")
     security = FinanceSecurity(ticker="NVDA", name="NVIDIA Corp")
     session.add(security)
     await session.flush()
@@ -167,6 +169,67 @@ async def test_accounts_returns_the_full_balance_sheet(
     assert holdings[0]["market_value_cents"] == 400_00
 
 
+async def test_accounts_carries_property_provenance(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """A property's value is only as good as where it came from. The entry
+    carries the provenance so the model can say "$711,200, your estimate as
+    of August 2026" instead of stating a guess as fact."""
+    house = await seed_account(
+        svc,
+        name="House Bedner",
+        account_type="property",
+        current_balance=711_200_00,
+    )
+    house.metadata_ = set_property_metadata(
+        house.metadata_,
+        purchase_price=285_000_00,
+        purchase_date=date(2016, 8, 1),
+        valuation_source="user",
+        valuation_as_of=date(2026, 8, 1),
+    )
+    session.add(house)
+    await session.commit()
+
+    result = await ai_tools.accounts()
+
+    entry = {a["name"]: a for a in result["accounts"]}["House Bedner"]
+    assert entry["property"]["valuation_source"] == "user"
+    assert entry["property"]["valuation_as_of"] == "2026-08-01"
+    assert entry["property"]["purchase_price_cents"] == 285_000_00
+    assert entry["property"]["include_in_net_worth"] is True
+
+
+async def test_the_valuation_row_outranks_the_typed_provenance(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """When a dated series drives the balance, the entry must say where THAT
+    number came from. Reporting the metadata's label while the balance comes
+    from a Zestimate is how a model ends up calling an estimate an appraisal.
+    """
+    house = await seed_account(svc, name="House Bedner", account_type="property")
+    house.metadata_ = set_property_metadata(
+        house.metadata_, valuation_source="appraisal", valuation_as_of=date(2024, 1, 1)
+    )
+    session.add(house)
+    await session.flush()
+    await svc.ingest_valuations(
+        house.id,
+        owner_user_id=1,
+        rows=[(date(2026, 8, 1), 711_200_00)],
+        source="zillow",
+        is_estimate=True,
+    )
+    await session.commit()
+
+    result = await ai_tools.accounts()
+
+    entry = {a["name"]: a for a in result["accounts"]}["House Bedner"]
+    assert entry["property"]["valuation_source"] == "zillow"
+    assert entry["property"]["valuation_as_of"] == "2026-08-01"
+    assert entry["property"]["is_estimate"] is True
+
+
 async def test_accounts_uses_register_balance_when_none_was_written(
     svc: FinanceService, session: AsyncSession
 ) -> None:
@@ -200,20 +263,17 @@ async def test_accounts_carries_upcoming_scheduled_flows(
     signed like the briefing (inflows positive) - a transfer plan can
     check every touched account's near-term debits without guessing."""
     checking = await seed_account(svc)
-    await svc.create_recurring_stream(
-        owner_user_id=1,
+    await seed_stream(
+        svc,
         name="Eleanor Care",
-        direction="outflow",
-        frequency="monthly",
         expected_amount=2_200_00,
         next_expected_date=date.today() + timedelta(days=9),
         account_id=checking.id,
     )
-    await svc.create_recurring_stream(
-        owner_user_id=1,
+    await seed_stream(
+        svc,
         name="NYS Deposit",
         direction="inflow",
-        frequency="monthly",
         expected_amount=1_004_93,
         next_expected_date=date.today() + timedelta(days=60),
         account_id=checking.id,

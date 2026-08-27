@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 {% endif %}
 from app.core.log import logger
+from app.services.ai.domains.chat.titles import conversation_title
 from app.services.ai.config import AIServiceConfig
 from app.services.ai.domains.chat.agent_loader import (
     DEFAULT_AGENT_SLUG,
@@ -28,7 +29,10 @@ from app.services.ai.service.base import (
 from app.services.ai.service.prompt import PromptMixin
 {%- if ai_backend != "memory" %}
 from app.services.ai.domains.chat.module_context import render_memory_modules
-from app.services.ai.domains.chat.user_memory import build_user_memory_context
+from app.services.ai.domains.chat.user_memory import (
+    build_user_memory_context,
+    memory_user,
+)
 {%- endif %}
 {%- if include_finance and ai_backend != "memory" %}
 # Importing registers the finance host tools (ledger, accounts, quote)
@@ -65,6 +69,9 @@ class ChatMixin(PromptMixin):
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
             agent_slug: Agent row to speak as (None = the default agent)
+            surface: Originating chat surface, recorded on new
+                conversations so each embedded chat lists only its own
+                history
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -158,9 +165,11 @@ class ChatMixin(PromptMixin):
 {% endif %}
             )
 
-            # Get AI response
+            # Get AI response. The turn's user rides a ContextVar so a
+            # memory write from inside the model call knows whose it is.
             start_time = datetime.now(UTC)
-            result = await agent.run(conversation_context)
+            with memory_user(user_id):
+                result = await agent.run(conversation_context)
             end_time = datetime.now(UTC)
             response_time_ms = (end_time - start_time).total_seconds() * 1000
 
@@ -279,9 +288,7 @@ class ChatMixin(PromptMixin):
             )
             # First message names the conversation; history lists need a
             # human hook, not a UUID.
-            conversation.title = (
-                message if len(message) <= 60 else f"{message[:57]}..."
-            )
+            conversation.title = conversation_title(message)
 
         # Add user message to conversation
         conversation.add_message(MessageRole.USER, message)

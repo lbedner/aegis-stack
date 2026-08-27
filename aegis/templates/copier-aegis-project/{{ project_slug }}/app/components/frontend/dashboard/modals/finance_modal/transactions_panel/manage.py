@@ -31,12 +31,15 @@ from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.p
     PropertyDetailsMixin,
     ValuationHistoryMixin,
 )
+from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.secured_by import (
+    SecuredByMixin,
+)
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_date
 
 
 class ManageAccountMixin(
-    PropertyDetailsMixin, ValuationHistoryMixin, TransactionsPanelState
+    PropertyDetailsMixin, SecuredByMixin, ValuationHistoryMixin, TransactionsPanelState
 ):
     """The account Manage menu: rename, reconcile, remove, and - on a
     property account - its purchase and valuation details."""

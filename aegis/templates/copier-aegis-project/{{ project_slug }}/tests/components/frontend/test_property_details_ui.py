@@ -14,16 +14,12 @@ from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.p
 
 class TestManageMenu:
     def test_a_property_account_offers_property_details(self) -> None:
-        labels = manage_menu_labels(
-            {"account_type": "property", "is_manual": True}
-        )
+        labels = manage_menu_labels({"account_type": "property", "is_manual": True})
 
         assert "Property details" in labels
 
     def test_a_cash_account_does_not(self) -> None:
-        labels = manage_menu_labels(
-            {"account_type": "checking", "is_manual": True}
-        )
+        labels = manage_menu_labels({"account_type": "checking", "is_manual": True})
 
         assert "Property details" not in labels
         assert "Rename" in labels  # the ordinary items are untouched
@@ -31,9 +27,7 @@ class TestManageMenu:
     def test_a_connected_account_still_hides_remove(self) -> None:
         """Provider accounts belong to the bank connection; the existing
         rule survives the new item."""
-        labels = manage_menu_labels(
-            {"account_type": "property", "is_manual": False}
-        )
+        labels = manage_menu_labels({"account_type": "property", "is_manual": False})
 
         assert "Remove" not in labels
         assert "Property details" in labels
@@ -112,9 +106,10 @@ class TestValuationPayload:
             valuation_payload,
         )
 
-        assert valuation_payload(text="2026-08-01,715000", source="manual")[
-            "is_estimate"
-        ] is False
+        assert (
+            valuation_payload(text="2026-08-01,715000", source="manual")["is_estimate"]
+            is False
+        )
 
     def test_an_empty_paste_is_rejected_before_the_request(self) -> None:
         from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.property_details import (
@@ -155,3 +150,50 @@ class TestPayload:
     def test_a_non_numeric_amount_is_rejected(self) -> None:
         with pytest.raises(ValueError):
             property_payload(purchase_price="about three hundred grand")
+
+
+class TestSecuredByMenu:
+    """FW-04: the Manage menu offers the lien link only where it can mean
+    something - a liability account."""
+
+    def test_a_liability_gets_the_secured_by_item(self) -> None:
+        labels = manage_menu_labels(
+            {"account_type": "loan", "classification": "liability", "is_manual": True}
+        )
+        assert "Secured by" in labels
+
+    def test_an_asset_does_not(self) -> None:
+        labels = manage_menu_labels({"account_type": "checking", "is_manual": True})
+        assert "Secured by" not in labels
+
+
+class TestSecuredByPayload:
+    def test_linking_carries_property_and_position(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.secured_by import (
+            secured_by_payload,
+        )
+
+        assert secured_by_payload(5, "2") == {
+            "secured_by_account_id": 5,
+            "lien_position": 2,
+        }
+
+    def test_a_blank_position_defers_to_the_first_lien_default(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.secured_by import (
+            secured_by_payload,
+        )
+
+        assert secured_by_payload(5, "") == {
+            "secured_by_account_id": 5,
+            "lien_position": None,
+        }
+
+    def test_unlinking_clears_both(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.secured_by import (
+            secured_by_payload,
+        )
+
+        assert secured_by_payload(None, "3") == {
+            "secured_by_account_id": None,
+            "lien_position": None,
+        }

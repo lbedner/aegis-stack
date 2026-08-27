@@ -1874,6 +1874,10 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("ytd_principal_paid", "sa.BigInteger()", nullable=True),
                 ColumnSpec("loan_term_months", "sa.Integer()", nullable=True),
                 ColumnSpec("is_overdue", "sa.Boolean()", nullable=True),
+                # FW-04: the property that secures this liability, as the
+                # user confirms it; 1 = first mortgage, 2 = second/HELOC.
+                ColumnSpec("secured_by_account_id", "sa.Integer()", nullable=True),
+                ColumnSpec("lien_position", "sa.Integer()", nullable=True),
                 ColumnSpec("aprs", "sa.JSON()", nullable=False, default="[]"),
                 ColumnSpec(
                     "currency", "sa.String(16)", nullable=False, default="'usd'"
@@ -1891,6 +1895,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 ForeignKeySpec(
                     ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
                 ),
+                ForeignKeySpec(["secured_by_account_id"], "finance_account", ["id"]),
                 ForeignKeySpec(["currency"], "finance_currency", ["code"]),
             ],
         ),

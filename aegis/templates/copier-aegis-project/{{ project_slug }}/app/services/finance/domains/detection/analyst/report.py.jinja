@@ -1,15 +1,12 @@
-{% if include_ai and ai_backend != "memory" %}"""Rendering the report and the registered snapshot fetcher.
-"""
+{% if include_ai and ai_backend != "memory" %}"""Rendering the report and the registered snapshot fetcher."""
 
 from datetime import date
+
 from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.chat.fetchers import FetchContext, register_fetcher
-from app.services.finance.domains.detection.insights import format_usd
-from app.services.finance.domains.detection.analyst.context import (
-    load_report_context,
-)
 from app.services.finance.domains.detection.analyst.activity import (
     _anomalies_section,
     _cashflow_section,
@@ -18,6 +15,17 @@ from app.services.finance.domains.detection.analyst.activity import (
     _spending_section,
     _transactions_section,
     _upcoming_section,
+)
+from app.services.finance.domains.detection.analyst.context import (
+    load_report_context,
+)
+from app.services.finance.domains.detection.analyst.facts import (
+    ReportFacts,
+    SectionCommentary,
+    _note_on,
+    build_report_facts,
+    diff_facts,
+    snapshot_before,
 )
 from app.services.finance.domains.detection.analyst.sections import (
     ReportContext,
@@ -29,10 +37,11 @@ from app.services.finance.domains.detection.analyst.sections import (
     _projection_section,
     _signed,
 )
-from app.services.finance.domains.detection.analyst.facts import _note_on, ReportFacts, SectionCommentary, build_report_facts, diff_facts, snapshot_before
-from app.services.finance.domains.detection.analyst.shared import SNAPSHOT_MODULE_SLUG, owner_user_id_for
-
-
+from app.services.finance.domains.detection.analyst.shared import (
+    SNAPSHOT_MODULE_SLUG,
+    owner_user_id_for,
+)
+from app.services.finance.domains.detection.insights import format_usd
 
 
 def render_report(facts: ReportFacts, commentary: SectionCommentary) -> str:
@@ -113,8 +122,6 @@ def render_report(facts: ReportFacts, commentary: SectionCommentary) -> str:
     return "\n\n".join(blocks)
 
 
-
-
 async def _changes_section(
     db: AsyncSession, *, owner_user_id: int | None, today: date, current: ReportFacts
 ) -> str | None:
@@ -154,8 +161,6 @@ async def _changes_section(
     return "\n".join(lines) if lines else None
 
 
-
-
 async def build_finance_snapshot(
     db: AsyncSession,
     *,
@@ -188,7 +193,7 @@ async def build_finance_snapshot(
     )
 
     sections = [
-        _accounts_section(ctx.accounts, ctx.activity_totals),
+        _accounts_section(ctx.accounts, ctx.activity_totals, ctx.liability_details),
         _net_worth_section(ctx),
         _liabilities_section(ctx),
         _portfolio_section(ctx),
@@ -205,8 +210,6 @@ async def build_finance_snapshot(
         _envelopes_section(ctx),
     ]
     return "\n\n".join(section for section in sections if section)
-
-
 
 
 async def finance_snapshot(ctx: FetchContext) -> str | None:

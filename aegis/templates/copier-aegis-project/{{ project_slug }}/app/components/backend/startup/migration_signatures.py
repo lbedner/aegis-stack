@@ -20,6 +20,7 @@ Forms:
 SERVICE_MIGRATION_SIGNATURES: dict[str, tuple[str, ...]] = {
     "ai": ("table", "llm_vendor"),
     "ai_agents": ("table", "agent"),
+    "agent_code_mode": ("column", "agent", "code_mode"),
     "ai_sentiment": ("table", "sentiment_analysis"),
     "ai_voice": ("table", "voice_usage"),
     "auth": ("table", "user"),
@@ -36,5 +37,10 @@ SERVICE_MIGRATION_SIGNATURES: dict[str, tuple[str, ...]] = {
     "finance_budget_payee": ("column", "finance.finance_budget_category", "payee_key"),
     "finance_auth_link": ("foreign_key", "finance.finance_account", "owner_user_id"),
     "finance_icon": ("table", "finance.finance_icon"),
+    "secured_debt": (
+        "column",
+        "finance.finance_liability_detail",
+        "secured_by_account_id",
+    ),
     "scheduler": ("table", "scheduler.job_execution"),
 }

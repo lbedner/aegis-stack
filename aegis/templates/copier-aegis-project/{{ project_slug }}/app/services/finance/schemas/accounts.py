@@ -43,6 +43,10 @@ class LiabilitySummary(BaseModel):
     last_payment_date: date | None = None
     is_overdue: bool | None = None
     aprs: list[Any] = Field(default_factory=list)
+    # FW-04: the property this liability encumbers, as the user confirmed
+    # it (1 = first mortgage, 2 = second/HELOC). None = unlinked.
+    secured_by_account_id: int | None = None
+    lien_position: int | None = None
 
     @classmethod
     def from_row(cls, row: FinanceLiabilityDetail) -> LiabilitySummary:
@@ -55,6 +59,8 @@ class LiabilitySummary(BaseModel):
             last_payment_date=row.last_payment_date,
             is_overdue=row.is_overdue,
             aprs=row.aprs or [],
+            secured_by_account_id=row.secured_by_account_id,
+            lien_position=row.lien_position,
         )
 
 
@@ -303,3 +309,14 @@ class FinanceOverviewResponse(BaseModel):
     recent_transactions: TransactionListResponse
     uncategorized: TransactionListResponse
     spending: list[SpendingCategory]
+
+
+class SecuredDebtUpdate(BaseModel):
+    """PATCH body for /accounts/{id}/secured-by: the confirmed lien link.
+
+    ``secured_by_account_id=None`` unlinks (and clears the position);
+    ``lien_position`` defaults to 1 (first mortgage) when linking.
+    """
+
+    secured_by_account_id: int | None
+    lien_position: int | None = None

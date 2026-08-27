@@ -1,19 +1,17 @@
-{% if include_ai and ai_backend != "memory" %}"""Report facts and their history: snapshots, diffs, the movers.
-"""
+{% if include_ai and ai_backend != "memory" %}"""Report facts and their history: snapshots, diffs, the movers."""
 
 from datetime import (
     date,
     timedelta,
 )
+
 from pydantic import (
     BaseModel,
     Field,
 )
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.services.finance.domains.detection.analyst.sections import _SPENDING_RANK_POOL
+
 from app.services.finance.domains.detection import queries
-from app.services.finance.domains.detection.insights import pace_day
-from app.services.finance.models import FinanceInsight, FinanceAnalystSnapshot
 from app.services.finance.domains.detection.analyst.context import (
     load_report_context,
 )
@@ -24,9 +22,12 @@ from app.services.finance.domains.detection.analyst.sections import (
     _liability_lines,
     _signed,
 )
-from app.services.finance.domains.detection.analyst.shared import note_dedup_key, _NOTE_INSIGHT_TYPES
-
-
+from app.services.finance.domains.detection.analyst.shared import (
+    _NOTE_INSIGHT_TYPES,
+    note_dedup_key,
+)
+from app.services.finance.domains.detection.insights import pace_day
+from app.services.finance.models import FinanceAnalystSnapshot, FinanceInsight
 
 
 class SectionCommentary(BaseModel):
@@ -65,8 +66,6 @@ class SectionCommentary(BaseModel):
     )
 
 
-
-
 class ReportFacts(BaseModel):
     """Code-owned figures for the report skeleton, all pre-formatted upstream.
 
@@ -99,8 +98,6 @@ class ReportFacts(BaseModel):
     changes: list[str] = Field(default_factory=list)
 
 
-
-
 _REPORT_SPENDING_LINES = 3
 
 
@@ -113,10 +110,6 @@ _SPENDING_MOVER_FLOOR = 5_000  # cents; a move smaller than this never shows
 
 
 _SPENDING_MOVER_RATIO = 0.10  # and it must be >= 10% of the category's norm
-
-
-
-
 
 
 def _spending_movers(
@@ -148,13 +141,9 @@ def _spending_movers(
     ]
 
 
-
-
 # How far back a ranged read looks by default. The delta only needs
 # yesterday; this is for the trend questions the table exists to allow.
 SNAPSHOT_SERIES_DAYS = 90
-
-
 
 
 def _days_apart(earlier: date, later: date) -> str:
@@ -165,8 +154,6 @@ def _days_apart(earlier: date, later: date) -> str:
         return "same day"
     unit = "day" if abs(delta) == 1 else "days"
     return f"{abs(delta)} {unit} {'later' if delta > 0 else 'earlier'}"
-
-
 
 
 def diff_facts(
@@ -239,8 +226,6 @@ def diff_facts(
     return lines
 
 
-
-
 def _snapshot_to_facts(row: FinanceAnalystSnapshot) -> ReportFacts:
     """The trended columns back as facts. Credit lines and spending are
     prose inputs rather than figures worth diffing, so they do not round
@@ -265,8 +250,6 @@ def _snapshot_to_facts(row: FinanceAnalystSnapshot) -> ReportFacts:
         open_warning=row.open_warning,
         goals_total_saved=row.goals_total_saved,
     )
-
-
 
 
 async def save_snapshot(
@@ -305,8 +288,6 @@ async def save_snapshot(
     return row
 
 
-
-
 async def snapshot_before(
     db: AsyncSession, *, owner_user_id: int | None, day: date
 ) -> tuple[date, ReportFacts] | None:
@@ -319,8 +300,6 @@ async def snapshot_before(
     store_owner = 0 if owner_user_id is None else owner_user_id
     row = await queries.analyst_snapshot_before(db, store_owner=store_owner, day=day)
     return None if row is None else (row.as_of_date, _snapshot_to_facts(row))
-
-
 
 
 async def snapshot_series(
@@ -345,8 +324,6 @@ async def snapshot_series(
         end=today,
     )
     return [(row.as_of_date, _snapshot_to_facts(row)) for row in rows]
-
-
 
 
 async def build_report_facts(
@@ -404,7 +381,9 @@ async def build_report_facts(
         projection_end=projection_end,
         projection_low=projection_low,
         first_negative=first_negative,
-        credit_lines=_liability_lines(ctx.accounts, ctx.liability_details),
+        credit_lines=_liability_lines(
+            ctx.accounts, ctx.liability_details, ctx.activity_totals
+        ),
         spending=_spending_movers(ctx.ranked_spending),
         spending_through_day=pace_day(ctx.today),
         portfolio_total=portfolio_total,

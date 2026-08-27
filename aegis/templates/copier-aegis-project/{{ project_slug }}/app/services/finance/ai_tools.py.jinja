@@ -34,6 +34,7 @@ from app.services.finance.domains.ledger.accounts import (
 from app.services.finance.domains.ledger.properties import (
     PROPERTY_ACCOUNT_TYPE,
     property_metadata,
+    secured_position,
 )
 from app.services.finance.domains.ledger.queries.accounts import accounts_page
 from app.services.finance.domains.ledger.valuations import preferred_valuation_row
@@ -156,7 +157,10 @@ async def accounts() -> dict[str, Any]:
     'minimum_payment_cents', 'next_payment_due',
     'last_statement_balance_cents', 'last_payment_cents',
     'last_payment_date', 'ytd_interest_paid_cents' and
-    'ytd_principal_paid_cents' when card terms are on file. Accounts
+    'ytd_principal_paid_cents' when card terms are on file. A property
+    that secures linked liabilities adds 'equity_cents', 'ltv_bps'
+    (basis points) and 'liens' (account name + lien_position) - derived
+    from the confirmed links, absent when nothing is linked. Accounts
     with scheduled activity inside the next 35 days add 'upcoming': a
     date-ordered list of entries with 'name', 'date' and 'amount_cents'
     (signed - inflows positive, bills negative), from the same recurring
@@ -206,6 +210,32 @@ async def accounts() -> dict[str, Any]:
             }
         )
 
+    balances = {
+        account.id: effective_balance(
+            current_balance=account.current_balance,
+            balance_as_of=account.balance_as_of,
+            classification=account.classification,
+            activity_balance=activity_totals.get(account.id, 0),
+        )
+        for account in account_rows
+    }
+    account_names = {account.id: account.name for account in account_rows}
+    # FW-04: liens by the property they encumber. The link is what the
+    # user CONFIRMED on the liability (never inferred); equity and LTV
+    # derive from it at read time and are never stored.
+    liens_by_property: dict[int, list[tuple[int, str, int, int | None]]] = {}
+    for detail in liabilities.values():
+        if detail.secured_by_account_id is None:
+            continue
+        liens_by_property.setdefault(detail.secured_by_account_id, []).append(
+            (
+                detail.lien_position or 99,
+                account_names.get(detail.account_id, f"account {detail.account_id}"),
+                abs(balances.get(detail.account_id, 0)),
+                detail.lien_position,
+            )
+        )
+
     holdings_by_account: dict[int, list[dict[str, Any]]] = {}
     for holding, security, market_value_cents in holdings:
         holdings_by_account.setdefault(holding.account_id, []).append(
@@ -226,12 +256,7 @@ async def accounts() -> dict[str, Any]:
             "classification": account.classification,
             # Same rule the accounts tab renders: authoritative balance
             # writes win; a never-written 0 falls back to the register sum.
-            "balance_cents": effective_balance(
-                current_balance=account.current_balance,
-                balance_as_of=account.balance_as_of,
-                classification=account.classification,
-                activity_balance=activity_totals.get(account.id, 0),
-            ),
+            "balance_cents": balances[account.id],
             "hidden": account.is_hidden,
         }
         envelope_meta = envelope_metadata(account.metadata_)
@@ -278,6 +303,19 @@ async def accounts() -> dict[str, Any]:
                 "ownership_share_bps": property_meta.ownership_share_bps,
                 "include_in_net_worth": property_meta.include_in_net_worth,
             }
+            liens = sorted(liens_by_property.get(account.id, []))
+            position = secured_position(
+                balances[account.id], [owed for _, _, owed, _ in liens]
+            )
+            if position is not None:
+                # Absent entirely when nothing is linked: an unlinked
+                # property must not read as a 100%-equity claim.
+                entry["property"]["equity_cents"] = position.equity
+                entry["property"]["ltv_bps"] = position.ltv_bps
+                entry["property"]["liens"] = [
+                    {"account": name, "lien_position": lien_position}
+                    for _, name, _, lien_position in liens
+                ]
         goal_meta = goal_metadata(account.metadata_)
         if goal_meta is not None:
             entry["goal"] = {

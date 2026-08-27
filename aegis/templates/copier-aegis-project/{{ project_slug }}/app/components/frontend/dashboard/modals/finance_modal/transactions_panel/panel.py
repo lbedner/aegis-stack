@@ -33,7 +33,7 @@ from app.components.frontend.controls.table import (
     TableNameText,
 )
 from app.components.frontend.dashboard.modals.finance_modal.account_header import (
-    _account_detail_header,
+    panel_detail_header,
 )
 from app.components.frontend.dashboard.modals.finance_modal.constants import (
     _DENSE_ROW_HEIGHT,
@@ -352,16 +352,7 @@ class TransactionsPanel(
         # The detail header replaces the plain title when an account is chosen.
         self._detail.visible = is_account
         self._detail.content = (
-            _account_detail_header(
-                account,
-                on_rename=self._open_rename,
-                on_remove=self._open_remove,
-                on_reconcile=self._open_reconcile,
-                on_property=self._open_property_details,
-                on_valuations=self._open_valuation_history,
-            )
-            if is_account
-            else None
+            panel_detail_header(self, account) if is_account else None
         )
         self._title.visible = not is_account
         self._title.value = "All Accounts"

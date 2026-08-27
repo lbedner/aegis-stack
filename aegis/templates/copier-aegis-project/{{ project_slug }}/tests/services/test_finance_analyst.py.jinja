@@ -305,6 +305,114 @@ class TestSnapshotDetailSections:
         assert "(89% used)" in snapshot
 
     @pytest.mark.asyncio
+    async def test_a_secured_loan_names_its_property(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """FW-04 gate: the briefing names the secured relationship - the
+        mortgage line says which property it encumbers and at what lien
+        position, and the property's line carries the derived equity and
+        LTV."""
+        from app.services.finance.models import FinanceLiabilityDetail
+
+        await self._checking(svc)
+        house = await svc.create_manual_account(
+            owner_user_id=OWNER,
+            name="House Bedner",
+            account_type="property",
+            classification="asset",
+            current_balance=71_120_000,
+        )
+        mortgage = await svc.create_manual_account(
+            owner_user_id=OWNER,
+            name="Citizens Mortgage",
+            account_type="loan",
+            classification="liability",
+            current_balance=-18_700_000,
+        )
+        async_db_session.add(
+            FinanceLiabilityDetail(
+                owner_user_id=OWNER,
+                account_id=mortgage.id,
+                liability_type="mortgage",
+                interest_rate_bps=2_875,
+                secured_by_account_id=house.id,
+                lien_position=1,
+            )
+        )
+        await async_db_session.flush()
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER
+        )
+
+        assert snapshot is not None
+        assert "secures House Bedner (lien 1)" in snapshot
+        assert "equity $524,200.00" in snapshot
+        assert "LTV 26.29%" in snapshot
+
+    async def test_a_register_derived_mortgage_still_computes_equity(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """A Quicken-imported mortgage has no written balance - its truth
+        is the register sum (opening balance + payments), the same
+        effective-balance rule every display uses. The lien math must
+        read that, not the raw column, or an imported mortgage shows
+        100% equity."""
+        from app.services.finance.models import FinanceLiabilityDetail
+
+        await self._checking(svc)
+        house = await svc.create_manual_account(
+            owner_user_id=OWNER,
+            name="House Bedner",
+            account_type="property",
+            classification="asset",
+            current_balance=71_120_000,
+        )
+        mortgage = await svc.create_manual_account(
+            owner_user_id=OWNER,
+            name="Citizens Mortgage",
+            account_type="loan",
+            classification="liability",
+        )
+        await svc.create_transaction(
+            account_id=mortgage.id,
+            amount=-22_800_000,
+            txn_date=date(2015, 12, 31),
+            owner_user_id=OWNER,
+            name="Live Opening Balance",
+        )
+        await svc.create_transaction(
+            account_id=mortgage.id,
+            amount=5_154_353,
+            txn_date=date(2026, 8, 1),
+            owner_user_id=OWNER,
+            name="Principal to date",
+        )
+        async_db_session.add(
+            FinanceLiabilityDetail(
+                owner_user_id=OWNER,
+                account_id=mortgage.id,
+                liability_type="mortgage",
+                secured_by_account_id=house.id,
+                lien_position=1,
+            )
+        )
+        await async_db_session.flush()
+
+        snapshot = await analyst.build_finance_snapshot(
+            async_db_session, owner_user_id=OWNER
+        )
+
+        assert snapshot is not None
+        assert "equity $534,743.53" in snapshot
+        assert "LTV 24.81%" in snapshot
+        # The debt line itself must quote the same register-derived
+        # figure - "$0.00 owed" on a mortgage with eleven years of
+        # register is the exact gap-dressed-as-a-fact this file warns
+        # about.
+        assert "$176,456.47 owed" in snapshot
+        assert "$0.00 owed" not in snapshot
+
     async def test_a_bare_liability_adds_no_detail_section(
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:

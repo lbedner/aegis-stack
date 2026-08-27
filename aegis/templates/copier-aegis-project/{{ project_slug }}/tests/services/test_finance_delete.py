@@ -14,8 +14,8 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.service import FinanceService
 from app.services.finance.models import FinanceTransactionSplit
+from app.services.finance.service import FinanceService
 
 
 async def _account(svc: FinanceService, name: str = "Checking") -> int:
@@ -30,10 +30,7 @@ async def _account(svc: FinanceService, name: str = "Checking") -> int:
 
 class TestSoftDelete:
     @pytest.mark.asyncio
-    async def test_deleted_rows_leave_the_register(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_deleted_rows_leave_the_register(self, svc: FinanceService) -> None:
         account_id = await _account(svc)
         keep = await svc.create_transaction(
             account_id=account_id,
@@ -58,10 +55,7 @@ class TestSoftDelete:
         assert [r.id for r in rows] == [keep.id]
 
     @pytest.mark.asyncio
-    async def test_deleting_is_scoped_to_the_owner(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_deleting_is_scoped_to_the_owner(self, svc: FinanceService) -> None:
         account_id = await _account(svc)
         txn = await svc.create_transaction(
             account_id=account_id,
@@ -78,10 +72,7 @@ class TestSoftDelete:
         assert total == 1
 
     @pytest.mark.asyncio
-    async def test_deleting_twice_is_a_no_op(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_deleting_twice_is_a_no_op(self, svc: FinanceService) -> None:
         account_id = await _account(svc)
         txn = await svc.create_transaction(
             account_id=account_id,
@@ -98,12 +89,11 @@ class TestSoftDelete:
 class TestLinkedRows:
     @pytest.mark.asyncio
     async def test_deleting_one_transfer_leg_unpairs_the_survivor(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The other account's money movement still happened - it comes
         back into view as a normal row instead of staying hidden as half
         of a pair that no longer exists."""
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking")
         card = await _account(svc, "Card")
         out_leg = await svc.create_transaction(
@@ -137,9 +127,8 @@ class TestLinkedRows:
 
     @pytest.mark.asyncio
     async def test_deleting_both_legs_together_unpairs_nothing_back(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await _account(svc, "Checking")
         card = await _account(svc, "Card")
         out_leg = await svc.create_transaction(
@@ -173,9 +162,8 @@ class TestLinkedRows:
 
     @pytest.mark.asyncio
     async def test_a_split_parent_takes_its_lines_with_it(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account_id = await _account(svc)
         parent = await svc.create_transaction(
             account_id=account_id,

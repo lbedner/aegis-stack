@@ -13,12 +13,11 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.models import FinanceTransaction, FinanceTransfer
 from app.services.finance.domains.planning.allocation import (
     MonthlyFigures,
+    allocate_month,
     goal_shortfall,
     month_figures,
-    allocate_month,
     resolve_target,
     resolved_meta,
 )
@@ -32,7 +31,9 @@ from app.services.finance.domains.planning.goals import (
     goal_progress,
     set_goal_metadata,
 )
+from app.services.finance.models import FinanceTransaction, FinanceTransfer
 from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_stream
 
 
 class TestMetadataContract:
@@ -114,8 +115,10 @@ class TestMetadataContract:
 
 class TestGoalAccountType:
     @pytest.mark.asyncio
-    async def test_a_goal_account_inserts(self, async_db_session: AsyncSession) -> None:
-        account = await FinanceService(async_db_session).create_manual_account(
+    async def test_a_goal_account_inserts(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        account = await svc.create_manual_account(
             owner_user_id=1,
             name="Vacation",
             account_type=GOAL_ACCOUNT_TYPE,
@@ -126,20 +129,19 @@ class TestGoalAccountType:
 
     @pytest.mark.asyncio
     async def test_hidden_goal_account_is_excluded_everywhere(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The design's load-bearing wall, pinned: a hidden goal account
         adds nothing to net worth (its money already sits in checking)
         and never appears in account listings."""
-        service = FinanceService(async_db_session)
-        await service.create_manual_account(
+        await svc.create_manual_account(
             owner_user_id=1,
             name="Chase Checking",
             account_type="checking",
             classification="asset",
             current_balance=100_000,
         )
-        goal = await service.create_manual_account(
+        goal = await svc.create_manual_account(
             owner_user_id=1,
             name="Vacation",
             account_type=GOAL_ACCOUNT_TYPE,
@@ -150,10 +152,10 @@ class TestGoalAccountType:
         async_db_session.add(goal)
         await async_db_session.commit()
 
-        net_worth = await service.get_net_worth(owner_user_id=1)
+        net_worth = await svc.get_net_worth(owner_user_id=1)
         assert net_worth.total_assets_amount == 100_000  # goal's 30k absent
 
-        accounts, total = await service.list_accounts(owner_user_id=1)
+        accounts, total = await svc.list_accounts(owner_user_id=1)
         assert total == 1
         assert [a.name for a in accounts] == ["Chase Checking"]
 
@@ -231,9 +233,8 @@ class TestPureMath:
 
 class TestGoalService:
     @pytest.mark.asyncio
-    async def test_create_virtual_goal(self, async_db_session: AsyncSession) -> None:
-        service = FinanceService(async_db_session)
-        account = await service.create_virtual_goal(
+    async def test_create_virtual_goal(self, svc: FinanceService) -> None:
+        account = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Vacation",
             target_amount=300_000,
@@ -246,83 +247,77 @@ class TestGoalService:
         assert meta is not None and meta.target_amount == 300_000
 
     @pytest.mark.asyncio
-    async def test_contribute_moves_the_balance(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        service = FinanceService(async_db_session)
-        account = await service.create_virtual_goal(
+    async def test_contribute_moves_the_balance(self, svc: FinanceService) -> None:
+        account = await svc.create_virtual_goal(
             owner_user_id=1, name="Vacation", target_amount=300_000
         )
-        await service.contribute_to_goal(
+        await svc.contribute_to_goal(
             account.id, amount=25_000, owner_user_id=1, when=date(2026, 8, 1)
         )
-        await service.contribute_to_goal(
+        await svc.contribute_to_goal(
             account.id, amount=10_000, owner_user_id=1, when=date(2026, 9, 1)
         )
-        refreshed = await service.get_account(account.id, owner_user_id=1)
+        refreshed = await svc.get_account(account.id, owner_user_id=1)
         assert refreshed is not None
         assert refreshed.current_balance == 35_000
 
     @pytest.mark.asyncio
     async def test_contribute_to_a_linked_goal_is_refused(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """A linked goal's contributions are its real transfers - a manual
         top-up would double-count against the account's own register."""
-        service = FinanceService(async_db_session)
-        savings = await service.create_manual_account(
+        savings = await svc.create_manual_account(
             owner_user_id=1,
             name="CHASE SAVINGS",
             account_type="savings",
             classification="asset",
         )
-        await service.flag_account_as_goal(
+        await svc.flag_account_as_goal(
             savings.id, owner_user_id=1, target_amount=1_200_000
         )
         with pytest.raises(ValueError):
-            await service.contribute_to_goal(savings.id, amount=10_000, owner_user_id=1)
+            await svc.contribute_to_goal(savings.id, amount=10_000, owner_user_id=1)
 
     @pytest.mark.asyncio
     async def test_flag_and_unflag_leave_the_account_intact(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        service = FinanceService(async_db_session)
-        savings = await service.create_manual_account(
+        savings = await svc.create_manual_account(
             owner_user_id=1,
             name="CHASE SAVINGS",
             account_type="savings",
             classification="asset",
             current_balance=65_900,
         )
-        await service.flag_account_as_goal(
+        await svc.flag_account_as_goal(
             savings.id, owner_user_id=1, target_amount=1_200_000
         )
-        flagged = await service.get_account(savings.id, owner_user_id=1)
+        flagged = await svc.get_account(savings.id, owner_user_id=1)
         assert flagged is not None and goal_metadata(flagged.metadata_) is not None
         assert flagged.is_hidden is False  # linked goals stay visible
 
-        await service.unflag_goal(savings.id, owner_user_id=1)
-        unflagged = await service.get_account(savings.id, owner_user_id=1)
+        await svc.unflag_goal(savings.id, owner_user_id=1)
+        unflagged = await svc.get_account(savings.id, owner_user_id=1)
         assert unflagged is not None
         assert goal_metadata(unflagged.metadata_) is None
         assert unflagged.current_balance == 65_900  # untouched
 
     @pytest.mark.asyncio
-    async def test_status_transitions(self, async_db_session: AsyncSession) -> None:
-        service = FinanceService(async_db_session)
-        account = await service.create_virtual_goal(
+    async def test_status_transitions(self, svc: FinanceService) -> None:
+        account = await svc.create_virtual_goal(
             owner_user_id=1, name="Vacation", target_amount=300_000
         )
-        await service.set_goal_status(account.id, "paused", owner_user_id=1)
-        paused = await service.get_account(account.id, owner_user_id=1)
+        await svc.set_goal_status(account.id, "paused", owner_user_id=1)
+        paused = await svc.get_account(account.id, owner_user_id=1)
         assert goal_metadata(paused.metadata_).status == "paused"
 
-        await service.set_goal_status(account.id, "active", owner_user_id=1)
-        active = await service.get_account(account.id, owner_user_id=1)
+        await svc.set_goal_status(account.id, "active", owner_user_id=1)
+        active = await svc.get_account(account.id, owner_user_id=1)
         assert goal_metadata(active.metadata_).status == "active"
 
         with pytest.raises(ValueError):
-            await service.set_goal_status(account.id, "vibing", owner_user_id=1)
+            await svc.set_goal_status(account.id, "vibing", owner_user_id=1)
 
 
 class TestGoalsInTheProjection:
@@ -331,8 +326,8 @@ class TestGoalsInTheProjection:
     and a linked goal's synthetic outflow yields for any month a real
     transfer already booked (or commit+transfer double-drops the line)."""
 
-    async def _cash(self, service: FinanceService) -> int:
-        account = await service.create_manual_account(
+    async def _cash(self, svc: FinanceService) -> int:
+        account = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
@@ -343,17 +338,16 @@ class TestGoalsInTheProjection:
 
     @pytest.mark.asyncio
     async def test_a_virtual_goal_drains_the_walk_monthly(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        service = FinanceService(async_db_session)
-        await self._cash(service)
-        await service.create_virtual_goal(
+        await self._cash(svc)
+        await svc.create_virtual_goal(
             owner_user_id=1,
             name="Vacation",
             target_amount=300_000,
             monthly_contribution=25_000,
         )
-        projection = await service.project_balances(
+        projection = await svc.project_balances(
             owner_user_id=1, days=90, today=date(2026, 8, 10)
         )
         goal_points = [p for p in projection.points if p.name == "Vacation"]
@@ -362,50 +356,46 @@ class TestGoalsInTheProjection:
         assert projection.points[-1].balance <= 1_000_000 - 3 * 25_000
 
     @pytest.mark.asyncio
-    async def test_a_paused_goal_emits_nothing(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        service = FinanceService(async_db_session)
-        await self._cash(service)
-        goal = await service.create_virtual_goal(
+    async def test_a_paused_goal_emits_nothing(self, svc: FinanceService) -> None:
+        await self._cash(svc)
+        goal = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Vacation",
             target_amount=300_000,
             monthly_contribution=25_000,
         )
-        await service.set_goal_status(goal.id, "paused", owner_user_id=1)
-        projection = await service.project_balances(
+        await svc.set_goal_status(goal.id, "paused", owner_user_id=1)
+        projection = await svc.project_balances(
             owner_user_id=1, days=90, today=date(2026, 8, 10)
         )
         assert not [p for p in projection.points if p.name == "Vacation"]
 
     @pytest.mark.asyncio
     async def test_a_linked_goals_month_yields_to_a_real_transfer(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        cash_id = await self._cash(service)
-        savings = await service.create_manual_account(
+        cash_id = await self._cash(svc)
+        savings = await svc.create_manual_account(
             owner_user_id=1,
             name="CHASE SAVINGS",
             account_type="savings",
             classification="asset",
         )
-        await service.flag_account_as_goal(
+        await svc.flag_account_as_goal(
             savings.id,
             owner_user_id=1,
             target_amount=1_200_000,
             monthly_contribution=30_000,
         )
         # A real transfer into the goal account, booked in September.
-        out_leg = await service.create_transaction(
+        out_leg = await svc.create_transaction(
             account_id=cash_id,
             amount=-30_000,
             txn_date=date(2026, 9, 3),
             owner_user_id=1,
             name="To savings",
         )
-        in_leg = await service.create_transaction(
+        in_leg = await svc.create_transaction(
             account_id=savings.id,
             amount=30_000,
             txn_date=date(2026, 9, 3),
@@ -418,7 +408,7 @@ class TestGoalsInTheProjection:
         async_db_session.add(in_leg)
         await async_db_session.flush()
 
-        projection = await service.project_balances(
+        projection = await svc.project_balances(
             owner_user_id=1, days=90, today=date(2026, 8, 10)
         )
         goal_points = [p for p in projection.points if p.name == "CHASE SAVINGS"]
@@ -434,84 +424,77 @@ class TestAutoContribute:
     per month; paused/linked/toggle-off goals are skipped."""
 
     @pytest.mark.asyncio
-    async def test_books_once_and_only_once(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        service = FinanceService(async_db_session)
-        goal = await service.create_virtual_goal(
+    async def test_books_once_and_only_once(self, svc: FinanceService) -> None:
+        goal = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Vacation",
             target_amount=300_000,
             monthly_contribution=25_000,
         )
-        await service.set_goal_auto_contribute(goal.id, True, owner_user_id=1)
+        await svc.set_goal_auto_contribute(goal.id, True, owner_user_id=1)
 
-        first = await service.auto_contribute_goals(
-            owner_user_id=1, today=date(2026, 9, 1)
-        )
-        again = await service.auto_contribute_goals(
+        first = await svc.auto_contribute_goals(owner_user_id=1, today=date(2026, 9, 1))
+        again = await svc.auto_contribute_goals(
             owner_user_id=1,
             today=date(2026, 9, 15),  # rerun mid-month
         )
 
         assert first == 1
         assert again == 0
-        refreshed = await service.get_account(goal.id, owner_user_id=1)
+        refreshed = await svc.get_account(goal.id, owner_user_id=1)
         assert refreshed is not None
         assert refreshed.current_balance == 25_000  # once, not twice
 
     @pytest.mark.asyncio
-    async def test_next_month_books_again(self, async_db_session: AsyncSession) -> None:
-        service = FinanceService(async_db_session)
-        goal = await service.create_virtual_goal(
+    async def test_next_month_books_again(self, svc: FinanceService) -> None:
+        goal = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Vacation",
             target_amount=300_000,
             monthly_contribution=25_000,
         )
-        await service.set_goal_auto_contribute(goal.id, True, owner_user_id=1)
-        await service.auto_contribute_goals(owner_user_id=1, today=date(2026, 9, 1))
-        await service.auto_contribute_goals(owner_user_id=1, today=date(2026, 10, 1))
-        refreshed = await service.get_account(goal.id, owner_user_id=1)
+        await svc.set_goal_auto_contribute(goal.id, True, owner_user_id=1)
+        await svc.auto_contribute_goals(owner_user_id=1, today=date(2026, 9, 1))
+        await svc.auto_contribute_goals(owner_user_id=1, today=date(2026, 10, 1))
+        refreshed = await svc.get_account(goal.id, owner_user_id=1)
         assert refreshed is not None
         assert refreshed.current_balance == 50_000
 
     @pytest.mark.asyncio
     async def test_paused_toggle_off_and_linked_are_skipped(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        service = FinanceService(async_db_session)
         # Toggle off (the default): never booked.
-        await service.create_virtual_goal(
+        await svc.create_virtual_goal(
             owner_user_id=1,
             name="Quiet",
             target_amount=100_000,
             monthly_contribution=10_000,
         )
         # Toggled on but paused: skipped.
-        paused = await service.create_virtual_goal(
+        paused = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Paused",
             target_amount=100_000,
             monthly_contribution=10_000,
         )
-        await service.set_goal_auto_contribute(paused.id, True, owner_user_id=1)
-        await service.set_goal_status(paused.id, "paused", owner_user_id=1)
+        await svc.set_goal_auto_contribute(paused.id, True, owner_user_id=1)
+        await svc.set_goal_status(paused.id, "paused", owner_user_id=1)
         # Linked: reality books it, never the job.
-        savings = await service.create_manual_account(
+        savings = await svc.create_manual_account(
             owner_user_id=1,
             name="CHASE SAVINGS",
             account_type="savings",
             classification="asset",
         )
-        await service.flag_account_as_goal(
+        await svc.flag_account_as_goal(
             savings.id,
             owner_user_id=1,
             target_amount=1_000_000,
             monthly_contribution=30_000,
         )
 
-        booked = await service.auto_contribute_goals(
+        booked = await svc.auto_contribute_goals(
             owner_user_id=1, today=date(2026, 9, 1)
         )
         assert booked == 0
@@ -644,19 +627,18 @@ class TestConsumersReadTheEngine:
     """GL-14: month_net, the projection, and auto-contribute all charge
     the EVALUATED allocation, not the raw declared amount."""
 
-    async def _income(self, service: FinanceService) -> int:
-        account = await service.create_manual_account(
+    async def _income(self, svc: FinanceService) -> int:
+        account = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
             classification="asset",
             current_balance=1_000_000,
         )
-        await service.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Paycheck",
             direction="inflow",
-            frequency="monthly",
             expected_amount=820_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
@@ -665,40 +647,38 @@ class TestConsumersReadTheEngine:
 
     @pytest.mark.asyncio
     async def test_a_percent_goal_moves_the_month_by_its_evaluation(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        service = FinanceService(async_db_session)
-        await self._income(service)
-        goal = await service.create_virtual_goal(
+        await self._income(svc)
+        goal = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Retire",
             target_amount=10_000_000,
             contribution_kind="percent_income",
             contribution_bps=1_000,
         )
-        stats = (await service.budget_summary(owner_user_id=1)).stats
+        stats = (await svc.budget_summary(owner_user_id=1)).stats
         assert stats.goals_total == 82_000  # 10% of $8,200
         assert stats.month_net == 820_000 - 82_000
 
-        allocations = await service.goal_allocations(
+        allocations = await svc.goal_allocations(
             owner_user_id=1, today=date(2026, 8, 10)
         )
         assert allocations[goal.id] == 82_000
 
     @pytest.mark.asyncio
     async def test_the_projection_charges_the_evaluation(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        service = FinanceService(async_db_session)
-        await self._income(service)
-        await service.create_virtual_goal(
+        await self._income(svc)
+        await svc.create_virtual_goal(
             owner_user_id=1,
             name="Retire",
             target_amount=10_000_000,
             contribution_kind="percent_income",
             contribution_bps=1_000,
         )
-        projection = await service.project_balances(
+        projection = await svc.project_balances(
             owner_user_id=1, days=60, today=date(2026, 8, 10)
         )
         goal_points = [p for p in projection.points if p.name == "Retire"]
@@ -706,43 +686,39 @@ class TestConsumersReadTheEngine:
 
     @pytest.mark.asyncio
     async def test_auto_contribute_books_the_evaluation(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        service = FinanceService(async_db_session)
-        await self._income(service)
-        goal = await service.create_virtual_goal(
+        await self._income(svc)
+        goal = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Retire",
             target_amount=10_000_000,
             contribution_kind="percent_income",
             contribution_bps=1_000,
         )
-        await service.set_goal_auto_contribute(goal.id, True, owner_user_id=1)
-        booked = await service.auto_contribute_goals(
+        await svc.set_goal_auto_contribute(goal.id, True, owner_user_id=1)
+        booked = await svc.auto_contribute_goals(
             owner_user_id=1, today=date(2026, 9, 1)
         )
         assert booked == 1
-        refreshed = await service.get_account(goal.id, owner_user_id=1)
+        refreshed = await svc.get_account(goal.id, owner_user_id=1)
         assert refreshed is not None
         assert refreshed.current_balance == 82_000
 
     @pytest.mark.asyncio
-    async def test_pausing_via_status_keeps_the_rule(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_pausing_via_status_keeps_the_rule(self, svc: FinanceService) -> None:
         """set_goal_status must not flatten a percent rule back to fixed."""
-        service = FinanceService(async_db_session)
-        await self._income(service)
-        goal = await service.create_virtual_goal(
+        await self._income(svc)
+        goal = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Retire",
             target_amount=10_000_000,
             contribution_kind="percent_income",
             contribution_bps=1_000,
         )
-        await service.set_goal_status(goal.id, "paused", owner_user_id=1)
-        await service.set_goal_status(goal.id, "active", owner_user_id=1)
-        refreshed = await service.get_account(goal.id, owner_user_id=1)
+        await svc.set_goal_status(goal.id, "paused", owner_user_id=1)
+        await svc.set_goal_status(goal.id, "active", owner_user_id=1)
+        refreshed = await svc.get_account(goal.id, owner_user_id=1)
         meta = goal_metadata(refreshed.metadata_)
         assert meta is not None
         assert meta.contribution_kind == "percent_income"
@@ -864,21 +840,18 @@ class TestDerivedTargets:
             goal_metadata({"goal_target_amount": 100, "goal_target_rule": "nonsense"})
 
     @pytest.mark.asyncio
-    async def test_pausing_keeps_the_derived_rule(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_pausing_keeps_the_derived_rule(self, svc: FinanceService) -> None:
         """set_goal_status rebuilds the metadata; it must not flatten a
         derived target back to the fixed cents it last resolved to."""
-        service = FinanceService(async_db_session)
-        goal = await service.create_virtual_goal(
+        goal = await svc.create_virtual_goal(
             owner_user_id=1,
             name="Emergency Fund",
             target_amount=1_800_000,
             target_rule="months_of_expenses",
             target_factor=6,
         )
-        await service.set_goal_status(goal.id, "paused", owner_user_id=1)
-        refreshed = await service.get_account(goal.id, owner_user_id=1)
+        await svc.set_goal_status(goal.id, "paused", owner_user_id=1)
+        refreshed = await svc.get_account(goal.id, owner_user_id=1)
         meta = goal_metadata(refreshed.metadata_)
         assert meta is not None
         assert meta.target_rule == "months_of_expenses"
@@ -974,12 +947,10 @@ class TestExpenseBaseExcludesCardPaymentsOnly:
     ) -> None:
         """A confirmed transfer from cash into a liability, wearing a
         recurring stream - the shape ``payment_stream_ids`` recognises."""
-        service = FinanceService(session)
-        stream = await service.create_recurring_stream(
-            owner_user_id=1,
+        svc = FinanceService(session)
+        stream = await seed_stream(
+            svc,
             name=name,
-            direction="outflow",
-            frequency="monthly",
             expected_amount=amount,
             next_expected_date=date(2026, 8, 5),
             account_id=cash_id,
@@ -1027,24 +998,23 @@ class TestExpenseBaseExcludesCardPaymentsOnly:
 
     @pytest.mark.asyncio
     async def test_a_card_payment_drops_out_and_a_loan_payment_stays(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        checking = await service.create_manual_account(
+        checking = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
             classification="asset",
             current_balance=0,
         )
-        card = await service.create_manual_account(
+        card = await svc.create_manual_account(
             owner_user_id=1,
             name="AMEX",
             account_type="credit_card",
             classification="liability",
             current_balance=0,
         )
-        mortgage = await service.create_manual_account(
+        mortgage = await svc.create_manual_account(
             owner_user_id=1,
             name="Mortgage",
             account_type="loan",
@@ -1082,12 +1052,11 @@ class TestObservedRunRate:
 
     @pytest.mark.asyncio
     async def test_observed_spending_beats_the_declared_base(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A book whose spending is real transactions rather than
         declared bills must still produce a run rate."""
-        service = FinanceService(async_db_session)
-        checking = await service.create_manual_account(
+        checking = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
@@ -1109,18 +1078,15 @@ class TestObservedRunRate:
             )
         await async_db_session.commit()
 
-        figures = await month_figures(
-            async_db_session, owner_user_id=1, today=today
-        )
+        figures = await month_figures(async_db_session, owner_user_id=1, today=today)
         assert figures.expenses_for() == 60_000
         assert figures.expenses_for((checking.id,)) == 60_000
 
     @pytest.mark.asyncio
     async def test_transfers_never_count_as_spending(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        checking = await service.create_manual_account(
+        checking = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
@@ -1149,10 +1115,9 @@ class TestObservedRunRate:
 
     @pytest.mark.asyncio
     async def test_money_coming_in_is_not_spending(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        checking = await service.create_manual_account(
+        checking = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
@@ -1186,28 +1151,25 @@ class TestUnmatchedPaymentsDoNotInflateTheRunRate:
 
     @pytest.mark.asyncio
     async def test_an_unmatched_card_payment_is_still_not_spending(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        checking = await service.create_manual_account(
+        checking = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
             classification="asset",
             current_balance=0,
         )
-        card = await service.create_manual_account(
+        card = await svc.create_manual_account(
             owner_user_id=1,
             name="AMEX",
             account_type="credit_card",
             classification="liability",
             current_balance=0,
         )
-        stream = await service.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="American Express",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=100_000,
             next_expected_date=date(2026, 8, 5),
             account_id=checking.id,
@@ -1331,12 +1293,10 @@ class TestLoanPaymentsSurviveTheMeasuredPath:
     ) -> None:
         """A confirmed transfer from cash into a liability, wearing a
         recurring stream - the shape ``payment_stream_ids`` recognises."""
-        service = FinanceService(session)
-        stream = await service.create_recurring_stream(
-            owner_user_id=1,
+        svc = FinanceService(session)
+        stream = await seed_stream(
+            svc,
             name=name,
-            direction="outflow",
-            frequency="monthly",
             expected_amount=amount,
             next_expected_date=date(2026, 8, 5),
             account_id=cash_id,
@@ -1384,24 +1344,23 @@ class TestLoanPaymentsSurviveTheMeasuredPath:
 
     @pytest.mark.asyncio
     async def test_a_matched_mortgage_still_counts_once_observed_wins(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        service = FinanceService(async_db_session)
-        checking = await service.create_manual_account(
+        checking = await svc.create_manual_account(
             owner_user_id=1,
             name="Checking",
             account_type="checking",
             classification="asset",
             current_balance=0,
         )
-        mortgage = await service.create_manual_account(
+        mortgage = await svc.create_manual_account(
             owner_user_id=1,
             name="Mortgage",
             account_type="loan",
             classification="liability",
             current_balance=0,
         )
-        card = await service.create_manual_account(
+        card = await svc.create_manual_account(
             owner_user_id=1,
             name="AMEX",
             account_type="credit_card",

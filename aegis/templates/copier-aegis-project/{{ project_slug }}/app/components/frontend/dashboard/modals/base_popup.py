@@ -91,7 +91,9 @@ class BasePopup(ft.Container):
         # Actual popup panel with customizable styling
         # Click handler stops propagation so clicks inside don't close popup
         self.panel = ft.Container(
-            content=content,
+            # Text controls are plain (see controls/text.py): selection
+            # is a property of the region, not of each Text.
+            content=ft.SelectionArea(content=content),
             visible=False,
             width=width,
             height=height,
@@ -142,6 +144,19 @@ class BasePopup(ft.Container):
         self.visible = False
         self.overlay.visible = False
         self.panel.visible = False
+
+    def close(self) -> None:
+        """Hide the popup AND repaint.
+
+        ``hide()`` deliberately leaves the repaint to the caller (it is
+        used mid-build); every caller that just wants the popup gone then
+        rewrote the same two lines, and one wrote ``self.open = False`` -
+        an AlertDialog-ism that does nothing on a Container and left the
+        popup on screen with a dead Cancel button.
+        """
+        self.hide()
+        if self.page is not None:
+            self.page.update()
 
     def _handle_backdrop_click(self, e: ft.ControlEvent) -> None:
         """Close popup when backdrop is clicked (not the panel itself)."""

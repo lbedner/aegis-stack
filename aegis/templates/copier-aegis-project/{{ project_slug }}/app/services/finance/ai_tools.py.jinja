@@ -31,7 +31,12 @@ from app.services.finance.domains.ledger.accounts import (
     effective_balance,
     liability_details,
 )
+from app.services.finance.domains.ledger.properties import (
+    PROPERTY_ACCOUNT_TYPE,
+    property_metadata,
+)
 from app.services.finance.domains.ledger.queries.accounts import accounts_page
+from app.services.finance.domains.ledger.valuations import preferred_valuation_row
 from app.services.finance.domains.ledger.queries.categories import (
     category_names_by_id,
 )
@@ -172,6 +177,14 @@ async def accounts() -> dict[str, Any]:
             session, account_ids=account_ids
         )
         liabilities = await liability_details(session, account_ids)
+        # The row that actually drives each property's balance: its source
+        # and date are the provenance worth quoting, and they outrank the
+        # typed metadata whenever a dated series exists.
+        valuation_rows = {
+            account.id: await preferred_valuation_row(session, account)
+            for account in account_rows
+            if account.account_type == PROPERTY_ACCOUNT_TYPE
+        }
         streams = await recurring_queries.active_streams(session)
 
     today = date.today()
@@ -231,6 +244,39 @@ async def accounts() -> dict[str, Any]:
                 "credit_cents": envelope_meta.monthly_credit,
                 "cadence": envelope_meta.cadence,
                 "auto_credit": envelope_meta.auto_credit,
+            }
+        property_meta = property_metadata(account.metadata_)
+        if property_meta is not None:
+            # Provenance rides with the number: an owner's estimate and an
+            # appraisal are not interchangeable in a lending conversation,
+            # and a bare figure invites the model to present one as the other.
+            valuation = valuation_rows.get(account.id)
+            entry["property"] = {
+                "kind": property_meta.property_kind,
+                "valuation_source": (
+                    valuation.source
+                    if valuation is not None
+                    else property_meta.valuation_source
+                ),
+                "valuation_as_of": (
+                    valuation.as_of_date.isoformat()
+                    if valuation is not None
+                    else property_meta.valuation_as_of.isoformat()
+                    if property_meta.valuation_as_of
+                    else None
+                ),
+                "is_estimate": (
+                    valuation.is_estimate if valuation is not None else None
+                ),
+
+                "purchase_price_cents": property_meta.purchase_price,
+                "purchase_date": (
+                    property_meta.purchase_date.isoformat()
+                    if property_meta.purchase_date
+                    else None
+                ),
+                "ownership_share_bps": property_meta.ownership_share_bps,
+                "include_in_net_worth": property_meta.include_in_net_worth,
             }
         goal_meta = goal_metadata(account.metadata_)
         if goal_meta is not None:

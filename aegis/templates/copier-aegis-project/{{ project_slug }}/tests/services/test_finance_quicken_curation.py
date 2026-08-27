@@ -15,8 +15,8 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.domains.detection import promote_curated_streams
 from app.services.finance.adapters.importers import imports
+from app.services.finance.domains.detection import promote_curated_streams
 from app.services.finance.models import (
     FinanceCategoryAlias,
     FinanceRecurringStream,
@@ -32,9 +32,8 @@ OWNER = 1
 class TestCategoryFromHint:
     @pytest.mark.asyncio
     async def test_deep_quicken_path_creates_a_two_segment_category(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         category = await svc.get_or_create_category_from_hint(
             "Bills & Utilities:Streaming:Television:Netflix"
         )
@@ -49,26 +48,21 @@ class TestCategoryFromHint:
         assert resolved == category.id
 
     @pytest.mark.asyncio
-    async def test_income_paths_classify_as_income(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_income_paths_classify_as_income(self, svc: FinanceService) -> None:
         category = await svc.get_or_create_category_from_hint("Income:Paycheck")
         assert category is not None
         assert category.classification == "income"
 
     @pytest.mark.asyncio
     async def test_bracketed_transfer_hints_are_not_categories(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         assert await svc.get_or_create_category_from_hint("[TOTAL CHECKING]") is None
 
     @pytest.mark.asyncio
     async def test_paths_sharing_two_segments_share_one_category(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         first = await svc.get_or_create_category_from_hint(
             "Bills & Utilities:Streaming:Television:Netflix"
         )
@@ -136,9 +130,8 @@ class TestImportCarriesCuration:
 class TestStreamPromotion:
     @pytest.mark.asyncio
     async def test_bills_categorized_stream_becomes_a_subscription(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
@@ -185,9 +178,8 @@ class TestStreamPromotion:
 
     @pytest.mark.asyncio
     async def test_uncategorized_stream_is_left_alone(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",

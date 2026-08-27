@@ -12,7 +12,7 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.service import FinanceService
-from tests.services._finance_factories import declare_bill
+from tests.services._finance_factories import declare_bill, seed_stream
 
 
 async def _bill(svc, db, account_id, name, cents):
@@ -24,9 +24,8 @@ async def _bill(svc, db, account_id, name, cents):
 class TestProjectionAccountFilter:
     @pytest.mark.asyncio
     async def test_it_only_walks_the_accounts_you_are_viewing(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
@@ -55,9 +54,8 @@ class TestProjectionAccountFilter:
 
     @pytest.mark.asyncio
     async def test_no_filter_still_means_everything(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
@@ -82,18 +80,15 @@ class TestAccountLessBills:
     """
 
     @pytest.mark.asyncio
-    async def test_it_projects_with_no_filter(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_it_projects_with_no_filter(self, svc: FinanceService) -> None:
         await svc.create_manual_account(
             name="Checking",
             account_type="checking",
             classification="asset",
             owner_user_id=1,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Betr Health",
             direction="inflow",
             frequency="semi_monthly",
@@ -110,17 +105,16 @@ class TestAccountLessBills:
 
     @pytest.mark.asyncio
     async def test_narrowing_to_an_account_does_not_drop_it(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking = await svc.create_manual_account(
             name="Checking",
             account_type="checking",
             classification="asset",
             owner_user_id=1,
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Betr Health",
             direction="inflow",
             frequency="semi_monthly",

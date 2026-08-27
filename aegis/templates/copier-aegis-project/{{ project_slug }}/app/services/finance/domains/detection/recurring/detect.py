@@ -34,6 +34,12 @@ from app.services.finance.domains.detection.recurring.cadence import (
     _has_gone_quiet,
     _payee_key,
     _rhythm_ratio,
+    split_interleaved,
+)
+from app.services.finance.domains.detection.recurring.resolve import (
+    _dismissed_twin,
+    _is_the_bill_again,
+    _resolve_payee_key,
 )
 from app.services.finance.models import (
     FinanceAccount,
@@ -80,81 +86,6 @@ class RecurringDetectionResult(BaseModel):
     detected: int = 0
     # Streams retired because nothing points at them any more - see
     pruned: int = 0
-
-
-# Separator for the second, third, ... bill a single payee runs on one
-# account. ``normalized_payee`` is purely the detected-stream unique key
-# and is never displayed (Bills & Income shows ``name``), so widening it
-# this way needs no migration - the unique index still does its job, it
-# just stops forcing one payee to mean one bill.
-_SPLIT_MARK = "#"
-
-
-async def _sibling_streams(
-    db: AsyncSession, *, owner_user_id: int, account_id: int, direction: str, base: str
-) -> list[FinanceRecurringStream]:
-    """Every live stream on this payee+account+direction, base key or a
-    split of it."""
-    rows = await queries.sibling_streams_raw(
-        db,
-        owner_user_id=owner_user_id,
-        account_id=account_id,
-        direction=direction,
-    )
-    return [
-        s
-        for s in rows
-        if s.normalized_payee == base
-        or (s.normalized_payee or "").startswith(base + _SPLIT_MARK)
-    ]
-
-
-async def _resolve_payee_key(
-    db: AsyncSession,
-    *,
-    owner_user_id: int,
-    account_id: int,
-    direction: str,
-    base: str,
-    member_ids: set[int],
-) -> tuple[str, FinanceRecurringStream | None]:
-    """The key this group of members should land on, and the stream already
-    holding it (if any).
-
-    One payee on one account used to mean exactly one bill, because the key
-    WAS the payee. That is wrong for a payee that really does sell you two
-    things - Anthropic billing a Claude subscription and API usage, Amazon
-    billing Prime and AWS - and it is what would quietly undo an exclusion:
-    drop a charge from a bill, and the next pass regroups it under the same
-    payee key, finds the bill, and puts it straight back.
-
-    So a CONFIRMED bill owns its membership. If one exists on the base key
-    and these members are not its members, they are something else, and
-    they get their own key (``merchant:12#2``) rather than being merged in.
-    """
-    siblings = await _sibling_streams(
-        db,
-        owner_user_id=owner_user_id,
-        account_id=account_id,
-        direction=direction,
-        base=base,
-    )
-    # A stream these members already sit in is the one they belong to -
-    # this is the ordinary re-run, and it must absorb rather than fork.
-    for stream in siblings:
-        if stream.id is not None and member_ids:
-            if await queries.any_member_linked(
-                db, stream_id=stream.id, member_ids=member_ids
-            ):
-                return str(stream.normalized_payee or base), stream
-    on_base = next((s for s in siblings if s.normalized_payee == base), None)
-    if on_base is not None and on_base.is_user_confirmed:
-        taken = {s.normalized_payee for s in siblings}
-        index = 2
-        while f"{base}{_SPLIT_MARK}{index}" in taken:
-            index += 1
-        return f"{base}{_SPLIT_MARK}{index}", None
-    return base, on_base
 
 
 async def _curated_members(db: AsyncSession, owner_user_id: int | None) -> set[int]:
@@ -240,6 +171,23 @@ async def detect_recurring(
     # already have an owner, and regrouping them is how an exclusion or a
     # split gets silently undone overnight.
     curated = await _curated_members(db, owner_user_id)
+    # Confirmed bills by (account, direction), for the repropose guard:
+    # a group that IS one of these must release, not duplicate. Streams
+    # are STORED under ``store_owner`` (0 for a standalone install), so
+    # the read matches that, not the raw argument - owner_clause's
+    # IS NULL would find nothing a standalone install ever wrote.
+    confirmed_by_slot: dict[tuple[int | None, str], list[FinanceRecurringStream]] = {}
+    for bill in await queries.stream_rows_where(
+        db,
+        [
+            FinanceRecurringStream.owner_user_id == store_owner,
+            or_(
+                FinanceRecurringStream.is_user_confirmed.is_(True),
+                FinanceRecurringStream.source == "user",
+            ),
+        ],
+    ):
+        confirmed_by_slot.setdefault((bill.account_id, bill.direction), []).append(bill)
     groups: dict[tuple[int, str, str], list[FinanceTransaction]] = {}
     for txn in txns:
         # Already spoken for by a real bill - not detection's business.
@@ -275,6 +223,13 @@ async def detect_recurring(
             if member.recurring_stream_id is not None:
                 member.recurring_stream_id = None
                 db.add(member)
+
+    # One payee interleaving two subscriptions (Apple billing iCloud
+    # and Music on one descriptor) either has no rhythm as a single
+    # group or fakes a shorter cadence from the interleaved gaps -
+    # see split_interleaved for the banding rule and its guardrails.
+    work, unbanded = split_interleaved(work, today)
+    _release(unbanded)
 
     for account_id, direction, payee, members in work:
         if len(members) < MIN_OCCURRENCES:
@@ -313,6 +268,14 @@ async def detect_recurring(
         amounts = [abs(t.amount) for t in members]
         median_amount = int(statistics.median(amounts))
         if median_amount < MIN_STREAM_AMOUNT:
+            _release(members)
+            continue
+        if _is_the_bill_again(
+            confirmed_by_slot.get((account_id, direction), []),
+            payee,
+            frequency,
+            median_amount,
+        ):
             _release(members)
             continue
         variable = any(
@@ -555,6 +518,22 @@ async def _upsert_stream(
         direction=direction,
         normalized_payee=payee,
     )
+    if existing is None:
+        # A dismissal must survive a key respelling (a normalization
+        # change, descriptor drift): re-key the tombstone and refresh
+        # its facts below - muted and hidden it stays - rather than
+        # letting the purge eat it and this pass repropose it loud.
+        existing = await _dismissed_twin(
+            db,
+            owner_user_id=owner_user_id,
+            account_id=account_id,
+            direction=direction,
+            payee=payee,
+            frequency=frequency,
+            average_amount=average_amount,
+        )
+        if existing is not None:
+            existing.normalized_payee = payee
     status = "mature" if occurrence_count >= MIN_OCCURRENCES else "early_detection"
     if existing is not None:
         existing.name = name

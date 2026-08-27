@@ -787,27 +787,27 @@ async def setup_dashboard(view: BaseView) -> None:
     )
     {%- endif %}
 
-    # Mount controls onto the View. Header stays fixed; content scrolls.
-    view.controls = [
-        header,
-        ft.Container(
-            content=ft.Column(
-                [
-                    {% if insights_per_user -%}
-                    empty_state_container,
-                    {%- endif %}
-                    stack_view_container,   # Stack + Activity view (default)
-                    cards_view_container,   # Cards view
-                    diagram_view_container, # Diagram view
-                ],
-                spacing=20,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            alignment=ft.alignment.top_center,
-            expand=True,
+    # Header stays fixed; content scrolls inside one selection region
+    # (text controls are plain - see controls/text.py).
+    body = ft.Container(
+        content=ft.Column(
+            [
+                {% if insights_per_user -%}
+                empty_state_container,
+                {%- endif %}
+                stack_view_container,   # Stack + Activity view (default)
+                cards_view_container,   # Cards view
+                diagram_view_container, # Diagram view
+            ],
+            spacing=20,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            scroll=ft.ScrollMode.AUTO,
         ),
-    ]
+        alignment=ft.alignment.top_center,
+        expand=True,
+    )
+    view.controls = [header, ft.SelectionArea(content=body)]
+
     view.update()
 
     {% if insights_per_user -%}

@@ -8,6 +8,9 @@ transaction, a category total, or a payee roll-up is asking.
 
 from __future__ import annotations
 
+from decimal import Decimal
+import re
+
 from sqlalchemy import func
 from sqlmodel import or_, select
 
@@ -51,12 +54,14 @@ def transaction_search_filter(query: str):
     columns are joins. An empty result then reads as "no such data"
     rather than "that column is not searched".
 
-    Amount and date are deliberately left out: they have their own
-    affordances (column sort, the range chips), and substring-matching a
-    formatted number finds "50" inside "$1,502.00".
+    A query that reads as money ("500", "1,502.00", "$8.99") ALSO
+    matches the amount - exactly, either sign. Exact rather than
+    substring, because substring-matching a formatted number finds "50"
+    inside "$1,502.00". Date stays out: it has its own affordances
+    (column sort, the range chips).
     """
     like = f"%{query}%"
-    return or_(
+    branches = [
         FinanceTransaction.name.ilike(like),
         FinanceTransaction.merchant_name.ilike(like),
         FinanceTransaction.original_description.ilike(like),
@@ -72,4 +77,21 @@ def transaction_search_filter(query: str):
         FinanceTransaction.account_id.in_(
             select(FinanceAccount.id).where(FinanceAccount.name.ilike(like))
         ),
-    )
+    ]
+    cents = _query_cents(query)
+    if cents is not None:
+        branches.append(func.abs(FinanceTransaction.amount) == cents)
+    return or_(*branches)
+
+
+def _query_cents(query: str) -> int | None:
+    """The query as an exact amount in cents, or None if it isn't money.
+
+    Accepts what a person types from a statement: an optional leading
+    ``$``, thousands commas, up to two decimals. Decimal arithmetic, so
+    "1502.29" is 150229 and never a float neighbour.
+    """
+    text = query.strip().lstrip("$").replace(",", "")
+    if not re.fullmatch(r"\d+(\.\d{1,2})?", text):
+        return None
+    return int(Decimal(text).scaleb(2))

@@ -45,11 +45,10 @@ async def _payment(
 class TestAttach:
     @pytest.mark.asyncio
     async def test_it_consumes_the_occurrence(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Membership set, due date stepped from the PAYMENT's date (the
         same rule the automatic matcher follows), occurrence counted."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(svc, account)
         payment = await _payment(svc, account)
@@ -66,12 +65,11 @@ class TestAttach:
 
     @pytest.mark.asyncio
     async def test_it_teaches_the_bill_the_payees_key(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The half that ends the treadmill: the bill adopts the
         transaction's merchant, so NEXT month's charge matches without
         anyone doing anything."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         merchant = await svc.create_merchant("World Anvil", owner_user_id=1)
         bill = await _bill(svc, account)
@@ -88,9 +86,8 @@ class TestAttach:
 
     @pytest.mark.asyncio
     async def test_it_teaches_the_transaction_when_the_bill_knows_more(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         merchant = await svc.create_merchant("World Anvil", owner_user_id=1)
         bill = await _bill(svc, account)
@@ -105,7 +102,7 @@ class TestAttach:
 
     @pytest.mark.asyncio
     async def test_it_backfills_the_payees_history(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Attaching one payment claims the payee's OTHER unclaimed rows
         too. Teaching the key only helps future months; without the
@@ -113,7 +110,6 @@ class TestAttach:
         spending and the "Everything else" figure double-counts the bill
         (confirmed live: a nursing-home bill counted once in BILLS and
         again in the observed run rate)."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(svc, account)
         payee = await svc.create_merchant("World Anvil", owner_user_id=1)
@@ -134,11 +130,10 @@ class TestAttach:
 
     @pytest.mark.asyncio
     async def test_backfill_never_steals_claimed_rows(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A row another live bill already claims stays claimed - the
         backfill sweeps strays, it does not re-litigate memberships."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(svc, account)
         other = await _bill(svc, account, name="Other bill")
@@ -165,11 +160,10 @@ class TestAttach:
 
     @pytest.mark.asyncio
     async def test_an_older_payment_never_moves_the_date_backward(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Attaching June's charge for the record must not re-arm July's
         nag by dragging next_expected_date into the past."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(svc, account, next_expected_date=date(2026, 8, 30))
         payment = await _payment(svc, account, day=date(2026, 6, 2))
@@ -182,11 +176,10 @@ class TestAttach:
 
     @pytest.mark.asyncio
     async def test_a_once_bill_completes_instead_of_stepping(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """ "Pay someone back" has no next occurrence; its payment
         arriving is the end of it, not a reschedule."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(
             svc, account, frequency="once", next_expected_date=date(2026, 8, 1)
@@ -200,10 +193,7 @@ class TestAttach:
         assert updated.next_expected_date is None
 
     @pytest.mark.asyncio
-    async def test_wrong_owner_touches_nothing(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_wrong_owner_touches_nothing(self, svc: FinanceService) -> None:
         account = await _account(svc)
         bill = await _bill(svc, account)
         payment = await _payment(svc, account)
@@ -218,12 +208,9 @@ class TestAttach:
 
 class TestMatchCandidates:
     @pytest.mark.asyncio
-    async def test_candidates_look_like_the_bill(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_candidates_look_like_the_bill(self, svc: FinanceService) -> None:
         """Same direction, unclaimed, amount in the neighborhood, recent
         first - the shortlist a human would scan for."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(svc, account)
         lookalike = await _payment(svc, account, day=date(2026, 8, 2), cents=-1_500)
@@ -246,10 +233,7 @@ class TestMatchCandidates:
         assert all(t.amount < 0 for t in rows)
 
     @pytest.mark.asyncio
-    async def test_already_claimed_rows_stay_out(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_already_claimed_rows_stay_out(self, svc: FinanceService) -> None:
         account = await _account(svc)
         bill = await _bill(svc, account)
         other = await _bill(svc, account, name="Other")
@@ -262,13 +246,12 @@ class TestMatchCandidates:
 
     @pytest.mark.asyncio
     async def test_the_likeliest_candidate_sorts_first(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """A $7.57 bill's band admits every coffee in the register; the
         REAL payment (exact amount, dated near the due date) must not
         drown under twenty newer lookalikes (confirmed live: the World
         Anvil payment sat below a page of Targets)."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(
             svc, account, expected_amount=757, next_expected_date=date(2026, 7, 30)
@@ -287,17 +270,15 @@ class TestMatchCandidates:
 
         assert rows[0].id == real.id
 
-
     @pytest.mark.asyncio
     async def test_another_bills_payment_stays_out_of_the_fallback(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Rows carrying a DIFFERENT live bill's name are that bill's
         business, not answers here - the YouTube picker offered DoorDash
         rows because their amounts landed in the window (confirmed live).
         A genuinely unknown descriptor stays offered: that is the case
         the fallback shortlist exists for."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(
             svc,
@@ -332,12 +313,11 @@ class TestMatchCandidates:
 
     @pytest.mark.asyncio
     async def test_own_name_beats_another_bills_claim(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """A row naming THIS bill is offered even if another live bill's
         name also appears in the descriptor - the tie belongs to the
         human, not to silence."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(
             svc,
@@ -365,10 +345,9 @@ class TestMatchCandidates:
 
         assert both.id in [t.id for t in rows]
 
-
     @pytest.mark.asyncio
     async def test_rows_the_categorizer_already_identified_stay_out(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A $9 bill's band admits every $9 purchase in the register, and
         they all arrived pre-labelled - McDonald's as Fast Food, CVS as
@@ -376,7 +355,6 @@ class TestMatchCandidates:
         them). A row the system already identifies as someone else is not
         a candidate; the fallback exists for UNRECOGNIZABLE descriptors,
         which stay offered."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         patreon_cat = await seed_category(async_db_session, "Patreon")
         fast_food = await seed_category(async_db_session, "Fast Food")
@@ -387,9 +365,7 @@ class TestMatchCandidates:
             expected_amount=900,
             next_expected_date=date(2026, 8, 1),
         )
-        await svc.update_recurring(
-            bill.id, owner_user_id=1, category_id=patreon_cat.id
-        )
+        await svc.update_recurring(bill.id, owner_user_id=1, category_id=patreon_cat.id)
         labelled = await svc.create_transaction(
             account_id=account.id,
             amount=-939,
@@ -410,12 +386,11 @@ class TestMatchCandidates:
 
     @pytest.mark.asyncio
     async def test_a_row_sharing_the_bills_category_stays_offered(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Categorized is only disqualifying when it points at someone
         ELSE - a row already carrying the bill's own category is more
         likely the payment, not less."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         patreon_cat = await seed_category(async_db_session, "Patreon")
         bill = await _bill(
@@ -425,9 +400,7 @@ class TestMatchCandidates:
             expected_amount=900,
             next_expected_date=date(2026, 8, 1),
         )
-        await svc.update_recurring(
-            bill.id, owner_user_id=1, category_id=patreon_cat.id
-        )
+        await svc.update_recurring(bill.id, owner_user_id=1, category_id=patreon_cat.id)
         same_cat = await svc.create_transaction(
             account_id=account.id,
             amount=-900,
@@ -441,10 +414,9 @@ class TestMatchCandidates:
 
         assert same_cat.id in [t.id for t in rows]
 
-
     @pytest.mark.asyncio
     async def test_bill_without_a_category_infers_one_from_its_members(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The Citi shape (confirmed live): the bill row stores no
         category, but its matched history is all Finance Charge - the
@@ -452,7 +424,6 @@ class TestMatchCandidates:
         run got cut and the picker showed nine of them; with it, the
         register noise goes and the interest rows - the actual
         answers - stay."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         finance_charge = await seed_category(async_db_session, "Finance Charge")
         groceries = await seed_category(async_db_session, "Groceries")
@@ -508,9 +479,8 @@ class TestDeleteReleasesMembers:
 
     @pytest.mark.asyncio
     async def test_members_are_freed_on_delete(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(svc, account)
         payment = await _payment(svc, account)
@@ -525,12 +495,11 @@ class TestDeleteReleasesMembers:
 class TestNameTakesPrecedence:
     @pytest.mark.asyncio
     async def test_a_payee_match_outranks_a_closer_amount(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """ "Fidelity" in the candidate beats a stranger a dollar nearer:
         the list ranked purely on figures, so Etsy and DoorDash from last
         year outranked rows that carry the bill's own name."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         merchant = await svc.create_merchant("Fidelity", owner_user_id=1)
         bill = await _bill(
@@ -563,13 +532,12 @@ class TestNameTakesPrecedence:
 
     @pytest.mark.asyncio
     async def test_a_dead_streams_claim_does_not_hide_a_candidate(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A dismissed detector guess keeps claiming its pattern's rows
         (by design - that is how a dismissal stays silent), but a human
         reconciling a CONFIRMED bill outranks a dead proposal: the row
         must appear, and attaching it re-parents the claim."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(svc, account, name="Fidelity", expected_amount=34_748)
         twin = await _bill(svc, account, name="Fidelity twin", expected_amount=34_748)
@@ -596,11 +564,10 @@ class TestNameTakesPrecedence:
 
     @pytest.mark.asyncio
     async def test_strangers_still_show_when_nothing_wears_the_name(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """The amount shortlist is the whole value when the payment came
         through under an unrecognizable descriptor."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         bill = await _bill(
             svc,
@@ -623,12 +590,11 @@ class TestNameTakesPrecedence:
 
     @pytest.mark.asyncio
     async def test_history_stays_out_of_a_reconciliation(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The dialog answers "which payment was THIS due date" - last
         year's identical charges are not answers to that question, and
         six of them crowded out everything else (confirmed live)."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         merchant = await svc.create_merchant("Fidelity", owner_user_id=1)
         bill = await _bill(

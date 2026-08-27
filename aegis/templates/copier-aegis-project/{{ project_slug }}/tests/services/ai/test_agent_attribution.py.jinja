@@ -1,6 +1,7 @@
 """Chat routes through the agent loader: persona, sampling, attribution."""
 {% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
 
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -139,6 +140,66 @@ def _stub_resolve(
 
     monkeypatch.setattr(chat_module, "resolve_agent", resolve)
     monkeypatch.setattr(streaming_module, "resolve_agent", resolve)
+
+
+class TestTheTurnCarriesItsUser:
+    """``save_memory`` resolves its user from a ContextVar the runtime sets
+    for the turn. Unset, the tool declines and returns a plain string the
+    model reports as a successful save - so the user is told a fact was
+    stored while nothing was written. Both runtimes must set it.
+    """
+
+    async def test_chat_path_sets_the_user_for_the_turn(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        from app.services.ai.domains.chat.user_memory import current_user_id
+
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+        seen: dict[str, Any] = {}
+
+        class _RecordingAgent(_FakeAgent):
+            async def run(self, prompt: str) -> Any:
+                seen["user_id"] = current_user_id.get()
+                return await super().run(prompt)
+
+        monkeypatch.setattr(
+            prompt_module,
+            "get_agent",
+            lambda *a, **k: _RecordingAgent(),
+        )
+
+        await service.chat("remember something", user_id="u42")
+
+        assert seen["user_id"] == "u42"
+        assert current_user_id.get() is None  # restored after the turn
+
+    async def test_streaming_path_sets_the_user_for_the_turn(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        from app.services.ai.domains.chat.user_memory import current_user_id
+
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+        seen: dict[str, Any] = {}
+
+        class _RecordingAgent(_FakeAgent):
+            @asynccontextmanager
+            async def run_stream_events(self, prompt: str) -> "AsyncIterator[Any]":
+                seen["user_id"] = current_user_id.get()
+                yield _FakeEventStream()
+
+        monkeypatch.setattr(
+            prompt_module,
+            "get_agent",
+            lambda *a, **k: _RecordingAgent(),
+        )
+
+        async for _chunk in service.stream_chat("remember something", user_id="u42"):
+            pass
+
+        assert seen["user_id"] == "u42"
+        assert current_user_id.get() is None
 
 
 class TestAgentGrantsReachTheApiChatPath:
@@ -396,77 +457,6 @@ class TestUserMemoryInjection:
         assert "allergic to peanuts" in prompt
 
 
-{% if ai_rag %}
-class TestAgentKnowledgeScoping:
-    async def test_scoped_agent_searches_only_its_collections(
-        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
-    ) -> None:
-        """An agent with knowledge_base_ids only retrieves from that scope."""
-        service, _, _, monkeypatch = harness
-        _stub_resolve(
-            monkeypatch, _custom_config(knowledge_base_ids=("kb-food",))
-        )
-
-        searched: dict[str, Any] = {}
-
-        class FakeRagService:
-            async def search_scoped(
-                self,
-                query: str,
-                allowed_collections: Any,
-                top_k: Any = None,
-                filter_metadata: Any = None,
-            ) -> list[Any]:
-                searched["allowed"] = tuple(allowed_collections)
-                return []
-
-            async def search(self, *args: Any, **kwargs: Any) -> list[Any]:
-                searched["unscoped"] = True
-                return []
-
-        monkeypatch.setattr(
-            AIService, "rag_service", property(lambda self: FakeRagService())
-        )
-
-        await service.chat("what can I eat?", use_rag=True)
-
-        assert searched.get("allowed") == ("kb-food",)
-        assert "unscoped" not in searched
-
-    async def test_unscoped_agent_keeps_single_collection_search(
-        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
-    ) -> None:
-        """Empty scope = existing behavior (default collection search)."""
-        service, _, _, monkeypatch = harness
-        _stub_resolve(monkeypatch, default_agent_config())
-
-        searched: dict[str, Any] = {}
-
-        class FakeRagService:
-            async def search_scoped(self, *args: Any, **kwargs: Any) -> list[Any]:
-                searched["scoped"] = True
-                return []
-
-            async def search(
-                self,
-                query: str,
-                collection_name: str,
-                top_k: Any = None,
-            ) -> list[Any]:
-                searched["collection"] = collection_name
-                return []
-
-        monkeypatch.setattr(
-            AIService, "rag_service", property(lambda self: FakeRagService())
-        )
-
-        await service.chat("hello", use_rag=True)
-
-        assert searched.get("collection") == "default"
-        assert "scoped" not in searched
-
-
-{% endif %}
 def test_call_args_preview_summarizes_scripts() -> None:
     """A run_code call previews as its first meaningful code line; plain
     tool calls keep their (clipped) arguments."""

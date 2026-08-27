@@ -10,16 +10,19 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date
-from typing import Any, Literal
+from typing import Literal
 
-from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.services.finance.constants import CADENCES, add_months
 from app.services.finance.domains.detection.insights.commitments import (
     MONTHLY_FACTOR,
     commitment_rollup,
     is_commitment,
     is_paused,
+    monthly_share,
+    monthly_share_of,
+    shown_cadence,
 )
 from app.services.finance.domains.ledger import categories
 from app.services.finance.domains.planning import envelopes, goals, recurring
@@ -28,11 +31,13 @@ from app.services.finance.domains.planning.budgets.lines import (
     budget_line_status,
     get_or_create_budget,
 )
+from app.services.finance.domains.planning.budgets.uncovered import (
+    uncovered_spend,
+    uncovered_spend_filters,
+)
 from app.services.finance.models import (
-    FinanceAccount,
     FinanceBudgetCategory,
     FinanceRecurringStream,
-    FinanceTransaction,
 )
 from app.services.finance.schemas import (
     BudgetBucketResponse,
@@ -167,6 +172,7 @@ async def budget_summary(
     owner_user_id: int | None = None,
     period_month: int | None = None,
     account_ids: list[int] | None = None,
+    today: date | None = None,
 ) -> BudgetSummaryResponse:
     """Flexible: explicit limits the owner chose to track (category or
     payee) - the only bucket with a real spend-vs-allocation status.
@@ -183,7 +189,8 @@ async def budget_summary(
     be a spend lookup per line. Do not "simplify" steps 4/5 below into
     per-line queries - that is exactly the N+1 this was built to avoid.
     """
-    month = period_month or current_period_month()
+    today = today or date.today()
+    month = period_month or current_period_month(today)
     start, end = queries.month_bounds(month)
     prior_start, prior_end = queries.month_bounds(_prior_period_month(month))
 
@@ -251,13 +258,15 @@ async def budget_summary(
     streams = [s for s in streams if s.id not in transfer_ids]
     if account_ids is not None:
         streams = [s for s in streams if s.account_id in account_ids]
-    rollup = commitment_rollup(streams)
+    rollup = commitment_rollup(streams, today=today)
     stream_category_names = await recurring.stream_category_names(
-        db, {s.id for s in rollup["fixed"] + rollup["non_monthly"]}
+        db,
+        {s.id for s in rollup["fixed"] + rollup["non_monthly"] + rollup["one_time"]},
     )
 
     def commitment_line(stream: FinanceRecurringStream) -> BudgetLineResponse:
-        typical = int(stream.average_amount or 0)
+        # The monthly share: these render under a "/mo" heading.
+        typical = monthly_share(stream)
         actual = spent_by_stream.get(stream.id, 0)
         status, variance = _commitment_variance_status(
             actual, spent_by_stream_prior.get(stream.id)
@@ -295,7 +304,7 @@ async def budget_summary(
         )
 
     def bucket(
-        name: Literal["fixed", "non_monthly", "flexible"],
+        name: Literal["fixed", "non_monthly", "one_time", "flexible"],
         item_lines: list[BudgetLineResponse],
     ) -> BudgetBucketResponse:
         return BudgetBucketResponse(
@@ -305,14 +314,33 @@ async def budget_summary(
             lines=item_lines,
         )
 
+    def one_time_line(stream: FinanceRecurringStream) -> BudgetLineResponse:
+        # Face value beside a date, never a "/mo" share: a one-off is a
+        # plan the user typed in, and its whole amount lands on one day.
+        return BudgetLineResponse(
+            id=stream.id,
+            category_id=stream.category_id,
+            category_name=stream_category_names.get(stream.id),
+            payee_key=None,
+            payee_label=stream.name,
+            allocated_amount=int(stream.average_amount or 0),
+            spent_amount=spent_by_stream.get(stream.id, 0),
+            status="good",
+            variance_amount=None,
+            due_date=stream.next_expected_date,
+        )
+
     fixed_lines = [commitment_line(s) for s in rollup["fixed"]]
     non_monthly_lines = [commitment_line(s) for s in rollup["non_monthly"]]
+    one_time_lines = sorted(
+        (one_time_line(s) for s in rollup["one_time"]),
+        key=lambda row: (row.due_date is None, row.due_date or date.min),
+    )
     flexible_lines = [user_line(line) for line in lines]
 
     # 7. Stats strip - derived entirely from data already in memory
     # above, no further queries.
     over_budget = [row for row in flexible_lines if row.status == "critical"]
-    today = date.today()
     days_left = (end - today).days if start <= today < end else 0
     flexible_spent = sum(row.spent_amount for row in flexible_lines)
     flexible_allocated = sum(row.allocated_amount for row in flexible_lines)
@@ -372,7 +400,7 @@ async def budget_summary(
     envelopes_total = sum(envelope_credits)
 
     # The sixth term: observed spending no bill and no limit covers.
-    everything_else = await uncovered_spending_rate(
+    uncovered = await uncovered_spend(
         db, owner_user_id=owner_user_id, today=today, account_ids=account_ids
     )
 
@@ -386,7 +414,7 @@ async def budget_summary(
         - flexible_allocated
         - goals_total
         - envelopes_total
-        - everything_else
+        - uncovered.rate
     )
 
     # 9. When the month lands negative, the summary carries its own
@@ -419,7 +447,8 @@ async def budget_summary(
         goals_shortfall=goals_shortfall,
         envelopes_total=envelopes_total,
         envelopes_count=len(envelope_credits),
-        everything_else=everything_else,
+        everything_else=uncovered.rate,
+        one_off_total=uncovered.one_off,
         month_net=month_net,
         trim_residual=plan.residual,
     )
@@ -429,6 +458,7 @@ async def budget_summary(
         buckets=[
             bucket("fixed", fixed_lines),
             bucket("non_monthly", non_monthly_lines),
+            bucket("one_time", one_time_lines),
             bucket("flexible", flexible_lines),
         ],
         stats=stats,
@@ -436,84 +466,9 @@ async def budget_summary(
     )
 
 
-async def uncovered_spending_rate(
-    db: AsyncSession,
-    *,
-    owner_user_id: int | None = None,
-    today: date | None = None,
-    account_ids: list[int] | None = None,
-) -> int:
-    """Cents/month of observed spending no bill and no budget limit
-    covers - the trailing 3 full months' average of spend-space
-    outflows that are neither linked to a recurring stream nor in a
-    budgeted category. The sixth term of the month equation: without
-    it, unplanned spending is invisible and every future month reads
-    optimistic by exactly that amount (confirmed live: ~40% of real
-    spending was in no bucket).
-    """
-    filters, _window = await uncovered_spend_filters(
-        db, owner_user_id=owner_user_id, today=today, account_ids=account_ids
-    )
-    total = await queries.sum_amount_where(db, filters)
-    return round(-total / 3)
-
-
-async def uncovered_spend_filters(
-    db: AsyncSession,
-    *,
-    owner_user_id: int | None,
-    today: date | None,
-    account_ids: list[int] | None,
-) -> tuple[list[Any], tuple[date, date]]:
-    """The uncovered-spend population, shared by the rate and its
-    per-category breakdown so the popup's rows always sum to the
-    cell's figure. Returns (filters, (window_start, window_end))."""
-    today = today or date.today()
-    window_end = date(today.year, today.month, 1)
-    window_start = add_months(window_end, -3)
-
-    budget = await get_or_create_budget(
-        db, owner_user_id=owner_user_id, period_month=current_period_month()
-    )
-    budgeted_category_ids = {
-        line.category_id
-        for line in await queries.budget_lines_for_period(
-            db, budget.id, current_period_month()
-        )
-        if line.category_id is not None
-    }
-
-    live_accounts = select(FinanceAccount.id).where(FinanceAccount.deleted_at.is_(None))
-    filters: list[Any] = [
-        FinanceTransaction.deleted_at.is_(None),
-        FinanceTransaction.dedup_status != "duplicate",
-        FinanceTransaction.excluded_from_reports.is_(False),
-        FinanceTransaction.is_transfer.is_(False),
-        FinanceTransaction.account_id.in_(live_accounts),
-        FinanceTransaction.amount < 0,
-        FinanceTransaction.date_ >= window_start,
-        FinanceTransaction.date_ < window_end,
-        FinanceTransaction.recurring_stream_id.is_(None),
-        # A reconciliation adjustment is bookkeeping, not spending.
-        or_(
-            FinanceTransaction.external_id_source.is_(None),
-            FinanceTransaction.external_id_source != "reconcile",
-        ),
-    ]
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
-    if account_ids is not None:
-        filters.append(FinanceTransaction.account_id.in_(account_ids))
-    if budgeted_category_ids:
-        filters.append(
-            or_(
-                FinanceTransaction.category_id.is_(None),
-                FinanceTransaction.category_id.notin_(budgeted_category_ids),
-            )
-        )
-    return filters, (window_start, window_end)
-
-
+# How many of the window's months a category must have spent in before
+# its total is treated as a monthly rate. One month is an event; two is
+# a habit. Below this the spending is reported as a one-off instead.
 async def budget_stat_details(
     db: AsyncSession,
     *,
@@ -535,13 +490,10 @@ async def budget_stat_details(
     income_rows = [
         StatDetailRow(
             label=s.name,
-            value=int(
-                (s.expected_amount or s.average_amount or 0)
-                * MONTHLY_FACTOR.get(s.frequency, 0.0)
+            value=monthly_share_of(
+                s.expected_amount or s.average_amount or 0, s.frequency
             ),
-            frequency=None
-            if MONTHLY_FACTOR.get(s.frequency, 0.0) >= 1.0
-            else s.frequency,
+            frequency=shown_cadence(s.frequency),
         )
         for s in streams
         if s.direction == "inflow"
@@ -556,39 +508,48 @@ async def budget_stat_details(
     bills_rows = [
         StatDetailRow(
             label=s.name,
-            value=int((s.average_amount or 0) * MONTHLY_FACTOR.get(s.frequency, 0.0)),
-            frequency=None
-            if MONTHLY_FACTOR.get(s.frequency, 0.0) >= 1.0
-            else s.frequency,
+            value=monthly_share(s),
+            frequency=shown_cadence(s.frequency),
             per_period_amount=None
-            if MONTHLY_FACTOR.get(s.frequency, 0.0) >= 1.0
+            if shown_cadence(s.frequency) is None
             else int(s.average_amount or 0),
         )
         for s in rollup["fixed"] + rollup["non_monthly"]
     ]
     bills_rows.sort(key=lambda r: -r.value)
 
-    filters, (window_start, window_end) = await uncovered_spend_filters(
+    _filters, (window_start, window_end) = await uncovered_spend_filters(
         db, owner_user_id=owner_user_id, today=today, account_ids=account_ids
     )
-    grouped = await queries.grouped_category_totals_where(db, filters)
-    names = await categories.category_names(
-        db, {category_id for category_id, _n, _total in grouped if category_id}
+    uncovered = await uncovered_spend(
+        db, owner_user_id=owner_user_id, today=today, account_ids=account_ids
     )
-    else_rows = [
-        StatDetailRow(
-            label=names.get(category_id) or "Uncategorized",
-            value=round(-int(total) / 3),
-            transaction_count=int(count or 0),
-        )
-        for category_id, count, total in grouped
-    ]
-    else_rows.sort(key=lambda r: -r.value)
+    names = await categories.category_names(
+        db, {cid for cid in uncovered.counts if cid}
+    )
+
+    def _rows(by_category: dict[int | None, int]) -> list[StatDetailRow]:
+        rows = [
+            StatDetailRow(
+                label=names.get(category_id) or "Uncategorized",
+                value=value,
+                transaction_count=uncovered.counts.get(category_id, 0),
+            )
+            for category_id, value in by_category.items()
+        ]
+        rows.sort(key=lambda r: -r.value)
+        return rows
+
+    # Two lists, because they are two different units: a monthly rate and
+    # a window total. Each sums to the figure it explains.
+    else_rows = _rows(uncovered.rate_by_category)
+    one_off_rows = _rows(uncovered.one_off_by_category)
 
     return BudgetStatDetailsResponse(
         income=income_rows,
         bills=bills_rows,
         everything_else=else_rows,
+        one_offs=one_off_rows,
         window_start=window_start,
         window_end=window_end,
     )

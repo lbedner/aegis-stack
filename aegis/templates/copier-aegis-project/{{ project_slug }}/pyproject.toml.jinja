@@ -140,7 +140,11 @@ dependencies = [
     "cryptography>=42.0.0",  # AES-GCM at-rest encryption for provider credentials
 {%- endif %}
 {%- if include_finance and finance_snaptrade %}
-    "snaptrade-python-sdk>=11.0.0",  # official client; signs every request (HMAC)
+    # Official client (signs every request with the partner HMAC). Ceiling is
+    # deliberate: 13.x renamed the positions call the finance sync depends on
+    # (get_user_account_positions -> get_all_account_positions, a new response
+    # shape), so a major bump needs the adapter checked, not just resolved.
+    "snaptrade-python-sdk>=13.0.9,<14.0.0",
 {%- endif %}
 {%- if include_auth or include_comms %}
     "email-validator==2.2.0",

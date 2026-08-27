@@ -17,11 +17,11 @@ import pytest
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.ai.config import AIServiceConfig
 from app.services.ai.domains.chat import module_context
 from app.services.ai.domains.chat.agent_loader import invalidate_agent_cache
-from app.services.ai.config import AIServiceConfig
-from app.services.ai.models import AIProvider
 from app.services.ai.domains.llm.providers import ProviderError, model_for
+from app.services.ai.models import AIProvider
 from app.services.finance.domains.detection import analyst
 from app.services.finance.models import FinanceInsight
 from app.services.finance.seeds import demo_seed
@@ -103,7 +103,9 @@ class TestModelFor:
 
         with (
             patch("app.services.ai.domains.llm.providers.AsyncOpenAI") as client,
-            patch("app.services.ai.domains.llm.providers.OpenAIChatModel") as chat_model,
+            patch(
+                "app.services.ai.domains.llm.providers.OpenAIChatModel"
+            ) as chat_model,
             patch("app.services.ai.domains.llm.providers.OpenAIProvider"),
         ):
             model, model_name = model_for(config, settings)

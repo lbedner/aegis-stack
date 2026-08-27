@@ -54,9 +54,7 @@ class TestRuntimeWebhookUrl:
         assert get_webhook_url() == "https://static.example/wh"
 
     @pytest.mark.asyncio
-    async def test_link_token_carries_the_resolved_webhook(
-        self, monkeypatch
-    ) -> None:
+    async def test_link_token_carries_the_resolved_webhook(self, monkeypatch) -> None:
         set_runtime_webhook_url("https://abc.trycloudflare.com/wh")
         captured: dict = {}
 
@@ -91,9 +89,7 @@ class TestTunnelDiscovery:
         monkeypatch.setattr(tunnel.httpx, "AsyncClient", fake_async_client)
 
     @pytest.mark.asyncio
-    async def test_reads_hostname_from_quicktunnel_endpoint(
-        self, monkeypatch
-    ) -> None:
+    async def test_reads_hostname_from_quicktunnel_endpoint(self, monkeypatch) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             assert request.url.path == "/quicktunnel"
             return httpx.Response(200, json={"hostname": "abc.trycloudflare.com"})
@@ -103,9 +99,7 @@ class TestTunnelDiscovery:
         assert hostname == "abc.trycloudflare.com"
 
     @pytest.mark.asyncio
-    async def test_unreachable_or_bad_response_returns_none(
-        self, monkeypatch
-    ) -> None:
+    async def test_unreachable_or_bad_response_returns_none(self, monkeypatch) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             raise httpx.ConnectError("no tunnel")
 
@@ -165,9 +159,7 @@ class TestRefreshWebhookUrls:
             client=client,
         )
         assert updated == 1
-        assert client.updated == [
-            ("tok-item-2", "https://abc.trycloudflare.com/wh")
-        ]
+        assert client.updated == [("tok-item-2", "https://abc.trycloudflare.com/wh")]
 
 
 class TestStartupHookGating:
@@ -212,7 +204,10 @@ class TestTaskLifetime:
         """Start the hook against a tunnel that never answers, so the task
         is parked mid-poll - the state it is in for most of its life."""
         monkeypatch.setattr(
-            tunnel.settings, "PLAID_TUNNEL_METRICS_URL", "http://tunnel:1234", raising=False
+            tunnel.settings,
+            "PLAID_TUNNEL_METRICS_URL",
+            "http://tunnel:1234",
+            raising=False,
         )
 
         async def never_answers(metrics_url: str) -> str | None:
@@ -263,5 +258,4 @@ class TestTaskLifetime:
         await self._start_a_polling_tunnel(monkeypatch)
         await shutdown_finance_webhook_tunnel()
         await shutdown_finance_webhook_tunnel()
-
 {%- endif %}

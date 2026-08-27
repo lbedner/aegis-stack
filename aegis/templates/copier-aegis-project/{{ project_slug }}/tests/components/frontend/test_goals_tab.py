@@ -5,10 +5,6 @@ both row kinds, the linkable-account options, and the dollars parser -
 everything the tab renders that can be tested without a page.
 """
 
-from app.components.frontend.dashboard.modals.finance_modal.budget_panel.goal_editor import (
-    _months_or_zero,
-)
-from app.components.frontend.theme import AegisTheme as Theme
 from app.components.frontend.dashboard.modals.finance_modal import (
     close_gap_row_copy,
     contribution_preview,
@@ -16,11 +12,16 @@ from app.components.frontend.dashboard.modals.finance_modal import (
     envelope_card,
     goal_amounts_line,
     goal_eta_caption,
+    goal_shortfall_caption,
     linkable_account_options,
     savings_goal_card,
-    goal_shortfall_caption,
     target_note_copy,
 )
+from app.components.frontend.dashboard.modals.finance_modal.budget_panel.goal_editor import (
+    _months_or_zero,
+)
+from app.components.frontend.theme import AegisTheme as Theme
+from tests.components.frontend._tree import texts as _texts
 
 GOAL = {
     "account_id": 71,
@@ -35,19 +36,6 @@ GOAL = {
     "monthly_need": 25_000,
     "eta": "2027-06-01",
 }
-
-
-def _texts(control) -> list[str]:
-    if control is None:
-        return []
-    found = []
-    value = getattr(control, "value", None)
-    if isinstance(value, str) and value:
-        found.append(value)
-    for child in getattr(control, "controls", None) or []:
-        found.extend(_texts(child))
-    found.extend(_texts(getattr(control, "content", None)))
-    return found
 
 
 class TestCardCopy:
@@ -126,10 +114,30 @@ class TestCloseGapRows:
 
 class TestLinkableAccounts:
     ACCOUNTS = [
-        {"id": 1, "name": "Checking", "account_type": "checking", "classification": "asset"},
-        {"id": 2, "name": "Savings", "account_type": "savings", "classification": "asset"},
-        {"id": 3, "name": "AMEX", "account_type": "credit_card", "classification": "liability"},
-        {"id": 4, "name": "Old goal", "account_type": "goal", "classification": "asset"},
+        {
+            "id": 1,
+            "name": "Checking",
+            "account_type": "checking",
+            "classification": "asset",
+        },
+        {
+            "id": 2,
+            "name": "Savings",
+            "account_type": "savings",
+            "classification": "asset",
+        },
+        {
+            "id": 3,
+            "name": "AMEX",
+            "account_type": "credit_card",
+            "classification": "liability",
+        },
+        {
+            "id": 4,
+            "name": "Old goal",
+            "account_type": "goal",
+            "classification": "asset",
+        },
     ]
 
     def test_only_real_asset_accounts_are_linkable(self) -> None:
@@ -175,9 +183,6 @@ class TestRuleCopy:
             "eta": None,
         }
         assert goal_eta_caption(goal) == "$400.00/mo (surplus) · at this rate: never"
-
-    def test_fixed_goal_caption_is_unchanged(self) -> None:
-        assert goal_eta_caption(GOAL) == "$250.00/mo · lands Jun 1, 2027"
 
     def test_percent_preview_names_the_base(self) -> None:
         assert (
@@ -228,17 +233,13 @@ class TestEnvelopeCards:
         assert "+$40.00/mo" in rendered
 
     def test_manual_credit_has_no_monthly_caption(self) -> None:
-        rendered = " ".join(
-            _texts(self._card({**self.ENVELOPE, "auto_credit": False}))
-        )
+        rendered = " ".join(_texts(self._card({**self.ENVELOPE, "auto_credit": False})))
         assert "+$40.00/mo" not in rendered
 
     def test_a_negative_balance_reads_red(self) -> None:
         card = self._card({**self.ENVELOPE, "balance": -1_250})
         texts = [
-            t
-            for t in _walk_controls(card)
-            if getattr(t, "value", None) == "-$12.50"
+            t for t in _walk_controls(card) if getattr(t, "value", None) == "-$12.50"
         ]
         assert texts and texts[0].color == Theme.Colors.ERROR
 

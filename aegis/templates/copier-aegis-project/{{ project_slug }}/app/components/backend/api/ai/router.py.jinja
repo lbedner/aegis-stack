@@ -12,6 +12,10 @@ from datetime import datetime
 {% endif %}
 from typing import Any
 
+{% if ai_backend != "memory" %}
+from app.components.backend.api.ai import memory as memory_routes
+from app.services.ai.domains.chat.user_memory import DEFAULT_MEMORY_USER_ID
+{% endif %}
 from app.core.config import settings
 from app.core.log import logger
 from app.services.ai.service import (
@@ -550,90 +554,8 @@ async def update_registry_agent(
     return serialize_agent(agent)
 
 
-class MemoryModuleUpdateRequest(BaseModel):
-    """Partial update of a memory module's editable fields."""
-
-    name: str | None = None
-    description: str | None = None
-    category: str | None = None
-    prompt_content: str | None = None
-    fetch_function: str | None = None
-    context_key: str | None = None
-    priority: int | None = None
-    token_estimate: int | None = None
-    is_active: bool | None = None
-
-
-@router.get("/memory-modules")
-async def list_registry_memory_modules() -> list[dict[str, Any]]:
-    """Every memory module, active or not, in render order."""
-    from app.core.db import get_async_session
-    from app.services.ai.domains.chat.memory_modules import (
-        list_memory_modules,
-        serialize_memory_module,
-    )
-
-    try:
-        async with get_async_session() as session:
-            modules = await list_memory_modules(session, active_only=False)
-            return [serialize_memory_module(module) for module in modules]
-    except Exception as e:
-        logger.exception("Failed to list memory modules")
-        raise HTTPException(
-            status_code=500, detail="Failed to list memory modules"
-        ) from e
-
-
-@router.patch("/memory-modules/{slug}")
-async def update_registry_memory_module(
-    slug: str, request: MemoryModuleUpdateRequest
-) -> dict[str, Any]:
-    """Apply a partial memory-module update."""
-    from app.core.db import get_async_session
-    from app.services.ai.domains.chat.memory_modules import (
-        InvalidMemoryModuleError,
-        serialize_memory_module,
-        update_memory_module,
-    )
-
-    changes = request.model_dump(exclude_unset=True)
-    try:
-        async with get_async_session() as session:
-            module = await update_memory_module(slug, session=session, **changes)
-            return serialize_memory_module(module)
-    except InvalidMemoryModuleError as e:
-        # The service raises one error type for "no such module" and for a
-        # rejected change; a missing slug is the only 404-shaped one.
-        status = 404 if "not found" in str(e) else 400
-        raise HTTPException(status_code=status, detail=str(e)) from None
-    except Exception as e:
-        logger.exception("Failed to update memory module")
-        raise HTTPException(
-            status_code=500, detail="Failed to update memory module"
-        ) from e
-
-
-@router.get("/memory-modules/{slug}/preview")
-async def preview_registry_memory_module(
-    slug: str, user_id: str = "0"
-) -> dict[str, Any]:
-    """Render a module exactly as an agent turn would see it.
-
-    A module whose content comes from a fetcher has nothing to show in its
-    row: the text is produced per request. This runs the real renderer so the
-    dashboard can display what the model would actually be handed, which is
-    the only way to tell a working module from a silently empty one.
-    """
-    from app.services.ai.domains.chat.module_context import render_memory_modules
-
-    try:
-        rendered = await render_memory_modules([slug], user_id=user_id)
-    except Exception as e:
-        logger.exception("Failed to render memory module")
-        raise HTTPException(
-            status_code=500, detail="Failed to render memory module"
-        ) from e
-    return {"slug": slug, "user_id": user_id, "rendered": rendered}
+# Memory modules and saved facts both live in their own module.
+router.include_router(memory_routes.router, tags=["ai: memory"])
 {% endif %}
 
 
@@ -1007,3 +929,4 @@ async def tts_status() -> dict[str, Any]:
             "error": str(e),
         }
 {% endif %}
+

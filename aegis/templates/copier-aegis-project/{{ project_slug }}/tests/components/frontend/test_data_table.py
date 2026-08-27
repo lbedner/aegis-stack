@@ -14,6 +14,7 @@ from app.components.frontend.controls.data_table import (
     DataTableColumn,
     DataTableHeader,
     DataTableRow,
+    style_cell,
 )
 from app.components.frontend.controls.expandable_data_table import (
     EXPAND_ICON_WIDTH,
@@ -201,7 +202,7 @@ class TestHoverRevealedCells:
 
 def _rendered_first_cells(table: DataTable) -> list[str]:
     """First-column text of each rendered row, in display order."""
-    body = table.content.controls[1].content
+    body = table._data_content
     texts = []
     for row in body.controls:
         cell = row.content.controls[0]
@@ -244,7 +245,7 @@ class TestSortableColumns:
         clicked: list[int] = []
         table = self._table(on_row_click=clicked.append)
         table._on_sort(0)  # display order: apple(1), banana(0), cherry(2)
-        body = table.content.controls[1].content
+        body = table._data_content
         body.controls[0].on_click(None)  # topmost displayed row
         assert clicked == [1]  # "apple" was original row 1
 
@@ -264,10 +265,10 @@ class TestSortableColumns:
         rows = [["a", "$1.00", "Checking"]]
         table = DataTable(columns=columns, rows=rows, column_picker=True)
         # ships with Account hidden: Name + Amount cells + picker gutter
-        body = table.content.controls[1].content
+        body = table._data_content
         assert len(body.controls[0].content.controls) == 3
         table._toggle_column(2)
-        assert len(table.content.controls[1].content.controls[0].content.controls) == 4
+        assert len(table._data_content.controls[0].content.controls) == 4
         # non-hideable Name is not offered in the menu
         menu = table._picker_cell().content
         assert [item.text for item in menu.items] == ["Amount", "Account"]
@@ -435,7 +436,7 @@ class TestPerRowSelectability:
 
     def test_an_unselectable_row_gets_no_checkbox(self) -> None:
         table = self._table([True, False, True])
-        body = table.content.controls[1].content
+        body = table._data_content
         boxes = [
             row.content.controls[0].content.__class__.__name__
             if hasattr(row.content.controls[0], "content")
@@ -693,3 +694,15 @@ class TestOneHoverAtATime:
         table.set_rows([["X", "x", "$1.00"]])
 
         assert table._hovered_row is None
+
+
+def test_cell_text_is_not_individually_selectable() -> None:
+    """An individually selectable Text renders as a SelectableText, which
+    owns the pointer and paints an I-beam - so a clickable row lost its
+    click cursor and stopped reading as clickable. The enclosing
+    SelectionArea provides selection instead, and the row's InkWell keeps
+    the pointer.
+    """
+    cell = style_cell("House valued at $711,200", "primary")
+
+    assert cell.selectable is False

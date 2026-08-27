@@ -209,13 +209,19 @@ class SnapTradeClient:
     async def get_positions(
         self, user_id: str, user_secret: str, account_id: str
     ) -> list[dict[str, Any]]:
-        """Current positions for one account."""
+        """Current positions for one account.
+
+        ``/positions/all`` returns every instrument kind (stock, ETF, option,
+        crypto, future, ...) in one ``results`` list, each row discriminated
+        by ``instrument.kind``."""
         body = await self._call(
-            self._sdk().account_information.get_user_account_positions,
+            self._sdk().account_information.get_all_account_positions,
             user_id=user_id,
             user_secret=user_secret,
             account_id=account_id,
         )
+        if isinstance(body, dict):
+            return list(body.get("results") or [])
         return list(body or [])
 
     async def get_activities(

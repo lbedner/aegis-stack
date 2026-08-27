@@ -213,7 +213,21 @@ def agent_capabilities(config: AgentConfig) -> list[Any]:
     if config.code_mode:
         from pydantic_ai_harness import CodeMode
 
-        capabilities.append(CodeMode(tools=list(config.tool_names)))
+        from app.services.ai.domains.chat.user_memory import (
+            MEMORY_WRITE_TOOL_NAMES,
+        )
+
+        # Reads go in the sandbox (slicing a payload in code is the point);
+        # writes stay native so they surface as their own tool call.
+        capabilities.append(
+            CodeMode(
+                tools=[
+                    name
+                    for name in config.tool_names
+                    if name not in MEMORY_WRITE_TOOL_NAMES
+                ]
+            )
+        )
     if config.code_mode or config.tool_names:
         capabilities.append(_tool_output_limits(code_mode=config.code_mode))
     return capabilities

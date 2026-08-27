@@ -223,15 +223,11 @@ class TestLLMPickerGating:
         is configured - only keyless ollama survives."""
         # The llm package re-exports its APIRouter under the same name,
         # shadowing the module attribute - import the module directly.
-        llm_router = importlib.import_module(
-            "app.components.backend.api.llm.router"
-        )
+        llm_router = importlib.import_module("app.components.backend.api.llm.router")
         from app.core.config import settings
 
         monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
-        monkeypatch.setattr(
-            llm_router, "list_vendors", lambda: self._vendor_rows()
-        )
+        monkeypatch.setattr(llm_router, "list_vendors", lambda: self._vendor_rows())
 
         response = client.get("/api/v1/llm/vendors", params={"usable": True})
 
@@ -243,15 +239,11 @@ class TestLLMPickerGating:
     ) -> None:
         # The llm package re-exports its APIRouter under the same name,
         # shadowing the module attribute - import the module directly.
-        llm_router = importlib.import_module(
-            "app.components.backend.api.llm.router"
-        )
+        llm_router = importlib.import_module("app.components.backend.api.llm.router")
         from app.core.config import settings
 
         monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-test")
-        monkeypatch.setattr(
-            llm_router, "list_vendors", lambda: self._vendor_rows()
-        )
+        monkeypatch.setattr(llm_router, "list_vendors", lambda: self._vendor_rows())
 
         async def fake_icons(names: list[str]) -> dict[str, str]:
             return {"openai": "iVBORfake"}
@@ -273,9 +265,7 @@ class TestLLMPickerGating:
         queried at all."""
         # The llm package re-exports its APIRouter under the same name,
         # shadowing the module attribute - import the module directly.
-        llm_router = importlib.import_module(
-            "app.components.backend.api.llm.router"
-        )
+        llm_router = importlib.import_module("app.components.backend.api.llm.router")
         from app.core.config import settings
         from app.services.ai.domains.llm.llm_service import LLMListResult
 
@@ -318,3 +308,57 @@ class TestLLMPickerGating:
             "ollama-model",
             "openai-model",
         ]
+
+
+class TestUserMemoryEndpoints:
+    """The dashboard's window on what the assistant saved about you."""
+
+    def test_list_returns_saved_facts(self, client: TestClient) -> None:
+        facts = [
+            {"index": 0, "category": "finance", "fact": "house is worth $711,200"},
+        ]
+        with patch(
+            "app.services.ai.domains.chat.user_memory.list_user_facts",
+            AsyncMock(return_value=facts),
+        ):
+            response = client.get("/api/v1/ai/user-memory")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["facts"] == facts
+        assert body["user_id"] == "0"  # the standalone default, as elsewhere
+
+    def test_update_rewrites_a_fact(self, client: TestClient) -> None:
+        updated = {"index": 0, "category": "finance", "fact": "corrected"}
+        with patch(
+            "app.services.ai.domains.chat.user_memory.update_user_fact",
+            AsyncMock(return_value=updated),
+        ) as mock_update:
+            response = client.patch(
+                "/api/v1/ai/user-memory/0",
+                json={"fact": "corrected", "category": "finance"},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == updated
+        assert mock_update.await_count == 1
+
+    def test_delete_removes_a_fact(self, client: TestClient) -> None:
+        with patch(
+            "app.services.ai.domains.chat.user_memory.delete_user_fact",
+            AsyncMock(),
+        ) as mock_delete:
+            response = client.delete("/api/v1/ai/user-memory/0")
+
+        assert response.status_code == 200
+        assert response.json()["deleted"] is True
+        assert mock_delete.await_count == 1
+
+    def test_missing_fact_is_a_404(self, client: TestClient) -> None:
+        with patch(
+            "app.services.ai.domains.chat.user_memory.delete_user_fact",
+            AsyncMock(side_effect=IndexError("no fact at index 7")),
+        ):
+            response = client.delete("/api/v1/ai/user-memory/7")
+
+        assert response.status_code == 404

@@ -6,19 +6,18 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_stream
 
 OWNER = 1
 
 
 class TestManualStreams:
     @pytest.mark.asyncio
-    async def test_create_a_manual_bill(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
-        stream = await svc.create_recurring_stream(
+    async def test_create_a_manual_bill(self, svc: FinanceService) -> None:
+        stream = await seed_stream(
+            svc,
             owner_user_id=OWNER,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=185_000,
             next_expected_date=date(2026, 8, 1),
         )
@@ -32,10 +31,10 @@ class TestManualStreams:
 
     @pytest.mark.asyncio
     async def test_create_income_and_list_soonest_first(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
-        await svc.create_recurring_stream(
+        await seed_stream(
+            svc,
             owner_user_id=OWNER,
             name="Paycheck",
             direction="inflow",
@@ -43,11 +42,10 @@ class TestManualStreams:
             expected_amount=250_000,
             next_expected_date=date(2026, 8, 8),
         )
-        await svc.create_recurring_stream(
+        await seed_stream(
+            svc,
             owner_user_id=OWNER,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=185_000,
             next_expected_date=date(2026, 8, 1),
         )
@@ -57,31 +55,26 @@ class TestManualStreams:
 
     @pytest.mark.asyncio
     async def test_standalone_owner_stores_under_the_sentinel(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """NULL-owner installs store streams under 0, like insights do."""
-        svc = FinanceService(async_db_session)
-        stream = await svc.create_recurring_stream(
+        stream = await seed_stream(
+            svc,
             owner_user_id=None,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=185_000,
             next_expected_date=date(2026, 8, 1),
         )
         assert stream.owner_user_id == 0
 
     @pytest.mark.asyncio
-    async def test_invalid_direction_is_refused(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_invalid_direction_is_refused(self, svc: FinanceService) -> None:
         with pytest.raises(ValueError):
-            await svc.create_recurring_stream(
+            await seed_stream(
+                svc,
                 owner_user_id=OWNER,
                 name="Rent",
                 direction="sideways",
-                frequency="monthly",
                 expected_amount=185_000,
                 next_expected_date=date(2026, 8, 1),
             )
@@ -90,14 +83,12 @@ class TestManualStreams:
 class TestConfirmAndMute:
     @pytest.mark.asyncio
     async def test_confirm_marks_a_detected_stream(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
-        created = await svc.create_recurring_stream(
+        created = await seed_stream(
+            svc,
             owner_user_id=OWNER,
             name="Spotify",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=1_199,
             next_expected_date=date(2026, 8, 16),
         )
@@ -109,13 +100,11 @@ class TestConfirmAndMute:
         assert confirmed is not None and confirmed.is_user_confirmed is True
 
     @pytest.mark.asyncio
-    async def test_unmute_reverses_mute(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
-        created = await svc.create_recurring_stream(
+    async def test_unmute_reverses_mute(self, svc: FinanceService) -> None:
+        created = await seed_stream(
+            svc,
             owner_user_id=OWNER,
             name="Spotify",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=1_199,
             next_expected_date=date(2026, 8, 16),
         )
@@ -127,24 +116,22 @@ class TestConfirmAndMute:
 class TestTransferStreamsAreNotBills:
     @pytest.mark.asyncio
     async def test_listing_and_rollup_exclude_transfer_rhythms(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A monthly card-payment stream is an internal transfer, not a bill:
         it must not appear in Bills & Income nor inflate the monthly cost."""
         from app.services.finance.models import FinanceRecurringStream
 
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
             classification="asset",
         )
-        real_bill = await svc.create_recurring_stream(
+        real_bill = await seed_stream(
+            svc,
             owner_user_id=OWNER,
             name="Rent",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=185_000,
             next_expected_date=date(2026, 8, 1),
         )
@@ -184,23 +171,21 @@ class TestTransferStreamsAreNotBills:
 class TestStreamCategories:
     @pytest.mark.asyncio
     async def test_category_comes_from_the_dominant_member_transaction(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A stream's own ``category_id`` is a provider field the local
         detector never fills, so the category is read off its member
         transactions - the most common one wins."""
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=OWNER,
             name="Checking",
             account_type="checking",
             classification="asset",
         )
-        stream = await svc.create_recurring_stream(
+        stream = await seed_stream(
+            svc,
             owner_user_id=OWNER,
             name="ComEd",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=10_000,
             next_expected_date=date(2026, 8, 1),
         )

@@ -39,8 +39,9 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
 
 from app.core.log import logger
-
+from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.usage_recording import extract_usage, record_usage
+
 from .context import ContextProvider, compose_context, gather_context
 from .models import (
     ChatMessage,
@@ -156,30 +157,33 @@ class ToolChatAgent(Generic[DepsT]):
             # before calling a tool keeps streaming after the tool returns
             # instead of the early text ending the turn.
             result: Any = None
-            async with self._agent.run_stream_events(
-                message,
-                instructions=run_instructions,
-                deps=deps,
-                message_history=model_history,
-                usage_limits=self._limits,
-            ) as events:
-                async for event in events:
-                    delta = ""
-                    if isinstance(event, PartStartEvent) and isinstance(
-                        event.part, TextPart
-                    ):
-                        delta = event.part.content
-                    elif isinstance(event, PartDeltaEvent) and isinstance(
-                        event.delta, TextPartDelta
-                    ):
-                        delta = event.delta.content_delta
-                    elif isinstance(event, AgentRunResultEvent):
-                        result = event.result
-                    if delta:
-                        answer_parts.append(delta)
-                        yield DeltaFrame(delta)
-                usage = extract_usage(result) if result is not None else {}
-                tool_calls = _count_tool_calls(result) if result is not None else 0
+            # Bind the turn's user so a save_memory call mid-stream knows
+            # whose fact it is; the scope is the only identity a turn has.
+            with memory_user(scope.user_id):
+                async with self._agent.run_stream_events(
+                    message,
+                    instructions=run_instructions,
+                    deps=deps,
+                    message_history=model_history,
+                    usage_limits=self._limits,
+                ) as events:
+                    async for event in events:
+                        delta = ""
+                        if isinstance(event, PartStartEvent) and isinstance(
+                            event.part, TextPart
+                        ):
+                            delta = event.part.content
+                        elif isinstance(event, PartDeltaEvent) and isinstance(
+                            event.delta, TextPartDelta
+                        ):
+                            delta = event.delta.content_delta
+                        elif isinstance(event, AgentRunResultEvent):
+                            result = event.result
+                        if delta:
+                            answer_parts.append(delta)
+                            yield DeltaFrame(delta)
+                    usage = extract_usage(result) if result is not None else {}
+                    tool_calls = _count_tool_calls(result) if result is not None else 0
         except Exception as exc:  # noqa: BLE001 - surface as a frame, never raise
             logger.warning(
                 "chat turn failed",

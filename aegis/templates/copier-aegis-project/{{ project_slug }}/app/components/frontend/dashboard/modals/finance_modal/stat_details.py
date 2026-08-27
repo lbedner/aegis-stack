@@ -70,57 +70,87 @@ def equation_rows(stats: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _heading(text: str, *, top: int = 0, upper: bool = True) -> ft.Control:
+    """A caption line, padded like the panel's rows (the sidebar's own
+    group-header treatment)."""
+    return ft.Container(
+        content=SecondaryText(
+            text.upper() if upper else text, size=Theme.Typography.CAPTION
+        ),
+        padding=ft.padding.only(left=Theme.Spacing.MD, right=Theme.Spacing.MD, top=top),
+    )
+
+
+def _row_control(row: dict[str, Any]) -> ft.Control:
+    """One label/value line: name left, optional caption, money right."""
+    value = int(row.get("value", 0))
+    amount = _usd(abs(value)) if value >= 0 else f"-{_usd(-value)}"
+    label_bits: list[ft.Control] = [
+        ft.Container(
+            content=SecondaryText(
+                str(row.get("label", "")),
+                size=Theme.Typography.BODY_SMALL,
+                color=ft.Colors.ON_SURFACE,
+                no_wrap=True,
+                overflow=ft.TextOverflow.ELLIPSIS,
+            ),
+            expand=True,
+        ),
+    ]
+    caption = row.get("caption")
+    if caption:
+        label_bits.append(SecondaryText(str(caption), size=Theme.Typography.CAPTION))
+    label_bits.append(
+        NumericText(
+            amount,
+            size=Theme.Typography.BODY_SMALL,
+            color=Theme.Colors.ERROR if value < 0 else ft.Colors.ON_SURFACE,
+        )
+    )
+    # Side padding is the panel's own chrome, the same MD every other
+    # Dropdown panel uses (the account filter's rows): without it the
+    # label and the amount run into the border and read as torn.
+    return ft.Container(
+        content=ft.Row(
+            label_bits,
+            spacing=Theme.Spacing.SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD),
+    )
+
+
 def stat_detail_panel(
-    title: str, rows: list[dict[str, Any]], *, footer: str | None = None
+    title: str,
+    rows: list[dict[str, Any]],
+    *,
+    footer: str | None = None,
 ) -> ft.Column:
     """The body of a header cell's click-through popup: dense label/value
     rows (money right-aligned), an optional muted footer naming the
-    window. One builder for all five cells - they differ only in rows."""
+    window. One builder for all five cells - they differ only in rows.
+    """
     children: list[ft.Control] = [
-        SecondaryText(title.upper(), size=Theme.Typography.CAPTION),
+        _heading(title),
+        *(_row_control(row) for row in rows),
     ]
-    for row in rows:
-        value = int(row.get("value", 0))
-        amount = _usd(abs(value)) if value >= 0 else f"-{_usd(-value)}"
-        label_bits: list[ft.Control] = [
-            ft.Container(
-                content=SecondaryText(
-                    str(row.get("label", "")),
-                    size=Theme.Typography.BODY_SMALL,
-                    color=ft.Colors.ON_SURFACE,
-                    no_wrap=True,
-                    overflow=ft.TextOverflow.ELLIPSIS,
-                ),
-                expand=True,
-            ),
-        ]
-        caption = row.get("caption")
-        if caption:
-            label_bits.append(
-                SecondaryText(str(caption), size=Theme.Typography.CAPTION)
-            )
-        label_bits.append(
-            NumericText(
-                amount,
-                size=Theme.Typography.BODY_SMALL,
-                color=Theme.Colors.ERROR if value < 0 else ft.Colors.ON_SURFACE,
-            )
-        )
-        children.append(
-            ft.Row(
-                label_bits,
-                spacing=Theme.Spacing.SM,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            )
-        )
     if footer:
-        children.append(SecondaryText(footer, size=Theme.Typography.CAPTION))
+        children.append(_heading(footer, top=Theme.Spacing.SM, upper=False))
     return ft.Column(
         children,
         spacing=Theme.Spacing.XS,
         tight=True,
         scroll=ft.ScrollMode.AUTO,
     )
+
+
+# Sizing estimate for the popup's height: one dense label/value line
+# (BODY_SMALL text in its padded row, plus the column's XS gap) and the
+# frame's own vertical padding. An estimate is enough - the column
+# scrolls, so erring small costs a scrollbar, never clipped rows.
+_POPUP_LINE_HEIGHT = 26
+_POPUP_FRAME_PADDING = 2 * Theme.Spacing.SM
+_POPUP_MAX_HEIGHT = 380
 
 
 class StatDetailPopup(Dropdown):
@@ -138,7 +168,7 @@ class StatDetailPopup(Dropdown):
             trigger_width=200,
             min_width=300,
             max_width=340,
-            max_height=380,
+            max_height=_POPUP_MAX_HEIGHT,
         )
 
     def open_at(
@@ -150,6 +180,13 @@ class StatDetailPopup(Dropdown):
         footer: str | None = None,
     ) -> None:
         self._slot.content = stat_detail_panel(title, rows, footer=footer)
+        # Hug the content up to the cap: one popup serves a four-row
+        # income list and a twenty-row category list, and a fixed height
+        # stranded the short one at the top of a mostly-empty box.
+        lines = 1 + len(rows) + (1 if footer else 0)
+        self._max_height = min(
+            _POPUP_MAX_HEIGHT, _POPUP_FRAME_PADDING + lines * _POPUP_LINE_HEIGHT
+        )
         self.close()
         self._toggle(e)  # type: ignore[arg-type]
 

@@ -13,7 +13,6 @@ mechanism covers follow-ups, trips, and audits alike.
 from datetime import date
 
 import pytest
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.service import FinanceService
 
@@ -43,9 +42,8 @@ async def _three_transactions(
 class TestAttachDetach:
     @pytest.mark.asyncio
     async def test_tagging_creates_the_tag_and_attaches_it(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         _, ids = await _three_transactions(svc)
 
         tag = await svc.tag_transactions(ids[:2], "Flagged", owner_user_id=1)
@@ -58,11 +56,10 @@ class TestAttachDetach:
 
     @pytest.mark.asyncio
     async def test_tagging_is_idempotent_and_reuses_by_normalized_name(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Re-flagging an already-flagged row must not blow up on the
         composite PK, and "flagged" lands ON "Flagged", not beside it."""
-        svc = FinanceService(async_db_session)
         _, ids = await _three_transactions(svc)
 
         first = await svc.tag_transactions(ids[:1], "Flagged", owner_user_id=1)
@@ -75,11 +72,10 @@ class TestAttachDetach:
 
     @pytest.mark.asyncio
     async def test_untagging_removes_only_the_join_rows(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Removing a flag never deletes the tag itself or its other
         attachments - unflagging one transaction must not strip the rest."""
-        svc = FinanceService(async_db_session)
         _, ids = await _three_transactions(svc)
         tag = await svc.tag_transactions(ids, "Flagged", owner_user_id=1)
 
@@ -95,12 +91,9 @@ class TestAttachDetach:
 
 class TestDirectory:
     @pytest.mark.asyncio
-    async def test_list_tags_carries_usage_counts(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_list_tags_carries_usage_counts(self, svc: FinanceService) -> None:
         """The count is what makes the list a directory - which flags are
         live versus leftovers - and it must be batched, not per-tag."""
-        svc = FinanceService(async_db_session)
         _, ids = await _three_transactions(svc)
         await svc.tag_transactions(ids, "Flagged", owner_user_id=1)
         await svc.tag_transactions(ids[:1], "Tax 2026", owner_user_id=1)
@@ -115,10 +108,7 @@ class TestDirectory:
 
 class TestRegisterFilter:
     @pytest.mark.asyncio
-    async def test_list_transactions_filters_by_tag(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_list_transactions_filters_by_tag(self, svc: FinanceService) -> None:
         _, ids = await _three_transactions(svc)
         tag = await svc.tag_transactions(ids[1:], "Flagged", owner_user_id=1)
 
@@ -128,10 +118,7 @@ class TestRegisterFilter:
         assert {r.id for r in rows} == set(ids[1:])
 
     @pytest.mark.asyncio
-    async def test_no_tag_filter_means_no_filter(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_no_tag_filter_means_no_filter(self, svc: FinanceService) -> None:
         _, ids = await _three_transactions(svc)
         await svc.tag_transactions(ids[:1], "Flagged", owner_user_id=1)
 

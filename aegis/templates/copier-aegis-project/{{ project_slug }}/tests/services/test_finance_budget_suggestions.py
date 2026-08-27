@@ -15,12 +15,13 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from tests.services._finance_factories import seed_account as _account, seed_category as _category
 from app.services.finance.models import FinanceCategory
 from app.services.finance.service import FinanceService
+from tests.services._finance_factories import seed_account as _account
+from tests.services._finance_factories import seed_category as _category
+from tests.services._finance_factories import seed_stream
 
 TODAY = date(2026, 8, 2)
-
 
 
 async def _spend(
@@ -43,9 +44,8 @@ async def _spend(
 class TestSuggestions:
     @pytest.mark.asyncio
     async def test_a_steady_category_is_suggested(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         await _spend(
@@ -63,10 +63,9 @@ class TestSuggestions:
 
     @pytest.mark.asyncio
     async def test_a_lumpy_category_is_not(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """$36 one month, $2,301 another. The mean predicts nothing."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         repairs = await _category(async_db_session, "Auto & Transport:Service")
         await _spend(
@@ -78,8 +77,9 @@ class TestSuggestions:
         assert picks == []
 
     @pytest.mark.asyncio
-    async def test_a_one_off_is_not(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_a_one_off_is_not(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
         account = await _account(svc)
         once = await _category(async_db_session, "Shopping")
         await _spend(svc, account.id, once.id, {5: 900})
@@ -90,12 +90,11 @@ class TestSuggestions:
 
     @pytest.mark.asyncio
     async def test_transfers_are_never_suggested(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The three biggest rows by value are credit-card payments and
         transfers - money moving between your own accounts, not spending.
         Budgeting them would double-count against the forecast."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         moving = await _category(async_db_session, "Transfer:Credit Card Payment")
         await _spend(
@@ -112,11 +111,10 @@ class TestSuggestions:
 
     @pytest.mark.asyncio
     async def test_a_category_a_bill_already_covers_is_skipped(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Mortgage is steady as a rock and already a bill. Budgeting it
         too would charge the forecast twice for one payment."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         rent = await _category(async_db_session, "Home:Mortgage & Rent")
         await _spend(
@@ -125,11 +123,9 @@ class TestSuggestions:
             rent.id,
             {2: 2553, 3: 2553, 4: 2553, 5: 2553, 6: 2553, 7: 2553},
         )
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="Mortgage",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=255_300,
             next_expected_date=date(2026, 9, 1),
             account_id=account.id,
@@ -142,9 +138,8 @@ class TestSuggestions:
 
     @pytest.mark.asyncio
     async def test_a_line_you_already_set_is_not_re_suggested(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         await _spend(
@@ -179,9 +174,8 @@ class TestBudgetsInTheForecast:
 
     @pytest.mark.asyncio
     async def test_a_budget_line_draws_the_balance_down(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account, groceries = await self._setup(svc, async_db_session)
         await svc.upsert_budget_line(
             owner_user_id=1,
@@ -200,17 +194,14 @@ class TestBudgetsInTheForecast:
 
     @pytest.mark.asyncio
     async def test_a_category_a_bill_covers_is_not_charged_twice(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The rule: bills win. A budget line on a category a recurring
         bill already pays would subtract the same money a second time."""
-        svc = FinanceService(async_db_session)
         account, groceries = await self._setup(svc, async_db_session)
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="Grocery delivery",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=140_000,
             next_expected_date=date(2026, 8, 15),
             account_id=account.id,
@@ -244,11 +235,10 @@ class TestBillOverlapUsesInferredCategories:
 
     @pytest.mark.asyncio
     async def test_a_bill_with_no_stored_category_still_blocks(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.domains.detection import declare_recurring
 
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         productivity = await _category(
             async_db_session, "Bills & Utilities:Productivity"
@@ -287,9 +277,8 @@ class TestOnlyForecastChargingBillsBlock:
 
     @pytest.mark.asyncio
     async def test_a_shopping_rhythm_does_not_block_its_category(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         await _spend(
@@ -300,10 +289,9 @@ class TestOnlyForecastChargingBillsBlock:
         )
         # A detected merchant rhythm: varying amounts, never confirmed -
         # exactly what is_commitment refuses, so it projects nothing.
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="Shop Rite",
-            direction="outflow",
             frequency="weekly",
             expected_amount=120_000,
             next_expected_date=date(2026, 8, 9),
@@ -340,9 +328,8 @@ class TestSuggestionDismissals:
 
     @pytest.mark.asyncio
     async def test_dismissed_suggestion_stays_gone_until_restored(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         _, groceries = await self._steady_groceries(svc, async_db_session)
 
         before = await svc.suggest_budget_lines(owner_user_id=1, today=TODAY)
@@ -379,9 +366,8 @@ class TestSuggestionDismissals:
 
     @pytest.mark.asyncio
     async def test_dismissal_marker_is_not_a_budget_line(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         _, groceries = await self._steady_groceries(svc, async_db_session)
         await svc.dismiss_budget_suggestions(
             owner_user_id=1, category_ids=[groceries.id]
@@ -398,12 +384,11 @@ class TestConfirmedBillSuppression:
 
     @pytest.mark.asyncio
     async def test_confirmed_bill_suppresses_even_with_no_members(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The FIN-34 shape: bill membership stripped, stored category
         intact, expected amount too small for the magnitude test - the
         category must still never be suggested."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         rent = await _category(async_db_session, "Home:Mortgage & Rent")
         await _spend(
@@ -412,11 +397,9 @@ class TestConfirmedBillSuppression:
             rent.id,
             {2: 2553, 3: 2553, 4: 2553, 5: 2553, 6: 2553, 7: 2553},
         )
-        stream = await svc.create_recurring_stream(
-            owner_user_id=1,
+        stream = await seed_stream(
+            svc,
             name="Mortgage",
-            direction="outflow",
-            frequency="monthly",
             # A sliver of the real spend: the magnitude test alone would
             # NOT suppress this. Presence must.
             expected_amount=100,
@@ -430,13 +413,12 @@ class TestConfirmedBillSuppression:
 
     @pytest.mark.asyncio
     async def test_confirmed_bill_with_no_category_resolves_via_name_alias(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """No stored category and no members to infer from: the stream's
         own name through the alias table still claims the category."""
         from app.services.finance.models import FinanceCategoryAlias
 
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         rent = await _category(async_db_session, "Home:Mortgage & Rent")
         async_db_session.add(
@@ -453,11 +435,9 @@ class TestConfirmedBillSuppression:
             rent.id,
             {2: 2553, 3: 2553, 4: 2553, 5: 2553, 6: 2553, 7: 2553},
         )
-        await svc.create_recurring_stream(
-            owner_user_id=1,
+        await seed_stream(
+            svc,
             name="Mortgage",
-            direction="outflow",
-            frequency="monthly",
             expected_amount=100,
             next_expected_date=date(2026, 9, 1),
             account_id=account.id,
@@ -507,9 +487,8 @@ class TestTheForecastStaysInSyncWithActuals:
 
     @pytest.mark.asyncio
     async def test_only_the_unspent_remainder_is_charged_this_month(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account, groceries = await self._budgeted(svc, async_db_session)
         await _spend(svc, account.id, groceries.id, {8: 600})
 
@@ -521,12 +500,11 @@ class TestTheForecastStaysInSyncWithActuals:
 
     @pytest.mark.asyncio
     async def test_the_end_balance_does_not_move_when_a_transaction_lands(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """THE test. Spending against a budgeted category moves money from
         "projected" to "already gone" - two sides of one envelope - so the
         forecast must land in exactly the same place."""
-        svc = FinanceService(async_db_session)
         account, groceries = await self._budgeted(svc, async_db_session)
 
         before = await svc.project_balances(owner_user_id=1, days=20, today=TODAY)
@@ -537,9 +515,8 @@ class TestTheForecastStaysInSyncWithActuals:
 
     @pytest.mark.asyncio
     async def test_a_fully_spent_envelope_charges_nothing_more(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account, groceries = await self._budgeted(svc, async_db_session)
         await _spend(svc, account.id, groceries.id, {8: 800})
 
@@ -549,11 +526,10 @@ class TestTheForecastStaysInSyncWithActuals:
 
     @pytest.mark.asyncio
     async def test_an_overspent_envelope_charges_nothing_more(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The overage already left the account. Charging anything further
         this month would be inventing spending."""
-        svc = FinanceService(async_db_session)
         account, groceries = await self._budgeted(svc, async_db_session)
         await _spend(svc, account.id, groceries.id, {8: 950})
 
@@ -563,12 +539,11 @@ class TestTheForecastStaysInSyncWithActuals:
 
     @pytest.mark.asyncio
     async def test_the_remainder_is_dated_at_month_end(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """It has not happened yet, so it must not dent the line today -
         which is also why every budget line used to pile up at the very
         start of the projection."""
-        svc = FinanceService(async_db_session)
         await self._budgeted(svc, async_db_session)
 
         result = await svc.project_balances(owner_user_id=1, days=20, today=TODAY)
@@ -607,9 +582,8 @@ class TestAnOverageIsMadeUpNextMonth:
 
     @pytest.mark.asyncio
     async def test_an_overage_tightens_next_month(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         await self._overspent(svc, async_db_session, 950)
 
         result = await svc.project_balances(owner_user_id=1, days=75, today=TODAY)
@@ -621,11 +595,10 @@ class TestAnOverageIsMadeUpNextMonth:
 
     @pytest.mark.asyncio
     async def test_the_tightened_month_says_why(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A number smaller than the budget, with no explanation, reads as
         a bug in the forecast."""
-        svc = FinanceService(async_db_session)
         await self._overspent(svc, async_db_session, 950)
 
         result = await svc.project_balances(owner_user_id=1, days=75, today=TODAY)
@@ -634,10 +607,9 @@ class TestAnOverageIsMadeUpNextMonth:
 
     @pytest.mark.asyncio
     async def test_the_carry_reaches_only_the_next_month(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """You make it up once. The month after is a clean envelope."""
-        svc = FinanceService(async_db_session)
         await self._overspent(svc, async_db_session, 950)
 
         result = await svc.project_balances(owner_user_id=1, days=105, today=TODAY)
@@ -650,11 +622,10 @@ class TestAnOverageIsMadeUpNextMonth:
 
     @pytest.mark.asyncio
     async def test_a_carry_bigger_than_the_envelope_clamps_at_zero(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A negative outflow is income. Blowing two months of grocery
         budget must not forecast the supermarket paying you."""
-        svc = FinanceService(async_db_session)
         await self._overspent(svc, async_db_session, 2_000)
 
         result = await svc.project_balances(owner_user_id=1, days=75, today=TODAY)
@@ -664,11 +635,10 @@ class TestAnOverageIsMadeUpNextMonth:
 
     @pytest.mark.asyncio
     async def test_an_unspent_envelope_does_not_inflate_next_month(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The forecast already assumes this month's envelope gets used,
         so there is nothing left over to carry."""
-        svc = FinanceService(async_db_session)
         await self._overspent(svc, async_db_session, 200)
 
         result = await svc.project_balances(owner_user_id=1, days=75, today=TODAY)
@@ -697,9 +667,8 @@ class TestOneQuietMonthIsNotErratic:
 
     @pytest.mark.asyncio
     async def test_a_steady_category_with_one_big_month_is_suggested(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         portfolio = await _category(async_db_session, "Investing:Portfolio")
         # Five identical months and one that is four times bigger.
@@ -719,11 +688,10 @@ class TestOneQuietMonthIsNotErratic:
 
     @pytest.mark.asyncio
     async def test_genuinely_erratic_spending_is_still_refused(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """The half that must not regress: this is the "stuff I will not
         spend money on again" that a budget line would be wrong about."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         odd = await _category(async_db_session, "Shopping:Whatever")
         await _spend(
@@ -739,10 +707,9 @@ class TestOneQuietMonthIsNotErratic:
 
     @pytest.mark.asyncio
     async def test_the_reported_figure_counts_the_odd_months(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """A flat category reports 0 - no month looked unlike the rest."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         flat = await _category(async_db_session, "Bills & Utilities:Flat")
         await _spend(
@@ -760,12 +727,11 @@ class TestOneQuietMonthIsNotErratic:
 class TestUncategorizedIsNeverABudgetLine:
     @pytest.mark.asyncio
     async def test_uncategorized_spending_is_not_suggested(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """It is steady on real data - $278/month - and it passes every
         numeric gate. "Budget your uncategorized spending" is still not a
         line anyone can act on; the fix is to categorize it."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         junk = await _category(async_db_session, "Uncategorized")
         await _spend(
@@ -781,9 +747,8 @@ class TestUncategorizedIsNeverABudgetLine:
 
     @pytest.mark.asyncio
     async def test_a_real_category_beside_it_still_is(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         junk = await _category(async_db_session, "Misc")
         real = await _category(async_db_session, "Food & Dining:Groceries")
@@ -800,12 +765,11 @@ class TestUncategorizedIsNeverABudgetLine:
 
     @pytest.mark.asyncio
     async def test_two_odd_months_is_not_steady(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """Where a median-of-deviations went wrong: four tightly clustered
         months make auto repairs look placid, and it would be budgeted at
         $47 while actually costing $2,301 twice a year."""
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         repairs = await _category(async_db_session, "Auto & Transport:Repairs")
         await _spend(
@@ -834,9 +798,8 @@ class TestOnlyExpensesAreBudgeted:
 
     @pytest.mark.asyncio
     async def test_a_transfer_category_is_never_suggested(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         moving = FinanceCategory(
             owner_user_id=1,
@@ -859,9 +822,8 @@ class TestOnlyExpensesAreBudgeted:
 
     @pytest.mark.asyncio
     async def test_an_expense_category_beside_it_still_is(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _account(svc)
         moving = FinanceCategory(
             owner_user_id=1,

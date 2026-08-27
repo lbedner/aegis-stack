@@ -42,3 +42,20 @@ def test_click_on_panel_never_closes() -> None:
     popup._handle_backdrop_click(_make_event(popup.panel))
 
     assert popup.visible is True
+
+
+def test_close_hides_the_popup() -> None:
+    """``hide()`` leaves the repaint to the caller, so every popup wrote the
+    same two lines - and one of them wrote ``self.open = False``, an
+    AlertDialog-ism that silently does nothing on a Container and left the
+    popup on screen. ``close()`` is the one way to do it."""
+    page = MagicMock()
+    popup = BasePopup(page, content=ft.Text("body"))
+    popup.show()
+
+    popup.close()
+
+    assert popup.visible is False
+    assert popup.overlay.visible is False
+    assert popup.panel.visible is False
+    assert page.update.called

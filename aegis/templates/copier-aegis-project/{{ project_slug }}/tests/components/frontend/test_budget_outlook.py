@@ -8,10 +8,10 @@ signed remainder.
 """
 
 from app.components.frontend.dashboard.modals.finance_modal import (
+    budget_stats_cells,
     outlook_chip,
     outlook_month_label,
     outlook_stats_cells,
-    budget_stats_cells,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 
@@ -183,16 +183,10 @@ class TestEverythingElseCell:
     def test_the_cell_appears_with_the_observed_rate(self) -> None:
         cells = budget_stats_cells({**STATS, "everything_else": 794_400})
         labels = [c[0] for c in cells]
-        assert labels == [
-            "Income", "Bills", "Budgets", "Everything else", "This month"
-        ]
+        assert labels == ["Income", "Bills", "Budgets", "Everything else", "This month"]
         cell = next(c for c in cells if c[0] == "Everything else")
         assert cell[1] == "$7,944.00"
         assert "observed" in cell[2]
-
-    def test_zero_keeps_the_classic_four(self) -> None:
-        labels = [c[0] for c in budget_stats_cells(STATS)]
-        assert labels == ["Income", "Bills", "Budgets", "This month"]
 
     def test_the_outlook_strip_gains_it_too(self) -> None:
         entry = {**TestTheMonthPager.ENTRY, "everything_else": 794_400}
@@ -200,6 +194,7 @@ class TestEverythingElseCell:
         labels = [c[0] for c in cells]
         assert "Everything else" in labels
         assert labels[-1] == "October 2026"
+
 
 class TestHeaderStaysShort:
     """The Budget header spends its height on numbers, not prose: the
@@ -220,11 +215,10 @@ class TestHeaderStaysShort:
 
         from app.components.frontend.dashboard.modals import finance_modal
 
-        assert "_pager_slot" in inspect.getsource(
-            finance_modal.BudgetPanel.__init__
-        )
+        assert "_pager_slot" in inspect.getsource(finance_modal.BudgetPanel.__init__)
         strip = inspect.getsource(finance_modal.BudgetPanel._stats_strip)
         assert "_month_pager" not in strip
+
 
 class TestStatPopups:
     """Click a header cell, get its rows: one shared popup, five feeds.

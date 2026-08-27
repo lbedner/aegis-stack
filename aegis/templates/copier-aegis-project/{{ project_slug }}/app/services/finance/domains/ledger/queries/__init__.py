@@ -29,6 +29,7 @@ from app.services.finance.domains.ledger.queries.accounts import (
     currency_by_code,
     has_nonreconcile_register,
     institution_by_provider_ref,
+    latest_valuation_row,
     latest_valuation_value,
     liability_details_by_account,
     reconcile_adjustment_on,
@@ -82,7 +83,6 @@ from app.services.finance.domains.ledger.queries.networth import (
 )
 from app.services.finance.domains.ledger.queries.transactions import (
     dated_amounts_in_window,
-    outflow_by_account_in_window,
     dedup_match,
     live_transactions_by_ids,
     outflow_by_account_in_window,
@@ -131,6 +131,7 @@ __all__ = [
     "holding_quantities",
     "icons_by_domains",
     "institution_by_provider_ref",
+    "latest_valuation_row",
     "latest_valuation_value",
     "liability_details_by_account",
     "live_account_ids",

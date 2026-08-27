@@ -51,9 +51,8 @@ async def _seed_register(svc: FinanceService, account_id: int) -> int:
 class TestReconcileAdjustment:
     @pytest.mark.asyncio
     async def test_adjustment_fixes_register_and_stays_out_of_spend(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _checking(svc)
         register = await _seed_register(svc, account.id)
         statement = register - 12_345  # the bank says we have less
@@ -87,9 +86,8 @@ class TestReconcileAdjustment:
 
     @pytest.mark.asyncio
     async def test_reconcile_is_idempotent_per_date(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await _checking(svc)
         register = await _seed_register(svc, account.id)
 
@@ -139,7 +137,7 @@ class TestReconcileAdjustment:
 
     @pytest.mark.asyncio
     async def test_import_inserts_beside_adjustment_never_edits_it(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """LANE-3 edit matching must not claim an adjustment: an import row
         landing on its (date, amount) is new money, not a rename of the
@@ -147,7 +145,6 @@ class TestReconcileAdjustment:
         from app.services.finance.adapters.importers.base import ParsedTransaction
         from app.services.finance.adapters.importers.imports import plan_transactions
 
-        svc = FinanceService(async_db_session)
         account = await _checking(svc)
         register = await _seed_register(svc, account.id)
         result = await svc.reconcile_account(
@@ -173,14 +170,13 @@ class TestReconcileAdjustment:
 
     @pytest.mark.asyncio
     async def test_transfer_pairing_never_claims_an_adjustment(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         """detect_transfers filters ``is_transfer`` rows out of its
         candidates, so an adjustment can never be paired as a transfer leg
         - pin it in case that filter ever loosens."""
         from app.services.finance.domains.detection import detect_transfers
 
-        svc = FinanceService(async_db_session)
         account = await _checking(svc)
         register = await _seed_register(svc, account.id)
         other = await svc.create_manual_account(
@@ -213,9 +209,8 @@ class TestReconcileAdjustment:
 class TestReconcileValuationRoute:
     @pytest.mark.asyncio
     async def test_no_register_routes_to_valuation(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        svc = FinanceService(async_db_session)
         account = await svc.create_manual_account(
             owner_user_id=1,
             name="House Bedner",
@@ -254,8 +249,9 @@ class TestReconcileValuationRoute:
 
 class TestReconcilePreview:
     @pytest.mark.asyncio
-    async def test_preview_writes_nothing(self, async_db_session: AsyncSession) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_preview_writes_nothing(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
         account = await _checking(svc)
         register = await _seed_register(svc, account.id)
         preview = await svc.reconcile_preview(

@@ -40,6 +40,7 @@ class CommitmentRollup(TypedDict):
     monthly_total: int
     fixed: list[FinanceRecurringStream]
     non_monthly: list[FinanceRecurringStream]
+    one_time: list[FinanceRecurringStream]
 
 
 def is_commitment(stream: FinanceRecurringStream) -> bool:
@@ -88,6 +89,28 @@ def not_paused_clause(today: date):
     )
 
 
+def shown_cadence(frequency: str) -> str | None:
+    """The cadence worth printing beside a monthly figure: none when the
+    stream already IS monthly, the cadence itself otherwise."""
+    return None if MONTHLY_FACTOR.get(frequency, 0.0) >= 1.0 else frequency
+
+
+def monthly_share_of(amount: int, frequency: str) -> int:
+    """A cadence's amount as a monthly figure, in cents."""
+    return round(amount * MONTHLY_FACTOR.get(frequency, 0.0))
+
+
+def monthly_share(stream: FinanceRecurringStream) -> int:
+    """What one stream costs per month, in cents.
+
+    A six-month premium is a sixth of itself each month; a one-off is
+    zero, because it is not a monthly cost at any weight. Every surface
+    that shows a "/mo" figure for a stream goes through here, so the
+    card's lines and its total can never be computed two ways.
+    """
+    return monthly_share_of(int(stream.average_amount or 0), stream.frequency)
+
+
 def commitment_rollup(
     streams: list[FinanceRecurringStream], today: date | None = None
 ) -> CommitmentRollup:
@@ -97,6 +120,7 @@ def commitment_rollup(
     Fixed/Non-monthly split can never drift from it."""
     fixed: list[FinanceRecurringStream] = []
     non_monthly: list[FinanceRecurringStream] = []
+    one_time: list[FinanceRecurringStream] = []
     total = 0.0
     for stream in streams:
         # Muted and paused bills charge NOTHING here - the same silence
@@ -112,9 +136,23 @@ def commitment_rollup(
         ):
             continue
         factor = MONTHLY_FACTOR.get(stream.frequency, 0.0)
-        total += stream.average_amount * factor
+        if factor <= 0.0:
+            # A one-off has no monthly share - a line reading "$0.00 /mo"
+            # is worse than its absence - but it IS a deliberate entry,
+            # so it rides along at face value for the surfaces that show
+            # it beside its date instead of under a "/mo" heading.
+            one_time.append(stream)
+            continue
+        # Per-stream shares, summed - the same arithmetic the lines use.
+        # Summing floats and truncating left the total a cent adrift.
+        total += monthly_share(stream)
         (fixed if factor >= 1.0 else non_monthly).append(stream)
-    return {"monthly_total": int(total), "fixed": fixed, "non_monthly": non_monthly}
+    return {
+        "monthly_total": int(total),
+        "fixed": fixed,
+        "non_monthly": non_monthly,
+        "one_time": one_time,
+    }
 
 
 def stream_staleness(

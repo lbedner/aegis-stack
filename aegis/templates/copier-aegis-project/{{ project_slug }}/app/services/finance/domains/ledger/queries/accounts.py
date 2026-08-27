@@ -148,16 +148,41 @@ async def valuation_by_key(
     ).first()
 
 
-async def latest_valuation_value(db: AsyncSession, account_id: int) -> int | None:
+async def latest_valuation_value(
+    db: AsyncSession, account_id: int, *, source: str | None = None
+) -> int | None:
+    """The newest valuation for an account, optionally within one source.
+
+    Several sources can hold an opinion about the same date (the row key
+    includes ``source``), so "latest" alone is only unambiguous while
+    there is one of them. ``source`` is how a caller says which opinion
+    it wants; ``None`` keeps the old behaviour.
+    """
+    query = select(FinanceValuation.value).where(
+        FinanceValuation.account_id == account_id
+    )
+    if source is not None:
+        query = query.where(FinanceValuation.source == source)
     value = (
-        await db.exec(
-            select(FinanceValuation.value)
-            .where(FinanceValuation.account_id == account_id)
-            .order_by(FinanceValuation.as_of_date.desc())
-            .limit(1)
-        )
+        await db.exec(query.order_by(FinanceValuation.as_of_date.desc()).limit(1))
     ).first()
     return int(value) if value is not None else None
+
+
+async def latest_valuation_row(
+    db: AsyncSession, account_id: int, *, source: str | None = None
+) -> FinanceValuation | None:
+    """The newest valuation row (optionally within one source).
+
+    Callers that report provenance need the row, not the number: the
+    source and date that produced a balance are what make it quotable.
+    """
+    query = select(FinanceValuation).where(FinanceValuation.account_id == account_id)
+    if source is not None:
+        query = query.where(FinanceValuation.source == source)
+    return (
+        await db.exec(query.order_by(FinanceValuation.as_of_date.desc()).limit(1))
+    ).first()
 
 
 async def valuations_for_account(

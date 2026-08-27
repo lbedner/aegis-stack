@@ -78,8 +78,8 @@ BUDGET_OWNERS = {
     "dismiss_budget_suggestions": "suggestions",
     "restore_budget_suggestions": "suggestions",
     "budget_summary": "summary",
-    "uncovered_spending_rate": "summary",
-    "uncovered_spend_filters": "summary",
+    "uncovered_spending_rate": "uncovered",
+    "uncovered_spend_filters": "uncovered",
     "budget_stat_details": "summary",
     "plan_budget_trims": "summary",
     "budget_month_outlook": "outlook",
@@ -680,12 +680,20 @@ def test_domains_never_reach_into_adapters() -> None:
 
 
 def test_the_service_root_separates_knowing_from_talking() -> None:
-    """Five folders, each answering a different question. A new package at
-    this level means a new KIND of thing, which is worth noticing."""
+    """Six folders, each answering a different question - ``models`` is
+    what's stored, ``schemas`` is what's spoken over the API. A new
+    package at this level means a new KIND of thing, worth noticing."""
     import pathlib
 
     import app.services.finance as finance_pkg
 
     root = pathlib.Path(finance_pkg.__file__).parent
     folders = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}
-    assert folders == {"domains", "adapters", "models", "service", "seeds"}, folders
+    assert folders == {
+        "domains",
+        "adapters",
+        "models",
+        "schemas",
+        "service",
+        "seeds",
+    }, folders

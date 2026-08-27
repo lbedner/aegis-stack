@@ -52,9 +52,8 @@ async def _bill(svc: FinanceService, name: str, account_id: int | None):
 class TestSetBillAccount:
     @pytest.mark.asyncio
     async def test_an_account_less_bill_can_be_given_one(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
-        svc = FinanceService(async_db_session)
         checking, _ = await _accounts(svc)
         bill = await _bill(svc, "Betr Health", None)
         assert bill.account_id is None
@@ -67,10 +66,7 @@ class TestSetBillAccount:
         assert updated.account_id == checking.id
 
     @pytest.mark.asyncio
-    async def test_it_can_be_moved_between_accounts(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_it_can_be_moved_between_accounts(self, svc: FinanceService) -> None:
         checking, savings = await _accounts(svc)
         bill = await _bill(svc, "Betr Health", checking.id)
 
@@ -83,12 +79,11 @@ class TestSetBillAccount:
 
     @pytest.mark.asyncio
     async def test_moving_onto_an_occupied_key_is_refused_cleanly(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Same owner, account, direction and payee is the unique key. A
         collision must raise something the API can turn into a 409, not a
         database error surfacing as a 500."""
-        svc = FinanceService(async_db_session)
         checking, savings = await _accounts(svc)
         here = await _bill(svc, "Betr Health", checking.id)
         await _bill(svc, "Betr Health", savings.id)
@@ -98,11 +93,10 @@ class TestSetBillAccount:
 
     @pytest.mark.asyncio
     async def test_leaving_the_account_out_does_not_clear_it(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService
     ) -> None:
         """Every other field on this endpoint is "omitted means unchanged"
         - the account must not be the one that silently blanks."""
-        svc = FinanceService(async_db_session)
         checking, _ = await _accounts(svc)
         bill = await _bill(svc, "Betr Health", checking.id)
 
@@ -128,11 +122,10 @@ class TestRetiredGhostsDoNotBlockAMove:
 
     @pytest.mark.asyncio
     async def test_a_retired_row_gives_up_its_key(
-        self, async_db_session: AsyncSession
+        self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         from datetime import UTC, datetime
 
-        svc = FinanceService(async_db_session)
         checking, savings = await _accounts(svc)
         ghost = await _bill(svc, "Eleanor", savings.id)
         ghost.deleted_at = datetime.now(UTC).replace(tzinfo=None)
@@ -152,10 +145,7 @@ class TestRetiredGhostsDoNotBlockAMove:
         assert ghost.normalized_payee != updated.normalized_payee
 
     @pytest.mark.asyncio
-    async def test_a_live_row_still_refuses(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        svc = FinanceService(async_db_session)
+    async def test_a_live_row_still_refuses(self, svc: FinanceService) -> None:
         checking, savings = await _accounts(svc)
         await _bill(svc, "Eleanor", savings.id)
         live = await _bill(svc, "Eleanor", checking.id)

@@ -7,8 +7,9 @@ to the matching domain module as ``module.func(self.db, ...)``.
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
-from app.services.finance.domains.ledger import accounts
+from app.services.finance.domains.ledger import accounts, properties, valuations
 from app.services.finance.models import (
     FinanceAccount,
     FinanceCurrency,
@@ -145,7 +146,7 @@ class AccountsMixin(FinanceServiceBase):
         source: str = "manual",
         source_ref: str | None = None,
     ) -> FinanceValuation:
-        return await accounts.add_valuation(
+        return await valuations.add_valuation(
             self.db,
             account_id=account_id,
             as_of_date=as_of_date,
@@ -173,6 +174,23 @@ class AccountsMixin(FinanceServiceBase):
             is_closed=is_closed,
         )
 
+    async def set_property_details(
+        self,
+        account_id: int,
+        *,
+        owner_user_id: int | None = None,
+        **fields: Any,
+    ) -> FinanceAccount | None:
+        """Write a property account's facts (purchase, ownership, valuation
+        provenance). Raises ValueError on a bad figure or a non-property
+        account; the model is the boundary."""
+        return await properties.set_property_details(
+            self.db,
+            account_id,
+            owner_user_id=owner_user_id,
+            **fields,
+        )
+
     async def soft_delete_account(
         self, account_id: int, *, owner_user_id: int | None = None
     ) -> bool:
@@ -193,7 +211,7 @@ class AccountsMixin(FinanceServiceBase):
         source_ref: str | None = None,
         note: str | None = None,
     ) -> FinanceValuation:
-        return await accounts.upsert_valuation(
+        return await valuations.upsert_valuation(
             self.db,
             account_id=account_id,
             as_of_date=as_of_date,
@@ -248,10 +266,31 @@ class AccountsMixin(FinanceServiceBase):
             statement_balance=statement_balance,
         )
 
+    async def ingest_valuations(
+        self,
+        account_id: int,
+        *,
+        rows: list[tuple[date, int]],
+        source: str = "manual",
+        is_estimate: bool = False,
+        note: str | None = None,
+        owner_user_id: int | None = None,
+    ) -> valuations.IngestResult:
+        """Upsert a whole dated series from one source in one pass."""
+        return await valuations.ingest_valuations(
+            self.db,
+            account_id,
+            rows=rows,
+            source=source,
+            is_estimate=is_estimate,
+            note=note,
+            owner_user_id=owner_user_id,
+        )
+
     async def list_valuations(
         self, account_id: int, *, owner_user_id: int | None = None
     ) -> list[FinanceValuation]:
-        return await accounts.list_valuations(
+        return await valuations.list_valuations(
             self.db,
             account_id,
             owner_user_id=owner_user_id,

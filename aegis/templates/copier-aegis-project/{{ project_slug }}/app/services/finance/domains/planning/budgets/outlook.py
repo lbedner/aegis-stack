@@ -9,9 +9,9 @@ budget line would need.
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from datetime import date, timedelta
+import re
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -34,7 +34,7 @@ from app.services.finance.domains.planning import (
 from app.services.finance.domains.planning import queries as planning_queries
 from app.services.finance.domains.planning.budgets import queries
 from app.services.finance.domains.planning.budgets.lines import get_or_create_budget
-from app.services.finance.domains.planning.budgets.summary import (
+from app.services.finance.domains.planning.budgets.uncovered import (
     uncovered_spending_rate,
 )
 from app.services.finance.models import FinanceTransaction
@@ -121,7 +121,9 @@ async def budget_month_outlook(
     )
     goals_monthly = sum(
         (
-            await allocation.goal_allocations(db, owner_user_id=owner_user_id, today=today)
+            await allocation.goal_allocations(
+                db, owner_user_id=owner_user_id, today=today
+            )
         ).values()
     )
     envelopes_monthly = sum(

@@ -32,6 +32,9 @@ from app.components.frontend.controls.table import (
     TableCellText,
     TableNameText,
 )
+from app.components.frontend.dashboard.modals.finance_modal.account_header import (
+    _account_detail_header,
+)
 from app.components.frontend.dashboard.modals.finance_modal.constants import (
     _DENSE_ROW_HEIGHT,
     _INVESTMENT_TYPES,
@@ -50,9 +53,6 @@ from app.components.frontend.dashboard.modals.finance_modal.formatting import (
     _qty,
     _trade_type_label,
     _usd,
-)
-from app.components.frontend.dashboard.modals.finance_modal.sidebar import (
-    _account_detail_header,
 )
 from app.components.frontend.dashboard.modals.finance_modal.trades_view import (
     _trade_expanded_content,
@@ -144,9 +144,8 @@ class TransactionsPanel(
             no_wrap=True,
             overflow=ft.TextOverflow.ELLIPSIS,
         )
-        # Beside the count, not under the table: a footer permanently
-        # costs one row's height, and the count line is the chrome that
-        # already tells this story ("Showing 100 of 685").
+        # Beside the count, not under the table: a footer costs a row's
+        # height, and the count line already tells this story.
         self._load_more_link = PulseButton(
             on_click_callable=self._load_more,
             text="Load more",
@@ -358,6 +357,8 @@ class TransactionsPanel(
                 on_rename=self._open_rename,
                 on_remove=self._open_remove,
                 on_reconcile=self._open_reconcile,
+                on_property=self._open_property_details,
+                on_valuations=self._open_valuation_history,
             )
             if is_account
             else None
@@ -444,10 +445,9 @@ class TransactionsPanel(
         # settle on results for a prefix of what was typed.
         sequence = self._debounce.sequence
         api = get_session_state(self.page).api_client
-        # A fresh table build below has nothing checked - a stale
-        # self._selected_txn_ids from before this load (a different
-        # account, a different search) would otherwise leave the bulk
-        # trigger showing a count for rows that no longer exist on screen.
+        # A fresh table build below has nothing checked; a stale selection
+        # from before this load would leave the bulk trigger showing a
+        # count for rows that no longer exist on screen.
         self._selected_txn_ids = set()
         self._selected_amount = 0
         self._selected_trade_count = 0

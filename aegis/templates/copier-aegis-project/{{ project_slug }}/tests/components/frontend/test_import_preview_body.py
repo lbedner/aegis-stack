@@ -16,7 +16,6 @@ before and after, and a reader compares them - so they are built from one
 shared layout rather than two that drift.
 """
 
-from collections.abc import Iterator
 from typing import Any
 
 import flet as ft
@@ -39,28 +38,8 @@ from app.components.frontend.dashboard.modals.modal_sections import (
     RankedBarCard,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-
-
-def _walk(node: ft.Control) -> Iterator[ft.Control]:
-    """Every control in the tree, in render order."""
-    yield node
-    children: list[ft.Control] = []
-    content = getattr(node, "content", None)
-    if isinstance(content, ft.Control):
-        children.append(content)
-    controls = getattr(node, "controls", None)
-    if isinstance(controls, list):
-        children.extend(c for c in controls if isinstance(c, ft.Control))
-    for child in children:
-        yield from _walk(child)
-
-
-def _texts(node: ft.Control) -> list[str]:
-    return [
-        str(c.value)
-        for c in _walk(node)
-        if isinstance(c, ft.Text) and c.value not in (None, "")
-    ]
+from tests.components.frontend._tree import texts as _texts
+from tests.components.frontend._tree import walk as _walk
 
 
 def _of_type(node: ft.Control, kind: type) -> list[Any]:

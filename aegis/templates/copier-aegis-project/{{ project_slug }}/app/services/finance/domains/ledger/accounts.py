@@ -17,7 +17,6 @@ from app.services.finance.models import (
     FinanceInstitution,
     FinanceLiabilityDetail,
     FinanceTransaction,
-    FinanceValuation,
 )
 from app.services.finance.schemas import ReconcileResponse
 from app.services.finance.utils import (
@@ -203,29 +202,6 @@ async def account_transaction_totals(
     )
 
 
-async def add_valuation(
-    db: AsyncSession,
-    *,
-    account_id: int,
-    as_of_date: date,
-    value: int,
-    owner_user_id: int | None = None,
-    source: str = "manual",
-    source_ref: str | None = None,
-) -> FinanceValuation:
-    valuation = FinanceValuation(
-        owner_user_id=owner_user_id,
-        account_id=account_id,
-        as_of_date=as_of_date,
-        value=value,
-        source=source,
-        source_ref=source_ref,
-    )
-    db.add(valuation)
-    await db.flush()
-    return valuation
-
-
 async def update_account(
     db: AsyncSession,
     account_id: int,
@@ -262,56 +238,6 @@ async def soft_delete_account(
     db.add(account)
     await db.flush()
     return True
-
-
-async def upsert_valuation(
-    db: AsyncSession,
-    *,
-    account_id: int,
-    as_of_date: date,
-    value: int,
-    owner_user_id: int | None = None,
-    source: str = "manual",
-    source_ref: str | None = None,
-    note: str | None = None,
-) -> FinanceValuation:
-    """Insert or update the (account, date, source) valuation, then set the
-    account's ``current_balance`` to the latest-dated valuation.
-
-    Idempotent on ``uq_finance_valuation (account_id, as_of_date, source)``:
-    a repeat write updates in place rather than duplicating.
-    """
-    existing = await queries.valuation_by_key(
-        db, account_id=account_id, as_of_date=as_of_date, source=source
-    )
-    if existing is not None:
-        existing.value = value
-        existing.source_ref = source_ref
-        existing.note = note
-        existing.updated_at = utcnow()
-        valuation = existing
-    else:
-        valuation = FinanceValuation(
-            owner_user_id=owner_user_id,
-            account_id=account_id,
-            as_of_date=as_of_date,
-            value=value,
-            source=source,
-            source_ref=source_ref,
-            note=note,
-        )
-    db.add(valuation)
-    await db.flush()
-
-    # current_balance for a manual asset = its latest-dated valuation.
-    latest_value = await queries.latest_valuation_value(db, account_id)
-    account = await get_account(db, account_id, owner_user_id=owner_user_id)
-    if account is not None and latest_value is not None:
-        account.current_balance = int(latest_value)
-        account.balance_as_of = utcnow()
-        db.add(account)
-        await db.flush()
-    return valuation
 
 
 async def register_balance_as_of(db: AsyncSession, account_id: int, as_of: date) -> int:
@@ -391,6 +317,10 @@ async def reconcile_account(
     result = preview.model_copy(update={"applied": True})
 
     if preview.route == "valuation":
+        # Imported here, not at module scope: ``valuations`` reads accounts
+        # (get_account), so a top-level import back would be circular.
+        from app.services.finance.domains.ledger.valuations import upsert_valuation
+
         await upsert_valuation(
             db,
             account_id=account_id,
@@ -462,11 +392,3 @@ async def reconcile_account(
     return result
 
 
-async def list_valuations(
-    db: AsyncSession, account_id: int, *, owner_user_id: int | None = None
-) -> list[FinanceValuation]:
-    """Valuation series for an account, oldest first. Empty if not owned."""
-    account = await get_account(db, account_id, owner_user_id=owner_user_id)
-    if account is None:
-        return []
-    return await queries.valuations_for_account(db, account_id)

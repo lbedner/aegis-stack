@@ -62,9 +62,8 @@ async def _budget_line(svc: FinanceService, hint: str, cents: int) -> None:
 class TestProjectionDrawdownsAreBatched:
     @pytest.mark.asyncio
     async def test_query_count_does_not_grow_with_budget_lines(
-        self, async_db_session: AsyncSession, async_engine
+        self, svc: FinanceService, async_engine
     ) -> None:
-        svc = FinanceService(async_db_session)
         await _checking(svc)
         for hint in ("Groceries", "Fuel"):
             await _budget_line(svc, hint, 40_000)
@@ -105,9 +104,8 @@ class TestBulkSoftDeleteIsBatched:
 
     @pytest.mark.asyncio
     async def test_query_count_does_not_grow_with_deleted_rows(
-        self, async_db_session: AsyncSession, async_engine
+        self, svc: FinanceService, async_engine
     ) -> None:
-        svc = FinanceService(async_db_session)
         account_id = await _checking(svc)
 
         first = await self._split_parents(svc, account_id, 2)
@@ -126,7 +124,7 @@ class TestBulkSoftDeleteIsBatched:
 class TestAnalystSnapshotIsBatched:
     @pytest.mark.asyncio
     async def test_query_count_does_not_grow_with_goals(
-        self, async_db_session: AsyncSession, async_engine
+        self, svc: FinanceService, async_db_session: AsyncSession, async_engine
     ) -> None:
         from app.services.finance.domains.detection import analyst
 
@@ -137,7 +135,6 @@ class TestAnalystSnapshotIsBatched:
             # instead - importing an empty PACKAGE succeeds.)
             pytest.skip("analyst not present in this stack (no AI)")
 
-        svc = FinanceService(async_db_session)
         await _checking(svc)
         await svc.create_virtual_goal(
             owner_user_id=1, name="Vacation", target_amount=500_000
@@ -201,9 +198,8 @@ class TestBudgetSuggestionAliasesAreBatched:
 
     @pytest.mark.asyncio
     async def test_query_count_does_not_grow_with_streams(
-        self, async_db_session: AsyncSession, async_engine
+        self, svc: FinanceService, async_db_session: AsyncSession, async_engine
     ) -> None:
-        svc = FinanceService(async_db_session)
         account_id = await _checking(svc)
 
         await self._confirmed_uncategorized_stream(

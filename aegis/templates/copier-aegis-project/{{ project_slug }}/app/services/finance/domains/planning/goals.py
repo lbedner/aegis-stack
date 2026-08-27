@@ -23,7 +23,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.finance.constants import (
     add_months,
 )
-from app.services.finance.domains.ledger import accounts
+from app.services.finance.domains.ledger import accounts, valuations
 from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.models import (
     FinanceAccount,
@@ -246,8 +246,7 @@ def _validated(meta: GoalMeta) -> GoalMeta:
         meta.target_factor is not None or meta.target_scope
     ):
         raise ValueError(
-            "A fixed target takes no factor or scope; set target_rule to "
-            "express one."
+            "A fixed target takes no factor or scope; set target_rule to express one."
         )
     if meta.contribution_kind == "percent_income" and not (
         meta.contribution_bps is not None and 0 < meta.contribution_bps <= 10_000
@@ -443,7 +442,7 @@ async def contribute_to_goal(
             "Linked goals book contributions from their own transfers; "
             "manual contributions are for virtual goals only."
         )
-    await accounts.upsert_valuation(
+    await valuations.upsert_valuation(
         db,
         account_id=account_id,
         as_of_date=when or utcnow().date(),
@@ -532,7 +531,7 @@ async def auto_contribute_goals(
         )
         if already is not None:
             continue
-        await accounts.upsert_valuation(
+        await valuations.upsert_valuation(
             db,
             account_id=account.id,
             as_of_date=first,

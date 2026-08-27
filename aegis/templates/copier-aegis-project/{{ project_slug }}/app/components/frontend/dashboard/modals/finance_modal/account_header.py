@@ -35,13 +35,23 @@ def manage_menu_labels(account: dict[str, Any]) -> list[str]:
     labels = ["Rename", "Reconcile"]
     if account.get("account_type") == PROPERTY_ACCOUNT_TYPE:
         labels.extend(("Property details", "Valuation history"))
+    if account.get("classification") == "liability":
+        # FW-04: the lien link only means something on a debt.
+        labels.append("Secured by")
     if account.get("is_manual", False):
         labels.append("Remove")
     return labels
 
 
 def _account_detail_header(
-    account: dict, *, on_rename, on_remove, on_reconcile, on_property, on_valuations
+    account: dict,
+    *,
+    on_rename,
+    on_remove,
+    on_reconcile,
+    on_property,
+    on_valuations,
+    on_secured,
 ) -> ft.Control:
     """The header shown above an account's register: name, type, balance, and a
     Manage menu (Rename and Reconcile always; Remove for manual accounts only —
@@ -57,6 +67,7 @@ def _account_detail_header(
         "Reconcile": on_reconcile,
         "Property details": on_property,
         "Valuation history": on_valuations,
+        "Secured by": on_secured,
         "Remove": on_remove,
     }
     menu_items = [
@@ -113,4 +124,22 @@ def _account_detail_header(
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=ft.padding.only(bottom=Theme.Spacing.SM),
+    )
+
+
+def panel_detail_header(panel: Any, account: dict) -> ft.Control:
+    """The detail header wired to one panel's Manage handlers.
+
+    The callsite used to be seven kwargs of plumbing in ``panel.py``;
+    the wiring lives here beside the menu it feeds, so adding a menu
+    item is a one-file change.
+    """
+    return _account_detail_header(
+        account,
+        on_rename=panel._open_rename,
+        on_remove=panel._open_remove,
+        on_reconcile=panel._open_reconcile,
+        on_property=panel._open_property_details,
+        on_valuations=panel._open_valuation_history,
+        on_secured=panel._open_secured_by,
     )

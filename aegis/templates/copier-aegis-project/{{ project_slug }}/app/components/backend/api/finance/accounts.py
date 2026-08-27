@@ -19,10 +19,12 @@ from app.services.finance.schemas import (
     AccountListResponse,
     AccountResponse,
     AccountUpdate,
+    LiabilitySummary,
     ManualAccountCreate,
     PropertyDetailsUpdate,
     ReconcileRequest,
     ReconcileResponse,
+    SecuredDebtUpdate,
     ValuationBulkRequest,
     ValuationBulkResponse,
     ValuationCreateRequest,
@@ -111,6 +113,35 @@ async def update_account(
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     return AccountResponse.from_row(account)
+
+
+@router.patch("/accounts/{account_id}/secured-by", response_model=LiabilitySummary)
+async def update_secured_debt(
+    account_id: int,
+    body: SecuredDebtUpdate,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> LiabilitySummary:
+    """Link (or unlink) the property that secures this liability.
+
+    Stores what the user CONFIRMS - lien priority is never inferred. The
+    derived figures (equity, LTV) appear on the property wherever
+    accounts are read; unlinking removes them.
+    """
+    try:
+        detail = await service.set_secured_debt(
+            account_id,
+            owner_user_id=owner_user_id,
+            secured_by_account_id=body.secured_by_account_id,
+            lien_position=body.lien_position,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from None
+    if detail is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return LiabilitySummary.from_row(detail)
 
 
 @router.patch("/accounts/{account_id}/property", response_model=AccountResponse)

@@ -392,4 +392,67 @@ async def test_quote_unknown_ticker_reports_not_found(
     result = await ai_tools.quote("ZZZZ")
 
     assert result["found"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_linked_property_reports_equity_and_ltv(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """FW-04 gate: link the mortgage as first lien and the property entry
+    carries equity and LTV matching the hand calculation; the liability
+    entry names what it secures."""
+    house = await seed_account(
+        svc,
+        name="House Bedner",
+        account_type="property",
+        current_balance=71_120_000,
+    )
+    await svc.set_property_details(house.id, owner_user_id=1, property_kind="primary")
+    mortgage = await seed_account(
+        svc,
+        name="Citizens Mortgage",
+        account_type="loan",
+        classification="liability",
+        current_balance=-18_700_000,
+    )
+    session.add(
+        FinanceLiabilityDetail(
+            owner_user_id=1,
+            account_id=mortgage.id,
+            secured_by_account_id=house.id,
+            lien_position=1,
+        )
+    )
+    await session.commit()
+
+    result = await ai_tools.accounts()
+
+    entry = next(a for a in result["accounts"] if a["name"] == "House Bedner")
+    assert entry["property"]["equity_cents"] == 52_420_000
+    assert entry["property"]["ltv_bps"] == 2629
+    assert entry["property"]["liens"] == [
+        {"account": "Citizens Mortgage", "lien_position": 1}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_unlinked_property_shows_no_lending_figures(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """The gate's unlink case: no link, no equity/LTV keys at all."""
+    house = await seed_account(
+        svc,
+        name="House Bedner",
+        account_type="property",
+        current_balance=71_120_000,
+    )
+    await svc.set_property_details(house.id, owner_user_id=1, property_kind="primary")
+    await session.commit()
+
+    result = await ai_tools.accounts()
+
+    entry = next(a for a in result["accounts"] if a["name"] == "House Bedner")
+    assert "equity_cents" not in entry["property"]
+    assert "ltv_bps" not in entry["property"]
+    assert "liens" not in entry["property"]
 {% endif %}

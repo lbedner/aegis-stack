@@ -174,6 +174,23 @@ class AccountsMixin(FinanceServiceBase):
             is_closed=is_closed,
         )
 
+    async def set_secured_debt(
+        self,
+        account_id: int,
+        *,
+        owner_user_id: int | None = None,
+        secured_by_account_id: int | None,
+        lien_position: int | None = None,
+    ) -> FinanceLiabilityDetail | None:
+        """Link (or unlink) the property securing a liability."""
+        return await properties.set_secured_debt(
+            self.db,
+            account_id,
+            owner_user_id=owner_user_id,
+            secured_by_account_id=secured_by_account_id,
+            lien_position=lien_position,
+        )
+
     async def set_property_details(
         self,
         account_id: int,

@@ -8,7 +8,10 @@ where every later reader has to re-guess it.
 
 from datetime import date
 
+from typing import Any
+
 import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.domains.ledger.properties import (
     PROPERTY_ACCOUNT_TYPE,
@@ -17,8 +20,10 @@ from app.services.finance.domains.ledger.properties import (
     PropertyMeta,
     clear_property_metadata,
     property_metadata,
+    secured_position,
     set_property_metadata,
 )
+from app.services.finance.models import FinanceLiabilityDetail
 from app.services.finance.service import FinanceService
 
 
@@ -254,3 +259,135 @@ class TestServiceWrite:
 
         with pytest.raises(ValueError):
             await svc.set_property_details(account.id, owner_user_id=1)
+
+
+class TestSecuredDebt:
+    """FW-04: the ledger stores which property secures a liability (what
+    the user confirms - lien priority is never inferred), and equity/LTV
+    are derived from the link, computed and never stored."""
+
+    def test_equity_and_ltv_derive_from_the_linked_balances(self) -> None:
+        position = secured_position(71_120_000, [18_700_000])
+        assert position is not None
+        assert position.equity == 52_420_000
+        assert position.ltv_bps == 2629  # 26.29%
+
+    def test_a_second_lien_stacks_into_both_figures(self) -> None:
+        position = secured_position(71_120_000, [18_700_000, 3_000_000])
+        assert position is not None
+        assert position.equity == 49_420_000
+        assert position.ltv_bps == 3051
+
+    def test_no_linked_liens_means_no_figures(self) -> None:
+        """The gate's unlink case: removing the link removes the derived
+        numbers entirely, it does not leave 100%-equity noise."""
+        assert secured_position(71_120_000, []) is None
+
+    def test_a_worthless_property_has_no_ratio(self) -> None:
+        position = secured_position(0, [18_700_000])
+        assert position is not None
+        assert position.equity == -18_700_000
+        assert position.ltv_bps is None
+
+    @pytest.mark.asyncio
+    async def test_the_link_is_stored_on_the_liability_detail(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        house = await svc.create_manual_account(
+            name="House Bedner",
+            account_type=PROPERTY_ACCOUNT_TYPE,
+            classification="asset",
+            owner_user_id=1,
+        )
+        mortgage = await svc.create_manual_account(
+            name="Citizens Mortgage",
+            account_type="loan",
+            classification="liability",
+            owner_user_id=1,
+        )
+        detail = FinanceLiabilityDetail(
+            account_id=mortgage.id,
+            secured_by_account_id=house.id,
+            lien_position=1,
+        )
+        async_db_session.add(detail)
+        await async_db_session.flush()
+
+        assert detail.secured_by_account_id == house.id
+        assert detail.lien_position == 1
+
+
+class TestSecuredDebtService:
+    """The write path stores only what the user confirms, and refuses
+    links that cannot mean anything (a checking account "securing" a
+    loan, a lien on an asset that is not a property)."""
+
+    @staticmethod
+    async def _pair(svc: FinanceService) -> tuple[Any, Any]:
+        house = await svc.create_manual_account(
+            name="House Bedner",
+            account_type=PROPERTY_ACCOUNT_TYPE,
+            classification="asset",
+            owner_user_id=1,
+        )
+        mortgage = await svc.create_manual_account(
+            name="Citizens Mortgage",
+            account_type="loan",
+            classification="liability",
+            owner_user_id=1,
+        )
+        return house, mortgage
+
+    @pytest.mark.asyncio
+    async def test_link_then_unlink_round_trips(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        house, mortgage = await self._pair(svc)
+
+        detail = await svc.set_secured_debt(
+            mortgage.id,
+            owner_user_id=1,
+            secured_by_account_id=house.id,
+            lien_position=1,
+        )
+        assert detail.secured_by_account_id == house.id
+        assert detail.lien_position == 1
+
+        linked_at = detail.updated_at
+
+        detail = await svc.set_secured_debt(
+            mortgage.id, owner_user_id=1, secured_by_account_id=None
+        )
+        assert detail.secured_by_account_id is None
+        assert detail.lien_position is None
+        # The row must LOOK changed: sync reconciliation and audit reads
+        # trust updated_at, and a silent write hides the unlink from both.
+        assert detail.updated_at > linked_at
+
+    @pytest.mark.asyncio
+    async def test_only_a_property_can_secure(self, svc: FinanceService) -> None:
+        _, mortgage = await self._pair(svc)
+        checking = await svc.create_manual_account(
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            owner_user_id=1,
+        )
+        with pytest.raises(ValueError):
+            await svc.set_secured_debt(
+                mortgage.id,
+                owner_user_id=1,
+                secured_by_account_id=checking.id,
+                lien_position=1,
+            )
+
+    @pytest.mark.asyncio
+    async def test_only_a_liability_can_be_secured(self, svc: FinanceService) -> None:
+        house, _ = await self._pair(svc)
+        with pytest.raises(ValueError):
+            await svc.set_secured_debt(
+                house.id,
+                owner_user_id=1,
+                secured_by_account_id=house.id,
+                lien_position=1,
+            )

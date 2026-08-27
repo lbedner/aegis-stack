@@ -148,6 +148,14 @@ class FinanceLiabilityDetail(SQLModel, table=True):
     ytd_principal_paid: int | None = _bigint("ytd_principal_paid")
     loan_term_months: int | None = Field(default=None)
     is_overdue: bool | None = Field(default=None)
+    # FW-04: which property secures this liability, as CONFIRMED by the
+    # user - lien priority is never inferred. 1 = first mortgage,
+    # 2 = second/HELOC. Equity and LTV derive from the link at read
+    # time and are never stored.
+    secured_by_account_id: int | None = Field(
+        default=None, foreign_key=f"{_FK}finance_account.id"
+    )
+    lien_position: int | None = Field(default=None)
     aprs: list[Any] = Field(default_factory=list, sa_column=Column("aprs", JSON))
     currency: str = Field(
         default="usd", foreign_key=f"{_FK}finance_currency.code", max_length=16

@@ -3148,3 +3148,76 @@ class TestDerivedGoalTargets:
         )
         assert wide.json()["target_amount"] == 3_600_000
         assert wide.json()["target_scope"] == []
+
+
+@pytest.mark.asyncio
+async def test_secured_debt_link_round_trip(
+    authenticated_client: TestClient,
+) -> None:
+    """FW-04 acceptance: link the mortgage to the property as first lien,
+    read it back on the account list, unlink and it is gone."""
+    house = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "House Bedner",
+            "account_type": "property",
+            "classification": "asset",
+        },
+    ).json()
+    mortgage = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "Citizens Mortgage",
+            "account_type": "loan",
+            "classification": "liability",
+        },
+    ).json()
+
+    linked = authenticated_client.patch(
+        f"/api/v1/finance/accounts/{mortgage['id']}/secured-by",
+        json={"secured_by_account_id": house["id"], "lien_position": 1},
+    )
+    assert linked.status_code == 200
+    assert linked.json()["secured_by_account_id"] == house["id"]
+    assert linked.json()["lien_position"] == 1
+
+    rows = authenticated_client.get("/api/v1/finance/accounts").json()["items"]
+    row = next(r for r in rows if r["id"] == mortgage["id"])
+    assert row["liability"]["secured_by_account_id"] == house["id"]
+
+    unlinked = authenticated_client.patch(
+        f"/api/v1/finance/accounts/{mortgage['id']}/secured-by",
+        json={"secured_by_account_id": None},
+    )
+    assert unlinked.status_code == 200
+    assert unlinked.json()["secured_by_account_id"] is None
+    assert unlinked.json()["lien_position"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_lien_on_a_non_property_is_refused(
+    authenticated_client: TestClient,
+) -> None:
+    checking = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "Checking",
+            "account_type": "checking",
+            "classification": "asset",
+        },
+    ).json()
+    mortgage = authenticated_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "name": "Citizens Mortgage",
+            "account_type": "loan",
+            "classification": "liability",
+        },
+    ).json()
+
+    refused = authenticated_client.patch(
+        f"/api/v1/finance/accounts/{mortgage['id']}/secured-by",
+        json={"secured_by_account_id": checking["id"], "lien_position": 1},
+    )
+    assert refused.status_code == 400
+    assert "not a property" in refused.json()["detail"]

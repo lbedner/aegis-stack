@@ -16,10 +16,11 @@ unlabelled 71120000 cannot.
 from datetime import date
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
+from sqlmodel import Field, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.models import FinanceAccount
+from app.services.finance.models import FinanceAccount, FinanceLiabilityDetail
 
 PROPERTY_ACCOUNT_TYPE = "property"
 
@@ -221,3 +222,93 @@ async def set_property_details(
     db.add(account)
     await db.flush()
     return account
+
+
+class SecuredPosition(BaseModel):
+    """Equity and LTV for one property, derived from its lien links.
+
+    Computed at read time, never stored: the inputs (valuation, loan
+    balances) each move on their own schedule, and a stored copy would
+    just be one more number that can disagree. ``ltv_bps`` is basis
+    points (26.29% = 2629), ``None`` when the property has no value to
+    ratio against.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    equity: int
+    ltv_bps: int | None
+
+
+def secured_position(
+    property_value: int, secured_balances: list[int]
+) -> SecuredPosition | None:
+    """The property's position against the liens it secures, or ``None``
+    when nothing is linked - an unlinked property must show NO figures,
+    not a noisy 100%-equity claim."""
+    if not secured_balances:
+        return None
+    owed = sum(secured_balances)
+    ltv = round(owed * 10_000 / property_value) if property_value > 0 else None
+    return SecuredPosition(equity=property_value - owed, ltv_bps=ltv)
+
+
+async def set_secured_debt(
+    db: AsyncSession,
+    account_id: int,
+    *,
+    owner_user_id: int | None = None,
+    secured_by_account_id: int | None,
+    lien_position: int | None = None,
+) -> FinanceLiabilityDetail | None:
+    """Record which property secures a liability - what the user CONFIRMS,
+    never inferred (the assistant explicitly refused to guess lien
+    priority, and that refusal was correct; this is where the confirmed
+    answer lives). ``secured_by_account_id=None`` unlinks and clears the
+    lien position with it. Equity and LTV derive from the link at read
+    time and are never stored.
+    """
+    from app.services.finance.domains.ledger.accounts import get_account
+    from app.services.finance.utils import utcnow
+
+    liability = await get_account(db, account_id, owner_user_id=owner_user_id)
+    if liability is None:
+        return None
+    if liability.classification != "liability":
+        raise ValueError(
+            f"Account {account_id} is an asset; only a liability can be "
+            "secured by a property."
+        )
+    if secured_by_account_id is not None:
+        target = await get_account(
+            db, secured_by_account_id, owner_user_id=owner_user_id
+        )
+        if target is None or target.account_type != PROPERTY_ACCOUNT_TYPE:
+            raise ValueError(
+                f"Account {secured_by_account_id} is not a property; a lien "
+                "can only attach to one."
+            )
+        if lien_position is not None and lien_position < 1:
+            raise ValueError("lien_position counts from 1 (first mortgage).")
+
+    detail = (
+        await db.exec(
+            select(FinanceLiabilityDetail).where(
+                FinanceLiabilityDetail.account_id == account_id
+            )
+        )
+    ).first()
+    if detail is None:
+        detail = FinanceLiabilityDetail(
+            owner_user_id=owner_user_id, account_id=account_id
+        )
+    if secured_by_account_id is None:
+        detail.secured_by_account_id = None
+        detail.lien_position = None
+    else:
+        detail.secured_by_account_id = secured_by_account_id
+        detail.lien_position = lien_position or 1
+    detail.updated_at = utcnow()
+    db.add(detail)
+    await db.flush()
+    return detail

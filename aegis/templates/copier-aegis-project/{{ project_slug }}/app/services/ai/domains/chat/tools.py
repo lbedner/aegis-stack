@@ -32,11 +32,19 @@ ToolFunc = Callable[..., Any]
 
 @dataclass(frozen=True)
 class RegisteredTool:
-    """A named tool entry: the callable plus registry metadata."""
+    """A named tool entry: the callable plus registry metadata.
+
+    ``native_write`` marks a tool that must stay a visible native call
+    even in code mode - a write the user has to see in the tool trail
+    (memory saves, queue proposals) is never dispatched from inside the
+    sandbox. The tool declares this about itself at registration; the
+    agent loader asks the registry rather than keeping its own list.
+    """
 
     name: str
     func: ToolFunc
     description: str | None = None
+    native_write: bool = False
 
 
 _registry: dict[str, RegisteredTool] = {}
@@ -47,6 +55,7 @@ def register_tool(
     func: ToolFunc,
     *,
     description: str | None = None,
+    native_write: bool = False,
     replace: bool = False,
 ) -> None:
     """Register a callable under a tool name.
@@ -58,7 +67,9 @@ def register_tool(
         raise ValueError(
             f"Tool '{name}' is already registered; pass replace=True to rebind it"
         )
-    _registry[name] = RegisteredTool(name=name, func=func, description=description)
+    _registry[name] = RegisteredTool(
+        name=name, func=func, description=description, native_write=native_write
+    )
 
 
 def unregister_tool(name: str) -> None:
@@ -72,6 +83,11 @@ def unregister_tool(name: str) -> None:
 def get_tool(name: str) -> RegisteredTool | None:
     """Return the registry entry for a name, or None if unregistered."""
     return _registry.get(name)
+
+
+def native_write_tool_names() -> frozenset[str]:
+    """Every registered tool that must stay native in code mode."""
+    return frozenset(t.name for t in _registry.values() if t.native_write)
 
 
 def registered_tool_names() -> list[str]:
@@ -90,9 +106,7 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
     for name in names:
         entry = _registry.get(name)
         if entry is None:
-            logger.warning(
-                "Tool has no registered callable; skipping", tool_name=name
-            )
+            logger.warning("Tool has no registered callable; skipping", tool_name=name)
             continue
         resolved.append(entry.func)
     return resolved

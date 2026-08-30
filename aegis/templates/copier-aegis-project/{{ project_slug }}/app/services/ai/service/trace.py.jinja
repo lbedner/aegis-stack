@@ -79,9 +79,49 @@ def record_tool_result(
     content = event.part.content
     text = content if isinstance(content, str) else json.dumps(content, default=str)
     entry["result"] = text[:_TRACE_RESULT_CAP]
+    marker = _component_marker(name, content, text)
+    if marker is not None:
+        entry["component"] = marker
     nested = nested_tool_calls(event)
     if nested:
         entry["nested"] = [{"tool": n, "args": a} for n, a in nested]
+
+
+def _component_marker(name: str, content: Any, text: str) -> dict[str, Any] | None:
+    """A compact, parse-safe payload for results the UI must RENDER.
+
+    The result field above is clipped for display; a large proposal
+    batch truncates to invalid JSON, and a card built by parsing it
+    silently vanished. The card needs only identity - the queue is
+    fetched for the rows - so identity rides here, under any cap.
+    """
+    if name not in ("propose", "propose_many"):
+        return None
+    data: Any = content
+    if isinstance(content, str):
+        try:
+            data = json.loads(text if len(text) < _TRACE_RESULT_CAP else content)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(data, dict) or data.get("error"):
+        return None
+    if data.get("batch_id"):
+        return {
+            "kind": "pending_change_batch",
+            "batch_id": data["batch_id"],
+            "change_type": data.get("change_type"),
+            "title": data.get("title"),
+            "count": data.get("count"),
+        }
+    if data.get("pending_change_id"):
+        return {
+            "kind": "pending_change",
+            "pending_change_id": data["pending_change_id"],
+            "change_type": data.get("change_type"),
+            "title": data.get("title"),
+            "status": data.get("status", "pending"),
+        }
+    return None
 
 
 def nested_tool_calls(event: FunctionToolResultEvent) -> list[tuple[str, str]]:

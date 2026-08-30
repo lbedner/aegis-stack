@@ -45,26 +45,45 @@ MEMORY_CATEGORIES = (
 MEMORY_WRITE_TOOL_NAMES: tuple[str, ...] = ("save_memory", "replace_memory")
 
 current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
+# Attribution for writes made mid-turn (queue proposals): which agent
+# asked, in which conversation. Set by the same runtimes that bind the
+# user - a write with no author cannot be audited.
+current_agent_slug: ContextVar[str | None] = ContextVar(
+    "current_agent_slug", default=None
+)
+current_conversation_id: ContextVar[str | None] = ContextVar(
+    "current_conversation_id", default=None
+)
 
 # The user a single-tenant install writes memory for. Chat turns without an
 # authenticated user (the dashboard's own surfaces) resolve to this, so the
 # facts the assistant saves and the facts the dashboard lists are one store.
 DEFAULT_MEMORY_USER_ID = "0"
 
-@contextmanager
-def memory_user(user_id: str) -> Iterator[None]:
-    """Bind the turn's user so ``save_memory`` knows who it is saving for.
 
-    Every chat runtime wraps its model call in this. Without it the tool
-    has no identity, declines the write, and returns a plain string the
-    model reads as success - the user is told a fact was stored while
-    nothing reached the database.
+@contextmanager
+def memory_user(
+    user_id: str,
+    *,
+    agent_slug: str | None = None,
+    conversation_id: str | None = None,
+) -> Iterator[None]:
+    """Bind the turn's identity: whose turn, which agent, which chat.
+
+    Every chat runtime wraps its model call in this. Without it a
+    memory write has no owner (the tool declines and the model reads
+    the refusal as success), and a queue proposal has no author for
+    the audit trail.
     """
     token = current_user_id.set(user_id)
+    agent_token = current_agent_slug.set(agent_slug)
+    conversation_token = current_conversation_id.set(conversation_id)
     try:
         yield
     finally:
         current_user_id.reset(token)
+        current_agent_slug.reset(agent_token)
+        current_conversation_id.reset(conversation_token)
 
 
 SAVE_MEMORY_GUIDANCE = (
@@ -302,11 +321,13 @@ register_tool(
     "save_memory",
     save_memory,
     description="Persist one durable fact about the current user",
+    native_write=True,
     replace=True,
 )
 register_tool(
     "replace_memory",
     replace_memory,
     description="Replace all saved facts about the current user",
+    native_write=True,
     replace=True,
 )

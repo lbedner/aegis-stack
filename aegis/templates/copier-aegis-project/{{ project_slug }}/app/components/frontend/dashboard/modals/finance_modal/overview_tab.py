@@ -64,6 +64,9 @@ from app.components.frontend.dashboard.modals.finance_modal.formatting import (
     _month_label,
     _usd,
 )
+from app.components.frontend.dashboard.modals.finance_modal.pending_changes import (
+    PendingChangesSection,
+)
 from app.components.frontend.dashboard.modals.finance_modal.transactions_view import (
     _transaction_expanded_content,
 )
@@ -139,6 +142,7 @@ class OverviewTab(FinancePanel):
         # Header matches the Projected tab: title + subtitle on the left,
         # the headline figures bare against the right edge. Cards below
         # would cost the chart a card's height and box it twice.
+        self._pending_changes = PendingChangesSection(page)
         self._stats = ft.Row(
             [],
             spacing=Theme.Spacing.LG,
@@ -146,6 +150,7 @@ class OverviewTab(FinancePanel):
         )
         self.content = ft.Column(
             [
+                self._pending_changes,
                 ft.Row(
                     [
                         ft.Column(
@@ -276,6 +281,7 @@ class OverviewTab(FinancePanel):
         self.page.open(dialog)
 
     async def _load(self) -> None:
+        await self._pending_changes.refresh()
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client

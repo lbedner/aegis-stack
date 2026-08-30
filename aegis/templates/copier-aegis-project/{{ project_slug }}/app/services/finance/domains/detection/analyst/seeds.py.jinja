@@ -1,30 +1,43 @@
-{% if include_ai and ai_backend != "memory" %}"""The database handoff: agent + memory-module seed rows and their loader.
-"""
+{% if include_ai and ai_backend != "memory" %}"""The database handoff: agent + memory-module seed rows and their loader."""
 
 from typing import Any
+
 from sqlmodel import (
     Session,
     select,
 )
-from app.core.log import logger
 
-# Registers the finance host tools (ledger/accounts/quote) by import, so a
-# bare seeding process gets their ``tool`` rows and the grants below
-# resolve. Same reason the ai fixtures import their built-ins.
-import app.services.finance.ai_tools  # noqa: F401
+from app.core.log import logger
 from app.services.ai.models.agents import (
     Agent,
     AgentTool,
     MemoryModule,
     Tool,
 )
-from app.services.finance.domains.detection.analyst.prompts import ANALYST_MAX_TOKENS, ANALYST_SYSTEM_PROMPT, ANALYST_TEMPERATURE, DEEP_DIVE_MAX_TOKENS, DEEP_DIVE_SYSTEM_PROMPT, DEEP_DIVE_TEMPERATURE, FINANCE_CHAT_MAX_TOKENS, FINANCE_CHAT_SYSTEM_PROMPT, FINANCE_CHAT_TEMPERATURE
-from app.services.finance.domains.detection.analyst.shared import ANALYST_AGENT_SLUG, DEEP_DIVE_AGENT_SLUG, FINANCE_CHAT_AGENT_SLUG, SNAPSHOT_MODULE_SLUG
 
+# Registers the finance host tools (ledger/accounts/quote) by import, so a
+# bare seeding process gets their ``tool`` rows and the grants below
+# resolve. Same reason the ai fixtures import their built-ins.
+import app.services.finance.ai_tools  # noqa: F401
+from app.services.finance.domains.detection.analyst.prompts import (
+    ANALYST_MAX_TOKENS,
+    ANALYST_SYSTEM_PROMPT,
+    ANALYST_TEMPERATURE,
+    DEEP_DIVE_MAX_TOKENS,
+    DEEP_DIVE_SYSTEM_PROMPT,
+    DEEP_DIVE_TEMPERATURE,
+    FINANCE_CHAT_MAX_TOKENS,
+    FINANCE_CHAT_SYSTEM_PROMPT,
+    FINANCE_CHAT_TEMPERATURE,
+)
+from app.services.finance.domains.detection.analyst.shared import (
+    ANALYST_AGENT_SLUG,
+    DEEP_DIVE_AGENT_SLUG,
+    FINANCE_CHAT_AGENT_SLUG,
+    SNAPSHOT_MODULE_SLUG,
+)
 
 SNAPSHOT_TOKEN_ESTIMATE = 1_200
-
-
 
 
 def snapshot_module_definition() -> dict[str, Any]:
@@ -48,8 +61,6 @@ def snapshot_module_definition() -> dict[str, Any]:
     }
 
 
-
-
 def analyst_agent_definition() -> dict[str, Any]:
     """The seed row for the finance analyst agent.
 
@@ -69,8 +80,6 @@ def analyst_agent_definition() -> dict[str, Any]:
         "knowledge_base_ids": [],
         "is_active": True,
     }
-
-
 
 
 def deep_dive_agent_definition() -> dict[str, Any]:
@@ -95,8 +104,6 @@ def deep_dive_agent_definition() -> dict[str, Any]:
     }
 
 
-
-
 # The chat agent's data surface: the finance host tools registered by
 # ``app.services.finance.ai_tools``. Attachment is by name against the
 # tool rows the fixture sync seeds; a missing row is skipped, never an
@@ -105,10 +112,26 @@ FINANCE_CHAT_TOOL_NAMES = (
     "ledger",
     "accounts",
     "quote",
-    # The one write: durable facts the user states about their money
-    # (a property value, a bill no connection reports) outlive the
-    # conversation. Not a ledger write - that rides the approval queue.
+    # The ids a proposal's payload takes - names alone cannot propose.
+    "categories",
+    # The bill surface: live streams, and the ranked shortlist of
+    # unclaimed payments the app's own match picker uses - matches are
+    # proposed FROM the shortlist, never from lookalike guessing.
+    "bills",
+    "bill_candidates",
+    # The tag directory: the label axis a transaction.tag payload
+    # names; listed so spellings are reused, not coined per turn.
+    "tags",
+    # The one memory write: durable facts the user states about their
+    # money (a property value, a bill no connection reports) outlive
+    # the conversation.
     "save_memory",
+    # The one LEDGER write, and it does not write: it files a pending
+    # change the user approves in the app (FW-05). Registered
+    # native_write, so it surfaces as its own visible call.
+    "propose",
+    # Same contract, many rows, one approval card with per-row veto.
+    "propose_many",
 )
 
 
@@ -142,9 +165,12 @@ def _attach_chat_tools(session: Session) -> int:
     ).first()
     if agent is None or agent.id is None:
         return 0
-    linked = {link.tool_id for link in session.exec(
-        select(AgentTool).where(AgentTool.agent_id == agent.id)
-    ).all()}
+    linked = {
+        link.tool_id
+        for link in session.exec(
+            select(AgentTool).where(AgentTool.agent_id == agent.id)
+        ).all()
+    }
     attached = 0
     for name in FINANCE_CHAT_TOOL_NAMES:
         tool = session.exec(select(Tool).where(Tool.name == name)).first()

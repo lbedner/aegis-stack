@@ -53,6 +53,10 @@ def _tools_use_test_session(
         yield session
 
     monkeypatch.setattr(ai_tools, "get_async_session", test_session)
+    # The write tools live in their own module with their own import.
+    from app.services.finance import ai_write_tools
+
+    monkeypatch.setattr(ai_write_tools, "get_async_session", test_session)
 
 
 def test_finance_tools_register_on_import() -> None:
@@ -455,4 +459,296 @@ async def test_an_unlinked_property_shows_no_lending_figures(
     assert "equity_cents" not in entry["property"]
     assert "ltv_bps" not in entry["property"]
     assert "liens" not in entry["property"]
+
+
+@pytest.mark.asyncio
+async def test_propose_is_the_only_write_and_moves_nothing(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """FW-05: the sandbox's one write tool records a pending change with
+    the turn's attribution and touches nothing in the ledger."""
+    from sqlmodel import select
+
+    from app.services.ai.domains.chat.user_memory import memory_user
+    from app.services.finance.models import FinancePendingChange
+
+    account = await seed_account(svc)
+    from app.services.finance.models import FinanceCategory
+
+    cat = FinanceCategory(
+        owner_user_id=1,
+        name="Food & Dining:Groceries",
+        slug="pc-groceries",
+        classification="expense",
+    )
+    session.add(cat)
+    await session.flush()
+    txn = await svc.create_transaction(
+        account_id=account.id,
+        amount=-897,
+        txn_date=date(2026, 6, 10),
+        owner_user_id=1,
+        name="Shelly's Deli",
+    )
+    await session.commit()
+
+    with memory_user("1", agent_slug="finance-assistant", conversation_id="conv-9"):
+        result = await ai_tools.propose(
+            "transaction.categorize",
+            {"transaction_id": txn.id, "category_id": cat.id},
+        )
+
+    assert result["status"] == "pending"
+    assert result["change_type"] == "transaction.categorize"
+    row = (
+        await session.exec(
+            select(FinancePendingChange).where(
+                FinancePendingChange.id == result["pending_change_id"]
+            )
+        )
+    ).one()
+    assert row.proposed_by_agent == "finance-assistant"
+    assert row.conversation_id == "conv-9"
+    await session.refresh(txn)
+    assert txn.category_id is None  # proposing moved nothing
+
+
+@pytest.mark.asyncio
+async def test_propose_registers_as_a_native_write_tool() -> None:
+    """Code mode must dispatch propose as a visible native call - a
+    write from inside the sandbox is invisible in the tool trail."""
+    from app.services.ai.domains.chat.tools import native_write_tool_names
+
+    assert "propose" in native_write_tool_names()
+
+
+@pytest.mark.asyncio
+async def test_transaction_detail_carries_the_ids_a_proposal_needs(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """A model cannot propose transaction.categorize without the
+    transaction's id and the current category_id - names alone made the
+    write tool ungrantable in practice."""
+    account = await seed_account(svc)
+    txn = await svc.create_transaction(
+        account_id=account.id,
+        amount=-1_296,
+        txn_date=date(2026, 8, 21),
+        owner_user_id=1,
+        name="Target",
+    )
+    await session.commit()
+
+    result = await ai_tools.ledger(months=3, detail="transactions")
+
+    row = next(r for r in result["transactions"] if r["payee"] == "Target")
+    assert row["id"] == txn.id
+    assert row["category_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_categories_lists_the_assignable_targets(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """The other half of a categorize payload: the target category's id."""
+    from app.services.finance.models import FinanceCategory
+
+    session.add(
+        FinanceCategory(
+            owner_user_id=1,
+            name="Food & Dining:Groceries",
+            slug="cat-tool-groceries",
+            classification="expense",
+        )
+    )
+    await session.commit()
+
+    result = await ai_tools.categories()
+
+    match = next(
+        c for c in result["categories"] if c["name"] == "Food & Dining:Groceries"
+    )
+    assert isinstance(match["id"], int)
+    assert match["classification"] == "expense"
+
+
+@pytest.mark.asyncio
+async def test_ledger_rows_say_uncategorized_outright(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """ "Uncategorized" in this ledger is usually a REAL category (the
+    import catch-all), not a NULL - a model filtering category is None
+    burned four sandbox runs discovering that. The row states it."""
+    from app.services.finance.models import FinanceCategory
+
+    account = await seed_account(svc)
+    catchall = FinanceCategory(
+        owner_user_id=1,
+        name="Uncategorized",
+        slug="ai-tools-uncat",
+        classification="expense",
+    )
+    groceries = FinanceCategory(
+        owner_user_id=1,
+        name="Food & Dining:Groceries",
+        slug="ai-tools-groc",
+        classification="expense",
+    )
+    session.add(catchall)
+    session.add(groceries)
+    await session.flush()
+    await svc.create_transaction(
+        account_id=account.id,
+        amount=-100,
+        txn_date=date(2026, 8, 1),
+        owner_user_id=1,
+        name="Bare",
+    )
+    bucketed = await svc.create_transaction(
+        account_id=account.id,
+        amount=-200,
+        txn_date=date(2026, 8, 2),
+        owner_user_id=1,
+        name="Bucketed",
+    )
+    await svc.categorize_transaction(bucketed.id, catchall.id, owner_user_id=1)
+    filed = await svc.create_transaction(
+        account_id=account.id,
+        amount=-300,
+        txn_date=date(2026, 8, 3),
+        owner_user_id=1,
+        name="Filed",
+    )
+    await svc.categorize_transaction(filed.id, groceries.id, owner_user_id=1)
+    await session.commit()
+
+    result = await ai_tools.ledger(months=3, detail="transactions")
+
+    by_name = {r["payee"]: r for r in result["transactions"]}
+    assert by_name["Bare"]["uncategorized"] is True
+    assert (
+        by_name["Bucketed"]["uncategorized"] is True
+    )  # the catch-all IS uncategorized
+    assert by_name["Filed"]["uncategorized"] is False
+
+
+@pytest.mark.asyncio
+async def test_bills_lists_the_recurring_surface(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """The agent cannot discuss (or match) bills it cannot see: every
+    live stream, both directions, with the ids proposals need."""
+    await seed_stream(
+        svc,
+        name="Eleanor Nursing Care",
+        expected_amount=100_000,
+        next_expected_date=date(2026, 7, 31),
+    )
+    await seed_stream(
+        svc,
+        name="Paycheck",
+        expected_amount=250_000,
+        next_expected_date=date(2026, 8, 1),
+        direction="inflow",
+        frequency="biweekly",
+    )
+    await session.commit()
+
+    result = await ai_tools.bills()
+
+    rows = {b["name"]: b for b in result["bills"]}
+    eleanor = rows["Eleanor Nursing Care"]
+    assert eleanor["direction"] == "outflow"
+    assert eleanor["frequency"] == "monthly"
+    assert eleanor["expected_amount"] == 100_000
+    assert eleanor["next_expected_date"] == "2026-07-31"
+    assert isinstance(eleanor["id"], int)
+    assert rows["Paycheck"]["direction"] == "inflow"
+
+
+@pytest.mark.asyncio
+async def test_bill_candidates_returns_the_ranked_shortlist(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """The same shortlist the Bills tab's picker shows - the agent
+    proposes matches from the real heuristic, never from its own guess
+    about what looks similar."""
+    account = await seed_account(svc)
+    stream = await seed_stream(
+        svc,
+        name="Eleanor Nursing Care",
+        expected_amount=100_000,
+        next_expected_date=date(2026, 7, 31),
+    )
+    # The tools read under the standalone convention (owner NULL) -
+    # the matching heuristic scopes candidate rows to it.
+    payment = await seed_txn(
+        svc,
+        account.id,
+        -100_000,
+        date(2026, 7, 31),
+        name="Recurring Withdrawal CK *Eleanor Nursing Ca",
+        owner_user_id=None,
+    )
+    await seed_txn(  # wrong direction: never a candidate
+        svc,
+        account.id,
+        100_000,
+        date(2026, 7, 30),
+        name="Deposit",
+        owner_user_id=None,
+    )
+    await session.commit()
+
+    result = await ai_tools.bill_candidates(stream.id)
+
+    ids = [c["id"] for c in result["candidates"]]
+    assert payment.id in ids
+    top = result["candidates"][0]
+    assert top["amount"] == -100_000
+    assert top["date"] == "2026-07-31"
+    assert result["stream_id"] == stream.id
+
+
+@pytest.mark.asyncio
+async def test_bill_tools_register_for_granting() -> None:
+    assert {"bills", "bill_candidates"} <= set(registered_tool_names())
+
+
+@pytest.mark.asyncio
+async def test_ledger_rows_carry_their_tags(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """The label axis must be visible where the agent reads - a tag it
+    cannot see is a rollup it cannot compute."""
+    from app.services.finance.domains.ledger.transactions import tag_transactions
+
+    account = await seed_account(svc)
+    txn = await seed_txn(svc, account.id, -900, date(2026, 8, 24), name="Link.com")
+    await tag_transactions(session, [txn.id], "Business", owner_user_id=None)
+    await session.commit()
+
+    result = await ai_tools.ledger(months=3, detail="transactions")
+
+    row = next(r for r in result["transactions"] if r["id"] == txn.id)
+    assert row["tags"] == ["Business"]
+
+
+@pytest.mark.asyncio
+async def test_tags_tool_lists_the_directory_with_counts(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    from app.services.finance.domains.ledger.transactions import tag_transactions
+
+    account = await seed_account(svc)
+    a = await seed_txn(svc, account.id, -900, date(2026, 8, 24), name="Link.com")
+    b = await seed_txn(svc, account.id, -800, date(2026, 8, 23), name="X Corp")
+    await tag_transactions(session, [a.id, b.id], "Business", owner_user_id=None)
+    await session.commit()
+
+    result = await ai_tools.tags()
+
+    assert {"name": "Business", "count": 2} in [
+        {"name": t["name"], "count": t["count"]} for t in result["tags"]
+    ]
 {% endif %}

@@ -172,7 +172,9 @@ async def attach_transaction_to_stream(
     charge for the record must not re-arm July's nag.
     """
     stream = await get_recurring(db, stream_id, owner_user_id)
-    if stream is None:
+    if stream is None or stream.deleted_at is not None:
+        # A queued match proposal can outlive its bill; attaching to a
+        # deleted stream would resurrect it as a phantom claim.
         return None
     txn = await ledger_queries.transaction_by_id(
         db, transaction_id, owner_user_id=owner_user_id

@@ -78,11 +78,12 @@ from app.components.frontend.dashboard.modals.finance_modal.import_preview impor
     import_preview_body,
 )
 from app.components.frontend.dashboard.modals.finance_modal.import_summary import (
-    import_identical_body,
     import_summary_body,
+    import_up_to_date_body,
     investment_import_preview_body,
     investment_import_summary_body,
     investment_target_options,
+    nothing_to_import,
 )
 from app.components.frontend.dashboard.modals.finance_modal.no_payee_panel import (
     NoPayeePanel,
@@ -178,7 +179,8 @@ __all__ = [
     "goal_amounts_line",
     "goal_eta_caption",
     "goal_suggestion_message",
-    "import_identical_body",
+    "import_up_to_date_body",
+    "nothing_to_import",
     "import_preview_body",
     "import_summary_body",
     "investment_import_preview_body",

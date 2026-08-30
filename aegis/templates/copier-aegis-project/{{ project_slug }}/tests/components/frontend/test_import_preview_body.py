@@ -27,9 +27,9 @@ from app.components.frontend.controls import (
     Tag,
 )
 from app.components.frontend.dashboard.modals.finance_modal import (
-    import_identical_body,
     import_preview_body,
     import_summary_body,
+    import_up_to_date_body,
     investment_import_preview_body,
     investment_target_options,
 )
@@ -389,7 +389,9 @@ class TestIdenticalFile:
     IDENTICAL: dict[str, Any] = {"rows_total": 18343, "identical_batch_id": 7}
 
     def test_it_names_the_file_and_the_row_count(self) -> None:
-        rendered = " ".join(_texts(import_identical_body(self.IDENTICAL, "export.csv")))
+        rendered = " ".join(
+            _texts(import_up_to_date_body(self.IDENTICAL, "export.csv"))
+        )
         assert "export.csv" in rendered
         assert "18,343" in rendered
 
@@ -397,25 +399,29 @@ class TestIdenticalFile:
         """Nothing lands, so nothing earns a card. A row of zeroes in the
         chrome that means "this reaches your ledger" says the opposite of
         what happened."""
-        body = import_identical_body(self.IDENTICAL, "export.csv")
+        body = import_up_to_date_body(self.IDENTICAL, "export.csv")
         assert not _of_type(body, MetricCard)
         assert "0 changes" in _dots(body)
 
     def test_the_dots_are_muted(self) -> None:
         """A no-op is not a warning. Nothing here should catch the eye."""
         for _label, color in _dots(
-            import_identical_body(self.IDENTICAL, "e.csv")
+            import_up_to_date_body(self.IDENTICAL, "e.csv")
         ).items():
             assert color == Theme.Colors.TEXT_SECONDARY
 
     def test_it_says_nothing_was_written(self) -> None:
-        rendered = " ".join(_texts(import_identical_body(self.IDENTICAL, "export.csv")))
+        rendered = " ".join(
+            _texts(import_up_to_date_body(self.IDENTICAL, "export.csv"))
+        )
         assert "Nothing has been written" in rendered
 
     def test_it_explains_why_there_is_nothing_to_do(self) -> None:
         """ "0 changes" alone reads as a failed import. The reason - you
         already imported this exact file - is the whole message."""
-        rendered = " ".join(_texts(import_identical_body(self.IDENTICAL, "export.csv")))
+        rendered = " ".join(
+            _texts(import_up_to_date_body(self.IDENTICAL, "export.csv"))
+        )
         assert "already imported" in rendered.lower()
 
 
@@ -443,7 +449,7 @@ class TestTheFootnoteWraps:
     def test_every_dialog_constrains_its_footnote(self) -> None:
         for body in (
             import_preview_body(PREVIEW, "export.csv"),
-            import_identical_body(
+            import_up_to_date_body(
                 {"rows_total": 18343, "identical_batch_id": 7}, "export.csv"
             ),
         ):
@@ -457,7 +463,7 @@ class TestTheFootnoteWraps:
     def test_the_icon_sits_with_the_first_line(self) -> None:
         """Centred against a note that wraps to two lines, the icon
         floats into the gap between them."""
-        body = import_identical_body(
+        body = import_up_to_date_body(
             {"rows_total": 18343, "identical_batch_id": 7}, "export.csv"
         )
         for row in self._footnote_rows(body):
@@ -544,3 +550,49 @@ class TestInvestmentPreviewBody:
         assert isinstance(name, PrimaryText)
         assert shares.color == Theme.Colors.TEXT_SECONDARY
         assert not isinstance(value, SecondaryText)
+
+
+class TestUpToDateFile:
+    """A DIFFERENT file whose every row is already stored is the same
+    dead end as a byte-identical one: nothing to decide, so no Import
+    button may be offered. Same family, same one-button shape."""
+
+    UP_TO_DATE: dict[str, Any] = {
+        "rows_total": 207,
+        "rows_inserted": 0,
+        "rows_updated": 0,
+        "rows_error": 0,
+    }
+
+    def test_zero_changes_means_nothing_to_import(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_modal.import_summary import (
+            nothing_to_import,
+        )
+
+        assert nothing_to_import(self.UP_TO_DATE)
+        assert nothing_to_import({"identical_batch_id": 7})
+        assert not nothing_to_import({**self.UP_TO_DATE, "rows_inserted": 3})
+        assert not nothing_to_import({**self.UP_TO_DATE, "rows_updated": 1})
+        # A file with parse errors deserves the full review, not a shrug.
+        assert not nothing_to_import({**self.UP_TO_DATE, "rows_error": 2})
+
+    def test_the_body_says_up_to_date_not_identical(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_modal.import_summary import (
+            import_up_to_date_body,
+        )
+
+        body = import_up_to_date_body(self.UP_TO_DATE, "export.csv")
+        dots = _dots(body)
+        assert "up to date" in dots
+        assert "identical file" not in dots
+        assert not _of_type(body, MetricCard)
+
+    def test_the_identical_case_keeps_its_own_words(self) -> None:
+        from app.components.frontend.dashboard.modals.finance_modal.import_summary import (
+            import_up_to_date_body,
+        )
+
+        body = import_up_to_date_body(
+            {"rows_total": 5, "identical_batch_id": 7}, "export.csv"
+        )
+        assert "identical file" in _dots(body)

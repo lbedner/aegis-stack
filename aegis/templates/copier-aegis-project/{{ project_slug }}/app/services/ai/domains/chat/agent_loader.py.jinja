@@ -14,8 +14,7 @@ CRUD paths that edit agent rows must call ``invalidate_agent_cache`` so
 the next request sees the change.
 """
 
-{% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-from collections.abc import Callable, Sequence
+{% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,10 +27,10 @@ from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.chat.chat_kit import ContextProvider, ToolChatAgent
-from app.services.ai.models.agents import Agent
 from app.services.ai.domains.chat.module_context import MemoryModuleContextProvider
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.domains.chat.tools import resolve_tools
+from app.services.ai.models.agents import Agent
 from app.services.ai.usage_recording import record_usage
 {% elif ai_backend != "memory" %}
 from dataclasses import dataclass
@@ -52,7 +51,6 @@ from app.core.config import settings
 from app.core.log import logger
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 {% endif %}
-
 DEFAULT_AGENT_SLUG = "assistant"
 
 
@@ -93,7 +91,6 @@ def default_agent_config() -> AgentConfig:
     )
 {% if ai_backend != "memory" %}
 
-
 _cache: dict[str, AgentConfig] = {}
 
 
@@ -122,9 +119,7 @@ def _to_config(row: Agent) -> AgentConfig:
 
 async def _fetch_agent(session: AsyncSession, slug: str) -> Agent | None:
     stmt = (
-        select(Agent)
-        .where(Agent.slug == slug)
-        .options(selectinload(Agent.tools))  # type: ignore[arg-type]
+        select(Agent).where(Agent.slug == slug).options(selectinload(Agent.tools))  # type: ignore[arg-type]
     )
     result = await session.exec(stmt)
     return result.first()
@@ -185,8 +180,6 @@ async def resolve_agent(
     return default_agent_config()
 {% endif %}
 {% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-
-
 # Per-turn tool-call budgets. Chat stays briefing-first and snappy; code
 # mode's loop is script -> observe -> script, so its budget must cover a
 # real investigation without letting a runaway loop stack latency forever.
@@ -213,20 +206,16 @@ def agent_capabilities(config: AgentConfig) -> list[Any]:
     if config.code_mode:
         from pydantic_ai_harness import CodeMode
 
-        from app.services.ai.domains.chat.user_memory import (
-            MEMORY_WRITE_TOOL_NAMES,
-        )
+        from app.services.ai.domains.chat.tools import native_write_tool_names
 
         # Reads go in the sandbox (slicing a payload in code is the point);
-        # writes stay native so they surface as their own tool call.
+        # writes stay native so they surface as their own tool call. A
+        # tool declares its own nature at registration (native_write) -
+        # memory saves and queue proposals both ride this, and the next
+        # write tool just declares itself.
+        native = native_write_tool_names()
         capabilities.append(
-            CodeMode(
-                tools=[
-                    name
-                    for name in config.tool_names
-                    if name not in MEMORY_WRITE_TOOL_NAMES
-                ]
-            )
+            CodeMode(tools=[name for name in config.tool_names if name not in native])
         )
     if config.code_mode or config.tool_names:
         capabilities.append(_tool_output_limits(code_mode=config.code_mode))
@@ -336,4 +325,4 @@ def build_chat_agent(
         capabilities=effective_capabilities,
         name=config.slug,
     )
-{% endif %}
+{%- endif %}

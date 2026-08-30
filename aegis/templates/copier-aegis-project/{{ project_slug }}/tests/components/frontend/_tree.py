@@ -26,12 +26,20 @@ def walk(node: Any) -> Iterator[Any]:
 
 
 def texts(node: Any) -> list[str]:
-    """Every non-empty rendered string in the tree, in walk order."""
-    return [
-        n.value
-        for n in walk(node)
-        if isinstance(getattr(n, "value", None), str) and n.value
-    ]
+    """Every non-empty rendered string in the tree, in walk order.
+
+    Includes ``TextSpan`` text: a value split into styled spans still
+    reads as one rendered line."""
+    out: list[str] = []
+    for n in walk(node):
+        value = getattr(n, "value", None)
+        if isinstance(value, str) and value:
+            out.append(value)
+        for span in getattr(n, "spans", None) or []:
+            text = getattr(span, "text", None)
+            if isinstance(text, str) and text:
+                out.append(text)
+    return out
 
 
 def rendered(node: Any) -> str:

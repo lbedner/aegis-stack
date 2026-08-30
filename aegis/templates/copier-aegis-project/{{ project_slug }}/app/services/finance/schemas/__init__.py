@@ -85,6 +85,14 @@ from app.services.finance.schemas.categorization import (
     TagRemoveResult,
     TagResponse,
 )
+from app.services.finance.schemas.changes import (
+    BatchResolveRequest,
+    BatchResolveResponse,
+    ChangeDisplayRow,
+    ChangeProposal,
+    PendingChangeListResponse,
+    PendingChangeResponse,
+)
 from app.services.finance.schemas.goals import (
     GoalContribute,
     GoalCreate,
@@ -182,7 +190,13 @@ __all__ = [
     "BudgetSummaryResponse",
     "BudgetTrimPlan",
     "BudgetTrimResponse",
+    "BatchResolveRequest",
+    "BatchResolveResponse",
     "CashflowMonth",
+    "PendingChangeResponse",
+    "PendingChangeListResponse",
+    "ChangeProposal",
+    "ChangeDisplayRow",
     "CashflowResponse",
     "CategoryCreate",
     "CategoryListResponse",

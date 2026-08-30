@@ -183,9 +183,18 @@ async def _tag_execute(
 async def _tag_describe(
     db: AsyncSession, payload: TagPayload, owner_user_id: int | None
 ) -> list[dict[str, str]]:
+    from app.services.finance.utils import normalize_payee
+
     _txn, subject = await _txn_subject(db, payload.transaction_id, owner_user_id)
     before = await _tag_names(db, payload.transaction_id)
-    after = sorted(set(before) | {payload.tag.strip()})
+    # Predict with the executor's own rule: attach dedupes by normalized
+    # name, so "business" against an existing "Business" changes nothing
+    # - the card must not promise a duplicate that will never exist.
+    wanted = normalize_payee(payload.tag)
+    if any(normalize_payee(name) == wanted for name in before):
+        after = before
+    else:
+        after = sorted([*before, payload.tag.strip()])
     return _tag_rows(subject, before, after)
 
 
@@ -214,10 +223,13 @@ async def _untag_execute(
 async def _untag_describe(
     db: AsyncSession, payload: TagPayload, owner_user_id: int | None
 ) -> list[dict[str, str]]:
+    from app.services.finance.utils import normalize_payee
+
     _txn, subject = await _txn_subject(db, payload.transaction_id, owner_user_id)
     before = await _tag_names(db, payload.transaction_id)
-    wanted = payload.tag.strip().casefold()
-    after = [n for n in before if n.casefold() != wanted]
+    # Same normalization the executor resolves the tag with.
+    wanted = normalize_payee(payload.tag)
+    after = [n for n in before if normalize_payee(n) != wanted]
     return _tag_rows(subject, before, after)
 
 

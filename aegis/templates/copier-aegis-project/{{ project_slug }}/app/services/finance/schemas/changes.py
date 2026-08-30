@@ -55,8 +55,10 @@ class PendingChangeResponse(BaseModel):
         title: str,
         display: list[dict[str, str]],
     ) -> PendingChangeResponse:
+        if row.id is None:
+            raise ValueError("pending change row has no id - flush before responding")
         return cls(
-            id=row.id or 0,
+            id=row.id,
             change_type=row.change_type,
             title=title,
             status=row.status,

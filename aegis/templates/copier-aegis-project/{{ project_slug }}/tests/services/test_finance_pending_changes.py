@@ -645,3 +645,50 @@ class TestTagExecutors:
         await async_db_session.refresh(row)
         assert row.status == "pending"
         assert row.result.get("error")
+
+    @pytest.mark.asyncio
+    async def test_the_card_never_shows_a_duplicate_it_will_not_create(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """Execute dedupes by normalized name ("business" attaches the
+        existing "Business" tag); the card must predict with the same
+        rule, not show "Business, business"."""
+        from app.services.finance.domains.ledger.transactions import (
+            tag_transactions,
+        )
+
+        txn = await self._fixture(svc, async_db_session)
+        await tag_transactions(async_db_session, [txn.id], "Business", owner_user_id=1)
+
+        row = await svc.propose_change(
+            "transaction.tag",
+            {"transaction_id": txn.id, "tag": "business"},
+            owner_user_id=1,
+        )
+        display = {
+            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+        }
+
+        assert display["Tags"] == "Business \u2192 Business"
+
+    @pytest.mark.asyncio
+    async def test_untag_describe_matches_by_normalized_name_too(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.domains.ledger.transactions import (
+            tag_transactions,
+        )
+
+        txn = await self._fixture(svc, async_db_session)
+        await tag_transactions(async_db_session, [txn.id], "Business", owner_user_id=1)
+
+        row = await svc.propose_change(
+            "transaction.untag",
+            {"transaction_id": txn.id, "tag": "BUSINESS!"},
+            owner_user_id=1,
+        )
+        display = {
+            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+        }
+
+        assert display["Tags"] == "Business \u2192 none"

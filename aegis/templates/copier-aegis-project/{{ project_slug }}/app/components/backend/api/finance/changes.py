@@ -7,6 +7,7 @@ pending with its error in the payload the card renders.
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.core.log import logger
 from app.services.finance.deps import (
     get_finance_service,
     get_owner_user_id,
@@ -97,6 +98,16 @@ async def approve_change(
         await service.db.commit()  # a recorded execution error is audit
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from None
+    except Exception:
+        # Same audit rule for a NON-domain crash - the row's recorded
+        # error must survive, or the card shows a pending change with
+        # no explanation - but internals never reach the client.
+        await service.db.commit()
+        logger.exception(f"Executing pending change {change_id} failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The change could not be executed.",
         ) from None
     response = await _to_response(service, row)
     await service.db.commit()

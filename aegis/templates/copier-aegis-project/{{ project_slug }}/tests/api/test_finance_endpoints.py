@@ -3369,3 +3369,54 @@ async def test_batch_approve_with_a_veto(
     await async_db_session.refresh(txns[1])
     assert txns[0].category_id == category.id
     assert txns[1].category_id is None
+
+
+@pytest.mark.asyncio
+async def test_an_executor_crash_keeps_the_recorded_error(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """A non-domain executor failure (not ValueError) must still land the
+    row's recorded error - losing it to a rollback erases exactly the
+    audit detail the card shows - and must not leak internals."""
+    from pydantic import BaseModel, ConfigDict
+
+    from app.services.finance.domains.writes import registry
+
+    class _BoomPayload(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        anything: int
+
+    async def _boom(db, payload, owner_user_id):
+        raise RuntimeError("secret internal detail")
+
+    async def _describe(db, payload, owner_user_id):
+        return [{"label": "Anything", "value": str(payload.anything)}]
+
+    registry.register(
+        registry.ChangeExecutor(
+            change_type="test.boom",
+            title="Boom",
+            payload_model=_BoomPayload,
+            execute=_boom,
+            describe=_describe,
+        )
+    )
+    try:
+        change = authenticated_client.post(
+            "/api/v1/finance/changes",
+            json={"change_type": "test.boom", "payload": {"anything": 1}},
+        ).json()
+
+        crashed = authenticated_client.post(
+            f"/api/v1/finance/changes/{change['id']}/approve"
+        )
+
+        assert crashed.status_code == 500
+        assert "secret internal detail" not in crashed.text
+        row = authenticated_client.get(f"/api/v1/finance/changes/{change['id']}").json()
+        assert row["status"] == "pending"
+        assert "secret internal detail" in (row["error"] or "")
+    finally:
+        registry._EXECUTORS.pop("test.boom", None)

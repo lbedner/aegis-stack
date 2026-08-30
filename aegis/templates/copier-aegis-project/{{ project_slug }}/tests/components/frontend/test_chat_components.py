@@ -64,13 +64,14 @@ class TestPendingChangeCard:
         from app.components.frontend.controls.chat.components import (
             render_component,
         )
+        from tests.components.frontend._tree import texts
 
         resolved = {**_CHANGE, "status": "approved"}
         card = render_component("pending_change", resolved, on_action=_noop_action)
-        text = rendered(card)
-        assert "Approved" in text
-        assert "Approve" != text  # chip, not button: no actionable copy
-        assert "Reject" not in text
+        tokens = texts(card)
+        assert "Approved" in tokens  # the status chip
+        assert "Approve" not in tokens  # the button label, gone
+        assert "Reject" not in tokens
 
     def test_an_execution_error_is_shown_on_the_card(self) -> None:
         from app.components.frontend.controls.chat.components import (
@@ -461,7 +462,6 @@ class TestMarkerTraceExtraction:
         cards = components_from_trace(trace, on_action=_noop_action)
         assert len(cards) == 1
         assert cards[0]._change_id == 7
-
 
     def test_a_pre_marker_truncated_result_still_yields_the_card(self) -> None:
         """Traces recorded before the marker existed clipped big batch

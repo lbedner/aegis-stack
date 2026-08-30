@@ -3221,3 +3221,202 @@ async def test_a_lien_on_a_non_property_is_refused(
     )
     assert refused.status_code == 400
     assert "not a property" in refused.json()["detail"]
+
+
+async def _seed_change_fixture(service, owner_user_id):
+    account = await service.create_manual_account(
+        owner_user_id=owner_user_id,
+        name="Checking",
+        account_type="checking",
+        classification="asset",
+    )
+    category = await service.get_or_create_category_from_hint(
+        "Food & Dining:Eating Out"
+    )
+    txn = await service.create_transaction(
+        owner_user_id=owner_user_id,
+        account_id=account.id,
+        amount=-897,
+        txn_date=date(2026, 6, 10),
+        name="Shelly's Deli",
+    )
+    return txn, category
+
+
+@pytest.mark.asyncio
+async def test_pending_change_approve_round_trip(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """FW-05 acceptance: a proposal lists as pending with its
+    human-readable display, approval executes the mutation, and the
+    resolved state reads back."""
+    txn, category = await _seed_change_fixture(
+        FinanceService(async_db_session), acting_owner_user_id
+    )
+    await async_db_session.commit()
+
+    proposed = authenticated_client.post(
+        "/api/v1/finance/changes",
+        json={
+            "change_type": "transaction.categorize",
+            "payload": {"transaction_id": txn.id, "category_id": category.id},
+        },
+    )
+    assert proposed.status_code == 200, proposed.text
+    change = proposed.json()
+    assert change["status"] == "pending"
+    assert change["title"] == "Categorize a transaction"
+    assert any("Shelly" in row["value"] for row in change["display"])
+
+    listed = authenticated_client.get("/api/v1/finance/changes").json()
+    assert [c["id"] for c in listed["items"]] == [change["id"]]
+
+    approved = authenticated_client.post(
+        f"/api/v1/finance/changes/{change['id']}/approve"
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    await async_db_session.refresh(txn)
+    assert txn.category_id == category.id
+
+
+@pytest.mark.asyncio
+async def test_pending_change_reject_keeps_the_audit_row(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    txn, category = await _seed_change_fixture(
+        FinanceService(async_db_session), acting_owner_user_id
+    )
+    await async_db_session.commit()
+
+    change = authenticated_client.post(
+        "/api/v1/finance/changes",
+        json={
+            "change_type": "transaction.categorize",
+            "payload": {"transaction_id": txn.id, "category_id": category.id},
+        },
+    ).json()
+
+    rejected = authenticated_client.post(
+        f"/api/v1/finance/changes/{change['id']}/reject"
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "rejected"
+
+    assert authenticated_client.get("/api/v1/finance/changes").json()["items"] == []
+    trail = authenticated_client.get(
+        "/api/v1/finance/changes", params={"status": "rejected"}
+    ).json()["items"]
+    assert [c["id"] for c in trail] == [change["id"]]
+
+    await async_db_session.refresh(txn)
+    assert txn.category_id is None
+    resolved_again = authenticated_client.post(
+        f"/api/v1/finance/changes/{change['id']}/approve"
+    )
+    assert resolved_again.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_batch_approve_with_a_veto(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    service = FinanceService(async_db_session)
+    account = await service.create_manual_account(
+        owner_user_id=acting_owner_user_id,
+        name="Checking",
+        account_type="checking",
+        classification="asset",
+    )
+    category = await service.get_or_create_category_from_hint("Food & Dining:Groceries")
+    txns = [
+        await service.create_transaction(
+            owner_user_id=acting_owner_user_id,
+            account_id=account.id,
+            amount=-1_000 - i,
+            txn_date=date(2026, 8, 1 + i),
+            name=f"Store {i}",
+        )
+        for i in range(3)
+    ]
+    rows = await service.propose_many_changes(
+        "transaction.categorize",
+        [{"transaction_id": t.id, "category_id": category.id} for t in txns],
+        owner_user_id=acting_owner_user_id,
+    )
+    batch_id = rows[0].batch_id
+    await async_db_session.commit()
+
+    listed = authenticated_client.get("/api/v1/finance/changes").json()["items"]
+    assert {c["batch_id"] for c in listed} == {batch_id}
+
+    resolved = authenticated_client.post(
+        f"/api/v1/finance/changes/batch/{batch_id}/approve",
+        json={"exclude_ids": [rows[1].id]},
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["approved"] == 2
+    assert resolved.json()["rejected"] == 1
+
+    await async_db_session.refresh(txns[0])
+    await async_db_session.refresh(txns[1])
+    assert txns[0].category_id == category.id
+    assert txns[1].category_id is None
+
+
+@pytest.mark.asyncio
+async def test_an_executor_crash_keeps_the_recorded_error(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """A non-domain executor failure (not ValueError) must still land the
+    row's recorded error - losing it to a rollback erases exactly the
+    audit detail the card shows - and must not leak internals."""
+    from pydantic import BaseModel, ConfigDict
+
+    from app.services.finance.domains.writes import registry
+
+    class _BoomPayload(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        anything: int
+
+    async def _boom(db, payload, owner_user_id):
+        raise RuntimeError("secret internal detail")
+
+    async def _describe(db, payload, owner_user_id):
+        return [{"label": "Anything", "value": str(payload.anything)}]
+
+    registry.register(
+        registry.ChangeExecutor(
+            change_type="test.boom",
+            title="Boom",
+            payload_model=_BoomPayload,
+            execute=_boom,
+            describe=_describe,
+        )
+    )
+    try:
+        change = authenticated_client.post(
+            "/api/v1/finance/changes",
+            json={"change_type": "test.boom", "payload": {"anything": 1}},
+        ).json()
+
+        crashed = authenticated_client.post(
+            f"/api/v1/finance/changes/{change['id']}/approve"
+        )
+
+        assert crashed.status_code == 500
+        assert "secret internal detail" not in crashed.text
+        row = authenticated_client.get(f"/api/v1/finance/changes/{change['id']}").json()
+        assert row["status"] == "pending"
+        assert "secret internal detail" in (row["error"] or "")
+    finally:
+        registry._EXECUTORS.pop("test.boom", None)

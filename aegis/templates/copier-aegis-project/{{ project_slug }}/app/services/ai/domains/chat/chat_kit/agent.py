@@ -159,7 +159,11 @@ class ToolChatAgent(Generic[DepsT]):
             result: Any = None
             # Bind the turn's user so a save_memory call mid-stream knows
             # whose fact it is; the scope is the only identity a turn has.
-            with memory_user(scope.user_id):
+            with memory_user(
+                scope.user_id,
+                agent_slug=getattr(self._agent, "name", None),
+                conversation_id=getattr(scope, "conversation_id", None),
+            ):
                 async with self._agent.run_stream_events(
                     message,
                     instructions=run_instructions,

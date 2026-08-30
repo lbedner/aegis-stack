@@ -5,45 +5,41 @@ conversation, gather contexts (from the mixin chain below), run the
 model, record usage, persist. Streaming lives in ``streaming.py``.
 """
 
-import uuid
 from datetime import UTC, datetime
-
+import uuid
 {% if ai_framework == "pydantic-ai" %}
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 {% endif %}
 from app.core.log import logger
-from app.services.ai.domains.chat.titles import conversation_title
 from app.services.ai.config import AIServiceConfig
 from app.services.ai.domains.chat.agent_loader import (
     DEFAULT_AGENT_SLUG,
     resolve_agent,
 )
-from app.services.ai.models import Conversation, ConversationMessage, MessageRole
-from app.services.ai.service.base import (
-    AIServiceError,
-    ConversationError,
-{% if ai_framework == "pydantic-ai" %}
-    ProviderError,
-{% endif %}
-)
-from app.services.ai.service.prompt import PromptMixin
-{%- if ai_backend != "memory" %}
 from app.services.ai.domains.chat.module_context import render_memory_modules
+from app.services.ai.domains.chat.titles import conversation_title
 from app.services.ai.domains.chat.user_memory import (
     build_user_memory_context,
     memory_user,
 )
+from app.services.ai.models import Conversation, ConversationMessage, MessageRole
+from app.services.ai.service.base import (
+    AIServiceError,
+    ConversationError,
+{% if ai_framework == "pydantic-ai" %}    ProviderError,
+{% endif %})
+from app.services.ai.service.prompt import PromptMixin{%- if ai_backend != "memory" %}
+
 {%- endif %}
 {%- if include_finance and ai_backend != "memory" %}
+
 # Importing registers the finance host tools (ledger, accounts, quote)
 # so DB-granted names resolve in every process that serves chat - the
 # API, the CLI, and code-mode agents alike.
-import app.services.finance.ai_tools  # noqa: F401
-{%- endif %}
+import app.services.finance.ai_tools  # noqa: F401{%- endif %}
 {% if ai_rag %}
 from app.services.ai.domains.chat.rag_context import RAGContext
 {% endif %}
-
 
 class ChatMixin(PromptMixin):
     """Non-streaming chat turn plus conversation setup/teardown."""
@@ -59,8 +55,7 @@ class ChatMixin(PromptMixin):
         use_rag: bool = False,
         rag_collection: str | None = None,
         rag_top_k: int | None = None,
-{% endif %}
-    ) -> ConversationMessage:
+{% endif %}    ) -> ConversationMessage:
         """
         Send a chat message and get AI response.
 
@@ -77,7 +72,6 @@ class ChatMixin(PromptMixin):
             rag_collection: Collection to search (uses config default if None)
             rag_top_k: Number of results to retrieve (uses config default if None)
 {% endif %}
-
         Returns:
             ConversationMessage: The AI's response message
 
@@ -115,8 +109,7 @@ class ChatMixin(PromptMixin):
                     allowed_collections=agent_config.knowledge_base_ids,
                 )
 
-{% endif %}
-            # Build health context (always included, refreshed per message)
+{% endif %}            # Build health context (always included, refreshed per message)
             health_context, health_warning = await self._build_health_context()
 
             # Usage and model-catalog self-awareness belong to the
@@ -131,44 +124,42 @@ class ChatMixin(PromptMixin):
                 self._build_catalog_context() if is_default_agent else None
             )
 
-{% if ai_backend != "memory" %}
-            # Guarded per-user memory block (saved via the save_memory tool)
+{% if ai_backend != "memory" %}            # Guarded per-user memory block (saved via the save_memory tool)
             memory_context = await build_user_memory_context(user_id)
 
             # The agent row's memory modules (e.g. the finance snapshot)
             agent_modules_context = await render_memory_modules(
                 agent_config.memory_modules, user_id=user_id
             )
-
 {% endif %}
-{% if ai_rag %}
+{%- if ai_rag %}
             # Build RAG stats context (always included when RAG enabled)
             rag_stats_context = await self._build_rag_stats_context()
-
 {% endif %}
-{% if ai_framework == "pydantic-ai" %}
+{%- if ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
             agent, conversation_context = self._prepare_agent_and_context(
                 conversation,
 {% if ai_rag %}
                 rag_context=rag_context,
                 rag_stats_context=rag_stats_context,
-{% endif %}
-                health_context=health_context,
+{% endif %}                health_context=health_context,
                 health_warning=health_warning,
                 usage_context=usage_context,
                 catalog_context=catalog_context,
                 agent_config=agent_config,
-{% if ai_backend != "memory" %}
-                memory_context=memory_context,
+{% if ai_backend != "memory" %}                memory_context=memory_context,
                 agent_modules_context=agent_modules_context,
-{% endif %}
-            )
+{% endif %}            )
 
             # Get AI response. The turn's user rides a ContextVar so a
             # memory write from inside the model call knows whose it is.
             start_time = datetime.now(UTC)
-            with memory_user(user_id):
+            with memory_user(
+                user_id,
+                agent_slug=agent_slug,
+                conversation_id=conversation.id,
+            ):
                 result = await agent.run(conversation_context)
             end_time = datetime.now(UTC)
             response_time_ms = (end_time - start_time).total_seconds() * 1000
@@ -198,11 +189,9 @@ class ChatMixin(PromptMixin):
                 MessageRole.ASSISTANT, result.content, message_id=str(uuid.uuid4())
             )
 {% endif %}
-
             # Store conversation ID in message metadata for easy lookup
             ai_message.metadata["conversation_id"] = conversation.id
             ai_message.metadata["response_time_ms"] = response_time_ms
-
 {% if ai_rag %}
             # Add RAG sources to response metadata if RAG was used
             if rag_context and rag_context.results:
@@ -210,7 +199,7 @@ class ChatMixin(PromptMixin):
                 ai_message.metadata["rag_collection"] = rag_context.collection
 
 {% endif %}
-{% if ai_backend != "memory" %}
+{%- if ai_backend != "memory" %}
             # Record usage tracking, attributed to the resolved agent
             usage = self._extract_usage(result)
             self._record_usage(f"chat:{agent_config.slug}", usage, user_id)
@@ -224,12 +213,10 @@ class ChatMixin(PromptMixin):
             ai_message.metadata["input_tokens"] = usage.get("input_tokens", 0)
             ai_message.metadata["output_tokens"] = output_tokens
 {% endif %}
-
             # Finalize conversation (update metadata and save)
             self._finalize_conversation(conversation, response_time_ms)
 
             return ai_message
-
 {% if ai_framework == "pydantic-ai" %}
         except (ModelRetry, UnexpectedModelBehavior) as e:
             error_msg = f"AI provider error: {e}"

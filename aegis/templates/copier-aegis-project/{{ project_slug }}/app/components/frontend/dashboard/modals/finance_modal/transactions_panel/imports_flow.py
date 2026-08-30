@@ -25,11 +25,12 @@ from app.components.frontend.dashboard.modals.finance_modal.import_preview impor
 )
 from app.components.frontend.dashboard.modals.finance_modal.import_summary import (
     _suggested_account_name,
-    import_identical_body,
     import_summary_body,
+    import_up_to_date_body,
     investment_import_preview_body,
     investment_import_summary_body,
     investment_target_options,
+    nothing_to_import,
 )
 from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.base import (
     TransactionsPanelState,
@@ -38,12 +39,12 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
 from app.core.constants import dashboard_upload_dir
 
-
 # Import uploads parse the file and run the reconciliation plan inside
 # the request, so they legitimately outlive the client-wide 10s UI
 # budget. The commit path is exempt: it returns a job id immediately
 # and streams progress over SSE.
 _IMPORT_TIMEOUT_SECONDS = 120.0
+
 
 class ImportsFlowMixin(TransactionsPanelState):
     """The file-import flow: picker, upload, preview, run, summary dialogs."""
@@ -415,10 +416,14 @@ class ImportsFlowMixin(TransactionsPanelState):
                 dialog.open = False
             self.page.update()
 
-        if preview.get("identical_batch_id") is not None:
+        if nothing_to_import(preview):
             dialog = StyledAlertDialog(
-                title="Nothing to import",
-                body=import_identical_body(preview, original_name),
+                title=(
+                    "Nothing to import"
+                    if preview.get("identical_batch_id") is not None
+                    else "Import up to date"
+                ),
+                body=import_up_to_date_body(preview, original_name),
                 actions=[
                     PulseButton(
                         on_click_callable=_close,

@@ -69,7 +69,6 @@ from app.services.ai.service.trace import (
 class StreamingMixin(ChatMixin):
     """Streaming variant of the chat turn."""
 {% if ai_framework == "pydantic-ai" %}
-
     @staticmethod
     def _tool_notice(
         tool_name: str,
@@ -89,7 +88,6 @@ class StreamingMixin(ChatMixin):
             metadata={"event": "tool", "tool": tool_name, "args": args},
         )
 {% endif %}
-
     async def stream_chat(
         self,
         message: str,
@@ -102,8 +100,7 @@ class StreamingMixin(ChatMixin):
         use_rag: bool = False,
         rag_collection: str | None = None,
         rag_top_k: int | None = None,
-{% endif %}
-    ) -> AsyncIterator[StreamingMessage]:
+{% endif %}    ) -> AsyncIterator[StreamingMessage]:
         """
         Stream a chat message with real-time response generation.
 
@@ -121,7 +118,6 @@ class StreamingMixin(ChatMixin):
             rag_collection: Collection to search (uses config default if None)
             rag_top_k: Number of results to retrieve (uses config default if None)
 {% endif %}
-
         Yields:
             StreamingMessage: Real-time message chunks
 
@@ -163,8 +159,7 @@ class StreamingMixin(ChatMixin):
                     allowed_collections=agent_config.knowledge_base_ids,
                 )
 
-{% endif %}
-            # Build health context (always included, refreshed per message)
+{% endif %}            # Build health context (always included, refreshed per message)
             health_context, health_warning = await self._build_health_context()
 
             # Usage and model-catalog self-awareness belong to the
@@ -178,13 +173,12 @@ class StreamingMixin(ChatMixin):
             catalog_context = (
                 self._build_catalog_context() if is_default_agent else None
             )
-
 {% if ai_rag %}
             # Build RAG stats context (always included when RAG enabled)
             rag_stats_context = await self._build_rag_stats_context()
 
 {% endif %}
-{% if ai_backend != "memory" %}
+{%- if ai_backend != "memory" %}
             # Guarded per-user memory block (saved via the save_memory tool)
             memory_context = await build_user_memory_context(user_id)
 
@@ -192,26 +186,22 @@ class StreamingMixin(ChatMixin):
             agent_modules_context = await render_memory_modules(
                 agent_config.memory_modules, user_id=user_id
             )
-
 {% endif %}
-{% if ai_framework == "pydantic-ai" %}
+{%- if ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
             agent, conversation_context = self._prepare_agent_and_context(
                 conversation,
 {% if ai_rag %}
                 rag_context=rag_context,
                 rag_stats_context=rag_stats_context,
-{% endif %}
-                health_context=health_context,
+{% endif %}                health_context=health_context,
                 health_warning=health_warning,
                 usage_context=usage_context,
                 catalog_context=catalog_context,
                 agent_config=agent_config,
-{% if ai_backend != "memory" %}
-                memory_context=memory_context,
+{% if ai_backend != "memory" %}                memory_context=memory_context,
                 agent_modules_context=agent_modules_context,
-{% endif %}
-            )
+{% endif %}            )
 {% else %}
             # Prepare LLM and messages with full context
             llm, messages = self._prepare_llm_and_messages(
@@ -221,14 +211,12 @@ class StreamingMixin(ChatMixin):
                 conversation, None, None, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
 {% endif %}
             )
-{% endif %}
-
+{%- endif %}
             # Start streaming
             start_time = datetime.now(UTC)
 
             # Generate a message ID for the streaming response
             message_id = str(uuid.uuid4())
-
 {% if ai_framework == "pydantic-ai" %}
             # Event-based streaming: unlike ``run_stream`` (which treats the
             # first text output as THE answer and stops), the event stream
@@ -242,7 +230,11 @@ class StreamingMixin(ChatMixin):
             # The turn's user rides a ContextVar for the whole stream:
             # a memory write lands mid-stream, inside a tool call, and
             # has no other way to know whose fact it is.
-            with memory_user(user_id):
+            with memory_user(
+                user_id,
+                agent_slug=agent_slug,
+                conversation_id=conversation.id,
+            ):
                 async with agent.run_stream_events(conversation_context) as events:
                     async for event in events:
                         text_chunk = ""
@@ -285,7 +277,7 @@ class StreamingMixin(ChatMixin):
                                 )
                             continue
                         elif isinstance(event, AgentRunResultEvent):
-    {% if ai_backend != "memory" %}
+{%- if ai_backend != "memory" %}
                             usage_obj = (
                                 event.result.usage()
                                 if callable(getattr(event.result, "usage", None))
@@ -293,14 +285,19 @@ class StreamingMixin(ChatMixin):
                             )
                             if usage_obj:
                                 stream_usage = {
-                                    "input_tokens": getattr(usage_obj, "input_tokens", 0)
+                                    "input_tokens": getattr(
+                                        usage_obj, "input_tokens", 0
+                                    )
                                     or 0,
-                                    "output_tokens": getattr(usage_obj, "output_tokens", 0)
+                                    "output_tokens": getattr(
+                                        usage_obj, "output_tokens", 0
+                                    )
                                     or 0,
                                 }
-    {% else %}
+{%- else %}
                             pass
-    {% endif %}
+{%- endif %}
+
                         if not text_chunk:
                             continue
 
@@ -322,7 +319,7 @@ class StreamingMixin(ChatMixin):
                                 "stream_delta": stream_delta,
                             },
                         )
-    {% else %}
+{%- else %}
             # Use LangChain's astream method for streaming
             async for chunk in llm.astream(messages):
                 # Get content from chunk
@@ -378,17 +375,17 @@ class StreamingMixin(ChatMixin):
                 }
 
 {% endif %}
-{% if ai_backend != "memory" %}
-{% if ai_framework == "pydantic-ai" %}
-            # Record usage tracking (PydanticAI provides streaming usage)
-            self._record_usage(f"stream_chat:{agent_config.slug}", stream_usage, user_id)
+{%- if ai_backend != "memory" %}
+{%- if ai_framework == "pydantic-ai" %}            # Record usage tracking (PydanticAI provides streaming usage)
+            self._record_usage(
+                f"stream_chat:{agent_config.slug}", stream_usage, user_id
+            )
 {% else %}
             # LangChain streaming doesn't provide token counts
             # Record with zero tokens - actual usage tracking requires non-streaming
             self._record_usage(f"stream_chat:{agent_config.slug}", {"input_tokens": 0, "output_tokens": 0}, user_id)
 {% endif %}
-{% endif %}
-
+{%- endif %}
             # Finalize conversation (update metadata and save)
             self._finalize_conversation(
                 conversation, response_time_ms, is_streaming=True
@@ -407,21 +404,18 @@ class StreamingMixin(ChatMixin):
             if output_tokens > 0 and response_time_ms > 0:
                 gen_tps = round(output_tokens * 1000 / response_time_ms, 1)
 {% endif %}
-
             final_metadata: dict[str, Any] = {
                 "provider": current.provider,
                 "model": current.model,
                 "response_time_ms": response_time_ms,
                 "stream_complete": True,
-{% if ai_backend != "memory" %}
-                # Token usage and cost for CLI status line
+{% if ai_backend != "memory" %}                # Token usage and cost for CLI status line
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "cost": cost,
                 # TPS for performance monitoring (especially useful for Ollama)
                 "gen_tps": gen_tps,
-{% endif %}
-            }
+{% endif %}            }
 {% if ai_rag %}
             final_metadata.update(rag_metadata)
 {% endif %}
@@ -436,8 +430,7 @@ class StreamingMixin(ChatMixin):
                 metadata=final_metadata,
             )
 
-{% if ai_framework == "pydantic-ai" %}
-        except (ModelRetry, UnexpectedModelBehavior) as e:
+{% if ai_framework == "pydantic-ai" %}        except (ModelRetry, UnexpectedModelBehavior) as e:
             error_msg = f"AI provider streaming error: {e}"
             logger.error(error_msg)
             raise ProviderError(error_msg) from e

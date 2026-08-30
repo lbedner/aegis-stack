@@ -28,6 +28,7 @@ from app.services.finance.service.accounts import AccountsMixin
 from app.services.finance.service.base import FinanceServiceBase
 from app.services.finance.service.budgets import BudgetsMixin
 from app.services.finance.service.categories import CategoriesMixin
+from app.services.finance.service.changes import ChangesMixin
 from app.services.finance.service.goals import GoalsMixin
 from app.services.finance.service.imports import ImportsMixin
 from app.services.finance.service.insights import InsightsMixin
@@ -42,6 +43,7 @@ class FinanceService(
     AccountsMixin,
     TransactionsMixin,
     CategoriesMixin,
+    ChangesMixin,
     MerchantsMixin,
     NetWorthMixin,
     BudgetsMixin,

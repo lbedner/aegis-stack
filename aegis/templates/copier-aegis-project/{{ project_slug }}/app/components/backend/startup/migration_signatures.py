@@ -37,6 +37,12 @@ SERVICE_MIGRATION_SIGNATURES: dict[str, tuple[str, ...]] = {
     "finance_budget_payee": ("column", "finance.finance_budget_category", "payee_key"),
     "finance_auth_link": ("foreign_key", "finance.finance_account", "owner_user_id"),
     "finance_icon": ("table", "finance.finance_icon"),
+    "pending_changes": ("table", "finance.finance_pending_change"),
+    "pending_change_batch": (
+        "column",
+        "finance.finance_pending_change",
+        "batch_id",
+    ),
     "secured_debt": (
         "column",
         "finance.finance_liability_detail",

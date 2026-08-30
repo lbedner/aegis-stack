@@ -22,7 +22,7 @@ from app.components.frontend.controls.text import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 
-from .models import group_models, newest_first
+from .models import group_models, model_label, newest_first
 
 _GROUP_MODES = (("vendor", "Vendors"), ("family", "Families"), ("all", "All"))
 
@@ -209,3 +209,54 @@ class ModelPickerDialog(StyledAlertDialog):
                 self._on_pick, mid
             ),
         )
+
+
+class ModelChipMixin:
+    """The panel's model chip + picker verbs.
+
+    State contract with ``ChatPanel``: ``_api()``, ``_model_chip_label``,
+    ``_model_dialog``, ``page``. Split from the panel purely so each
+    module stays inside the size budget - one surface, two files.
+    """
+
+    async def _refresh_model_chip(self) -> None:
+        current = await self._api().get("/api/v1/llm/current")
+        self._model_chip_label.value = model_label(current)
+        if self.page:
+            self._model_chip_label.update()
+
+    async def _pick_model(self, model_id: str) -> None:
+        result = await self._api().post("/api/v1/llm/current", {"model_id": model_id})
+        if not result or not result.get("success"):
+            from app.components.frontend.controls.snack_bar import ErrorSnackBar
+
+            detail = (result or {}).get("message") or "Model switch failed."
+            self.page.open(ErrorSnackBar(detail))
+            return
+        if self._model_dialog is not None:
+            self._model_dialog.open = False
+        await self._refresh_model_chip()
+        self.page.update()
+
+    async def _close_model_picker(self) -> None:
+        if self._model_dialog is not None:
+            self._model_dialog.open = False
+            self.page.update()
+
+    async def _open_model_picker(self) -> None:
+        models = await self._api().get(
+            "/api/v1/llm/models", {"limit": 200, "usable": True}
+        )
+        vendors = await self._api().get("/api/v1/llm/vendors", {"usable": True})
+        current = await self._api().get("/api/v1/llm/current")
+        vendor_icons = {
+            v["name"]: v["icon_b64"] for v in (vendors or []) if v.get("icon_b64")
+        }
+        self._model_dialog = ModelPickerDialog(
+            models=models or [],
+            vendor_icons=vendor_icons,
+            active_id=str((current or {}).get("model") or ""),
+            on_pick=self._pick_model,
+            on_close=self._close_model_picker,
+        )
+        self.page.open(self._model_dialog)

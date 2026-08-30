@@ -41,6 +41,15 @@ class ChatMessageBubble(ft.Container):
             "", size=Theme.Typography.BODY_SMALL, visible=False
         )
         self._trail = ft.Column([], spacing=2, tight=True, visible=False)
+        # In-conversation components (approval cards, future previews):
+        # system-rendered from typed tool-result data, never model layout.
+        self._components = ft.Column(
+            [],
+            spacing=Theme.Spacing.SM,
+            tight=True,
+            visible=False,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        )
         self._waiting = ft.Container(
             content=busy_bar(width=160),
             padding=ft.padding.symmetric(vertical=Theme.Spacing.XS),
@@ -54,6 +63,7 @@ class ChatMessageBubble(ft.Container):
                 LabelText("You" if is_user else agent_name),
                 self._trail,
                 self._body,
+                self._components,
                 self._waiting,
                 self._footer,
             ],
@@ -74,9 +84,7 @@ class ChatMessageBubble(ft.Container):
                 alignment=ft.alignment.center_right,
                 padding=ft.padding.only(left=_ALIGN_INSET),
             )
-        return ft.Container(
-            content=self, padding=ft.padding.only(right=_ALIGN_INSET)
-        )
+        return ft.Container(content=self, padding=ft.padding.only(right=_ALIGN_INSET))
 
     # -- waiting indicator -------------------------------------------------
 
@@ -194,6 +202,13 @@ class ChatMessageBubble(ft.Container):
         self._body.value = text
         if self.page:
             self._body.update()
+
+    def set_components(self, controls: list[ft.Control]) -> None:
+        """Attach in-conversation components below the message body."""
+        self._components.controls = list(controls)
+        self._components.visible = bool(controls)
+        if self.page:
+            self._components.update()
 
     def finalize(
         self,

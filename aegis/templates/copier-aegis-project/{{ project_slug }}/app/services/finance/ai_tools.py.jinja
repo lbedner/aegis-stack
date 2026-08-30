@@ -22,6 +22,7 @@ from typing import Any
 
 from app.core.db import get_async_session
 from app.services.ai.domains.chat.tools import register_tool
+from app.services.finance.constants import UNCATEGORIZED_CATEGORY_NAMES
 from app.services.finance.domains.investments import queries as investment_queries
 from app.services.finance.domains.investments.securities import (
     list_current_holdings,
@@ -37,14 +38,17 @@ from app.services.finance.domains.ledger.properties import (
     secured_position,
 )
 from app.services.finance.domains.ledger.queries.accounts import accounts_page
-from app.services.finance.domains.ledger.valuations import preferred_valuation_row
 from app.services.finance.domains.ledger.queries.categories import (
     category_names_by_id,
 )
 from app.services.finance.domains.ledger.queries.transactions import (
     transactions_window_with_payees,
 )
-from app.services.finance.domains.ledger.transactions import monthly_cashflow
+from app.services.finance.domains.ledger.transactions import (
+    monthly_cashflow,
+    transaction_tags,
+)
+from app.services.finance.domains.ledger.valuations import preferred_valuation_row
 from app.services.finance.domains.planning.envelopes import envelope_metadata
 from app.services.finance.domains.planning.goals import goal_metadata
 from app.services.finance.domains.planning.recurring import (
@@ -120,12 +124,18 @@ async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
             page=1,
             page_size=500,
         )
+        tags_by_txn = await transaction_tags(
+            session, [t.id for t, _name in rows if t.id is not None]
+        )
     account_names = {account.id: account.name for account in account_rows}
     return {
         "total": total,
         "returned": len(rows),
         "transactions": [
             {
+                # The id is what a transaction.categorize proposal's
+                # 'transaction_id' takes - names alone cannot propose.
+                "id": txn.id,
                 "date": txn.date_.isoformat(),
                 # Curated merchant name first - what the register shows -
                 # then the provider's merchant string, then the raw
@@ -134,7 +144,18 @@ async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
                 "payee": curated_name or txn.merchant_name or txn.name,
                 "amount_cents": txn.amount,
                 "category": category_names.get(txn.category_id),
+                "category_id": txn.category_id,
+                # True for BOTH shapes of uncategorized: no category at
+                # all, or the import catch-all bucket ("Uncategorized",
+                # "Misc", ...). Filtering category is None alone misses
+                # the second shape - a model burned four runs on that.
+                "uncategorized": txn.category_id is None
+                or (category_names.get(txn.category_id) or "").lower()
+                in UNCATEGORIZED_CATEGORY_NAMES,
                 "account": account_names.get(txn.account_id),
+                # The label axis, orthogonal to category ("Business" on
+                # a Software row) - what tag rollups compute over.
+                "tags": sorted(t.name for t in tags_by_txn.get(txn.id, [])),
                 "pending": txn.pending,
             }
             for txn, curated_name in rows
@@ -293,7 +314,6 @@ async def accounts() -> dict[str, Any]:
                 "is_estimate": (
                     valuation.is_estimate if valuation is not None else None
                 ),
-
                 "purchase_price_cents": property_meta.purchase_price,
                 "purchase_date": (
                     property_meta.purchase_date.isoformat()
@@ -364,9 +384,7 @@ async def quote(ticker: str) -> dict[str, Any]:
         security = await investment_queries.security_by_ticker(session, symbol)
         if security is None or security.id is None:
             return {"found": False, "ticker": symbol}
-        price = await investment_queries.latest_price_for_security(
-            session, security.id
-        )
+        price = await investment_queries.latest_price_for_security(session, security.id)
     if price is None:
         return {"found": False, "ticker": symbol}
     # Normalize to cents in integer arithmetic regardless of the row's
@@ -388,6 +406,8 @@ async def quote(ticker: str) -> dict[str, Any]:
 
 # Built-in registration: importing this module makes the tools grantable
 # via the agent registry. replace=True keeps re-imports idempotent.
+
+
 register_tool(
     "ledger",
     ledger,
@@ -405,6 +425,18 @@ register_tool(
     quote,
     description="Latest stored closing price for a ticker",
     replace=True,
+)
+
+# The write-side tools (and the id lookup they need) live in their own
+# module; importing it here keeps "import ai_tools" the one line that
+# registers the whole finance tool surface.
+from app.services.finance.ai_write_tools import (  # noqa: E402,F401
+    bill_candidates,
+    bills,
+    categories,
+    propose,
+    propose_many,
+    tags,
 )
 {% else %}"""Finance host tools ship only with the AI service on a persistent backend."""
 {% endif %}

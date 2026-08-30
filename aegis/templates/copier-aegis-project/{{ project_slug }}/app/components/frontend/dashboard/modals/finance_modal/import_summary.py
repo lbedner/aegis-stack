@@ -57,8 +57,25 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_date
 
 
-def import_identical_body(preview: dict[str, Any], file_name: str) -> ft.Column:
-    """The body for a file that was already imported, byte for byte.
+def nothing_to_import(preview: dict[str, Any]) -> bool:
+    """True when the review has nothing to offer an Import button.
+
+    Two shapes of the same dead end: the byte-identical re-upload, and a
+    fresh export whose every row is already stored (yesterday's import,
+    or a sync, got there first). Parse errors disqualify - a file that
+    partly failed deserves the full review, not a shrug.
+    """
+    if preview.get("identical_batch_id") is not None:
+        return True
+    return (
+        preview.get("rows_inserted", 0) == 0
+        and preview.get("rows_updated", 0) == 0
+        and preview.get("rows_error", 0) == 0
+    )
+
+
+def import_up_to_date_body(preview: dict[str, Any], file_name: str) -> ft.Column:
+    """The body for a file with nothing to import, byte-identical or not.
 
     The third state of the same dialog, so it keeps the family's shape:
     the same subtitle line, the same dot vocabulary, the same closing
@@ -71,6 +88,7 @@ def import_identical_body(preview: dict[str, Any], file_name: str) -> ft.Column:
     reads as a failed import; what the reader needs is that this exact
     file already went in.
     """
+    identical = preview.get("identical_batch_id") is not None
     return ft.Column(
         [
             SecondaryText(
@@ -85,20 +103,33 @@ def import_identical_body(preview: dict[str, Any], file_name: str) -> ft.Column:
                         Theme.Colors.TEXT_SECONDARY,
                         "Every row in this file is already in your ledger.",
                     ),
-                    _preview_dot(
-                        "identical file",
-                        False,
-                        Theme.Colors.TEXT_SECONDARY,
-                        "Matched by content hash, so a rename would not fool it.",
+                    (
+                        _preview_dot(
+                            "identical file",
+                            False,
+                            Theme.Colors.TEXT_SECONDARY,
+                            "Matched by content hash, so a rename would not fool it.",
+                        )
+                        if identical
+                        else _preview_dot(
+                            "up to date",
+                            False,
+                            Theme.Colors.TEXT_SECONDARY,
+                            "Every row this file carries is already stored - an "
+                            "earlier import or sync brought them in.",
+                        )
                     ),
                 ],
                 spacing=Theme.Spacing.MD,
                 wrap=True,
             ),
-            # Short: the dots above already carry "identical" and "no
-            # changes", so this only has to say WHY, once.
+            # Short: the dots above already carry the outcome, so this
+            # only has to say WHY, once.
             _import_footnote(
                 "Nothing has been written. You already imported this exact file."
+                if identical
+                else "Nothing has been written. Your ledger already has "
+                "everything this file carries."
             ),
         ],
         spacing=Theme.Spacing.MD,

@@ -1900,6 +1900,36 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
             ],
         ),
         TableSpec(
+            name="finance_pending_change",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("change_type", "sa.String(64)", nullable=False),
+                ColumnSpec("payload", "sa.JSON()", nullable=False),
+                ColumnSpec("proposed_by_agent", "sa.String(64)", nullable=True),
+                ColumnSpec("conversation_id", "sa.String(64)", nullable=True),
+                ColumnSpec("batch_id", "sa.String(36)", nullable=True),
+                ColumnSpec(
+                    "status", "sa.String(16)", nullable=False, default="'pending'"
+                ),
+                ColumnSpec("result", "sa.JSON()", nullable=False),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("resolved_at", "sa.DateTime()", nullable=True),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_pending_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_pending_status", ["status"]),
+                IndexSpec("ix_finance_pending_change_batch_id", ["batch_id"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_pending_status",
+                    "status IN ('pending', 'approved', 'rejected', 'expired')",
+                ),
+            ],
+        ),
+        TableSpec(
             name="finance_balance_snapshot",
             columns=[
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),

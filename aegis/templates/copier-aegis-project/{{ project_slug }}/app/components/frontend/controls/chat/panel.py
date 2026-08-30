@@ -15,14 +15,16 @@ import flet as ft
 from app.components.frontend.controls.buttons import BaseIconButton
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.form_fields import input_field_kwargs
+from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.text import PrimaryText, SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_relative_time
 from app.core.log import logger
 from app.core.sse import stream_sse_post
 
+from .components import PendingChangeBatchCard, components_from_trace
 from .message import ChatMessageBubble
-from .model_picker import ModelPickerDialog
+from .model_picker import ModelChipMixin
 from .models import model_label
 from .stream import StreamAccumulator, narration_note, tool_label
 
@@ -30,7 +32,7 @@ from .stream import StreamAccumulator, narration_note, tool_label
 _RENDER_INTERVAL_SECONDS = 0.1
 
 
-class ChatPanel(ft.Container):
+class ChatPanel(ModelChipMixin, ft.Container):
     """A self-contained chat surface bound to one agent row.
 
     Args:
@@ -143,9 +145,7 @@ class ChatPanel(ft.Container):
                 ft.Stack(
                     [
                         self._body,
-                        ft.Container(
-                            content=self._jump_button, right=10, bottom=10
-                        ),
+                        ft.Container(content=self._jump_button, right=10, bottom=10),
                     ],
                     expand=True,
                 ),
@@ -155,8 +155,43 @@ class ChatPanel(ft.Container):
             spacing=Theme.Spacing.SM,
         )
         self.expand = True
+        # Every pending-change card the transcript currently shows, so a
+        # return to this tab can re-read them - a resolution made on the
+        # Overview tab must reach a card chat already rendered.
+        self._pending_cards: list[ft.Control] = []
 
     # -- lifecycle ---------------------------------------------------------
+
+    def _clear_transcript(self) -> None:
+        self._transcript.controls.clear()
+        self._pending_cards.clear()
+
+    def refresh_on_revisit(self) -> None:
+        if self.page and self._pending_cards:
+            self.page.run_task(self._refresh_pending_cards)
+
+    def _track_cards(self, cards: list[ft.Control]) -> None:
+        """Register rendered cards and immediately re-read each from the
+        queue: a card built from the trace's compact marker carries
+        identity only - the server supplies the rows."""
+        self._pending_cards.extend(cards)
+        for card in cards:
+            fetch = (
+                self._batch_fetch
+                if isinstance(card, PendingChangeBatchCard)
+                else self._change_fetch
+            )
+            if self.page:
+                self.page.run_task(card.refresh_from, fetch)
+
+    async def _refresh_pending_cards(self) -> None:
+        for card in list(self._pending_cards):
+            fetch = (
+                self._batch_fetch
+                if isinstance(card, PendingChangeBatchCard)
+                else self._change_fetch
+            )
+            await card.refresh_from(fetch)
 
     def did_mount(self) -> None:
         self.page.run_task(self._resume_latest)
@@ -186,15 +221,27 @@ class ChatPanel(ft.Container):
         if detail is None:
             return
         self.conversation_id = conversation_id
-        self._transcript.controls.clear()
+        self._clear_transcript()
         for message in detail.get("messages", []):
             role = message.get("role", "assistant")
+            trace = (message.get("metadata") or {}).get("tool_trace")
             bubble = ChatMessageBubble(
                 role=role,
                 text=message.get("content", ""),
                 agent_name=self.agent_name,
-                tool_trace=(message.get("metadata") or {}).get("tool_trace"),
+                tool_trace=trace,
             )
+            if trace:
+                cards = components_from_trace(
+                    trace,
+                    on_action=self._change_action,
+                    on_batch_action=self._batch_action,
+                    fetch_items=self._batch_fetch,
+                )
+                bubble.set_components(cards)
+                # Snapshot state is propose-time state: a resolution made
+                # on the Overview tab has to reach a reloaded chat card.
+                self._track_cards(cards)
             self._transcript.controls.append(bubble.in_row())
         self._show_transcript()
 
@@ -238,6 +285,7 @@ class ChatPanel(ft.Container):
         ]
         if not rows:
             rows = [SecondaryText("No conversations yet.")]
+
         async def _close_history() -> None:
             if self._history_dialog is not None:
                 self._history_dialog.open = False
@@ -255,58 +303,10 @@ class ChatPanel(ft.Container):
 
     async def _start_new_conversation(self) -> None:
         self.conversation_id = None
-        self._transcript.controls.clear()
+        self._clear_transcript()
         self._body.content = self._empty_state
         if self.page:
             self.update()
-
-    # -- model selection ---------------------------------------------------
-
-    async def _refresh_model_chip(self) -> None:
-        current = await self._api().get("/api/v1/llm/current")
-        self._model_chip_label.value = model_label(current)
-        if self.page:
-            self._model_chip_label.update()
-
-    async def _pick_model(self, model_id: str) -> None:
-        result = await self._api().post(
-            "/api/v1/llm/current", {"model_id": model_id}
-        )
-        if not result or not result.get("success"):
-            from app.components.frontend.controls.snack_bar import ErrorSnackBar
-
-            detail = (result or {}).get("message") or "Model switch failed."
-            self.page.open(ErrorSnackBar(detail))
-            return
-        if self._model_dialog is not None:
-            self._model_dialog.open = False
-        await self._refresh_model_chip()
-        self.page.update()
-
-    async def _close_model_picker(self) -> None:
-        if self._model_dialog is not None:
-            self._model_dialog.open = False
-            self.page.update()
-
-    async def _open_model_picker(self) -> None:
-        models = await self._api().get(
-            "/api/v1/llm/models", {"limit": 200, "usable": True}
-        )
-        vendors = await self._api().get("/api/v1/llm/vendors", {"usable": True})
-        current = await self._api().get("/api/v1/llm/current")
-        vendor_icons = {
-            v["name"]: v["icon_b64"]
-            for v in (vendors or [])
-            if v.get("icon_b64")
-        }
-        self._model_dialog = ModelPickerDialog(
-            models=models or [],
-            vendor_icons=vendor_icons,
-            active_id=str((current or {}).get("model") or ""),
-            on_pick=self._pick_model,
-            on_close=self._close_model_picker,
-        )
-        self.page.open(self._model_dialog)
 
     # -- streaming turn ----------------------------------------------------
 
@@ -388,11 +388,69 @@ class ChatPanel(ft.Container):
                 accumulator.final_meta,
                 accumulator.tool_trace,
             )
+            if accumulator.tool_trace:
+                cards = components_from_trace(
+                    accumulator.tool_trace,
+                    on_action=self._change_action,
+                    on_batch_action=self._batch_action,
+                    fetch_items=self._batch_fetch,
+                )
+                reply.set_components(cards)
+                self._track_cards(cards)
         self._scroll_to_latest()
         self._streaming = False
         self._send_button.update_state(disabled=False)
         if self.page:
             self._input.focus()
+
+    async def _batch_fetch(self, batch_id: str) -> list[dict[str, Any]] | None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        response = await api.get(f"/api/v1/finance/changes/batch/{batch_id}")
+        return response.get("items") if isinstance(response, dict) else None
+
+    async def _batch_action(
+        self, batch_id: str, action: str, exclude_ids: list[int]
+    ) -> dict[str, Any] | None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        response = await api.post(
+            f"/api/v1/finance/changes/batch/{batch_id}/{action}",
+            json={"exclude_ids": exclude_ids} if action == "approve" else None,
+        )
+        if not isinstance(response, dict):
+            ErrorSnackBar(api.last_error or "Could not resolve the batch.").launch(
+                self.page
+            )
+            return None
+        return response
+
+    async def _change_fetch(self, change_id: int) -> dict[str, Any] | None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        response = await api.get(f"/api/v1/finance/changes/{change_id}")
+        return response if isinstance(response, dict) else None
+
+    async def _change_action(
+        self, change_id: int, action: str
+    ) -> dict[str, Any] | None:
+        """Resolve one pending change and hand the card the queue's new
+        truth. The endpoint is the finance write queue's - the only
+        surface that currently proposes - and a stack without it simply
+        never renders a card that could call this."""
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        response = await api.post(f"/api/v1/finance/changes/{change_id}/{action}")
+        if not isinstance(response, dict):
+            ErrorSnackBar(api.last_error or "Could not resolve the change.").launch(
+                self.page
+            )
+            return None
+        return response
 
     # -- scroll behavior ---------------------------------------------------
 

@@ -7,13 +7,13 @@ above the page, never a column pushing the net worth chart down.
 
 import flet as ft
 
+from app.components.frontend.dashboard.modals.finance_modal.pending_changes import (
+    PendingChangesSection,
+)
+
 
 class TestCardsLayOutHorizontally:
     def test_the_card_rail_is_a_sideways_scrolling_row(self) -> None:
-        from app.components.frontend.dashboard.modals.finance_modal.pending_changes import (
-            PendingChangesSection,
-        )
-
         section = PendingChangesSection(page=None)
 
         rail = section._cards

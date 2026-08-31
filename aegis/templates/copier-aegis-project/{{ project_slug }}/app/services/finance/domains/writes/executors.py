@@ -5,12 +5,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.formatting import format_date
 from app.services.finance.domains.detection.insights.formatting import format_usd
-from app.services.finance.domains.ledger import categories, transactions
+from app.services.finance.domains.ledger import categories, splits, transactions
 from app.services.finance.domains.writes.registry import ChangeExecutor, register
+from app.services.finance.schemas import ChangeDisplayRow, SplitPart
 
 
 class CategorizePayload(BaseModel):
@@ -50,7 +52,7 @@ async def _txn_subject(
     )
     subject = (
         f"{txn.merchant_name or txn.name} "
-        f"({format_usd(abs(txn.amount))} on {txn.date_})"
+        f"({format_usd(abs(txn.amount))} on {format_date(txn.date_)})"
         if txn is not None
         else f"transaction {transaction_id} (missing)"
     )
@@ -59,7 +61,7 @@ async def _txn_subject(
 
 async def _categorize_describe(
     db: AsyncSession, payload: CategorizePayload, owner_user_id: int | None
-) -> list[dict[str, str]]:
+) -> list[ChangeDisplayRow]:
     txn, subject = await _txn_subject(db, payload.transaction_id, owner_user_id)
     wanted = [payload.category_id]
     if txn is not None and txn.category_id is not None:
@@ -75,8 +77,8 @@ async def _categorize_describe(
     )
     after = names.get(payload.category_id, f"category {payload.category_id}")
     return [
-        {"label": "Transaction", "value": subject},
-        {"label": "Category", "value": f"{before} \u2192 {after}"},
+        ChangeDisplayRow(label="Transaction", value=subject),
+        ChangeDisplayRow(label="Category", value=f"{before} \u2192 {after}"),
     ]
 
 
@@ -116,7 +118,7 @@ async def _match_execute(
 
 async def _match_describe(
     db: AsyncSession, payload: MatchPayload, owner_user_id: int | None
-) -> list[dict[str, str]]:
+) -> list[ChangeDisplayRow]:
     from app.services.finance.domains.planning.recurring import streams
 
     txn, subject = await _txn_subject(db, payload.transaction_id, owner_user_id)
@@ -131,8 +133,8 @@ async def _match_describe(
             before = holder.name
     after = stream.name if stream is not None else f"bill {payload.stream_id} (missing)"
     return [
-        {"label": "Payment", "value": subject},
-        {"label": "Bill", "value": f"{before} \u2192 {after}"},
+        ChangeDisplayRow(label="Payment", value=subject),
+        ChangeDisplayRow(label="Bill", value=f"{before} \u2192 {after}"),
     ]
 
 
@@ -155,14 +157,14 @@ async def _tag_names(db: AsyncSession, transaction_id: int) -> list[str]:
 
 def _tag_rows(
     subject: str, before: list[str], after: list[str]
-) -> list[dict[str, str]]:
+) -> list[ChangeDisplayRow]:
     return [
-        {"label": "Transaction", "value": subject},
-        {
-            "label": "Tags",
-            "value": f"{', '.join(before) or 'none'} \u2192 "
+        ChangeDisplayRow(label="Transaction", value=subject),
+        ChangeDisplayRow(
+            label="Tags",
+            value=f"{', '.join(before) or 'none'} \u2192 "
             f"{', '.join(after) or 'none'}",
-        },
+        ),
     ]
 
 
@@ -182,7 +184,7 @@ async def _tag_execute(
 
 async def _tag_describe(
     db: AsyncSession, payload: TagPayload, owner_user_id: int | None
-) -> list[dict[str, str]]:
+) -> list[ChangeDisplayRow]:
     from app.services.finance.utils import normalize_payee
 
     _txn, subject = await _txn_subject(db, payload.transaction_id, owner_user_id)
@@ -222,7 +224,7 @@ async def _untag_execute(
 
 async def _untag_describe(
     db: AsyncSession, payload: TagPayload, owner_user_id: int | None
-) -> list[dict[str, str]]:
+) -> list[ChangeDisplayRow]:
     from app.services.finance.utils import normalize_payee
 
     _txn, subject = await _txn_subject(db, payload.transaction_id, owner_user_id)
@@ -231,6 +233,86 @@ async def _untag_describe(
     wanted = normalize_payee(payload.tag)
     after = [n for n in before if normalize_payee(n) != wanted]
     return _tag_rows(subject, before, after)
+
+
+class SplitChangePayload(BaseModel):
+    """Which transaction, which lines. Parts follow the ``SplitPart``
+    contract - positive magnitudes in cents; the service signs them and
+    fills the difference as a remainder line under the parent's own
+    category, so a proposal only states what the agent knows."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: int
+    parts: list[SplitPart]
+
+    @field_validator("parts")
+    @classmethod
+    def _parts_are_positive_magnitudes(
+        cls, parts: list[SplitPart]
+    ) -> list[SplitPart]:
+        """Propose-time, not approve-time: a card that can never execute
+        must never exist, and the error loops back to the proposer."""
+        if not parts:
+            raise ValueError("a split needs at least one part")
+        if any(part.amount <= 0 for part in parts):
+            raise ValueError(
+                "part amounts are positive magnitudes in cents; the "
+                "transaction's own sign is applied automatically"
+            )
+        return parts
+
+
+async def _split_execute(
+    db: AsyncSession, payload: SplitChangePayload, owner_user_id: int | None
+) -> dict[str, Any]:
+    lines = await splits.split_transaction(
+        db, payload.transaction_id, payload.parts, owner_user_id=owner_user_id
+    )
+    return {
+        "transaction_id": payload.transaction_id,
+        "line_count": len(lines),
+        "amounts": [line.amount for line in lines],
+    }
+
+
+async def _split_describe(
+    db: AsyncSession, payload: SplitChangePayload, owner_user_id: int | None
+) -> list[ChangeDisplayRow]:
+    txn, subject = await _txn_subject(db, payload.transaction_id, owner_user_id)
+    wanted = [p.category_id for p in payload.parts if p.category_id is not None]
+    if txn is not None and txn.category_id is not None:
+        wanted.append(txn.category_id)
+    names = await categories.category_names(db, wanted)
+    # One card row PER LINE - the user reviews the itemization the way
+    # it will land: category, amount, and what the amount covers.
+    rows = [ChangeDisplayRow(label="Transaction", value=subject)]
+    for part in payload.parts:
+        value = format_usd(part.amount)
+        if part.memo:
+            value += f" · {part.memo}"
+        rows.append(
+            ChangeDisplayRow(
+                label=names.get(part.category_id, "Uncategorized"), value=value
+            )
+        )
+    # Show the remainder line the approval will actually create - the
+    # card must promise exactly what the executor does.
+    if txn is not None:
+        remainder = abs(txn.amount) - sum(p.amount for p in payload.parts)
+        if remainder > 0:
+            parent_name = (
+                names.get(txn.category_id, "Uncategorized")
+                if txn.category_id is not None
+                else "Uncategorized"
+            )
+            rows.append(
+                ChangeDisplayRow(
+                    label=parent_name,
+                    value=f"{format_usd(remainder)} · the rest",
+                )
+            )
+    return rows
 
 
 register(
@@ -267,5 +349,14 @@ register(
         payload_model=TagPayload,
         execute=_untag_execute,
         describe=_untag_describe,
+    )
+)
+register(
+    ChangeExecutor(
+        change_type="transaction.split",
+        title="Split a transaction",
+        payload_model=SplitChangePayload,
+        execute=_split_execute,
+        describe=_split_describe,
     )
 )

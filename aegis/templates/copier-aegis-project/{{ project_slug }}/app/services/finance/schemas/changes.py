@@ -53,7 +53,7 @@ class PendingChangeResponse(BaseModel):
         row: FinancePendingChange,
         *,
         title: str,
-        display: list[dict[str, str]],
+        display: list[ChangeDisplayRow],
     ) -> PendingChangeResponse:
         if row.id is None:
             raise ValueError("pending change row has no id - flush before responding")
@@ -62,7 +62,7 @@ class PendingChangeResponse(BaseModel):
             change_type=row.change_type,
             title=title,
             status=row.status,
-            display=[ChangeDisplayRow(**line) for line in display],
+            display=display,
             proposed_by_agent=row.proposed_by_agent,
             conversation_id=row.conversation_id,
             batch_id=row.batch_id,

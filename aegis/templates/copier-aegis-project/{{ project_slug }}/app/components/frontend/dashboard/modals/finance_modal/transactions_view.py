@@ -25,6 +25,7 @@ from app.components.frontend.controls import (
     SecondaryText,
     Tag,
 )
+from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.record_detail import (
     HeroSpec,
     build_field_blocks,
@@ -53,6 +54,7 @@ from app.components.frontend.dashboard.modals.finance_modal.constants import (
 )
 from app.components.frontend.dashboard.modals.finance_modal.formatting import (
     _amount_cell,
+    _category_leaf,
     _usd,
     _yn,
 )
@@ -154,6 +156,83 @@ def transaction_detail_sections(
     ]
 
 
+def split_summary_label(splits: list[dict]) -> str:
+    """The category cell's text for a split parent: the first line's leaf
+    category plus how many more - "Split · Groceries +1". The parent's own
+    category is deliberately absent; once split, it no longer reports."""
+    first = _category_leaf(splits[0].get("category") or "") or "Uncategorized"
+    more = len(splits) - 1
+    return f"Split · {first} +{more}" if more else f"Split · {first}"
+
+
+def split_tooltip(splits: list[dict]) -> str:
+    """Hover detail for a split parent's category cell: every line as
+    ``category  amount``, memo appended when present."""
+    lines = []
+    for split in splits:
+        line = f"{split.get('category') or 'Uncategorized'}  {_usd(split.get('amount', 0))}"
+        if split.get("memo"):
+            line += f" · {split['memo']}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _split_lines_block(
+    txn: dict,
+    on_edit_split: Callable[[dict], None] | None,
+    on_unsplit: Callable[[dict], None] | None,
+) -> list[ft.Control]:
+    """The row-expand's split section: the lines themselves plus the
+    edit/remove (or way-in) actions. Empty when no callbacks are given -
+    surfaces outside the register render exactly as before."""
+    if on_edit_split is None and on_unsplit is None:
+        return []
+    blocks: list[ft.Control] = []
+    splits = txn.get("splits") or []
+    for split in splits:
+        row = [
+            SecondaryText(
+                split.get("category") or "Uncategorized",
+                size=Theme.Typography.BODY_SMALL,
+            ),
+            ft.Text(
+                _usd(split.get("amount", 0)),
+                size=Theme.Typography.BODY_SMALL,
+                color=Theme.Colors.TEXT_PRIMARY,
+            ),
+        ]
+        if split.get("memo"):
+            row.append(
+                SecondaryText(str(split["memo"]), size=Theme.Typography.CAPTION)
+            )
+        blocks.append(
+            ft.Row(
+                row,
+                spacing=Theme.Spacing.SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        )
+    def _action(label: str, callback: Callable[[dict], None]) -> ft.Control:
+        async def _fire(target: dict = txn) -> None:
+            callback(target)
+
+        return PulseButton(
+            on_click_callable=_fire, text=label, variant="muted", compact=True
+        )
+
+    actions: list[ft.Control] = []
+    if txn.get("is_split"):
+        if on_edit_split is not None:
+            actions.append(_action("Edit split", on_edit_split))
+        if on_unsplit is not None:
+            actions.append(_action("Remove split", on_unsplit))
+    elif on_edit_split is not None and txn.get("id") is not None:
+        actions.append(_action("Split into categories…", on_edit_split))
+    if actions:
+        blocks.append(ft.Row(actions, spacing=Theme.Spacing.SM))
+    return blocks
+
+
 def transaction_tag_chips(
     tags: list[dict],
     *,
@@ -243,7 +322,10 @@ async def post_tag(page: ft.Page, transaction_ids: list[int], name: str) -> bool
 
 
 def _transaction_expanded_content(
-    txn: dict, on_remove_tag: Callable[[dict, dict], None] | None = None
+    txn: dict,
+    on_remove_tag: Callable[[dict, dict], None] | None = None,
+    on_edit_split: Callable[[dict], None] | None = None,
+    on_unsplit: Callable[[dict], None] | None = None,
 ) -> ft.Control:
     """A transaction's inline row-expand content: the supplementary field
     sections only, no hero - unlike a modal (which starts from nothing),
@@ -253,8 +335,12 @@ def _transaction_expanded_content(
 
     ``on_remove_tag(txn, tag)``, when given and the row wears tags, adds a
     Tags block whose chips each carry the remove ``x`` - taking a flag OFF
-    happens here, next to everything else about the row."""
-    blocks = build_field_blocks(
+    happens here, next to everything else about the row.
+
+    ``on_edit_split``/``on_unsplit`` add the split section: the row's
+    lines plus edit/remove actions (or the way in, on an unsplit row)."""
+    blocks = _split_lines_block(txn, on_edit_split, on_unsplit)
+    blocks += build_field_blocks(
         transaction_detail_sections(txn),
         collapsed_sections=_TRANSACTION_COLLAPSED_SECTIONS,
     )

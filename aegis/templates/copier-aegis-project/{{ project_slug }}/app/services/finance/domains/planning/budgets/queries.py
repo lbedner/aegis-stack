@@ -24,6 +24,7 @@ from app.services.finance.models import (
     FinanceBudget,
     FinanceBudgetCategory,
     FinanceTransaction,
+    FinanceTransactionSplit,
 )
 
 
@@ -154,10 +155,15 @@ async def outflow_tuples(
     account_ids: list[int] | None = None,
 ) -> list[tuple]:
     """(category_id, merchant_name, original_description, name, amount,
-    recurring_stream_id) for every countable outflow in the window - ONE
-    fetch a caller tallies by category / payee key / stream in a single
-    Python pass. This is the query that keeps budget_summary O(1) in the
-    number of lines and streams."""
+    recurring_stream_id) for every countable outflow in the window - one
+    fetch (plus one for split lines) a caller tallies by category / payee
+    key / stream in a single Python pass. This is the query that keeps
+    budget_summary O(1) in the number of lines and streams.
+
+    Split-aware: a split parent is swapped for its lines, each carrying
+    the parent's payee columns and stream - so category tallies see the
+    lines while payee and stream tallies still add up to the parent."""
+    filters = spend_filters(owner_user_id, start, end, account_ids)
     rows = (
         await db.exec(
             select(
@@ -167,10 +173,28 @@ async def outflow_tuples(
                 FinanceTransaction.name,
                 FinanceTransaction.amount,
                 FinanceTransaction.recurring_stream_id,
-            ).where(*spend_filters(owner_user_id, start, end, account_ids))
+            ).where(*filters, FinanceTransaction.is_split.is_(False))
         )
     ).all()
-    return list(rows)
+    split_rows = (
+        await db.exec(
+            select(
+                FinanceTransactionSplit.category_id,
+                FinanceTransaction.merchant_name,
+                FinanceTransaction.original_description,
+                FinanceTransaction.name,
+                FinanceTransactionSplit.amount,
+                FinanceTransaction.recurring_stream_id,
+            )
+            .join(
+                FinanceTransaction,
+                FinanceTransaction.id
+                == FinanceTransactionSplit.parent_transaction_id,
+            )
+            .where(*filters, FinanceTransaction.is_split.is_(True))
+        )
+    ).all()
+    return [*rows, *split_rows]
 
 
 async def sum_amount_where(db: AsyncSession, filters: list) -> int:

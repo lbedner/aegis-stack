@@ -14,6 +14,7 @@ from typing import Any
 
 {% if ai_backend != "memory" %}
 from app.components.backend.api.ai import memory as memory_routes
+from app.services.ai.domains.chat.attachments import ChatAttachment
 from app.services.ai.domains.chat.user_memory import DEFAULT_MEMORY_USER_ID
 {% endif %}
 from app.core.config import settings
@@ -91,6 +92,9 @@ class ChatRequest(BaseModel):
     user_id: str = "api-user"
     agent_slug: str | None = None
     surface: str | None = None
+    # Image parts riding this turn (screenshots, receipts) - generic
+    # across every agent and surface; see domains/chat/attachments.py.
+    attachments: list[ChatAttachment] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -174,6 +178,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             user_id=request.user_id,
             agent_slug=request.agent_slug,
             surface=request.surface,
+            attachments=request.attachments,
         )
 
         # Get updated conversation for metadata
@@ -232,6 +237,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 stream_delta=True,
                 agent_slug=request.agent_slug,
                 surface=request.surface,
+                attachments=request.attachments,
             ):
                 # Tool-use notice: no content, just which tool started, so
                 # the frontend can caption the pause in the token stream.

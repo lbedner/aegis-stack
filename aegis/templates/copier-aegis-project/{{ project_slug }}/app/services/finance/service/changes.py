@@ -6,6 +6,7 @@ from typing import Any
 
 from app.services.finance.domains import writes
 from app.services.finance.models import FinancePendingChange
+from app.services.finance.schemas import ChangeDisplayRow
 from app.services.finance.service.base import FinanceServiceBase
 
 
@@ -58,7 +59,7 @@ class ChangesMixin(FinanceServiceBase):
 
     async def describe_pending_change(
         self, row: FinancePendingChange
-    ) -> list[dict[str, str]]:
+    ) -> list[ChangeDisplayRow]:
         return await writes.describe_change(self.db, row)
 
     async def propose_many_changes(

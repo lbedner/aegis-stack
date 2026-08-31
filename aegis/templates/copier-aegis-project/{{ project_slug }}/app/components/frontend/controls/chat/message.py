@@ -1,5 +1,6 @@
 """One chat message bubble: role header, markdown body, quiet footer."""
 
+from collections.abc import Callable
 from typing import Any
 
 import flet as ft
@@ -31,10 +32,34 @@ class ChatMessageBubble(ft.Container):
         text: str = "",
         agent_name: str = "Assistant",
         tool_trace: list[dict[str, Any]] | None = None,
+        on_replay: Callable[[str], None] | None = None,
     ):
         super().__init__()
         self.role = role
         is_user = role == "user"
+
+        header: ft.Control = LabelText("You" if is_user else agent_name)
+        if is_user and on_replay is not None:
+            # Replay: send this exact text again as a new turn. Only user
+            # messages carry it - replaying an answer means nothing.
+            header = ft.Row(
+                [
+                    header,
+                    ft.IconButton(
+                        icon=ft.Icons.REPLAY,
+                        icon_size=14,
+                        icon_color=Theme.Colors.TEXT_SECONDARY,
+                        tooltip="Send this message again",
+                        style=ft.ButtonStyle(padding=0),
+                        width=22,
+                        height=22,
+                        on_click=lambda _e, t=text: on_replay(t),
+                    ),
+                ],
+                spacing=Theme.Spacing.XS,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
 
         self._body = markdown_control(text, color=Theme.Colors.TEXT_PRIMARY)
         self._footer = SecondaryText(
@@ -60,7 +85,7 @@ class ChatMessageBubble(ft.Container):
 
         self.content = ft.Column(
             [
-                LabelText("You" if is_user else agent_name),
+                header,
                 self._trail,
                 self._body,
                 self._components,

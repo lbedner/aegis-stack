@@ -4,6 +4,7 @@ from app.components.backend.api import health
 from app.components.backend.api import jobs
 from app.components.backend.api import load_test_api
 from app.components.backend.api import metrics
+from app.components.backend.api import pastebox
 from app.components.backend.api import traffic
 {%- if include_worker %}
 from app.components.backend.api import events as worker_events
@@ -62,6 +63,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(health.router, prefix="/health", tags=["health"])
     app.include_router(jobs.router, prefix="/api/v1")
     app.include_router(metrics.router, prefix="/api/v1")
+    app.include_router(pastebox.router, prefix="/api/v1")
     app.include_router(traffic.router, prefix="/api/v1")
     app.include_router(load_test_api.router, prefix="/api/v1")
     {%- if include_worker %}

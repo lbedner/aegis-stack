@@ -20,6 +20,7 @@ from app.services.ai.domains.chat.prompts import (
     DEFAULT_SYSTEM_PROMPT,
     build_system_prompt,
 )
+from app.services.ai.domains.chat.readings import format_readings
 {% if ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.llm.providers import get_agent
 {% else %}
@@ -38,7 +39,25 @@ from app.services.ai.domains.chat.rag_stats_context import RAGStatsContext
 # Conversation history carried into each model call, in characters
 # (~1.5k tokens). Newest messages first; the oldest drop when a thread
 # outgrows the budget - prefill cost is paid on EVERY call of a turn.
-HISTORY_CHAR_BUDGET = 6_000
+# The replayed-history budget scales with the ACTIVE model's context
+# window: a fixed budget sized for small local models is how a
+# long-context agent "forgets" an allocation it computed minutes ago,
+# while an unbounded one re-bills the whole transcript every turn.
+_CHARS_PER_TOKEN = 4
+_HISTORY_CONTEXT_FRACTION = 0.05
+HISTORY_CHAR_BUDGET_MIN = 6_000
+HISTORY_CHAR_BUDGET_DEFAULT = 24_000  # model not in the catalog
+HISTORY_CHAR_BUDGET_MAX = 60_000
+
+
+def history_char_budget(context_window_tokens: int | None) -> int:
+    """Chars of history one turn replays, for a given context window."""
+    if not context_window_tokens:
+        return HISTORY_CHAR_BUDGET_DEFAULT
+    chars = int(
+        context_window_tokens * _CHARS_PER_TOKEN * _HISTORY_CONTEXT_FRACTION
+    )
+    return max(HISTORY_CHAR_BUDGET_MIN, min(HISTORY_CHAR_BUDGET_MAX, chars))
 
 
 class PromptMixin(ContextsMixin):
@@ -91,6 +110,7 @@ class PromptMixin(ContextsMixin):
         agent_config: AgentConfig | None = None,
         memory_context: str | None = None,
         agent_modules_context: str | None = None,
+        history_budget: int | None = None,
     ) -> tuple[Any, str]:
         """
         Create agent for request and build conversation context.
@@ -184,11 +204,15 @@ class PromptMixin(ContextsMixin):
         )
 
         # Build conversation context for AI
-        conversation_context = self._build_conversation_context(conversation)
+        conversation_context = self._build_conversation_context(
+            conversation, history_budget=history_budget
+        )
 
         return agent, conversation_context
 
-    def _build_conversation_context(self, conversation: Conversation) -> str:
+    def _build_conversation_context(
+        self, conversation: Conversation, history_budget: int | None = None
+    ) -> str:
         """
         Build conversation context for AI from message history.
 
@@ -200,6 +224,12 @@ class PromptMixin(ContextsMixin):
         """
         if not conversation.messages:
             return ""
+
+        # Recorded readings (extractions from since-gone images) ride
+        # every turn, ahead of history - they are the durable record the
+        # ephemeral attachment left behind.
+        readings_block = format_readings(conversation.metadata)
+        prefix = f"{readings_block}\n\n" if readings_block else ""
 
         # Budget history by SIZE, newest first, rather than by message
         # count: one agent's answers can run 1k+ tokens each, so "last 10
@@ -214,7 +244,7 @@ class PromptMixin(ContextsMixin):
                 line = f"Assistant: {msg.content}"
             else:
                 continue
-            if used + len(line) > HISTORY_CHAR_BUDGET:
+            if used + len(line) > (history_budget or HISTORY_CHAR_BUDGET_DEFAULT):
                 break
             context_parts.insert(0, line)
             used += len(line) + 1
@@ -224,10 +254,14 @@ class PromptMixin(ContextsMixin):
         if latest_message and latest_message.role == MessageRole.USER:
             if context_parts:
                 # Include conversation history + current message
-                return "\n".join(context_parts) + f"\n\nUser: {latest_message.content}"
+                return (
+                    prefix
+                    + "\n".join(context_parts)
+                    + f"\n\nUser: {latest_message.content}"
+                )
             else:
                 # First message in conversation
-                return latest_message.content
+                return prefix + latest_message.content
 
         return ""
 {% else %}

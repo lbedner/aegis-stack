@@ -18,6 +18,9 @@ else:
 
 from app.components.backend.hooks import backend_hooks  # noqa: E402
 from app.components.backend.main import create_backend_app  # noqa: E402
+from app.components.backend.middleware.paste_capture import (  # noqa: E402
+    PasteCaptureMiddleware,
+)
 from app.components.frontend.main import create_frontend_app  # noqa: E402
 {%- if include_htmx %}
 from app.components.web_frontend.main import (  # noqa: E402
@@ -172,4 +175,9 @@ def create_integrated_app() -> FastAPI:
     )
     # Mount Flet at /dashboard to avoid intercepting FastAPI routes like /health
     app.mount("/dashboard", flet_app)
+    # Splice the paste-capture script into the dashboard page: pasted
+    # images post to /api/v1/pastebox, where consumer surfaces (chat's
+    # attachment bar) drain them. Flet has no clipboard-image API of its
+    # own, so this is caught in the browser.
+    app.add_middleware(PasteCaptureMiddleware)
     return app

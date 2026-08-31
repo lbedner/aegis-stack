@@ -18,7 +18,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.domains.writes.registry import executor_for
 from app.services.finance.models import FinancePendingChange
+from app.services.finance.schemas import ChangeDisplayRow
 from app.services.finance.utils import utcnow
+
+
+def _freeze(display: list[ChangeDisplayRow]) -> list[dict[str, str]]:
+    """Typed rows -> the plain dicts the JSON audit column stores."""
+    return [line.model_dump() for line in display]
 
 
 async def propose(
@@ -200,6 +206,27 @@ def _require_pending(row: FinancePendingChange | None) -> FinancePendingChange:
     return row
 
 
+async def _describe_row(
+    db: AsyncSession, row: FinancePendingChange
+) -> list[ChangeDisplayRow]:
+    """The card body for a stored row, tolerant of tightened rules.
+
+    Validation guards the DOOR (propose); a stored payload that no
+    longer validates is exactly what reject/withdraw exist to clean up,
+    so it renders as its raw payload instead of raising."""
+    executor = executor_for(row.change_type)
+    try:
+        model = executor.payload_model(**row.payload)
+    except ValidationError:
+        return [
+            ChangeDisplayRow(label="Change", value=executor.title),
+            ChangeDisplayRow(
+                label="Payload (no longer valid)", value=str(row.payload)
+            ),
+        ]
+    return await executor.describe(db, model, row.owner_user_id)
+
+
 async def approve(
     db: AsyncSession, change_id: int, *, owner_user_id: int | None = None
 ) -> FinancePendingChange:
@@ -210,7 +237,7 @@ async def approve(
     # Snapshot the display BEFORE executing: after the mutation the
     # world reflects it, and re-resolving read "Groceries -> Groceries".
     # Resolution freezes the record; only pending cards track the world.
-    display = await executor.describe(db, model, row.owner_user_id)
+    display = _freeze(await executor.describe(db, model, row.owner_user_id))
     try:
         result = await executor.execute(db, model, row.owner_user_id)
     except Exception as e:
@@ -238,10 +265,7 @@ async def reject(
     note: str | None = None,
 ) -> FinancePendingChange:
     row = _require_pending(await get_change(db, change_id, owner_user_id=owner_user_id))
-    executor = executor_for(row.change_type)
-    display = await executor.describe(
-        db, executor.payload_model(**row.payload), row.owner_user_id
-    )
+    display = _freeze(await _describe_row(db, row))
     row.status = "rejected"
     row.result = {"display": display, **({"note": note} if note else {})}
     row.resolved_at = utcnow()
@@ -251,9 +275,32 @@ async def reject(
     return row
 
 
+async def withdraw(
+    db: AsyncSession,
+    change_id: int,
+    *,
+    agent_slug: str | None,
+    owner_user_id: int | None = None,
+) -> FinancePendingChange:
+    """An agent retracting ITS OWN pending proposal - propose's cleanup
+    half. Guarded to the proposer, so one agent (or a slug-less caller)
+    can never sweep another's cards, and it lands as a rejection with a
+    note: the audit trail keeps the mistake visible, the user just
+    never has to clean it up by hand."""
+    row = _require_pending(await get_change(db, change_id, owner_user_id=owner_user_id))
+    if not agent_slug or row.proposed_by_agent != agent_slug:
+        raise ValueError("only the proposing agent can withdraw a change")
+    return await reject(
+        db,
+        change_id,
+        owner_user_id=owner_user_id,
+        note=f"Withdrawn by {agent_slug}.",
+    )
+
+
 async def describe_change(
     db: AsyncSession, row: FinancePendingChange
-) -> list[dict[str, str]]:
+) -> list[ChangeDisplayRow]:
     """The card's body lines: system truth, never model copy.
 
     Pending rows resolve from the database at read time (the world may
@@ -262,7 +309,5 @@ async def describe_change(
     """
     frozen = (row.result or {}).get("display")
     if row.status != "pending" and isinstance(frozen, list):
-        return frozen
-    executor = executor_for(row.change_type)
-    model = executor.payload_model(**row.payload)
-    return await executor.describe(db, model, row.owner_user_id)
+        return [ChangeDisplayRow(**line) for line in frozen]
+    return await _describe_row(db, row)

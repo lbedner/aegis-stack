@@ -17,6 +17,7 @@ from app.services.finance.domains.writes.queue import (
     propose_many,
     reject,
     reject_batch,
+    withdraw,
 )
 from app.services.finance.domains.writes.registry import (
     ChangeExecutor,
@@ -40,4 +41,5 @@ __all__ = [
     "register",
     "registered_change_types",
     "reject",
+    "withdraw",
 ]

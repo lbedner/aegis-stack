@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 import re
+from typing import Any
 
 from sqlalchemy import func
-from sqlmodel import or_, select
+from sqlmodel import and_, or_, select
 
 from app.services.finance.constants import (
     UNCATEGORIZED_CATEGORY_NAMES,
@@ -22,6 +23,7 @@ from app.services.finance.models import (
     FinanceCategory,
     FinanceMerchant,
     FinanceTransaction,
+    FinanceTransactionSplit,
 )
 
 
@@ -95,3 +97,17 @@ def _query_cents(query: str) -> int | None:
     if not re.fullmatch(r"\d+(\.\d{1,2})?", text):
         return None
     return int(Decimal(text).scaleb(2))
+
+
+def split_aware_category_clause(own: Any, line: Any) -> Any:
+    """Category membership that respects splits: an unsplit row matches
+    by its OWN category clause, a split parent by its LINES' clause -
+    the parent's own category stops counting the moment it is split.
+    ``own`` predicates ``FinanceTransaction`` columns; ``line``
+    predicates ``FinanceTransactionSplit`` ones."""
+    return or_(
+        and_(FinanceTransaction.is_split.is_(False), own),
+        FinanceTransaction.id.in_(
+            select(FinanceTransactionSplit.parent_transaction_id).where(line)
+        ),
+    )

@@ -346,15 +346,9 @@ class TestTargetCategoryHighlight:
     @staticmethod
     def _accent_texts(card: Any) -> list[str]:
         from app.components.frontend.theme import AegisTheme as Theme
-        from tests.components.frontend._tree import walk
+        from tests.components.frontend._tree import accent_texts
 
-        return [
-            span.text
-            for n in walk(card)
-            for span in getattr(n, "spans", None) or []
-            if getattr(getattr(span, "style", None), "color", None)
-            == Theme.Colors.ACCENT
-        ]
+        return accent_texts(card, Theme.Colors.ACCENT)
 
     def test_the_single_card_target_is_teal(self) -> None:
         from app.components.frontend.controls.chat.components import (
@@ -409,6 +403,159 @@ class TestTargetCategoryHighlight:
         )
         card.toggle_expanded()
         assert self._accent_texts(card) == []
+
+
+_SPLIT_CHANGE = {
+    "id": 9,
+    "pending_change_id": 9,
+    "change_type": "transaction.split",
+    "title": "Split a transaction",
+    "status": "pending",
+    "display": [
+        {"label": "Transaction", "value": "Target ($20.47 on Aug 27, 2026)"},
+        {"label": "School supplies", "value": "$3.99"},
+        {"label": "Groceries", "value": "$16.48"},
+    ],
+}
+
+_SPLIT_BATCH = {
+    "batch_id": "b-split",
+    "change_type": "transaction.split",
+    "title": "Split a transaction",
+    "items": [
+        {
+            "id": 21,
+            "status": "pending",
+            "display": _SPLIT_CHANGE["display"],
+        },
+    ],
+}
+
+
+class TestReadableDetailRows:
+    """A card's detail rows read as a person's line items, not a
+    dot-joined log line: each row keeps its own label and lands on its
+    own line. A plain (non-arrow) value is new information being
+    proposed, so it pops in accent teal the same way an arrow's target
+    does; the subject line (payee/amount/date) is context, never teal."""
+
+    @staticmethod
+    def _teal(card: Any) -> list[str]:
+        from app.components.frontend.theme import AegisTheme as Theme
+        from tests.components.frontend._tree import accent_texts
+
+        return accent_texts(card, Theme.Colors.ACCENT)
+
+    def test_the_single_card_keeps_each_split_line_separate(self) -> None:
+        from app.components.frontend.controls.chat.components import (
+            render_component,
+        )
+
+        card = render_component(
+            "pending_change", _SPLIT_CHANGE, on_action=_noop_action
+        )
+
+        assert "School supplies" in rendered(card)
+        assert "Groceries" in rendered(card)
+        # Never flattened into one dot-joined blob.
+        assert "School supplies  ·" not in rendered(card)
+
+    def test_a_memo_carrying_value_teals_only_the_price(self) -> None:
+        """"$3.99 · groceries" highlights the money, not the prose - a
+        wall of teal marks nothing."""
+        from app.components.frontend.controls.chat.components import (
+            render_component,
+        )
+
+        change = {
+            **_SPLIT_CHANGE,
+            "display": [
+                _SPLIT_CHANGE["display"][0],
+                {"label": "Groceries", "value": "$3.99 · root beer and candy"},
+            ],
+        }
+        card = render_component("pending_change", change, on_action=_noop_action)
+
+        teal = self._teal(card)
+        assert "$3.99" in teal
+        assert not any("root beer" in t for t in teal)
+        assert "root beer and candy" in rendered(card)
+
+    def test_the_single_card_teals_plain_values_but_not_the_subject(self) -> None:
+        from app.components.frontend.controls.chat.components import (
+            render_component,
+        )
+
+        card = render_component(
+            "pending_change", _SPLIT_CHANGE, on_action=_noop_action
+        )
+
+        teal = self._teal(card)
+        assert "$3.99" in teal
+        assert "$16.48" in teal
+        assert "Target ($20.47 on Aug 27, 2026)" not in teal
+
+    def test_the_batch_card_keeps_each_split_line_separate_and_teal(self) -> None:
+        from app.components.frontend.controls.chat.components import (
+            render_component,
+        )
+
+        card = render_component(
+            "pending_change_batch",
+            _SPLIT_BATCH,
+            on_action=_noop_action,
+            on_batch_action=_noop_batch_action,
+        )
+
+        text = rendered(card)
+        assert "School supplies" in text
+        assert "Groceries" in text
+        assert "School supplies  ·" not in text
+        teal = self._teal(card)
+        assert "$3.99" in teal
+        assert "$16.48" in teal
+        assert "Target ($20.47 on Aug 27, 2026)" not in teal
+
+    def test_pending_labels_are_not_border_colored(self) -> None:
+        """OUTLINE is a border token, near-invisible as body text on a
+        dark card - a live label needs SecondaryText's own legible
+        default, not that."""
+        import flet as ft
+
+        from app.components.frontend.controls.chat.components import (
+            render_component,
+        )
+        from tests.components.frontend._tree import walk
+
+        card = render_component(
+            "pending_change_batch",
+            _SPLIT_BATCH,
+            on_action=_noop_action,
+            on_batch_action=_noop_batch_action,
+        )
+        label = next(
+            n for n in walk(card) if getattr(n, "value", None) == "School supplies"
+        )
+        assert label.color != ft.Colors.OUTLINE
+
+    def test_a_rejected_batch_item_never_highlights(self) -> None:
+        from app.components.frontend.controls.chat.components import (
+            render_component,
+        )
+
+        rejected = {
+            **_SPLIT_BATCH,
+            "items": [{**_SPLIT_BATCH["items"][0], "status": "rejected"}],
+        }
+        card = render_component(
+            "pending_change_batch",
+            rejected,
+            on_action=_noop_action,
+            on_batch_action=_noop_batch_action,
+        )
+        card.toggle_expanded()
+
+        assert self._teal(card) == []
 
 
 class TestMarkerTraceExtraction:
@@ -484,3 +631,140 @@ class TestMarkerTraceExtraction:
         assert len(cards) == 1
         assert cards[0]._batch_id == "97d8b137-ba64"
         assert "Tag a transaction" in rendered(cards[0])
+
+
+class TestReplayAffordance:
+    """The user bubble's replay control: same text again, one click."""
+
+    def _replay_buttons(self, bubble: Any) -> list[Any]:
+        from tests.components.frontend._tree import walk
+
+        return [
+            node
+            for node in walk(bubble)
+            if getattr(node, "tooltip", None) == "Send this message again"
+        ]
+
+    def test_user_bubbles_with_a_handler_offer_replay(self) -> None:
+        from app.components.frontend.controls.chat.message import ChatMessageBubble
+
+        bubble = ChatMessageBubble(
+            role="user", text="split this", on_replay=lambda _text: None
+        )
+
+        assert len(self._replay_buttons(bubble)) == 1
+
+    def test_replay_fires_with_the_message_text(self) -> None:
+        from app.components.frontend.controls.chat.message import ChatMessageBubble
+
+        seen: list[str] = []
+        bubble = ChatMessageBubble(
+            role="user", text="split this", on_replay=seen.append
+        )
+
+        (button,) = self._replay_buttons(bubble)
+        button.on_click(None)
+
+        assert seen == ["split this"]
+
+    def test_assistant_bubbles_and_handlerless_user_bubbles_do_not(self) -> None:
+        from app.components.frontend.controls.chat.message import ChatMessageBubble
+
+        assistant = ChatMessageBubble(
+            role="assistant", text="hi", on_replay=lambda _text: None
+        )
+        plain_user = ChatMessageBubble(role="user", text="hi")
+
+        assert self._replay_buttons(assistant) == []
+        assert self._replay_buttons(plain_user) == []
+
+
+class TestReplayRetention:
+    """Sent images stay replayable in session memory - bounded, and
+    cleared IN PLACE on eviction so bubble closures see them vanish."""
+
+    def test_retained_lists_stay_intact_under_the_cap(self) -> None:
+        from app.components.frontend.controls.chat.attachments_ui import (
+            ReplayRetention,
+        )
+
+        retention = ReplayRetention(max_turns=2)
+        first = [{"name": "a.png"}]
+        second = [{"name": "b.png"}]
+        retention.retain(first)
+        retention.retain(second)
+
+        assert first == [{"name": "a.png"}]
+        assert second == [{"name": "b.png"}]
+
+    def test_eviction_clears_the_oldest_in_place(self) -> None:
+        from app.components.frontend.controls.chat.attachments_ui import (
+            ReplayRetention,
+        )
+
+        retention = ReplayRetention(max_turns=2)
+        first = [{"name": "a.png"}]
+        retention.retain(first)
+        retention.retain([{"name": "b.png"}])
+        retention.retain([{"name": "c.png"}])
+
+        assert first == []  # the closure holding this list now sends no images
+
+    def test_empty_turns_are_not_retained(self) -> None:
+        from app.components.frontend.controls.chat.attachments_ui import (
+            ReplayRetention,
+        )
+
+        retention = ReplayRetention(max_turns=1)
+        kept = [{"name": "a.png"}]
+        retention.retain(kept)
+        retention.retain([])  # a text-only turn must not evict real images
+
+        assert kept == [{"name": "a.png"}]
+
+
+class TestAttachmentChips:
+    """A staged image's chip shows the image itself - a thumbnail you
+    can click for full size - not just a filename."""
+
+    @staticmethod
+    def _chip():
+        from app.components.frontend.controls.chat.panel import ChatPanel
+
+        panel = ChatPanel()
+        return panel._attachment_chip(
+            {"media_type": "image/png", "data_b64": "aGk=", "name": "order.png"}
+        )
+
+    def test_the_chip_carries_a_thumbnail_of_the_actual_image(self) -> None:
+        import flet as ft
+
+        from tests.components.frontend._tree import walk
+
+        chip = self._chip()
+        images = [n for n in walk(chip) if isinstance(n, ft.Image)]
+
+        assert len(images) == 1
+        assert images[0].src_base64 == "aGk="
+
+    def test_the_thumbnail_is_clickable_for_full_size(self) -> None:
+        from tests.components.frontend._tree import walk
+
+        chip = self._chip()
+        clickable = [
+            n
+            for n in walk(chip)
+            if getattr(n, "tooltip", None) == "View full size"
+            and getattr(n, "on_click", None) is not None
+        ]
+
+        assert len(clickable) == 1
+
+    def test_the_name_and_remove_control_remain(self) -> None:
+        from tests.components.frontend._tree import walk
+
+        chip = self._chip()
+        assert "order.png" in rendered(chip)
+        assert any(
+            getattr(n, "tooltip", None) == "Remove" for n in walk(chip)
+        )

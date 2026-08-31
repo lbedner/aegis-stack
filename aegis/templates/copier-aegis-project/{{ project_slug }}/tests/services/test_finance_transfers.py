@@ -1,7 +1,7 @@
 """Tests for internal-transfer detection + pairing (FIN-26).
 
 Covers the ticket's acceptance scenarios: a credit-card payment auto-pairs and
-drops out of spend; a near-miss is only *suggested* (never silently hidden) and
+drops out of spend; a near-miss is never silently hidden and
 confirm/reject behave; same-account and one-sided cases never pair.
 """
 
@@ -53,7 +53,6 @@ class TestTransferDetection:
             async_db_session, owner_user_id=1, today=date(2026, 6, 10)
         )
         assert result.auto_paired == 1
-        assert result.suggested == 0
 
         assert out.is_transfer and out.excluded_from_reports
         assert inflow.is_transfer and inflow.excluded_from_reports
@@ -67,9 +66,12 @@ class TestTransferDetection:
         assert all(name != "Credit Card Payment" for name, _ in summary)
 
     @pytest.mark.asyncio
-    async def test_near_miss_is_suggested_not_hidden_then_confirm(
+    async def test_a_near_miss_is_never_hidden(
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
+        """Below the auto threshold nothing pairs and nothing hides: a
+        fuzzy lookalike (a Venmo to a friend) is real spending until an
+        exact match proves otherwise."""
         checking = await _account(svc, "Checking", "checking", "asset")
         savings = await _account(svc, "Savings", "savings", "asset")
         out = await svc.create_transaction(
@@ -90,55 +92,11 @@ class TestTransferDetection:
         result = await detect_transfers(
             async_db_session, owner_user_id=1, today=date(2026, 6, 10)
         )
-        assert result.suggested == 1
+
         assert result.auto_paired == 0
-        # NEVER hidden below the auto threshold.
         assert out.is_transfer is False
         assert inflow.is_transfer is False
-
-        transfer = (await async_db_session.exec(select(FinanceTransfer))).one()
-        assert transfer.status == "suggested"
-
-        confirmed = await svc.confirm_transfer(transfer.id, owner_user_id=1)
-        assert confirmed is not None and confirmed.status == "confirmed"
-        assert out.is_transfer and inflow.is_transfer
-
-    @pytest.mark.asyncio
-    async def test_reject_leaves_legs_and_never_resuggests(
-        self, svc: FinanceService, async_db_session: AsyncSession
-    ) -> None:
-        checking = await _account(svc, "Checking", "checking", "asset")
-        savings = await _account(svc, "Savings", "savings", "asset")
-        out = await svc.create_transaction(
-            account_id=checking.id,
-            amount=-190000,
-            txn_date=date(2026, 6, 1),
-            owner_user_id=1,
-            name="ONLINE TRANSFER",
-        )
-        await svc.create_transaction(
-            account_id=savings.id,
-            amount=185000,
-            txn_date=date(2026, 6, 5),
-            owner_user_id=1,
-            name="ONLINE TRANSFER",
-        )
-        await detect_transfers(
-            async_db_session, owner_user_id=1, today=date(2026, 6, 10)
-        )
-        transfer = (await async_db_session.exec(select(FinanceTransfer))).one()
-
-        rejected = await svc.reject_transfer(transfer.id, owner_user_id=1)
-        assert rejected is not None and rejected.status == "rejected"
-        assert out.is_transfer is False and out.excluded_from_reports is False
-
-        # Re-running must NOT re-suggest the rejected pair.
-        result = await detect_transfers(
-            async_db_session, owner_user_id=1, today=date(2026, 6, 10)
-        )
-        assert result.suggested == 0
-        transfers = (await async_db_session.exec(select(FinanceTransfer))).all()
-        assert len(transfers) == 1  # still just the rejected row
+        assert (await async_db_session.exec(select(FinanceTransfer))).all() == []
 
     @pytest.mark.asyncio
     async def test_same_account_opposite_signs_not_paired(
@@ -163,13 +121,12 @@ class TestTransferDetection:
             async_db_session, owner_user_id=1, today=date(2026, 6, 10)
         )
         assert result.auto_paired == 0
-        assert result.suggested == 0
 
     @pytest.mark.asyncio
     async def test_old_history_outside_the_lookback_is_left_alone(
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
-        """A decade-deep import must not bury Review under ancient pairs;
+        """A decade-deep import must not churn through ancient history;
         only activity inside the configured lookback window is considered."""
         checking = await _account(svc, "Checking", "checking", "asset")
         savings = await _account(svc, "Savings", "savings", "asset")
@@ -183,7 +140,7 @@ class TestTransferDetection:
         await svc.create_transaction(
             account_id=savings.id,
             amount=50000,
-            txn_date=date(2020, 3, 2),
+            txn_date=date(2020, 3, 1),  # exact same-day pair: auto grade
             owner_user_id=1,
             name="ONLINE TRANSFER",
         )
@@ -192,13 +149,14 @@ class TestTransferDetection:
             async_db_session, owner_user_id=1, today=date(2026, 7, 27)
         )
         assert result.auto_paired == 0
-        assert result.suggested == 0
 
-        # The escape hatch: 0 disables the window and processes full history.
+        # The escape hatch: 0 disables the window and processes full
+        # history - the same pair now pairs, proving the gate (not the
+        # scorer) is what held it back above.
         result = await detect_transfers(
             async_db_session, owner_user_id=1, today=date(2026, 7, 27), lookback_days=0
         )
-        assert result.suggested == 1
+        assert result.auto_paired == 1
 
     @pytest.mark.asyncio
     async def test_one_sided_stays_visible(
@@ -216,7 +174,6 @@ class TestTransferDetection:
             async_db_session, owner_user_id=1, today=date(2026, 6, 10)
         )
         assert result.auto_paired == 0
-        assert result.suggested == 0
         assert out.is_transfer is False
 
 

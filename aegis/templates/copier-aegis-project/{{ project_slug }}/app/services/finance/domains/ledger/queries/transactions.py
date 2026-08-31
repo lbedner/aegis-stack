@@ -7,8 +7,7 @@ transaction surfaces are built from.
 
 from __future__ import annotations
 
-from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import date, timedelta
 
 from sqlalchemy import func
@@ -17,6 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.domains.ledger.queries.filters import (
     live_account_ids,
+    split_aware_category_clause,
     transaction_search_filter,
     uncategorized_catchall_ids,
 )
@@ -27,27 +27,6 @@ from app.services.finance.models import (
     FinanceTransactionSplit,
     FinanceTransactionTag,
 )
-
-
-async def splits_for_parents(
-    db: AsyncSession, parent_ids: Iterable[int]
-) -> dict[int, list[FinanceTransactionSplit]]:
-    """All split rows for the given parent transactions, one query,
-    grouped by parent id."""
-    wanted = set(parent_ids)
-    if not wanted:
-        return {}
-    rows = (
-        await db.exec(
-            select(FinanceTransactionSplit).where(
-                FinanceTransactionSplit.parent_transaction_id.in_(wanted)
-            )
-        )
-    ).all()
-    grouped: dict[int, list[FinanceTransactionSplit]] = defaultdict(list)
-    for split in rows:
-        grouped[split.parent_transaction_id].append(split)
-    return dict(grouped)
 
 
 async def dedup_match(
@@ -149,7 +128,12 @@ async def transactions_page(
     if to_date is not None:
         filters.append(FinanceTransaction.date_ <= to_date)
     if category_id is not None:
-        filters.append(FinanceTransaction.category_id == category_id)
+        filters.append(
+            split_aware_category_clause(
+                FinanceTransaction.category_id == category_id,
+                FinanceTransactionSplit.category_id == category_id,
+            )
+        )
     if merchant_id is not None:
         filters.append(FinanceTransaction.merchant_id == merchant_id)
     if without_merchant:
@@ -237,6 +221,9 @@ async def uncategorized_page(
         FinanceTransaction.dedup_status != "duplicate",
         FinanceTransaction.excluded_from_reports.is_(False),
         FinanceTransaction.account_id.in_(live_account_ids()),
+        # A split parent's categorization lives in its lines; it never
+        # sits in the attention queue no matter what its own column says.
+        FinanceTransaction.is_split.is_(False),
         or_(
             FinanceTransaction.category_id.is_(None),
             FinanceTransaction.category_id.in_(catchall),

@@ -65,7 +65,7 @@ from app.components.frontend.dashboard.modals.finance_modal.formatting import (
     _usd,
 )
 from app.components.frontend.dashboard.modals.finance_modal.pending_changes import (
-    PendingChangesSection,
+    PendingChangesBanner,
 )
 from app.components.frontend.dashboard.modals.finance_modal.transactions_view import (
     _transaction_expanded_content,
@@ -104,6 +104,7 @@ class OverviewTab(FinancePanel):
         page: ft.Page,
         account_filter: AccountFilter | None = None,
         register_filter_listener: Callable[[Callable[[], None]], None] | None = None,
+        on_open_review: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(page, account_filter, register_filter_listener)
         self.expand = True
@@ -142,7 +143,9 @@ class OverviewTab(FinancePanel):
         # Header matches the Projected tab: title + subtitle on the left,
         # the headline figures bare against the right edge. Cards below
         # would cost the chart a card's height and box it twice.
-        self._pending_changes = PendingChangesSection(page)
+        self._pending_changes = PendingChangesBanner(
+            page, on_open_review=on_open_review
+        )
         self._stats = ft.Row(
             [],
             spacing=Theme.Spacing.LG,

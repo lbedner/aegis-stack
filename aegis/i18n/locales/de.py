@@ -204,15 +204,6 @@ MESSAGES: dict[str, str] = {
         "Hinweis: Erster Start kann Zeit für den Modell-Download benötigen"
     ),
     "interactive.ai_rag_label": "RAG (Retrieval-Augmented Generation):",
-    "interactive.ai_rag_warning": (
-        "Warnung: RAG benötigt Python <3.14 (chromadb/onnxruntime-Einschränkung)"
-    ),
-    "interactive.ai_rag_compat_note": (
-        "RAG aktivieren generiert ein Projekt, das Python 3.11–3.13 benötigt"
-    ),
-    "interactive.ai_rag_compat_prompt": (
-        "RAG trotz Python-3.14-Inkompatibilität aktivieren?"
-    ),
     "interactive.ai_rag_prompt": (
         "RAG für Dokumentenindexierung und semantische Suche aktivieren?"
     ),

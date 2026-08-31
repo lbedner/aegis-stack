@@ -127,6 +127,23 @@
   agent tool-result boundary.
 
 
+### Changed
+- Generated projects default to Python 3.14. The RAG option no longer pins
+  projects below 3.14 (onnxruntime now ships 3.14 wheels), so the interactive
+  RAG compatibility warning is gone. Any supported version (3.11 to 3.14) can
+  still be selected with `--python-version`.
+
+### Fixed
+- Generated projects on the AI memory backend now pass lint, typecheck and
+  tests: `memory_user` and the active-model selector no longer leak into the
+  memory backend, and DB-only endpoint tests are gated out.
+- RAG chunking: an overlap at or above the chunk size no longer loops
+  forever (default overlap is a fifth of the chunk size, larger values are
+  rejected), documents that fit in one chunk are kept whole, a min chunk
+  size at or above the chunk size no longer filters everything, and
+  `estimate_chunks` no longer overcounts by one. The RAG service tests use
+  `RAGServiceConfig` instead of a stale settings mock.
+
 ## [0.10.1] - 2026-07-20
 
 ### Added

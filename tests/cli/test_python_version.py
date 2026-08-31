@@ -221,6 +221,30 @@ class TestPythonVersionGeneration:
         assert_file_contains(project_path, "Dockerfile", "FROM python:3.14-slim")
 
     @pytest.mark.slow
+    def test_python_version_3_14_with_rag(
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+    ) -> None:
+        """RAG no longer clamps the project to 3.13 (onnxruntime ships 3.14 wheels)."""
+        result = run_aegis_init(
+            project_name="test-python-314-rag",
+            output_dir=temp_output_dir,
+            python_version="3.14",
+            services=["ai[rag]"],
+        )
+
+        assert result.success, f"CLI command failed: {result.stderr}"
+        project_path = result.project_path
+        assert project_path is not None
+
+        content = (project_path / ".python-version").read_text().strip()
+        assert content == "3.14", f"Expected Python 3.14, got {content}"
+        assert_file_contains(
+            project_path, "pyproject.toml", 'requires-python = ">=3.14,<3.15"'
+        )
+
+    @pytest.mark.slow
     def test_python_version_with_components(
         self,
         temp_output_dir: Any,

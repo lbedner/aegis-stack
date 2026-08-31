@@ -5,7 +5,6 @@ This module contains interactive selection and prompting functions
 used by CLI commands.
 """
 
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1150,20 +1149,11 @@ def interactive_ai_service_config(
         # No Ollama selected - set mode to none
         _ollama_mode_selection[service_name] = OllamaMode.NONE
 
-    # RAG selection with Python 3.14 compatibility check
     typer.echo(f"\n{t('interactive.ai_rag_label')}")
-    if sys.version_info >= (3, 14):
-        brand.warn(f"  {t('interactive.ai_rag_warning')}")
-        typer.echo(f"  {t('interactive.ai_rag_compat_note')}")
-        rag_enabled = typer.confirm(
-            f"  {t('interactive.ai_rag_compat_prompt')}",
-            default=True,
-        )
-    else:
-        rag_enabled = typer.confirm(
-            f"  {t('interactive.ai_rag_prompt')}",
-            default=True,
-        )
+    rag_enabled = typer.confirm(
+        f"  {t('interactive.ai_rag_prompt')}",
+        default=True,
+    )
     _ai_rag_selection[service_name] = rag_enabled
     if rag_enabled:
         brand.success(f"  {t('interactive.ai_rag_enabled')}")

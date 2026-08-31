@@ -3,9 +3,8 @@ name = "{{ project_slug }}"
 version = "{{ version }}"
 description = "{{ project_description }}"
 readme = "README.md"
-{% if ai_rag %}requires-python = ">=3.11,<3.14"  # chromadb→onnxruntime lacks Python 3.14 wheels
-{% else %}requires-python = ">={{ python_version }},<3.15"
-{% endif %}
+requires-python = ">={{ python_version }},<3.15"
+
 authors = [
     {name = "{{ author_name }}", email = "{{ author_email }}"}
 ]

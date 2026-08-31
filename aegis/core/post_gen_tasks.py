@@ -362,6 +362,9 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Remove LLM tracking models (only needed with persistence)
         # Keep app/services/ai/models/__init__.py - contains core types (AIProvider, ProviderConfig)
         remove_dir(project_path, "app/services/ai/models/llm")
+        # The active-model selector reads the LLM tables removed above.
+        remove_file(project_path, "app/services/ai/domains/llm/active_model.py")
+        remove_file(project_path, "tests/services/ai/test_active_model.py")
         # Agent registry models ride the same persistence gate (the memory
         # backend resolves the default agent from code, not DB rows). The
         # tools.py registry itself stays: it is DB-free and the code-config
@@ -681,7 +684,7 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         We pass --python to uv sync when python_version is specified to ensure
         uv uses the correct Python version and respects the requires-python
         constraint in pyproject.toml. This prevents uv from selecting incompatible
-        Python versions (e.g., 3.14 when requires-python = ">=3.11,<3.14").
+        Python versions than the project's requires-python allows.
 
         When python_version is None, uv sync runs without version constraint,
         allowing uv to auto-detect a compatible Python version.

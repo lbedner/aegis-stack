@@ -50,11 +50,16 @@ def _no_user_memory_db(monkeypatch: pytest.MonkeyPatch) -> None:
     async def no_memory(user_id: str, **kwargs: object) -> None:
         return None
 
+    # raising=False: the memory backend ships without the user-memory block.
     monkeypatch.setattr(
-        "app.services.ai.service.chat.build_user_memory_context", no_memory
+        "app.services.ai.service.chat.build_user_memory_context",
+        no_memory,
+        raising=False,
     )
     monkeypatch.setattr(
-        "app.services.ai.service.streaming.build_user_memory_context", no_memory
+        "app.services.ai.service.streaming.build_user_memory_context",
+        no_memory,
+        raising=False,
     )
 
 

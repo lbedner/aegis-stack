@@ -160,11 +160,6 @@ MESSAGES: dict[str, str] = {
     "interactive.ai_ollama_docker_ok": ("Ollama 服務將寫入 docker-compose.yml"),
     "interactive.ai_ollama_docker_hint": "首次啟動可能需要較長時間下載模型",
     "interactive.ai_rag_label": "RAG（檢索增強生成）：",
-    "interactive.ai_rag_warning": (
-        "注意：RAG 暫不支援 Python 3.14（chromadb / onnxruntime 限制）"
-    ),
-    "interactive.ai_rag_compat_note": ("啟用 RAG 後，專案將要求 Python 3.11–3.13"),
-    "interactive.ai_rag_compat_prompt": "盡管如此，仍要啟用 RAG？",
     "interactive.ai_rag_prompt": "啟用 RAG？（文檔索引與語義檢索）",
     "interactive.ai_rag_enabled": "已啟用 RAG，向量存儲使用 ChromaDB",
     "interactive.ai_voice_label": "語音功能（TTS 語音合成 & STT 語音識別）：",

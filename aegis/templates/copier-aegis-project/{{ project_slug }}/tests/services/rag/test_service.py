@@ -3,26 +3,20 @@
 from pathlib import Path
 
 import pytest
+from app.services.rag.config import RAGServiceConfig
 from app.services.rag.service import LoaderError, RAGService
-
-
-class MockSettings:
-    """Mock settings for testing."""
-
-    RAG_ENABLED = True
-    RAG_PERSIST_DIRECTORY = "./test_data/chromadb"
-    RAG_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-    RAG_CHUNK_SIZE = 500
-    RAG_CHUNK_OVERLAP = 100
-    RAG_DEFAULT_TOP_K = 3
 
 
 @pytest.fixture
 def rag_service(tmp_path: Path) -> RAGService:
     """Create RAG service instance with temporary storage."""
-    settings = MockSettings()
-    settings.RAG_PERSIST_DIRECTORY = str(tmp_path / "chromadb")
-    return RAGService(settings)
+    config = RAGServiceConfig(
+        persist_directory=str(tmp_path / "chromadb"),
+        chunk_size=500,
+        chunk_overlap=100,
+        default_top_k=3,
+    )
+    return RAGService(config)
 
 
 @pytest.fixture

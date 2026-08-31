@@ -121,14 +121,8 @@ class TestConfigurationConstants:
         assert parts[1].isdigit()
 
     def test_default_python_version_current_value(self) -> None:
-        """Test DEFAULT_PYTHON_VERSION equals expected value.
-
-        Hardcoded to 3.13 even though pyproject.toml supports up to 3.14
-        — see ``aegis/config/defaults.py`` for why (third-party 3.14
-        ecosystem gaps in openai/requests). When 3.14 is widely
-        compatible we can revert to ``_max_version``.
-        """
-        assert DEFAULT_PYTHON_VERSION == "3.13"
+        """Test DEFAULT_PYTHON_VERSION tracks the newest supported version."""
+        assert DEFAULT_PYTHON_VERSION == "3.14"
 
     def test_supported_python_versions_is_list(self) -> None:
         """Test SUPPORTED_PYTHON_VERSIONS is a list."""

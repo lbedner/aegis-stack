@@ -101,6 +101,35 @@ class TestDocumentChunker:
         assert "file2.py" in sources
 
 
+class TestChunkSizeValidation:
+    """Non-positive sizes must fail loudly, not hang the splitter."""
+
+    def test_zero_chunk_size_is_rejected_at_construction(self) -> None:
+        with pytest.raises(ValueError, match="chunk_size"):
+            DocumentChunker(chunk_size=0)
+
+    @pytest.mark.asyncio
+    async def test_zero_chunk_size_override_is_rejected(self) -> None:
+        """``chunk_size=0`` used to silently fall back to the default;
+        a negative value walked into a non-advancing split loop."""
+        chunker = DocumentChunker(chunk_size=100)
+        docs = [Document(content="A" * 200, metadata={"source": "test"})]
+
+        with pytest.raises(ValueError, match="chunk_size"):
+            await chunker.chunk(docs, chunk_size=0)
+
+    def test_min_chunk_size_keeps_caller_intent(self) -> None:
+        """The floor is only kept below the ceiling - it is not halved.
+        Clamping 900 to 500 silently changed what the caller asked for."""
+        chunker = DocumentChunker(chunk_size=1000, min_chunk_size=900)
+        assert chunker.min_chunk_size == 900
+
+    def test_min_chunk_size_never_reaches_the_ceiling(self) -> None:
+        """A floor at or above the chunk size would filter every chunk."""
+        chunker = DocumentChunker(chunk_size=1000, min_chunk_size=1000)
+        assert chunker.min_chunk_size == 999
+
+
 class TestEstimateChunks:
     """Tests for chunk estimation utility."""
 

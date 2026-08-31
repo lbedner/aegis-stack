@@ -261,6 +261,7 @@ class StreamingMixin(ChatMixin):
             # The turn's user rides a ContextVar for the whole stream:
             # a memory write lands mid-stream, inside a tool call, and
             # has no other way to know whose fact it is.
+{% if ai_backend != "memory" %}
             with (
                 memory_user(
                     user_id,
@@ -269,6 +270,9 @@ class StreamingMixin(ChatMixin):
                 ),
                 reading_stage() as staged_readings,
             ):
+{% else %}
+            with reading_stage() as staged_readings:
+{% endif %}
                 async with agent.run_stream_events(
                     build_user_content(conversation_context, attachments)
                 ) as events:

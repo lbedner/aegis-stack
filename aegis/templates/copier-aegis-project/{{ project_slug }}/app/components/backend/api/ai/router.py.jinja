@@ -16,6 +16,8 @@ from typing import Any
 from app.components.backend.api.ai import memory as memory_routes
 from app.services.ai.domains.chat.attachments import ChatAttachment
 from app.services.ai.domains.chat.user_memory import DEFAULT_MEMORY_USER_ID
+{% else %}
+from app.services.ai.domains.chat.attachments import ChatAttachment
 {% endif %}
 from app.core.config import settings
 from app.core.log import logger

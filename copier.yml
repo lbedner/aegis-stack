@@ -63,12 +63,7 @@ aegis_version:
 python_version:
   type: str
   help: "Python version to use"
-  # Default 3.13 (not 3.14) because the 3.14 ecosystem still has gaps:
-  # openai 2.x circular-imports during pytest collection on 3.14, and
-  # requests' ``compat.py`` is missing ``JSONDecodeError`` on 3.14.
-  # 3.13 has been out long enough that all our deps work cleanly.
-  # Users can still opt into 3.14 explicitly when they want it.
-  default: "3.13"
+  default: "3.14"
   choices:
     - "3.11"
     - "3.12"

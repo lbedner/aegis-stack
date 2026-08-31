@@ -415,6 +415,47 @@ class TestMatchCandidates:
         assert same_cat.id in [t.id for t in rows]
 
     @pytest.mark.asyncio
+    async def test_a_paycheck_with_its_own_merchant_stays_offered(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """Income always arrives pre-labelled: the deposit carries the
+        payroll processor's merchant, which never equals the human-named
+        stream. Category agreement is identification FOR the stream and
+        must outrank the merchant mismatch - ranked the old way, the
+        $5,000 paycheck was "identified as someone else" and the picker
+        offered nothing (confirmed live)."""
+        account = await _account(svc)
+        paycheck_cat = await seed_category(async_db_session, "Paycheck")
+        payroll = await svc.create_merchant("Pure Proactive", owner_user_id=1)
+        stream = await seed_stream(
+            svc,
+            name="Betr Health",
+            direction="inflow",
+            frequency="semi_monthly",
+            expected_amount=500_000,
+            next_expected_date=date(2026, 8, 15),
+            account_id=account.id,
+        )
+        await svc.update_recurring(
+            stream.id, owner_user_id=1, category_id=paycheck_cat.id
+        )
+        deposit = await svc.create_transaction(
+            account_id=account.id,
+            amount=500_000,
+            txn_date=date(2026, 8, 17),
+            owner_user_id=1,
+            name="PURE PROACTIVE H PAYROLL PPD ID:",
+            category_id=paycheck_cat.id,
+        )
+        deposit.merchant_id = payroll.id
+        async_db_session.add(deposit)
+        await async_db_session.flush()
+
+        rows = await svc.recurring_match_candidates(stream.id, owner_user_id=1)
+
+        assert deposit.id in [t.id for t in rows]
+
+    @pytest.mark.asyncio
     async def test_bill_without_a_category_infers_one_from_its_members(
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:

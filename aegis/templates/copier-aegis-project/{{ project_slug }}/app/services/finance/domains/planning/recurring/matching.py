@@ -92,6 +92,7 @@ async def recurring_match_candidates(
     # amount, dated near the due date) must not drown under a page
     # of newer lookalikes (confirmed live).
     today = date.today()
+
     # Name affinity outranks the figures: a candidate carrying the
     # bill's own payee (or its name in the descriptor) is the answer
     # even when a stranger's amount lands a dollar nearer - ranked
@@ -143,6 +144,15 @@ async def recurring_match_candidates(
         reference_category = await queries.stream_member_category_id(db, stream.id)
 
     def identified_as_other(txn: FinanceTransaction) -> bool:
+        # Category agreement is identification FOR the stream and
+        # outranks a merchant mismatch. Inflows are where this bites:
+        # a paycheck always arrives pre-labelled with the payroll
+        # processor's merchant, which never equals the human-named
+        # stream - ranked on merchant alone, the $5,000 paycheck was
+        # "someone else" and the picker offered nothing (confirmed
+        # live).
+        if reference_category is not None and txn.category_id == reference_category:
+            return False
         if txn.merchant_id is not None and txn.merchant_id != stream.merchant_id:
             return True
         return (

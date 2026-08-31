@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Overdue occurrences vanished from the balance forecast**: the
+  projection fast-forwarded every stream past occurrences dated before
+  today, so a day-late paycheck read as "you are $5,000 poorer for the
+  next two weeks" - the walk started from a balance the check never
+  reached and charged it nowhere. A stream's latest missed occurrence
+  now carries to today's line (money still in flight, both directions);
+  older misses stay with the insight rules' missed-payment chase, and
+  one-time bills are unchanged.
+- **The match picker offered nothing for income**: a candidate already
+  carrying a merchant was treated as "identified as someone else", and
+  paycheck deposits always arrive pre-labelled with the payroll
+  processor's merchant - which never equals the human-named stream.
+  Category agreement now outranks the merchant mismatch, so a deposit
+  sharing the stream's own category stays offered; bills keep their
+  noise protection.
+
 ### Removed
 
 - **The Transfers review queue**: the suggested-transfer lane

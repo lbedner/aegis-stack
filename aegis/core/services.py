@@ -1046,6 +1046,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_finance_payees.py",
                 "tests/services/test_finance_module_layout.py",
                 "tests/services/test_finance_projection_filter.py",
+                "tests/services/test_finance_projection_overdue.py",
                 "tests/services/test_finance_search.py",
                 "tests/services/test_finance_stream_regimes.py",
                 "tests/services/test_merchant_icon.py",

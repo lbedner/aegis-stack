@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.services.finance.constants import (
     CASH_ACCOUNT_TYPES,
     ONE_TIME_FREQUENCY,
@@ -75,9 +76,10 @@ async def project_balances(
     rollup gate), in both directions: detected merchant rhythms
     would fabricate a five-figure decline, and detected refund or
     transfer rhythms an equally fictional windfall. Muted and
-    transfer streams are skipped. Occurrences already in the past
-    are not re-charged - chasing a missed payment is the insight
-    rules' job, not the forecast's.
+    transfer streams are skipped. Of a stream's past-due
+    occurrences only the latest is charged, carried to today (it is
+    in flight); older ones are the insight rules' missed-payment
+    chase, not the forecast's.
     """
     today = today or date.today()
     horizon = today + timedelta(days=days)
@@ -153,7 +155,17 @@ async def project_balances(
         when = stream.next_expected_date
         guard = 0
         while when < today and guard < 400:
-            when = step(when)
+            nxt = step(when)
+            if nxt > today:
+                # The latest missed occurrence is money still in
+                # flight - a day-late paycheck or an undrafted bill.
+                # Skipping it walks the forecast from a balance the
+                # check never reached; it lands on today's line
+                # instead. Older misses stay skipped: they are
+                # already inside the starting balance or the insight
+                # rules' missed-payment chase.
+                occurrences.append((today, stream, amount))
+            when = nxt
             guard += 1
         while when <= horizon and guard < 400:
             occurrences.append((when, stream, amount))

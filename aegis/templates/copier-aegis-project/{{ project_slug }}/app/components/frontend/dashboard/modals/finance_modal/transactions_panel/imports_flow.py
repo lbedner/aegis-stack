@@ -17,6 +17,7 @@ from app.components.frontend.controls.form_fields import (
 )
 from app.components.frontend.controls.loading_overlay import LoadingOverlay
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
+from app.components.frontend.controls.uploads import signed_upload_url
 from app.components.frontend.dashboard.modals.finance_modal.constants import (
     _NEW_ACCOUNT_KEY,
 )
@@ -36,7 +37,6 @@ from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.b
     TransactionsPanelState,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.config import settings
 from app.core.constants import dashboard_upload_dir
 
 # Import uploads parse the file and run the reconciliation plan inside
@@ -108,26 +108,11 @@ class ImportsFlowMixin(TransactionsPanelState):
         # (uuid4().hex has no dashes, so split on the first dash recovers
         # the original file name later).
         self._pending_upload = f"{uuid4().hex}-{name}"
-        upload_url = self._import_upload_url(self._pending_upload)
+        upload_url = signed_upload_url(self._pending_upload)
         # Block the page for the whole upload+import; cleared by
         # _finish_import (success) or fail() (any error).
         LoadingOverlay.of(self.page).show(f"Uploading {name}...")
         self._file_picker.upload([ft.FilePickerUploadFile(name, upload_url=upload_url)])
-
-    def _import_upload_url(self, server_name: str) -> str:
-        """Signed URL for the dashboard-mounted flet upload endpoint.
-
-        ``page.get_upload_url`` cannot be used here: the Flet app is
-        mounted at ``/dashboard``, so flet would sign its sub-app-relative
-        endpoint while the server verifies the externally visible path
-        (``request.url.path`` includes the mount prefix). Signing the
-        external path directly satisfies both the route and the check.
-        """
-        from flet_web.uploads import build_upload_url
-
-        return build_upload_url(
-            "/dashboard/upload", server_name, 600, settings.SECRET_KEY
-        )
 
     def _on_import_progress(self, event: ft.FilePickerUploadEvent) -> None:
         if event.error:

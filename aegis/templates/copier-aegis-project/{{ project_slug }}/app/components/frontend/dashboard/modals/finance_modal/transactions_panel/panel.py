@@ -73,8 +73,10 @@ from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.i
 from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.manage import (
     ManageAccountMixin,
 )
+from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.splits_flow import (
+    SplitsFlowMixin,
+)
 from app.components.frontend.dashboard.modals.finance_modal.transactions_view import (
-    _transaction_expanded_content,
     register_columns,
     register_count_label,
     transaction_tag_chips,
@@ -93,6 +95,7 @@ class TransactionsPanel(
     DeclareMixin,
     BulkActionsMixin,
     ManageAccountMixin,
+    SplitsFlowMixin,
     TransactionsPanelState,
 ):
     """Right-hand detail: the selected account's header + transactions (or
@@ -562,6 +565,8 @@ class TransactionsPanel(
             # pick as the trigger's own label, same idea as any other
             # "click a value to change it" field.
             txn_id = record.get("id")
+            if record.get("is_split") and record.get("splits"):
+                return self._split_category_cell(record)
             label = TableCellText(record.get("category") or "Uncategorized")
             if txn_id is None:
                 return label
@@ -668,7 +673,7 @@ class TransactionsPanel(
             kind, record = _merged[index]
             if kind == "trade":
                 return _trade_expanded_content(record)
-            return _transaction_expanded_content(record, on_remove_tag=self._remove_tag)
+            return self._txn_expand_content(record)
 
         def _on_selection_change(indices: set[int], _merged: list = merged) -> None:
             # Trades select like anything else, but they carry no payee or

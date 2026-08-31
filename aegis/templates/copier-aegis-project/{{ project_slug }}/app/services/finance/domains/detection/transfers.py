@@ -5,20 +5,17 @@ credit-card payment, a checking->savings sweep) counted as spending on the
 outflow side while never netting out. This pairs the two legs and flags them
 out of spend/income reports.
 
-Run after each sync/import batch. High-confidence matches (>= ``AUTO_THRESHOLD``)
-auto-pair and are hidden from reports; medium matches (``SUGGEST_THRESHOLD`` up
-to auto) are recorded as ``status='suggested'`` for the user to confirm. We
-NEVER hide money below the auto threshold: a Venmo to a friend looks like a
-transfer but is real spending. A transaction is a leg of at most one transfer
-(DB partial-uniques on both legs); an existing transfer row — including a
-``rejected`` one — keeps that pairing from recurring.
+Run after each sync/import batch. Only high-confidence matches
+(>= ``AUTO_THRESHOLD``) pair, and pairing hides both legs from reports.
+We NEVER hide money below that bar: a Venmo to a friend looks like a
+transfer but is real spending, so a fuzzy near-miss simply stays visible
+as ordinary spend/income. A transaction is a leg of at most one transfer
+(DB partial-uniques on both legs); an existing transfer row keeps that
+pairing from recurring.
 
-Scoring note: the design brief's candidate rule ("within $2") contradicts its
-own near-miss acceptance ($1,900 vs $1,850). We widen the candidate band to
-``max($2, 5%)`` so near-misses are considered, reserve the full amount score
-for an exact ("within $2") match, and give a within-band-but-inexact match a
-partial score. Net effect: exact same-day moves auto-pair; fuzzy ones surface
-as suggestions.
+Scoring note: the candidate band is ``max($2, 5%)`` with the full amount
+score reserved for an exact ("within $2") match - exact same-day moves
+pair, fuzzy ones never silently vanish.
 """
 
 from __future__ import annotations
@@ -43,7 +40,6 @@ WINDOW_DAYS = 5
 AMOUNT_EXACT_TOLERANCE_CENTS = 200  # $2 fee tolerance -> full amount score
 AMOUNT_BAND_PCT = 0.05  # within 5% (or $2) is a candidate at all
 AUTO_THRESHOLD = 80
-SUGGEST_THRESHOLD = 50
 _CREDIT_CARD_TYPE = "credit_card"
 _PAYEE_RE = re.compile(r"PAYMENT|PYMT|TRANSFER|XFER|EPAY|AUTOPAY|ACH", re.IGNORECASE)
 
@@ -52,7 +48,6 @@ class TransferDetectionResult(BaseModel):
     """Counts from one detection pass."""
 
     auto_paired: int = 0
-    suggested: int = 0
     # Flagged by their category's classification, not by finding a pair.
     category_flagged: int = 0
     # Same-account offsetting adjustment pairs (issuer bookkeeping),
@@ -199,7 +194,7 @@ async def _pair_transfers(
                 continue
             in_on_card = account_type.get(in_txn.account_id) == _CREDIT_CARD_TYPE
             score, is_ccp = _score(out_txn, in_txn, in_on_card=in_on_card)
-            if score >= SUGGEST_THRESHOLD:
+            if score >= AUTO_THRESHOLD:
                 scored.append((score, is_ccp, out_txn, in_txn))
 
     scored.sort(key=lambda entry: entry[0], reverse=True)
@@ -208,7 +203,6 @@ async def _pair_transfers(
     for score, is_ccp, out_txn, in_txn in scored:
         if out_txn.id in used or in_txn.id in used:
             continue
-        auto = score >= AUTO_THRESHOLD
         try:
             async with db.begin_nested():
                 transfer = FinanceTransfer(
@@ -224,15 +218,14 @@ async def _pair_transfers(
                     is_credit_card_payment=is_ccp,
                     match_method="auto_amount_date",
                     confidence=score,
-                    status="confirmed" if auto else "suggested",
+                    status="confirmed",
                 )
                 db.add(transfer)
                 await db.flush()
-                if auto:
-                    _flag_legs(out_txn, in_txn, transfer.id)
-                    db.add(out_txn)
-                    db.add(in_txn)
-                    await db.flush()
+                _flag_legs(out_txn, in_txn, transfer.id)
+                db.add(out_txn)
+                db.add(in_txn)
+                await db.flush()
         except IntegrityError:
             # A leg was claimed by another transfer (race / prior pass). The
             # partial-uniques guarantee one transfer per leg — skip this pair.
@@ -240,10 +233,7 @@ async def _pair_transfers(
             continue
         used.add(out_txn.id)
         used.add(in_txn.id)
-        if auto:
-            result.auto_paired += 1
-        else:
-            result.suggested += 1
+        result.auto_paired += 1
     return result
 
 

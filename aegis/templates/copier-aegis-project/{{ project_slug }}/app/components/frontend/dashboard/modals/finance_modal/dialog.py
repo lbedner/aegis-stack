@@ -19,6 +19,7 @@ from collections.abc import Callable
 
 import flet as ft
 
+from app.components.frontend.controls.chat import ChatPanel
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.dashboard.cards.card_utils import get_status_detail
 from app.components.frontend.dashboard.modals.base_detail_popup import BaseDetailPopup
@@ -49,7 +50,6 @@ from app.components.frontend.dashboard.modals.finance_modal.filters import (
 from app.components.frontend.dashboard.modals.finance_modal.overview_tab import (
     OverviewTab,
 )
-from app.components.frontend.controls.chat import ChatPanel
 from app.components.frontend.dashboard.modals.finance_modal.review_tab import ReviewTab
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
@@ -60,7 +60,7 @@ class FinanceDetailDialog(BaseDetailPopup):
 
     Six tabs you would open on a normal day (Overview, Accounts,
     Bills & Income, Projected, Budget, Review) plus a gear holding the
-    setup surfaces. Review is itself tabbed (Uncategorized / Transfers /
+    setup surfaces. Review is itself tabbed (Approvals / Uncategorized /
     Attention - Attention merges the analyst note with the rule findings
     it was written from); Connections and Categories live behind the gear.
     """
@@ -127,7 +127,7 @@ class FinanceDetailDialog(BaseDetailPopup):
         # Ordered by how often you look at it, summary first; Review sits
         # after Projected, last of the reading tabs, since it's a queue you
         # work through rather than numbers you read - and now hosts
-        # Attention as one of its own sub-tabs (Uncategorized / Transfers /
+        # Attention as one of its own sub-tabs (Approvals / Uncategorized /
         # Attention) rather than that living as a sixth top-level tab of
         # its own. Connections and Categories are setup, not reading, so
         # they sit behind the gear at the end. The gear is a Tab with an
@@ -137,7 +137,10 @@ class FinanceDetailDialog(BaseDetailPopup):
             (
                 "Overview",
                 lambda: OverviewTab(
-                    page, self._account_filter, self.register_filter_listener
+                    page,
+                    self._account_filter,
+                    self.register_filter_listener,
+                    on_open_review=self._open_review_tab,
                 ),
                 None,
             ),
@@ -219,6 +222,11 @@ class FinanceDetailDialog(BaseDetailPopup):
             )
         )
 
+        # The Overview banner's jump target - by name, so reordering
+        # tabs cannot silently point it somewhere else.
+        self._review_tab_index = next(
+            i for i, (name, _, _) in enumerate(factories) if name == "Review"
+        )
         self._lazy_contents = [_LazyTabContent(factory) for _, factory, _ in factories]
         tab_list = [
             ft.Tab(text=name or None, icon=icon, content=content)
@@ -248,6 +256,20 @@ class FinanceDetailDialog(BaseDetailPopup):
             expand=True,
             on_change=_on_tab_change,
         )
+        self._tabs = tabs
+
+        def _open_review_tab() -> None:
+            # Programmatic selection does not fire on_change: build (or
+            # revisit-refresh) the tab the same way the handler would.
+            tabs.selected_index = self._review_tab_index
+            lazy = self._lazy_contents[self._review_tab_index]
+            if lazy.ensure_built():
+                refresh = getattr(lazy.content, "refresh_on_revisit", None)
+                if callable(refresh):
+                    refresh()
+            tabs.update()
+
+        self._open_review_tab = _open_review_tab
         # The initial tab is visible immediately; build it now.
         self._lazy_contents[0].ensure_built()
         # Pinned above the tab strip, right-aligned - visible (and the

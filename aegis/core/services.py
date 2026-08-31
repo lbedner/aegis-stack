@@ -254,8 +254,8 @@ SERVICES: dict[str, ServiceSpec] = {
             # Order matches the legacy pyproject.toml.jinja template's
             # block order so the plugin-renderer / legacy parity test
             # (test_pyproject_deps_parity) keeps passing.
+            # (python-multipart is core now - the pastebox ships it.)
             "alembic==1.16.5",
-            "python-multipart==0.0.9",
             "email-validator==2.2.0",
         ],
         template_files=[
@@ -494,6 +494,9 @@ SERVICES: dict[str, ServiceSpec] = {
                 # dashboard tab (``format_relative_time``).
                 "tests/api/test_ai_endpoints.py",
                 "tests/services/test_conversation_persistence.py",
+                "tests/services/test_chat_attachments.py",
+                "tests/services/test_chat_readings.py",
+                "tests/services/test_history_budget.py",
                 "tests/cli/test_ai_rendering.py",
                 "tests/cli/test_conversation_memory.py",
                 "tests/cli/test_chat_completer.py",
@@ -872,9 +875,8 @@ SERVICES: dict[str, ServiceSpec] = {
         migrations=[BLOG_MIGRATION],
         pyproject_deps=[
             "alembic==1.16.5",
-            # /import endpoint uses UploadFile, which FastAPI lowers to a
-            # multipart form parameter and requires python-multipart.
-            "python-multipart==0.0.9",
+            # (python-multipart, once here for the /import UploadFile
+            # endpoint, is core now - the pastebox ships it.)
             # YAML-frontmatter parser used by the export/import pipeline
             # (see app/services/blog/serialization.py).
             "python-frontmatter>=1.1.0",
@@ -962,7 +964,7 @@ SERVICES: dict[str, ServiceSpec] = {
         # tickets. ``ofxtools`` backs the OFX/QFX importer (gated on the
         # finance_import sub-flag in pyproject.toml.jinja). ``aegis add-service
         # finance`` bootstraps alembic itself, so no alembic pin is needed here.
-        pyproject_deps=["ofxtools>=0.9.5", "python-multipart==0.0.9"],
+        pyproject_deps=["ofxtools>=0.9.5"],
         template_files=[
             "app/services/finance/",
             "app/components/backend/api/finance/",
@@ -1066,6 +1068,9 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/components/frontend/test_register_header.py",
                 "app/components/backend/startup/finance_webhook_tunnel.py",
                 "app/components/backend/shutdown/finance_webhook_tunnel.py",
+                "tests/services/test_finance_splits.py",
+                "tests/api/test_finance_split_endpoints.py",
+                "tests/components/frontend/test_finance_splits_ui.py",
             ],
         ),
     ),

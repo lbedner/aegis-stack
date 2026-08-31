@@ -10,10 +10,41 @@ import ast
 from dataclasses import dataclass, field
 import json
 import pprint
+import re
 from typing import Any
 
 # Rendered while text is still arriving; dropped from the final render.
 STREAM_CURSOR = "▌"
+
+# The image types a chat attachment may carry, by upload extension.
+_IMAGE_MEDIA_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "gif": "image/gif",
+}
+
+
+def image_media_type(filename: str) -> str | None:
+    """Mime type for an image attachment by extension, None otherwise.
+
+    The gate for the attach picker: anything returning None is refused
+    client-side instead of failing in the model call."""
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return _IMAGE_MEDIA_TYPES.get(extension)
+
+
+# The service's stored-history marker for image parts - the format
+# written by ``services/ai/domains/chat/attachments.annotate_attachments``.
+_ATTACHMENT_MARKER = re.compile(r"\n\n\[attached \d+ images?: [^\]\n]*\]$")
+
+
+def strip_attachment_marker(text: str) -> str:
+    """A replayed message must not carry its old attachment marker: the
+    bytes are gone (they ride one turn only), so re-sending the marker
+    would claim images the model cannot see."""
+    return _ATTACHMENT_MARKER.sub("", text)
 
 
 def balance_fences(text: str) -> str:

@@ -1,4 +1,4 @@
-"""The register: transactions, splits, tags and transfer pairs.
+"""The register: transactions, splits and tags.
 
 One mixin of the ``FinanceService`` facade: every method here forwards
 to the matching domain module as ``module.func(self.db, ...)``.
@@ -10,25 +10,28 @@ from datetime import date
 
 from app.services.finance.constants import Provider
 from app.services.finance.domains.ledger import (
+    queries as ledger_queries,
+)
+from app.services.finance.domains.ledger import (
+    splits,
     transactions,
-    transfers,
 )
 from app.services.finance.models import (
     FinanceTag,
     FinanceTransaction,
     FinanceTransactionSplit,
-    FinanceTransfer,
 )
 from app.services.finance.schemas import (
     CashflowMonth,
     PayeeTotal,
+    SplitPart,
 )
 from app.services.finance.service.base import FinanceServiceBase
 from app.services.finance.utils import DEFAULT_CURRENCY
 
 
 class TransactionsMixin(FinanceServiceBase):
-    """The register: transactions, splits, tags and transfer pairs."""
+    """The register: transactions, splits and tags."""
 
     async def transaction_exists(
         self,
@@ -138,6 +141,29 @@ class TransactionsMixin(FinanceServiceBase):
             currency=currency,
         )
 
+    async def split_transaction(
+        self,
+        transaction_id: int,
+        parts: list[SplitPart],
+        *,
+        owner_user_id: int | None = None,
+    ) -> list[FinanceTransactionSplit]:
+        return await splits.split_transaction(
+            self.db, transaction_id, parts, owner_user_id=owner_user_id
+        )
+
+    async def unsplit_transaction(
+        self, transaction_id: int, *, owner_user_id: int | None = None
+    ) -> int:
+        return await splits.unsplit_transaction(
+            self.db, transaction_id, owner_user_id=owner_user_id
+        )
+
+    async def transaction_splits(
+        self, transaction_ids: list[int]
+    ) -> dict[int, list[FinanceTransactionSplit]]:
+        return await ledger_queries.splits_for_parents(self.db, transaction_ids)
+
     async def get_or_create_tag(
         self, name: str, *, owner_user_id: int | None = None
     ) -> FinanceTag:
@@ -238,15 +264,6 @@ class TransactionsMixin(FinanceServiceBase):
             account_ids=account_ids,
         )
 
-    async def get_transfer(
-        self, transfer_id: int, *, owner_user_id: int | None
-    ) -> FinanceTransfer | None:
-        return await transfers.get_transfer(
-            self.db,
-            transfer_id,
-            owner_user_id=owner_user_id,
-        )
-
     async def get_transaction(
         self, transaction_id: int, *, owner_user_id: int | None = None
     ) -> FinanceTransaction | None:
@@ -256,37 +273,10 @@ class TransactionsMixin(FinanceServiceBase):
             owner_user_id=owner_user_id,
         )
 
-    async def list_transfers(
-        self, *, owner_user_id: int | None = None, status: str | None = None
-    ) -> list[FinanceTransfer]:
-        return await transfers.list_transfers(
-            self.db,
-            owner_user_id=owner_user_id,
-            status=status,
-        )
-
     async def transactions_by_ids(
         self, ids: list[int]
     ) -> dict[int, FinanceTransaction]:
         return await transactions.transactions_by_ids(self.db, ids)
-
-    async def confirm_transfer(
-        self, transfer_id: int, *, owner_user_id: int | None = None
-    ) -> FinanceTransfer | None:
-        return await transfers.confirm_transfer(
-            self.db,
-            transfer_id,
-            owner_user_id=owner_user_id,
-        )
-
-    async def reject_transfer(
-        self, transfer_id: int, *, owner_user_id: int | None = None
-    ) -> FinanceTransfer | None:
-        return await transfers.reject_transfer(
-            self.db,
-            transfer_id,
-            owner_user_id=owner_user_id,
-        )
 
     async def list_transactions(
         self,

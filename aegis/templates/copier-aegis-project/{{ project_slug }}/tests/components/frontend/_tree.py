@@ -46,3 +46,21 @@ def rendered(node: Any) -> str:
     """The tree's strings as one newline-joined blob - for substring
     assertions ("Due Sep 10" in rendered(card))."""
     return "\n".join(texts(node))
+
+
+def accent_texts(node: Any, accent: str) -> list[str]:
+    """Every string rendered in ``accent`` color - a plain node's own
+    ``.color``, or a styled ``TextSpan``'s ``.style.color`` (the "before
+    -> AFTER" pattern splits one value into spans so only the target
+    pops)."""
+    out: list[str] = []
+    for n in walk(node):
+        value = getattr(n, "value", None)
+        if isinstance(value, str) and value and getattr(n, "color", None) == accent:
+            out.append(value)
+        for span in getattr(n, "spans", None) or []:
+            text = getattr(span, "text", None)
+            color = getattr(getattr(span, "style", None), "color", None)
+            if isinstance(text, str) and text and color == accent:
+                out.append(text)
+    return out

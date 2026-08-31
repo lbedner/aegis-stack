@@ -45,7 +45,12 @@ async def propose_many(
                     "id": row.id,
                     "pending_change_id": row.id,
                     "status": row.status,
-                    "display": await writes.describe_change(session, row),
+                    # Tool results serialize into the model's context:
+                    # typed rows become plain dicts at this boundary.
+                    "display": [
+                        line.model_dump()
+                        for line in await writes.describe_change(session, row)
+                    ],
                 }
                 for row in rows
             ]
@@ -185,7 +190,10 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
                 proposed_by_agent=current_agent_slug.get(),
                 conversation_id=current_conversation_id.get(),
             )
-            display = await writes.describe_change(session, row)
+            display = [
+                line.model_dump()
+                for line in await writes.describe_change(session, row)
+            ]
             await session.commit()
         except ValueError as e:
             return {
@@ -198,6 +206,33 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         "title": writes.executor_for(row.change_type).title,
         "status": row.status,
         "display": display,
+    }
+
+
+async def withdraw(pending_change_id: int) -> dict[str, Any]:
+    """Retract one of YOUR OWN still-pending proposals - the cleanup
+    for a card you filed by mistake. It resolves as rejected with a
+    "withdrawn" note (the audit trail keeps it), and only the agent
+    that proposed a change can withdraw it. Use immediately when you
+    notice a bad card instead of asking the user to reject it."""
+    from app.services.ai.domains.chat.user_memory import current_agent_slug
+    from app.services.finance.domains import writes
+
+    async with get_async_session() as session:
+        try:
+            row = await writes.withdraw(
+                session,
+                pending_change_id,
+                agent_slug=current_agent_slug.get(),
+                owner_user_id=None,
+            )
+            await session.commit()
+        except ValueError as e:
+            return {"error": str(e)}
+    return {
+        "pending_change_id": row.id,
+        "status": row.status,
+        "note": (row.result or {}).get("note"),
     }
 
 
@@ -238,6 +273,13 @@ register_tool(
     "propose_many",
     propose_many,
     description="Propose a batch of same-type changes for one bulk approval",
+    native_write=True,
+    replace=True,
+)
+register_tool(
+    "withdraw",
+    withdraw,
+    description="Retract one of your own still-pending proposals",
     native_write=True,
     replace=True,
 )

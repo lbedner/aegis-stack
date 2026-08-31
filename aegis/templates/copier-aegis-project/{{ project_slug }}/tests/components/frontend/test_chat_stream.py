@@ -6,7 +6,9 @@ from app.components.frontend.controls.chat.stream import (
     StreamAccumulator,
     balance_fences,
     footer_line,
+    image_media_type,
     narration_note,
+    strip_attachment_marker,
     tool_label,
     trace_failed,
     trace_label,
@@ -160,6 +162,34 @@ class TestToolEvents:
         long = "x" * 150
         assert len(narration_note(long)) == 100
         assert narration_note(long).endswith("...")
+
+
+class TestImageMediaType:
+    def test_known_image_extensions_map_to_mime(self) -> None:
+        assert image_media_type("Order.PNG") == "image/png"
+        assert image_media_type("a.jpg") == "image/jpeg"
+        assert image_media_type("b.jpeg") == "image/jpeg"
+        assert image_media_type("c.webp") == "image/webp"
+        assert image_media_type("d.gif") == "image/gif"
+
+    def test_non_images_are_refused(self) -> None:
+        assert image_media_type("statement.pdf") is None
+        assert image_media_type("noextension") is None
+        assert image_media_type("archive.png.zip") is None
+
+
+class TestStripAttachmentMarker:
+    def test_trailing_marker_is_removed_for_replay(self) -> None:
+        stored = "split this\n\n[attached 2 images: a.png, b.jpg]"
+        assert strip_attachment_marker(stored) == "split this"
+
+    def test_singular_marker_is_removed_too(self) -> None:
+        assert strip_attachment_marker("hi\n\n[attached 1 image: x.png]") == "hi"
+
+    def test_plain_text_and_mid_text_brackets_are_untouched(self) -> None:
+        assert strip_attachment_marker("no marker here") == "no marker here"
+        mid = "[attached 1 image: x.png] was mentioned mid-text"
+        assert strip_attachment_marker(mid) == mid
 
 
 class TestFooterLine:

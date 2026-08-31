@@ -16,23 +16,29 @@ from app.components.frontend.controls.buttons import BaseIconButton
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.form_fields import input_field_kwargs
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
-from app.components.frontend.controls.text import PrimaryText, SecondaryText
+from app.components.frontend.controls.text import SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.formatting import format_relative_time
 from app.core.log import logger
 from app.core.sse import stream_sse_post
 
+from .attachments_ui import AttachmentsMixin, attachment_payload
 from .components import PendingChangeBatchCard, components_from_trace
+from .history_ui import HistoryMixin
 from .message import ChatMessageBubble
 from .model_picker import ModelChipMixin
 from .models import model_label
-from .stream import StreamAccumulator, narration_note, tool_label
+from .stream import (
+    StreamAccumulator,
+    narration_note,
+    strip_attachment_marker,
+    tool_label,
+)
 
 # Render at most this often while streaming; chunks buffer in between.
 _RENDER_INTERVAL_SECONDS = 0.1
 
 
-class ChatPanel(ModelChipMixin, ft.Container):
+class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
     """A self-contained chat surface bound to one agent row.
 
     Args:
@@ -96,6 +102,7 @@ class ChatPanel(ModelChipMixin, ft.Container):
         self._send_button = BaseIconButton(
             self._send_current_input, ft.Icons.SEND, tooltip="Send"
         )
+        self._build_attachment_controls()
         self._model_chip_label = SecondaryText(
             model_label(None),
             size=Theme.Typography.BODY_SMALL,
@@ -149,7 +156,15 @@ class ChatPanel(ModelChipMixin, ft.Container):
                     ],
                     expand=True,
                 ),
-                ft.Row([self._model_chip, self._input, self._send_button]),
+                self._attachment_bar,
+                ft.Row(
+                    [
+                        self._model_chip,
+                        self._input,
+                        self._attach_button,
+                        self._send_button,
+                    ]
+                ),
             ],
             expand=True,
             spacing=Theme.Spacing.SM,
@@ -194,6 +209,7 @@ class ChatPanel(ModelChipMixin, ft.Container):
             await card.refresh_from(fetch)
 
     def did_mount(self) -> None:
+        self._mount_attachments()
         self.page.run_task(self._resume_latest)
         self.page.run_task(self._refresh_model_chip)
 
@@ -230,6 +246,7 @@ class ChatPanel(ModelChipMixin, ft.Container):
                 text=message.get("content", ""),
                 agent_name=self.agent_name,
                 tool_trace=trace,
+                on_replay=self._replay,
             )
             if trace:
                 cards = components_from_trace(
@@ -245,62 +262,6 @@ class ChatPanel(ModelChipMixin, ft.Container):
             self._transcript.controls.append(bubble.in_row())
         self._show_transcript()
 
-    def _history_row(self, conv: dict[str, Any]) -> ft.Control:
-        async def pick() -> None:
-            if self._history_dialog is not None:
-                self._history_dialog.open = False
-                self.page.update()
-            await self._load_conversation(conv["id"])
-
-        return ft.Container(
-            content=ft.Column(
-                [
-                    PrimaryText(
-                        conv.get("title") or conv["id"][:8],
-                        no_wrap=True,
-                        selectable=False,
-                    ),
-                    SecondaryText(
-                        format_relative_time(conv.get("last_activity")),
-                        size=Theme.Typography.BODY_SMALL,
-                        selectable=False,
-                    ),
-                ],
-                spacing=0,
-                tight=True,
-            ),
-            padding=Theme.Spacing.SM,
-            border_radius=Theme.Components.BUTTON_RADIUS,
-            ink=True,
-            on_click=lambda _event: self.page.run_task(pick),
-        )
-
-    async def _open_history(self) -> None:
-        params: dict[str, Any] = {"user_id": self.user_id, "limit": 25}
-        if self.surface:
-            params["surface"] = self.surface
-        conversations = await self._api().get("/api/v1/ai/conversations", params)
-        rows: list[ft.Control] = [
-            self._history_row(conv) for conv in (conversations or [])
-        ]
-        if not rows:
-            rows = [SecondaryText("No conversations yet.")]
-
-        async def _close_history() -> None:
-            if self._history_dialog is not None:
-                self._history_dialog.open = False
-                self.page.update()
-
-        self._history_dialog = StyledAlertDialog(
-            title="Conversation history",
-            body=ft.Container(
-                content=ft.Column(rows, tight=True, scroll=ft.ScrollMode.AUTO),
-                height=320,
-            ),
-            on_close=_close_history,
-        )
-        self.page.open(self._history_dialog)
-
     async def _start_new_conversation(self) -> None:
         self.conversation_id = None
         self._clear_transcript()
@@ -314,21 +275,51 @@ class ChatPanel(ModelChipMixin, ft.Container):
         """Enter-key submit path; the send button uses the async handler."""
         self.page.run_task(self._send_current_input)
 
+    def _replay(
+        self, text: str, attachments: list[dict[str, str]] | None = None
+    ) -> None:
+        """A user bubble's replay: the same text as a fresh turn, riding
+        its retained images plus anything newly staged. A history-reloaded
+        bubble has no retained bytes, so its stored marker is stripped
+        rather than re-claimed."""
+        if self._streaming:
+            return
+        resend = list(attachments or [])
+        # A failed turn restages these same dicts as chips; equality
+        # dedupe keeps a post-error replay from sending doubles.
+        resend += [a for a in self._take_attachments() if a not in resend]
+        self.page.run_task(self._run_turn, strip_attachment_marker(text), resend)
+
     async def _send_current_input(self) -> None:
         text = (self._input.value or "").strip()
-        if not text or self._streaming:
+        if self._streaming or (not text and not self._pending_attachments):
             return
+        if not text:
+            text = "See the attached images."
         self._input.value = ""
-        await self._run_turn(text)
+        await self._run_turn(text, attachments=self._take_attachments())
 
-    async def _run_turn(self, text: str) -> None:
+    async def _run_turn(
+        self, text: str, attachments: list[dict[str, str]] | None = None
+    ) -> None:
+        attachments = attachments or []
+        # Session-memory retention: this bubble's replay closure holds
+        # this very list, so replaying re-sends the original images
+        # until the bounded retainer evicts them.
+        self._retained.retain(attachments)
         self._streaming = True
         self._send_button.update_state(disabled=True)
         self._transcript.controls.append(
             ChatMessageBubble(
-                role="user", text=text, agent_name=self.agent_name
+                role="user",
+                text=text,
+                agent_name=self.agent_name,
+                on_replay=lambda t, a=attachments: self._replay(t, a),
             ).in_row()
         )
+        note = self._attachment_note_row(attachments)
+        if note is not None:
+            self._transcript.controls.append(note)
         reply = ChatMessageBubble(role="assistant", agent_name=self.agent_name)
         self._transcript.controls.append(reply.in_row())
         self._show_transcript()
@@ -341,6 +332,7 @@ class ChatPanel(ModelChipMixin, ft.Container):
             "user_id": self.user_id,
             "agent_slug": self.agent_slug,
             "surface": self.surface,
+            "attachments": attachment_payload(attachments),
         }
         last_render = 0.0
         errored = False
@@ -380,6 +372,11 @@ class ChatPanel(ModelChipMixin, ft.Container):
             logger.warning("chat_panel.turn_failed", error=str(exc))
             reply.set_streaming_text("Something went wrong answering that.")
 
+        if errored and attachments:
+            # A failed turn must not eat its images: restage them so the
+            # bubble's replay (or a plain resend) carries them again.
+            self._pending_attachments.extend(attachments)
+            self._refresh_attachment_chips()
         if not errored:
             if accumulator.conversation_id:
                 self.conversation_id = accumulator.conversation_id

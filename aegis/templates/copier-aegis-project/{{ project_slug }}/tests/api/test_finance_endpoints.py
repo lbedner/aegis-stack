@@ -3392,7 +3392,9 @@ async def test_an_executor_crash_keeps_the_recorded_error(
         raise RuntimeError("secret internal detail")
 
     async def _describe(db, payload, owner_user_id):
-        return [{"label": "Anything", "value": str(payload.anything)}]
+        from app.services.finance.schemas import ChangeDisplayRow
+
+        return [ChangeDisplayRow(label="Anything", value=str(payload.anything))]
 
     registry.register(
         registry.ChangeExecutor(

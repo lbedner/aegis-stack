@@ -225,7 +225,7 @@ class TestCategorizeCardCopy:
             owner_user_id=1,
         )
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+            d.label: d.value for d in await svc.describe_pending_change(row)
         }
 
         assert display["Category"] == "Shopping \u2192 Food & Dining:Groceries"
@@ -244,7 +244,7 @@ class TestCategorizeCardCopy:
             owner_user_id=1,
         )
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+            d.label: d.value for d in await svc.describe_pending_change(row)
         }
 
         assert display["Category"] == "Uncategorized \u2192 Food & Dining:Groceries"
@@ -272,7 +272,7 @@ class TestResolutionFreezesTheRecord:
 
         resolved = await svc.approve_change(row.id, owner_user_id=1)
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(resolved)
+            d.label: d.value for d in await svc.describe_pending_change(resolved)
         }
 
         assert display["Category"] == "Shopping \u2192 Food & Dining:Groceries"
@@ -296,7 +296,7 @@ class TestResolutionFreezesTheRecord:
         # the world moves after rejection - the card must not follow it
         await svc.categorize_transaction(txn.id, groceries.id, owner_user_id=1)
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(resolved)
+            d.label: d.value for d in await svc.describe_pending_change(resolved)
         }
 
         assert display["Category"] == "Shopping \u2192 Food & Dining:Groceries"
@@ -470,11 +470,11 @@ class TestMatchExecutor:
             owner_user_id=1,
         )
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+            d.label: d.value for d in await svc.describe_pending_change(row)
         }
 
         assert "$1,000.00" in display["Payment"]
-        assert "2026-07-31" in display["Payment"]
+        assert "Jul 31, 2026" in display["Payment"]
         assert display["Bill"] == "Unmatched \u2192 Eleanor Nursing Care"
 
     @pytest.mark.asyncio
@@ -585,7 +585,7 @@ class TestTagExecutors:
             owner_user_id=1,
         )
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+            d.label: d.value for d in await svc.describe_pending_change(row)
         }
 
         assert display["Tags"] == "Travel \u2192 Business, Travel"
@@ -601,7 +601,7 @@ class TestTagExecutors:
             owner_user_id=1,
         )
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+            d.label: d.value for d in await svc.describe_pending_change(row)
         }
         assert display["Tags"] == "none \u2192 Business"
 
@@ -666,7 +666,7 @@ class TestTagExecutors:
             owner_user_id=1,
         )
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+            d.label: d.value for d in await svc.describe_pending_change(row)
         }
 
         assert display["Tags"] == "Business \u2192 Business"
@@ -688,7 +688,130 @@ class TestTagExecutors:
             owner_user_id=1,
         )
         display = {
-            d["label"]: d["value"] for d in await svc.describe_pending_change(row)
+            d.label: d.value for d in await svc.describe_pending_change(row)
         }
 
         assert display["Tags"] == "Business \u2192 none"
+
+
+class TestWithdraw:
+    """The cleanup half of propose: an agent retracting its own pending
+    mistake. Guarded to the proposer, lands as a rejection with a note -
+    the audit trail keeps the fumble visible, the user never has to
+    clean it up by hand."""
+
+    @staticmethod
+    async def _proposed(
+        svc: FinanceService, session: AsyncSession, *, agent: str | None
+    ) -> FinancePendingChange:
+        account = await _account(svc)
+        groceries = await _category(session, "Food & Dining:Groceries")
+        txn = await _txn(svc, account.id, -897, date(2026, 6, 10), name="Deli")
+        return await svc.propose_change(
+            "transaction.categorize",
+            {"transaction_id": txn.id, "category_id": groceries.id},
+            owner_user_id=1,
+            proposed_by_agent=agent,
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_proposer_can_withdraw_its_pending_card(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.domains import writes
+
+        row = await self._proposed(svc, async_db_session, agent="finance-assistant")
+
+        withdrawn = await writes.withdraw(
+            async_db_session, row.id, agent_slug="finance-assistant", owner_user_id=1
+        )
+
+        assert withdrawn.status == "rejected"
+        assert (withdrawn.result or {}).get("note") == "Withdrawn by finance-assistant."
+
+    @pytest.mark.asyncio
+    async def test_only_the_proposer_may_withdraw(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.domains import writes
+
+        row = await self._proposed(svc, async_db_session, agent="finance-assistant")
+
+        with pytest.raises(ValueError, match="proposing agent"):
+            await writes.withdraw(
+                async_db_session, row.id, agent_slug="other-agent", owner_user_id=1
+            )
+        with pytest.raises(ValueError, match="proposing agent"):
+            await writes.withdraw(
+                async_db_session, row.id, agent_slug=None, owner_user_id=1
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_resolved_card_cannot_be_withdrawn(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.domains import writes
+
+        row = await self._proposed(svc, async_db_session, agent="finance-assistant")
+        await svc.reject_change(row.id, owner_user_id=1)
+
+        with pytest.raises(ValueError, match="already rejected"):
+            await writes.withdraw(
+                async_db_session, row.id, agent_slug="finance-assistant", owner_user_id=1
+            )
+
+
+class TestLegacyInvalidPayloads:
+    """Rows filed before a payload rule tightened must stay resolvable.
+
+    Validation guards the DOOR (propose); a stored card that no longer
+    validates is exactly the thing reject/withdraw exist to clean up,
+    so resolution and description fall back to the raw payload instead
+    of raising."""
+
+    @staticmethod
+    def _legacy_row() -> FinancePendingChange:
+        # Filed directly, the way a pre-validator card exists in the DB.
+        return FinancePendingChange(
+            owner_user_id=1,
+            change_type="transaction.split",
+            payload={
+                "transaction_id": 999,
+                "parts": [{"amount": -399, "category_id": 1, "memo": None}],
+            },
+            proposed_by_agent="finance-assistant",
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_no_longer_valid_card_can_still_be_rejected(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.domains import writes
+
+        row = self._legacy_row()
+        async_db_session.add(row)
+        await async_db_session.flush()
+
+        rejected = await writes.reject(async_db_session, row.id, owner_user_id=1)
+
+        assert rejected.status == "rejected"
+        display = (rejected.result or {}).get("display")
+        assert display and "-399" in str(display)  # raw payload as the record
+
+    @pytest.mark.asyncio
+    async def test_and_still_be_withdrawn_and_described(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.finance.domains import writes
+
+        row = self._legacy_row()
+        async_db_session.add(row)
+        await async_db_session.flush()
+
+        card = await writes.describe_change(async_db_session, row)
+        assert "-399" in str(card)  # renders instead of raising
+
+        withdrawn = await writes.withdraw(
+            async_db_session, row.id, agent_slug="finance-assistant", owner_user_id=1
+        )
+        assert withdrawn.status == "rejected"

@@ -1,4 +1,4 @@
-"""Transaction, transfer, and cashflow shapes.
+"""Transaction and cashflow shapes.
 
 A topic module of the ``schemas`` package; every name here is
 re-exported from the package root, which stays the one import path.
@@ -13,12 +13,20 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from app.services.finance.models import (
-        FinanceTransaction,
-        FinanceTransfer,
-    )
+    from app.services.finance.models import FinanceTransaction
 
 from app.services.finance.schemas.categorization import TagRef
+
+
+class SplitLineResponse(BaseModel):
+    """One line of a split transaction, category name resolved by the
+    list endpoint like ``TransactionResponse.category``."""
+
+    id: int
+    amount: int
+    category_id: int | None = None
+    category: str | None = None
+    memo: str | None = None
 
 
 class TransactionResponse(BaseModel):
@@ -65,8 +73,10 @@ class TransactionResponse(BaseModel):
     is_transfer: bool = False
     excluded_from_reports: bool = False
     is_reversal: bool = False
+    is_split: bool = False
     # Filled by the list endpoint (batched), like ``category``/``merchant``.
     tags: list[TagRef] = Field(default_factory=list)
+    splits: list[SplitLineResponse] = Field(default_factory=list)
 
     @classmethod
     def from_row(cls, row: FinanceTransaction) -> TransactionResponse:
@@ -98,12 +108,37 @@ class TransactionResponse(BaseModel):
             is_transfer=row.is_transfer,
             excluded_from_reports=row.excluded_from_reports,
             is_reversal=row.is_reversal,
+            is_split=row.is_split,
         )
 
 
 class TransactionListResponse(BaseModel):
     items: list[TransactionResponse]
     total: int
+
+
+class SplitPart(BaseModel):
+    """One requested line of a transaction split.
+
+    ``amount`` is a positive magnitude in minor units; the service applies
+    the parent's sign and fills any unclaimed difference with a remainder
+    line, so callers only state what they know."""
+
+    amount: int
+    category_id: int | None = None
+    memo: str | None = None
+
+
+class TransactionSplitRequest(BaseModel):
+    parts: list[SplitPart]
+
+
+class SplitListResponse(BaseModel):
+    items: list[SplitLineResponse]
+
+
+class UnsplitResponse(BaseModel):
+    removed: int
 
 
 class SpendingCategory(BaseModel):
@@ -123,60 +158,6 @@ class TransactionCreate(BaseModel):
 
 class TransactionCategorize(BaseModel):
     category_id: int
-
-
-class TransferResponse(BaseModel):
-    """A matched internal transfer between two of the user's own accounts."""
-
-    id: int
-    from_account_id: int | None
-    to_account_id: int | None
-    from_transaction_id: int | None
-    to_transaction_id: int | None
-    amount: int | None  # cents
-    currency: str
-    transfer_date: date | None
-    is_credit_card_payment: bool
-    match_method: str
-    confidence: int | None
-    status: str  # suggested | confirmed | rejected
-    # The full leg transactions — the decisive context for a review decision
-    # ("Starbucks -> INTRST PYMNT" is obviously not a transfer), and the same
-    # payload the click-through detail dialog renders.
-    from_transaction: TransactionResponse | None = None
-    to_transaction: TransactionResponse | None = None
-
-    @classmethod
-    def from_row(
-        cls,
-        transfer: FinanceTransfer,
-        *,
-        from_txn: FinanceTransaction | None = None,
-        to_txn: FinanceTransaction | None = None,
-    ) -> TransferResponse:
-        return cls(
-            id=transfer.id,
-            from_account_id=transfer.from_account_id,
-            to_account_id=transfer.to_account_id,
-            from_transaction_id=transfer.from_transaction_id,
-            to_transaction_id=transfer.to_transaction_id,
-            amount=transfer.amount,
-            currency=transfer.currency,
-            transfer_date=transfer.transfer_date,
-            is_credit_card_payment=transfer.is_credit_card_payment,
-            match_method=transfer.match_method,
-            confidence=transfer.confidence,
-            status=transfer.status,
-            from_transaction=(
-                TransactionResponse.from_row(from_txn) if from_txn else None
-            ),
-            to_transaction=(TransactionResponse.from_row(to_txn) if to_txn else None),
-        )
-
-
-class TransferListResponse(BaseModel):
-    items: list[TransferResponse]
-    total: int
 
 
 class SpendingSummaryResponse(BaseModel):

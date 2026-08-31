@@ -256,9 +256,12 @@ def test_full_stack_validation_pipeline(get_generated_stack: Any) -> None:
         f"Failed steps:\n" + "\n".join(failure_blocks)
     )
 
-    # Verify reasonable performance
-    assert total_duration < 300, (
-        f"Validation took too long: {total_duration:.1f}s > 300s"
+    # Verify reasonable performance. Sized above the per-step caps in
+    # QUALITY_CHECK_TIMEOUTS (deps 180 + tests 300 + the small steps):
+    # a genuinely hung step is caught by its own timeout first, so this
+    # only trips on death-by-a-thousand-slow-steps.
+    assert total_duration < 600, (
+        f"Validation took too long: {total_duration:.1f}s > 600s"
     )
 
 

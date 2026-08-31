@@ -22,6 +22,9 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.chat.display_rows import (
+    _display_rows,
+)
 from app.components.frontend.controls.text import LabelText, SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
 
@@ -43,26 +46,6 @@ _STATUS_COPY = {
 
 
 BatchAction = Callable[[str, str, list[int]], Awaitable[dict[str, Any] | None]]
-
-_ARROW = " \u2192 "
-
-
-def _value_text(value: str, *, color: str, **kwargs: Any) -> SecondaryText:
-    """A display value; a "before \u2192 after" line gets its target in
-    accent teal so the eye lands on what will change."""
-    if _ARROW not in value:
-        return SecondaryText(value, color=color, **kwargs)
-    before, _, target = value.rpartition(_ARROW)
-    return SecondaryText(
-        "",
-        color=color,
-        spans=[
-            ft.TextSpan(before + _ARROW),
-            ft.TextSpan(target, style=ft.TextStyle(color=Theme.Colors.ACCENT)),
-        ],
-        **kwargs,
-    )
-
 
 class PendingChangeBatchCard(ft.Container):
     """One decision over many rows: every proposal in the batch as a
@@ -130,11 +113,6 @@ class PendingChangeBatchCard(ft.Container):
             counts[str(item.get("status"))] = counts.get(str(item.get("status")), 0) + 1
         return ", ".join(f"{n} {status}" for status, n in sorted(counts.items()))
 
-    def _row_line(self, item: dict[str, Any]) -> str:
-        return "  \u00b7  ".join(
-            str(line.get("value", "")) for line in item.get("display") or []
-        )
-
     def render(self, items: list[dict[str, Any]]) -> None:
         self._items = items
         pending = [i for i in items if i.get("status") == "pending"]
@@ -171,10 +149,10 @@ class PendingChangeBatchCard(ft.Container):
             status = str(item.get("status", "pending"))
             vetoed = item_id in self._excluded
             dimmed = vetoed or status == "rejected"
-            line = (
-                SecondaryText(self._row_line(item), color=ft.Colors.OUTLINE)
-                if dimmed
-                else _value_text(self._row_line(item), color=ft.Colors.ON_SURFACE)
+            block = ft.Column(
+                _display_rows(item.get("display") or [], dimmed=dimmed),
+                spacing=2,
+                tight=True,
             )
             trailing: ft.Control
             if status == "pending":
@@ -189,9 +167,9 @@ class PendingChangeBatchCard(ft.Container):
                 trailing = SecondaryText(copy, color=color)
             rows.append(
                 ft.Row(
-                    [ft.Container(content=line, expand=True), trailing],
+                    [ft.Container(content=block, expand=True), trailing],
                     spacing=Theme.Spacing.SM,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
                 )
             )
         if pending:
@@ -312,27 +290,10 @@ class PendingChangeCard(ft.Container):
         if resolved and not self._expanded:
             self.content = ft.Column(rows, spacing=Theme.Spacing.SM, tight=True)
             return
-        for line in data.get("display") or []:
-            # The value gets the row's remaining width and WRAPS: a long
-            # before -> after line clipped at the card edge is exactly
-            # the half-truth a confirmation cannot afford.
-            rows.append(
-                ft.Row(
-                    [
-                        SecondaryText(str(line.get("label", ""))),
-                        ft.Container(
-                            content=_value_text(
-                                str(line.get("value", "")),
-                                color=ft.Colors.ON_SURFACE,
-                                text_align=ft.TextAlign.RIGHT,
-                            ),
-                            expand=True,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.SM,
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                )
-            )
+        # The subject (payee/amount/date) reads as context; every row
+        # after it is a proposed fact, teal-highlighted the same way a
+        # batch item's rows are - one card, one visual language.
+        rows.extend(_display_rows(data.get("display") or [], dimmed=False))
         error = data.get("error")
         if error:
             rows.append(SecondaryText(str(error), color=Theme.Colors.ERROR))

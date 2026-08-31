@@ -31,9 +31,18 @@ from app.services.ai.domains.chat.agent_loader import (
     DEFAULT_AGENT_SLUG,
     resolve_agent,
 )
+from app.services.ai.domains.chat.attachments import (
+    ChatAttachment,
+    annotate_attachments,
+    build_user_content,
+)
 {%- if ai_backend != "memory" %}
 from app.services.ai.domains.chat.module_context import render_memory_modules
 {%- endif %}
+from app.services.ai.domains.chat.readings import (
+    merge_staged_readings,
+    reading_stage,
+)
 {%- if ai_rag %}
 from app.services.ai.domains.chat.rag_context import RAGContext
 {%- endif %}
@@ -56,6 +65,7 @@ from app.services.ai.service.base import (
 {%- endif %}
 )
 from app.services.ai.service.chat import ChatMixin
+from app.services.ai.service.prompt import history_char_budget
 {%- if ai_framework == "pydantic-ai" %}
 from app.services.ai.service.trace import (
     call_args_preview,
@@ -96,6 +106,7 @@ class StreamingMixin(ChatMixin):
         stream_delta: bool = False,
         agent_slug: str | None = None,
         surface: str | None = None,
+        attachments: list[ChatAttachment] | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -139,9 +150,15 @@ class StreamingMixin(ChatMixin):
             else:
                 agent_config = await resolve_agent()
 
-            # Setup conversation and add user message
+            # Setup conversation and add user message. The stored text
+            # carries the attachment marker; the bytes ride only this
+            # turn's model call (history replays as text).
             conversation = self._setup_conversation(
-                message, conversation_id, user_id, config=current, surface=surface
+                annotate_attachments(message, attachments),
+                conversation_id,
+                user_id,
+                config=current,
+                surface=surface,
             )
 
             # Create streaming conversation wrapper
@@ -182,6 +199,19 @@ class StreamingMixin(ChatMixin):
             # Guarded per-user memory block (saved via the save_memory tool)
             memory_context = await build_user_memory_context(user_id)
 
+            # History budget scales with the EFFECTIVE model for this
+            # request (the agent's pin wins over the active default).
+            from app.services.ai.domains.llm.catalog import context_window_for
+
+            effective_model = (
+                agent_config.model_id
+                if agent_config is not None and agent_config.model_id
+                else current.model
+            )
+            history_budget = history_char_budget(
+                await context_window_for(effective_model)
+            )
+
             # The agent row's memory modules (e.g. the finance snapshot)
             agent_modules_context = await render_memory_modules(
                 agent_config.memory_modules, user_id=user_id
@@ -201,6 +231,7 @@ class StreamingMixin(ChatMixin):
                 agent_config=agent_config,
 {% if ai_backend != "memory" %}                memory_context=memory_context,
                 agent_modules_context=agent_modules_context,
+                history_budget=history_budget,
 {% endif %}            )
 {% else %}
             # Prepare LLM and messages with full context
@@ -230,12 +261,17 @@ class StreamingMixin(ChatMixin):
             # The turn's user rides a ContextVar for the whole stream:
             # a memory write lands mid-stream, inside a tool call, and
             # has no other way to know whose fact it is.
-            with memory_user(
-                user_id,
-                agent_slug=agent_slug,
-                conversation_id=conversation.id,
+            with (
+                memory_user(
+                    user_id,
+                    agent_slug=agent_slug,
+                    conversation_id=conversation.id,
+                ),
+                reading_stage() as staged_readings,
             ):
-                async with agent.run_stream_events(conversation_context) as events:
+                async with agent.run_stream_events(
+                    build_user_content(conversation_context, attachments)
+                ) as events:
                     async for event in events:
                         text_chunk = ""
                         if isinstance(event, PartStartEvent) and isinstance(
@@ -386,6 +422,9 @@ class StreamingMixin(ChatMixin):
             self._record_usage(f"stream_chat:{agent_config.slug}", {"input_tokens": 0, "output_tokens": 0}, user_id)
 {% endif %}
 {%- endif %}
+            # Extractions recorded mid-run outlive the image: fold them
+            # into the conversation before finalize persists it.
+            merge_staged_readings(conversation.metadata, staged_readings)
             # Finalize conversation (update metadata and save)
             self._finalize_conversation(
                 conversation, response_time_ms, is_streaming=True

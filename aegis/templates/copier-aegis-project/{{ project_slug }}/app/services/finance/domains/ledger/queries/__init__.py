@@ -20,8 +20,8 @@ from app.services.finance.domains.ledger.queries import (
     filters,
     merchants,
     networth,
+    splits,
     transactions,
-    transfers,
 )
 from app.services.finance.domains.ledger.queries.accounts import (
     account_by_id,
@@ -52,6 +52,7 @@ from app.services.finance.domains.ledger.queries.categories import (
 )
 from app.services.finance.domains.ledger.queries.filters import (
     live_account_ids,
+    split_aware_category_clause,
     transaction_search_filter,
     uncategorized_catchall_ids,
 )
@@ -81,12 +82,14 @@ from app.services.finance.domains.ledger.queries.networth import (
     priced_trade_rows,
     valuations_for_accounts,
 )
+from app.services.finance.domains.ledger.queries.splits import (
+    splits_for_parents,
+)
 from app.services.finance.domains.ledger.queries.transactions import (
     dated_amounts_in_window,
     dedup_match,
     live_transactions_by_ids,
     outflow_by_account_in_window,
-    splits_for_parents,
     tag_by_normalized_name,
     tag_links,
     tagged_transaction_ids,
@@ -97,10 +100,6 @@ from app.services.finance.domains.ledger.queries.transactions import (
     transactions_by_ids,
     transactions_page,
     uncategorized_page,
-)
-from app.services.finance.domains.ledger.queries.transfers import (
-    transfer_by_id,
-    transfers_for_owner,
 )
 
 __all__ = [
@@ -155,6 +154,8 @@ __all__ = [
     "reconcile_adjustment_on",
     "register_balance_through",
     "spending_rows",
+    "split_aware_category_clause",
+    "splits",
     "splits_for_parents",
     "tag_by_normalized_name",
     "tag_links",
@@ -168,9 +169,6 @@ __all__ = [
     "transactions",
     "transactions_by_ids",
     "transactions_page",
-    "transfer_by_id",
-    "transfers",
-    "transfers_for_owner",
     "uncategorized_catchall_ids",
     "uncategorized_page",
     "valuation_by_key",

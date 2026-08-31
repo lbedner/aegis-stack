@@ -24,6 +24,7 @@ from app.services.finance.models import (
     FinanceAccount,
     FinanceInsight,
     FinanceTransaction,
+    FinanceTransactionSplit,
 )
 from app.services.finance.utils import transaction_payee_key
 
@@ -66,24 +67,53 @@ async def spend_by_category(
     end: date,
     category_ids: Iterable[int],
 ) -> dict[int, int]:
-    """Positive cents spent per category over ``[start, end)`` - one query
-    regardless of how many categories are asked for."""
+    """Positive cents spent per category over ``[start, end)`` - two
+    queries regardless of how many categories are asked for.
+
+    Split-aware: a split parent's own category stops counting and its
+    lines count instead (same window/account predicate, applied to the
+    parent they hang off), so a split never double-counts."""
     wanted = set(category_ids)
     if not wanted:
         return {}
     filters = _spend_filters(owner_user_id, start, end)
-    filters.append(FinanceTransaction.category_id.in_(wanted))
-    rows = (
+    parent_rows = (
         await db.exec(
             select(
                 FinanceTransaction.category_id,
                 func.sum(FinanceTransaction.amount),
             )
-            .where(*filters)
+            .where(
+                *filters,
+                FinanceTransaction.is_split.is_(False),
+                FinanceTransaction.category_id.in_(wanted),
+            )
             .group_by(FinanceTransaction.category_id)
         )
     ).all()
-    return {category_id: int(-(total or 0)) for category_id, total in rows}
+    split_rows = (
+        await db.exec(
+            select(
+                FinanceTransactionSplit.category_id,
+                func.sum(FinanceTransactionSplit.amount),
+            )
+            .join(
+                FinanceTransaction,
+                FinanceTransaction.id
+                == FinanceTransactionSplit.parent_transaction_id,
+            )
+            .where(
+                *filters,
+                FinanceTransaction.is_split.is_(True),
+                FinanceTransactionSplit.category_id.in_(wanted),
+            )
+            .group_by(FinanceTransactionSplit.category_id)
+        )
+    ).all()
+    spent: dict[int, int] = {}
+    for category_id, total in [*parent_rows, *split_rows]:
+        spent[category_id] = spent.get(category_id, 0) + int(-(total or 0))
+    return spent
 
 
 async def spend_by_payee_key(

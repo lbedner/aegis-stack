@@ -7,6 +7,108 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **The Transfers review queue**: the suggested-transfer lane
+  (detection's suggest threshold, the confirm/reject endpoints and
+  service methods, the Review > Transfers sub-tab, and the transfer
+  response schemas) is gone end to end. Transfer detection now pairs
+  ONLY high-confidence matches, automatically; a fuzzy near-miss simply
+  stays visible as ordinary spend/income instead of queueing for a
+  review nobody performed. Auto-pairing, category-classified flagging,
+  and adjustment-pair handling are unchanged.
+
+### Added
+
+- **Durable readings from image turns**: attachment bytes ride one turn
+  by design, but the extraction no longer dies with them. A generic
+  `record_reading` chat tool (schema-forced, Pydantic-validated - the
+  same door-guarding pattern as the finance queue) lets an agent record
+  every line item it reads out of a receipt/order/document image; the
+  turn stages it, finalize merges it into the conversation's stored
+  metadata (bounded), and every later turn re-injects the recorded
+  readings as context - "list the items again" works long after the
+  image is gone. The finance assistant is granted the tool and
+  instructed to record before answering. Reading items carry the
+  source's own grouping (a shipment, a sub-receipt) so structure never
+  flattens away, the assistant is forbidden from prorating category
+  totals across charges, and the replayed-history budget now
+  scales with the ACTIVE model's context window (5% of context in
+  chars, floored at 6k for small local models, capped at 60k so a
+  million-token model doesn't re-bill the whole transcript every turn;
+  agent model pins respected) instead of a fixed small-model constant -
+  so an agent stops "forgetting" allocations it computed minutes
+  earlier.
+
+- **Readable approval cards**: a proposal's dates read like "Aug 27,
+  2026" instead of "2026-08-27" throughout the propose/approve queue
+  (card, batch, and CLI-style subjects share the one formatter). Batch
+  cards no longer flatten a multi-line proposal into one dot-joined
+  string - each split's category and amount gets its own line, matching
+  the single-card layout. Every card's plain (non-arrow) detail value
+  now pops in accent teal - the same treatment an arrow's target already
+  got - so the eye lands on what the proposal actually changes; a
+  rejected or vetoed row never highlights. The approvals queue moved to
+  its own Review > Approvals sub-tab (cards flow as a wrapping grid,
+  with an empty state like every other queue); Overview now carries
+  only a one-line "N pending changes awaiting your approval" banner
+  that jumps straight to it - proposals are never invisible, and never
+  bury the summary page.
+
+- **Finance split transactions**: one purchase can now be carved into
+  category lines. The parent row is never modified - lines live in the
+  existing `finance_transaction_split` table, parts are stated as positive
+  magnitudes and the unclaimed difference auto-fills as a remainder line
+  under the parent's own category. Category reporting (budget actuals,
+  budget summary, categories tab, spending totals, register category
+  filter) swaps a split parent for its lines, while payee, cashflow and
+  account math stay on the parent so nothing double-counts. Ships with
+  split/unsplit API endpoints, a register split editor with a live
+  remainder line, and a `transaction.split` change type on the agent
+  propose/approve queue.
+- **Chat image attachments**: the embeddable chat panel can attach
+  images (screenshots, receipts) to a turn. Fully generic across the AI
+  system: attachments ride the chat request body, the service hands them
+  to the model as multimodal content (any vision-capable model on any
+  provider), and history keeps a text marker of what was attached. The
+  finance assistant uses this to read itemized order screenshots and
+  propose a transaction split, with the approval card listing every line
+  (item memo, category, amount, remainder) before anything is written.
+- **Paste images anywhere on the dashboard**: Flet has no
+  clipboard-image API, so a capture script spliced into the dashboard
+  page posts pasted images to a new generic `/api/v1/pastebox` endpoint
+  (bounded, drain-once, framework-level); consumer surfaces poll-drain
+  it - chat pulls a paste straight into its attachment chips, so
+  Ctrl/Cmd+V behaves exactly like the attach button. Staged chips show
+  a clickable thumbnail of the actual image (full-size preview dialog),
+  not just a filename. A "Receiving
+  image..." busy indicator bridges the upload gap: the capture script
+  announces the paste before uploading, and both the paste and picker
+  paths show the same indicator until the chip lands.
+- **Replay a chat message**: every user bubble (live or reloaded from
+  history) carries a replay control that re-sends the same text as a
+  fresh turn, riding whatever attachments are staged at that moment.
+  Stored attachment markers are stripped on replay (image bytes ride
+  one turn only), and a failed turn now restages its attachments
+  instead of losing them - the recover-from-a-model-error path is one
+  click. Sent images stay replayable from session memory (bounded to
+  the last 8 image-carrying turns; never persisted), so a replay
+  re-sends the original screenshots without re-pasting.
+- **Agent proposal hygiene**: `transaction.split` payloads are validated
+  at propose time (positive magnitudes, at least one part), so a card
+  that can never execute is refused at the door and the error loops back
+  to the agent. A new `withdraw` write tool lets an agent retract its
+  own still-pending proposals - resolved as rejected with a "withdrawn"
+  note so the audit trail keeps the mistake - instead of leaving bad
+  cards for the user to reject by hand. Cards whose stored payload no
+  longer passes a since-tightened rule stay resolvable: they render as
+  their raw payload and can still be rejected or withdrawn (validation
+  guards the door, never the cleanup). Card display rows are typed
+  (`ChangeDisplayRow`) end to end through the registry, executors, and
+  queue - plain dicts exist only in the frozen audit JSON and at the
+  agent tool-result boundary.
+
+
 ## [0.10.1] - 2026-07-20
 
 ### Added

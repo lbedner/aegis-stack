@@ -18,10 +18,13 @@ from app.services.finance.deps import (
     get_finance_service,
     get_owner_user_id,
 )
+from app.services.finance.models import FinanceTransactionSplit
 from app.services.finance.schemas import (
     CategorySuggestionListResponse,
     SimilarTransaction,
     SimilarTransactionListResponse,
+    SplitLineResponse,
+    SplitListResponse,
     SuggestCategoriesRequest,
     TagAssign,
     TagRef,
@@ -32,10 +35,25 @@ from app.services.finance.schemas import (
     TransactionDeleteResult,
     TransactionListResponse,
     TransactionResponse,
+    TransactionSplitRequest,
+    UnsplitResponse,
 )
 from app.services.finance.service import FinanceService
 
 router = APIRouter()
+
+
+def _split_line(
+    split: FinanceTransactionSplit, names: dict[int, str]
+) -> SplitLineResponse:
+    """A split row as its response shape, category name resolved."""
+    return SplitLineResponse(
+        id=split.id,
+        amount=split.amount,
+        category_id=split.category_id,
+        category=names.get(split.category_id),
+        memo=split.memo,
+    )
 
 
 # -- Transactions ------------------------------------------------------------
@@ -77,8 +95,17 @@ async def list_transactions(
         page=page,
         page_size=page_size,
     )
+    splits_by_txn = await service.transaction_splits(
+        [t.id for t in transactions if t.is_split and t.id is not None]
+    )
     names = await service.category_names(
         {t.category_id for t in transactions if t.category_id is not None}
+        | {
+            s.category_id
+            for lines in splits_by_txn.values()
+            for s in lines
+            if s.category_id is not None
+        }
     )
     payees = await service.merchant_names(
         {t.merchant_id for t in transactions if t.merchant_id is not None}
@@ -114,6 +141,9 @@ async def list_transactions(
         item.tags = [
             TagRef(id=t.id, name=t.name, color=t.color)
             for t in tags_by_txn.get(txn.id, [])
+        ]
+        item.splits = [
+            _split_line(s, names) for s in splits_by_txn.get(txn.id, [])
         ]
         items.append(item)
     return TransactionListResponse(items=items, total=total)
@@ -193,6 +223,54 @@ async def categorize_transaction(
     item = TransactionResponse.from_row(txn)
     item.category = names.get(txn.category_id)
     return item
+
+
+@router.post("/transactions/{transaction_id}/split", response_model=SplitListResponse)
+async def split_transaction(
+    transaction_id: int,
+    body: TransactionSplitRequest,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SplitListResponse:
+    """Carve a transaction into category lines. Parts are positive
+    magnitudes in cents; any unclaimed difference becomes a remainder
+    line under the parent's own category. Replaces existing lines; the
+    parent row itself is never modified."""
+    try:
+        lines = await service.split_transaction(
+            transaction_id, body.parts, owner_user_id=owner_user_id
+        )
+    except ValueError as exc:
+        if "not found" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from None
+    names = await service.category_names(
+        {s.category_id for s in lines if s.category_id is not None}
+    )
+    return SplitListResponse(items=[_split_line(s, names) for s in lines])
+
+
+@router.delete("/transactions/{transaction_id}/split", response_model=UnsplitResponse)
+async def unsplit_transaction(
+    transaction_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> UnsplitResponse:
+    """Remove a transaction's split lines; it reports under its own
+    category again."""
+    try:
+        removed = await service.unsplit_transaction(
+            transaction_id, owner_user_id=owner_user_id
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+        ) from None
+    return UnsplitResponse(removed=removed)
 
 
 @router.get("/tags", response_model=list[TagResponse])

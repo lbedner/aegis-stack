@@ -203,6 +203,45 @@ class TestChatAgentSlug:
         assert response.status_code == 200
         assert mock_chat.call_args.kwargs["agent_slug"] is None
 
+    def test_chat_threads_attachments_to_the_service(
+        self, client: TestClient
+    ) -> None:
+        """Image parts ride the same request body as the message - one
+        generic surface for every agent, not a per-surface upload."""
+        with patch(
+            "app.components.backend.api.ai.router.ai_service.chat",
+            new=AsyncMock(return_value=self._reply()),
+        ) as mock_chat:
+            response = client.post(
+                "/api/v1/ai/chat",
+                json={
+                    "message": "split this",
+                    "attachments": [
+                        {
+                            "media_type": "image/png",
+                            "data_b64": "aGk=",
+                            "name": "order.png",
+                        }
+                    ],
+                },
+            )
+
+        assert response.status_code == 200
+        (attachment,) = mock_chat.call_args.kwargs["attachments"]
+        assert attachment.media_type == "image/png"
+        assert attachment.data_b64 == "aGk="
+        assert attachment.name == "order.png"
+
+    def test_chat_defaults_attachments_to_empty(self, client: TestClient) -> None:
+        with patch(
+            "app.components.backend.api.ai.router.ai_service.chat",
+            new=AsyncMock(return_value=self._reply()),
+        ) as mock_chat:
+            response = client.post("/api/v1/ai/chat", json={"message": "hello"})
+
+        assert response.status_code == 200
+        assert mock_chat.call_args.kwargs["attachments"] == []
+
 
 class TestLLMPickerGating:
     """The picker's usable filter: no key, no models."""

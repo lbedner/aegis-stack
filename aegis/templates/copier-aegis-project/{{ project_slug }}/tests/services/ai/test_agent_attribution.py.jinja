@@ -358,7 +358,6 @@ class TestHistoryBudget:
         self, mock_ai_settings: MagicMock
     ) -> None:
         from app.services.ai.models import AIProvider, Conversation, MessageRole
-        from app.services.ai.service.prompt import HISTORY_CHAR_BUDGET
 
         service = AIService(mock_ai_settings)
         conversation = Conversation(
@@ -369,9 +368,13 @@ class TestHistoryBudget:
             conversation.add_message(MessageRole.ASSISTANT, f"answer {i} " + "x" * 2000)
         conversation.add_message(MessageRole.USER, "the current question")
 
-        context = service._build_conversation_context(conversation)
+        # The budget itself scales with the model (see
+        # test_history_budget.py); here a fixed one proves the clipping.
+        context = service._build_conversation_context(
+            conversation, history_budget=6_000
+        )
 
-        assert len(context) <= HISTORY_CHAR_BUDGET + len(
+        assert len(context) <= 6_000 + len(
             "\n\nUser: the current question"
         )
         # Newest history survives; the oldest essays are the ones dropped.

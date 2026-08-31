@@ -16,7 +16,16 @@ from app.services.ai.domains.chat.agent_loader import (
     DEFAULT_AGENT_SLUG,
     resolve_agent,
 )
+from app.services.ai.domains.chat.attachments import (
+    ChatAttachment,
+    annotate_attachments,
+{% if ai_framework == "pydantic-ai" %}    build_user_content,
+{% endif %})
 from app.services.ai.domains.chat.module_context import render_memory_modules
+from app.services.ai.domains.chat.readings import (
+    merge_staged_readings,
+    reading_stage,
+)
 from app.services.ai.domains.chat.titles import conversation_title
 from app.services.ai.domains.chat.user_memory import (
     build_user_memory_context,
@@ -28,7 +37,7 @@ from app.services.ai.service.base import (
     ConversationError,
 {% if ai_framework == "pydantic-ai" %}    ProviderError,
 {% endif %})
-from app.services.ai.service.prompt import PromptMixin{%- if ai_backend != "memory" %}
+from app.services.ai.service.prompt import PromptMixin, history_char_budget{%- if ai_backend != "memory" %}
 
 {%- endif %}
 {%- if include_finance and ai_backend != "memory" %}
@@ -51,6 +60,7 @@ class ChatMixin(PromptMixin):
         user_id: str = "default",
         agent_slug: str | None = None,
         surface: str | None = None,
+        attachments: list[ChatAttachment] | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -67,6 +77,8 @@ class ChatMixin(PromptMixin):
             surface: Originating chat surface, recorded on new
                 conversations so each embedded chat lists only its own
                 history
+            attachments: Image parts riding this turn (screenshots,
+                receipts); the model sees them alongside the message
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -93,9 +105,15 @@ class ChatMixin(PromptMixin):
             else:
                 agent_config = await resolve_agent()
 
-            # Setup conversation and add user message
+            # Setup conversation and add user message. The stored text
+            # carries the attachment marker; the bytes ride only this
+            # turn's model call (history replays as text).
             conversation = self._setup_conversation(
-                message, conversation_id, user_id, config=current, surface=surface
+                annotate_attachments(message, attachments),
+                conversation_id,
+                user_id,
+                config=current,
+                surface=surface,
             )
 
 {% if ai_rag %}
@@ -127,6 +145,19 @@ class ChatMixin(PromptMixin):
 {% if ai_backend != "memory" %}            # Guarded per-user memory block (saved via the save_memory tool)
             memory_context = await build_user_memory_context(user_id)
 
+            # History budget scales with the EFFECTIVE model for this
+            # request (the agent's pin wins over the active default).
+            from app.services.ai.domains.llm.catalog import context_window_for
+
+            effective_model = (
+                agent_config.model_id
+                if agent_config is not None and agent_config.model_id
+                else current.model
+            )
+            history_budget = history_char_budget(
+                await context_window_for(effective_model)
+            )
+
             # The agent row's memory modules (e.g. the finance snapshot)
             agent_modules_context = await render_memory_modules(
                 agent_config.memory_modules, user_id=user_id
@@ -150,17 +181,26 @@ class ChatMixin(PromptMixin):
                 agent_config=agent_config,
 {% if ai_backend != "memory" %}                memory_context=memory_context,
                 agent_modules_context=agent_modules_context,
+                history_budget=history_budget,
 {% endif %}            )
 
             # Get AI response. The turn's user rides a ContextVar so a
             # memory write from inside the model call knows whose it is.
             start_time = datetime.now(UTC)
-            with memory_user(
-                user_id,
-                agent_slug=agent_slug,
-                conversation_id=conversation.id,
+            with (
+                memory_user(
+                    user_id,
+                    agent_slug=agent_slug,
+                    conversation_id=conversation.id,
+                ),
+                reading_stage() as staged_readings,
             ):
-                result = await agent.run(conversation_context)
+                result = await agent.run(
+                    build_user_content(conversation_context, attachments)
+                )
+            # Extractions recorded mid-run outlive the image: fold them
+            # into the conversation before finalize persists it.
+            merge_staged_readings(conversation.metadata, staged_readings)
             end_time = datetime.now(UTC)
             response_time_ms = (end_time - start_time).total_seconds() * 1000
 

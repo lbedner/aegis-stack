@@ -16,22 +16,28 @@ from typing import Any
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.finance.schemas import ChangeDisplayRow
+
 
 @dataclass(frozen=True)
 class ChangeExecutor:
     """One kind of proposable mutation.
 
     ``execute`` runs the REAL service mutation and returns an audit
-    summary; ``describe`` resolves the payload's ids into the
-    human-readable lines the confirmation card renders - system truth
-    from the database, never model-authored copy.
+    summary; ``describe`` resolves the payload's ids into the typed
+    card rows the confirmation surface renders - system truth from the
+    database, never model-authored copy. Rows are ``ChangeDisplayRow``
+    end to end; they become plain dicts only at the freeze into the
+    audit column and at the tool-result boundary.
     """
 
     change_type: str
     title: str
     payload_model: type[BaseModel]
     execute: Callable[[AsyncSession, Any, int | None], Awaitable[dict[str, Any]]]
-    describe: Callable[[AsyncSession, Any, int | None], Awaitable[list[dict[str, str]]]]
+    describe: Callable[
+        [AsyncSession, Any, int | None], Awaitable[list[ChangeDisplayRow]]
+    ]
 
 
 _EXECUTORS: dict[str, ChangeExecutor] = {}

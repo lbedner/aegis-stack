@@ -29,6 +29,8 @@ dependencies = [
     "urllib3>=2.6.3",
     # System monitoring
     "psutil==7.0.0",
+    # The pastebox upload endpoint (pasted images) is multipart.
+    "python-multipart==0.0.9",
 {%- if include_scheduler %}
     "apscheduler==3.10.4",
 {%- endif %}
@@ -80,9 +82,6 @@ dependencies = [
 {%- endif %}
 {%- if include_auth or include_payment or include_insights or include_blog or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend == "postgres") %}
     "alembic==1.16.5",
-{%- endif %}
-{%- if include_auth or include_ai or include_blog or include_finance or include_htmx %}
-    "python-multipart==0.0.9",
 {%- endif %}
 {%- if include_ai %}
 {%- if ai_framework == "pydantic-ai" %}

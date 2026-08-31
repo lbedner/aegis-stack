@@ -42,7 +42,7 @@ from app.services.payment.models import (  # noqa: F401
 # Import blog models to register them with SQLModel metadata
 from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F401
 {% endif %}
-{%- if include_ai %}
+{%- if include_ai and ai_backend != "memory" %}
 # Import AI models to register them with SQLModel metadata. The agents and
 # llm subpackages each import every model module they own, so these two
 # names pull in the whole set.

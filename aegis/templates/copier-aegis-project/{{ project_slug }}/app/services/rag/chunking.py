@@ -114,11 +114,21 @@ def chunk_params_for_strategy(strategy: str) -> tuple[int, int]:
     """
     params = CHUNKING_STRATEGIES.get(strategy)
     if params is None:
-        logger.warning(
-            "Unknown chunking strategy; using paragraph", strategy=strategy
-        )
+        logger.warning("Unknown chunking strategy; using paragraph", strategy=strategy)
         return CHUNKING_STRATEGIES["paragraph"]
     return params
+
+
+def _resolve_overlap(chunk_size: int, chunk_overlap: int | None) -> int:
+    """Default overlap to a fifth of the chunk; reject one that never advances."""
+    if chunk_overlap is None:
+        return chunk_size // 5
+    if chunk_overlap >= chunk_size:
+        raise ValueError(
+            f"chunk_overlap ({chunk_overlap}) must be less than "
+            f"chunk_size ({chunk_size})"
+        )
+    return chunk_overlap
 
 
 class DocumentChunker:
@@ -130,20 +140,30 @@ class DocumentChunker:
     def __init__(
         self,
         chunk_size: int = 2000,
-        chunk_overlap: int = 400,
-        min_chunk_size: int = 50,
+        chunk_overlap: int | None = None,
+        min_chunk_size: int | None = None,
     ):
         """
         Initialize document chunker.
 
         Args:
             chunk_size: Maximum chunk size in characters
-            chunk_overlap: Overlap between chunks in characters
-            min_chunk_size: Minimum chunk size to keep (smaller chunks filtered out)
+            chunk_overlap: Overlap between chunks (default: a fifth of chunk_size)
+            min_chunk_size: Minimum chunk size to keep (default 50, scaled
+                down for small chunk sizes; smaller chunks filtered out)
         """
+        if chunk_size <= 0:
+            raise ValueError(f"chunk_size ({chunk_size}) must be positive")
         self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-        self.min_chunk_size = min_chunk_size
+        self.chunk_overlap = _resolve_overlap(chunk_size, chunk_overlap)
+        if min_chunk_size is None:
+            # Default junk-fragment floor, scaled down where separator
+            # splits land just under a small ceiling.
+            self.min_chunk_size = min(50, chunk_size // 2)
+        else:
+            # An explicit floor stands as the caller wrote it, kept just
+            # below the ceiling - at it, every chunk would be filtered.
+            self.min_chunk_size = min(min_chunk_size, chunk_size - 1)
 
     async def chunk(
         self,
@@ -162,8 +182,16 @@ class DocumentChunker:
         Returns:
             list[Document]: Chunked documents with preserved metadata
         """
-        size = chunk_size or self.chunk_size
-        overlap = chunk_overlap or self.chunk_overlap
+        size = self.chunk_size if chunk_size is None else chunk_size
+        if size <= 0:
+            # ``or`` used to swallow 0 silently; a negative walked the
+            # splitter into a non-advancing loop.
+            raise ValueError(f"chunk_size ({size}) must be positive")
+        overlap = (
+            self.chunk_overlap
+            if chunk_size is None and chunk_overlap is None
+            else _resolve_overlap(size, chunk_overlap)
+        )
 
         # Run chunking in thread pool (CPU-bound)
         chunks = await asyncio.to_thread(
@@ -215,10 +243,14 @@ class DocumentChunker:
                 content, chunk_size, chunk_overlap, separators
             )
 
-            # Filter out low-quality chunks and track valid ones
+            # Filter out low-quality chunks and track valid ones. A document
+            # that fits in a single chunk is kept whole: dropping it would
+            # erase short files from the index entirely.
             valid_chunks: list[tuple[str, int, int]] = []
             for chunk_text, start_line, end_line in doc_chunks:
-                if not self._is_low_quality_chunk(chunk_text, language):
+                if len(doc_chunks) == 1 or not self._is_low_quality_chunk(
+                    chunk_text, language
+                ):
                     valid_chunks.append((chunk_text, start_line, end_line))
 
             for i, (chunk_text, start_line, end_line) in enumerate(valid_chunks):
@@ -245,13 +277,21 @@ class DocumentChunker:
 
         return chunks
 
+    # Line prefixes that mark code-file boilerplate (imports/comments):
+    # a chunk that is mostly these embeds poorly and pollutes search.
+    _BOILERPLATE_PREFIXES: dict[str, tuple[str, ...]] = {
+        "python": ("import ", "from ", "#"),
+        "javascript": ("import ", "export {", "export *", "require(", "//"),
+        "typescript": ("import ", "export {", "export *", "require(", "//"),
+    }
+
     def _is_low_quality_chunk(self, content: str, language: str | None) -> bool:
         """
         Check if a chunk is low-quality and should be filtered out.
 
         Filters:
         - Chunks smaller than min_chunk_size characters
-        - Chunks that are mostly import statements (for code files)
+        - Code-file chunks that are >70% imports/comments
 
         Args:
             content: The chunk content
@@ -264,37 +304,13 @@ class DocumentChunker:
         if len(content.strip()) < self.min_chunk_size:
             return True
 
-        # For Python files, filter chunks that are mostly imports
-        if language and language.lower() == "python":
+        prefixes = self._BOILERPLATE_PREFIXES.get((language or "").lower())
+        if prefixes:
             lines = [line.strip() for line in content.split("\n") if line.strip()]
             if not lines:
                 return True
-
-            import_lines = sum(
-                1
-                for line in lines
-                if line.startswith(("import ", "from ")) or line.startswith("#")
-            )
-
-            # Filter if more than 70% of lines are imports/comments
-            if len(lines) > 0 and (import_lines / len(lines)) > 0.7:
-                return True
-
-        # For JS/TS files, filter chunks that are mostly imports
-        if language and language.lower() in ("javascript", "typescript"):
-            lines = [line.strip() for line in content.split("\n") if line.strip()]
-            if not lines:
-                return True
-
-            import_lines = sum(
-                1
-                for line in lines
-                if line.startswith(("import ", "export {", "export *", "require("))
-                or line.startswith("//")
-            )
-
-            # Filter if more than 70% of lines are imports/comments
-            if len(lines) > 0 and (import_lines / len(lines)) > 0.7:
+            boilerplate = sum(1 for line in lines if line.startswith(prefixes))
+            if boilerplate / len(lines) > 0.7:
                 return True
 
         return False
@@ -479,4 +495,5 @@ def estimate_chunks(content_length: int, chunk_size: int, chunk_overlap: int) ->
     if effective_size <= 0:
         return 1
 
-    return max(1, (content_length - chunk_overlap) // effective_size + 1)
+    remaining = content_length - chunk_overlap
+    return max(1, (remaining + effective_size - 1) // effective_size)

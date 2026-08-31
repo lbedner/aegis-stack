@@ -206,15 +206,6 @@ MESSAGES: dict[str, str] = {
         "Note : le premier démarrage peut prendre du temps pour télécharger les modèles"
     ),
     "interactive.ai_rag_label": "RAG (Retrieval-Augmented Generation) :",
-    "interactive.ai_rag_warning": (
-        "Attention : RAG nécessite Python <3.14 (limitation chromadb/onnxruntime)"
-    ),
-    "interactive.ai_rag_compat_note": (
-        "Activer RAG générera un projet nécessitant Python 3.11-3.13"
-    ),
-    "interactive.ai_rag_compat_prompt": (
-        "Activer RAG malgré l'incompatibilité avec Python 3.14 ?"
-    ),
     "interactive.ai_rag_prompt": (
         "Activer RAG pour l'indexation de documents et la recherche sémantique ?"
     ),

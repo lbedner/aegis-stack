@@ -185,15 +185,6 @@ MESSAGES: dict[str, str] = {
         "참고: 첫 시작 시 모델 다운로드에 시간이 걸릴 수 있습니다"
     ),
     "interactive.ai_rag_label": "RAG (검색 증강 생성):",
-    "interactive.ai_rag_warning": (
-        "경고: RAG는 Python <3.14 필요 (chromadb/onnxruntime 제한)"
-    ),
-    "interactive.ai_rag_compat_note": (
-        "RAG를 활성화하면 Python 3.11-3.13이 필요한 프로젝트가 생성됩니다"
-    ),
-    "interactive.ai_rag_compat_prompt": (
-        "Python 3.14 비호환에도 RAG를 활성화하시겠습니까?"
-    ),
     "interactive.ai_rag_prompt": (
         "문서 인덱싱 및 시맨틱 검색을 위해 RAG를 활성화하시겠습니까?"
     ),

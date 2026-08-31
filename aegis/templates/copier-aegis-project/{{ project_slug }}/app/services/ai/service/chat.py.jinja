@@ -21,16 +21,20 @@ from app.services.ai.domains.chat.attachments import (
     annotate_attachments,
 {% if ai_framework == "pydantic-ai" %}    build_user_content,
 {% endif %})
+{%- if ai_backend != "memory" %}
 from app.services.ai.domains.chat.module_context import render_memory_modules
+{%- endif %}
 from app.services.ai.domains.chat.readings import (
     merge_staged_readings,
     reading_stage,
 )
 from app.services.ai.domains.chat.titles import conversation_title
+{%- if ai_backend != "memory" %}
 from app.services.ai.domains.chat.user_memory import (
     build_user_memory_context,
     memory_user,
 )
+{%- endif %}
 from app.services.ai.models import Conversation, ConversationMessage, MessageRole
 from app.services.ai.service.base import (
     AIServiceError,
@@ -187,6 +191,7 @@ class ChatMixin(PromptMixin):
             # Get AI response. The turn's user rides a ContextVar so a
             # memory write from inside the model call knows whose it is.
             start_time = datetime.now(UTC)
+{% if ai_backend != "memory" %}
             with (
                 memory_user(
                     user_id,
@@ -195,6 +200,9 @@ class ChatMixin(PromptMixin):
                 ),
                 reading_stage() as staged_readings,
             ):
+{% else %}
+            with reading_stage() as staged_readings:
+{% endif %}
                 result = await agent.run(
                     build_user_content(conversation_context, attachments)
                 )

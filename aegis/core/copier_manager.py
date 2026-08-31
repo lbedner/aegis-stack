@@ -12,7 +12,6 @@ from typing import Any, Literal
 import typer
 import yaml
 from copier import run_copy, run_update
-from packaging.version import Version
 
 from aegis import __version__
 from aegis.i18n import t
@@ -112,12 +111,7 @@ def generate_with_copier(
     # Get template context from template generator
     template_context = template_gen.get_template_context()
 
-    # Determine Python version early - may need to override for RAG compatibility
-    # When RAG is enabled, chromadb requires onnxruntime which lacks Python 3.14 wheels
     python_version = template_context.get("python_version", DEFAULT_PYTHON_VERSION)
-    ai_rag = template_context.get(AnswerKeys.AI_RAG, "no") == "yes"
-    if ai_rag and python_version and Version(python_version) >= Version("3.14"):
-        python_version = "3.13"
 
     # Convert template context to Copier data format
     # Copier uses boolean values instead of "yes"/"no" strings

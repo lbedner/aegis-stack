@@ -57,6 +57,7 @@ def mock_usage_stats() -> dict[str, Any]:
     }
 
 
+{% if ai_backend != "memory" %}
 class TestUsageStatsEndpoint:
     """Tests for /api/v1/ai/usage/stats endpoint."""
 
@@ -169,6 +170,7 @@ class TestUsageStatsEndpoint:
         assert data["recent_activity"] == []
 
 
+{% endif %}
 class TestChatAgentSlug:
     """The chat endpoints thread agent_slug through to the service."""
 
@@ -243,6 +245,7 @@ class TestChatAgentSlug:
         assert mock_chat.call_args.kwargs["attachments"] == []
 
 
+{% if ai_backend != "memory" %}
 class TestLLMPickerGating:
     """The picker's usable filter: no key, no models."""
 
@@ -401,3 +404,4 @@ class TestUserMemoryEndpoints:
             response = client.delete("/api/v1/ai/user-memory/7")
 
         assert response.status_code == 404
+{% endif %}

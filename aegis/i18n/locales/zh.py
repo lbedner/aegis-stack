@@ -837,6 +837,11 @@ MESSAGES: dict[str, str] = {
     "plugins.update_use_list_hint": "可使用 `aegis plugins list` 查看可用插件，并通过 `aegis add <name>` 安装。",
     "plugins.update_not_pip_installed": "插件「{name}」在项目 _plugins 列表中，但当前未通过 pip 安装；请先执行 `pip install aegis-plugin-{name}`。",
     "plugins.update_already_at": "{name}（已是 {version}）",
+    "plugins.local_changes_replaced": (
+        "Replaced {count} locally-modified file(s) owned by '{name}'. "
+        "Plugin files are re-rendered on install; your previous versions "
+        "were saved to {path}"
+    ),
     "plugins.update_forcing": "版本不匹配，强制更新：{error}",
     "plugins.update_progress": "正在更新插件：{name}（{old} → {new}）",
     "plugins.update_confirm_apply": "是否对「{name}」应用更新？",

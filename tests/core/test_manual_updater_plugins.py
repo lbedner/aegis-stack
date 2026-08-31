@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from aegis.core.manual_updater import ManualUpdater
+from aegis.core.manual_updater import ManualUpdater, _safe_path_segment
 
 # Make sure the in-repo fake plugin is importable via importlib.resources.
 TESTS_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
@@ -214,7 +214,15 @@ class TestInstallPluginTemplateTree:
     def test_overwrites_existing_files(self, fake_project: Path) -> None:
         """Re-running install on the same plugin overwrites — the test
         plugin's content should be deterministic, so the second run
-        produces the same output."""
+        produces the same output.
+
+        Plugin files are vendored artifacts owned by the plugin, not
+        scaffolding the project takes ownership of: an upgrade re-renders
+        them wholesale, the same way ``npm update`` replaces a package
+        rather than merging your edits to it. Local edits are replaced —
+        see ``TestPluginOverwriteIsBackedUp`` for the guarantee that they
+        are never destroyed *silently*.
+        """
         updater = ManualUpdater(fake_project)
         updater.install_plugin_template_tree("aegis_plugin_test")
         first_content = (
@@ -229,3 +237,114 @@ class TestInstallPluginTemplateTree:
             fake_project / "app/services/test_plugin/service.py"
         ).read_text()
         assert second_content == first_content
+
+
+SERVICE_FILE = "app/services/test_plugin/service.py"
+
+
+class TestPluginOverwriteIsBackedUp:
+    """Overwriting is correct; overwriting *silently* is not.
+
+    Plugin files land in the user's own repo, next to their code, so
+    "this is vendored, don't edit it" is not self-evident the way
+    ``node_modules/`` is. When an upgrade replaces a file whose content
+    differs from what we're about to write, the previous content is
+    snapshotted under ``.aegis/plugin-backups/`` (already gitignored in
+    generated projects, alongside ``deploy.yml``) and reported, so the
+    user can recover an edit they'd otherwise lose without warning.
+    """
+
+    def test_first_install_backs_up_nothing(self, fake_project: Path) -> None:
+        updater = ManualUpdater(fake_project)
+        updater.install_plugin_template_tree("aegis_plugin_test")
+
+        assert not (fake_project / ".aegis" / "plugin-backups").exists()
+
+    def test_identical_reinstall_backs_up_nothing(self, fake_project: Path) -> None:
+        """A no-op re-render must not litter backups — only genuinely
+        replaced content is worth snapshotting."""
+        updater = ManualUpdater(fake_project)
+        updater.install_plugin_template_tree("aegis_plugin_test")
+        updater.install_plugin_template_tree("aegis_plugin_test")
+
+        assert not (fake_project / ".aegis" / "plugin-backups").exists()
+
+    def test_replaced_local_edit_is_snapshotted(self, fake_project: Path) -> None:
+        updater = ManualUpdater(fake_project)
+        updater.install_plugin_template_tree("aegis_plugin_test")
+        (fake_project / SERVICE_FILE).write_text("my local edit\n")
+
+        updater.install_plugin_template_tree(
+            "aegis_plugin_test", backup_label="test_plugin/0.0.1"
+        )
+
+        backup = fake_project / ".aegis/plugin-backups/test_plugin/0.0.1" / SERVICE_FILE
+        assert backup.is_file(), "replaced local edit was not snapshotted"
+        assert backup.read_text() == "my local edit\n"
+
+    def test_reports_which_files_were_replaced(self, fake_project: Path) -> None:
+        updater = ManualUpdater(fake_project)
+        updater.install_plugin_template_tree("aegis_plugin_test")
+        (fake_project / SERVICE_FILE).write_text("my local edit\n")
+
+        result = updater.render_plugin_tree(
+            "aegis_plugin_test", backup_label="test_plugin/0.0.1"
+        )
+
+        assert SERVICE_FILE in result.replaced
+        # The untouched sibling was re-rendered identically, so it is not
+        # reported as replaced.
+        assert "app/services/test_plugin/__init__.py" not in result.replaced
+
+    def test_backup_label_defaults_when_version_unknown(
+        self, fake_project: Path
+    ) -> None:
+        updater = ManualUpdater(fake_project)
+        updater.install_plugin_template_tree("aegis_plugin_test")
+        (fake_project / SERVICE_FILE).write_text("my local edit\n")
+
+        updater.install_plugin_template_tree("aegis_plugin_test")
+
+        backup = fake_project / ".aegis/plugin-backups/previous" / SERVICE_FILE
+        assert backup.is_file()
+        assert backup.read_text() == "my local edit\n"
+
+
+class TestBackupLabelSegmentsArePathSafe:
+    """The backup directory is built from a plugin's ``spec.name`` and the
+    version recorded in ``.copier-answers.yml``. Neither is validated on
+    the install path — ``validate_plugin_name`` only guards
+    ``aegis plugins create`` — and the answers file is user-editable, so a
+    stray separator would put the snapshot outside the backup directory.
+    """
+
+    @pytest.mark.parametrize(
+        "hostile",
+        [
+            "../../etc",
+            "a/b",
+            "scraper/../../..",
+            "..",
+            ".",
+            "...",
+            "",
+            "/",
+            "..\\..\\windows",
+            "1.0/rc1",
+        ],
+    )
+    def test_result_can_never_escape_the_backup_directory(self, hostile: str) -> None:
+        """The property that matters, asserted instead of the exact
+        sanitized spelling: whatever comes out, joining it under the
+        backup root must stay under the backup root."""
+        root = Path("/tmp/backups").resolve()
+        joined = (root / _safe_path_segment(hostile)).resolve()
+
+        assert joined != root, f"{hostile!r} collapsed onto the root itself"
+        assert joined.parent == root, f"{hostile!r} escaped to {joined}"
+
+    def test_ordinary_names_and_versions_pass_through_unchanged(self) -> None:
+        """Sanitizing must not mangle the normal case — the overwhelming
+        majority — or backup paths stop being recognizable."""
+        for ordinary in ("scraper", "metrics_hub", "1.2.0", "2.0.0-rc1"):
+            assert _safe_path_segment(ordinary) == ordinary

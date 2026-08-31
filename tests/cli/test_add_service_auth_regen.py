@@ -2,7 +2,8 @@
 
 On a project generated without auth, several auth-conditional frontend files
 were left on their pre-auth render (they were not in
-``aegis/config/shared_files.py`` so the updater never regenerated them), and
+the shared-file list of the day, ``aegis/config/shared_files.py``, since
+replaced by a derived scope — so the updater never regenerated them), and
 ``auth_sessions_tab.py`` was never created (it was missing from the auth
 ``FileManifest``). The webserver then crash-looped on::
 

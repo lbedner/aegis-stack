@@ -98,6 +98,10 @@ celerybeat-schedule
 
 # Aegis deploy config (contains server host/path/docker context)
 .aegis/
+
+# Safety copies written by `aegis add` / `aegis remove` before overwriting a
+# shared file. Local artefacts of a local operation, like .aegis/ above.
+*.backup
 env/
 venv/
 ENV/

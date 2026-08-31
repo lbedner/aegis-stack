@@ -837,6 +837,11 @@ MESSAGES: dict[str, str] = {
     "plugins.update_use_list_hint": "可使用 `aegis plugins list` 檢視可用外掛,並透過 `aegis add <name>` 安裝。",
     "plugins.update_not_pip_installed": "外掛「{name}」在專案 _plugins 清單中,但當前未透過 pip 安裝;請先執行 `pip install aegis-plugin-{name}`。",
     "plugins.update_already_at": "{name}（已是 {version}）",
+    "plugins.local_changes_replaced": (
+        "Replaced {count} locally-modified file(s) owned by '{name}'. "
+        "Plugin files are re-rendered on install; your previous versions "
+        "were saved to {path}"
+    ),
     "plugins.update_forcing": "版本不相容,強制更新：{error}",
     "plugins.update_progress": "正在更新外掛：{name}（{old} → {new}）",
     "plugins.update_confirm_apply": "是否對「{name}」套用更新？",

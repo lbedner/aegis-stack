@@ -669,7 +669,7 @@ def _sync_python_file(
     Compared byte-wise that formatting reads as user edits, turning a
     pristine file into a merge with conflicts wherever real template
     changes land near the formatting differences. Mirrors the add/remove
-    path's fix for issue #715 (``ManualUpdater._merge_shared_file``).
+    path's fix for issue #715 (``render_diff.RenderDiffEngine._merge``).
 
     Returns True when the file was handled (synced, preserved, merged, or
     genuinely conflicted after a normalized merge); False when ruff or git

@@ -1,3 +1,4 @@
+{#- aegis: no-backup -#}
 """
 PostgreSQL database health check for {{ project_name }}.
 
@@ -16,7 +17,6 @@ from app.core.log import logger
 from app.services.system.health import format_bytes
 from app.services.system.models import ComponentStatus, ComponentStatusType, MigrationInfo
 
-# Cache static data that doesn't change at runtime
 _migration_cache: list[MigrationInfo] | None = None
 _pg_settings_cache: dict[str, Any] | None = None
 _schema_cache: dict[str, Any] | None = None

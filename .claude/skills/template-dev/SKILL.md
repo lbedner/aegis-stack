@@ -46,6 +46,10 @@ templates live under:
   ref for `aegis update`.
 - `aegis/core/manual_updater.py`: adds/removes a single component or service
   on an existing project without a full Copier update.
+- `aegis/core/render_diff.py`: the engine `manual_updater` uses to decide
+  what a shared file needs on add/remove. Reads the file's policy
+  annotation; you rarely edit this, but its module docstring is the
+  reference for the decision table below.
 - `Makefile` (repo root): the `test-template*` and `test-stacks*` targets used
   to validate template changes.
 
@@ -61,6 +65,55 @@ cp my-app/app/components/worker/registry.py \
 
 Quote the destination path; the directory name contains the literal `{{ project_slug }}`
 placeholder, which a shell would otherwise try to expand.
+
+## Who owns a template file
+
+Every file in the tree is governed by exactly one mechanism, and which one
+is **derived, not declared** — there is no registration list. Adding a new
+template file requires no bookkeeping anywhere.
+
+- **Component/service-owned** — the path appears in some spec's
+  `FileManifest` (`aegis/core/components.py` / `services.py`). Its existence
+  is decided by manifest membership: `aegis add` copies it, `aegis remove`
+  deletes it. Most of a component's own files.
+- **Shared** — nothing claims it. On add/remove the render-diff engine
+  renders the tree at the old answers and the new answers and diffs; a file
+  whose output changed gets written. This is where `{% if include_x %}`
+  conditionals belong.
+
+Consequence worth internalising: a `{% if include_worker %}` block inside a
+file the *auth* manifest owns will never re-render when worker is added,
+because owned files are invisible to the engine by design. Cross-cutting
+conditionals go in shared files.
+
+### Per-file policy annotations
+
+A shared file can override the default handling with a comment on its very
+first line, read and stripped before rendering:
+
+```jinja
+{#- aegis: user-owned -#}        create once, then never touch (README, docs/)
+{#- aegis: warn-if-diverged -#}  overwrite while pristine, else preserve + report
+{#- aegis: no-backup -#}         overwrite without writing a .backup
+```
+
+No annotation means the default: overwrite while pristine (with a
+`.backup`), 3-way merge once the user has edited it.
+
+The `-#` / `#-` trim markers are **required**, not stylistic. `aegis init`
+and `aegis update` render through Copier, which knows nothing about these
+annotations; without the trim markers the comment leaves a blank line at
+the top of every generated file. A recognised word missing its markers
+raises rather than silently degrading.
+
+### Whole-file gates leave a stub
+
+`{%- if include_x -%}...{%- endif -%}` wrapping an entire file still emits a
+newline when the gate is off, so Copier writes a 1-byte file. That stub is
+what the template currently produces, so it counts as pristine and gets
+populated when the gate flips on. Don't "tidy" it by making the engine treat
+existing-but-empty as user content — that is the exact bug that once left
+`docker-compose.prod.yml` empty forever after `aegis add ingress`.
 
 ## Procedure
 
@@ -111,6 +164,21 @@ Rendering modes (this resolves which template content Copier actually reads):
   committed first.
 
 ## Gates
+
+Start with the fast ones. These run in under a second against rendered
+output and catch the two mistakes template edits actually make:
+
+- `uv run pytest tests/core/test_template_tree_hygiene.py` — every template
+  parses, and no file is shadowed by a `.jinja` twin.
+- `uv run pytest tests/core/test_shared_scope_completeness.py
+  tests/core/test_render_diff_transition_coverage.py` — a new
+  stack-dependent file is handled by something, and every add/remove
+  transition writes the files it needs.
+
+Run those *before* generating a project; a template that fails to parse
+wastes a 40-second `aegis init` to tell you so.
+
+Then the generation gates:
 
 - `make test-template` after any template edit (generates a project and runs
   its full validation, including `make check` inside the generated project).

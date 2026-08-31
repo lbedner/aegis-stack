@@ -24,7 +24,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from aegis.core import manual_updater as mu
+from aegis.core import render_diff
 from aegis.core.manual_updater import ManualUpdater
 from tests.cli.conftest import ProjectFactory
 
@@ -143,16 +143,20 @@ class TestThreeWayMergeFallback:
 
     @pytest.fixture
     def _no_merge(self) -> Iterator[None]:
-        original = mu.merge_three_way_text
+        # Patch target moved with the RD-04 rewiring (aegis-stack#919):
+        # the merge now runs inside the render-diff engine, so its module's
+        # reference is the one that matters — patching manual_updater's
+        # copy would silently intercept nothing and let a real merge run.
+        original = render_diff.merge_three_way_text
 
         def boom(*_args: object, **_kwargs: object) -> tuple[int, str]:
             return (-1, "")  # simulate git merge-file unavailable/failed
 
-        mu.merge_three_way_text = boom  # type: ignore[assignment]
+        render_diff.merge_three_way_text = boom  # type: ignore[assignment]
         try:
             yield
         finally:
-            mu.merge_three_way_text = original  # type: ignore[assignment]
+            render_diff.merge_three_way_text = original  # type: ignore[assignment]
 
     def test_falls_back_to_preserve_when_merge_unavailable(
         self, project_factory: ProjectFactory, _no_merge: None
@@ -183,8 +187,11 @@ class TestThreeWayMergeFallback:
         before = config.read_text()
 
         updater = ManualUpdater(project)
-        # Sanity: ruff normalization reports failure on the broken file.
-        assert updater._ruff_format_safe(before) is None
+        # Sanity: ruff normalization reports failure on the broken file
+        # (same call the engine's merge path makes).
+        from aegis.core.template_cleanup import run_ruff_on_text
+
+        assert run_ruff_on_text(before, project, "I", CONFIG_FILE) is None
 
         _, _, manual = updater._regenerate_shared_files(
             {**updater.answers, "include_database": True}

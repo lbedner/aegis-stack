@@ -3,7 +3,9 @@
 The full-service audit (fresh ``init --services S`` vs ``base init +
 add-service S``, same slug, tree+content diff) found four classes of miss:
 
-1. Stale conditional wiring in files absent from ``SHARED_TEMPLATE_FILES`` —
+1. Stale conditional wiring in files absent from the then-current shared-file
+   list (``SHARED_TEMPLATE_FILES``, since deleted in favour of a derived scope
+   — aegis-stack#922) —
    including auth gates on ``metrics.py``/``task_history.py`` (security) and
    job registration in ``scheduler/main.py`` (silent no-op collectors).
 2. Regen machinery bugs: ruff normalization under a temp filename bypasses the
@@ -81,7 +83,11 @@ class TestRegenFidelity:
 
 
 class TestPromotedWiringFiles:
-    """Stack-conditional files promoted to SHARED_TEMPLATE_FILES regenerate."""
+    """Stack-conditional files that must regenerate on a stack change.
+
+    Named for the old ``SHARED_TEMPLATE_FILES`` promotion that fixed them;
+    they are now in scope automatically because no manifest owns them.
+    """
 
     def test_metrics_gains_auth_gate_on_regen(
         self, project_factory: ProjectFactory

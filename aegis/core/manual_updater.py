@@ -6,47 +6,84 @@ Copier's git-dependent update mechanism. It directly renders Jinja2 templates
 and copies files to the target project.
 """
 
+import re
 import shutil
 import subprocess
+from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
-from jinja2 import Environment, FileSystemLoader, TemplateNotFound
+from jinja2 import TemplateNotFound
 from pydantic import BaseModel, Field
 
-from aegis.config.shared_files import SHARED_TEMPLATE_FILES
 from aegis.constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
     StorageBackends,
-    WorkerBackends,
 )
 from aegis.i18n import t
 
 from ..cli import brand
 from .component_files import (
+    JINJA_EXTENSION,
+    MIGRATION_SKILL_FILE,
+    OWNED_BUT_SHARED_PATHS,
+    PROJECT_SLUG_PLACEHOLDER,
+    SERVICES_CARD_FILE,
     get_component_cleanup_paths,
     get_component_files,
     get_copier_defaults,
+    get_shared_scope,
     get_template_path,
 )
 from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.template_resolver import get_plugin_template_root
-from .template_cleanup import (
-    merge_three_way_text,
-    normalize_for_compare,
-    run_ruff_on_text,
-)
+from .render_diff import FilePolicy, RenderDiffEngine, build_template_env
+from .template_cleanup import run_ruff_on_text
 from .verbosity import verbose_print
+
+if TYPE_CHECKING:  # import cycle at runtime; see _spec_for
+    from .plugins.spec import PluginSpec
 
 # Constants
 COPIER_ANSWERS_HEADER = (
     "# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY\n"
 )
-PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
-JINJA_EXTENSION = ".jinja"
+
+# Where a plugin upgrade snapshots files it is about to replace.
+# ``.aegis/`` is local-only scratch, already gitignored in generated
+# projects alongside ``deploy.yml`` / ``email-setup.json``.
+PLUGIN_BACKUP_DIR = Path(".aegis") / "plugin-backups"
+DEFAULT_PLUGIN_BACKUP_LABEL = "previous"
+# Characters allowed in a backup-directory path segment. Anything else is
+# replaced, so a value that reaches the filesystem can never escape
+# PLUGIN_BACKUP_DIR via ``/`` or ``..``.
+_UNSAFE_PATH_SEGMENT_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _safe_path_segment(value: str) -> str:
+    """Reduce ``value`` to something safe to use as one path segment.
+
+    ``spec.name`` and the recorded plugin version both reach the
+    filesystem as ``.aegis/plugin-backups/<name>/<version>/``, and neither
+    is validated on the install path — ``validate_plugin_name`` only guards
+    ``aegis plugins create``, so a pip-installed plugin's ``spec.name`` is
+    whatever its ``get_spec()`` returned, and the version is read back from
+    the user-editable ``.copier-answers.yml``. A stray ``/`` or ``..`` in
+    either would put the snapshot somewhere unintended.
+
+    Not a security boundary — a hostile plugin already executed arbitrary
+    code the moment its ``get_spec()`` was called. This is robustness: it
+    keeps an odd-but-innocent name or version (``1.0/rc1``) from writing
+    outside the backup directory, and it degrades to a readable name
+    rather than raising, because losing a *backup location* is not worth
+    failing an install over.
+    """
+    cleaned = _UNSAFE_PATH_SEGMENT_CHARS.sub("_", value).strip(".")
+    return cleaned or "unnamed"
+
 
 # Files with conditional content that should be regenerated when components change.
 # These files are not user-editable and contain Jinja conditionals that depend on
@@ -56,9 +93,13 @@ REGENERATE_ON_COMPONENT_CHANGE = {
     "app/components/backend/api/routing.py",
 }
 
-# Service flags that gate the cross-spec ``ServicesCard``. It is shown whenever
-# ANY business service is enabled (mirrors the removal in
-# ``post_gen_tasks.cleanup_components``).
+# Service flags that gate the cross-spec ``ServicesCard``
+# (SERVICES_CARD_FILE, defined next to its engine-scope exclusion in
+# ``component_files``). It is shown whenever ANY business service is
+# enabled (mirrors the removal in ``post_gen_tasks.cleanup_components``).
+# MIGRATION_SKILL_FILE likewise: init removes it alongside ``alembic/``
+# when nothing needs migrations, and the first migration-bearing add must
+# bring it back (issue #814) via ``ManualUpdater._ensure_migration_skill``.
 _SERVICE_ANSWER_KEYS = (
     AnswerKeys.AUTH,
     AnswerKeys.AI,
@@ -68,13 +109,6 @@ _SERVICE_ANSWER_KEYS = (
     AnswerKeys.BLOG,
     AnswerKeys.FINANCE,
 )
-_SERVICES_CARD_FILE = "app/components/frontend/dashboard/cards/services_card.py"
-
-# The model-and-migration skill only applies where alembic exists; init removes
-# both when nothing needs migrations, and the first migration-bearing add must
-# bring the skill back (issue #814). Its add-side mirror is
-# ``ManualUpdater._ensure_migration_skill``.
-_MIGRATION_SKILL_FILE = ".claude/skills/add-model-and-migration/SKILL.md"
 
 
 def _is_empty_stub(path: Path) -> bool:
@@ -94,11 +128,6 @@ def _is_empty_stub(path: Path) -> bool:
         # UnicodeDecodeError: file is binary or non-UTF-8 — treat as
         # non-empty so we never mistake unreadable content for a stub.
         return False
-
-
-# Canonicalization/ruff helpers live in template_cleanup so the update-sync
-# path can share them; imported above as normalize_for_compare / run_ruff_on_text.
-_normalize_for_compare = normalize_for_compare
 
 
 # Directories that should never be swept. Some contain authored content
@@ -191,6 +220,22 @@ REGENERATE_ON_AUTH_LEVEL_CHANGE = {
 }
 
 
+class PluginRenderResult(BaseModel):
+    """Outcome of rendering one plugin's template tree into a project."""
+
+    written: list[str] = Field(
+        default_factory=list, description="Project-relative paths rendered"
+    )
+    replaced: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Paths whose existing content differed from the incoming render "
+            "and was snapshotted to .aegis/plugin-backups/ before being "
+            "overwritten. Empty on a first install or a no-op re-render."
+        ),
+    )
+
+
 class UpdateResult(BaseModel):
     """Result of a component update operation."""
 
@@ -279,16 +324,40 @@ class ManualUpdater:
             self.answers = {**self.answers, **reconciled}
             self._save_answers(self.answers)
 
-        # Setup Jinja2 environment
-        # Template files are at: template/{{ project_slug }}/...
-        # We need to point to the template root
-        self.jinja_env = Environment(
-            loader=FileSystemLoader(str(self.template_path)),
-            trim_blocks=False,  # Preserve newlines after blocks (matches Copier default)
-            lstrip_blocks=False,  # Preserve whitespace for parity
-            keep_trailing_newline=True,  # Copier keeps it; without this every
-            # regenerated file loses its final newline (issue #814 audit).
+        # Template files are at: template/{{ project_slug }}/... — the env
+        # is rooted at the template root. Semantics (trim/lstrip/trailing
+        # newline) are centralized in build_template_env.
+        self.jinja_env = build_template_env(self.template_path)
+
+    @cached_property
+    def _render_diff_engine(self) -> RenderDiffEngine:
+        """The answers-diff render engine (aegis-stack#916), reusing this
+        updater's own Jinja environment so rendering semantics never
+        drift between the two."""
+        return RenderDiffEngine(
+            jinja_env=self.jinja_env,
+            template_root=self.template_path,
+            project_path=self.project_path,
         )
+
+    @cached_property
+    def _shared_scope(self) -> list[str]:
+        """Candidate template paths ``_regenerate_shared_files`` may touch:
+        every path no component/service manifest claims, plus the one
+        documented exception (``get_shared_scope``, aegis-stack#918).
+        Cached — neither the template tree nor the component/service
+        registry changes within one ``ManualUpdater``'s lifetime.
+
+        This is a *candidate* set, not the final per-call scope: paths in
+        ``OWNED_BUT_SHARED_PATHS`` (existence is manifest-owned; only their
+        content is cross-cutting) must additionally exist on disk before
+        a call may touch them — see ``_regenerate_shared_files``. Without
+        that extra check, a project without scheduler would have
+        ``scheduler/main.py`` backfill-created by an unrelated operation
+        (e.g. adding insights), reproducing the exact bug the old
+        ``_REGEN_EXISTING`` "no-create" policy existed to prevent.
+        """
+        return get_shared_scope(self._render_diff_engine.discover_paths())
 
     def add_component(
         self,
@@ -426,21 +495,12 @@ class ManualUpdater:
                     verbose_print(f"   Created: {relative_path}")
                     files_modified.append(relative_path)
 
-            # Worker backend variants (Pattern D): the manifest just wrote
-            # every backend's sibling files (pools_dramatiq.py, ...). Run the
-            # same rename/strip pass init runs, or the project keeps arq code
-            # at the canonical names with the variants strewn alongside.
-            if component == ComponentNames.WORKER:
-                from .post_gen_tasks import cleanup_worker_backend_files
-
-                cleanup_worker_backend_files(
-                    self.project_path,
-                    str(
-                        updated_answers.get(
-                            AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ
-                        )
-                    ),
-                )
+            # Spec-declared post-render transform, if this component has
+            # one (worker's Pattern D backend rename is the only in-tree
+            # case). Runs after the component's files are on disk and
+            # before shared-file regen, mirroring where init calls it —
+            # see PluginSpec.post_render (aegis-stack#921).
+            self._run_post_render_hook(component, updated_answers)
 
             # Regenerate shared template files with updated component configuration
             (
@@ -633,18 +693,20 @@ class ManualUpdater:
             # Update answers
             updated_answers = {**self.answers, include_key: False}
 
-            # Also reset backend variant if removing scheduler
-            if component == ComponentNames.SCHEDULER:
-                updated_answers[AnswerKeys.SCHEDULER_BACKEND] = StorageBackends.MEMORY
-                updated_answers[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = False
+            # Revert answer keys that only mean something while this
+            # component is installed, per its spec declaration.
+            updated_answers = self._apply_removal_answer_resets(
+                component, updated_answers
+            )
 
             # Regenerate shared files BEFORE persisting the new answers, the
             # same order ``add_component`` uses. ``_save_answers`` also
-            # reassigns ``self.answers``, and ``_shared_file_is_pristine``
-            # renders its baseline from that: save first and the baseline
-            # becomes the post-removal render, so every file that ought to
-            # change looks hand-edited, the merge finds base == ours, and the
-            # file is left wired to the component we just deleted. See #869.
+            # reassigns ``self.answers``, and the render-diff engine renders
+            # its BASE (pristine baseline) from that: save first and the
+            # baseline becomes the post-removal render, so every file that
+            # ought to change looks hand-edited, the merge finds base ==
+            # ours, and the file is left wired to the component we just
+            # deleted. See #869.
             (
                 shared_files_updated,
                 shared_files_backed_up,
@@ -766,102 +828,49 @@ class ManualUpdater:
                 content = formatted
         output_path.write_text(content)
 
-    def _ruff_format_safe(self, src: str, rel_path: str | None = None) -> str | None:
-        """Normalize Python for *merging* without ever deleting code.
+    @staticmethod
+    def _spec_for(component: str) -> "PluginSpec | None":
+        """The registry spec for a component or service name, if known.
 
-        Runs ``ruff check --fix --select I`` (import sorting/merging only,
-        which never removes imports) then ``ruff format``. Unlike
-        :meth:`_ruff_normalize`, the output IS written to disk, so it must be
-        non-destructive — a full ``check --fix`` could strip an import the
-        file relies on indirectly. Neutralizes the dominant formatting noise
-        (whitespace, quotes, line wrapping, import grouping) so a 3-way merge
-        doesn't raise spurious conflicts.
+        Imported lazily — ``components``/``services`` import from this
+        module's neighbours, so a top-level import would close a cycle.
+        Returns None for names in neither registry (third-party plugins,
+        which carry their spec through the ``add_plugin`` path instead).
         """
-        return self._run_ruff(src, "I", rel_path)
+        from .components import COMPONENTS
+        from .services import SERVICES
 
-    def _shared_file_is_pristine(self, output_path: Path, template_file: str) -> bool:
-        """Return True if ``output_path`` still matches the template default.
+        return COMPONENTS.get(component) or SERVICES.get(component)
 
-        "Pristine" means the project hasn't hand-edited this shared file, so
-        it's safe to regenerate. The check renders the template for the
-        project's *current* configuration and compares it to the file on
-        disk, ignoring whitespace. For Python files that still differ, it
-        re-compares after normalizing both sides through ruff, so a file
-        that ``make fix`` reformatted (but nobody edited) is still
-        recognized as pristine. See issue #715.
+    def _apply_removal_answer_resets(
+        self, component: str, updated_answers: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Revert ``component``'s spec-declared answer keys on removal.
+
+        See :attr:`PluginSpec.reset_answers_on_remove`. Returns the
+        answers dict with the resets applied; a no-op (same content) for
+        specs that declare none, which is most of them.
         """
-        baseline = self._render_template_file(template_file, self.answers)
-        if baseline is None:
-            # Can't establish a baseline — treat as diverged so we never
-            # overwrite a file we can't verify.
-            return False
+        spec = self._spec_for(component)
+        if spec is None or not spec.reset_answers_on_remove:
+            return updated_answers
+        return {**updated_answers, **spec.reset_answers_on_remove}
 
-        existing = output_path.read_text()
-        if _normalize_for_compare(existing) == _normalize_for_compare(baseline):
-            return True
+    def _run_post_render_hook(
+        self, component: str, updated_answers: dict[str, Any]
+    ) -> None:
+        """Invoke ``component``'s spec-declared post-render transform, if any.
 
-        # Non-Python files have no formatter to look through: a remaining
-        # difference is a real edit.
-        if not output_path.name.endswith(".py"):
-            return False
-
-        rel = str(output_path.relative_to(self.project_path))
-        existing_norm = self._ruff_normalize(existing, rel_path=rel)
-        baseline_norm = self._ruff_normalize(baseline, rel_path=rel)
-        if existing_norm is None or baseline_norm is None:
-            return False
-        return _normalize_for_compare(existing_norm) == _normalize_for_compare(
-            baseline_norm
-        )
-
-    def _merge_shared_file(
-        self, output_path: Path, template_file: str, content: str
-    ) -> str | None:
-        """3-way merge a diverged shared file in place (issue #715, Phase B).
-
-        Merges the template's change for this operation into the user's
-        edited file:
-          - base   = template render at the project's current answers
-          - ours   = template render at the updated answers (``content``)
-          - theirs = the file on disk
-
-        Python files are normalized through ruff first so formatting (not the
-        user) doesn't create spurious conflicts. Returns:
-          - ``"unchanged"`` → this operation doesn't change this file; left
-            untouched (nothing to merge).
-          - ``"merged"``   → clean merge written to disk.
-          - ``"conflict"`` → written with git-style conflict markers.
-          - ``None``       → merge could not run (git/ruff missing, no base);
-            the caller falls back to preserving the file untouched.
+        The add-path half of :attr:`PluginSpec.post_render`; init calls the
+        same hooks from ``post_gen_tasks.cleanup_components``, so both
+        paths produce identical trees. Unknown component names (and specs
+        without a hook — the overwhelming majority) are a silent no-op.
         """
-        base = self._render_template_file(template_file, self.answers)
-        if base is None:
-            return None
-        if content == base:
-            # The template output for this file is identical before and after
-            # the operation — there's no change to merge, so don't touch the
-            # user's customized file at all.
-            return "unchanged"
-        theirs = output_path.read_text()
-        ours = content
-
-        if output_path.name.endswith(".py"):
-            rel = str(output_path.relative_to(self.project_path))
-            theirs_n = self._ruff_format_safe(theirs, rel_path=rel)
-            base_n = self._ruff_format_safe(base, rel_path=rel)
-            ours_n = self._ruff_format_safe(ours, rel_path=rel)
-            if theirs_n is None or base_n is None or ours_n is None:
-                return None  # ruff unavailable — fall back to preserve
-            theirs, base, ours = theirs_n, base_n, ours_n
-
-        returncode, merged = merge_three_way_text(theirs, base, ours)
-        if returncode == 0:
-            output_path.write_text(merged)
-            return "merged"
-        if 1 <= returncode <= 127:
-            output_path.write_text(merged)
-            return "conflict"
-        return None  # git merge-file unavailable/errored — preserve instead
+        spec = self._spec_for(component)
+        if spec is None or spec.post_render is None:
+            return
+        verbose_print(f"   Running post-render transform for: {component}")
+        spec.post_render(self.project_path, updated_answers)
 
     def _regenerate_shared_files(
         self, updated_answers: dict[str, Any]
@@ -869,9 +878,14 @@ class ManualUpdater:
         """
         Regenerate shared template files with updated answers.
 
-        Shared files (docker-compose.yml, pyproject.toml, etc.) contain
-        conditional logic for components and must be regenerated when
-        components are added or removed.
+        Delegates to the render-diff engine (aegis-stack#916/#917),
+        scoped to :attr:`_shared_scope` — every template path no
+        component/service manifest claims, plus one documented exception
+        (``get_shared_scope``, aegis-stack#918). The engine discovers
+        which files this operation must touch by rendering
+        ``self.answers`` (before) against ``updated_answers`` (after) and
+        diffing, rather than from a hand-maintained file list — see
+        ``aegis.core.render_diff`` for the full decision table.
 
         Args:
             updated_answers: Updated Copier answers with component changes
@@ -879,123 +893,79 @@ class ManualUpdater:
         Returns:
             Tuple of (updated_files, backed_up_files, need_manual_merge_files)
         """
-        shared_files_updated: list[str] = []
-        shared_files_backed_up: list[str] = []
-        shared_files_need_manual_merge: list[str] = []
-
         print(f"\n{t('updater.updating_shared')}")
-        for shared_file, policy in SHARED_TEMPLATE_FILES.items():
-            template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{shared_file}"
-            output_path = self.project_path / shared_file
 
-            # Create the file if the project predates it. This is how an older
-            # project gains newly shared files (for example CLAUDE.md and the
-            # always-on .claude/skills on a pre-skills project): render and
-            # write it. Nothing to back up or merge for a file that is new to
-            # the project. Warn-only files are exempt: their policy promises we
-            # never write them, so a user-deleted one stays deleted. So are
-            # no-create files: their existence is stack-gated (component-owned
-            # like scheduler/main.py), so materializing them in a project
-            # without their owner would pollute it (issue #814).
-            if not output_path.exists():
-                if not policy.get("overwrite") or not policy.get("create", True):
-                    continue
-                content = self._render_template_file(template_file, updated_answers)
-                if content is None:
-                    continue
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                self._write_rendered(output_path, content)
-                verbose_print(f"   Created: {shared_file}")
-                shared_files_updated.append(shared_file)
-                continue
+        env_path = self.project_path / ".env.example"
+        old_env_vars = (
+            self._extract_env_vars(env_path.read_text()) if env_path.exists() else {}
+        )
 
-            # For .env.example, extract variables before and after to show diff
-            old_env_vars: dict[str, str] = {}
-            if shared_file == ".env.example":
-                old_content = output_path.read_text()
-                old_env_vars = self._extract_env_vars(old_content)
+        # OWNED_BUT_SHARED_PATHS entries only join THIS call's scope when
+        # already on disk — their existence is manifest-owned (only
+        # content is cross-cutting), so an operation unrelated to their
+        # owning component must never backfill-create them. See
+        # ``_shared_scope``'s docstring.
+        scope = [
+            p
+            for p in self._shared_scope
+            if p not in OWNED_BUT_SHARED_PATHS or (self.project_path / p).exists()
+        ]
 
-            # Render template with updated answers
-            content = self._render_template_file(template_file, updated_answers)
+        engine = self._render_diff_engine
+        plans = engine.plan(self.answers, updated_answers, paths=scope)
+        policy_by_path = {p.rel_path: p.policy for p in plans}
+        result = engine.apply(plans)
 
-            if content is None:
-                continue  # Template not found
+        for rel_path in result.created:
+            verbose_print(f"   Created: {rel_path}")
+        for rel_path in result.overwritten:
+            verbose_print(f"   Updated: {rel_path}")
+        for rel_path in result.backed_up:
+            verbose_print(f"   Backed up: {rel_path}")
+        # Whole-file-gated shared files whose gate just turned off (e.g.
+        # docker-compose.prod.yml when ingress is removed). Same verbosity
+        # level as remove_component's own "Removed file:" lines.
+        for rel_path in result.deleted:
+            verbose_print(f"   Removed: {rel_path}")
+        for rel_path in result.merged:
+            print(f"   {t('updater.shared_merged', file=rel_path)}")
+        for rel_path in result.conflicts:
+            print(f"   {t('updater.shared_conflict', file=rel_path)}")
 
-            if policy.get("overwrite"):
-                # Divergence guard (issue #715): regenerating a shared file
-                # means overwriting it with the template default. That is only
-                # safe when the project hasn't hand-edited it — otherwise the
-                # edit is silently destroyed. If the file has diverged, 3-way
-                # merge this operation's template change into the user's file
-                # (Phase B); fall back to preserving it untouched if the merge
-                # can't run.
-                if not self._shared_file_is_pristine(output_path, template_file):
-                    # Warn-if-diverged policy (issue #870): the template only
-                    # partly owns this file (e.g. the Dockerfile's htmx
-                    # css-build stage), so a hand-edited copy must NOT be
-                    # merged — the merge could mangle custom build steps the
-                    # template can't reproduce. Preserve it untouched and warn,
-                    # but only when this operation would actually change the
-                    # template output (base == ours ⇒ nothing to warn about).
-                    if policy.get("warn"):
-                        base = self._render_template_file(template_file, self.answers)
-                        if base is not None and content == base:
-                            continue
-                        print(f"   {t('updater.shared_preserved', file=shared_file)}")
-                        shared_files_need_manual_merge.append(shared_file)
-                        continue
-                    status = self._merge_shared_file(
-                        output_path, template_file, content
-                    )
-                    if status == "unchanged":
-                        # Operation doesn't touch this file; leave it as-is.
-                        continue
-                    if status == "merged":
-                        print(f"   {t('updater.shared_merged', file=shared_file)}")
-                        shared_files_updated.append(shared_file)
-                    elif status == "conflict":
-                        print(f"   {t('updater.shared_conflict', file=shared_file)}")
-                        shared_files_need_manual_merge.append(shared_file)
-                    else:
-                        print(f"   {t('updater.shared_preserved', file=shared_file)}")
-                        shared_files_need_manual_merge.append(shared_file)
-                    continue
+        # A USER_OWNED preserve is working as designed — the old
+        # INTENTIONALLY_NOT_REGENERATED allowlist never surfaced those
+        # files at all, since it wasn't even iterated by this method. Only
+        # report a preserve as needing attention when the policy promised
+        # regeneration and couldn't safely deliver it (diverged
+        # WARN_IF_DIVERGED file, or a DEFAULT-policy merge that couldn't
+        # run at all).
+        reported_preserved = [
+            rel_path
+            for rel_path in result.preserved
+            if policy_by_path.get(rel_path) is not FilePolicy.USER_OWNED
+        ]
+        for rel_path in reported_preserved:
+            print(f"   {t('updater.shared_preserved', file=rel_path)}")
 
-                if policy.get("backup"):
-                    # Create backup before overwriting
-                    backup_path = output_path.with_suffix(
-                        output_path.suffix + ".backup"
-                    )
-                    shutil.copy(output_path, backup_path)
-                    verbose_print(f"   Backed up: {shared_file}")
-                    shared_files_backed_up.append(shared_file)
+        # Show environment variable changes for .env.example, if it was
+        # actually touched this call.
+        if env_path.exists() and (
+            ".env.example" in result.created
+            or ".env.example" in result.overwritten
+            or ".env.example" in result.merged
+        ):
+            new_env_vars = self._extract_env_vars(env_path.read_text())
+            added_vars = {
+                k: v for k, v in new_env_vars.items() if k not in old_env_vars
+            }
+            if added_vars:
+                verbose_print("   New environment variables:")
+                for var_name, var_value in sorted(added_vars.items()):
+                    verbose_print(f"      • {var_name}={var_value}")
 
-                # Regenerate with updated answers
-                self._write_rendered(output_path, content)
-                verbose_print(f"   Updated: {shared_file}")
-                shared_files_updated.append(shared_file)
-
-                # Show environment variable changes for .env.example
-                if shared_file == ".env.example":
-                    new_env_vars = self._extract_env_vars(content)
-                    added_vars = {
-                        k: v for k, v in new_env_vars.items() if k not in old_env_vars
-                    }
-
-                    if added_vars:
-                        verbose_print("   New environment variables:")
-                        for var_name, var_value in sorted(added_vars.items()):
-                            verbose_print(f"      • {var_name}={var_value}")
-
-            elif policy.get("warn"):
-                if self._shared_file_is_pristine(output_path, template_file):
-                    self._write_rendered(output_path, content)
-                    verbose_print(f"   Updated: {shared_file}")
-                    shared_files_updated.append(shared_file)
-                # Only warn if a diverged file has changes that need manual merge.
-                elif content != output_path.read_text():
-                    print(f"   Manual merge required: {shared_file}")
-                    shared_files_need_manual_merge.append(shared_file)
+        shared_files_updated = result.created + result.overwritten + result.merged
+        shared_files_backed_up = result.backed_up
+        shared_files_need_manual_merge = result.conflicts + reported_preserved
 
         return (
             shared_files_updated,
@@ -1036,18 +1006,18 @@ class ManualUpdater:
         """
         if not self._answers_need_migrations(answers):
             return None
-        output_path = self.project_path / _MIGRATION_SKILL_FILE
+        output_path = self.project_path / MIGRATION_SKILL_FILE
         if output_path.exists():
             return None
         content = self._render_template_file(
-            f"{PROJECT_SLUG_PLACEHOLDER}/{_MIGRATION_SKILL_FILE}", answers
+            f"{PROJECT_SLUG_PLACEHOLDER}/{MIGRATION_SKILL_FILE}", answers
         )
         if content is None:
             return None
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content)
-        verbose_print(f"   Created cross-spec file: {_MIGRATION_SKILL_FILE}")
-        return _MIGRATION_SKILL_FILE
+        verbose_print(f"   Created cross-spec file: {MIGRATION_SKILL_FILE}")
+        return MIGRATION_SKILL_FILE
 
     def _ensure_services_card(self, answers: dict[str, Any]) -> str | None:
         """Create ``services_card.py`` when an add brings the first service.
@@ -1064,18 +1034,18 @@ class ManualUpdater:
         """
         if not any(answers.get(key) for key in _SERVICE_ANSWER_KEYS):
             return None
-        output_path = self.project_path / _SERVICES_CARD_FILE
+        output_path = self.project_path / SERVICES_CARD_FILE
         if output_path.exists():
             return None
         content = self._render_template_file(
-            f"{PROJECT_SLUG_PLACEHOLDER}/{_SERVICES_CARD_FILE}", answers
+            f"{PROJECT_SLUG_PLACEHOLDER}/{SERVICES_CARD_FILE}", answers
         )
         if content is None:
             return None
         output_path.parent.mkdir(parents=True, exist_ok=True)
         self._write_rendered(output_path, content)
-        verbose_print(f"   Created cross-spec file: {_SERVICES_CARD_FILE}")
-        return _SERVICES_CARD_FILE
+        verbose_print(f"   Created cross-spec file: {SERVICES_CARD_FILE}")
+        return SERVICES_CARD_FILE
 
     def _render_template_file(
         self, template_file: str, context: dict[str, Any]
@@ -1106,7 +1076,21 @@ class ManualUpdater:
             return raw_path.read_text()
         return None
 
-    def install_plugin_template_tree(self, plugin_module_name: str) -> list[str]:
+    def install_plugin_template_tree(
+        self, plugin_module_name: str, *, backup_label: str | None = None
+    ) -> list[str]:
+        """Render the plugin's template tree into the project.
+
+        Thin wrapper over :meth:`render_plugin_tree` preserving the
+        original ``list[str]`` contract; see there for the semantics.
+        """
+        return self.render_plugin_tree(
+            plugin_module_name, backup_label=backup_label
+        ).written
+
+    def render_plugin_tree(
+        self, plugin_module_name: str, *, backup_label: str | None = None
+    ) -> PluginRenderResult:
         """Render the plugin's template tree into the project.
 
         Plugins ship a ``<package>/templates/{{ project_slug }}/...``
@@ -1123,12 +1107,28 @@ class ManualUpdater:
         aegis-stack templates do (``include_database``, ``database_engine``,
         etc.).
 
-        Returns the list of relative paths written. Empty list when the
-        plugin ships no templates (pure-code plugin).
+        **Existing files are overwritten — deliberately.** A plugin's
+        files are vendored artifacts owned by that plugin, not scaffolding
+        the project takes ownership of; an upgrade re-renders them
+        wholesale, the way ``npm update`` replaces a package rather than
+        merging your edits into it. Editing them is allowed, but an
+        upgrade replaces them. (A true 3-way merge isn't even available
+        here: pip has already swapped the plugin package by upgrade time,
+        so the previous version's templates — the merge base — no longer
+        exist on disk.)
 
-        Existing files are overwritten. Per-file conflict policy lives at
-        the calling level (``aegis add`` in round 8b); for now this is
-        used by tests and by future ``aegis add`` once it lands.
+        What it does NOT do is destroy work *silently*. Plugin files land
+        in the user's own repo next to their code, where "this is
+        vendored" isn't self-evident, so any existing file whose content
+        differs from the incoming render is first snapshotted under
+        ``.aegis/plugin-backups/<backup_label>/`` (``.aegis/`` is already
+        gitignored in generated projects) and reported in
+        :attr:`PluginRenderResult.replaced`. Unchanged files are not
+        backed up, so a routine no-op re-render leaves no litter.
+
+        ``backup_label`` names the snapshot directory — callers pass the
+        version being replaced (e.g. ``"scraper/1.2.0"``). Defaults to
+        ``"previous"`` when the caller doesn't know it.
 
         **Filesystem-only.** Uses ``Path.rglob`` and ``FileSystemLoader``
         on the resolver's returned path, which requires a real on-disk
@@ -1137,23 +1137,23 @@ class ManualUpdater:
         """
         template_root = get_plugin_template_root(plugin_module_name)
         if template_root is None:
-            return []
+            return PluginRenderResult()
 
         # Plugin templates mirror aegis-stack's: every file is nested
         # under ``{{ project_slug }}/`` so the rendered path is naturally
         # rooted at the project tree.
         project_slug_dir = template_root / PROJECT_SLUG_PLACEHOLDER
         if not project_slug_dir.is_dir():
-            return []
+            return PluginRenderResult()
 
-        plugin_env = Environment(
-            loader=FileSystemLoader(str(template_root)),
-            trim_blocks=False,
-            lstrip_blocks=False,
-            keep_trailing_newline=True,
+        plugin_env = build_template_env(template_root)
+        backup_root = (
+            self.project_path
+            / PLUGIN_BACKUP_DIR
+            / (backup_label or DEFAULT_PLUGIN_BACKUP_LABEL)
         )
 
-        files_written: list[str] = []
+        result = PluginRenderResult()
         for source_file in sorted(project_slug_dir.rglob(f"*{JINJA_EXTENSION}")):
             # Path relative to the project slug dir → relative path
             # inside the target project. Strip the ``.jinja`` suffix
@@ -1169,11 +1169,42 @@ class ManualUpdater:
             template = plugin_env.get_template(template_name)
             content = template.render(self.answers)
 
+            if self._snapshot_if_replaced(out_path, content, backup_root):
+                result.replaced.append(str(out_rel))
+
             out_path.parent.mkdir(parents=True, exist_ok=True)
             self._write_rendered(out_path, content)
-            files_written.append(str(out_rel))
+            result.written.append(str(out_rel))
 
-        return files_written
+        return result
+
+    def _snapshot_if_replaced(
+        self, out_path: Path, incoming: str, backup_root: Path
+    ) -> bool:
+        """Copy ``out_path`` into ``backup_root`` if the write replaces it.
+
+        "Replaces" means the file exists and its content differs from
+        ``incoming`` — an identical re-render is a no-op worth no backup.
+        Returns True when a snapshot was taken.
+
+        Comparison is exact rather than whitespace/ruff-normalized: the
+        point is "did the bytes on disk change", not "did the author's
+        intent change", and an unreadable (binary/non-UTF-8) file is
+        snapshotted rather than skipped, since losing it would be the
+        worse failure.
+        """
+        if not out_path.exists():
+            return False
+        try:
+            if out_path.read_text() == incoming:
+                return False
+        except (OSError, UnicodeDecodeError):
+            pass  # unreadable as text — snapshot it rather than risk loss
+
+        backup_path = backup_root / out_path.relative_to(self.project_path)
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(out_path, backup_path)
+        return True
 
     def remove_plugin(self, spec: Any) -> UpdateResult:
         """Uninstall a plugin from the project.
@@ -1222,10 +1253,10 @@ class ManualUpdater:
             # Shared file regen — the plugin is no longer in ``_plugins``, so
             # its wiring loops emit nothing for it. This runs BEFORE the
             # answers are persisted: ``_save_answers`` reassigns
-            # ``self.answers``, which is what ``_shared_file_is_pristine``
-            # renders its baseline from, so saving first makes every file
-            # needing regeneration look hand-edited and it gets skipped. Same
-            # bug as remove_component's. See #869.
+            # ``self.answers``, which is what the render-diff engine renders
+            # its BASE (pristine baseline) from, so saving first makes every
+            # file needing regeneration look hand-edited and it gets skipped.
+            # Same bug as remove_component's. See #869.
             (
                 shared_updated,
                 shared_backed_up,
@@ -1308,6 +1339,13 @@ class ManualUpdater:
             existing_plugins: list[dict[str, Any]] = [
                 p for p in raw_plugins if isinstance(p, dict)
             ]
+            # The version being replaced, captured before the entry is
+            # dropped below — names the backup dir for any plugin file
+            # this install overwrites.
+            previous_entry = next(
+                (p for p in existing_plugins if p.get("name") == spec.name), None
+            )
+            previous_version = (previous_entry or {}).get("version")
             # Idempotent: same plugin name replaces an existing entry
             # rather than duplicating. Plugin authors who want re-add
             # semantics use ``aegis remove`` + ``aegis add`` explicitly.
@@ -1324,14 +1362,16 @@ class ManualUpdater:
 
             updated_answers = {**self.answers, PLUGINS_ANSWER_KEY: existing_plugins}
 
-            # Persist BEFORE regenerating shared files so subsequent
-            # ManualUpdater operations (and tests) see the plugin in
-            # answers from disk.
-            self._save_answers(updated_answers)
-
-            # Shared file regen — uses ``self.answers`` (now includes
-            # the new plugin) so ``{% for p in _plugins %}`` loops emit
-            # this plugin's wiring entries.
+            # Shared file regen BEFORE persisting, the same order
+            # ``remove_plugin`` and ``remove_component`` use. Regen renders
+            # its BASE from ``self.answers`` and its OURS from
+            # ``updated_answers``; ``_save_answers`` rebinds
+            # ``self.answers`` to the dict it is handed, so persisting
+            # first makes both sides the same object — every file compares
+            # equal to itself, nothing is classified as changed, and the
+            # plugin's ``{% for p in _plugins %}`` wiring never reaches
+            # the project. Same bug class as #869. See
+            # ``tests/cli/test_add_plugin_shared_regen.py``.
             (
                 shared_updated,
                 shared_backed_up,
@@ -1339,9 +1379,34 @@ class ManualUpdater:
             ) = self._regenerate_shared_files(updated_answers)
             files_modified.extend(shared_updated)
 
-            # Plugin's own template tree.
-            plugin_files = self.install_plugin_template_tree(plugin_module_name)
-            files_modified.extend(plugin_files)
+            # Persist once regen has its pre-operation baseline. Still
+            # before this method returns, so the resolver flow's next
+            # ManualUpdater reads the plugin back from disk.
+            self._save_answers(updated_answers)
+
+            # Plugin's own template tree — renders with ``self.answers``,
+            # which now includes this plugin. Vendored semantics: existing
+            # files are replaced, but anything whose content differed is
+            # snapshotted under the version it's replacing and reported.
+            backup_label = (
+                f"{_safe_path_segment(spec.name)}/"
+                f"{_safe_path_segment(str(previous_version))}"
+                if previous_version
+                else DEFAULT_PLUGIN_BACKUP_LABEL
+            )
+            plugin_render = self.render_plugin_tree(
+                plugin_module_name, backup_label=backup_label
+            )
+            files_modified.extend(plugin_render.written)
+            if plugin_render.replaced:
+                brand.warn(
+                    t(
+                        "plugins.local_changes_replaced",
+                        count=len(plugin_render.replaced),
+                        name=spec.name,
+                        path=f"{PLUGIN_BACKUP_DIR / backup_label}",
+                    )
+                )
 
             # Post-gen — uv sync picks up the plugin's pyproject deps,
             # make fix re-formats anything we touched. Skipped when the

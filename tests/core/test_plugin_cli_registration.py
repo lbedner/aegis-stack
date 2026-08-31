@@ -6,9 +6,10 @@ exposing a typer ``app``; the generated project's CLI entrypoint registers
 it via ``app.add_typer(...)`` so ``<project> <cli_name> ...`` works the
 same way the in-tree ``auth`` / ``llm`` subcommands do.
 
-``app/cli/main.py`` is a regen-on-existing shared file (see
-``aegis/config/shared_files.py``), so the block below re-renders whenever a
-plugin is added or removed.
+``app/cli/main.py`` is a shared file — no component/service manifest
+claims it, so it falls into the render-diff engine's scope automatically
+(``get_shared_scope``) and the block below re-renders whenever a plugin is
+added or removed.
 """
 
 from __future__ import annotations

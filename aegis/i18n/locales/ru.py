@@ -967,6 +967,11 @@ MESSAGES: dict[str, str] = {
     "plugins.update_use_list_hint": "Посмотреть доступные плагины: `aegis plugins list`, установить: `aegis add <name>`.",
     "plugins.update_not_pip_installed": "Плагин «{name}» присутствует в _plugins проекта, но не установлен через pip; сначала выполните `pip install aegis-plugin-{name}`.",
     "plugins.update_already_at": "{name} (уже {version})",
+    "plugins.local_changes_replaced": (
+        "Replaced {count} locally-modified file(s) owned by '{name}'. "
+        "Plugin files are re-rendered on install; your previous versions "
+        "were saved to {path}"
+    ),
     "plugins.update_forcing": "Обновление выполняется, несмотря на несовместимость версий: {error}",
     "plugins.update_progress": "Обновление плагина: {name} ({old} → {new})",
     "plugins.update_confirm_apply": "Применить обновление к «{name}»?",

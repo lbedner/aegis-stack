@@ -6,12 +6,13 @@ components by parsing the Copier template's exclusion rules.
 """
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from ..constants import ComponentNames, StorageBackends
+from ..constants import AnswerKeys, ComponentNames, StorageBackends
 
 # Constants
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
@@ -351,3 +352,136 @@ def get_service_files(service: str) -> list[str]:
         List of file paths relative to project root
     """
     return get_component_files(service)
+
+
+def get_all_owned_paths() -> set[str]:
+    """Union of every component's and service's complete file footprint.
+
+    A path in this set is component/service-owned: its existence in a
+    project is decided by manifest membership (``aegis add``/``remove``
+    copies or deletes it as a unit), not by rendering — most
+    component-exclusive files carry no inline ``{% if include_x %}`` gate
+    at all, since manifest membership already decides whether they're
+    copied in the first place. Directories are expanded to individual
+    files, and every ``extras`` group is included regardless of options
+    (``full=True``, matching the removal footprint).
+
+    This is how the render-diff engine (``aegis.core.render_diff``)
+    determines which template paths are safe for it to touch — anything
+    NOT in this set — without a hand-maintained registration list: the
+    boundary is derived from each spec's own ``FileManifest``, which
+    already exists and already lives with that spec. See aegis-stack#918.
+    """
+    from .components import COMPONENTS
+    from .services import SERVICES
+
+    owned: set[str] = set()
+    for name in (*COMPONENTS, *SERVICES):
+        owned.update(get_component_files(name, full=True))
+    return owned
+
+
+# Manifest-owned paths whose CONTENT also depends on other specs' answers,
+# not just their own gate — ownership alone can't tell the render-diff
+# engine these need touching. ``app/components/scheduler/main.py``:
+# existence is scheduler-owned (only ever copied when scheduler is
+# selected), but its content also registers OTHER services' jobs
+# (insights, finance, ...). The old ``shared_files.py`` carried this same
+# file under the "no-create" ``_REGEN_EXISTING`` policy for exactly this
+# reason. A single documented exception, not a list that grows — kept
+# honest by ``tests/core/test_component_ownership.py::TestOwnedButSharedPaths``
+# and ``tests/core/test_render_diff_shared_scope.py``.
+OWNED_BUT_SHARED_PATHS: frozenset[str] = frozenset({"app/components/scheduler/main.py"})
+
+# Unowned by any component/service manifest (nothing claims them), but
+# NOT safe for the render-diff engine to render either — the naive
+# derivation would otherwise pull them into scope. Kept honest by
+# ``tests/core/test_component_ownership.py``.
+#
+# ``.copier-answers.yml``: rendered by Copier itself with a special
+# ``_copier_conf`` runtime context a bare Jinja render can't supply
+# (``UndefinedError`` the first time the engine tries); it's also
+# Copier's own bookkeeping file, not template content, matching its
+# exclusion from the old ``INTENTIONALLY_NOT_REGENERATED`` allowlist
+# ("owned by Copier itself").
+#
+# ``alembic/*``: not owned by any SINGLE component/service manifest
+# because it's cross-cutting — materialized when ANY service needs
+# migrations, removed when NONE do (``bootstrap_alembic`` /
+# ``cleanup_components``'s aggregate check, Pattern C). Its static files
+# (``alembic.ini`` has zero Jinja markers) render base == ours for every
+# operation regardless of what changed, so the "project predates this
+# file" backfill path would create a full ``alembic/`` directory the
+# first time ANY component/service is added to a project that doesn't
+# have it yet — even one needing no migrations at all (e.g. comms). Never
+# in the old ``SHARED_TEMPLATE_FILES`` list either; existence is entirely
+# the migration-bootstrap mechanism's job, not this engine's.
+#
+# ``.env.ports``: ships as a static placeholder comment ("Auto-generated
+# by make serve") but its real content is computed and overwritten by
+# ``make serve``/``poe serve`` at runtime, not by Copier rendering — it's
+# gitignored and ephemeral. Static (answer-independent) and unowned, so
+# the naive derivation would backfill the stub on any unrelated
+# operation; its actual lifecycle belongs to the port-resolution
+# scripts, not this engine.
+# ``services_card.py`` / the add-model-and-migration skill: not ``.jinja``
+# files at all — fully static, unowned by any manifest. Existence is
+# decided by post-gen Python cleanup (``cleanup_components``: remove if
+# NO services / no migrations needed) and restored on the add side by
+# ``ManualUpdater._ensure_services_card``/``_ensure_migration_skill``,
+# which already run right after ``_regenerate_shared_files`` in
+# ``add_component`` — excluding them here is safe because those hooks
+# already own creating them correctly. Confirmed live: before this
+# exclusion, adding ``worker`` (unrelated to services) to a zero-service
+# project incorrectly materialized ``services_card.py``. The two paths
+# are defined once here (SERVICES_CARD_FILE / MIGRATION_SKILL_FILE) and
+# imported by ``manual_updater``'s ensure-hooks, so the exclusion and the
+# restoration mechanism can never drift apart.
+# ``docs/components/api-load-testing.md`` / ``tests/services/
+# test_health_logic.py``: existence gated by post-gen aggregate
+# conditions (docs/components emptied when zero components selected;
+# the shared integration test removed only when BOTH scheduler AND
+# worker are disabled), unowned, no self-gating content. Unlike
+# services_card.py there is NO existing ensure-hook restoring these when
+# their condition later flips true via ``aegis add`` — but neither was
+# ever in the old ``SHARED_TEMPLATE_FILES`` list either, so excluding
+# them reproduces the OLD system's behavior exactly (never
+# auto-restored), not a new regression. A real gap, just a pre-existing
+# one; a candidate for a future ensure-hook, not solved by this
+# exclusion.
+# Cross-spec files with an add-side restoration hook in ManualUpdater —
+# single definition shared by _ENGINE_UNSAFE_PATHS and those hooks.
+SERVICES_CARD_FILE = "app/components/frontend/dashboard/cards/services_card.py"
+MIGRATION_SKILL_FILE = ".claude/skills/add-model-and-migration/SKILL.md"
+
+_ENGINE_UNSAFE_PATHS: frozenset[str] = frozenset(
+    {
+        AnswerKeys.ANSWERS_FILENAME,
+        "alembic/alembic.ini",
+        "alembic/env.py",
+        "alembic/script.py.mako",
+        "alembic/versions/.gitkeep",
+        ".env.ports",
+        SERVICES_CARD_FILE,
+        MIGRATION_SKILL_FILE,
+        "docs/components/api-load-testing.md",
+        "tests/services/test_health_logic.py",
+    }
+)
+
+
+def get_shared_scope(all_paths: Iterable[str]) -> list[str]:
+    """Restrict ``all_paths`` (typically ``RenderDiffEngine.discover_paths()``)
+    to the render-diff engine's safe scope: every path no component/service
+    manifest claims, plus :data:`OWNED_BUT_SHARED_PATHS`, minus
+    :data:`_ENGINE_UNSAFE_PATHS`.
+
+    The single canonical scoping expression — callers (``ManualUpdater``,
+    tests) use this rather than each re-deriving the set expression
+    themselves. See aegis-stack#918/#919.
+    """
+    owned = get_all_owned_paths()
+    candidates = set(all_paths)
+    scope = (candidates - owned) | (candidates & OWNED_BUT_SHARED_PATHS)
+    scope -= _ENGINE_UNSAFE_PATHS
+    return sorted(scope)

@@ -10,7 +10,8 @@ contributed to the project. Two failure modes are tracked:
   scaffolding empty.
 
 * Failure B (shared-file clobbering): files in
-  ``aegis/config/shared_files.py`` (notably ``app/core/config.py``)
+  the shared-file scope (notably ``app/core/config.py``; then a hand-
+  maintained list in ``aegis/config/shared_files.py``, now derived)
   are re-rendered on ``add-service`` and lose fields contributed by
   previously-installed services if the merge of answers is missing
   any flag.

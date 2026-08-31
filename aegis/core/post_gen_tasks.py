@@ -305,12 +305,19 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/api/test_scheduler_endpoints.py")
         remove_file(project_path, "tests/services/test_scheduled_task_manager.py")
 
-    # Worker backend variant (Pattern D). Primary worker cleanup is handled
-    # above by the Pattern A loop; this branch only runs when worker IS
-    # selected and renames/strips backend-specific suffixes.
-    if is_enabled(AnswerKeys.WORKER):
-        worker_backend = context.get(AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ)
-        cleanup_worker_backend_files(project_path, worker_backend)
+    # Spec-declared post-render transforms (Pattern D). Primary cleanup is
+    # handled above by the Pattern A loop; these run for SELECTED specs
+    # only, after their files are on disk, and cover operations no file
+    # list can express — worker's backend rename is the one in-tree case.
+    # ``ManualUpdater._run_post_render_hook`` invokes the same hooks on the
+    # add path, so init and add converge. See PluginSpec.post_render
+    # (aegis-stack#921).
+    for _spec in (*COMPONENTS.values(), *SERVICES.values()):
+        if _spec.post_render is None:
+            continue
+        if not is_enabled(AnswerKeys.include_key(_spec.name)):
+            continue
+        _spec.post_render(project_path, context)
 
     # Remove shared component integration tests only when BOTH scheduler AND worker disabled
     if not is_enabled(AnswerKeys.SCHEDULER) and not is_enabled(AnswerKeys.WORKER):

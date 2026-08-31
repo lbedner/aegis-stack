@@ -172,14 +172,18 @@ Template side (`aegis/templates/copier-aegis-project/{{ project_slug }}/`):
 
 Cross-cutting:
 
-- `aegis/config/shared_files.py`: only if the component introduces a **new**
-  shared file with `{% if include_<name> %}` conditionals that isn't already
-  in `SHARED_TEMPLATE_FILES` (most component-conditional content lives in
-  already-registered shared files: `docker-compose.yml`, `pyproject.toml`,
-  `Makefile`, `component_health.py`, `app/core/config.py`, `.env.example`).
-  `tests/cli/test_shared_files_completeness.py` diffs a minimal and a
-  maximal generated stack and fails, naming the missing file, if a new
-  stack-dependent shared file is forgotten here.
+- Shared files need **no registration**. A shared file is any template path
+  no component/service `FileManifest` claims; `aegis add`/`remove` finds it
+  by rendering the tree at the old and new answers and diffing. Put
+  `{% if include_<name> %}` conditionals in `docker-compose.yml`,
+  `pyproject.toml`, `Makefile`, `component_health.py`, `app/core/config.py`,
+  `.env.example` — or in a brand-new shared file — and it is handled
+  automatically. There is no list to add it to.
+  - If the component needs a whole file of its own, put it in the spec's
+    `FileManifest` instead (see "Files this component owns" above). That is
+    the only file declaration there is.
+  - `tests/core/test_shared_scope_completeness.py` fails, naming the file,
+    if a stack-dependent file somehow ends up handled by nothing.
 - `docs/components/<name>/index.md` (or `<name>.md`) is pinned by
   `tests/core/test_spec_docs_paths.py` once `docs_path` is set on the spec
   - it accepts either `docs/<docs_path>.md` or `docs/<docs_path>/index.md`.

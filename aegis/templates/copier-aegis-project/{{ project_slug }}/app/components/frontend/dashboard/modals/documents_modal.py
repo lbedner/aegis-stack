@@ -60,7 +60,10 @@ class DocumentsTab(ft.Container):
         self.page = page
         self._docs: list[dict[str, Any]] = []
         self._query = ""
-        self._uploads_in_flight: dict[str, str] = {}
+        # Picker events name files by their local filename, and a scanner
+        # batch can hold several with the same one, so each name keeps a
+        # queue of server-side names rather than a single slot.
+        self._uploads_in_flight: dict[str, list[str]] = {}
         self._kind = FormDropdown(
             label="Kind",
             value=ALL,
@@ -179,7 +182,7 @@ class DocumentsTab(ft.Container):
         for picked in event.files:
             name = picked.name or "document"
             server_name = f"{uuid4().hex}-{name}"
-            self._uploads_in_flight[name] = server_name
+            self._uploads_in_flight.setdefault(name, []).append(server_name)
             uploads.append(
                 ft.FilePickerUploadFile(name, upload_url=signed_upload_url(server_name))
             )
@@ -187,15 +190,25 @@ class DocumentsTab(ft.Container):
 
     def _on_upload_progress(self, event: ft.FilePickerUploadEvent) -> None:
         if event.error:
-            self._uploads_in_flight.pop(event.file_name, None)
+            self._take_upload(event.file_name)
             ErrorSnackBar(f"Upload failed: {event.error}").launch(self.page)
             return
         if (event.progress or 0) >= 1.0:
             self.page.run_task(self._file, event.file_name)
 
+    def _take_upload(self, name: str) -> str | None:
+        """The next server-side name queued under this local filename."""
+        queue = self._uploads_in_flight.get(name)
+        if not queue:
+            return None
+        server_name = queue.pop(0)
+        if not queue:
+            del self._uploads_in_flight[name]
+        return server_name
+
     async def _file(self, name: str) -> None:
         """The upload arrived on the server: hand it to the store."""
-        server_name = self._uploads_in_flight.pop(name, None)
+        server_name = self._take_upload(name)
         if server_name is None:
             return
         path = dashboard_upload_dir() / server_name

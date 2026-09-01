@@ -22,7 +22,6 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from app.core.storage import content_key
 from app.services.documents.deps import get_document_service, get_owner_user_id
 from app.services.documents.models import Document
 from app.services.documents.service import DocumentService
@@ -96,8 +95,9 @@ class TagCount(BaseModel):
 
 
 class DocumentUpdate(BaseModel):
-    """What may change after filing. Fields left unset stay as they are;
-    a field sent as null is cleared."""
+    """What may change after filing. Fields left unset stay as they are.
+    ``document_date`` and ``note`` clear when sent as null; ``title`` and
+    ``kind`` must always hold a value, so null there is a 400."""
 
     title: str | None = None
     kind: str | None = None
@@ -122,12 +122,8 @@ async def upload_document(
     which happened: 201 for a new document, 200 for one already held.
     """
     data = await file.read()
-    if data and await service.by_content(
-        content_key(data), owner_user_id=owner_user_id
-    ):
-        response.status_code = status.HTTP_200_OK
     try:
-        document = await service.ingest(
+        document, created = await service.store(
             data,
             title=title or file.filename or "Untitled",
             kind=kind,
@@ -140,6 +136,8 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from None
+    if not created:
+        response.status_code = status.HTTP_200_OK
     return DocumentResponse.from_row(document)
 
 

@@ -55,11 +55,41 @@ class DocumentService:
         page_count: int | None = None,
     ) -> Document:
         """Store bytes and record the document, or return the one that
-        already holds these exact bytes.
+        already holds these exact bytes. See ``store`` for the version
+        that also says which of the two happened."""
+        document, _ = await self.store(
+            data,
+            title=title,
+            kind=kind,
+            media_type=media_type,
+            owner_user_id=owner_user_id,
+            document_date=document_date,
+            source=source,
+            note=note,
+            page_count=page_count,
+        )
+        return document
+
+    async def store(
+        self,
+        data: bytes,
+        *,
+        title: str,
+        kind: str = "other",
+        media_type: str | None = None,
+        owner_user_id: int | None = None,
+        document_date: date | None = None,
+        source: str = "upload",
+        note: str | None = None,
+        page_count: int | None = None,
+    ) -> tuple[Document, bool]:
+        """Store bytes and record the document, or return the one that
+        already holds these exact bytes, plus whether a row was created.
 
         Deduped per owner rather than globally: two people holding the
         same form is two documents, and one person scanning it twice is
-        one.
+        one. The flag comes from the single dedupe lookup here, so a
+        caller never has to repeat it to learn the outcome.
         """
         if not data:
             raise ValueError("A document needs content.")
@@ -75,7 +105,7 @@ class DocumentService:
         key = content_key(data)
         existing = await self.by_content(key, owner_user_id=owner_user_id)
         if existing is not None:
-            return existing
+            return existing, False
 
         storage = get_storage()
         stored_key = await storage.put(data, content_type=media_type)
@@ -96,7 +126,7 @@ class DocumentService:
         )
         self.db.add(document)
         await self.db.flush()
-        return document
+        return document, True
 
     async def by_content(
         self, key: str, *, owner_user_id: int | None = None
@@ -174,8 +204,9 @@ class DocumentService:
         owner_user_id: int | None = None,
     ) -> Document | None:
         """Change what the paper is called, what it is, when it is dated,
-        or the note on it. Only the keys present change; a key set to
-        None clears that field."""
+        or the note on it. Only the keys present change. ``document_date``
+        and ``note`` clear when set to None; ``title`` and ``kind`` must
+        always hold a value, so None there is refused."""
         unknown = set(fields) - _EDITABLE
         if unknown:
             raise ValueError(f"Cannot change {', '.join(sorted(unknown))}.")

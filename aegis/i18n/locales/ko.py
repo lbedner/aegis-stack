@@ -74,6 +74,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "JWT 토큰 기반 사용자 인증 및 권한 부여",
     "service.ai": "멀티 프레임워크 지원 AI 챗봇 서비스",
     "service.comms": "이메일, SMS, 음성 통신 서비스",
+    "service.documents": "Document store: keep the paper, deduped and findable",
     "service.blog": "초안, 게시, 태그 워크플로가 있는 Markdown 블로그",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "{description}을(를) 추가하시겠습니까?",
@@ -413,6 +414,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "통신",
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
+    "projectmap.documents": "Document store",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "문서",
@@ -1068,6 +1070,7 @@ MESSAGES: dict[str, str] = {
     "service.comms.long": "업계 프로바이더를 사용한 이메일, SMS, 음성 통화: 이메일은 Resend, SMS와 음성은 Twilio. 둘 다 무료 등급이 있어 신용카드 없이 시작할 수 있습니다.",
     "service.insights.long": "GitHub, PyPI, Plausible Analytics, Reddit 전반에서 프로젝트의 채택 현황을 자동으로 추적합니다. 일정에 따라 수집하고 기록을 저장하며 대시보드에서 성장을 시각화합니다.",
     "service.payment.long": "Stripe를 이용한 결제 처리: 체크아웃 세션, 구독, 웹훅, 환불. Stripe의 테스트 모드는 신용카드가 필요 없어 출시 전에 전체 흐름을 만들 수 있습니다.",
+    "service.documents.long": "Durable storage for the paper an application accumulates: scans, statements, letters, forms. Bytes are addressed by their own content hash, so the same file uploaded twice is one document and one object, and moving to a bucket later is a copy rather than a migration.",
     "service.blog.long": "데이터베이스 기반 게시물, 태그, 초안, 대시보드 내 편집기 UI를 갖춘 자체 Markdown 퍼블리싱. 게시물을 frontmatter가 포함된 일반 Markdown으로 가져오고 내보낼 수 있습니다.",
     # ── Guided setup: choice descriptions + build steps ──
     "guided.choice.name.in_memory": "인메모리",

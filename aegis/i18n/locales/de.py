@@ -78,6 +78,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "Benutzerauthentifizierung und -autorisierung mit JWT-Tokens",
     "service.ai": "AI Chatbot Service mit Multi-Framework-Unterstützung",
     "service.comms": "Kommunikationsservice mit E-Mail, SMS und Sprache",
+    "service.documents": "Document store: keep the paper, deduped and findable",
     "service.blog": "Markdown-Blog mit Entwurfs-, Veröffentlichungs- und Tag-Workflow",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "{description} hinzufügen?",
@@ -436,6 +437,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Kommunikation",
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
+    "projectmap.documents": "Document store",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "Dokumentation",
@@ -1118,6 +1120,7 @@ MESSAGES: dict[str, str] = {
     "service.comms.long": "E-Mail, SMS und Sprachanrufe über etablierte Anbieter: Resend für E-Mail, Twilio für SMS und Sprache. Beide haben kostenlose Kontingente, sodass Sie ohne Kreditkarte starten können.",
     "service.insights.long": "Automatisches Tracking der Verbreitung Ihres Projekts über GitHub, PyPI, Plausible Analytics und Reddit. Erfasst planmäßig, speichert den Verlauf und visualisiert das Wachstum im Dashboard.",
     "service.payment.long": "Zahlungsabwicklung mit Stripe: Checkout-Sessions, Abonnements, Webhooks und Rückerstattungen. Der Testmodus von Stripe braucht keine Kreditkarte, sodass Sie den gesamten Ablauf vor dem Produktivstart aufbauen können.",
+    "service.documents.long": "Durable storage for the paper an application accumulates: scans, statements, letters, forms. Bytes are addressed by their own content hash, so the same file uploaded twice is one document and one object, and moving to a bucket later is a copy rather than a migration.",
     "service.blog.long": "Hauseigenes Markdown-Publishing mit datenbankgestützten Beiträgen, Tags, Entwürfen und einer Editor-Oberfläche im Dashboard. Importieren und exportieren Sie Beiträge als reines Markdown mit Frontmatter.",
     # ── Guided setup: choice descriptions + build steps ──
     "guided.choice.name.in_memory": "In-Memory",

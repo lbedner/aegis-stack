@@ -287,6 +287,11 @@ include_blog:
   help: "Include Markdown blog service?"
   default: false
 
+include_documents:
+  type: bool
+  help: "Include document store service (scans, statements, forms)?"
+  default: false
+
 include_insights:
   type: bool
   help: "Include insights service (adoption metrics and analytics)?"
@@ -347,7 +352,7 @@ finance_import:
 
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"
-_include_migrations: "{{ include_auth or include_payment or include_insights or include_blog or include_finance or (include_ai and ai_backend in ['sqlite', 'postgres']) }}"
+_include_migrations: "{{ include_auth or include_payment or include_insights or include_blog or include_documents or include_finance or (include_ai and ai_backend in ['sqlite', 'postgres']) }}"
 
 # Component-specific dependencies (computed)
 _scheduler_deps: "{% if include_scheduler %}apscheduler>=3.10.0{% endif %}"

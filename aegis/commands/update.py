@@ -666,6 +666,7 @@ def update_command(
             include_insights = answers.get(AnswerKeys.INSIGHTS, False)
             include_payment = answers.get(AnswerKeys.PAYMENT, False)
             include_blog = answers.get(AnswerKeys.BLOG, False)
+            include_documents = answers.get(AnswerKeys.DOCUMENTS, False)
             ai_backend = answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
             ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
             include_migrations = (
@@ -674,6 +675,7 @@ def update_command(
                 or include_insights
                 or include_payment
                 or include_blog
+                or include_documents
             )
 
             typer.echo(t("update.running_postgen"))

@@ -161,6 +161,7 @@ class TestInTreeRegistry:
             "payment_auth_link",
             "insights",
             "blog",
+            "documents",
             "finance",
             "finance_auth_link",
         }

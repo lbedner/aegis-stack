@@ -320,6 +320,7 @@ def generate_with_copier(
     include_ai = copier_data.get(AnswerKeys.AI, False)
     include_insights = copier_data.get(AnswerKeys.INSIGHTS, False)
     include_blog = copier_data.get(AnswerKeys.BLOG, False)
+    include_documents = copier_data.get(AnswerKeys.DOCUMENTS, False)
     ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     database_engine = copier_data.get(
         AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
@@ -334,6 +335,7 @@ def generate_with_copier(
 
     is_insights_included: bool = include_insights is True
     is_blog_included: bool = include_blog is True
+    is_documents_included: bool = include_documents is True
     ai_needs_migrations = is_ai_included and ai_backend_str != StorageBackends.MEMORY
     needs_migration_files = (
         is_auth_included
@@ -381,6 +383,7 @@ def generate_with_copier(
             )
             is True,
             AnswerKeys.BLOG: is_blog_included,
+            AnswerKeys.DOCUMENTS: is_documents_included,
             AnswerKeys.PAYMENT: is_payment_included,
             AnswerKeys.FINANCE: is_finance_included,
             AnswerKeys.SCHEDULER: is_scheduler_included,

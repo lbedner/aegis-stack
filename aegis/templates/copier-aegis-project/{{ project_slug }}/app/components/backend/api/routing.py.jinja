@@ -48,6 +48,9 @@ from app.components.backend.api.payment.pages import router as payment_pages_rou
 {%- if include_blog %}
 from app.components.backend.api.blog.router import router as blog_router
 {%- endif %}
+{%- if include_documents %}
+from app.components.backend.api.documents.router import router as documents_router
+{%- endif %}
 {%- if include_finance %}
 from app.components.backend.api.finance.router import router as finance_router
 {%- endif %}
@@ -107,6 +110,9 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if include_blog %}
     app.include_router(blog_router, prefix="/api/v1")
+    {%- endif %}
+    {%- if include_documents %}
+    app.include_router(documents_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_finance %}
     app.include_router(finance_router, prefix="/api/v1")

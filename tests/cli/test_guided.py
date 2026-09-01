@@ -26,18 +26,43 @@ from aegis.cli.guided import (
 from aegis.cli.interactive import run_project_selection
 
 
+def _ui(keys: list[str]) -> GuidedSelectionUI:
+    """A scripted UI that declines whatever the script did not cover.
+
+    A test scripts the screens it cares about and means "no" to the rest.
+    Without the padding, adding a service turns every partial script in
+    this file into a StopIteration that says nothing about what broke.
+    Bounded, so a script that never reaches the review screen still
+    fails loudly rather than looping forever.
+    """
+    return GuidedSelectionUI(keys=list(keys) + ["n"] * _expected_screen_count())
+
+
 def _drive(keys: list[str]):
-    return run_guided_selection(GuidedSelectionUI(keys=keys))
+    return run_guided_selection(_ui(keys))
 
 
 # worker scheduler database redis ingress observability htmx |
-# auth payment ai comms insights blog finance
+# auth payment ai comms insights blog finance documents
 # (redis is skipped entirely when an accepted worker already bundled it)
-_DECLINE_ALL = ["n"] * 14
+_DECLINE_ALL = ["n"] * 15
 
 # The full init flow opens with the starting-point screen; enter selects
 # Blank canvas. (run_guided_selection alone never shows it.)
 _BLANK = ["\r"]
+
+
+def _expected_screen_count() -> int:
+    """One journal entry per screen the guided flow asks about.
+
+    Derived rather than hardcoded: adding an optional component or a
+    service adds a screen, and a literal count turns that into a failing
+    test in an unrelated file with a number for a message.
+    """
+    from aegis.constants import ComponentNames
+    from aegis.core.services import SERVICES
+
+    return len(ComponentNames.INFRASTRUCTURE_ORDER) + len(SERVICES)
 
 
 class TestGuidedDrivesEngine:
@@ -48,7 +73,7 @@ class TestGuidedDrivesEngine:
 
     def test_add_database_only(self) -> None:
         # yes only on the 3rd confirm (database); engine screen -> enter = SQLite
-        keys = ["n", "n", "y", "\r"] + ["n"] * 11
+        keys = ["n", "n", "y", "\r"] + ["n"] * 12
         state = _drive(keys)
         assert state.components == ["database"]
         assert state.services == []
@@ -56,7 +81,7 @@ class TestGuidedDrivesEngine:
     def test_add_database_postgres_neon(self) -> None:
         # database yes -> engine: right+enter = PostgreSQL -> host: right+enter
         # = Neon. Encodes as database[neon] (engine normalizes to postgres).
-        keys = ["n", "n", "y", "right", "\r", "right", "\r"] + ["n"] * 11
+        keys = ["n", "n", "y", "right", "\r", "right", "\r"] + ["n"] * 12
         state = _drive(keys)
         assert state.components == ["database[neon]"]
         assert state.postgres_provider == "neon"
@@ -64,7 +89,7 @@ class TestGuidedDrivesEngine:
     def test_add_database_postgres_container(self) -> None:
         # database yes -> engine: right+enter = PostgreSQL -> host: enter =
         # local container (the default). Encodes as database[postgres].
-        keys = ["n", "n", "y", "right", "\r", "\r"] + ["n"] * 11
+        keys = ["n", "n", "y", "right", "\r", "\r"] + ["n"] * 12
         state = _drive(keys)
         assert state.components == ["database[postgres]"]
         assert state.postgres_provider == "container"
@@ -74,7 +99,7 @@ class TestGuidedDrivesEngine:
         # skips the redis screen entirely (no point asking for something
         # already added). worker(y) backend(enter), then decline the
         # remaining 5 asked components and all 7 services.
-        keys = ["y", "\r"] + ["n"] * 12
+        keys = ["y", "\r"] + ["n"] * 13
         state = _drive(keys)
         assert "redis" in state.components
         assert "worker" in state.components
@@ -84,7 +109,7 @@ class TestGuidedDrivesEngine:
         # screen: chips are [In-memory, SQLite, PostgreSQL] — right twice
         # lands on PostgreSQL, then the host screen: enter = local
         # container. Database is auto-skipped; redis still asks.
-        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 11
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 12
         state = _drive(keys)
         assert "scheduler[postgres]" in state.components
         assert "database[postgres]" in state.components
@@ -95,7 +120,7 @@ class TestGuidedDrivesEngine:
         # The scheduler is what pulls the database in, so IT must ask the
         # container-vs-Neon question — right+enter on the host screen picks
         # Neon and the auto-added database encodes it.
-        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 11
+        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 12
         state = _drive(keys)
         assert "scheduler[postgres]" in state.components
         assert "database[neon]" in state.components
@@ -104,7 +129,7 @@ class TestGuidedDrivesEngine:
     def test_auth_configures_level(self) -> None:
         # decline all 7 components, accept auth, pick RBAC (right+enter), then
         # confirm the "auth needs a database" prompt (y), decline the rest.
-        keys = _DECLINE_ALL[:7] + ["y", "right", "\r", "y"] + ["n"] * 6
+        keys = _DECLINE_ALL[:7] + ["y", "right", "\r", "y"] + ["n"] * 7
         state = _drive(keys)
         assert "auth[rbac]" in state.services
 
@@ -222,13 +247,13 @@ class TestGuidedDrivesEngine:
         # skipped screen as declined, so esc from review still rewinds.
         ui = GuidedSelectionUI(keys=["f"])
         run_guided_selection(ui)
-        assert len(ui.breadcrumbs) == 14
+        assert len(ui.breadcrumbs) == _expected_screen_count()
         assert all("✗" in crumb for crumb in ui.breadcrumbs)
 
     def test_skip_to_services_goes_live_at_service_phase(self) -> None:
         # "s" declines the remaining components but services are still
         # asked for real — accepting auth here proves the screen was live.
-        keys = ["s", "y", "right", "\r", "y"] + ["n"] * 6
+        keys = ["s", "y", "right", "\r", "y"] + ["n"] * 7
         state = _drive(keys)
         assert state.components == []
         assert "auth[rbac]" in state.services
@@ -263,14 +288,14 @@ class TestBackNavigation:
         # Accept worker, then esc on the backend chips -> worker is
         # re-asked (journal popped) and this time declined. With worker
         # gone, redis IS asked, so the full 14 declines follow.
-        keys = ["y", "esc"] + ["n"] * 14
+        keys = ["y", "esc"] + ["n"] * 15
         state = _drive(keys)
         assert state.components == []
 
     def test_back_at_first_question_is_safe(self) -> None:
         # esc with an empty journal re-shows the welcome (a no-op when
         # scripted) and re-asks the first question.
-        keys = ["esc"] + ["n"] * 14
+        keys = ["esc"] + ["n"] * 15
         state = _drive(keys)
         assert state.components == []
 
@@ -279,7 +304,7 @@ class TestBackNavigation:
         # then decline worker -> the auto-added redis must vanish too,
         # because the engine genuinely re-runs (and the redis screen comes
         # back, hence 13 trailing declines).
-        keys = ["y", "esc", "n"] + ["n"] * 13
+        keys = ["y", "esc", "n"] + ["n"] * 14
         state = _drive(keys)
         assert "worker" not in state.components
         assert "redis" not in state.components
@@ -292,40 +317,41 @@ class TestReviewScreen:
     def test_review_enter_confirms_plan(self) -> None:
         # database accepted (engine screen -> enter = SQLite), everything else
         # declined, enter on REVIEW.
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 11 + ["\r"]
-        ui = GuidedSelectionUI(keys=keys)
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 12 + ["\r"]
+        ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
         assert plan.template_gen is not None
         assert plan.template_files  # previews resolved for the screen
 
     def test_review_back_revises_last_answer(self) -> None:
-        # Accept the last service (finance), esc on REVIEW -> it is re-asked
-        # and declined -> second REVIEW confirmed. The plan must reflect the
-        # revision, not the original answer.
-        keys = _BLANK + _DECLINE_ALL[:13] + ["y", "esc", "n", "\r"]
-        ui = GuidedSelectionUI(keys=keys)
+        # Accept the LAST service, esc on REVIEW -> it is re-asked and
+        # declined -> second REVIEW confirmed. The plan must reflect the
+        # revision, not the original answer. Sliced from the end so the
+        # test keeps meaning "the last one" as services are added.
+        keys = _BLANK + _DECLINE_ALL[:-1] + ["y", "esc", "n", "\r"]
+        ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert plan.services == []
 
     def test_review_detail_panes_toggle_harmlessly(self) -> None:
-        keys = _BLANK + ["n", "n", "y"] + ["n"] * 11 + ["f", "d", "f", "\r"]
-        ui = GuidedSelectionUI(keys=keys)
+        keys = _BLANK + ["n", "n", "y"] + ["n"] * 12 + ["f", "d", "f", "\r"]
+        ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
 
     def test_yes_skips_review(self) -> None:
         # With --yes the review is skipped entirely: no extra key consumed.
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 11
-        ui = GuidedSelectionUI(keys=keys)
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 12
+        ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", yes=True, ui=ui)
         assert "database" in plan.components
 
     def test_plan_includes_dependency_auto_adds(self) -> None:
         # Worker accepted -> the resolved plan carries the auto-added redis
         # (same resolution quick mode runs; REVIEW shows it tagged "auto").
-        keys = _BLANK + ["y", "\r"] + ["n"] * 12 + ["\r"]
-        ui = GuidedSelectionUI(keys=keys)
+        keys = _BLANK + ["y", "\r"] + ["n"] * 13 + ["\r"]
+        ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         bases = [c.split("[", 1)[0] for c in plan.components]
         assert "worker" in bases
@@ -345,8 +371,8 @@ class TestInExperienceBuild:
             calls.append(plan.project_name)
             return "/tmp/demo"
 
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 11 + ["\r", "\r"]
-        ui = GuidedSelectionUI(keys=keys)
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 12 + ["\r", "\r"]
+        ui = _ui(keys)
         plan, _ = run_guided_init_flow(
             "demo",
             "3.13",
@@ -365,9 +391,7 @@ class TestInExperienceBuild:
             return "/tmp/demo"
 
         keys = _BLANK + _DECLINE_ALL + ["\r", "\r"]
-        run_guided_init_flow(
-            "demo", "3.13", ui=GuidedSelectionUI(keys=keys), builder=builder
-        )
+        run_guided_init_flow("demo", "3.13", ui=_ui(keys), builder=builder)
         assert "loud generation output" not in capsys.readouterr().out
 
     def test_reporter_events_update_build_steps(self) -> None:
@@ -380,7 +404,7 @@ class TestInExperienceBuild:
             return "/tmp/demo"
 
         keys = _BLANK + _DECLINE_ALL + ["\r", "\r"]
-        ui = GuidedSelectionUI(keys=keys)
+        ui = _ui(keys)
         run_guided_init_flow("demo", "3.13", ui=ui, builder=builder)
         recorded = ui._build_steps
         assert [(s["key"], s["state"]) for s in recorded] == [
@@ -401,7 +425,7 @@ class TestInExperienceBuild:
 
         long_replay = "uvx aegis-stack init demo --components " + "x" * 200
         keys = _BLANK + _DECLINE_ALL + ["\r", "c", "\r"]  # review, copy, finish
-        ui = GuidedSelectionUI(keys=keys)
+        ui = _ui(keys)
         run_guided_init_flow(
             "demo",
             "3.13",
@@ -434,9 +458,7 @@ class TestInExperienceBuild:
 
         keys = _BLANK + _DECLINE_ALL + ["\r"]
         with pytest.raises(GuidedBuildError) as excinfo:
-            run_guided_init_flow(
-                "demo", "3.13", ui=GuidedSelectionUI(keys=keys), builder=builder
-            )
+            run_guided_init_flow("demo", "3.13", ui=_ui(keys), builder=builder)
         assert "partial progress line" in excinfo.value.log
         assert isinstance(excinfo.value.__cause__, RuntimeError)
 
@@ -447,29 +469,29 @@ class TestBreadcrumbs:
     def test_crumbs_record_each_component_decision(self) -> None:
         # Worker leads now; accepting it amends its crumb with the backend
         # and pushes the auto-added redis crumb (capability-first name).
-        ui = GuidedSelectionUI(keys=["y", "\r"] + ["n"] * 12)
+        ui = GuidedSelectionUI(keys=["y", "\r"] + ["n"] * 13)
         run_guided_selection(ui)
         assert ui.breadcrumbs[0] == "Worker ✓ arq"
         assert "Cache/Broker/Pubsub ✓" in ui.breadcrumbs
         assert "Scheduler ✗" in ui.breadcrumbs
-        # 14 entries: the skipped redis screen contributes no crumb of its
-        # own, but the auto-add pushed one in its place.
-        assert len(ui.breadcrumbs) == 14
+        # One crumb per screen: the skipped redis screen contributes none
+        # of its own, but the auto-add pushed one in its place.
+        assert len(ui.breadcrumbs) == _expected_screen_count()
 
     def test_chip_selections_amend_the_owning_crumb(self) -> None:
         # scheduler accepted, postgres backend (then host: enter = local
         # container): the engine choice attaches to the Scheduler crumb
         # instead of adding noise; the host screen leaves it alone.
-        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 11
-        ui = GuidedSelectionUI(keys=keys)
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 12
+        ui = _ui(keys)
         run_guided_selection(ui)
         assert "Scheduler ✓ postgres" in ui.breadcrumbs
 
     def test_worker_auto_added_redis_pushes_its_crumb(self) -> None:
         # Worker accepted: the engine bundles redis and pushes its crumb
         # (the redis screen itself is skipped, so this is its only trace).
-        keys = ["y", "\r"] + ["n"] * 12
-        ui = GuidedSelectionUI(keys=keys)
+        keys = ["y", "\r"] + ["n"] * 13
+        ui = _ui(keys)
         run_guided_selection(ui)
         assert "Cache/Broker/Pubsub ✓" in ui.breadcrumbs
         assert "Cache/Broker/Pubsub ✗" not in ui.breadcrumbs
@@ -479,8 +501,8 @@ class TestBreadcrumbs:
         # answer; the auto-pushed redis crumb rides with it. esc again to
         # back out of worker entirely, then decline it — redis is asked
         # for real this time and declined.
-        keys = ["y", "\r", "esc", "esc", "n"] + ["n"] * 13
-        ui = GuidedSelectionUI(keys=keys)
+        keys = ["y", "\r", "esc", "esc", "n"] + ["n"] * 14
+        ui = _ui(keys)
         run_guided_selection(ui)
         assert "Cache/Broker/Pubsub ✗" in ui.breadcrumbs
         assert "Cache/Broker/Pubsub ✓" not in ui.breadcrumbs
@@ -489,16 +511,16 @@ class TestBreadcrumbs:
     def test_auto_added_database_gets_its_own_crumb(self) -> None:
         # Picking a persistent scheduler backend pulls in Database; the
         # sidebar must show that, not hide it inside the Scheduler crumb.
-        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 11
-        ui = GuidedSelectionUI(keys=keys)
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 12
+        ui = _ui(keys)
         run_guided_selection(ui)
         assert "Database ✓ postgres" in ui.breadcrumbs
 
     def test_auto_added_neon_database_crumb_shows_neon(self) -> None:
         # Same path but picking Neon on the host screen: the auto-added
         # Database crumb must say so.
-        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 11
-        ui = GuidedSelectionUI(keys=keys)
+        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 12
+        ui = _ui(keys)
         run_guided_selection(ui)
         assert "Database ✓ neon" in ui.breadcrumbs
 
@@ -509,8 +531,8 @@ class TestBreadcrumbs:
         # In-memory means no auto database, so the Database screen comes
         # back on the replayed pass: 12 declines, not 11.
         keys = ["n", "y", "right", "right", "\r", "esc"]
-        keys += ["left", "left", "\r"] + ["n"] * 12
-        ui = GuidedSelectionUI(keys=keys)
+        keys += ["left", "left", "\r"] + ["n"] * 13
+        ui = _ui(keys)
         run_guided_selection(ui)
         # The auto-pushed crumb is gone; what remains is the re-asked (and
         # declined) Database screen's own crumb.
@@ -527,7 +549,7 @@ class TestBreadcrumbs:
             # rag n, voice n
             + ["n", "n", "n", "n"]
         )
-        ui = GuidedSelectionUI(keys=keys)
+        ui = _ui(keys)
         run_guided_selection(ui)
         assert "Database ✓ sqlite" in ui.breadcrumbs
 
@@ -539,7 +561,7 @@ class TestBreadcrumbs:
             + ["n", "n", "y", "\r", "right", "\r", "up", "\r", "n", "n"]
             + ["n", "n", "n", "n"]
         )
-        ui = GuidedSelectionUI(keys=keys)
+        ui = _ui(keys)
         run_guided_selection(ui)
         ui._console = Console(width=100, height=60)
         console = Console(width=100, height=60, record=True)
@@ -765,7 +787,7 @@ class TestBreadcrumbs:
     def test_back_rewinds_the_trail(self) -> None:
         # Worker accepted then revised to declined via esc on the backend
         # chips: the trail must show the revised answer, not the original.
-        ui = GuidedSelectionUI(keys=["y", "esc"] + ["n"] * 14)
+        ui = GuidedSelectionUI(keys=["y", "esc"] + ["n"] * 15)
         run_guided_selection(ui)
         assert ui.breadcrumbs[0] == "Worker ✗"
         assert all("✓" not in crumb for crumb in ui.breadcrumbs)

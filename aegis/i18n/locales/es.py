@@ -80,6 +80,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "Autenticación y autorización de usuarios con tokens JWT",
     "service.ai": "Servicio de chatbot IA con soporte multi-framework",
     "service.comms": "Servicio de comunicaciones con email, SMS y voz",
+    "service.documents": "Document store: keep the paper, deduped and findable",
     "service.blog": "Blog Markdown con borradores, publicación y etiquetas",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "¿Agregar {description}?",
@@ -438,6 +439,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Comunicaciones",
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
+    "projectmap.documents": "Document store",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "Documentación",
@@ -1122,6 +1124,7 @@ MESSAGES: dict[str, str] = {
     "service.comms.long": "Correo, SMS y llamadas de voz con proveedores del sector: Resend para correo, Twilio para SMS y voz. Ambos tienen planes gratuitos, así que puedes empezar sin tarjeta de crédito.",
     "service.insights.long": "Seguimiento automático de la adopción de tu proyecto en GitHub, PyPI, Plausible Analytics y Reddit. Recopila según un horario, guarda el historial y visualiza el crecimiento en el panel.",
     "service.payment.long": "Procesamiento de pagos con Stripe: sesiones de pago, suscripciones, webhooks y reembolsos. El modo de prueba de Stripe no necesita tarjeta de crédito, así que puedes construir todo el flujo antes de salir a producción.",
+    "service.documents.long": "Durable storage for the paper an application accumulates: scans, statements, letters, forms. Bytes are addressed by their own content hash, so the same file uploaded twice is one document and one object, and moving to a bucket later is a copy rather than a migration.",
     "service.blog.long": "Publicación nativa en Markdown con entradas respaldadas por base de datos, etiquetas, borradores y una interfaz de editor en el panel. Importa y exporta entradas como Markdown plano con frontmatter.",
     # ── Guided setup: choice descriptions + build steps ──
     "guided.choice.name.in_memory": "En memoria",

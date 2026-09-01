@@ -46,6 +46,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -78,6 +79,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -110,6 +112,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -144,6 +147,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -179,6 +183,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -219,6 +224,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -257,6 +263,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -425,6 +432,7 @@ class TestSchedulerPersistenceLogic:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -459,6 +467,7 @@ class TestSchedulerPersistenceLogic:
                     False,  # insights
                     False,  # blog service
                     False,  # finance service
+                    False,  # documents service
                 ]
 
                 components, scheduler_backend, services, _ = (

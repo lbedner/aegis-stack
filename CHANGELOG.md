@@ -9,6 +9,16 @@
 
 ### Added
 
+- **Document store service**: an optional `documents` service that keeps
+  the paper an application accumulates - scans, statements, letters,
+  forms - with ingest, tagging, listing, download, and soft delete.
+  Documents ride the storage seam, so a row records a content-derived
+  key and never a path: the same scan uploaded twice is one document and
+  one object, which makes a retried upload or a scanner that runs twice
+  free rather than duplicative. What a document MEANS - a case, a
+  deadline, a claim it proves - is deliberately absent; that belongs to
+  whatever consumes it.
+
 - **Finance rows say whose money they describe**: a `finance_subject`
   table plus a nullable `subject_id` on accounts and recurring streams.
   Households manage money for other people (a parent in care, a child's

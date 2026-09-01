@@ -28,11 +28,14 @@ from app.models.org import Organization, OrganizationMember  # noqa: F401
 {% if include_blog %}
 from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F401
 {% endif %}
+{% if include_documents %}
+from app.services.documents.models import Document, DocumentTag  # noqa: F401
+{% endif %}
 {% if include_scheduler and scheduler_backend != "memory" %}
 from app.services.scheduler.models import JobExecution  # noqa: F401
 {% endif %}
 
-{% set needs_migrations = include_auth or include_blog or include_insights or include_payment or include_finance or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") %}
+{% set needs_migrations = include_auth or include_blog or include_documents or include_insights or include_payment or include_finance or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") %}
 {% if database_engine == "postgres" and needs_migrations %}
 def _check_and_stamp_existing_tables() -> None:
     """

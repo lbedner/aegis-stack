@@ -1490,6 +1490,90 @@ PAYMENT_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
 # migration too (a Postgres-only ``schema=`` would forfeit that). Money and
 # scaled-integer columns use BigInteger — net worth / brokerage balances and
 # ``*_e8`` quantities/rates overflow int32.
+DOCUMENTS_MIGRATION = ServiceMigrationSpec(
+    service_name="documents",
+    description="Document store: the paper, addressed by its own content",
+    tables=[
+        # One row per stored document. The bytes live in object storage
+        # under ``storage_key``, which is derived from their SHA-256, so
+        # the same scan uploaded twice is one row and one object. What a
+        # document MEANS - a case, a deadline, an obligation - belongs to
+        # whatever consumes it, not here.
+        TableSpec(
+            name="document",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("title", "sa.String(255)", nullable=False),
+                ColumnSpec("kind", "sa.String(32)", nullable=False, default="'other'"),
+                ColumnSpec("storage_key", "sa.String(128)", nullable=False),
+                ColumnSpec(
+                    "storage_backend",
+                    "sa.String(32)",
+                    nullable=False,
+                    default="'filesystem'",
+                ),
+                ColumnSpec("content_hash", "sa.String(64)", nullable=False),
+                ColumnSpec("media_type", "sa.String(128)", nullable=True),
+                ColumnSpec("byte_size", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("page_count", "sa.Integer()", nullable=True),
+                ColumnSpec("document_date", "sa.Date()", nullable=True),
+                ColumnSpec("received_at", "sa.DateTime()", nullable=True),
+                ColumnSpec(
+                    "source", "sa.String(32)", nullable=False, default="'upload'"
+                ),
+                ColumnSpec("note", "sa.String()", nullable=True),
+                ColumnSpec("meta_data", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+            ],
+            indexes=[
+                IndexSpec("ix_document_owner", ["owner_user_id"]),
+                # The dedupe lookup: same bytes, same owner, same row.
+                # The dedupe rule, enforced rather than merely checked:
+                # ingest reads before it writes, and two concurrent
+                # uploads of the same bytes can both miss that read.
+                # Partial, so retiring a document does not block filing
+                # the same paper again.
+                IndexSpec(
+                    "ix_document_owner_hash",
+                    ["owner_user_id", "content_hash"],
+                    unique=True,
+                    where="deleted_at IS NULL",
+                ),
+                IndexSpec("ix_document_kind", ["kind"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_document_kind",
+                    sqltext=(
+                        "kind IN ('letter', 'statement', 'form', "
+                        "'identification', 'receipt', 'other')"
+                    ),
+                ),
+            ],
+        ),
+        # Free-form labels rather than a fixed taxonomy: the framework
+        # stores paper, it does not decide what kinds of paper exist.
+        TableSpec(
+            name="document_tag",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("document_id", "sa.Integer()", nullable=False),
+                ColumnSpec("label", "sa.String(64)", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_document_tag_document", ["document_id"]),
+                IndexSpec("uq_document_tag", ["document_id", "label"], unique=True),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["document_id"], "document", ["id"], ondelete="CASCADE"),
+            ],
+        ),
+    ],
+)
+
 FINANCE_MIGRATION = ServiceMigrationSpec(
     service_name="finance",
     description="Finance service tables (currencies, fx rates)",

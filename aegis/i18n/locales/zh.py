@@ -65,6 +65,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "用户认证与授权（JWT）",
     "service.ai": "AI 对话服务，支持多框架",
     "service.comms": "通信服务（邮件、短信、语音）",
+    "service.documents": "Document store: keep the paper, deduped and findable",
     "service.blog": "支持草稿、发布和标签的 Markdown 博客",
     # ── 交互：组件选择提示 ────────────────────────────────────────────
     "interactive.add_prompt": "添加{description}？",
@@ -342,6 +343,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "通信",
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
+    "projectmap.documents": "Document store",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "文档",
@@ -955,6 +957,7 @@ MESSAGES: dict[str, str] = {
     "service.comms.long": "使用主流服务商实现邮件、短信和语音通话：邮件用 Resend，短信和语音用 Twilio。两者都有免费额度，无需信用卡即可开始。",
     "service.insights.long": "自动追踪你的项目在 GitHub、PyPI、Plausible Analytics 和 Reddit 上的采用情况。按计划采集、保存历史，并在仪表盘中可视化增长。",
     "service.payment.long": "使用 Stripe 处理支付：结账会话、订阅、Webhook 和退款。Stripe 的测试模式无需信用卡，因此你可以在上线前构建完整流程。",
+    "service.documents.long": "Durable storage for the paper an application accumulates: scans, statements, letters, forms. Bytes are addressed by their own content hash, so the same file uploaded twice is one document and one object, and moving to a bucket later is a copy rather than a migration.",
     "service.blog.long": "原生的 Markdown 发布功能，文章由数据库支撑，支持标签、草稿，以及仪表盘中的编辑器界面。可将文章作为带 frontmatter 的纯 Markdown 导入和导出。",
     # ── Guided setup: choice descriptions + build steps ──
     "guided.choice.name.in_memory": "内存",

@@ -25,6 +25,7 @@ from .migration_generator import (
     AUTH_RBAC_MIGRATION,
     AUTH_TOKENS_MIGRATION,
     BLOG_MIGRATION,
+    DOCUMENTS_MIGRATION,
     FINANCE_AUTH_LINK_MIGRATION,
     FINANCE_MIGRATION,
     INSIGHTS_MIGRATION,
@@ -1073,6 +1074,58 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_finance_subjects.py",
                 "tests/api/test_finance_split_endpoints.py",
                 "tests/components/frontend/test_finance_splits_ui.py",
+            ],
+        ),
+    ),
+    "documents": ServiceSpec(
+        name="documents",
+        docs_path="",
+        marker_path="app/services/documents",
+        type=ServiceType.STORAGE,
+        description="Document store: keep the paper, deduped and findable",
+        long_description=(
+            "Durable storage for the paper an application accumulates: "
+            "scans, statements, letters, forms. Bytes are addressed by "
+            "their own content hash, so the same file uploaded twice is "
+            "one document and one object, and moving to a bucket later "
+            "is a copy rather than a migration. What a document MEANS - "
+            "a case, a deadline, an obligation - belongs to whatever "
+            "consumes it."
+        ),
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+        ],
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.documents.router",
+                    symbol="router",
+                    alias="documents_router",
+                    prefix="/api/v1",
+                ),
+            ],
+            deps_providers=[
+                SymbolWiring(
+                    module="app.services.documents.deps",
+                    symbol="get_document_service",
+                ),
+            ],
+        ),
+        migrations=[DOCUMENTS_MIGRATION],
+        pyproject_deps=[
+            "alembic==1.16.5",
+        ],
+        template_files=[
+            "app/services/documents/",
+            "app/components/backend/api/documents/",
+        ],
+        files=FileManifest(
+            primary=[
+                "app/components/backend/api/documents",
+                "app/services/documents",
+                "tests/services/test_documents_service.py",
+                "tests/api/test_documents_endpoints.py",
             ],
         ),
     ),

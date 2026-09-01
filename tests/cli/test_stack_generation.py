@@ -265,6 +265,20 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
     ),
     StackCombination(
+        name="documents",
+        components=["database"],
+        services=["documents"],
+        description="Document store service + database",
+        expected_files=[
+            "app/services/documents/",
+            "app/components/backend/api/documents/",
+            "app/core/storage.py",
+            "app/core/db.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "sqlmodel", "alembic"],
+    ),
+    StackCombination(
         name="finance",
         # Finance requires database + scheduler; auth is optional (owner FK
         # via finance_auth_link when present). This row proves standalone.

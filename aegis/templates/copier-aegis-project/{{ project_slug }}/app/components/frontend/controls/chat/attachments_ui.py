@@ -138,8 +138,11 @@ class AttachmentsMixin:
         )
 
     def _sync_receiving(self) -> None:
-        """The indicator follows what is still in transit."""
-        self._receiving.visible = self._uploads.in_flight
+        """An upload in flight shows the indicator. Only the pastebox poll
+        clears it: it is the one source that also knows whether a
+        clipboard paste is still incoming."""
+        if self._uploads.in_flight:
+            self._receiving.visible = True
         self._refresh_attachment_chips()
 
     async def _ingest_attachment(self, name: str, data: bytes) -> None:

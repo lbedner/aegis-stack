@@ -22,6 +22,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.core.log import logger
+from app.core.storage import get_storage
+
 
 class ChatAttachment(BaseModel):
     """One image part of a chat turn, base64 over the JSON body."""
@@ -53,16 +56,12 @@ def build_user_content(
     parts: list[Any] = [context]
     for attachment in attachments:
         parts.append(
-            BinaryContent(
-                data=attachment.decoded(), media_type=attachment.media_type
-            )
+            BinaryContent(data=attachment.decoded(), media_type=attachment.media_type)
         )
     return parts
 
 
-def annotate_attachments(
-    message: str, attachments: list[ChatAttachment] | None
-) -> str:
+def annotate_attachments(message: str, attachments: list[ChatAttachment] | None) -> str:
     """Stamp the stored user message with what was attached.
 
     History replays as text only, so this marker is how a later turn
@@ -72,3 +71,65 @@ def annotate_attachments(
     names = ", ".join(a.name or a.media_type for a in attachments)
     noun = "image" if len(attachments) == 1 else "images"
     return f"{message}\n\n[attached {len(attachments)} {noun}: {names}]"
+
+
+async def persist_attachments(
+    attachments: list[ChatAttachment] | None,
+) -> list[dict[str, Any]]:
+    """Keep the images, and describe where they went.
+
+    The bytes ride one model call by design, but the picture itself is
+    worth keeping: a reopened conversation should show the screenshot it
+    is talking about, and a replay should not depend on session memory
+    still holding megabytes. Each attachment is stored once - content
+    addressing makes re-attaching the same image free - and the returned
+    descriptors are what the message carries.
+
+    Storage failing is not the user losing their turn: the question still
+    goes to the model, the picture is simply not kept.
+    """
+    if not attachments:
+        return []
+    storage = get_storage()
+    stored: list[dict[str, Any]] = []
+    for attachment in attachments:
+        # Decoded OUTSIDE the storage guard: a malformed payload is the
+        # caller sending nonsense, not the store failing, and swallowing
+        # it here would drop the image silently while logging a reason
+        # that never happened.
+        data = attachment.decoded()
+        try:
+            key = await storage.put(data, content_type=attachment.media_type)
+        except OSError as exc:
+            logger.warning(f"Could not store chat attachment: {exc}")
+            continue
+        stored.append(
+            {
+                "key": key,
+                "media_type": attachment.media_type,
+                "name": attachment.name,
+            }
+        )
+    return stored
+
+
+def attachment_metadata(stored: list[dict[str, Any]]) -> dict[str, Any]:
+    """Message metadata for stored attachments, or nothing at all.
+
+    A message that carried no image should read as one, so this returns
+    an empty dict rather than a key holding an empty list.
+    """
+    return {"attachments": stored} if stored else {}
+
+
+async def prepare_turn(
+    message: str, attachments: list[ChatAttachment] | None
+) -> tuple[str, dict[str, Any]]:
+    """The stored message text and metadata for one turn's attachments.
+
+    Both chat paths - streaming and not - need the same three steps in
+    the same order, and doing them by hand in each is how one of them
+    ends up missing a step. One call, both callers.
+    """
+    stored = await persist_attachments(attachments)
+    return annotate_attachments(message, attachments), attachment_metadata(stored)

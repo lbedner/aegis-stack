@@ -496,6 +496,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/api/test_ai_endpoints.py",
                 "tests/services/test_conversation_persistence.py",
                 "tests/services/test_chat_attachments.py",
+                "tests/services/ai/test_chat_attachment_persistence.py",
                 "tests/services/test_chat_readings.py",
                 "tests/services/test_history_budget.py",
                 "tests/cli/test_ai_rendering.py",

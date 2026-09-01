@@ -98,5 +98,5 @@ class CommsCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name="comms",
+            component_name="service_comms",
         )

@@ -8,10 +8,8 @@ Tags lists every label in use with its count.
 
 from __future__ import annotations
 
-import logging
 import mimetypes
 from typing import Any
-from uuid import uuid4
 
 import flet as ft
 
@@ -20,9 +18,8 @@ from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.tabs import PulseTabs
-from app.components.frontend.controls.uploads import signed_upload_url
+from app.components.frontend.controls.uploads import BrowserUploads
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.constants import dashboard_upload_dir
 from app.core.formatting import format_bytes, format_date
 from app.services.documents.models import DOCUMENT_KINDS
 from app.services.system.models import ComponentStatus
@@ -32,8 +29,6 @@ from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .documents_detail_pane import API, DocumentDetailPane
 from .modal_sections import EmptyStatePlaceholder, row_matches
-
-logger = logging.getLogger(__name__)
 
 ALL = "all"
 
@@ -60,10 +55,6 @@ class DocumentsTab(ft.Container):
         self.page = page
         self._docs: list[dict[str, Any]] = []
         self._query = ""
-        # Picker events name files by their local filename, and a scanner
-        # batch can hold several with the same one, so each name keeps a
-        # queue of server-side names rather than a single slot.
-        self._uploads_in_flight: dict[str, list[str]] = {}
         self._kind = FormDropdown(
             label="Kind",
             value=ALL,
@@ -85,11 +76,8 @@ class DocumentsTab(ft.Container):
             content=EmptyStatePlaceholder("Loading documents..."), expand=True
         )
         self._pane = DocumentDetailPane(page, on_change=self._load)
-        self._picker = ft.FilePicker(
-            on_result=self._on_picked, on_upload=self._on_upload_progress
-        )
-        if self._picker not in page.overlay:
-            page.overlay.append(self._picker)
+        self._uploads = BrowserUploads(on_file=self._file)
+        self._uploads.mount(page)
         toolbar = ft.Row(
             [
                 PulseButton(on_click_callable=self._pick, text="Upload", compact=True),
@@ -173,53 +161,10 @@ class DocumentsTab(ft.Container):
             self._table.update()
 
     async def _pick(self) -> None:
-        self._picker.pick_files(dialog_title="Upload documents", allow_multiple=True)
+        self._uploads.pick(dialog_title="Upload documents", allow_multiple=True)
 
-    def _on_picked(self, event: ft.FilePickerResultEvent) -> None:
-        if not event.files:
-            return
-        uploads: list[ft.FilePickerUploadFile] = []
-        for picked in event.files:
-            name = picked.name or "document"
-            server_name = f"{uuid4().hex}-{name}"
-            self._uploads_in_flight.setdefault(name, []).append(server_name)
-            uploads.append(
-                ft.FilePickerUploadFile(name, upload_url=signed_upload_url(server_name))
-            )
-        self._picker.upload(uploads)
-
-    def _on_upload_progress(self, event: ft.FilePickerUploadEvent) -> None:
-        if event.error:
-            self._take_upload(event.file_name)
-            ErrorSnackBar(f"Upload failed: {event.error}").launch(self.page)
-            return
-        if (event.progress or 0) >= 1.0:
-            self.page.run_task(self._file, event.file_name)
-
-    def _take_upload(self, name: str) -> str | None:
-        """The next server-side name queued under this local filename."""
-        queue = self._uploads_in_flight.get(name)
-        if not queue:
-            return None
-        server_name = queue.pop(0)
-        if not queue:
-            del self._uploads_in_flight[name]
-        return server_name
-
-    async def _file(self, name: str) -> None:
-        """The upload arrived on the server: hand it to the store."""
-        server_name = self._take_upload(name)
-        if server_name is None:
-            return
-        path = dashboard_upload_dir() / server_name
-        try:
-            data = path.read_bytes()
-        except OSError:
-            logger.warning("documents.upload_missing name=%s", name)
-            ErrorSnackBar(f"{name} did not arrive on the server.").launch(self.page)
-            return
-        finally:
-            path.unlink(missing_ok=True)
+    async def _file(self, name: str, data: bytes) -> None:
+        """A picked file arrived on the server: hand it to the store."""
         kind = self._kind.value if self._kind.value != ALL else "other"
         media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
         code, body = await self._api().request_with_status(

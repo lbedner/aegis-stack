@@ -9,7 +9,7 @@ again, a user who clicks upload twice all cost one document.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Any
 
 from sqlalchemy import func
@@ -17,18 +17,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.storage import content_key, get_storage
-from app.services.documents.models import DOCUMENT_KINDS, Document, DocumentTag
-
-
-def _utcnow() -> datetime:
-    """Naive UTC, the timestamp convention every service here shares.
-
-    A local-time timestamp reads differently depending on where the
-    process runs, which makes "received on the 27th" a question about
-    the server rather than about the document.
-    """
-    return datetime.now(UTC).replace(tzinfo=None)
-
+from app.services.documents.models import DOCUMENT_KINDS, Document, DocumentTag, utcnow
 
 # The columns a client may change after the fact. Storage, hash, size and
 # provenance describe the bytes and are fixed by them.
@@ -120,7 +109,7 @@ class DocumentService:
             byte_size=len(data),
             page_count=page_count,
             document_date=document_date,
-            received_at=_utcnow(),
+            received_at=utcnow(),
             source=source,
             note=note,
         )
@@ -222,7 +211,7 @@ class DocumentService:
             return None
         for name, value in fields.items():
             setattr(document, name, value.strip() if name == "title" else value)
-        document.updated_at = _utcnow()
+        document.updated_at = utcnow()
         self.db.add(document)
         await self.db.flush()
         return document
@@ -243,9 +232,7 @@ class DocumentService:
                 .group_by(Document.kind)
             )
         ).all()
-        month_start = _utcnow().replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0
-        )
+        month_start = utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         this_month = (
             await self.db.exec(
                 select(func.count())
@@ -360,7 +347,7 @@ class DocumentService:
         document = await self.get(document_id, owner_user_id=owner_user_id)
         if document is None:
             return False
-        document.deleted_at = _utcnow()
+        document.deleted_at = utcnow()
         self.db.add(document)
         await self.db.flush()
         return True

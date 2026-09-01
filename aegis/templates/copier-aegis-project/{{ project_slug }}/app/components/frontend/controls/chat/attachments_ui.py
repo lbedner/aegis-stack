@@ -13,7 +13,6 @@ import asyncio
 import base64
 from collections import deque
 from typing import Any
-from uuid import uuid4
 
 import flet as ft
 
@@ -22,9 +21,8 @@ from app.components.frontend.controls.chat.stream import image_media_type
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.text import SecondaryText
-from app.components.frontend.controls.uploads import signed_upload_url
+from app.components.frontend.controls.uploads import BrowserUploads
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.constants import dashboard_upload_dir
 from app.core.log import logger
 
 
@@ -57,11 +55,10 @@ class AttachmentsMixin:
     # Provided by ChatPanel
     page: ft.Page
     _pending_attachments: list[dict[str, str]]
-    _uploads_in_flight: dict[str, str]
+    _uploads: BrowserUploads
     _attach_chips: ft.Row
     _attachment_bar: ft.Container
     _attach_button: Any
-    _file_picker: ft.FilePicker
     _retained: ReplayRetention
 
     def _api(self) -> Any: ...  # real definition on ChatPanel
@@ -72,10 +69,8 @@ class AttachmentsMixin:
 
         self._pending_attachments = []
         self._retained = ReplayRetention()
-        # original file name -> uuid-prefixed server-side name
-        self._uploads_in_flight = {}
-        self._file_picker = ft.FilePicker(
-            on_result=self._on_attach_picked, on_upload=self._on_attach_progress
+        self._uploads = BrowserUploads(
+            on_file=self._ingest_attachment, on_change=self._sync_receiving
         )
         self._attach_chips = ft.Row([], wrap=True, spacing=Theme.Spacing.XS)
         self._receiving = ft.Row(
@@ -104,8 +99,8 @@ class AttachmentsMixin:
         """did_mount half: overlay the picker (it must live in
         page.overlay to render, and revisits must not append it twice)
         and start the pastebox watch."""
-        if self._file_picker not in self.page.overlay:
-            self.page.overlay.append(self._file_picker)
+        if self._uploads.picker not in self.page.overlay:
+            self._uploads.mount(self.page)
             self.page.update()
         self.page.run_task(self._watch_pastebox)
 
@@ -125,7 +120,7 @@ class AttachmentsMixin:
                 incoming = data.get("incoming", 0) if isinstance(data, dict) else 0
                 if items:
                     self._pending_attachments.extend(items)
-                receiving = bool(incoming) or bool(self._uploads_in_flight)
+                receiving = bool(incoming) or self._uploads.in_flight
                 if items or receiving != self._receiving.visible:
                     self._receiving.visible = receiving
                     self._refresh_attachment_chips()
@@ -136,57 +131,22 @@ class AttachmentsMixin:
             await asyncio.sleep(0.75 if receiving else 2.5)
 
     async def _open_attach_picker(self) -> None:
-        self._file_picker.pick_files(
+        self._uploads.pick(
             dialog_title="Attach images",
             allow_multiple=True,
             allowed_extensions=["png", "jpg", "jpeg", "webp", "gif"],
         )
 
-    def _on_attach_picked(self, event: ft.FilePickerResultEvent) -> None:
-        if not event.files:
-            return  # dialog cancelled
-        uploads: list[ft.FilePickerUploadFile] = []
-        for picked in event.files:
-            name = picked.name or "image"
-            if image_media_type(name) is None:
-                ErrorSnackBar(f"{name} is not an image.").launch(self.page)
-                continue
-            server_name = f"{uuid4().hex}-{name}"
-            self._uploads_in_flight[name] = server_name
-            uploads.append(
-                ft.FilePickerUploadFile(
-                    name, upload_url=signed_upload_url(server_name)
-                )
-            )
-        if uploads:
-            self._file_picker.upload(uploads)
-            self._receiving.visible = True
-            self._refresh_attachment_chips()
+    def _sync_receiving(self) -> None:
+        """The indicator follows what is still in transit."""
+        self._receiving.visible = self._uploads.in_flight
+        self._refresh_attachment_chips()
 
-    def _on_attach_progress(self, event: ft.FilePickerUploadEvent) -> None:
-        if event.error:
-            self._uploads_in_flight.pop(event.file_name, None)
-            ErrorSnackBar(f"Upload failed: {event.error}").launch(self.page)
-            return
-        if (event.progress or 0) >= 1.0:
-            self.page.run_task(self._ingest_attachment, event.file_name)
-
-    async def _ingest_attachment(self, name: str) -> None:
-        """Read the arrived upload, stage it as a pending attachment."""
-        server_name = self._uploads_in_flight.pop(name, None)
-        if server_name is None:
-            return
-        upload_path = dashboard_upload_dir() / server_name
-        try:
-            data = upload_path.read_bytes()
-        except OSError:
-            logger.warning("chat_attachment.upload_missing", name=name)
-            ErrorSnackBar(f"{name} did not arrive on the server.").launch(self.page)
-            return
-        finally:
-            upload_path.unlink(missing_ok=True)
+    async def _ingest_attachment(self, name: str, data: bytes) -> None:
+        """An upload arrived: stage it as a pending attachment."""
         media_type = image_media_type(name)
         if media_type is None:
+            ErrorSnackBar(f"{name} is not an image.").launch(self.page)
             return
         self._pending_attachments.append(
             {
@@ -195,7 +155,6 @@ class AttachmentsMixin:
                 "name": name,
             }
         )
-        self._receiving.visible = bool(self._uploads_in_flight)
         self._refresh_attachment_chips()
 
     def _remove_attachment(self, attachment: dict[str, str]) -> None:

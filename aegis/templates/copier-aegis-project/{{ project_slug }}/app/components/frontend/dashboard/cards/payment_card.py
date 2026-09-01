@@ -80,7 +80,7 @@ class PaymentCard:
 
         return CardContainer(
             content=self._create_card_content(),
-            component_name=PAYMENT_COMPONENT_NAME,
+            component_name=f"service_{PAYMENT_COMPONENT_NAME}",
             component_data=self.component_data,
             border_color=border_color,
         )

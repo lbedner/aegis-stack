@@ -92,6 +92,16 @@ class TestGetServicesNeedingMigrations:
         result = get_services_needing_migrations(context)
         assert result == ["blog"]
 
+    def test_documents_needs_migration(self) -> None:
+        """The document store owns two tables; a fresh stack must migrate them."""
+        context = {
+            "include_documents": True,
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert result == ["documents"]
+
     def test_finance_needs_migration(self) -> None:
         """Finance service needs migrations when selected."""
         context = {
@@ -492,6 +502,15 @@ class TestGenerateMigration:
         assert "'blog_post_tag'" in content
         assert "ck_blog_post_status" in content
         assert "ondelete='CASCADE'" in content
+
+    def test_generates_documents_migration(self, tmp_path: Path) -> None:
+        result = generate_migration(tmp_path, "documents")
+
+        assert result is not None
+        assert result.name == "001_documents.py"
+        content = result.read_text()
+        assert "'document'" in content
+        assert "'document_tag'" in content
 
     def test_creates_versions_directory(self, tmp_path: Path) -> None:
         """Test creates versions directory if it doesn't exist."""

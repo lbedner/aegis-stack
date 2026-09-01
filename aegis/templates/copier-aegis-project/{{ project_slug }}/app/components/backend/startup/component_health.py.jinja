@@ -664,6 +664,13 @@ async def startup_hook() -> None:
     logger.info("Blog service health check registered")
     {%- endif %}
 
+    {%- if include_documents %}
+    # Register documents service health check
+    from app.services.documents.health import check_documents_service_health
+    register_service_health_check("documents", check_documents_service_health)
+    logger.info("Documents service health check registered")
+    {%- endif %}
+
     {%- for p in _plugins | default([]) %}
     {%- for h in p.wiring.health_checks %}
     # Register {{ h.label }} service health check (plugin)

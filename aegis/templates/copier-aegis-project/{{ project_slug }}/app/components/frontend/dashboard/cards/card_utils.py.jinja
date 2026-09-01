@@ -473,6 +473,9 @@ def create_modal_for_component(
     {%- if include_comms %}
     from app.components.frontend.dashboard.modals.comms_modal import CommsDetailDialog
     {%- endif %}
+    {%- if include_documents %}
+    from app.components.frontend.dashboard.modals.documents_modal import DocumentsDetailDialog
+    {%- endif %}
     {%- if include_insights %}
     from app.components.frontend.dashboard.modals.insights_modal import InsightsDetailDialog
     {%- endif %}
@@ -511,6 +514,9 @@ def create_modal_for_component(
     {%- if include_worker %}
     from app.components.frontend.dashboard.modals.worker_modal import WorkerDetailDialog
     {%- endif %}
+    {%- if include_documents %}
+    from app.services.documents.health import DOCUMENTS_MODAL_ID
+    {%- endif %}
 
     modal_map: dict[str, type[ft.Container]] = {
         {%- if include_ai %}
@@ -524,6 +530,9 @@ def create_modal_for_component(
         {%- endif %}
         {%- if include_comms %}
         "comms": CommsDetailDialog,
+        {%- endif %}
+        {%- if include_documents %}
+        DOCUMENTS_MODAL_ID: DocumentsDetailDialog,
         {%- endif %}
         {%- if include_insights %}
         "service_insights": InsightsDetailDialog,

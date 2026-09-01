@@ -177,3 +177,99 @@ class TestConcurrency:
         second = await svc.ingest(b"refiled", title="New", owner_user_id=1)
 
         assert second.id != first.id
+
+
+class TestUpdate:
+    @pytest.mark.asyncio
+    async def test_it_changes_what_the_paper_is_called_and_dated(self, svc) -> None:
+        doc = await svc.ingest(b"letter", title="Untitled", owner_user_id=1)
+
+        updated = await svc.update(
+            doc.id,
+            {
+                "title": "Renewal request",
+                "kind": "letter",
+                "document_date": date(2026, 8, 27),
+                "note": "Due Sep 8",
+            },
+            owner_user_id=1,
+        )
+
+        assert updated is not None
+        assert updated.title == "Renewal request"
+        assert updated.kind == "letter"
+        assert updated.document_date == date(2026, 8, 27)
+        assert updated.note == "Due Sep 8"
+        assert updated.updated_at is not None
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_kind_is_refused_before_the_row_changes(self, svc) -> None:
+        doc = await svc.ingest(b"letter2", title="Kept", owner_user_id=1)
+
+        with pytest.raises(ValueError, match="kind"):
+            await svc.update(doc.id, {"kind": "invoice-ish"}, owner_user_id=1)
+
+        assert (await svc.get(doc.id, owner_user_id=1)).kind == "other"
+
+    @pytest.mark.asyncio
+    async def test_someone_elses_document_is_not_yours_to_edit(self, svc) -> None:
+        doc = await svc.ingest(b"theirs", title="Theirs", owner_user_id=2)
+
+        assert await svc.update(doc.id, {"title": "Mine"}, owner_user_id=1) is None
+
+
+class TestTags:
+    @pytest.mark.asyncio
+    async def test_untag_removes_only_that_label(self, svc) -> None:
+        doc = await svc.ingest(b"tagged", title="T", owner_user_id=1)
+        await svc.tag(doc.id, "medicaid")
+        await svc.tag(doc.id, "2026")
+
+        assert await svc.untag(doc.id, "medicaid") is True
+        assert await svc.untag(doc.id, "medicaid") is False
+        assert await svc.tags_for(doc.id) == ["2026"]
+
+    @pytest.mark.asyncio
+    async def test_tag_counts_group_by_label_for_the_owner(self, svc) -> None:
+        a = await svc.ingest(b"a", title="A", owner_user_id=1)
+        b = await svc.ingest(b"b", title="B", owner_user_id=1)
+        other = await svc.ingest(b"c", title="C", owner_user_id=2)
+        await svc.tag(a.id, "medicaid")
+        await svc.tag(b.id, "medicaid")
+        await svc.tag(b.id, "2026")
+        await svc.tag(other.id, "medicaid")
+
+        counts = await svc.tag_counts(owner_user_id=1)
+
+        assert counts == [("medicaid", 2), ("2026", 1)]
+
+    @pytest.mark.asyncio
+    async def test_a_retired_document_stops_counting(self, svc) -> None:
+        doc = await svc.ingest(b"gone", title="G", owner_user_id=1)
+        await svc.tag(doc.id, "old")
+        await svc.soft_delete(doc.id, owner_user_id=1)
+
+        assert await svc.tag_counts(owner_user_id=1) == []
+
+
+class TestSummary:
+    @pytest.mark.asyncio
+    async def test_it_counts_what_is_live_and_how_much_it_weighs(self, svc) -> None:
+        await svc.ingest(b"12345", title="A", kind="letter", owner_user_id=1)
+        await svc.ingest(b"1234567", title="B", kind="letter", owner_user_id=1)
+        await svc.ingest(b"1", title="C", kind="statement", owner_user_id=1)
+        gone = await svc.ingest(b"xx", title="D", kind="form", owner_user_id=1)
+        await svc.soft_delete(gone.id, owner_user_id=1)
+
+        summary = await svc.summary(owner_user_id=1)
+
+        assert summary["total"] == 3
+        assert summary["this_month"] == 3
+        assert summary["bytes"] == 13
+        assert summary["by_kind"] == {"letter": 2, "statement": 1}
+
+    @pytest.mark.asyncio
+    async def test_an_empty_store_is_zeros_not_nulls(self, svc) -> None:
+        summary = await svc.summary(owner_user_id=99)
+
+        assert summary == {"total": 0, "this_month": 0, "bytes": 0, "by_kind": {}}

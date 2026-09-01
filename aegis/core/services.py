@@ -1106,6 +1106,20 @@ SERVICES: dict[str, ServiceSpec] = {
                     prefix="/api/v1",
                 ),
             ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.documents_card",
+                    symbol="DocumentsCard",
+                    modal_id="service_documents",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.documents_modal",
+                    symbol="DocumentsDetailDialog",
+                    modal_id="service_documents",
+                ),
+            ],
             deps_providers=[
                 SymbolWiring(
                     module="app.services.documents.deps",
@@ -1127,6 +1141,10 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/services/documents",
                 "tests/services/test_documents_service.py",
                 "tests/api/test_documents_endpoints.py",
+                "tests/components/frontend/test_documents_ui.py",
+                "app/components/frontend/dashboard/cards/documents_card.py",
+                "app/components/frontend/dashboard/modals/documents_modal.py",
+                "app/components/frontend/dashboard/modals/documents_detail_pane.py",
             ],
         ),
     ),

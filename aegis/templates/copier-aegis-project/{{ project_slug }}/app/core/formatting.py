@@ -24,6 +24,17 @@ def format_percentage(pct: float) -> str:
     return f"{pct:.1f}%"
 
 
+def format_bytes(size: int | float) -> str:
+    """A byte count in the unit that reads: "512 B", "9.0 MB", "3.0 GB"."""
+    if size < 1024:
+        return f"{int(size)} B"
+    for unit in ("KB", "MB", "GB", "TB"):
+        size /= 1024
+        if size < 1024 or unit == "TB":
+            return f"{size:.1f} {unit}"
+    return f"{size:.1f} TB"
+
+
 def format_date(value: object) -> str:
     """An ISO date (or ``date``) as "Aug 19, 2026". Blank stays blank.
 

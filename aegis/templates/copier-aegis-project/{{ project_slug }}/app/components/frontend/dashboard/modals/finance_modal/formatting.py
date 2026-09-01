@@ -49,6 +49,7 @@ from app.components.frontend.dashboard.modals.modal_sections import (
     ledger_amount_color,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.finance.domains.ledger.accounts import effective_balance
 
 
 def _usd(cents: int | None) -> str:
@@ -139,27 +140,15 @@ def _liability_line(account: dict) -> str | None:
 
 
 def _account_display_balance(account: dict) -> int:
-    """The balance to show for an account.
-
-    Prefer the authoritative ``current_balance`` (Plaid/statement/valuation);
-    for liabilities that figure is the amount owed, so show it negative. Fall
-    back to the transaction-sum ``activity_balance`` when no balance was ever
-    set (e.g. a CSV import with no running balance).
-
-    "Never set" is subtle: accounts are CREATED with ``current_balance=0``,
-    so a bare zero only counts as a real balance when ``balance_as_of``
-    says a balance write actually happened. A nonzero value is trusted even
-    unstamped (a hand-entered opening balance has no stamp).
-    """
-    current = account.get("current_balance")
-    authoritative = current is not None and (
-        current != 0 or account.get("balance_as_of")
+    """The balance to show for an account: the domain's effective-balance
+    rule over the API row (shared with the finance AI tools, so what the
+    assistant reports always matches what this tab renders)."""
+    return effective_balance(
+        current_balance=account.get("current_balance"),
+        balance_as_of=account.get("balance_as_of"),
+        classification=account.get("classification") or "asset",
+        activity_balance=account.get("activity_balance") or 0,
     )
-    if authoritative:
-        if account.get("classification") == "liability":
-            return -abs(current)
-        return current
-    return account.get("activity_balance") or 0
 
 
 def _balance_color(cents: int | None) -> str:

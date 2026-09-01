@@ -267,6 +267,21 @@ class TestServicesRegistry:
         assert len(spec.wiring.dashboard_modals) == 1
         assert spec.wiring.dashboard_modals[0].modal_id == "service_blog"
 
+    def test_documents_service_wiring(self):
+        """Documents ships a card and a modal like every other service."""
+        spec = SERVICES["documents"]
+
+        assert spec.wiring.dashboard_cards[0].modal_id == "service_documents"
+        assert spec.wiring.dashboard_modals[0].modal_id == "service_documents"
+        assert (
+            "app/components/frontend/dashboard/cards/documents_card.py"
+            in spec.files.primary
+        )
+        assert (
+            "app/components/frontend/dashboard/modals/documents_modal.py"
+            in spec.files.primary
+        )
+
 
 class TestServiceRegistryFunctions:
     """Test service registry helper functions."""

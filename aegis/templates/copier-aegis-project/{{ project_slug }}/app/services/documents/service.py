@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import Any
 
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -27,6 +28,11 @@ def _utcnow() -> datetime:
     the server rather than about the document.
     """
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+# The columns a client may change after the fact. Storage, hash, size and
+# provenance describe the bytes and are fixed by them.
+_EDITABLE = frozenset({"title", "kind", "document_date", "note"})
 
 
 class DocumentService:
@@ -49,11 +55,41 @@ class DocumentService:
         page_count: int | None = None,
     ) -> Document:
         """Store bytes and record the document, or return the one that
-        already holds these exact bytes.
+        already holds these exact bytes. See ``store`` for the version
+        that also says which of the two happened."""
+        document, _ = await self.store(
+            data,
+            title=title,
+            kind=kind,
+            media_type=media_type,
+            owner_user_id=owner_user_id,
+            document_date=document_date,
+            source=source,
+            note=note,
+            page_count=page_count,
+        )
+        return document
+
+    async def store(
+        self,
+        data: bytes,
+        *,
+        title: str,
+        kind: str = "other",
+        media_type: str | None = None,
+        owner_user_id: int | None = None,
+        document_date: date | None = None,
+        source: str = "upload",
+        note: str | None = None,
+        page_count: int | None = None,
+    ) -> tuple[Document, bool]:
+        """Store bytes and record the document, or return the one that
+        already holds these exact bytes, plus whether a row was created.
 
         Deduped per owner rather than globally: two people holding the
         same form is two documents, and one person scanning it twice is
-        one.
+        one. The flag comes from the single dedupe lookup here, so a
+        caller never has to repeat it to learn the outcome.
         """
         if not data:
             raise ValueError("A document needs content.")
@@ -69,7 +105,7 @@ class DocumentService:
         key = content_key(data)
         existing = await self.by_content(key, owner_user_id=owner_user_id)
         if existing is not None:
-            return existing
+            return existing, False
 
         storage = get_storage()
         stored_key = await storage.put(data, content_type=media_type)
@@ -90,7 +126,7 @@ class DocumentService:
         )
         self.db.add(document)
         await self.db.flush()
-        return document
+        return document, True
 
     async def by_content(
         self, key: str, *, owner_user_id: int | None = None
@@ -134,8 +170,6 @@ class DocumentService:
         page_size: int = 50,
     ) -> tuple[list[Document], int]:
         """A page of live documents, newest first, plus the total."""
-        from sqlalchemy import func
-
         query = select(Document).where(Document.deleted_at.is_(None))
         count_query = (
             select(func.count())
@@ -162,6 +196,106 @@ class DocumentService:
         ).all()
         return list(rows), int(total)
 
+    async def update(
+        self,
+        document_id: int,
+        fields: dict[str, Any],
+        *,
+        owner_user_id: int | None = None,
+    ) -> Document | None:
+        """Change what the paper is called, what it is, when it is dated,
+        or the note on it. Only the keys present change. ``document_date``
+        and ``note`` clear when set to None; ``title`` and ``kind`` must
+        always hold a value, so None there is refused."""
+        unknown = set(fields) - _EDITABLE
+        if unknown:
+            raise ValueError(f"Cannot change {', '.join(sorted(unknown))}.")
+        if "kind" in fields and fields["kind"] not in DOCUMENT_KINDS:
+            raise ValueError(
+                f"Unknown document kind {fields['kind']!r}; expected one of "
+                f"{', '.join(DOCUMENT_KINDS)}."
+            )
+        if "title" in fields and not (fields["title"] or "").strip():
+            raise ValueError("A document needs a title.")
+        document = await self.get(document_id, owner_user_id=owner_user_id)
+        if document is None:
+            return None
+        for name, value in fields.items():
+            setattr(document, name, value.strip() if name == "title" else value)
+        document.updated_at = _utcnow()
+        self.db.add(document)
+        await self.db.flush()
+        return document
+
+    async def summary(self, *, owner_user_id: int | None = None) -> dict[str, Any]:
+        """What the card shows: how much paper, how recent, how heavy."""
+        live = Document.deleted_at.is_(None)
+        if owner_user_id is not None:
+            live = live & (Document.owner_user_id == owner_user_id)
+        by_kind = (
+            await self.db.exec(
+                select(
+                    Document.kind,
+                    func.count(),
+                    func.coalesce(func.sum(Document.byte_size), 0),
+                )
+                .where(live)
+                .group_by(Document.kind)
+            )
+        ).all()
+        month_start = _utcnow().replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        this_month = (
+            await self.db.exec(
+                select(func.count())
+                .select_from(Document)
+                .where(live, Document.received_at >= month_start)
+            )
+        ).one()
+        return {
+            "total": sum(int(n) for _, n, _ in by_kind),
+            "this_month": int(this_month),
+            "bytes": sum(int(b) for _, _, b in by_kind),
+            "by_kind": {kind: int(n) for kind, n, _ in by_kind},
+        }
+
+    async def tag_counts(
+        self, *, owner_user_id: int | None = None
+    ) -> list[tuple[str, int]]:
+        """Every label in use on live documents, most used first."""
+        query = (
+            select(DocumentTag.label, func.count())
+            .join(Document, Document.id == DocumentTag.document_id)
+            .where(Document.deleted_at.is_(None))
+        )
+        if owner_user_id is not None:
+            query = query.where(Document.owner_user_id == owner_user_id)
+        rows = (
+            await self.db.exec(
+                query.group_by(DocumentTag.label).order_by(
+                    func.count().desc(), DocumentTag.label
+                )
+            )
+        ).all()
+        return [(str(label), int(n)) for label, n in rows]
+
+    async def untag(self, document_id: int, label: str) -> bool:
+        """Take a label off; False when it was not there."""
+        row = (
+            await self.db.exec(
+                select(DocumentTag).where(
+                    DocumentTag.document_id == document_id,
+                    DocumentTag.label == label,
+                )
+            )
+        ).first()
+        if row is None:
+            return False
+        await self.db.delete(row)
+        await self.db.flush()
+        return True
+
     async def tag(self, document_id: int, label: str) -> DocumentTag | None:
         """Label a document; re-tagging with the same label is a no-op."""
         clean = (label or "").strip()
@@ -185,9 +319,7 @@ class DocumentService:
         await self.db.flush()
         return row
 
-    async def tags_for_many(
-        self, document_ids: list[int]
-    ) -> dict[int, list[str]]:
+    async def tags_for_many(self, document_ids: list[int]) -> dict[int, list[str]]:
         """Tags for a page of documents in ONE query.
 
         A per-row lookup is the N+1 the house rules forbid, and a listing
@@ -232,9 +364,3 @@ class DocumentService:
         self.db.add(document)
         await self.db.flush()
         return True
-
-
-async def document_health() -> dict[str, Any]:
-    """Whether the store is reachable, for the health surface."""
-    storage = get_storage()
-    return {"status": "healthy", "backend": storage.backend_name}

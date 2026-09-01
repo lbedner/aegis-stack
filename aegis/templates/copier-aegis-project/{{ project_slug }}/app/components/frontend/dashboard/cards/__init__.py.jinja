@@ -15,6 +15,9 @@ from app.components.frontend.dashboard.cards.blog_card import BlogCard
 {%- if include_comms %}
 from app.components.frontend.dashboard.cards.comms_card import CommsCard
 {%- endif %}
+{%- if include_documents %}
+from app.components.frontend.dashboard.cards.documents_card import DocumentsCard
+{%- endif %}
 {%- if include_insights %}
 from app.components.frontend.dashboard.cards.insights_card import InsightsCard
 {%- endif %}
@@ -49,7 +52,7 @@ from .redis_card import RedisCard
 from .scheduler_card import SchedulerCard
 {%- endif %}
 from .server_card import ServerCard
-{%- if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or include_finance or _plugins %}
+{%- if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance or _plugins %}
 from .services_card import ServicesCard
 {%- endif %}
 {%- if include_worker %}
@@ -70,6 +73,9 @@ __all__ = [
 {%- if include_comms %}
     "CommsCard",
 {%- endif %}
+{%- if include_documents %}
+    "DocumentsCard",
+{%- endif %}
 {%- if include_insights %}
     "InsightsCard",
 {%- endif %}
@@ -84,7 +90,7 @@ __all__ = [
     "{{ c.symbol }}",
 {%- endfor %}
 {%- endfor %}
-{%- if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or include_finance or _plugins %}
+{%- if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance or _plugins %}
     "ServicesCard",
 {%- endif %}
 {%- if include_database %}

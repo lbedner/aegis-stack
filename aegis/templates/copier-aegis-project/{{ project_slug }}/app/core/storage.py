@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 from pathlib import Path
 import re
+import tempfile
 from typing import Protocol, runtime_checkable
 
 DIGEST_ALGORITHM = "sha256"
@@ -90,35 +92,64 @@ class FilesystemStorage:
     def _path(self, key: str) -> Path:
         return self._root / validate_key(key)
 
-    async def put(self, data: bytes, *, content_type: str | None = None) -> str:
-        key = content_key(data)
-        path = self._path(key)
+    @staticmethod
+    def _write(path: Path, data: bytes) -> None:
+        """Write, then move into place under the real key.
+
+        Staged under a name unique to this write rather than a fixed
+        ``.partial``: two callers storing the SAME bytes is the common
+        case, not a rare one, and a shared staging path lets them
+        interleave into a corrupt object. The move is atomic, so a
+        reader either sees a complete object or no object.
+        """
         if path.exists():
             # Same bytes, same key, same object: storing twice costs one.
-            return key
-        await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
-        # Written beside and moved into place, so a reader never sees a
-        # half-written object under a key that claims to be complete.
-        staged = path.with_suffix(".partial")
-        await asyncio.to_thread(staged.write_bytes, data)
-        await asyncio.to_thread(staged.replace, path)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, staged = tempfile.mkstemp(dir=path.parent, suffix=".partial")
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+            os.replace(staged, path)
+        except BaseException:
+            Path(staged).unlink(missing_ok=True)
+            raise
+
+    async def put(self, data: bytes, *, content_type: str | None = None) -> str:
+        key = content_key(data)
+        # Every filesystem touch happens in the thread, including the
+        # stat: a stat on a slow or network disk blocks the event loop
+        # exactly as a read does.
+        await asyncio.to_thread(self._write, self._path(key), data)
         return key
 
-    async def get(self, key: str) -> bytes | None:
-        path = self._path(key)
-        if not path.exists():
+    @staticmethod
+    def _read(path: Path) -> bytes | None:
+        try:
+            return path.read_bytes()
+        except FileNotFoundError:
+            # Absence is an answer, and asking first would be a second
+            # syscall that another process can invalidate anyway.
             return None
-        return await asyncio.to_thread(path.read_bytes)
+
+    async def get(self, key: str) -> bytes | None:
+        return await asyncio.to_thread(self._read, self._path(key))
 
     async def exists(self, key: str) -> bool:
         return await asyncio.to_thread(self._path(key).exists)
 
-    async def delete(self, key: str) -> bool:
-        path = self._path(key)
-        if not path.exists():
+    @staticmethod
+    def _unlink(path: Path) -> bool:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            # Checking first then unlinking is a race: another worker can
+            # remove it in between, turning "absent" into a crash.
             return False
-        await asyncio.to_thread(path.unlink)
         return True
+
+    async def delete(self, key: str) -> bool:
+        return await asyncio.to_thread(self._unlink, self._path(key))
 
 
 _storage: ObjectStorage | None = None

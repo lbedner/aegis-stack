@@ -14,6 +14,9 @@ x-app: &app
     - PORT=${PORT:-8000}
     - STORAGE_ROOT=/data/storage
   volumes:
+    # Every process that runs the app shares one object store. Compose
+    # merges volume lists across override files by target path, so the
+    # dev overlay's code mount adds to this rather than replacing it.
     - storage-data:/data/storage
   labels:
     logging: "aegis-stack"

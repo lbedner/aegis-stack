@@ -56,6 +56,7 @@ async def create_recurring_stream(
     next_expected_date: date,
     account_id: int | None = None,
     is_subscription: bool = False,
+    subject_id: int | None = None,
 ) -> FinanceRecurringStream:
     """Create a user-declared bill (outflow) or income (inflow) stream.
 
@@ -71,6 +72,7 @@ async def create_recurring_stream(
     await accounts.get_or_create_currency(db, DEFAULT_CURRENCY)
     stream = FinanceRecurringStream(
         owner_user_id=0 if owner_user_id is None else owner_user_id,
+        subject_id=subject_id,
         account_id=account_id,
         name=name,
         normalized_payee=name.strip().upper(),

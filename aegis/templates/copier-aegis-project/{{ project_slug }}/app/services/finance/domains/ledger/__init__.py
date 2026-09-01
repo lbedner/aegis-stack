@@ -13,6 +13,7 @@ from app.services.finance.domains.ledger import (
     networth,
     queries,
     splits,
+    subjects,
     transactions,
 )
 
@@ -24,5 +25,6 @@ __all__ = [
     "networth",
     "queries",
     "splits",
+    "subjects",
     "transactions",
 ]

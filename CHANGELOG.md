@@ -9,6 +9,15 @@
 
 ### Added
 
+- **Finance rows say whose money they describe**: a `finance_subject`
+  table plus a nullable `subject_id` on accounts and recurring streams.
+  Households manage money for other people (a parent in care, a child's
+  savings, an estate), and with a single owner column those sat beside
+  the household's own indistinguishably, so every total quietly mixed
+  two people's money and "what were his resources on this date" was not
+  a question anyone could ask. Null means the household's own, so every
+  existing ledger and query reads exactly as before; accounts can be
+  narrowed to one subject, or to the household alone.
 - **Durable storage for bytes, addressed by content**: `app/core/storage.py`
   introduces the seam every future backend implements - put, get, exists,
   delete - with a filesystem backend and a named docker volume behind it.

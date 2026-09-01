@@ -66,6 +66,7 @@ from app.services.finance.models.reference import (
     FinanceCurrency,
     FinanceFxRate,
     FinanceIcon,
+    FinanceSubject,
 )
 from app.services.finance.models.transactions import (
     FinanceTransaction,
@@ -84,6 +85,7 @@ __all__ = [
     "FinanceCategoryAlias",
     "FinanceConnection",
     "FinanceCurrency",
+    "FinanceSubject",
     "FinanceFxRate",
     "FinanceHolding",
     "FinanceIcon",

@@ -8,6 +8,8 @@ key resolves identically wherever the bytes happen to live.
 
 from pathlib import Path
 
+import asyncio
+
 import pytest
 
 from app.core.storage import FilesystemStorage, content_key
@@ -92,3 +94,21 @@ class TestFilesystemStorage:
         """Rows record which backend holds the bytes, so a half-migrated
         store still resolves every key."""
         assert FilesystemStorage(tmp_path).backend_name == "filesystem"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_writes_of_the_same_bytes_do_not_collide(
+        self, tmp_path: Path
+    ) -> None:
+        """Two callers storing the SAME payload is the common case, not a
+        rare one - a shared staging path would let them interleave into a
+        corrupt object."""
+        store = FilesystemStorage(tmp_path)
+        payload = b"x" * 200_000
+
+        keys = await asyncio.gather(*(store.put(payload) for _ in range(12)))
+
+        assert len(set(keys)) == 1
+        assert await store.get(keys[0]) == payload
+        files = [p for p in tmp_path.rglob("*") if p.is_file()]
+        assert len(files) == 1
+        assert not any(p.name.endswith(".partial") for p in files)

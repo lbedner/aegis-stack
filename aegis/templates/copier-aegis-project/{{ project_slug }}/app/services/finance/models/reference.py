@@ -120,3 +120,36 @@ class FinanceIcon(SQLModel, table=True):
     domain: str = Field(index=True, unique=True, max_length=255)
     icon_b64: str | None = Field(default=None)
     fetched_at: datetime = Field(default_factory=_utcnow)
+
+
+class FinanceSubject(SQLModel, table=True):
+    """Whose money a row describes, when it is not the household's own.
+
+    Deliberately small. A subject identifies a person, trust, or estate
+    whose accounts, income, and property this household tracks - a parent
+    in care, a child's savings, an estate being settled - and nothing
+    more. It is not a contacts model and not an access control boundary:
+    saying whose money a row is says nothing about who may see it.
+
+    Null on a row means the household's own money, so every ledger that
+    predates subjects reads exactly as it did.
+    """
+
+    __tablename__ = "finance_subject"
+    __table_args__ = (
+        Index("ix_finance_subject_owner", "owner_user_id"),
+        CheckConstraint(
+            "kind IN ('person', 'trust', 'estate', 'entity')",
+            name="ck_finance_subject_kind",
+        ),
+        {"schema": _SCHEMA} if _SCHEMA else {},
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_user_id: int | None = Field(default=None)
+    name: str = Field(max_length=128)
+    kind: str = Field(default="person", max_length=16)
+    note: str | None = None
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None

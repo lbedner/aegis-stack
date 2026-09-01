@@ -93,6 +93,11 @@ class FinanceRecurringStream(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field()
+    # Whose income this is: a parent's pension is not the household's,
+    # and a resources answer has to be able to say so.
+    subject_id: int | None = Field(
+        default=None, foreign_key=f"{_FK}finance_subject.id", index=True
+    )
     organization_id: int | None = Field(default=None)
     account_id: int | None = Field(default=None, foreign_key=f"{_FK}finance_account.id")
     merchant_id: int | None = Field(

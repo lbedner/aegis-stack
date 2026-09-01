@@ -113,6 +113,7 @@ async def list_accounts(
     include_hidden: bool = False,
     page: int = 1,
     page_size: int = 50,
+    subject_id: int | None = None,
 ) -> tuple[list[FinanceAccount], int]:
     return await queries.accounts_page(
         db,
@@ -120,6 +121,7 @@ async def list_accounts(
         include_hidden=include_hidden,
         page=page,
         page_size=page_size,
+        subject_id=subject_id,
     )
 
 
@@ -390,5 +392,3 @@ async def reconcile_account(
         db, owner_user_id=owner_user_id, start_date=statement_date
     )
     return result
-
-

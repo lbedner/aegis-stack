@@ -1070,6 +1070,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/startup/finance_webhook_tunnel.py",
                 "app/components/backend/shutdown/finance_webhook_tunnel.py",
                 "tests/services/test_finance_splits.py",
+                "tests/services/test_finance_subjects.py",
                 "tests/api/test_finance_split_endpoints.py",
                 "tests/components/frontend/test_finance_splits_ui.py",
             ],

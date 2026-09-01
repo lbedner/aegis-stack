@@ -38,6 +38,7 @@ class RecurringMixin(FinanceServiceBase):
         next_expected_date: date,
         account_id: int | None = None,
         is_subscription: bool = False,
+        subject_id: int | None = None,
     ) -> FinanceRecurringStream:
         return await recurring.create_recurring_stream(
             self.db,
@@ -49,6 +50,7 @@ class RecurringMixin(FinanceServiceBase):
             next_expected_date=next_expected_date,
             account_id=account_id,
             is_subscription=is_subscription,
+            subject_id=subject_id,
         )
 
     async def transfer_stream_ids(self, stream_ids: Sequence[int]) -> set[int]:

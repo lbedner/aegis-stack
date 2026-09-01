@@ -1790,11 +1790,35 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
             ],
         ),
         # ----- Group B: accounts & balances --------------------------------
+        # Whose money a row describes, when it is not the household's own.
+        # Null on a referencing row means ours, so an existing ledger is
+        # unchanged by this table's arrival.
+        TableSpec(
+            name="finance_subject",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("name", "sa.String(128)", nullable=False),
+                ColumnSpec("kind", "sa.String(16)", nullable=False, default="'person'"),
+                ColumnSpec("note", "sa.String()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+            ],
+            indexes=[IndexSpec("ix_finance_subject_owner", ["owner_user_id"])],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_finance_subject_kind",
+                    sqltext="kind IN ('person', 'trust', 'estate', 'entity')",
+                ),
+            ],
+        ),
         TableSpec(
             name="finance_account",
             columns=[
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
                 ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("subject_id", "sa.Integer()", nullable=True),
                 ColumnSpec("organization_id", "sa.Integer()", nullable=True),
                 # NULL connection => a manual asset (real estate, vehicle, etc.).
                 ColumnSpec("connection_id", "sa.Integer()", nullable=True),
@@ -1840,6 +1864,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
             ],
             indexes=[
                 IndexSpec("ix_finance_account_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_account_subject_id", ["subject_id"]),
                 IndexSpec("ix_finance_account_org", ["organization_id"]),
                 IndexSpec("ix_finance_account_connection", ["connection_id"]),
                 IndexSpec("ix_finance_account_institution", ["institution_id"]),
@@ -1873,6 +1898,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                     ondelete="SET NULL",
                 ),
                 ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+                ForeignKeySpec(["subject_id"], "finance_subject", ["id"]),
             ],
             check_constraints=[
                 CheckConstraintSpec(
@@ -2976,6 +3002,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
             columns=[
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
                 ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("subject_id", "sa.Integer()", nullable=True),
                 ColumnSpec("organization_id", "sa.Integer()", nullable=True),
                 ColumnSpec("account_id", "sa.Integer()", nullable=True),
                 ColumnSpec("merchant_id", "sa.Integer()", nullable=True),
@@ -3036,6 +3063,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
             ],
             indexes=[
                 IndexSpec("ix_finance_recurring_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_recurring_stream_subject_id", ["subject_id"]),
                 IndexSpec("ix_finance_recurring_account", ["account_id"]),
                 IndexSpec("ix_finance_recurring_merchant", ["merchant_id"]),
                 IndexSpec("ix_finance_recurring_category", ["category_id"]),
@@ -3076,6 +3104,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                     ondelete="SET NULL",
                 ),
                 ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+                ForeignKeySpec(["subject_id"], "finance_subject", ["id"]),
             ],
             check_constraints=[
                 CheckConstraintSpec(

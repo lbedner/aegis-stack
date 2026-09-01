@@ -33,6 +33,7 @@ SERVICE_MIGRATION_SIGNATURES: dict[str, tuple[str, ...]] = {
     "insights": ("table", "insight_source"),
     "payment": ("table", "payment_provider"),
     "payment_auth_link": ("foreign_key", "payment_customer", "user_id"),
+    "finance_subjects": ("table", "finance.finance_subject"),
     "finance": ("table", "finance.finance_account"),
     "finance_budget_payee": ("column", "finance.finance_budget_category", "payee_key"),
     "finance_auth_link": ("foreign_key", "finance.finance_account", "owner_user_id"),

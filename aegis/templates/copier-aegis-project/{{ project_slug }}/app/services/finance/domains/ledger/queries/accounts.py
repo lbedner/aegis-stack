@@ -64,8 +64,15 @@ async def accounts_page(
     include_hidden: bool,
     page: int,
     page_size: int,
+    subject_id: int | None = None,
 ) -> tuple[list[FinanceAccount], int]:
-    """One page of live accounts plus the total count (two statements)."""
+    """One page of live accounts plus the total count (two statements).
+
+    ``subject_id`` narrows to whose money the rows describe: an id for one
+    subject's accounts, ``0`` for the household's own (the rows nobody
+    assigned), and None for everything, which is what every caller that
+    predates subjects means.
+    """
     query = select(FinanceAccount).where(FinanceAccount.deleted_at.is_(None))
     count_query = (
         select(func.count())
@@ -78,6 +85,14 @@ async def accounts_page(
     if not include_hidden:
         query = query.where(~FinanceAccount.is_hidden)
         count_query = count_query.where(~FinanceAccount.is_hidden)
+    if subject_id is not None:
+        clause = (
+            FinanceAccount.subject_id.is_(None)
+            if subject_id == 0
+            else FinanceAccount.subject_id == subject_id
+        )
+        query = query.where(clause)
+        count_query = count_query.where(clause)
     total = (await db.exec(count_query)).one()
     query = (
         query.order_by(FinanceAccount.classification, FinanceAccount.name)

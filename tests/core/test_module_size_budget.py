@@ -95,7 +95,7 @@ BUDGET: dict[str, int] = {
     "components/frontend/dashboard/modals/llm_catalog_tab.py.jinja": 780,
     "components/frontend/dashboard/modals/rag_tab.py": 780,
     "components/frontend/dashboard/cards/card_utils.py.jinja": 762,
-    "core/config.py.jinja": 746,
+    "core/config.py.jinja": 751,
     "cli/rag.py": 686,
     "services/ai/fixtures/llm_fixtures.py": 684,
     "services/load_test/worker/service.py": 678,

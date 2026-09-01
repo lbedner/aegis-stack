@@ -9,12 +9,18 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from app.services.finance.domains.ledger import accounts, properties, valuations
+from app.services.finance.domains.ledger import (
+    accounts,
+    properties,
+    subjects,
+    valuations,
+)
 from app.services.finance.models import (
     FinanceAccount,
     FinanceCurrency,
     FinanceInstitution,
     FinanceLiabilityDetail,
+    FinanceSubject,
     FinanceTransaction,
     FinanceValuation,
 )
@@ -89,6 +95,38 @@ class AccountsMixin(FinanceServiceBase):
             owner_user_id=owner_user_id,
         )
 
+    async def create_subject(
+        self,
+        *,
+        name: str,
+        kind: str = "person",
+        note: str | None = None,
+        owner_user_id: int | None = None,
+    ) -> FinanceSubject:
+        return await subjects.create_subject(
+            self.db,
+            name=name,
+            kind=kind,
+            note=note,
+            owner_user_id=owner_user_id,
+        )
+
+    async def list_subjects(
+        self, *, owner_user_id: int | None = None
+    ) -> list[FinanceSubject]:
+        return await subjects.list_subjects(self.db, owner_user_id=owner_user_id)
+
+    async def assign_subject(
+        self,
+        account_id: int,
+        subject_id: int | None,
+        *,
+        owner_user_id: int | None = None,
+    ) -> FinanceAccount | None:
+        return await subjects.assign_subject(
+            self.db, account_id, subject_id, owner_user_id=owner_user_id
+        )
+
     async def list_accounts(
         self,
         *,
@@ -96,11 +134,13 @@ class AccountsMixin(FinanceServiceBase):
         include_hidden: bool = False,
         page: int = 1,
         page_size: int = 50,
+        subject_id: int | None = None,
     ) -> tuple[list[FinanceAccount], int]:
         return await accounts.list_accounts(
             self.db,
             owner_user_id=owner_user_id,
             include_hidden=include_hidden,
+            subject_id=subject_id,
             page=page,
             page_size=page_size,
         )

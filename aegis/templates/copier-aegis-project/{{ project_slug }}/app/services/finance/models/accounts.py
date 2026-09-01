@@ -80,6 +80,11 @@ class FinanceAccount(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int | None = Field(default=None, index=True)
+    # WHOSE money this is, when it is not the household's own. Null
+    # means ours, so an existing ledger is unchanged.
+    subject_id: int | None = Field(
+        default=None, foreign_key=f"{_FK}finance_subject.id", index=True
+    )
     organization_id: int | None = Field(default=None, index=True)
     connection_id: int | None = Field(
         default=None, foreign_key=f"{_FK}finance_connection.id", index=True

@@ -9,7 +9,10 @@
 
 services:
   webserver:
-    volumes: []  # Remove dev code mount - code is baked into the image
+    volumes:
+      # The code mount is gone (baked into the image); stored objects are
+      # not code and must outlive a redeploy.
+      - storage-data:/data/storage
 {%- if ingress_tls %}
     labels:
       # Public router (HTTPS)

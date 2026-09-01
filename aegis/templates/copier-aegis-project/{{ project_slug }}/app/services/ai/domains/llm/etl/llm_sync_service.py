@@ -18,17 +18,23 @@ from app.services.ai.domains.llm.etl.clients.openrouter_client import (
     OpenRouterClient,
     OpenRouterModelIndex,
 )
+from app.services.ai.domains.llm.etl.lab_resolver import _grant_role, attach_labs
 from app.services.ai.domains.llm.etl.mappers.llm_mapper import (
     MergedLLMData,
+    is_cloud_syncable,
     merge_model_data,
 )
+from app.services.ai.domains.llm.etl.vendor_metadata import (
+    VENDOR_METADATA as VENDOR_METADATA,
+)
 from app.services.ai.models.llm import (
+    ROLE_SERVER,
     Direction,
     LargeLanguageModel,
     LLMDeployment,
     LLMModality,
+    LLMOrg,
     LLMPrice,
-    LLMVendor,
     Modality,
 )
 
@@ -76,87 +82,6 @@ class CatalogStats:
     top_vendors: list[tuple[str, int]]
 
 
-# Default vendor metadata for known vendors
-VENDOR_METADATA: dict[str, dict[str, str]] = {
-    "openai": {
-        "description": "OpenAI - Creator of GPT models and ChatGPT",
-        "color": "#10A37F",
-        "api_base": "https://api.openai.com/v1",
-    },
-    "anthropic": {
-        "description": "Anthropic - Creator of Claude AI assistants",
-        "color": "#D4A574",
-        "api_base": "https://api.anthropic.com/v1",
-    },
-    "google": {
-        "description": "Google AI - Creator of Gemini models",
-        "color": "#4285F4",
-        "api_base": "https://generativelanguage.googleapis.com",
-    },
-    "groq": {
-        "description": "Groq - Ultra-fast LLM inference with custom LPU hardware",
-        "color": "#F55036",
-        "api_base": "https://api.groq.com/openai/v1",
-    },
-    "mistral": {
-        "description": "Mistral AI - European AI company with efficient models",
-        "color": "#FF7000",
-        "api_base": "https://api.mistral.ai/v1",
-    },
-    "cohere": {
-        "description": "Cohere - Enterprise-focused NLP and generation models",
-        "color": "#39594D",
-        "api_base": "https://api.cohere.ai/v1",
-    },
-    "together": {
-        "description": "Together AI - Open-source model hosting platform",
-        "color": "#6366F1",
-        "api_base": "https://api.together.xyz/v1",
-    },
-    "fireworks": {
-        "description": "Fireworks AI - Fast inference for open-source models",
-        "color": "#FF6B35",
-        "api_base": "https://api.fireworks.ai/inference/v1",
-    },
-    "deepinfra": {
-        "description": "DeepInfra - Serverless AI inference platform",
-        "color": "#7C3AED",
-        "api_base": "https://api.deepinfra.com/v1/openai",
-    },
-    "perplexity": {
-        "description": "Perplexity - AI-powered search and conversational models",
-        "color": "#20808D",
-        "api_base": "https://api.perplexity.ai",
-    },
-    "azure": {
-        "description": "Azure OpenAI Service - Microsoft's hosted OpenAI models",
-        "color": "#0078D4",
-        "api_base": "",
-    },
-    "aws": {
-        "description": "AWS Bedrock - Amazon's managed AI model service",
-        "color": "#FF9900",
-        "api_base": "",
-    },
-    "meta": {
-        "description": "Meta AI - Creator of Llama open-source models",
-        "color": "#0668E1",
-        "api_base": "",
-    },
-    "xai": {
-        "description": "xAI - Creator of Grok models",
-        "color": "#1DA1F2",
-        "api_base": "https://api.x.ai/v1",
-    },
-    "ollama": {
-        "description": "Ollama - Run LLMs locally",
-        "color": "#FFFFFF",
-        "api_base": "http://localhost:11434/v1",
-        "auth_method": "none",
-    },
-}
-
-
 class LLMSyncService:
     """Service for syncing LLM catalog from public APIs."""
 
@@ -169,9 +94,9 @@ class LLMSyncService:
         self.session = session
         self.openrouter_client = OpenRouterClient()
         self.litellm_client = LiteLLMClient()
-        self._vendor_cache: dict[str, LLMVendor] = {}
+        self._vendor_cache: dict[str, LLMOrg] = {}
         self._model_cache: dict[str, LargeLanguageModel] = {}
-        # Keyed by (llm_id, llm_vendor_id); ids are None only before the
+        # Keyed by (llm_id, org_id); ids are None only before the
         # owning row's first flush, and every cache write happens after it.
         self._deployment_cache: dict[tuple[int | None, int | None], LLMDeployment] = {}
         self._price_cache: dict[tuple[int | None, int | None], LLMPrice] = {}
@@ -259,6 +184,16 @@ class LLMSyncService:
             merged = [m for m in merged if m.mode == mode_filter]
             logger.info(f"Filtered to {len(merged)} models with mode={mode_filter}")
 
+        # Local-runner rows are the local sync's business, not the cloud
+        # catalog's - see is_cloud_syncable.
+        before = len(merged)
+        merged = [m for m in merged if is_cloud_syncable(m.model_id)]
+        if len(merged) != before:
+            logger.info(
+                f"Skipped {before - len(merged)} local-runner rows from the "
+                "cloud catalog"
+            )
+
         # Pre-load caches
         self._load_caches()
 
@@ -290,17 +225,17 @@ class LLMSyncService:
         models a single stray per-model lookup is 3,000 queries per run
         (observed live before deployments/prices/modalities were cached).
         """
-        vendors = self.session.exec(select(LLMVendor)).all()
+        vendors = self.session.exec(select(LLMOrg)).all()
         self._vendor_cache = {v.name: v for v in vendors}
 
         models = self.session.exec(select(LargeLanguageModel)).all()
         self._model_cache = {m.model_id: m for m in models}
 
         deployments = self.session.exec(select(LLMDeployment)).all()
-        self._deployment_cache = {(d.llm_id, d.llm_vendor_id): d for d in deployments}
+        self._deployment_cache = {(d.llm_id, d.org_id): d for d in deployments}
 
         prices = self.session.exec(select(LLMPrice)).all()
-        self._price_cache = {(p.llm_id, p.llm_vendor_id): p for p in prices}
+        self._price_cache = {(p.llm_id, p.org_id): p for p in prices}
 
         modalities = self.session.exec(select(LLMModality)).all()
         self._modality_cache = {}
@@ -348,7 +283,7 @@ class LLMSyncService:
         vendor_name: str,
         result: SyncResult,
         dry_run: bool,
-    ) -> LLMVendor | None:
+    ) -> LLMOrg | None:
         """Upsert a vendor record.
 
         Args:
@@ -357,7 +292,7 @@ class LLMSyncService:
             dry_run: If True, don't persist changes.
 
         Returns:
-            LLMVendor instance or None on error.
+            LLMOrg instance or None on error.
         """
         if vendor_name in self._vendor_cache:
             return self._vendor_cache[vendor_name]
@@ -365,7 +300,8 @@ class LLMSyncService:
         # Get metadata for known vendors
         metadata = VENDOR_METADATA.get(vendor_name, {})
 
-        vendor = LLMVendor(
+        vendor = LLMOrg(
+            slug=vendor_name,
             name=vendor_name,
             description=metadata.get("description", f"{vendor_name.title()} models"),
             color=metadata.get("color", "#6B7280"),
@@ -376,6 +312,9 @@ class LLMSyncService:
         if not dry_run:
             self.session.add(vendor)
             self.session.flush()
+            # Appearing in the catalog as a model's provider IS the
+            # server hat; the maker hat is granted by lab resolution.
+            _grant_role(self.session, vendor, ROLE_SERVER)
 
         self._vendor_cache[vendor_name] = vendor
         result.vendors_added += 1
@@ -386,7 +325,7 @@ class LLMSyncService:
     def _upsert_model(
         self,
         data: MergedLLMData,
-        vendor: LLMVendor,
+        vendor: LLMOrg,
         result: SyncResult,
         dry_run: bool,
     ) -> LargeLanguageModel | None:
@@ -413,7 +352,7 @@ class LLMSyncService:
                     ),
                     self._update_if_changed(existing, "streamable", data.streamable),
                     self._update_if_changed(existing, "family", data.family),
-                    self._update_if_changed(existing, "llm_vendor_id", vendor.id),
+                    self._update_if_changed(existing, "served_by_org_id", vendor.id),
                     self._update_if_changed(existing, "released_on", data.created_at),
                 ]
             )
@@ -435,7 +374,7 @@ class LLMSyncService:
                 enabled=True,
                 color=VENDOR_METADATA.get(data.vendor, {}).get("color", "#6B7280"),
                 family=data.family,
-                llm_vendor_id=vendor.id,
+                served_by_org_id=vendor.id,
                 released_on=data.created_at,
             )
 
@@ -452,7 +391,7 @@ class LLMSyncService:
     def _upsert_deployment(
         self,
         model: LargeLanguageModel,
-        vendor: LLMVendor,
+        vendor: LLMOrg,
         data: MergedLLMData,
         result: SyncResult,
         dry_run: bool,
@@ -494,7 +433,7 @@ class LLMSyncService:
             # Create new deployment
             deployment = LLMDeployment(
                 llm_id=model.id,
-                llm_vendor_id=vendor.id,
+                org_id=vendor.id,
                 speed=50,  # Default - would need benchmarks
                 intelligence=50,
                 reasoning=50,
@@ -515,7 +454,7 @@ class LLMSyncService:
     def _upsert_price(
         self,
         model: LargeLanguageModel,
-        vendor: LLMVendor,
+        vendor: LLMOrg,
         data: MergedLLMData,
         result: SyncResult,
         dry_run: bool,
@@ -558,7 +497,7 @@ class LLMSyncService:
             # Create new price
             price = LLMPrice(
                 llm_id=model.id,
-                llm_vendor_id=vendor.id,
+                org_id=vendor.id,
                 input_cost_per_token=data.input_cost_per_token,
                 output_cost_per_token=data.output_cost_per_token,
                 cache_input_cost_per_token=data.cache_read_cost_per_token,
@@ -697,6 +636,7 @@ class LLMSyncService:
 
         if not dry_run:
             self.session.commit()
+            await attach_labs(self.session, [m.model_id for m in ollama_models])
 
         logger.info(
             f"Ollama sync complete: {result.models_added} models added, "
@@ -708,7 +648,7 @@ class LLMSyncService:
     def _sync_ollama_model(
         self,
         ollama_model: "OllamaModel",
-        vendor: LLMVendor,
+        vendor: LLMOrg,
         result: SyncResult,
         dry_run: bool,
     ) -> None:
@@ -745,7 +685,7 @@ class LLMSyncService:
                 [
                     self._update_if_changed(existing, "title", title),
                     self._update_if_changed(existing, "description", description),
-                    self._update_if_changed(existing, "llm_vendor_id", vendor.id),
+                    self._update_if_changed(existing, "served_by_org_id", vendor.id),
                 ]
             )
 
@@ -764,7 +704,7 @@ class LLMSyncService:
                 enabled=True,
                 color=VENDOR_METADATA.get("ollama", {}).get("color", "#FFFFFF"),
                 family=model_data.details.family,
-                llm_vendor_id=vendor.id,
+                served_by_org_id=vendor.id,
             )
 
             if not dry_run:
@@ -823,7 +763,7 @@ def get_catalog_stats(session: Session) -> CatalogStats:
     """
     from sqlmodel import func
 
-    vendor_count = session.exec(select(func.count()).select_from(LLMVendor)).one()
+    vendor_count = session.exec(select(func.count()).select_from(LLMOrg)).one()
     model_count = session.exec(
         select(func.count()).select_from(LargeLanguageModel)
     ).one()
@@ -835,11 +775,11 @@ def get_catalog_stats(session: Session) -> CatalogStats:
     # Get top vendors by model count
     top_vendors_result = session.exec(
         select(
-            LLMVendor.name,
+            LLMOrg.name,
             func.count(LargeLanguageModel.id).label("model_count"),
         )
         .join(LargeLanguageModel, isouter=True)
-        .group_by(LLMVendor.id)
+        .group_by(LLMOrg.id)
         .order_by(func.count(LargeLanguageModel.id).desc())
         .limit(10)
     ).all()

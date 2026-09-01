@@ -305,17 +305,13 @@ async def get_models(
             allowed = _usable_vendor_names()
             if vendor is not None:
                 allowed &= {vendor}
-            results: list[LLMListResult] = []
-            for name in sorted(allowed):
-                results.extend(
-                    await list_models(
-                        pattern=pattern,
-                        vendor=name,
-                        modality=modality,
-                        limit=limit,
-                        include_disabled=include_disabled,
-                    )
-                )
+            results: list[LLMListResult] = await list_models(
+                pattern=pattern,
+                vendors=sorted(allowed),
+                modality=modality,
+                limit=limit,
+                include_disabled=include_disabled,
+            )
         else:
             results = await list_models(
                 pattern=pattern,

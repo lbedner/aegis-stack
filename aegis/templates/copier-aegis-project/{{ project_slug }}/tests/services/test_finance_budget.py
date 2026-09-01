@@ -1341,7 +1341,12 @@ class TestEverythingElse:
                 svc, account.id, date(2026, month, 12), 60_000, name="Random"
             )
 
-        stats = (await svc.budget_summary(owner_user_id=1)).stats
+        # Pinned, like every other date in this test: the trailing window
+        # this reads is relative to today, so an unpinned call silently
+        # changes what it measures at every month boundary.
+        stats = (
+            await svc.budget_summary(owner_user_id=1, today=date(2026, 8, 10))
+        ).stats
         assert stats.everything_else == 60_000
         assert stats.month_net == 500_000 - 60_000
 

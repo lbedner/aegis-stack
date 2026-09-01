@@ -35,6 +35,7 @@ class StyledAlertDialog(ft.AlertDialog):
         width: int = 360,
         on_close: Callable[[], Awaitable[None] | None] | None = None,
         accent_color: str | None = None,
+        modal: bool = True,
     ) -> None:
         """
         Args:
@@ -124,7 +125,9 @@ class StyledAlertDialog(ft.AlertDialog):
             ),
         )
         super().__init__(
-            modal=True,
+            # ``modal=False`` lets a click on the barrier dismiss - right
+            # for browse-and-leave dialogs like the model picker.
+            modal=modal,
             # Text controls are plain (see controls/text.py): selection is a
             # property of the region, so every surface encloses its own.
             content=ft.SelectionArea(content=panel),

@@ -320,15 +320,15 @@ class TestLLMPickerGating:
             "COHERE_API_KEY",
         ):
             monkeypatch.setattr(settings, key, None)
-        queried: list[str] = []
+        calls: list[list[str]] = []
 
         async def fake_list_models(**kwargs: Any) -> list[LLMListResult]:
-            queried.append(kwargs["vendor"])
+            calls.append(kwargs["vendors"])
             return [
                 LLMListResult(
-                    model_id=f"{kwargs['vendor']}-model",
-                    title=kwargs["vendor"].title(),
-                    vendor=kwargs["vendor"],
+                    model_id=f"{name}-model",
+                    title=name.title(),
+                    vendor=name,
                     family=None,
                     color="",
                     context_window=8192,
@@ -336,6 +336,7 @@ class TestLLMPickerGating:
                     output_price=None,
                     released_on=None,
                 )
+                for name in kwargs["vendors"]
             ]
 
         monkeypatch.setattr(llm_router, "list_models", fake_list_models)
@@ -345,11 +346,14 @@ class TestLLMPickerGating:
         )
 
         assert response.status_code == 200
-        assert queried == ["ollama", "openai"]
+        # ONE catalog call carrying every callable vendor - the old
+        # per-vendor loop opened a session per vendor (confirmed slow).
+        assert calls == [["ollama", "openai"]]
         assert [m["model_id"] for m in response.json()] == [
             "ollama-model",
             "openai-model",
         ]
+
 
 
 class TestUserMemoryEndpoints:

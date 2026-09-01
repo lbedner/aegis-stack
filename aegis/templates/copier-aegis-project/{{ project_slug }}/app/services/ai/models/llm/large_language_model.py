@@ -8,8 +8,8 @@ from sqlmodel import Field, Relationship, SQLModel
 if TYPE_CHECKING:
     from .llm_deployment import LLMDeployment
     from .llm_modality import LLMModality
+    from .llm_org import LLMOrg
     from .llm_price import LLMPrice
-    from .llm_vendor import LLMVendor
 
 
 class LargeLanguageModel(SQLModel, table=True):
@@ -37,12 +37,26 @@ class LargeLanguageModel(SQLModel, table=True):
     family: str | None = None
 
     # Foreign key
-    llm_vendor_id: int | None = Field(
-        default=None, foreign_key="llm_vendor.id", index=True
+    # The two org axes, both pointing at llm_org: who SERVES this model
+    # (whose endpoint you call) and who MADE it (whose weights these
+    # are). They are the same org for a first-party model and differ
+    # wherever something serves weights it did not build.
+    served_by_org_id: int | None = Field(
+        default=None, foreign_key="llm_org.id", index=True
+    )
+    made_by_org_id: int | None = Field(
+        default=None, foreign_key="llm_org.id", index=True
     )
 
     # Relationships
-    llm_vendor: "LLMVendor" = Relationship(back_populates="llms")
+    served_by: "LLMOrg" = Relationship(
+        back_populates="models_served",
+        sa_relationship_kwargs={"foreign_keys": "LargeLanguageModel.served_by_org_id"},
+    )
+    made_by: "LLMOrg" = Relationship(
+        back_populates="models_made",
+        sa_relationship_kwargs={"foreign_keys": "LargeLanguageModel.made_by_org_id"},
+    )
     modalities: list["LLMModality"] = Relationship(back_populates="llm")
     llm_prices: list["LLMPrice"] = Relationship(back_populates="llm")
     deployments: list["LLMDeployment"] = Relationship(back_populates="llm")

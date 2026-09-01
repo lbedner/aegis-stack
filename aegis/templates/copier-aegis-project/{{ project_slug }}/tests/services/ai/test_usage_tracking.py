@@ -5,14 +5,15 @@ from contextlib import ExitStack, contextmanager
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from sqlmodel import Session, select
+
 from app.services.ai.models.llm import (
     LargeLanguageModel,
+    LLMOrg,
     LLMPrice,
     LLMUsage,
-    LLMVendor,
 )
 from app.services.ai.service import AIService
-from sqlmodel import Session, select
 
 
 class TestExtractUsage:
@@ -379,7 +380,7 @@ class TestGetUsageStats:
         self,
         db_session: Session,
         sample_llm: LargeLanguageModel,
-        sample_vendor: LLMVendor,
+        sample_vendor: LLMOrg,
         mock_ai_settings: Any,
     ) -> None:
         """Test model breakdown aggregation."""

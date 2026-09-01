@@ -7,34 +7,26 @@ from datetime import datetime
 
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, or_, select
+from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.db import engine, get_async_session
 from app.core.log import logger
 from app.services.ai.domains.llm import active_model
+from app.services.ai.domains.llm.catalog_queries import (
+    LLMListResult as LLMListResult,
+)
+from app.services.ai.domains.llm.catalog_queries import (
+    list_models as list_models,
+)
+from app.services.ai.domains.llm.provider_management import update_env_file
 from app.services.ai.models import AIProvider
 from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMModality,
+    LLMOrg,
     LLMPrice,
-    LLMVendor,
 )
-from app.services.ai.domains.llm.provider_management import update_env_file
-
-
-class LLMListResult(BaseModel):
-    """Result for a single model in list output."""
-
-    model_id: str
-    title: str
-    vendor: str
-    family: str | None
-    color: str
-    context_window: int
-    input_price: float | None
-    output_price: float | None
-    released_on: str | None
 
 
 class VendorListResult(BaseModel):
@@ -101,105 +93,6 @@ class LLMDetails(BaseModel):
     input_price: float | None
     output_price: float | None
     modalities: list[str]
-
-
-async def list_models(
-    pattern: str | None = None,
-    vendor: str | None = None,
-    modality: str | None = None,
-    limit: int = 50,
-    include_disabled: bool = False,
-) -> list[LLMListResult]:
-    """List LLM models from catalog with optional filtering.
-
-    Args:
-        pattern: Search pattern for model_id or title (case-insensitive)
-        vendor: Filter by vendor name
-        modality: Filter by modality (text, vision, audio, etc.)
-        limit: Maximum number of results to return
-        include_disabled: Include disabled models in results
-
-    Returns:
-        List of LLMListResult with model summary data
-    """
-    async with get_async_session() as session:
-        # Build base query with eager loading for vendor
-        stmt = (
-            select(LargeLanguageModel)
-            .join(LLMVendor, LargeLanguageModel.llm_vendor_id == LLMVendor.id)
-            .options(selectinload(LargeLanguageModel.llm_vendor))
-        )
-
-        # Apply filters
-        if pattern:
-            stmt = stmt.where(
-                or_(
-                    LargeLanguageModel.model_id.ilike(f"%{pattern}%"),
-                    LargeLanguageModel.title.ilike(f"%{pattern}%"),
-                )
-            )
-
-        if vendor:
-            stmt = stmt.where(LLMVendor.name.ilike(f"%{vendor}%"))
-
-        if modality:
-            stmt = stmt.join(
-                LLMModality, LargeLanguageModel.id == LLMModality.llm_id
-            ).where(LLMModality.modality == modality)
-
-        if not include_disabled:
-            stmt = stmt.where(LargeLanguageModel.enabled == True)  # noqa: E712
-
-        # Sort by release date (newest first), nulls last
-        stmt = stmt.order_by(
-            LargeLanguageModel.released_on.desc().nulls_last(),
-            LargeLanguageModel.model_id,
-        )
-        stmt = stmt.limit(limit)
-
-        result = await session.exec(stmt)
-        models = result.all()
-
-        # Batch-fetch prices to avoid N+1 queries
-        model_ids = [m.id for m in models]
-        price_map: dict[int, LLMPrice] = {}
-        if model_ids:
-            price_stmt = (
-                select(LLMPrice)
-                .where(LLMPrice.llm_id.in_(model_ids))
-                .order_by(LLMPrice.llm_id, LLMPrice.effective_date.desc())
-            )
-            price_result = await session.exec(price_stmt)
-            prices = price_result.all()
-            # Keep only the latest price per model (first due to ordering)
-            for price in prices:
-                if price.llm_id not in price_map:
-                    price_map[price.llm_id] = price
-
-        results: list[LLMListResult] = []
-        for model in models:
-            price = price_map.get(model.id)
-            results.append(
-                LLMListResult(
-                    model_id=model.model_id,
-                    title=model.title,
-                    vendor=model.llm_vendor.name if model.llm_vendor else "Unknown",
-                    family=model.family,
-                    color=model.color,
-                    context_window=model.context_window,
-                    input_price=price.input_cost_per_token * 1_000_000
-                    if price
-                    else None,
-                    output_price=price.output_cost_per_token * 1_000_000
-                    if price
-                    else None,
-                    released_on=model.released_on.strftime("%Y-%m-%d")
-                    if model.released_on
-                    else None,
-                )
-            )
-
-        return results
 
 
 async def get_current_config() -> CurrentLLMConfig:
@@ -343,15 +236,15 @@ async def set_active_model(model_id: str, force: bool = False) -> SetModelResult
         async with get_async_session() as session:
             stmt = (
                 select(LargeLanguageModel)
-                .join(LLMVendor, LargeLanguageModel.llm_vendor_id == LLMVendor.id)
-                .options(selectinload(LargeLanguageModel.llm_vendor))
+                .join(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
+                .options(selectinload(LargeLanguageModel.served_by))
                 .where(LargeLanguageModel.model_id == model_id)
             )
             result = await session.exec(stmt)
             model = result.first()
 
             if model:
-                vendor_name = model.llm_vendor.name if model.llm_vendor else None
+                vendor_name = model.served_by.name if model.served_by else None
             else:
                 # Model not in catalog - check if it's an Ollama model
                 try:
@@ -431,8 +324,8 @@ async def get_model_info(model_id: str) -> LLMDetails | None:
     async with get_async_session() as session:
         stmt = (
             select(LargeLanguageModel)
-            .join(LLMVendor, LargeLanguageModel.llm_vendor_id == LLMVendor.id)
-            .options(selectinload(LargeLanguageModel.llm_vendor))
+            .join(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
+            .options(selectinload(LargeLanguageModel.served_by))
             .where(LargeLanguageModel.model_id == model_id)
         )
         result = await session.exec(stmt)
@@ -460,7 +353,7 @@ async def get_model_info(model_id: str) -> LLMDetails | None:
             model_id=model.model_id,
             title=model.title,
             description=model.description,
-            vendor=model.llm_vendor.name if model.llm_vendor else "Unknown",
+            vendor=model.served_by.name if model.served_by else "Unknown",
             context_window=model.context_window,
             streamable=model.streamable,
             enabled=model.enabled,
@@ -482,12 +375,18 @@ def list_vendors() -> list[VendorListResult]:
     with Session(engine) as session:
         results = session.exec(
             select(
-                LLMVendor.name,
+                LLMOrg.name,
                 func.count(LargeLanguageModel.id).label("model_count"),
             )
-            .join(LargeLanguageModel, isouter=True)
-            .group_by(LLMVendor.id)
-            .order_by(LLMVendor.name)
+            # Two FKs point here now (served_by, made_by); this list is
+            # the SERVING surface, so the join must say so.
+            .join(
+                LargeLanguageModel,
+                LargeLanguageModel.served_by_org_id == LLMOrg.id,
+                isouter=True,
+            )
+            .group_by(LLMOrg.id)
+            .order_by(LLMOrg.name)
         ).all()
 
         return [

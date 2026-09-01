@@ -224,9 +224,7 @@ class TestCategorizeCardCopy:
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
-        display = {
-            d.label: d.value for d in await svc.describe_pending_change(row)
-        }
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
 
         assert display["Category"] == "Shopping \u2192 Food & Dining:Groceries"
 
@@ -243,9 +241,7 @@ class TestCategorizeCardCopy:
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
-        display = {
-            d.label: d.value for d in await svc.describe_pending_change(row)
-        }
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
 
         assert display["Category"] == "Uncategorized \u2192 Food & Dining:Groceries"
 
@@ -469,9 +465,7 @@ class TestMatchExecutor:
             {"transaction_id": txn.id, "stream_id": stream.id},
             owner_user_id=1,
         )
-        display = {
-            d.label: d.value for d in await svc.describe_pending_change(row)
-        }
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
 
         assert "$1,000.00" in display["Payment"]
         assert "Jul 31, 2026" in display["Payment"]
@@ -510,6 +504,128 @@ class TestMatchExecutor:
         assert row.result.get("error")
         await async_db_session.refresh(txn)
         assert txn.recurring_stream_id is None
+
+
+class TestAssignPayeeExecutor:
+    """FW-06's second half: 'these withdrawals are Hudson Valley
+    Grounded' as a proposal. Approval find-or-creates the payee by
+    normalized name and points the rows at it - the same service verbs
+    the register UI calls, no new mutation path."""
+
+    @pytest.mark.asyncio
+    async def test_approve_assigns_the_payee_creating_it_once(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        account = await _account(svc)
+        one = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
+        two = await _txn(svc, account.id, -2_500, date(2026, 8, 17), name="ATM 882")
+
+        first = await svc.propose_change(
+            "transaction.assign_payee",
+            {"transaction_id": one.id, "payee": "Hudson Valley Grounded"},
+            owner_user_id=1,
+        )
+        second = await svc.propose_change(
+            "transaction.assign_payee",
+            {"transaction_id": two.id, "payee": "hudson valley grounded"},
+            owner_user_id=1,
+        )
+        await svc.approve_change(first.id, owner_user_id=1)
+        await svc.approve_change(second.id, owner_user_id=1)
+
+        await async_db_session.refresh(one)
+        await async_db_session.refresh(two)
+        assert one.merchant_id is not None
+        # Same normalized name = same payee row, not a duplicate.
+        assert two.merchant_id == one.merchant_id
+        rows = await svc.list_merchants(owner_user_id=1)
+        names = [m.name for m in rows]
+        assert names.count("Hudson Valley Grounded") == 1
+
+    @pytest.mark.asyncio
+    async def test_propose_moves_nothing(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        account = await _account(svc)
+        txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
+
+        await svc.propose_change(
+            "transaction.assign_payee",
+            {"transaction_id": txn.id, "payee": "Hudson Valley Grounded"},
+            owner_user_id=1,
+        )
+
+        await async_db_session.refresh(txn)
+        assert txn.merchant_id is None
+        assert await svc.list_merchants(owner_user_id=1) == []
+
+    @pytest.mark.asyncio
+    async def test_the_card_shows_the_move(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        account = await _account(svc)
+        txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
+
+        row = await svc.propose_change(
+            "transaction.assign_payee",
+            {"transaction_id": txn.id, "payee": "Hudson Valley Grounded"},
+            owner_user_id=1,
+        )
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+
+        assert display["Payee"] == "Unassigned \u2192 Hudson Valley Grounded"
+        assert "ATM 881" in display["Transaction"]
+
+    @pytest.mark.asyncio
+    async def test_the_card_shows_what_it_replaces(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        account = await _account(svc)
+        txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
+        old = await svc.create_merchant("Chase ATM", owner_user_id=1)
+        await svc.assign_merchant([txn.id], old.id, owner_user_id=1)
+
+        row = await svc.propose_change(
+            "transaction.assign_payee",
+            {"transaction_id": txn.id, "payee": "Hudson Valley Grounded"},
+            owner_user_id=1,
+        )
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+
+        assert display["Payee"] == "Chase ATM \u2192 Hudson Valley Grounded"
+
+    @pytest.mark.asyncio
+    async def test_a_blank_payee_is_refused_at_propose(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        account = await _account(svc)
+        txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
+
+        with pytest.raises(ValueError, match="payee"):
+            await svc.propose_change(
+                "transaction.assign_payee",
+                {"transaction_id": txn.id, "payee": "   "},
+                owner_user_id=1,
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_vanished_transaction_fails_the_approval_not_the_queue(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        account = await _account(svc)
+        txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
+        row = await svc.propose_change(
+            "transaction.assign_payee",
+            {"transaction_id": txn.id, "payee": "Hudson Valley Grounded"},
+            owner_user_id=1,
+        )
+        await svc.soft_delete_transactions([txn.id], owner_user_id=1)
+
+        with pytest.raises(ValueError, match="not found"):
+            await svc.approve_change(row.id, owner_user_id=1)
+
+        refreshed = await async_db_session.get(FinancePendingChange, row.id)
+        assert refreshed is not None and refreshed.status == "pending"
 
 
 class TestTagExecutors:
@@ -584,9 +700,7 @@ class TestTagExecutors:
             {"transaction_id": txn.id, "tag": "Business"},
             owner_user_id=1,
         )
-        display = {
-            d.label: d.value for d in await svc.describe_pending_change(row)
-        }
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
 
         assert display["Tags"] == "Travel \u2192 Business, Travel"
 
@@ -600,9 +714,7 @@ class TestTagExecutors:
             {"transaction_id": txn.id, "tag": "Business"},
             owner_user_id=1,
         )
-        display = {
-            d.label: d.value for d in await svc.describe_pending_change(row)
-        }
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
         assert display["Tags"] == "none \u2192 Business"
 
     @pytest.mark.asyncio
@@ -665,9 +777,7 @@ class TestTagExecutors:
             {"transaction_id": txn.id, "tag": "business"},
             owner_user_id=1,
         )
-        display = {
-            d.label: d.value for d in await svc.describe_pending_change(row)
-        }
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
 
         assert display["Tags"] == "Business \u2192 Business"
 
@@ -687,9 +797,7 @@ class TestTagExecutors:
             {"transaction_id": txn.id, "tag": "BUSINESS!"},
             owner_user_id=1,
         )
-        display = {
-            d.label: d.value for d in await svc.describe_pending_change(row)
-        }
+        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
 
         assert display["Tags"] == "Business \u2192 none"
 
@@ -757,7 +865,10 @@ class TestWithdraw:
 
         with pytest.raises(ValueError, match="already rejected"):
             await writes.withdraw(
-                async_db_session, row.id, agent_slug="finance-assistant", owner_user_id=1
+                async_db_session,
+                row.id,
+                agent_slug="finance-assistant",
+                owner_user_id=1,
             )
 
 

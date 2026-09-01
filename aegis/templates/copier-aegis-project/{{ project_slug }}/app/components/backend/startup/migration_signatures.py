@@ -18,7 +18,7 @@ Forms:
 """
 
 SERVICE_MIGRATION_SIGNATURES: dict[str, tuple[str, ...]] = {
-    "ai": ("table", "llm_vendor"),
+    "ai": ("table", "llm_org"),
     "ai_agents": ("table", "agent"),
     "agent_code_mode": ("column", "agent", "code_mode"),
     "ai_sentiment": ("table", "sentiment_analysis"),

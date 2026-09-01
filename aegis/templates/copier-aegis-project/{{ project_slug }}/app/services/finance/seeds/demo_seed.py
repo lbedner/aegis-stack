@@ -48,6 +48,7 @@ from app.services.finance.models import (
     FinanceHolding,
     FinanceImportBatch,
     FinanceImportBatchRow,
+    FinanceInsight,
     FinanceLiabilityDetail,
     FinanceNetWorthSnapshot,
     FinanceRecurringStream,
@@ -477,6 +478,10 @@ async def _delete_demo_rows(
             db, FinanceTransactionTag, FinanceTransactionTag.transaction_id, txn_ids
         )
     await _release_transfers(db, account_ids)
+    # Insights point AT the rows below (a missed-payment insight names its
+    # stream); an insight outliving its subject is a dangling claim, and
+    # the FK refuses the delete while it stands.
+    await _delete_insights_for(db, account_ids, txn_ids)
     await _delete_where(
         db, FinanceRecurringStream, FinanceRecurringStream.account_id, account_ids
     )
@@ -578,6 +583,46 @@ async def _release_transfers(db: AsyncSession, account_ids: list[int]) -> None:
     for transfer in transfers:
         await db.delete(transfer)
     await db.flush()
+
+
+async def _delete_insights_for(
+    db: AsyncSession, account_ids: list[int], txn_ids: list[int]
+) -> None:
+    """Drop insights raised about rows this teardown is removing.
+
+    An insight is a claim about a specific account, transaction, category,
+    or stream, so it cannot outlive the row it describes - and the
+    stream foreign key enforces that literally.
+    """
+    if not account_ids and not txn_ids:
+        return
+    conditions = []
+    if account_ids:
+        conditions.append(FinanceInsight.related_account_id.in_(account_ids))
+    if txn_ids:
+        conditions.append(FinanceInsight.related_transaction_id.in_(txn_ids))
+    stream_ids = (
+        [
+            s.id
+            for s in (
+                await db.exec(
+                    select(FinanceRecurringStream).where(
+                        FinanceRecurringStream.account_id.in_(account_ids)
+                    )
+                )
+            ).all()
+            if s.id is not None
+        ]
+        if account_ids
+        else []
+    )
+    if stream_ids:
+        conditions.append(FinanceInsight.related_stream_id.in_(stream_ids))
+    rows = (await db.exec(select(FinanceInsight).where(or_(*conditions)))).all()
+    for row in rows:
+        await db.delete(row)
+    if rows:
+        await db.flush()
 
 
 async def _delete_where(
@@ -998,6 +1043,14 @@ async def seed_demo(
         )
     ).all()
     for stream in demo_streams:
+        # Confirm the COMMITMENTS only. Confirming everything the detector
+        # found also promoted discretionary rhythms (a few jittered Amazon
+        # orders a month) into bills, and a bill that can be missed will
+        # eventually be missed: the household reads as delinquent on a
+        # shopping habit the moment one gap outruns the grace window.
+        # A fixed amount is what separates a commitment from a habit.
+        if stream.amount_is_variable and stream.direction != "inflow":
+            continue
         stream.is_user_confirmed = True
         db.add(stream)
     await db.flush()

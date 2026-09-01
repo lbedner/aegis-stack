@@ -3,7 +3,7 @@
 Contains seed data for LLM vendors, models, deployments, and pricing (Dec 2024 rates).
 
 Architecture:
-- LLMVendor: API providers (OpenAI, Anthropic, LLM7.io, etc.)
+- LLMOrg: API providers (OpenAI, Anthropic, LLM7.io, etc.)
 - LargeLanguageModel: Unique models (gpt-4o-mini exists ONCE, owned by OpenAI)
 - LLMDeployment: Which vendors offer which models (LLM7.io deploys
   gpt-4o-mini via proxy)
@@ -19,8 +19,8 @@ from app.core.log import logger
 from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMDeployment,
+    LLMOrg,
     LLMPrice,
-    LLMVendor,
 )
 
 # =============================================================================
@@ -500,10 +500,11 @@ def _load_vendors(session: Session) -> int:
     count = 0
     for vendor_data in VENDORS:
         existing = session.exec(
-            select(LLMVendor).where(LLMVendor.name == vendor_data["name"])
+            select(LLMOrg).where(LLMOrg.name == vendor_data["name"])
         ).first()
         if not existing:
-            vendor = LLMVendor(**vendor_data)
+            # The vendor key IS the slug for a catalog-sourced org.
+            vendor = LLMOrg(slug=vendor_data["name"], **vendor_data)
             session.add(vendor)
             count += 1
             logger.debug(f"Added vendor: {vendor_data['name']}")
@@ -516,7 +517,7 @@ def _load_models(session: Session) -> int:
     count = 0
 
     # Get vendor ID mapping
-    vendors = session.exec(select(LLMVendor)).all()
+    vendors = session.exec(select(LLMOrg)).all()
     vendor_map = {v.name: v.id for v in vendors}
 
     for vendor_name, models in MODELS.items():
@@ -534,7 +535,7 @@ def _load_models(session: Session) -> int:
 
             if not existing:
                 model = LargeLanguageModel(
-                    llm_vendor_id=vendor_id,
+                    served_by_org_id=vendor_id,
                     **model_data,
                 )
                 session.add(model)
@@ -550,7 +551,7 @@ def _load_deployments(session: Session) -> int:
     count = 0
 
     # Get vendor and model mappings
-    vendors = session.exec(select(LLMVendor)).all()
+    vendors = session.exec(select(LLMOrg)).all()
     vendor_map = {v.name: v.id for v in vendors}
 
     models = session.exec(select(LargeLanguageModel)).all()
@@ -573,14 +574,14 @@ def _load_deployments(session: Session) -> int:
             # Check if deployment already exists
             existing = session.exec(
                 select(LLMDeployment).where(
-                    LLMDeployment.llm_vendor_id == vendor_id,
+                    LLMDeployment.org_id == vendor_id,
                     LLMDeployment.llm_id == model_id,
                 )
             ).first()
 
             if not existing:
                 deployment = LLMDeployment(
-                    llm_vendor_id=vendor_id,
+                    org_id=vendor_id,
                     llm_id=model_id,
                     speed=deployment_data.get("speed", 50),
                     intelligence=deployment_data.get("intelligence", 50),
@@ -602,7 +603,7 @@ def _load_prices(session: Session) -> int:
     effective_date = datetime.now(UTC)
 
     # Get vendor and model mappings
-    vendors = session.exec(select(LLMVendor)).all()
+    vendors = session.exec(select(LLMOrg)).all()
     vendor_map = {v.name: v.id for v in vendors}
 
     models = session.exec(select(LargeLanguageModel)).all()
@@ -622,7 +623,7 @@ def _load_prices(session: Session) -> int:
         # Check if price already exists for this vendor-model pair
         existing = session.exec(
             select(LLMPrice).where(
-                LLMPrice.llm_vendor_id == vendor_id,
+                LLMPrice.org_id == vendor_id,
                 LLMPrice.llm_id == llm_id,
             )
         ).first()
@@ -630,7 +631,7 @@ def _load_prices(session: Session) -> int:
         if not existing:
             # Convert from per-1M-tokens to per-token
             price = LLMPrice(
-                llm_vendor_id=vendor_id,
+                org_id=vendor_id,
                 llm_id=llm_id,
                 input_cost_per_token=price_data["input"] / 1_000_000,
                 output_cost_per_token=price_data["output"] / 1_000_000,

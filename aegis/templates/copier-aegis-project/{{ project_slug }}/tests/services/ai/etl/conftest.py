@@ -9,7 +9,7 @@ from sqlmodel import Session
 
 from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMModel
 from app.services.ai.domains.llm.etl.clients.openrouter_client import OpenRouterModel
-from app.services.ai.models.llm import LargeLanguageModel, LLMVendor
+from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
 
 # =============================================================================
 # Database Fixtures
@@ -36,9 +36,10 @@ def etl_session(db_session: Session) -> Session:
 
 
 @pytest.fixture
-def ollama_vendor(etl_session: Session) -> LLMVendor:
+def ollama_vendor(etl_session: Session) -> LLMOrg:
     """Create Ollama vendor for testing."""
-    vendor = LLMVendor(
+    vendor = LLMOrg(
+        slug="ollama",
         name="ollama",
         description="Ollama - Run LLMs locally",
         color="#FFFFFF",
@@ -53,7 +54,7 @@ def ollama_vendor(etl_session: Session) -> LLMVendor:
 
 @pytest.fixture
 def existing_ollama_model(
-    etl_session: Session, ollama_vendor: LLMVendor
+    etl_session: Session, ollama_vendor: LLMOrg
 ) -> LargeLanguageModel:
     """Create an existing Ollama model for update tests."""
     model = LargeLanguageModel(
@@ -63,7 +64,7 @@ def existing_ollama_model(
         context_window=0,
         streamable=True,
         enabled=True,
-        llm_vendor_id=ollama_vendor.id,
+        served_by_org_id=ollama_vendor.id,
     )
     etl_session.add(model)
     etl_session.commit()
@@ -257,7 +258,9 @@ def sample_litellm_model() -> LiteLLMModel:
 @pytest.fixture
 def mock_httpx_openrouter(mock_openrouter_response: dict[str, Any]):
     """Mock httpx for OpenRouter API calls."""
-    with patch("app.services.ai.domains.llm.etl.clients.openrouter_client.httpx") as mock_httpx:
+    with patch(
+        "app.services.ai.domains.llm.etl.clients.openrouter_client.httpx"
+    ) as mock_httpx:
         mock_response = MagicMock()
         mock_response.json.return_value = mock_openrouter_response
         mock_response.raise_for_status = MagicMock()
@@ -275,7 +278,9 @@ def mock_httpx_openrouter(mock_openrouter_response: dict[str, Any]):
 @pytest.fixture
 def mock_httpx_litellm(mock_litellm_response: dict[str, Any]):
     """Mock httpx for LiteLLM API calls."""
-    with patch("app.services.ai.domains.llm.etl.clients.litellm_client.httpx") as mock_httpx:
+    with patch(
+        "app.services.ai.domains.llm.etl.clients.litellm_client.httpx"
+    ) as mock_httpx:
         mock_response = MagicMock()
         mock_response.json.return_value = mock_litellm_response
         mock_response.raise_for_status = MagicMock()

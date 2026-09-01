@@ -116,5 +116,5 @@ class RedisCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name="redis",
+            component_name="cache",
         )

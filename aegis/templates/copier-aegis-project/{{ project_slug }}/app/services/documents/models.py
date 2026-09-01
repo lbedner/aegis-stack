@@ -30,8 +30,13 @@ DOCUMENT_KINDS = (
 )
 
 
-def _utcnow() -> datetime:
-    """Naive UTC, matching the timestamp columns across services."""
+def utcnow() -> datetime:
+    """Naive UTC, matching the timestamp columns across services.
+
+    A local-time timestamp reads differently depending on where the
+    process runs, which makes "received on the 27th" a question about
+    the server rather than about the document.
+    """
     from datetime import UTC
 
     return datetime.now(UTC).replace(tzinfo=None)
@@ -87,7 +92,7 @@ class Document(SQLModel, table=True):
     meta_data: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("meta_data", JSON, nullable=False)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime | None = None
     deleted_at: datetime | None = None
 

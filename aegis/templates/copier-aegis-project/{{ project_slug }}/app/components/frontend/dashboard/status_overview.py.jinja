@@ -27,44 +27,6 @@ from .cards.card_utils import (
     create_header_row,
 )
 
-# Map status overview component names to modal names
-MODAL_NAME_MAP = {
-    "backend": "backend",
-{% if include_database %}
-    "database": "database",
-{% endif %}
-{% if ollama_mode != "none" %}
-    "ollama": "ollama",
-{% endif %}
-{% if include_redis %}
-    "cache": "redis",
-{% endif %}
-{% if include_worker %}
-    "worker": "worker",
-{% endif %}
-{% if include_scheduler %}
-    "scheduler": "scheduler",
-{% endif %}
-{% if include_auth %}
-    "service_auth": "auth",
-{% endif %}
-{% if include_ai %}
-    "service_ai": "ai",
-{% endif %}
-{% if include_comms %}
-    "service_comms": "comms",
-{% endif %}
-{% if include_documents %}
-    DOCUMENTS_MODAL_ID: DOCUMENTS_MODAL_ID,
-{% endif %}
-{% if include_ingress %}
-    "ingress": "ingress",
-{% endif %}
-{% if include_observability %}
-    "observability": "observability",
-{% endif %}
-    "frontend": "frontend",
-}
 
 
 def get_component_display_info(
@@ -214,8 +176,7 @@ class ClickableStatusCell(ft.Container):
         if not e.page:
             return
 
-        modal_name = MODAL_NAME_MAP.get(self._component_name, self._component_name)
-        _open_modal(modal_name, self._component_data, e.page)
+        _open_modal(self._component_name, self._component_data, e.page)
 
 
 class StatusOverviewPanel(ft.Container):

@@ -91,5 +91,5 @@ class AuthCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name="auth",
+            component_name="service_auth",
         )

@@ -288,13 +288,12 @@ def test_pyproject_deps_parity(service_name: str) -> None:
         "payment",
     ],
 )
-def test_card_utils_parity(service_name: str) -> None:
-    """``card_utils.py`` builds a ``modal_map`` keyed by component name.
+def test_modal_registry_parity(service_name: str) -> None:
+    """``modal_registry.py`` builds a ``modal_map`` keyed by component id.
     The plugin loop must emit the same imports + dict entries the legacy
-    if-blocks do (in-tree wiring data carries the modal_id keys
-    ``"auth"``/``"ai"``/``"service_payment"``/etc. that the dashboard
-    dispatcher uses)."""
-    template = "app/components/frontend/dashboard/cards/card_utils.py"
+    if-blocks do (in-tree wiring data carries the ``service_*`` modal ids
+    the cards pass)."""
+    template = "app/components/frontend/dashboard/modal_registry.py"
     spec = SERVICES[service_name]
     include_key = SERVICE_INCLUDE_KEY[service_name]
 
@@ -313,7 +312,7 @@ def test_card_utils_parity(service_name: str) -> None:
     plugin_output = _render(template, plugin_answers)
 
     assert legacy_output == plugin_output, (
-        f"card_utils.py parity drift for {service_name}:\n"
+        f"modal_registry.py parity drift for {service_name}:\n"
         f"--- legacy ---\n{legacy_output}\n"
         f"--- plugin ---\n{plugin_output}\n"
     )

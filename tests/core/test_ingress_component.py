@@ -480,14 +480,14 @@ class TestIngressModal:
         assert "IngressDetailDialog" in content
         assert "ingress_modal" in content
 
-    def test_ingress_modal_in_card_utils(self) -> None:
-        """Test that IngressDetailDialog is registered in card_utils.py.jinja."""
+    def test_ingress_modal_in_registry(self) -> None:
+        """Test that IngressDetailDialog is registered in modal_registry.py.jinja."""
         from pathlib import Path
 
-        card_utils_path = Path(
-            "aegis/templates/copier-aegis-project/{{ project_slug }}/app/components/frontend/dashboard/cards/card_utils.py.jinja"
+        registry_path = Path(
+            "aegis/templates/copier-aegis-project/{{ project_slug }}/app/components/frontend/dashboard/modal_registry.py.jinja"
         )
-        content = card_utils_path.read_text()
+        content = registry_path.read_text()
 
         assert "IngressDetailDialog" in content
         assert '"ingress": IngressDetailDialog' in content

@@ -143,14 +143,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.cards.auth_card",
                     symbol="AuthCard",
-                    modal_id="auth",
+                    modal_id="service_auth",
                 ),
             ],
             dashboard_modals=[
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.modals.auth_modal",
                     symbol="AuthDetailDialog",
-                    modal_id="auth",
+                    modal_id="service_auth",
                 ),
             ],
             # FastAPI dependency providers — service-facade deps that
@@ -398,14 +398,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.cards.ai_card",
                     symbol="AICard",
-                    modal_id="ai",
+                    modal_id="service_ai",
                 ),
             ],
             dashboard_modals=[
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.modals.ai_modal",
                     symbol="AIDetailDialog",
-                    modal_id="ai",
+                    modal_id="service_ai",
                 ),
             ],
         ),
@@ -580,14 +580,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.cards.comms_card",
                     symbol="CommsCard",
-                    modal_id="comms",
+                    modal_id="service_comms",
                 ),
             ],
             dashboard_modals=[
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.modals.comms_modal",
                     symbol="CommsDetailDialog",
-                    modal_id="comms",
+                    modal_id="service_comms",
                 ),
             ],
         ),

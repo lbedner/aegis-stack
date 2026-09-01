@@ -9,6 +9,13 @@
 
 ### Added
 
+- **Chat attachments outlive the turn that carried them**: images are
+  stored on receipt and the message records where they went, so a
+  reopened conversation still shows the screenshot it is discussing and
+  a replay no longer depends on session memory still holding megabytes.
+  Re-attaching the same image costs nothing (content addressing), and a
+  storage failure never costs the user their message: the question still
+  reaches the model, the picture is simply not kept.
 - **Finance rows say whose money they describe**: a `finance_subject`
   table plus a nullable `subject_id` on accounts and recurring streams.
   Households manage money for other people (a parent in care, a child's

@@ -108,13 +108,25 @@ class Conversation(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     def add_message(
-        self, role: MessageRole, content: str, message_id: str | None = None
+        self,
+        role: MessageRole,
+        content: str,
+        message_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> ConversationMessage:
-        """Add a new message to the conversation."""
+        """Add a new message to the conversation.
+
+        ``metadata`` is persisted with the row and read back on load, so
+        anything a message needs to remember beyond its text - which
+        images rode it, for instance - belongs here.
+        """
         import uuid
 
         message = ConversationMessage(
-            id=message_id or str(uuid.uuid4()), role=role, content=content
+            id=message_id or str(uuid.uuid4()),
+            role=role,
+            content=content,
+            metadata=metadata or {},
         )
         self.messages.append(message)
         self.updated_at = datetime.now(UTC)

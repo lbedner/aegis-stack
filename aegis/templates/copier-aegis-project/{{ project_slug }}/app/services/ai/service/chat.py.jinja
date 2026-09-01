@@ -5,8 +5,9 @@ conversation, gather contexts (from the mixin chain below), run the
 model, record usage, persist. Streaming lives in ``streaming.py``.
 """
 
-from datetime import UTC, datetime
 import uuid
+from datetime import UTC, datetime
+from typing import Any
 {% if ai_framework == "pydantic-ai" %}
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 {% endif %}
@@ -19,6 +20,8 @@ from app.services.ai.domains.chat.agent_loader import (
 from app.services.ai.domains.chat.attachments import (
     ChatAttachment,
     annotate_attachments,
+    attachment_metadata,
+    persist_attachments,
 {% if ai_framework == "pydantic-ai" %}    build_user_content,
 {% endif %})
 {%- if ai_backend != "memory" %}
@@ -112,12 +115,17 @@ class ChatMixin(PromptMixin):
             # Setup conversation and add user message. The stored text
             # carries the attachment marker; the bytes ride only this
             # turn's model call (history replays as text).
+            # Kept, not just carried: the bytes ride this turn's model
+            # call and the message remembers where the image was stored,
+            # so reopening the conversation still shows it.
+            stored_attachments = await persist_attachments(attachments)
             conversation = self._setup_conversation(
                 annotate_attachments(message, attachments),
                 conversation_id,
                 user_id,
                 config=current,
                 surface=surface,
+                metadata=attachment_metadata(stored_attachments),
             )
 
 {% if ai_rag %}
@@ -288,6 +296,7 @@ class ChatMixin(PromptMixin):
         user_id: str,
         config: AIServiceConfig | None = None,
         surface: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Conversation:
         """
         Get or create conversation and add user message.
@@ -326,7 +335,7 @@ class ChatMixin(PromptMixin):
             conversation.title = conversation_title(message)
 
         # Add user message to conversation
-        conversation.add_message(MessageRole.USER, message)
+        conversation.add_message(MessageRole.USER, message, metadata=metadata)
 
         return conversation
 

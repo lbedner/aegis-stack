@@ -14,7 +14,7 @@ from sqlmodel import select
 
 from app.core.db import db_session
 from app.core.log import logger
-from app.services.ai.models.llm import LargeLanguageModel, LLMPrice, LLMUsage, LLMVendor
+from app.services.ai.models.llm import LargeLanguageModel, LLMPrice, LLMUsage, LLMOrg
 {% if ai_framework == "pydantic-ai" %}
 # Single source of truth for LLM usage extraction / pricing / ledger writes.
 # ``usage_recording`` is a module (not the service) so worker and one-shot
@@ -323,8 +323,8 @@ class UsageMixin(AIServiceBase):
                 func.coalesce(
                     LargeLanguageModel.title, LLMUsage.model_id
                 ).label("title"),
-                func.coalesce(LLMVendor.name, "unknown").label("vendor"),
-                func.coalesce(LLMVendor.color, "#808080").label("vendor_color"),
+                func.coalesce(LLMOrg.name, "unknown").label("vendor"),
+                func.coalesce(LLMOrg.color, "#808080").label("vendor_color"),
                 func.count(LLMUsage.id).label("requests"),
                 func.coalesce(
                     func.sum(LLMUsage.input_tokens + LLMUsage.output_tokens), 0
@@ -334,12 +334,12 @@ class UsageMixin(AIServiceBase):
             .outerjoin(
                 LargeLanguageModel, LLMUsage.model_id == LargeLanguageModel.model_id
             )
-            .outerjoin(LLMVendor, LargeLanguageModel.llm_vendor_id == LLMVendor.id)
+            .outerjoin(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
             .group_by(
                 LLMUsage.model_id,
                 LargeLanguageModel.title,
-                LLMVendor.name,
-                LLMVendor.color,
+                LLMOrg.name,
+                LLMOrg.color,
             )
             .order_by(func.count(LLMUsage.id).desc())
         )

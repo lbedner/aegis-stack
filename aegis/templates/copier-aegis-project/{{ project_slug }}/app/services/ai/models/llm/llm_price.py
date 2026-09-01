@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from .large_language_model import LargeLanguageModel
-    from .llm_vendor import LLMVendor
+    from .llm_org import LLMOrg
 
 
 class LLMPrice(SQLModel, table=True):
@@ -21,7 +21,7 @@ class LLMPrice(SQLModel, table=True):
     __tablename__ = "llm_price"
 
     id: int | None = Field(default=None, primary_key=True)
-    llm_vendor_id: int = Field(foreign_key="llm_vendor.id", index=True)
+    org_id: int = Field(foreign_key="llm_org.id", index=True)
     llm_id: int = Field(foreign_key="large_language_model.id", index=True)
     input_cost_per_token: float = Field(ge=0)
     output_cost_per_token: float = Field(ge=0)
@@ -31,5 +31,5 @@ class LLMPrice(SQLModel, table=True):
     )
 
     # Relationships
-    llm_vendor: "LLMVendor" = Relationship(back_populates="llm_prices")
+    org: "LLMOrg" = Relationship(back_populates="llm_prices")
     llm: "LargeLanguageModel" = Relationship(back_populates="llm_prices")

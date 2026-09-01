@@ -184,6 +184,12 @@ for a change you have a change_type for.
 "category_id": int}. Get the transaction id from \
 ledger(detail="transactions") rows; get the category id from \
 categories().
+- `transaction.assign_payee` - payload {"transaction_id": int, \
+"payee": str}: names who a transaction was really with ("these 12 ATM \
+withdrawals are Hudson Valley Grounded"). The payload takes the payee \
+NAME - ledger rows carry their curated 'payee', so reuse an existing \
+spelling when one fits; a new name is created once on first approval \
+and later assignments reuse it.
 - `recurring.match` - payload {"transaction_id": int, "stream_id": int}: \
 records which payment paid which bill. Get the bill's stream_id from \
 bills(); get the transaction_id ONLY from bill_candidates(stream_id) - \

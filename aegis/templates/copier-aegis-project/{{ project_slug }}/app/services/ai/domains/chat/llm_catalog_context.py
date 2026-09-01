@@ -5,19 +5,20 @@ Provides Illiana with awareness of available LLM models, their pricing,
 and capabilities for informed model selection discussions.
 """
 
-import re
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import re
+
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, select
 
 from app.services.ai.models.llm import (
     Direction,
     LargeLanguageModel,
-    LLMVendor,
+    LLMOrg,
     Modality,
 )
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
 
 # Pattern to extract YYYYMMDD dates from model IDs (e.g., claude-3-5-sonnet-20241022)
 _DATE_PATTERN = re.compile(r"(\d{8})(?:\D|$)")
@@ -139,7 +140,7 @@ class LLMCatalogContext:
         """
         # Query 1: Get all featured vendors in one query
         vendors = session.exec(
-            select(LLMVendor).where(LLMVendor.name.in_(FEATURED_VENDORS))
+            select(LLMOrg).where(LLMOrg.name.in_(FEATURED_VENDORS))
         ).all()
 
         if not vendors:
@@ -153,7 +154,7 @@ class LLMCatalogContext:
         # This fetches models + prices + deployments + modalities in ~3 queries
         stmt = (
             select(LargeLanguageModel)
-            .where(LargeLanguageModel.llm_vendor_id.in_(vendor_ids))
+            .where(LargeLanguageModel.served_by_org_id.in_(vendor_ids))
             .options(
                 selectinload(LargeLanguageModel.llm_prices),
                 selectinload(LargeLanguageModel.deployments),
@@ -165,8 +166,10 @@ class LLMCatalogContext:
         # Group models by vendor, filtering out aliases (-latest, etc.)
         vendor_models: dict[int, list[LargeLanguageModel]] = defaultdict(list)
         for model in all_models:
-            if model.llm_vendor_id is not None and not _is_alias_model(model.model_id):
-                vendor_models[model.llm_vendor_id].append(model)
+            if model.served_by_org_id is not None and not _is_alias_model(
+                model.model_id
+            ):
+                vendor_models[model.served_by_org_id].append(model)
 
         # Sort each vendor's models by effective release date (newest first)
         # Uses released_on if available, else extracts date from model_id

@@ -684,7 +684,7 @@ class TestMigrationSpecs:
             "duplicate table in the AI spec"
         )
         # LLM catalog tables
-        assert "llm_vendor" in table_names
+        assert "llm_org" in table_names
         assert "large_language_model" in table_names
         assert "llm_deployment" in table_names
         assert "llm_modality" in table_names
@@ -1362,8 +1362,10 @@ class TestCheckConstraintRendering:
         """
         from aegis.core.migration_generator import generate_migration
 
-        # AI migration uses no CHECK constraints (yet) — sanity-check it.
-        migration_path = generate_migration(tmp_path, "ai")
+        # ai_voice declares no CHECK constraints — sanity-check it. (The
+        # ai spec grew one with the org-role table, so it no longer
+        # exercises the empty-loop path this guards.)
+        migration_path = generate_migration(tmp_path, "ai_voice")
         assert migration_path is not None
         content = migration_path.read_text()
 

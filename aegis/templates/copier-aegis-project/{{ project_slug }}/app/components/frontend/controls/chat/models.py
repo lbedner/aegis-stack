@@ -56,3 +56,72 @@ def group_models(
         groups.setdefault(key, []).append(model)
     ordered = sorted(groups, key=lambda name: (name == "Other", name))
     return [(name, newest_first(groups[name])) for name in ordered]
+
+
+def format_context_window(tokens: int | None) -> str:
+    """A context window as the compact figure people say: 128k, 1M."""
+    if not tokens:
+        return ""
+    if tokens >= 1_000_000:
+        millions = tokens / 1_000_000
+        return f"{millions:.0f}M" if millions >= 1.05 or millions < 1.0 else "1M"
+    return f"{round(tokens / 1_000)}k"
+
+
+def _usd(value: float) -> str:
+    """$3, $1.25 - cents only when they carry information."""
+    return f"${value:g}" if value == int(value) else f"${value:.2f}"
+
+
+def format_price(input_price: float | None, output_price: float | None) -> str:
+    """Per-million-token pricing as ``$in / $out``; blanks stay blank."""
+    if input_price is None and output_price is None:
+        return ""
+    if output_price is None:
+        return _usd(input_price or 0.0)
+    if input_price is None:
+        return _usd(output_price)
+    return f"{_usd(input_price)} / {_usd(output_price)}"
+
+
+def filter_models(models: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    """Case-insensitive substring match over id, title, and vendor."""
+    needle = query.strip().casefold()
+    if not needle:
+        return models
+    return [
+        m
+        for m in models
+        if needle
+        in f"{m.get('model_id', '')} {m.get('title', '')} {m.get('vendor', '')}".casefold()
+    ]
+
+
+def display_title(model: dict[str, Any], *, under_vendor: str | None = None) -> str:
+    """The row title: under a vendor's own section, the catalog's baked
+    "Vendor: " prefix is the header said twice, so it comes off; flat
+    views (All, search) keep it - there it IS the context."""
+    title = str(model.get("title") or model.get("model_id") or "")
+    vendor = str(model.get("vendor") or "")
+    if (
+        under_vendor
+        and vendor
+        and title.casefold().startswith(f"{vendor}: ".casefold())
+    ):
+        return title[len(vendor) + 2 :]
+    return title
+
+
+def lab_for_model(model: dict[str, Any]) -> str | None:
+    """Who MADE a model, as the catalog resolved it at sync time.
+
+    This used to be inferred from the model id against a table of
+    product-line prefixes, which is wrong twice over: labs ship under
+    new names (Meta's Muse Glimmer carries no "llama" anywhere), and a
+    local rename would have reassigned the model to a stranger. The
+    catalog now stores the publishing org on the row (``made_by_org_id``
+    into ``llm_org``), so this is a read, and a model the registry does
+    not know stays honestly unmarked.
+    """
+    lab = model.get("lab")
+    return str(lab) if lab else None

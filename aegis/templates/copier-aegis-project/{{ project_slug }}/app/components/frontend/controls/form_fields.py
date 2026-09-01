@@ -92,9 +92,9 @@ def _input_kwargs(
     return kwargs
 
 
-# Public alias: the one input recipe, importable by non-form surfaces
-# (e.g. the chat composer) so every text input shares the same border,
-# background, and focus colors instead of re-deriving them.
+# Public alias: the one input recipe. Prefer ``StyledTextField``
+# (controls/inputs.py); the alias remains for surfaces that must splice
+# the recipe into an existing ft.TextField construction.
 input_field_kwargs = _input_kwargs
 
 

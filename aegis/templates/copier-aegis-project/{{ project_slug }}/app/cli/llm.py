@@ -33,8 +33,8 @@ from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMDeployment,
     LLMModality,
+    LLMOrg,
     LLMPrice,
-    LLMVendor,
 )
 
 app = typer.Typer(help=lazy_t("llm.help"))
@@ -69,7 +69,7 @@ def _get_vendors_help() -> str:
         from sqlmodel import select
 
         with Session(engine) as session:
-            vendors = session.exec(select(LLMVendor.name).distinct()).all()
+            vendors = session.exec(select(LLMOrg.name).distinct()).all()
             if vendors:
                 sorted_vendors = sorted({str(v) for v in vendors})
                 sample = sorted_vendors[:8]
@@ -146,7 +146,7 @@ def sync(
             session.exec(delete(LLMPrice))
             session.exec(delete(LLMDeployment))
             session.exec(delete(LargeLanguageModel))
-            session.exec(delete(LLMVendor))
+            session.exec(delete(LLMOrg))
             session.commit()
 
         result: SyncResult = asyncio.run(

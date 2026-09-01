@@ -71,7 +71,8 @@ class TestClearable:
         an invisible glyph must not be clickable."""
         seen: list[str] = []
         field = FormTextField(
-            label="Search payee", clearable=True,
+            label="Search payee",
+            clearable=True,
             on_change=lambda e: seen.append(e.control.value or ""),
         )
         field._clear(None)
@@ -130,3 +131,30 @@ class TestClearable:
         field = FormTextField(label="Search payee", clearable=True)
         assert not isinstance(field._clear_button, ft.IconButton)
         assert field._clear_button.on_click is not None
+
+
+class TestStyledTextField:
+    """The bare house input as a CONTROL: one class every inline text
+    field uses, instead of each surface passing the kwargs recipe into
+    a raw ft.TextField."""
+
+    def test_wears_the_house_recipe(self) -> None:
+        from app.components.frontend.controls.form_fields import input_field_kwargs
+        from app.components.frontend.controls.inputs import StyledTextField
+
+        field = StyledTextField(hint_text="Search models")
+        recipe = input_field_kwargs("default", None)
+        assert field.bgcolor == recipe["bgcolor"]
+        assert field.border_color == recipe["border_color"]
+        assert field.hint_text == "Search models"
+
+    def test_compact_pins_the_toolbar_height(self) -> None:
+        from app.components.frontend.controls.inputs import StyledTextField
+
+        assert StyledTextField(compact=True).height == 36
+
+    def test_call_site_overrides_win(self) -> None:
+        from app.components.frontend.controls.inputs import StyledTextField
+
+        field = StyledTextField(text_size=15)
+        assert field.text_size == 15

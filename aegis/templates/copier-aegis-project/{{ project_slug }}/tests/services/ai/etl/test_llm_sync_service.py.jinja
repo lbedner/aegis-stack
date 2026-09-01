@@ -16,7 +16,7 @@ from app.services.ai.models.llm import (
     LLMDeployment,
     LLMModality,
     LLMPrice,
-    LLMVendor,
+    LLMOrg,
     Modality,
 )
 
@@ -175,7 +175,7 @@ class TestLLMSyncServiceVendor:
         # But not in database
         sync_db_session.rollback()
         db_vendor = sync_db_session.exec(
-            select(LLMVendor).where(LLMVendor.name == "openai")
+            select(LLMOrg).where(LLMOrg.name == "openai")
         ).first()
         assert db_vendor is None
 
@@ -224,7 +224,8 @@ class TestLLMSyncServiceModel:
     ) -> None:
         """Test that sync updates existing model."""
         # Create existing vendor and model
-        vendor = LLMVendor(
+        vendor = LLMOrg(
+        slug="openai",
             name="openai",
             description="OpenAI",
             color="#10A37F",
@@ -242,7 +243,7 @@ class TestLLMSyncServiceModel:
             streamable=True,
             enabled=True,
             color="#10A37F",
-            llm_vendor_id=vendor.id,
+            served_by_org_id=vendor.id,
         )
         sync_db_session.add(existing_model)
         sync_db_session.commit()
@@ -407,7 +408,7 @@ class TestLLMSyncServiceDryRun:
 
         # But database should be empty
         sync_db_session.rollback()
-        vendors = sync_db_session.exec(select(LLMVendor)).all()
+        vendors = sync_db_session.exec(select(LLMOrg)).all()
         models = sync_db_session.exec(select(LargeLanguageModel)).all()
         assert len(vendors) == 0
         assert len(models) == 0

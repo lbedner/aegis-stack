@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from .large_language_model import LargeLanguageModel
-    from .llm_vendor import LLMVendor
+    from .llm_org import LLMOrg
 
 
 class LLMDeployment(SQLModel, table=True):
@@ -20,14 +20,12 @@ class LLMDeployment(SQLModel, table=True):
 
     __tablename__ = "llm_deployment"
     __table_args__ = (
-        UniqueConstraint(
-            "llm_id", "llm_vendor_id", name="unique_llm_vendor_deployment"
-        ),
+        UniqueConstraint("llm_id", "org_id", name="unique_llm_org_deployment"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     llm_id: int = Field(foreign_key="large_language_model.id", index=True)
-    llm_vendor_id: int = Field(foreign_key="llm_vendor.id", index=True)
+    org_id: int = Field(foreign_key="llm_org.id", index=True)
 
     # Performance ratings (0-100 scale)
     speed: int = Field(default=50, ge=0, le=100)
@@ -42,4 +40,4 @@ class LLMDeployment(SQLModel, table=True):
 
     # Relationships
     llm: "LargeLanguageModel" = Relationship(back_populates="deployments")
-    llm_vendor: "LLMVendor" = Relationship(back_populates="deployments")
+    org: "LLMOrg" = Relationship(back_populates="deployments")

@@ -419,6 +419,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Remove persistence-related contexts (keep usage_context.py - no DB deps)
         remove_file(project_path, "app/services/ai/domains/chat/llm_catalog_context.py")
         remove_file(project_path, "app/services/ai/domains/llm/llm_service.py")
+        remove_file(project_path, "app/services/ai/domains/llm/catalog_queries.py")
         remove_file(project_path, "app/services/ai/domains/llm/provider_management.py")
         # Remove persistence-related tests
         remove_dir(project_path, "tests/services/ai/etl")

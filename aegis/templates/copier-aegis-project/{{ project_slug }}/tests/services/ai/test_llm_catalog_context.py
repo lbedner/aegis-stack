@@ -20,8 +20,8 @@ from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMDeployment,
     LLMModality,
+    LLMOrg,
     LLMPrice,
-    LLMVendor,
     Modality,
 )
 
@@ -137,9 +137,10 @@ def catalog_session(db_session: Session) -> Session:
 
 
 @pytest.fixture
-def anthropic_vendor(catalog_session: Session) -> LLMVendor:
+def anthropic_vendor(catalog_session: Session) -> LLMOrg:
     """Create Anthropic vendor."""
-    vendor = LLMVendor(
+    vendor = LLMOrg(
+        slug="anthropic",
         name="anthropic",
         description="Anthropic API",
         color="#D4A27F",
@@ -153,9 +154,10 @@ def anthropic_vendor(catalog_session: Session) -> LLMVendor:
 
 
 @pytest.fixture
-def openai_vendor(catalog_session: Session) -> LLMVendor:
+def openai_vendor(catalog_session: Session) -> LLMOrg:
     """Create OpenAI vendor."""
-    vendor = LLMVendor(
+    vendor = LLMOrg(
+        slug="openai",
         name="openai",
         description="OpenAI API",
         color="#10A37F",
@@ -170,7 +172,7 @@ def openai_vendor(catalog_session: Session) -> LLMVendor:
 
 @pytest.fixture
 def anthropic_models(
-    catalog_session: Session, anthropic_vendor: LLMVendor
+    catalog_session: Session, anthropic_vendor: LLMOrg
 ) -> list[LargeLanguageModel]:
     """Create multiple Anthropic models with varying dates."""
     models = [
@@ -178,31 +180,31 @@ def anthropic_models(
             model_id="claude-opus-4-5-20251101",
             title="Claude Opus 4.5",
             context_window=200000,
-            llm_vendor_id=anthropic_vendor.id,
+            served_by_org_id=anthropic_vendor.id,
         ),
         LargeLanguageModel(
             model_id="claude-sonnet-4-5-20250929",
             title="Claude Sonnet 4.5",
             context_window=200000,
-            llm_vendor_id=anthropic_vendor.id,
+            served_by_org_id=anthropic_vendor.id,
         ),
         LargeLanguageModel(
             model_id="claude-3-5-sonnet-20241022",
             title="Claude 3.5 Sonnet",
             context_window=200000,
-            llm_vendor_id=anthropic_vendor.id,
+            served_by_org_id=anthropic_vendor.id,
         ),
         LargeLanguageModel(
             model_id="claude-3-5-sonnet-latest",  # Alias - should be filtered
             title="Claude 3.5 Sonnet Latest",
             context_window=200000,
-            llm_vendor_id=anthropic_vendor.id,
+            served_by_org_id=anthropic_vendor.id,
         ),
         LargeLanguageModel(
             model_id="claude-3-haiku-20240307",
             title="Claude 3 Haiku",
             context_window=200000,
-            llm_vendor_id=anthropic_vendor.id,
+            served_by_org_id=anthropic_vendor.id,
         ),
     ]
     for model in models:
@@ -215,7 +217,7 @@ def anthropic_models(
 
 @pytest.fixture
 def openai_models_with_released_on(
-    catalog_session: Session, openai_vendor: LLMVendor
+    catalog_session: Session, openai_vendor: LLMOrg
 ) -> list[LargeLanguageModel]:
     """Create OpenAI models with released_on dates set."""
     models = [
@@ -223,21 +225,21 @@ def openai_models_with_released_on(
             model_id="gpt-4o",
             title="GPT-4o",
             context_window=128000,
-            llm_vendor_id=openai_vendor.id,
+            served_by_org_id=openai_vendor.id,
             released_on=datetime(2024, 5, 13, tzinfo=UTC),
         ),
         LargeLanguageModel(
             model_id="gpt-4-turbo",
             title="GPT-4 Turbo",
             context_window=128000,
-            llm_vendor_id=openai_vendor.id,
+            served_by_org_id=openai_vendor.id,
             released_on=datetime(2024, 4, 9, tzinfo=UTC),
         ),
         LargeLanguageModel(
             model_id="gpt-3.5-turbo",
             title="GPT-3.5 Turbo",
             context_window=16385,
-            llm_vendor_id=openai_vendor.id,
+            served_by_org_id=openai_vendor.id,
             released_on=datetime(2023, 3, 1, tzinfo=UTC),
         ),
     ]
@@ -260,7 +262,7 @@ class TestLLMCatalogContextBuild:
         assert context.flagships == []
 
     def test_returns_empty_context_with_no_models(
-        self, catalog_session: Session, anthropic_vendor: LLMVendor
+        self, catalog_session: Session, anthropic_vendor: LLMOrg
     ) -> None:
         """Should return empty context when vendor has no models."""
         context = LLMCatalogContext.build(catalog_session)
@@ -269,7 +271,7 @@ class TestLLMCatalogContextBuild:
     def test_sorts_by_date_extracted_from_model_id(
         self,
         catalog_session: Session,
-        anthropic_vendor: LLMVendor,
+        anthropic_vendor: LLMOrg,
         anthropic_models: list[LargeLanguageModel],
     ) -> None:
         """Should sort models by date extracted from model_id."""
@@ -292,7 +294,7 @@ class TestLLMCatalogContextBuild:
     def test_filters_out_latest_aliases(
         self,
         catalog_session: Session,
-        anthropic_vendor: LLMVendor,
+        anthropic_vendor: LLMOrg,
         anthropic_models: list[LargeLanguageModel],
     ) -> None:
         """Should filter out models ending in -latest."""
@@ -305,7 +307,7 @@ class TestLLMCatalogContextBuild:
     def test_prefers_released_on_over_extracted_date(
         self,
         catalog_session: Session,
-        openai_vendor: LLMVendor,
+        openai_vendor: LLMOrg,
         openai_models_with_released_on: list[LargeLanguageModel],
     ) -> None:
         """Should use released_on date when available."""
@@ -320,7 +322,7 @@ class TestLLMCatalogContextBuild:
         assert openai_flagships[2].model_id == "gpt-3.5-turbo"
 
     def test_limits_to_top_n_per_vendor(
-        self, catalog_session: Session, anthropic_vendor: LLMVendor
+        self, catalog_session: Session, anthropic_vendor: LLMOrg
     ) -> None:
         """Should only return TOP_MODELS_PER_VENDOR models per vendor."""
         # Create more models than the limit
@@ -329,7 +331,7 @@ class TestLLMCatalogContextBuild:
                 model_id=f"claude-test-{20250101 + i:08d}",
                 title=f"Claude Test {i}",
                 context_window=100000,
-                llm_vendor_id=anthropic_vendor.id,
+                served_by_org_id=anthropic_vendor.id,
             )
             catalog_session.add(model)
         catalog_session.commit()
@@ -346,7 +348,7 @@ class TestLLMCatalogContextWithRelatedData:
     def test_includes_pricing_data(
         self,
         catalog_session: Session,
-        openai_vendor: LLMVendor,
+        openai_vendor: LLMOrg,
     ) -> None:
         """Should include pricing information in flagship models."""
         # Create model
@@ -354,7 +356,7 @@ class TestLLMCatalogContextWithRelatedData:
             model_id="gpt-4o-20240513",
             title="GPT-4o",
             context_window=128000,
-            llm_vendor_id=openai_vendor.id,
+            served_by_org_id=openai_vendor.id,
         )
         catalog_session.add(model)
         catalog_session.commit()
@@ -363,7 +365,7 @@ class TestLLMCatalogContextWithRelatedData:
         # Create price
         price = LLMPrice(
             llm_id=model.id,
-            llm_vendor_id=openai_vendor.id,
+            org_id=openai_vendor.id,
             input_cost_per_token=0.000005,  # $5 per 1M
             output_cost_per_token=0.000015,  # $15 per 1M
             effective_date=datetime.now(),
@@ -380,7 +382,7 @@ class TestLLMCatalogContextWithRelatedData:
     def test_includes_deployment_capabilities(
         self,
         catalog_session: Session,
-        openai_vendor: LLMVendor,
+        openai_vendor: LLMOrg,
     ) -> None:
         """Should include deployment capabilities in flagship models."""
         # Create model
@@ -388,7 +390,7 @@ class TestLLMCatalogContextWithRelatedData:
             model_id="gpt-4o-20240513",
             title="GPT-4o",
             context_window=128000,
-            llm_vendor_id=openai_vendor.id,
+            served_by_org_id=openai_vendor.id,
         )
         catalog_session.add(model)
         catalog_session.commit()
@@ -397,7 +399,7 @@ class TestLLMCatalogContextWithRelatedData:
         # Create deployment
         deployment = LLMDeployment(
             llm_id=model.id,
-            llm_vendor_id=openai_vendor.id,
+            org_id=openai_vendor.id,
             function_calling=True,
             structured_output=True,
         )
@@ -413,7 +415,7 @@ class TestLLMCatalogContextWithRelatedData:
     def test_includes_vision_capability(
         self,
         catalog_session: Session,
-        openai_vendor: LLMVendor,
+        openai_vendor: LLMOrg,
     ) -> None:
         """Should detect vision capability from modalities."""
         # Create model
@@ -421,7 +423,7 @@ class TestLLMCatalogContextWithRelatedData:
             model_id="gpt-4o-20240513",
             title="GPT-4o",
             context_window=128000,
-            llm_vendor_id=openai_vendor.id,
+            served_by_org_id=openai_vendor.id,
         )
         catalog_session.add(model)
         catalog_session.commit()
@@ -567,7 +569,7 @@ class TestGetLLMCatalogContext:
     def test_returns_formatted_string(
         self,
         catalog_session: Session,
-        openai_vendor: LLMVendor,
+        openai_vendor: LLMOrg,
         openai_models_with_released_on: list[LargeLanguageModel],
     ) -> None:
         """Should return formatted string from convenience function."""

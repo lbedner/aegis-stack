@@ -3,10 +3,11 @@
 import re
 from unittest.mock import MagicMock, patch
 
+from typer.testing import CliRunner
+
 from app.cli.main import app
 from app.services.ai.domains.llm.etl.llm_sync_service import SyncResult
 from app.services.ai.domains.llm.llm_service import ModalityListResult, VendorListResult
-from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -25,7 +26,7 @@ def _plain(text: str) -> str:
     return _ANSI_RE.sub("", text)
 
 
-class TestLLMVendorsCommand:
+class TestLLMOrgsCommand:
     """Tests for the 'llm vendors' command."""
 
     def test_vendors_help(self) -> None:

@@ -14,7 +14,7 @@ import flet as ft
 
 from app.components.frontend.controls.buttons import BaseIconButton
 from app.components.frontend.controls.dialog import StyledAlertDialog
-from app.components.frontend.controls.form_fields import input_field_kwargs
+from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.text import SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
@@ -89,7 +89,7 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
             alignment=ft.alignment.center,
             expand=True,
         )
-        self._input = ft.TextField(
+        self._input = StyledTextField(
             hint_text=f"Message {agent_name}",
             multiline=True,
             min_lines=1,
@@ -97,7 +97,6 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
             shift_enter=True,
             expand=True,
             on_submit=self._on_send,
-            **input_field_kwargs("default", None),
         )
         self._send_button = BaseIconButton(
             self._send_current_input, ft.Icons.SEND, tooltip="Send"

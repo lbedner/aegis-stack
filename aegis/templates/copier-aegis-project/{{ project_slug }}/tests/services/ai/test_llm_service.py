@@ -21,8 +21,8 @@ from app.services.ai.models.llm import (
     Direction,
     LargeLanguageModel,
     LLMModality,
+    LLMOrg,
     LLMPrice,
-    LLMVendor,
     Modality,
 )
 
@@ -51,9 +51,10 @@ def llm_session(db_session: Session) -> Session:
 
 
 @pytest.fixture
-def anthropic_vendor(llm_session: Session) -> LLMVendor:
+def anthropic_vendor(llm_session: Session) -> LLMOrg:
     """Create Anthropic vendor."""
-    vendor = LLMVendor(
+    vendor = LLMOrg(
+        slug="anthropic",
         name="anthropic",
         description="Anthropic API",
         color="#D4A27F",
@@ -67,9 +68,10 @@ def anthropic_vendor(llm_session: Session) -> LLMVendor:
 
 
 @pytest.fixture
-def openai_vendor(llm_session: Session) -> LLMVendor:
+def openai_vendor(llm_session: Session) -> LLMOrg:
     """Create OpenAI vendor."""
-    vendor = LLMVendor(
+    vendor = LLMOrg(
+        slug="openai",
         name="openai",
         description="OpenAI API",
         color="#10A37F",
@@ -84,7 +86,7 @@ def openai_vendor(llm_session: Session) -> LLMVendor:
 
 @pytest.fixture
 def sample_models(
-    llm_session: Session, anthropic_vendor: LLMVendor, openai_vendor: LLMVendor
+    llm_session: Session, anthropic_vendor: LLMOrg, openai_vendor: LLMOrg
 ) -> list[LargeLanguageModel]:
     """Create sample LLM models for testing."""
     models = [
@@ -95,7 +97,7 @@ def sample_models(
             context_window=200000,
             streamable=True,
             enabled=True,
-            llm_vendor_id=anthropic_vendor.id,
+            served_by_org_id=anthropic_vendor.id,
             released_on=datetime(2025, 5, 14, tzinfo=UTC),
         ),
         LargeLanguageModel(
@@ -105,7 +107,7 @@ def sample_models(
             context_window=200000,
             streamable=True,
             enabled=True,
-            llm_vendor_id=anthropic_vendor.id,
+            served_by_org_id=anthropic_vendor.id,
             released_on=datetime(2025, 5, 14, tzinfo=UTC),
         ),
         LargeLanguageModel(
@@ -115,7 +117,7 @@ def sample_models(
             context_window=128000,
             streamable=True,
             enabled=True,
-            llm_vendor_id=openai_vendor.id,
+            served_by_org_id=openai_vendor.id,
             released_on=datetime(2024, 5, 13, tzinfo=UTC),
         ),
         LargeLanguageModel(
@@ -125,7 +127,7 @@ def sample_models(
             context_window=16385,
             streamable=True,
             enabled=False,  # Disabled model
-            llm_vendor_id=openai_vendor.id,
+            served_by_org_id=openai_vendor.id,
         ),
     ]
     for model in models:
@@ -140,8 +142,8 @@ def sample_models(
 def sample_prices(
     llm_session: Session,
     sample_models: list[LargeLanguageModel],
-    anthropic_vendor: LLMVendor,
-    openai_vendor: LLMVendor,
+    anthropic_vendor: LLMOrg,
+    openai_vendor: LLMOrg,
 ) -> list[LLMPrice]:
     """Create sample prices for models."""
     prices = []
@@ -149,7 +151,7 @@ def sample_prices(
     prices.append(
         LLMPrice(
             llm_id=sample_models[0].id,
-            llm_vendor_id=anthropic_vendor.id,
+            org_id=anthropic_vendor.id,
             input_cost_per_token=0.000003,  # $3 per 1M
             output_cost_per_token=0.000015,  # $15 per 1M
             effective_date=datetime.now(UTC),
@@ -159,7 +161,7 @@ def sample_prices(
     prices.append(
         LLMPrice(
             llm_id=sample_models[1].id,
-            llm_vendor_id=anthropic_vendor.id,
+            org_id=anthropic_vendor.id,
             input_cost_per_token=0.000015,  # $15 per 1M
             output_cost_per_token=0.000075,  # $75 per 1M
             effective_date=datetime.now(UTC),
@@ -169,7 +171,7 @@ def sample_prices(
     prices.append(
         LLMPrice(
             llm_id=sample_models[2].id,
-            llm_vendor_id=openai_vendor.id,
+            org_id=openai_vendor.id,
             input_cost_per_token=0.000005,  # $5 per 1M
             output_cost_per_token=0.000015,  # $15 per 1M
             effective_date=datetime.now(UTC),
@@ -263,7 +265,7 @@ class TestListVendors:
         assert results[1].model_count == 2
 
     def test_vendor_without_models(
-        self, llm_session: Session, llm_db_engine: Engine, anthropic_vendor: LLMVendor
+        self, llm_session: Session, llm_db_engine: Engine, anthropic_vendor: LLMOrg
     ) -> None:
         """Should include vendors with zero models."""
         with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
@@ -339,7 +341,10 @@ class TestListModels:
 
     async def test_empty_catalog(self, mock_async_session) -> None:
         """Should return empty list when no models exist."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(pattern="test")
         assert results == []
 
@@ -350,7 +355,10 @@ class TestListModels:
         sample_prices: list[LLMPrice],
     ) -> None:
         """Should filter by model_id pattern."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(pattern="claude")
 
         assert len(results) == 2
@@ -362,7 +370,10 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should filter by title pattern."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(pattern="Opus")
 
         assert len(results) == 1
@@ -374,7 +385,10 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should filter by vendor name."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(vendor="openai")
 
         assert len(results) == 1  # Only gpt-4o (gpt-3.5-turbo is disabled)
@@ -386,7 +400,10 @@ class TestListModels:
         sample_modalities: list[LLMModality],
     ) -> None:
         """Should filter by modality."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(modality=Modality.IMAGE)
 
         assert len(results) == 1
@@ -398,15 +415,63 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should respect limit parameter."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(pattern="", limit=2, include_disabled=True)
 
         # Note: pattern="" won't match anything, need at least pattern/vendor/modality
         # Let's use vendor instead
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(vendor="anthropic", limit=1)
 
         assert len(results) == 1
+
+    async def test_vendors_filter_caps_per_vendor_in_one_call(
+        self,
+        mock_async_session,
+        sample_models: list[LargeLanguageModel],
+    ) -> None:
+        """The picker's usable path: one query for ALL callable vendors,
+        the limit applying per vendor so one large catalog cannot crowd
+        the others out - it must not loop a session per vendor."""
+        sessions = 0
+
+        def counting_factory():
+            nonlocal sessions
+            sessions += 1
+            return mock_async_session()
+
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            counting_factory,
+        ):
+            results = await list_models(vendors=["anthropic", "openai"], limit=1)
+
+        by_vendor: dict[str, int] = {}
+        for r in results:
+            by_vendor[r.vendor] = by_vendor.get(r.vendor, 0) + 1
+        assert by_vendor == {"anthropic": 1, "openai": 1}
+        assert sessions == 1  # one session, not one per vendor
+
+    async def test_vendors_filter_matches_exact_names(
+        self,
+        mock_async_session,
+        sample_models: list[LargeLanguageModel],
+    ) -> None:
+        """``vendors`` is a whitelist of exact names, not a pattern - an
+        install keyed for "open" must not pull "openai" and "openrouter"."""
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
+            results = await list_models(vendors=["open"])
+
+        assert results == []
 
     async def test_include_disabled(
         self,
@@ -414,7 +479,10 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should include disabled models when flag is set."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(vendor="openai", include_disabled=True)
 
         assert len(results) == 2  # Both gpt-4o and gpt-3.5-turbo
@@ -425,7 +493,10 @@ class TestListModels:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should exclude disabled models by default."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(vendor="openai")
 
         assert len(results) == 1  # Only gpt-4o
@@ -438,7 +509,10 @@ class TestListModels:
         sample_prices: list[LLMPrice],
     ) -> None:
         """Should include pricing data when available."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            mock_async_session,
+        ):
             results = await list_models(pattern="gpt-4o")
 
         assert len(results) == 1
@@ -465,7 +539,10 @@ class TestGetCurrentConfig:
         mock_settings.AI_MAX_TOKENS = 4096
 
         with (
-            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
             patch("app.services.ai.domains.llm.llm_service.settings", mock_settings),
         ):
             config = await get_current_config()
@@ -493,7 +570,10 @@ class TestGetCurrentConfig:
         mock_settings.AI_MAX_TOKENS = 2000
 
         with (
-            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
             patch("app.services.ai.domains.llm.llm_service.settings", mock_settings),
         ):
             config = await get_current_config()
@@ -522,8 +602,13 @@ class TestSetActiveModel:
         need to seed prior env state.
         """
         with (
-            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
-            patch("app.services.ai.domains.llm.llm_service.update_env_file") as mock_update,
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
+            patch(
+                "app.services.ai.domains.llm.llm_service.update_env_file"
+            ) as mock_update,
         ):
             result = await set_active_model("claude-sonnet-4-20250514")
 
@@ -539,7 +624,10 @@ class TestSetActiveModel:
         mock_async_session,
     ) -> None:
         """Should fail when model not in catalog and force=False."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
             result = await set_active_model("nonexistent-model")
 
         assert result.success is False
@@ -552,8 +640,13 @@ class TestSetActiveModel:
     ) -> None:
         """Should succeed with force=True even if model not in catalog."""
         with (
-            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
-            patch("app.services.ai.domains.llm.llm_service.update_env_file") as mock_update,
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
+            patch(
+                "app.services.ai.domains.llm.llm_service.update_env_file"
+            ) as mock_update,
         ):
             result = await set_active_model("custom-model", force=True)
 
@@ -568,8 +661,13 @@ class TestSetActiveModel:
     ) -> None:
         """Should update provider when switching to different vendor."""
         with (
-            patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session),
-            patch("app.services.ai.domains.llm.llm_service.update_env_file") as mock_update,
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
+            patch(
+                "app.services.ai.domains.llm.llm_service.update_env_file"
+            ) as mock_update,
         ):
             result = await set_active_model("gpt-4o")
 
@@ -608,7 +706,10 @@ class TestGetModelInfo:
         sample_modalities: list[LLMModality],
     ) -> None:
         """Should return full details when model exists."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
             details = await get_model_info("gpt-4o")
 
         assert details is not None
@@ -629,7 +730,10 @@ class TestGetModelInfo:
         mock_async_session,
     ) -> None:
         """Should return None when model not in catalog."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
             details = await get_model_info("nonexistent-model")
 
         assert details is None
@@ -640,7 +744,10 @@ class TestGetModelInfo:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should handle models without pricing data."""
-        with patch("app.services.ai.domains.llm.llm_service.get_async_session", mock_async_session):
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
             # gpt-3.5-turbo has no price in sample_prices
             details = await get_model_info("gpt-3.5-turbo")
 

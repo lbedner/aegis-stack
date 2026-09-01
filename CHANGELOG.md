@@ -7,8 +7,68 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Model vendors and labs are one thing now**: the catalog kept
+  "who serves a model" and "who made it" in separate tables, which
+  duplicated every organization that does both and could not say the
+  two OpenAIs were the same one. A single `llm_org` table holds every
+  organization, and `llm_org_role` records which hats each wears -
+  maker, server, or both. A model row now carries two org references,
+  `served_by_org_id` and `made_by_org_id`, and prices and deployments
+  key on the org. Who made a model is resolved from the public model
+  registry at sync time (following a derivative upload back to the
+  weights it came from) rather than guessed from the model id, so a
+  lab shipping under a new product name is picked up automatically
+  and a model nobody published stays honestly unmarked.
+
+### Added
+
+- **Payee assignment through the approval queue**: a
+  `transaction.assign_payee` change type completes the curation write
+  surface. The payload names the payee rather than an id, because the
+  payee may not exist yet; approval find-or-creates it by normalized
+  name, so two spellings cannot mint two rows. Batch-capable through
+  `propose_many`, with the usual before/after card copy.
+- **A house control for bare text inputs**: `StyledTextField` wears
+  the shared input recipe as a control rather than each surface
+  splicing kwargs into a raw field. The chat composer and the model
+  picker's search both use it.
+
 ### Fixed
 
+- **The model picker was slow for three separate reasons**: the
+  catalog ran one database query per vendor sequentially, each opening
+  its own session, with the result limit applied per vendor so a
+  request for 200 models fetched far more; the client awaited its
+  three API calls one after another before the dialog could open; and
+  every model row was built as controls up front, including inside
+  collapsed groups, then rebuilt from scratch on every filter change.
+  The catalog is now one query with the per-vendor fairness cap
+  applied after it, the client fetches concurrently and caches for the
+  session, and group rows are built on first expand.
+- **Models nobody could call appeared in the picker**: the cloud
+  catalog lists local-runner entries under an `ollama/` prefix, which
+  is a runner namespace rather than a callable vendor. Those rows were
+  filed under the local runner's own vendor and passed the "models
+  this install can call" gate, so uninstallable models (and cloud
+  variants needing a key the install has no concept of) were offered.
+  The local runner's catalog is now owned by the local sync alone.
+- **The demo dataset confirmed shopping habits as bills**: the seed
+  confirmed every stream the detector found, which promoted
+  discretionary rhythms (a few jittered orders a month) into
+  commitments. A bill that can be missed eventually is: the household
+  read as delinquent on a shopping habit the moment one gap outran the
+  grace window. Only fixed-amount streams and income are confirmed now.
+- **Clearing demo data left insights pointing at deleted rows**: the
+  teardown released transaction back-references but not the insights
+  raised about those accounts, transactions, and streams, so the stream
+  foreign key refused the delete.
+- **A seeding process registered no reading tool**: the fixture loader
+  force-imports the modules whose tools must exist before grants are
+  written, and the durable-readings module was never added, so
+  `record_reading` silently got no row in any process that seeds
+  without building a chat agent.
 - **Overdue occurrences vanished from the balance forecast**: the
   projection fast-forwarded every stream past occurrences dated before
   today, so a day-late paycheck read as "you are $5,000 poorer for the

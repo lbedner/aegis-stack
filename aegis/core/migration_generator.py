@@ -342,21 +342,53 @@ AI_MIGRATION = ServiceMigrationSpec(
     tables=[
         # LLM Vendor - no dependencies
         TableSpec(
-            name="llm_vendor",
+            name="llm_org",
             columns=[
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("slug", "sa.String()", nullable=False),
                 ColumnSpec("name", "sa.String()", nullable=False),
                 ColumnSpec("description", "sa.String()", nullable=True),
+                ColumnSpec("homepage", "sa.String()", nullable=True),
+                ColumnSpec("icon_b64", "sa.String()", nullable=True),
                 ColumnSpec("color", "sa.String()", nullable=False, default="'#6B7280'"),
                 ColumnSpec("icon_path", "sa.String()", nullable=False, default="''"),
                 ColumnSpec("api_base", "sa.String()", nullable=True),
                 ColumnSpec(
                     "auth_method", "sa.String()", nullable=False, default="'api-key'"
                 ),
+                ColumnSpec(
+                    "source", "sa.String()", nullable=False, default="'catalog'"
+                ),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
             ],
-            indexes=[IndexSpec("ix_llm_vendor_name", ["name"], unique=True)],
+            indexes=[
+                IndexSpec("ix_llm_org_slug", ["slug"], unique=True),
+                IndexSpec("ix_llm_org_name", ["name"]),
+            ],
         ),
-        # Large Language Model - depends on llm_vendor
+        # An org can be a maker, a server, or both - the one genuinely
+        # many-to-many fact here, so it is a row per hat rather than a
+        # pair of booleans that a third role would have to break.
+        TableSpec(
+            name="llm_org_role",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("org_id", "sa.Integer()", nullable=False),
+                ColumnSpec("role", "sa.String(16)", nullable=False),
+            ],
+            indexes=[IndexSpec("ix_llm_org_role_org_id", ["org_id"])],
+            foreign_keys=[
+                ForeignKeySpec(["org_id"], "llm_org", ["id"], ondelete="CASCADE"),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_llm_org_role_role",
+                    sqltext="role IN ('maker', 'server')",
+                ),
+            ],
+        ),
+        # Large Language Model - depends on llm_org
         TableSpec(
             name="large_language_model",
             columns=[
@@ -380,15 +412,23 @@ AI_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("source_url", "sa.String()", nullable=True),
                 ColumnSpec("released_on", "sa.DateTime()", nullable=True),
                 ColumnSpec("family", "sa.String()", nullable=True),
-                ColumnSpec("llm_vendor_id", "sa.Integer()", nullable=True),
+                ColumnSpec("served_by_org_id", "sa.Integer()", nullable=True),
+                ColumnSpec("made_by_org_id", "sa.Integer()", nullable=True),
             ],
             indexes=[
                 IndexSpec(
                     "ix_large_language_model_model_id", ["model_id"], unique=True
                 ),
-                IndexSpec("ix_large_language_model_llm_vendor_id", ["llm_vendor_id"]),
+                IndexSpec(
+                    "ix_large_language_model_served_by_org_id",
+                    ["served_by_org_id"],
+                ),
+                IndexSpec("ix_large_language_model_made_by_org_id", ["made_by_org_id"]),
             ],
-            foreign_keys=[ForeignKeySpec(["llm_vendor_id"], "llm_vendor", ["id"])],
+            foreign_keys=[
+                ForeignKeySpec(["served_by_org_id"], "llm_org", ["id"]),
+                ForeignKeySpec(["made_by_org_id"], "llm_org", ["id"]),
+            ],
         ),
         # Active model selection - standalone singleton row. Mirrors
         # app/services/ai/models/llm/llm_active_selection.py; both sources
@@ -412,13 +452,13 @@ AI_MIGRATION = ServiceMigrationSpec(
                 IndexSpec("ix_llm_active_selection_model_id", ["model_id"]),
             ],
         ),
-        # LLM Deployment - depends on llm_vendor and large_language_model
+        # LLM Deployment - depends on llm_org and large_language_model
         TableSpec(
             name="llm_deployment",
             columns=[
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
                 ColumnSpec("llm_id", "sa.Integer()", nullable=False),
-                ColumnSpec("llm_vendor_id", "sa.Integer()", nullable=False),
+                ColumnSpec("org_id", "sa.Integer()", nullable=False),
                 ColumnSpec("speed", "sa.Integer()", nullable=False, default="50"),
                 ColumnSpec(
                     "intelligence", "sa.Integer()", nullable=False, default="50"
@@ -439,16 +479,16 @@ AI_MIGRATION = ServiceMigrationSpec(
             ],
             indexes=[
                 IndexSpec("ix_llm_deployment_llm_id", ["llm_id"]),
-                IndexSpec("ix_llm_deployment_llm_vendor_id", ["llm_vendor_id"]),
+                IndexSpec("ix_llm_deployment_org_id", ["org_id"]),
                 IndexSpec(
-                    "ix_llm_deployment_llm_vendor_unique",
-                    ["llm_id", "llm_vendor_id"],
+                    "ix_llm_deployment_org_unique",
+                    ["llm_id", "org_id"],
                     unique=True,
                 ),
             ],
             foreign_keys=[
                 ForeignKeySpec(["llm_id"], "large_language_model", ["id"]),
-                ForeignKeySpec(["llm_vendor_id"], "llm_vendor", ["id"]),
+                ForeignKeySpec(["org_id"], "llm_org", ["id"]),
             ],
         ),
         # LLM Modality - depends on large_language_model
@@ -470,12 +510,12 @@ AI_MIGRATION = ServiceMigrationSpec(
             ],
             foreign_keys=[ForeignKeySpec(["llm_id"], "large_language_model", ["id"])],
         ),
-        # LLM Price - depends on llm_vendor and large_language_model
+        # LLM Price - depends on llm_org and large_language_model
         TableSpec(
             name="llm_price",
             columns=[
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
-                ColumnSpec("llm_vendor_id", "sa.Integer()", nullable=False),
+                ColumnSpec("org_id", "sa.Integer()", nullable=False),
                 ColumnSpec("llm_id", "sa.Integer()", nullable=False),
                 ColumnSpec("input_cost_per_token", "sa.Float()", nullable=False),
                 ColumnSpec("output_cost_per_token", "sa.Float()", nullable=False),
@@ -483,12 +523,12 @@ AI_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("effective_date", "sa.DateTime()", nullable=False),
             ],
             indexes=[
-                IndexSpec("ix_llm_price_llm_vendor_id", ["llm_vendor_id"]),
+                IndexSpec("ix_llm_price_org_id", ["org_id"]),
                 IndexSpec("ix_llm_price_llm_id", ["llm_id"]),
                 IndexSpec("ix_llm_price_effective_date", ["effective_date"]),
             ],
             foreign_keys=[
-                ForeignKeySpec(["llm_vendor_id"], "llm_vendor", ["id"]),
+                ForeignKeySpec(["org_id"], "llm_org", ["id"]),
                 ForeignKeySpec(["llm_id"], "large_language_model", ["id"]),
             ],
         ),

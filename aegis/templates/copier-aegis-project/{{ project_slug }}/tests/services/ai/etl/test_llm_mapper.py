@@ -301,3 +301,31 @@ class TestVendorAliasNormalization:
     def test_ollama_chat_normalization(self) -> None:
         """Test ollama_chat normalizes to ollama."""
         assert extract_vendor("model", provider_hint="ollama_chat") == "ollama"
+
+
+class TestOllamaIsLocalOnly:
+    """The local runner's catalog is what the local server SERVES.
+
+    LiteLLM lists ``ollama/...`` entries as a runner prefix - models you
+    COULD pull - and filing those under the local ollama vendor put 24
+    uninstallable rows (llama2, mixtral, and Ollama Cloud's -cloud
+    variants, which need a key this install has no concept of) in a
+    picker that promises only callable models.
+    """
+
+    def test_cloud_catalog_ollama_rows_are_not_syncable(self) -> None:
+        from app.services.ai.domains.llm.etl.mappers.llm_mapper import (
+            is_cloud_syncable,
+        )
+
+        assert is_cloud_syncable("ollama/llama2") is False
+        assert is_cloud_syncable("ollama/gpt-oss:120b-cloud") is False
+
+    def test_every_other_vendor_still_syncs(self) -> None:
+        from app.services.ai.domains.llm.etl.mappers.llm_mapper import (
+            is_cloud_syncable,
+        )
+
+        assert is_cloud_syncable("openai/gpt-4o") is True
+        assert is_cloud_syncable("anthropic/claude-opus-4") is True
+        assert is_cloud_syncable("gpt-4o") is True

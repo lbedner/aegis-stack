@@ -10,7 +10,7 @@ from sqlmodel import Session
 import pytest
 from app.services.ai.models import AIProvider, Conversation, MessageRole
 {% if ai_backend != "memory" %}
-from app.services.ai.models.llm import LargeLanguageModel, LLMPrice, LLMVendor
+from app.services.ai.models.llm import LargeLanguageModel, LLMPrice, LLMOrg
 {% endif %}
 from app.services.ai.service import AIService
 
@@ -105,9 +105,10 @@ def paid_provider_with_key_settings(mock_ai_settings):
 
 
 @pytest.fixture
-def sample_vendor(db_session: Session) -> LLMVendor:
+def sample_vendor(db_session: Session) -> LLMOrg:
     """Create a sample LLM vendor (OpenAI) in the database."""
-    vendor = LLMVendor(
+    vendor = LLMOrg(
+        slug="openai",
         name="openai",
         description="OpenAI API",
         color="#10A37F",
@@ -121,7 +122,7 @@ def sample_vendor(db_session: Session) -> LLMVendor:
 
 
 @pytest.fixture
-def sample_llm(db_session: Session, sample_vendor: LLMVendor) -> LargeLanguageModel:
+def sample_llm(db_session: Session, sample_vendor: LLMOrg) -> LargeLanguageModel:
     """Create a sample LLM (gpt-4o) in the database."""
     llm = LargeLanguageModel(
         model_id="gpt-4o",
@@ -131,7 +132,7 @@ def sample_llm(db_session: Session, sample_vendor: LLMVendor) -> LargeLanguageMo
         streamable=True,
         enabled=True,
         color="#10A37F",
-        llm_vendor_id=sample_vendor.id,
+        served_by_org_id=sample_vendor.id,
     )
     db_session.add(llm)
     db_session.commit()
@@ -141,11 +142,11 @@ def sample_llm(db_session: Session, sample_vendor: LLMVendor) -> LargeLanguageMo
 
 @pytest.fixture
 def sample_price(
-    db_session: Session, sample_vendor: LLMVendor, sample_llm: LargeLanguageModel
+    db_session: Session, sample_vendor: LLMOrg, sample_llm: LargeLanguageModel
 ) -> LLMPrice:
     """Create sample pricing for gpt-4o in the database."""
     price = LLMPrice(
-        llm_vendor_id=sample_vendor.id,
+        org_id=sample_vendor.id,
         llm_id=sample_llm.id,
         input_cost_per_token=0.000005,  # $5.00 per 1M tokens
         output_cost_per_token=0.000015,  # $15.00 per 1M tokens

@@ -95,6 +95,11 @@ class Settings(
     DISK_THRESHOLD_PERCENT: float = 85.0
     CPU_THRESHOLD_PERCENT: float = 95.0
 
+    # Where stored objects live: chat attachments, documents, anything
+    # addressed by content hash. A directory today; the storage component
+    # points this at a bucket without any caller noticing.
+    STORAGE_ROOT: str = "storage_data"
+
     # Flet frontend settings
     FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)
 {%- if include_htmx %}

@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Durable storage for bytes, addressed by content**: `app/core/storage.py`
+  introduces the seam every future backend implements - put, get, exists,
+  delete - with a filesystem backend and a named docker volume behind it.
+  Keys are derived from the payload's SHA-256 rather than from a filename
+  or a path (`sha256/ab/cd/<digest>`), so storing the same bytes twice is
+  one object and adopting object storage later is a byte copy: the same
+  key resolves identically on a disk and in a bucket, with no database
+  change and no key rewriting. Callers keep the key and the backend name,
+  never a path.
+
 ### Changed
 
 - **Model vendors and labs are one thing now**: the catalog kept

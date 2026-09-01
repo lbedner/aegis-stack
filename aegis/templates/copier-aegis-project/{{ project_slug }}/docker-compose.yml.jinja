@@ -12,6 +12,9 @@ x-app: &app
     # Docker container marker for entrypoint script
     - DOCKER_CONTAINER=1
     - PORT=${PORT:-8000}
+    - STORAGE_ROOT=/data/storage
+  volumes:
+    - storage-data:/data/storage
   labels:
     logging: "aegis-stack"
 
@@ -353,6 +356,7 @@ services:
 
 volumes:
   aegis-data:
+  storage-data:
 {%- if database_engine == "postgres" %}
   postgres-data:
 {%- endif %}

@@ -33,7 +33,7 @@ from app.services.ai.domains.chat.agent_loader import (
 )
 from app.services.ai.domains.chat.attachments import (
     ChatAttachment,
-    annotate_attachments,
+    prepare_turn,
     build_user_content,
 )
 {%- if ai_backend != "memory" %}
@@ -153,12 +153,17 @@ class StreamingMixin(ChatMixin):
             # Setup conversation and add user message. The stored text
             # carries the attachment marker; the bytes ride only this
             # turn's model call (history replays as text).
+            # Kept, not just carried: the bytes ride this turn's model
+            # call and the message remembers where the image was stored,
+            # so reopening the conversation still shows it.
+            stored_text, stored_metadata = await prepare_turn(message, attachments)
             conversation = self._setup_conversation(
-                annotate_attachments(message, attachments),
+                stored_text,
                 conversation_id,
                 user_id,
                 config=current,
                 surface=surface,
+                metadata=stored_metadata,
             )
 
             # Create streaming conversation wrapper

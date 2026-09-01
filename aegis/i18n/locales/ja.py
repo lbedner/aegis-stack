@@ -73,6 +73,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "JWT トークンによるユーザー認証・認可",
     "service.ai": "マルチフレームワーク対応 AI チャットボットサービス",
     "service.comms": "メール・SMS・音声のコミュニケーションサービス",
+    "service.documents": "Document store: keep the paper, deduped and findable",
     "service.blog": "下書き、公開、タグに対応した Markdown ブログ",
     # ── 対話モード：コンポーネントプロンプト ────────────────────────────
     "interactive.add_prompt": "{description} を追加しますか？",
@@ -426,6 +427,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "コミュニケーション",
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
+    "projectmap.documents": "Document store",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "ドキュメント",
@@ -1103,6 +1105,7 @@ MESSAGES: dict[str, str] = {
     "service.comms.long": "主要なプロバイダーを使ったメール、SMS、音声通話：メールは Resend、SMS と音声は Twilio。どちらも無料枠があるので、クレジットカードなしで始められます。",
     "service.insights.long": "GitHub、PyPI、Plausible Analytics、Reddit にまたがってプロジェクトの普及状況を自動的に追跡。スケジュールに沿って収集し、履歴を保存し、ダッシュボードで成長を可視化します。",
     "service.payment.long": "Stripe による決済処理：チェックアウトセッション、サブスクリプション、Webhook、返金。Stripe のテストモードはクレジットカード不要なので、本番前にフロー全体を構築できます。",
+    "service.documents.long": "Durable storage for the paper an application accumulates: scans, statements, letters, forms. Bytes are addressed by their own content hash, so the same file uploaded twice is one document and one object, and moving to a bucket later is a copy rather than a migration.",
     "service.blog.long": "データベースに保存される投稿、タグ、下書き、ダッシュボード内のエディター UI を備えた、ファーストパーティの Markdown パブリッシング。投稿は frontmatter 付きのプレーン Markdown としてインポート・エクスポートできます。",
     # ── Guided setup: choice descriptions + build steps ──
     "guided.choice.name.in_memory": "インメモリ",

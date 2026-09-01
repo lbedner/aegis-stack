@@ -91,6 +91,7 @@ jobs:
           - insights_per_user
           - payment
           - blog
+          - documents
           - finance
           - finance_auth
           - comms

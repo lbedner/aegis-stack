@@ -80,6 +80,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "User authentication and authorization with JWT tokens",
     "service.ai": "AI chatbot service with multi-framework support",
     "service.comms": "Communications service with email, SMS and voice",
+    "service.documents": "Document store: keep the paper, deduped and findable",
     "service.blog": "Markdown blog with draft/publish workflow and tags",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "Add {description}?",
@@ -446,6 +447,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Communications",
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
+    "projectmap.documents": "Document store",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "Documentation",
@@ -1222,6 +1224,7 @@ MESSAGES: dict[str, str] = {
     "service.comms.long": "Email, SMS, and voice calls using industry providers: Resend for email, Twilio for SMS and voice. Both have free tiers, so you can start without a credit card.",
     "service.insights.long": "Automated tracking of your project's adoption across GitHub, PyPI, Plausible Analytics, and Reddit. Collects on a schedule, stores history, and visualizes growth in the dashboard.",
     "service.payment.long": "Payment processing with Stripe: checkout sessions, subscriptions, webhooks, and refunds. Stripe's test mode needs no credit card, so you can build the full flow before going live.",
+    "service.documents.long": "Durable storage for the paper an application accumulates: scans, statements, letters, forms. Bytes are addressed by their own content hash, so the same file uploaded twice is one document and one object, and moving to a bucket later is a copy rather than a migration.",
     "service.blog.long": "First-party Markdown publishing with database-backed posts, tags, drafts, and an editor UI in the dashboard. Import and export posts as plain Markdown with frontmatter.",
     # ── Guided setup: choice descriptions + build steps ──
     "guided.choice.name.in_memory": "In-memory",

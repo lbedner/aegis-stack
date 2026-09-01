@@ -79,7 +79,7 @@ dependencies = [
     "authlib>=1.7.0",
     "itsdangerous>=2.1.0",
 {%- endif %}
-{%- if include_auth or include_payment or include_insights or include_blog or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend == "postgres") %}
+{%- if include_auth or include_payment or include_insights or include_blog or include_documents or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend == "postgres") %}
     "alembic==1.16.5",
 {%- endif %}
 {%- if include_ai %}

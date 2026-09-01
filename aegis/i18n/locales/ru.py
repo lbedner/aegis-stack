@@ -78,6 +78,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "Аутентификация и авторизация с JWT-токенами",
     "service.ai": "AI-чатбот с поддержкой нескольких фреймворков",
     "service.comms": "Сервис коммуникаций: email, SMS и голос",
+    "service.documents": "Document store: keep the paper, deduped and findable",
     "service.blog": "Markdown-блог с черновиками, публикацией и тегами",
     # ── Интерактив: запросы для компонентов ─────────────────────────────
     "interactive.add_prompt": "Добавить {description}?",
@@ -416,6 +417,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Коммуникации",
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
+    "projectmap.documents": "Document store",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "Документация",
@@ -1085,6 +1087,7 @@ MESSAGES: dict[str, str] = {
     "service.comms.long": "Email, SMS и голосовые вызовы через ведущих провайдеров: Resend для почты, Twilio для SMS и голоса. У обоих есть бесплатные тарифы, так что можно начать без кредитной карты.",
     "service.insights.long": "Автоматическое отслеживание распространения вашего проекта в GitHub, PyPI, Plausible Analytics и Reddit. Собирает по расписанию, хранит историю и визуализирует рост на панели.",
     "service.payment.long": "Обработка платежей через Stripe: сессии оплаты, подписки, вебхуки и возвраты. Тестовый режим Stripe не требует кредитной карты, так что можно построить весь процесс до запуска.",
+    "service.documents.long": "Durable storage for the paper an application accumulates: scans, statements, letters, forms. Bytes are addressed by their own content hash, so the same file uploaded twice is one document and one object, and moving to a bucket later is a copy rather than a migration.",
     "service.blog.long": "Встроенная публикация в Markdown с хранением постов в базе данных, тегами, черновиками и редактором в панели. Импорт и экспорт постов в виде обычного Markdown с frontmatter.",
     # ── Guided setup: choice descriptions + build steps ──
     "guided.choice.name.in_memory": "В памяти",

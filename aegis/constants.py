@@ -208,6 +208,7 @@ class AnswerKeys:
     PAYMENT = "include_payment"
     BLOG = "include_blog"
     FINANCE = "include_finance"
+    DOCUMENTS = "include_documents"
 
     # Service names (used for selection/lookup)
     SERVICE_AUTH = "auth"
@@ -217,6 +218,7 @@ class AnswerKeys:
     SERVICE_PAYMENT = "payment"
     SERVICE_BLOG = "blog"
     SERVICE_FINANCE = "finance"
+    SERVICE_DOCUMENTS = "documents"
 
     # Insights source flags
     INSIGHTS_GITHUB = "insights_github"

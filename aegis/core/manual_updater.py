@@ -107,6 +107,7 @@ _SERVICE_ANSWER_KEYS = (
     AnswerKeys.INSIGHTS,
     AnswerKeys.PAYMENT,
     AnswerKeys.BLOG,
+    AnswerKeys.DOCUMENTS,
     AnswerKeys.FINANCE,
 )
 
@@ -989,6 +990,7 @@ class ManualUpdater:
             or answers.get(AnswerKeys.INSIGHTS)
             or answers.get(AnswerKeys.PAYMENT)
             or answers.get(AnswerKeys.BLOG)
+            or answers.get(AnswerKeys.DOCUMENTS)
             or answers.get(AnswerKeys.FINANCE)
             or scheduler_needs
         )
@@ -1510,6 +1512,8 @@ class ManualUpdater:
             inferred[AnswerKeys.INSIGHTS] = True
         if has_nonstub_dir("app", "services", "blog"):
             inferred[AnswerKeys.BLOG] = True
+        if has_nonstub_dir("app", "services", "documents"):
+            inferred[AnswerKeys.DOCUMENTS] = True
         if has_nonstub_dir("app", "services", "payment"):
             inferred[AnswerKeys.PAYMENT] = True
         if has_nonstub_dir("app", "services", "comms"):

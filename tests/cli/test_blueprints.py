@@ -215,7 +215,7 @@ class TestEscFromBlueprintReview:
 
         # Gallery door, open, pick finance, esc on review -> back at the
         # doors (cursor on blank canvas), take it, decline all 14, build.
-        keys = ["down", "\r", "\r", "esc", "\r"] + ["n"] * 14 + ["\r"]
+        keys = ["down", "\r", "\r", "esc", "\r"] + ["n"] * 15 + ["\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         # Nothing from the blueprint survived: it was un-picked, not edited.
@@ -283,8 +283,14 @@ class TestCoreStackPage:
         assert self._core_stack_calls(["\r"], BLUEPRINTS["finance"]) == 0
 
     def test_blank_canvas_still_shows_it(self) -> None:
-        # Blank-canvas door, decline all 14 questions, confirm the review.
-        keys = ["\r"] + ["n"] * 14 + ["\r"]
+        # Blank-canvas door, decline every question, confirm the review.
+        # The count is derived: a new component or service adds a screen,
+        # and a literal would fail here with a number for a message.
+        from aegis.constants import ComponentNames
+        from aegis.core.services import SERVICES
+
+        screens = len(ComponentNames.INFRASTRUCTURE_ORDER) + len(SERVICES)
+        keys = ["\r"] + ["n"] * screens + ["\r"]
         assert self._core_stack_calls(keys, None) == 1
 
 

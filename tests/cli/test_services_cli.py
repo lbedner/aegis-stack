@@ -271,6 +271,7 @@ class TestInteractiveServiceSelection:
                 False,  # insights service
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -302,6 +303,7 @@ class TestInteractiveServiceSelection:
                 False,  # insights service
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()

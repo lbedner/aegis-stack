@@ -17,6 +17,19 @@ from aegis.cli.interactive import (
 from aegis.constants import WorkerBackends
 
 
+def _prompt_count() -> int:
+    """How many confirms one pass through the flow asks.
+
+    Derived, because adding a component or a service adds a prompt: a
+    literal here fails in a scheduler test with a bare number when the
+    change was somewhere else entirely.
+    """
+    from aegis.constants import ComponentNames
+    from aegis.core.services import SERVICES
+
+    return len(ComponentNames.INFRASTRUCTURE_ORDER) + len(SERVICES)
+
+
 class TestInteractiveSchedulerFlow:
     """Test cases for enhanced scheduler interactive flow."""
 
@@ -45,6 +58,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -55,8 +69,8 @@ class TestInteractiveSchedulerFlow:
             assert scheduler_backend == "sqlite"
             assert services == []  # No services selected
 
-            # Verify correct calls were made (including blog service prompt)
-            assert mock_confirm.call_count == 14
+            # One confirm per screen: every component and every service.
+            assert mock_confirm.call_count == _prompt_count()
         finally:
             clear_database_engine_selection()
 
@@ -87,6 +101,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -122,6 +137,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -153,6 +169,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -190,6 +207,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -199,9 +217,10 @@ class TestInteractiveSchedulerFlow:
             assert any(c.startswith("database") for c in components)
             assert scheduler_backend == "sqlite"
 
-            # Should not have been prompted for generic database (14 confirms
-            # total: database auto-skipped, htmx and every service asked)
-            assert mock_confirm.call_count == 14
+            # Should not have been prompted for generic database: the
+            # database screen is auto-skipped, so the count still lands
+            # at one confirm per screen.
+            assert mock_confirm.call_count == _prompt_count()
         finally:
             clear_database_engine_selection()
 
@@ -234,6 +253,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -271,6 +291,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()

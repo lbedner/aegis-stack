@@ -78,6 +78,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "Authentification et autorisation avec jetons JWT",
     "service.ai": "Service de chatbot IA avec support multi-framework",
     "service.comms": "Service de communications : e-mail, SMS et voix",
+    "service.documents": "Document store: keep the paper, deduped and findable",
     "service.blog": "Blog Markdown avec brouillons, publication et tags",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "Ajouter {description} ?",
@@ -438,6 +439,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Communications",
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
+    "projectmap.documents": "Document store",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "Documentation",
@@ -1123,6 +1125,7 @@ MESSAGES: dict[str, str] = {
     "service.comms.long": "E-mail, SMS et appels vocaux via des fournisseurs reconnus : Resend pour l'e-mail, Twilio pour le SMS et la voix. Les deux proposent des offres gratuites, vous pouvez donc démarrer sans carte bancaire.",
     "service.insights.long": "Suivi automatique de l'adoption de votre projet sur GitHub, PyPI, Plausible Analytics et Reddit. Collecte selon un calendrier, conserve l'historique et visualise la croissance dans le tableau de bord.",
     "service.payment.long": "Traitement des paiements avec Stripe : sessions de paiement, abonnements, webhooks et remboursements. Le mode test de Stripe ne nécessite pas de carte bancaire, vous pouvez donc construire tout le parcours avant la mise en production.",
+    "service.documents.long": "Durable storage for the paper an application accumulates: scans, statements, letters, forms. Bytes are addressed by their own content hash, so the same file uploaded twice is one document and one object, and moving to a bucket later is a copy rather than a migration.",
     "service.blog.long": "Publication Markdown native avec des billets stockés en base de données, des tags, des brouillons et une interface d'édition dans le tableau de bord. Importez et exportez les billets en Markdown brut avec frontmatter.",
     # ── Guided setup: choice descriptions + build steps ──
     "guided.choice.name.in_memory": "En mémoire",

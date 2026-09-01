@@ -288,9 +288,17 @@ class TestServiceRegistryFunctions:
         assert "auth" in auth_services
         assert all(spec.type == ServiceType.AUTH for spec in auth_services.values())
 
-        # Test empty result for unused type
         storage_services = get_services_by_type(ServiceType.STORAGE)
-        assert len(storage_services) == 0
+        assert "documents" in storage_services
+        assert all(
+            spec.type == ServiceType.STORAGE for spec in storage_services.values()
+        )
+
+        # Every declared type is claimed by at least one service: a type
+        # nobody uses is a category we invented and never filled, and the
+        # filter should not be tested against one that cannot occur.
+        for service_type in ServiceType:
+            assert get_services_by_type(service_type), service_type
 
         content_services = get_services_by_type(ServiceType.CONTENT)
         assert "blog" in content_services

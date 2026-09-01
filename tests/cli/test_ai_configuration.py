@@ -58,6 +58,7 @@ class TestAIProviderSelection:
             False,  # insights
             False,  # blog service
             False,  # finance service
+            False,  # documents service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -101,6 +102,7 @@ class TestAIProviderSelection:
             False,  # insights
             False,  # blog service
             False,  # finance service
+            False,  # documents service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -145,6 +147,7 @@ class TestAIProviderSelection:
             False,  # insights
             False,  # blog service
             False,  # finance service
+            False,  # documents service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -177,6 +180,7 @@ class TestAIProviderSelection:
             False,  # insights
             False,  # blog service
             False,  # finance service
+            False,  # documents service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -237,6 +241,7 @@ class TestAIBackendSelection:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -295,6 +300,7 @@ class TestAIBackendSelection:
                 False,  # insights
                 False,  # blog service
                 False,  # finance service
+                False,  # documents service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -343,6 +349,7 @@ class TestAIBackendSelection:
             False,  # insights
             False,  # blog service
             False,  # finance service
+            False,  # documents service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -510,6 +517,7 @@ class TestAIConfigurationEndToEnd:
             False,  # insights
             False,  # blog service
             False,  # finance service
+            False,  # documents service
         ]
 
         # Run interactive selection
@@ -617,6 +625,7 @@ class TestOllamaModeSelection:
             False,  # insights
             False,  # blog service
             False,  # finance service
+            False,  # documents service
         ]
 
         interactive_project_selection()

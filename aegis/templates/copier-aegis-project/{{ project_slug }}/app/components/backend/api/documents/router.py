@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from app.services.documents.deps import get_document_service, get_owner_user_id
 from app.services.documents.models import Document
-from app.services.documents.service import DocumentService
+from app.services.documents.service import DocumentService, ProtectedDocumentError
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -58,6 +58,9 @@ class DocumentResponse(BaseModel):
     source: str
     storage_key: str
     storage_backend: str
+    channel: str | None
+    supersedes_id: int | None
+    protected: bool
     note: str | None
     tags: list[str] = Field(default_factory=list)
 
@@ -75,6 +78,9 @@ class DocumentResponse(BaseModel):
             source=row.source,
             storage_key=row.storage_key,
             storage_backend=row.storage_backend,
+            channel=row.channel,
+            supersedes_id=row.supersedes_id,
+            protected=row.protected,
             note=row.note,
             tags=tags or [],
         )
@@ -103,6 +109,9 @@ class DocumentUpdate(BaseModel):
     kind: str | None = None
     document_date: date | None = None
     note: str | None = None
+    channel: str | None = None
+    supersedes_id: int | None = None
+    protected: bool | None = None
 
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -112,6 +121,7 @@ async def upload_document(
     title: str | None = Form(None),
     kind: str = Form("other"),
     note: str | None = Form(None),
+    channel: str | None = Form(None),
     service: DocumentService = Depends(get_document_service),
     owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> DocumentResponse:
@@ -136,6 +146,8 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from None
+    if created and channel:
+        await service.update(document.id or 0, {"channel": channel})
     if not created:
         response.status_code = status.HTTP_200_OK
     return DocumentResponse.from_row(document)
@@ -145,6 +157,8 @@ async def upload_document(
 async def list_documents(
     kind: str | None = None,
     tag: str | None = None,
+    channel: str | None = None,
+    include_superseded: bool = False,
     page: int = 1,
     page_size: int = 50,
     service: DocumentService = Depends(get_document_service),
@@ -153,6 +167,8 @@ async def list_documents(
     rows, total = await service.list_documents(
         kind=kind,
         tag=tag,
+        channel=channel,
+        include_superseded=include_superseded,
         page=page,
         page_size=page_size,
         owner_user_id=owner_user_id,
@@ -273,11 +289,21 @@ async def untag_document(
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: int,
+    confirm: str | None = None,
     service: DocumentService = Depends(get_document_service),
     owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> Response:
     """Retire a document. The bytes stay: another document may hold the
-    same content, and the audit trail should not lose its subject."""
-    if not await service.soft_delete(document_id, owner_user_id=owner_user_id):
+    same content, and the audit trail should not lose its subject. A
+    protected document needs ``?confirm=<its exact title>``."""
+    try:
+        retired = await service.soft_delete(
+            document_id, owner_user_id=owner_user_id, confirm=confirm
+        )
+    except ProtectedDocumentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from None
+    if not retired:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

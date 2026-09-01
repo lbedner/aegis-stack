@@ -108,3 +108,98 @@ class TestDocumentEndpoints:
 
         assert client.delete(f"/api/v1/documents/{created['id']}").status_code == 204
         assert client.get(f"/api/v1/documents/{created['id']}").status_code == 404
+
+    def test_a_deduped_upload_says_so_with_200_not_201(
+        self, client: TestClient
+    ) -> None:
+        """The UI tells the user "already stored" instead of pretending a
+        second copy landed - the status code is how it knows."""
+        payload = b"bytes the client will send twice"
+        first = client.post(
+            "/api/v1/documents",
+            files={"file": ("scan.pdf", payload, "application/pdf")},
+            data={"title": "S", "kind": "receipt"},
+        )
+        second = client.post(
+            "/api/v1/documents",
+            files={"file": ("scan.pdf", payload, "application/pdf")},
+            data={"title": "S", "kind": "receipt"},
+        )
+
+        assert first.status_code == 201
+        assert second.status_code == 200
+        assert first.json()["id"] == second.json()["id"]
+
+    def test_patch_renames_and_dates_the_paper(self, client: TestClient) -> None:
+        created = client.post(
+            "/api/v1/documents",
+            files={"file": ("a.txt", b"patch me", "text/plain")},
+            data={"title": "Untitled"},
+        ).json()
+
+        response = client.patch(
+            f"/api/v1/documents/{created['id']}",
+            json={
+                "title": "Renewal request",
+                "kind": "letter",
+                "document_date": "2026-08-27",
+                "note": "Due Sep 8",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["title"] == "Renewal request"
+        assert body["kind"] == "letter"
+        assert body["document_date"] == "2026-08-27"
+        assert body["note"] == "Due Sep 8"
+
+    def test_patch_with_a_bad_kind_is_a_client_error(self, client: TestClient) -> None:
+        created = client.post(
+            "/api/v1/documents",
+            files={"file": ("a.txt", b"bad kind", "text/plain")},
+            data={"title": "A"},
+        ).json()
+
+        response = client.patch(
+            f"/api/v1/documents/{created['id']}", json={"kind": "invoice-ish"}
+        )
+
+        assert response.status_code == 400
+
+    def test_tags_lists_labels_with_counts(self, client: TestClient) -> None:
+        a = client.post(
+            "/api/v1/documents",
+            files={"file": ("a.txt", b"tag count a", "text/plain")},
+            data={"title": "A"},
+        ).json()
+        b = client.post(
+            "/api/v1/documents",
+            files={"file": ("b.txt", b"tag count b", "text/plain")},
+            data={"title": "B"},
+        ).json()
+        client.post(f"/api/v1/documents/{a['id']}/tags", json={"label": "estate"})
+        client.post(f"/api/v1/documents/{b['id']}/tags", json={"label": "estate"})
+
+        response = client.get("/api/v1/documents/tags")
+
+        assert response.status_code == 200
+        by_label = {row["label"]: row["count"] for row in response.json()}
+        assert by_label["estate"] == 2
+
+    def test_untag_removes_the_label(self, client: TestClient) -> None:
+        created = client.post(
+            "/api/v1/documents",
+            files={"file": ("a.txt", b"untag me", "text/plain")},
+            data={"title": "A"},
+        ).json()
+        client.post(f"/api/v1/documents/{created['id']}/tags", json={"label": "tmp"})
+
+        response = client.delete(f"/api/v1/documents/{created['id']}/tags/tmp")
+
+        assert response.status_code == 200
+        assert response.json()["tags"] == []
+        assert (
+            client.delete(f"/api/v1/documents/{created['id']}/tags/tmp").status_code
+            == 404
+        )

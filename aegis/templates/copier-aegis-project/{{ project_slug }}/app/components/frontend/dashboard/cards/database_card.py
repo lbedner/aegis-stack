@@ -7,6 +7,7 @@ Supports both SQLite and PostgreSQL backends.
 
 import flet as ft
 
+from app.core.formatting import format_bytes
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
@@ -66,17 +67,7 @@ class DatabaseCard:
             if "file_size_human" in self.metadata:
                 return self.metadata["file_size_human"]
             elif "file_size_bytes" in self.metadata:
-                size_bytes = self.metadata["file_size_bytes"]
-                if size_bytes == 0:
-                    return "0 B"
-                elif size_bytes < 1024:
-                    return f"{size_bytes} B"
-                elif size_bytes < 1024**2:
-                    return f"{size_bytes / 1024:.1f} KB"
-                elif size_bytes < 1024**3:
-                    return f"{size_bytes / (1024**2):.1f} MB"
-                else:
-                    return f"{size_bytes / (1024**3):.1f} GB"
+                return format_bytes(self.metadata["file_size_bytes"])
 
         return "-"
 

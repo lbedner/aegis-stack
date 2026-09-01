@@ -106,3 +106,14 @@ class TestFormatRelativeTime:
 
         ts = _dt.now(UTC).isoformat()
         assert format_relative_time(ts) == "just now"
+
+
+class TestFormatBytes:
+    def test_it_picks_the_unit_that_reads(self):
+        from app.core.formatting import format_bytes
+
+        assert format_bytes(0) == "0 B"
+        assert format_bytes(512) == "512 B"
+        assert format_bytes(9_400_000) == "9.0 MB"
+        assert format_bytes(222_298_112) == "212.0 MB"
+        assert format_bytes(3 * 1024**3) == "3.0 GB"

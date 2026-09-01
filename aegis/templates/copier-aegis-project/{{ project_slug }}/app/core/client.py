@@ -226,6 +226,7 @@ class APIClient:
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
         form_data: dict[str, str] | None = None,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
         _retry_on_401: bool = True,
     ) -> tuple[int, dict | list | None]:
         """
@@ -245,7 +246,7 @@ class APIClient:
             self._invalidate_get_cache()
         url = f"{self.base_url}{endpoint}"
         headers: dict[str, str] = {}
-        if form_data is not None:
+        if form_data is not None and files is None:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
         try:
             response = await self._client.request(
@@ -254,6 +255,7 @@ class APIClient:
                 params=params,
                 json=json,
                 data=form_data,
+                files=files,
                 headers=headers,
             )
             if response.status_code == 401:
@@ -268,6 +270,7 @@ class APIClient:
                         params=params,
                         json=json,
                         form_data=form_data,
+                        files=files,
                         _retry_on_401=False,
                     )
                 await self._emit_unauthorized()

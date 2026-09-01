@@ -1415,3 +1415,31 @@ class TestSyncRemovesFilesTheTemplateDropped:
             )
 
         assert not (tmp_path / "app" / "legacy").exists()
+
+
+class TestDocumentsOnlyStackKeepsWhatItNeeds:
+    """A stack whose only service is documents still has a services card
+    (its card imports through the same aggregate) and migrations."""
+
+    @staticmethod
+    def _documents_only(tmp_path: Path) -> tuple[Path, Path]:
+        card = tmp_path / "app/components/frontend/dashboard/cards/services_card.py"
+        card.parent.mkdir(parents=True)
+        card.write_text("# card")
+        alembic = tmp_path / "alembic"
+        alembic.mkdir()
+        (alembic / "env.py").write_text("# env")
+        return card, alembic
+
+    def test_services_card_and_alembic_survive(self, tmp_path: Path) -> None:
+        from aegis.core.post_gen_tasks import cleanup_components
+
+        card, alembic = self._documents_only(tmp_path)
+
+        cleanup_components(
+            tmp_path,
+            {"project_slug": "p", "include_documents": True, "include_database": True},
+        )
+
+        assert card.exists()
+        assert alembic.exists()

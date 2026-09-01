@@ -4677,6 +4677,11 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     if include_blog_on:
         services.append("blog")
 
+    # Documents service (always needs database)
+    include_documents = context.get(AnswerKeys.DOCUMENTS)
+    if include_documents == "yes" or include_documents is True:
+        services.append("documents")
+
     # Finance service (always needs database).
     include_finance = context.get(AnswerKeys.FINANCE)
     include_finance_on = include_finance == "yes" or include_finance is True

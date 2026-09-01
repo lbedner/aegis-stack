@@ -10,6 +10,9 @@ from app.components.frontend.controls import DataTable, DataTableColumn
 {% if include_blog %}
 from app.services.blog.constants import BLOG_COMPONENT_NAME
 {% endif %}
+{% if include_documents %}
+from app.services.documents.health import DOCUMENTS_MODAL_ID
+{% endif %}
 {% if include_payment %}
 from app.services.payment.constants import PAYMENT_COMPONENT_NAME
 {% endif %}
@@ -50,6 +53,9 @@ MODAL_NAME_MAP = {
 {% endif %}
 {% if include_comms %}
     "service_comms": "comms",
+{% endif %}
+{% if include_documents %}
+    DOCUMENTS_MODAL_ID: DOCUMENTS_MODAL_ID,
 {% endif %}
 {% if include_ingress %}
     "ingress": "ingress",
@@ -111,6 +117,11 @@ def get_component_display_info(
 
     elif component_name == "service_comms":
         return ("Comms Service", "Resend + Twilio")
+{% if include_documents %}
+
+    elif component_name == DOCUMENTS_MODAL_ID:
+        return ("Documents", get_component_subtitle(DOCUMENTS_MODAL_ID, metadata))
+{% endif %}
 {% if include_insights %}
 
     elif component_name == "service_insights":
@@ -266,6 +277,9 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_comms %}
             "service_comms",
+{% endif %}
+{% if include_documents %}
+            DOCUMENTS_MODAL_ID,
 {% endif %}
 {% if include_payment %}
             f"service_{PAYMENT_COMPONENT_NAME}",

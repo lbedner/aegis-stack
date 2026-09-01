@@ -5,6 +5,8 @@ document means is the caller's business; these routes only keep it and
 give it back.
 """
 
+from __future__ import annotations
+
 from datetime import date, datetime
 import re
 
@@ -20,6 +22,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from app.core.storage import content_key
 from app.services.documents.deps import get_document_service, get_owner_user_id
 from app.services.documents.models import Document
 from app.services.documents.service import DocumentService
@@ -60,9 +63,7 @@ class DocumentResponse(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
     @classmethod
-    def from_row(
-        cls, row: Document, tags: list[str] | None = None
-    ) -> "DocumentResponse":
+    def from_row(cls, row: Document, tags: list[str] | None = None) -> DocumentResponse:
         return cls(
             id=row.id or 0,
             title=row.title,
@@ -89,8 +90,24 @@ class TagRequest(BaseModel):
     label: str
 
 
+class TagCount(BaseModel):
+    label: str
+    count: int
+
+
+class DocumentUpdate(BaseModel):
+    """What may change after filing. Fields left unset stay as they are;
+    a field sent as null is cleared."""
+
+    title: str | None = None
+    kind: str | None = None
+    document_date: date | None = None
+    note: str | None = None
+
+
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
+    response: Response,
     file: UploadFile = File(...),
     title: str | None = Form(None),
     kind: str = Form("other"),
@@ -101,9 +118,14 @@ async def upload_document(
     """Store an uploaded file.
 
     Uploading the same bytes twice returns the existing document rather
-    than a second one, so a retried upload is safe.
+    than a second one, so a retried upload is safe. The status code says
+    which happened: 201 for a new document, 200 for one already held.
     """
     data = await file.read()
+    if data and await service.by_content(
+        content_key(data), owner_user_id=owner_user_id
+    ):
+        response.status_code = status.HTTP_200_OK
     try:
         document = await service.ingest(
             data,
@@ -143,6 +165,16 @@ async def list_documents(
     return DocumentListResponse(items=items, total=total)
 
 
+@router.get("/tags", response_model=list[TagCount])
+async def list_tags(
+    service: DocumentService = Depends(get_document_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> list[TagCount]:
+    """Every label in use, most used first."""
+    counts = await service.tag_counts(owner_user_id=owner_user_id)
+    return [TagCount(label=label, count=count) for label, count in counts]
+
+
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: int,
@@ -150,6 +182,28 @@ async def get_document(
     owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> DocumentResponse:
     document = await service.get(document_id, owner_user_id=owner_user_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return DocumentResponse.from_row(document, await service.tags_for(document_id))
+
+
+@router.patch("/{document_id}", response_model=DocumentResponse)
+async def update_document(
+    document_id: int,
+    body: DocumentUpdate,
+    service: DocumentService = Depends(get_document_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> DocumentResponse:
+    try:
+        document = await service.update(
+            document_id,
+            body.model_dump(exclude_unset=True),
+            owner_user_id=owner_user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from None
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     return DocumentResponse.from_row(document, await service.tags_for(document_id))
@@ -201,6 +255,19 @@ async def tag_document(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     document = await service.get(document_id, owner_user_id=owner_user_id)
     if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return DocumentResponse.from_row(document, await service.tags_for(document_id))
+
+
+@router.delete("/{document_id}/tags/{label}", response_model=DocumentResponse)
+async def untag_document(
+    document_id: int,
+    label: str,
+    service: DocumentService = Depends(get_document_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> DocumentResponse:
+    document = await service.get(document_id, owner_user_id=owner_user_id)
+    if document is None or not await service.untag(document_id, label):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     return DocumentResponse.from_row(document, await service.tags_for(document_id))
 

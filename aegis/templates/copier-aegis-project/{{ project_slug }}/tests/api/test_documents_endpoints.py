@@ -261,6 +261,23 @@ class TestDocumentEndpoints:
         ).json()
         assert both["total"] == 2
 
+    def test_protected_cannot_be_unset_to_null(self, client: TestClient) -> None:
+        created = client.post(
+            "/api/v1/documents",
+            files={"file": ("n.pdf", b"null protected", "application/pdf")},
+            data={"title": "N"},
+        ).json()
+
+        response = client.patch(
+            f"/api/v1/documents/{created['id']}", json={"protected": None}
+        )
+
+        assert response.status_code == 400
+        assert (
+            client.get(f"/api/v1/documents/{created['id']}").json()["protected"]
+            is False
+        )
+
     def test_channel_is_filed_and_filterable(self, client: TestClient) -> None:
         client.post(
             "/api/v1/documents",

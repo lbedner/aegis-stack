@@ -48,6 +48,7 @@ class DocumentService:
         source: str = "upload",
         note: str | None = None,
         page_count: int | None = None,
+        channel: str | None = None,
     ) -> Document:
         """Store bytes and record the document, or return the one that
         already holds these exact bytes. See ``store`` for the version
@@ -62,6 +63,7 @@ class DocumentService:
             source=source,
             note=note,
             page_count=page_count,
+            channel=channel,
         )
         return document
 
@@ -77,6 +79,7 @@ class DocumentService:
         source: str = "upload",
         note: str | None = None,
         page_count: int | None = None,
+        channel: str | None = None,
     ) -> tuple[Document, bool]:
         """Store bytes and record the document, or return the one that
         already holds these exact bytes, plus whether a row was created.
@@ -118,6 +121,7 @@ class DocumentService:
             received_at=utcnow(),
             source=source,
             note=note,
+            channel=channel,
         )
         self.db.add(document)
         await self.db.flush()
@@ -193,6 +197,8 @@ class DocumentService:
             )
         if "title" in fields and not (fields["title"] or "").strip():
             raise ValueError("A document needs a title.")
+        if "protected" in fields and not isinstance(fields["protected"], bool):
+            raise ValueError("protected must be true or false.")
         document = await self.get(document_id, owner_user_id=owner_user_id)
         if document is None:
             return None

@@ -140,14 +140,13 @@ async def upload_document(
             media_type=file.content_type,
             source="upload",
             note=note,
+            channel=channel,
             owner_user_id=owner_user_id,
         )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from None
-    if created and channel:
-        await service.update(document.id or 0, {"channel": channel})
     if not created:
         response.status_code = status.HTTP_200_OK
     return DocumentResponse.from_row(document)

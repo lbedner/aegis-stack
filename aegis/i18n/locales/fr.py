@@ -73,6 +73,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Base de données avec ORM SQLModel (SQLite ou PostgreSQL)",
     "component.ingress": "Reverse proxy et répartiteur de charge Traefik",
     "component.observability": "Observabilité, traçage et métriques Logfire",
+    "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
     "service.auth": "Authentification et autorisation avec jetons JWT",
@@ -1119,6 +1120,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "Magasin de données en mémoire utilisé comme cache et courtier de messages. Alimente les files de tâches en arrière-plan et la messagerie pub/sub entre vos services, et offre aux gestionnaires de requêtes un cache partagé rapide.",
     "component.ingress.long": "Proxy inverse et routage du trafic avec Traefik : découverte automatique des services, protection des points d'accès d'administration et TLS optionnel via Let's Encrypt. La porte d'entrée des déploiements.",
     "component.observability.long": "Traçage distribué, métriques et corrélation des journaux avec Pydantic Logfire. Instrumente automatiquement votre application et s'adapte aux composants activés, pour que vous voyiez ce que fait réellement la production.",
+    "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Gestion complète des utilisateurs avec authentification JWT, cookies de session et rotation des jetons de rafraîchissement. Trois niveaux : e-mail/mot de passe basique, rôles et permissions RBAC, ou organisations multi-locataires. Inclut l'inscription, la connexion et un onglet de tableau de bord d'administration.",
     "service.ai.long": "Une plateforme IA complète : chat multi-fournisseurs, un catalogue de LLM d'environ 2000 modèles, suivi des coûts avec analyses d'utilisation, RAG optionnel pour des conversations qui connaissent votre code, et voix optionnelle (TTS/STT). Choisissez Pydantic AI ou LangChain comme framework.",

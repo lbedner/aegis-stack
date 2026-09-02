@@ -73,6 +73,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Datenbank mit SQLModel ORM (SQLite oder PostgreSQL)",
     "component.ingress": "Traefik Reverse Proxy und Load Balancer",
     "component.observability": "Logfire Observability, Tracing und Metriken",
+    "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
     "service.auth": "Benutzerauthentifizierung und -autorisierung mit JWT-Tokens",
@@ -1114,6 +1115,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "In-Memory-Datenspeicher, der als Cache und Message-Broker dient. Treibt Hintergrund-Job-Queues und Pub/Sub-Messaging zwischen Ihren Diensten an und gibt Request-Handlern einen schnellen gemeinsamen Cache.",
     "component.ingress.long": "Reverse-Proxy und Traffic-Routing mit Traefik: automatische Service-Erkennung, Schutz von Admin-Endpunkten und optionales TLS über Let's Encrypt. Die Eingangstür für Deployments.",
     "component.observability.long": "Verteiltes Tracing, Metriken und Log-Korrelation mit Pydantic Logfire. Instrumentiert Ihre Anwendung automatisch und passt sich den aktivierten Komponenten an, damit Sie sehen, was die Produktion wirklich tut.",
+    "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Vollständige Benutzerverwaltung mit JWT-Authentifizierung, Session-Cookies und Refresh-Token-Rotation. Drei Stufen: einfache E-Mail/Passwort, RBAC-Rollen und -Berechtigungen oder mandantenfähige Organisationen. Enthält Registrierung, Login und einen Admin-Dashboard-Tab.",
     "service.ai.long": "Eine vollständige AI-Plattform: Multi-Provider-Chat, ein LLM-Katalog mit rund 2000 Modellen, Kostenverfolgung mit Nutzungsanalysen, optionales RAG für codebasierte Konversationen und optionale Sprache (TTS/STT). Wählen Sie Pydantic AI oder LangChain als Framework.",

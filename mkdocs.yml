@@ -87,6 +87,7 @@ nav:
       - CLI Interface: components/scheduler/cli.md
       - Database Persistence: components/scheduler/persistence.md
       - Running Jobs: components/scheduler/running-jobs.md
+    - Storage: components/storage.md
     - Worker:
       - Getting Started: components/worker/index.md
       - Configuration: components/worker/configuration.md

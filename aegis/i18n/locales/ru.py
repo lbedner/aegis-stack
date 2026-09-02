@@ -73,6 +73,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "База данных с SQLModel ORM (SQLite или PostgreSQL)",
     "component.ingress": "Traefik — обратный прокси и балансировщик",
     "component.observability": "Logfire — наблюдаемость, трассировка и метрики",
+    "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Описания сервисов ──────────────────────────────────────────────
     "service.auth": "Аутентификация и авторизация с JWT-токенами",
@@ -1081,6 +1082,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "Хранилище данных в памяти, используемое как кэш и брокер сообщений. Обеспечивает работу очередей фоновых задач и pub/sub-обмена между сервисами и даёт обработчикам запросов быстрый общий кэш.",
     "component.ingress.long": "Обратный прокси и маршрутизация трафика с Traefik: автоматическое обнаружение сервисов, защита админ-эндпоинтов и необязательный TLS через Let's Encrypt. Точка входа для развёртываний.",
     "component.observability.long": "Распределённая трассировка, метрики и корреляция логов с Pydantic Logfire. Автоматически инструментирует ваше приложение и подстраивается под включённые компоненты, чтобы вы видели, что на самом деле происходит в продакшене.",
+    "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Полное управление пользователями с JWT-аутентификацией, сессионными cookie и ротацией refresh-токенов. Три уровня: базовый email/пароль, роли и права RBAC или мультитенантные организации. Включает регистрацию, вход и вкладку админ-панели.",
     "service.ai.long": "Полноценная AI-платформа: чат с несколькими провайдерами, каталог LLM примерно из 2000 моделей, учёт затрат с аналитикой использования, необязательный RAG для диалогов с учётом кодовой базы и необязательный голос (TTS/STT). В качестве фреймворка выберите Pydantic AI или LangChain.",

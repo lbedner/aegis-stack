@@ -13,20 +13,23 @@ from app.services.system.ui import get_component_label, get_component_subtitle
 
 from ..cards.card_utils import _open_modal, get_ai_engine_display
 
-# Component configuration: display names and modal routing
+# Display names per component id. The id itself is what opens the modal:
+# cards, overview rows and diagram nodes all use the health-tree id, and
+# the modal registers under it, so there is no second name to keep in step.
 # Subtitles are generated dynamically via get_component_label()
-COMPONENT_CONFIG: dict[str, dict[str, str]] = {
-    "backend": {"name": "Server", "modal_name": "backend"},
-    "database": {"name": "Database", "modal_name": "database"},
-    "cache": {"name": "Cache", "modal_name": "redis"},
-    "worker": {"name": "Worker", "modal_name": "worker"},
-    "ingress": {"name": "Ingress", "modal_name": "ingress"},
-    "ollama": {"name": "Inference", "modal_name": "ollama"},
-    "scheduler": {"name": "Scheduler", "modal_name": "scheduler"},
-    "service_ai": {"name": "AI Service", "modal_name": "ai"},
-    "service_auth": {"name": "Auth Service", "modal_name": "auth"},
-    "service_comms": {"name": "Comms Service", "modal_name": "comms"},
-    "frontend": {"name": "Frontend", "modal_name": "frontend"},
+COMPONENT_NAMES: dict[str, str] = {
+    "backend": "Server",
+    "database": "Database",
+    "cache": "Cache",
+    "worker": "Worker",
+    "ingress": "Ingress",
+    "ollama": "Inference",
+    "scheduler": "Scheduler",
+    "storage": "Storage",
+    "service_ai": "AI Service",
+    "service_auth": "Auth Service",
+    "service_comms": "Comms Service",
+    "frontend": "Frontend",
 }
 
 
@@ -86,17 +89,10 @@ class DiagramNode(ft.Container):
         self._component_data = component_data
         self._size = size
 
-        # Get configuration for this component
-        config = COMPONENT_CONFIG.get(
-            component_name,
-            {
-                "name": component_name.replace("_", " ").title(),
-                "modal_name": component_name,
-            },
+        self._display_name = COMPONENT_NAMES.get(
+            component_name, component_name.replace("_", " ").title()
         )
-        self._display_name = config["name"]
         self._subtitle = self._get_subtitle(component_name, component_data)
-        self._modal_name = config["modal_name"]
 
         # Status colors
         self._status_color = get_status_color(component_data.status)  # For dot
@@ -205,7 +201,7 @@ class DiagramNode(ft.Container):
         if not e.page:
             return
 
-        _open_modal(self._modal_name, self._component_data, e.page)
+        _open_modal(self._component_name, self._component_data, e.page)
 
     def update_data(self, component_data: ComponentStatus) -> None:
         """

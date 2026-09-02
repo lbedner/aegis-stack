@@ -99,6 +99,19 @@ class Settings(
     # addressed by content hash. A directory today; the storage component
     # points this at a bucket without any caller noticing.
     STORAGE_ROOT: str = "storage_data"
+    # Which backend get_storage() builds: the storage component flips this
+    # to a bucket; everything else keeps the directory above.
+    STORAGE_BACKEND: str = "{{ 's3' if include_storage else 'filesystem' }}"
+{%- if include_storage %}
+    # The bucket. Empty endpoint means AWS; the compose stack points it at
+    # the SeaweedFS container, which accepts any credentials by default.
+    S3_ENDPOINT_URL: str = "http://seaweedfs:8333"
+    S3_BUCKET: str = "{{ project_slug }}"
+    S3_ACCESS_KEY: str = "aegis"
+    S3_SECRET_KEY: str = "aegis-secret"
+    S3_REGION: str = "us-east-1"
+    S3_PATH_STYLE: bool = True
+{%- endif %}
 
     # Flet frontend settings
     FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)

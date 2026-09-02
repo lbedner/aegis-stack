@@ -102,6 +102,9 @@ from .dashboard.cards import (
 {% if include_observability %}
     ObservabilityCard,
 {% endif %}
+{% if include_storage %}
+    StorageCard,
+{% endif %}
 {% if ollama_mode != "none" %}
     OllamaCard,
 {% endif %}
@@ -884,6 +887,10 @@ async def setup_dashboard(view: BaseView) -> None:
 {% if include_observability %}
             elif component_name == "observability":
                 return ObservabilityCard(component_data).build()
+{% endif %}
+{% if include_storage %}
+            elif component_name == "storage":
+                return StorageCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
             elif component_name == "ollama":

@@ -1,0 +1,68 @@
+"""Health check for the object store (dashboard ComponentStatus).
+
+One HEAD on the bucket answers "reachable". Counts come from our own
+document rows when the documents service is present, never from walking
+the bucket: the bucket knows keys, we know what they are.
+"""
+
+import logging
+from urllib.parse import urlparse
+
+from app.core.config import settings
+from app.core.storage import get_storage
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+logger = logging.getLogger(__name__)
+
+STORAGE_COMPONENT_NAME = "storage"
+
+
+def _endpoint_label(endpoint: str | None) -> str:
+    if not endpoint:
+        return "AWS S3"
+    host = urlparse(endpoint).netloc or endpoint
+    return host
+
+
+async def check_storage_health() -> ComponentStatus:
+    """Backend, endpoint, bucket, and whether the bucket answers."""
+    storage = get_storage()
+    metadata: dict[str, object] = {
+        "backend": storage.backend_name,
+        "endpoint": _endpoint_label(settings.S3_ENDPOINT_URL),
+        "bucket": settings.S3_BUCKET,
+        "region": settings.S3_REGION,
+    }
+{%- if include_documents %}
+    try:
+        from app.core.db import get_async_session
+        from app.services.documents.service import DocumentService
+
+        async with get_async_session() as session:
+            summary = await DocumentService(session).summary()
+        metadata["objects"] = summary["total"]
+        metadata["bytes"] = summary["bytes"]
+    except Exception as e:  # noqa: BLE001 - counts are decoration, reachability is the check
+        logger.warning("Storage health could not count documents: %s", e)
+{%- endif %}
+    reachable = getattr(storage, "reachable", None)
+    if reachable is None:
+        return ComponentStatus(
+            name=STORAGE_COMPONENT_NAME,
+            status=ComponentStatusType.HEALTHY,
+            message="Filesystem store",
+            metadata=metadata,
+        )
+    if await reachable():
+        return ComponentStatus(
+            name=STORAGE_COMPONENT_NAME,
+            status=ComponentStatusType.HEALTHY,
+            message=f"Bucket {settings.S3_BUCKET} reachable",
+            metadata=metadata,
+        )
+    return ComponentStatus(
+        name=STORAGE_COMPONENT_NAME,
+        status=ComponentStatusType.UNHEALTHY,
+        message=f"Bucket {settings.S3_BUCKET} not reachable at {metadata['endpoint']}",
+        metadata=metadata,
+    )

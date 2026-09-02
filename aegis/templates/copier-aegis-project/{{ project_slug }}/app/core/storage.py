@@ -2,8 +2,8 @@
 
 The seam between "something needs to keep a file" and wherever files
 actually live. One protocol, and backends that implement it: a local
-filesystem today, object storage (MinIO in dev, S3 in production) when
-that component lands.
+filesystem here, a bucket in ``app.components.storage.s3`` when the
+storage component is selected.
 
 Keys are derived from the payload's SHA-256, never from a filename or a
 path. That is the whole reason the backend can change later without a
@@ -52,9 +52,10 @@ def validate_key(key: str) -> str:
 class ObjectStorage(Protocol):
     """What every backend can do, and nothing more.
 
-    Deliberately four methods. Presigned URLs, ranges, and lifecycle
-    rules are additions a later backend can offer; they are not what a
-    caller needs to store a document and read it back.
+    Deliberately small. Ranges and lifecycle rules are additions a later
+    backend can offer; they are not what a caller needs to store a
+    document and read it back. ``presigned_url`` is the one extra: a
+    bucket can hand out a time-limited link, a filesystem cannot.
     """
 
     backend_name: str
@@ -72,6 +73,11 @@ class ObjectStorage(Protocol):
     async def delete(self, key: str) -> bool:
         """True when this call removed an object, False when there was
         nothing to remove - absence is an answer, not an error."""
+        ...
+
+    async def presigned_url(self, key: str, *, expires_seconds: int = 600) -> str | None:
+        """A time-limited link straight to the object, or None when this
+        backend can only serve through the app."""
         ...
 
 
@@ -151,6 +157,10 @@ class FilesystemStorage:
     async def delete(self, key: str) -> bool:
         return await asyncio.to_thread(self._unlink, self._path(key))
 
+    async def presigned_url(self, key: str, *, expires_seconds: int = 600) -> str | None:
+        validate_key(key)
+        return None
+
 
 _storage: ObjectStorage | None = None
 
@@ -158,15 +168,20 @@ _storage: ObjectStorage | None = None
 def get_storage() -> ObjectStorage:
     """The configured object store.
 
-    One instance per process, chosen from settings. When the storage
-    component lands it decides here between a bucket and the filesystem;
-    every caller already speaks the protocol either way.
+    One instance per process, chosen from settings: a bucket when the
+    storage component set ``STORAGE_BACKEND`` to ``s3``, the filesystem
+    otherwise. Every caller speaks the protocol either way.
     """
     global _storage
     if _storage is None:
         from app.core.config import settings
 
-        _storage = FilesystemStorage(settings.STORAGE_ROOT)
+        if getattr(settings, "STORAGE_BACKEND", "filesystem") == "s3":
+            from app.components.storage.s3 import S3Storage
+
+            _storage = S3Storage.from_settings(settings)
+        else:
+            _storage = FilesystemStorage(settings.STORAGE_ROOT)
     return _storage
 
 

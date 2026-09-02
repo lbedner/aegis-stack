@@ -75,6 +75,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Database with SQLModel ORM (SQLite or PostgreSQL)",
     "component.ingress": "Traefik reverse proxy and load balancer",
     "component.observability": "Logfire observability, tracing, and metrics",
+    "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
     "service.auth": "User authentication and authorization with JWT tokens",
@@ -1218,6 +1219,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "In-memory data store used as a cache and message broker. Powers background job queues and pub/sub messaging between your services, and gives request handlers a fast shared cache.",
     "component.ingress.long": "Reverse proxy and traffic routing with Traefik: automatic service discovery, admin endpoint protection, and optional TLS via Let's Encrypt. The front door for deployments.",
     "component.observability.long": "Distributed tracing, metrics, and log correlation with Pydantic Logfire. Auto-instruments your application and adapts to whichever components you enable, so you can see what production is actually doing.",
+    "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Complete user management with JWT authentication, session cookies, and refresh-token rotation. Three levels: basic email/password, RBAC roles and permissions, or multi-tenant organizations. Includes registration, login, and an admin dashboard tab.",
     "service.ai.long": "A complete AI platform: multi-provider chat, an LLM catalog with roughly 2000 models, cost tracking with usage analytics, optional RAG for codebase-aware conversations, and optional voice (TTS/STT). Pick Pydantic AI or LangChain as the framework.",

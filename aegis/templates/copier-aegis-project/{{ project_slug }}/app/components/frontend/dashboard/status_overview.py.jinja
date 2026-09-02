@@ -129,6 +129,11 @@ def get_component_display_info(
         subtitle = f"Pydantic Logfire {version}".strip() if version else "Pydantic Logfire"
         return ("Observability", subtitle)
 {% endif %}
+{% if include_storage %}
+
+    elif component_name == "storage":
+        return ("Storage", get_component_subtitle("storage", metadata))
+{% endif %}
 
     elif component_name == "frontend":
         return ("Frontend", "Flet")
@@ -256,6 +261,9 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_observability %}
             "observability",
+{% endif %}
+{% if include_storage %}
+            "storage",
 {% endif %}
         ]
 

@@ -1097,6 +1097,9 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.BACKEND,
             ComponentNames.DATABASE,
         ],
+        # A bucket is where the paper should live in production, but a
+        # filesystem is enough to start; never force MinIO-shaped infra.
+        recommended_components=[ComponentNames.STORAGE],
         wiring=PluginWiring(
             routers=[
                 RouterWiring(

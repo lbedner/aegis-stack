@@ -282,6 +282,30 @@ COMPONENTS: dict[str, ComponentSpec] = {
             ],
         ),
     ),
+    "storage": ComponentSpec(
+        name="storage",
+        docs_path="components/storage",
+        type=ComponentType.INFRASTRUCTURE,
+        description="S3 object storage, SeaweedFS in dev",
+        long_description=(
+            "An S3 backend for the object store every stack already has: "
+            "documents, chat attachments, anything addressed by its content "
+            "hash. Talks to any S3-compatible endpoint; the dev stack ships "
+            "SeaweedFS in a container. Switching from the filesystem is a "
+            "byte copy, never a migration."
+        ),
+        docker_services=["seaweedfs"],
+        pyproject_deps=["boto3>=1.35"],
+        marker_path="app/components/storage",
+        files=FileManifest(
+            primary=[
+                "app/components/storage",
+                "app/components/frontend/dashboard/cards/storage_card.py",
+                "app/components/frontend/dashboard/modals/storage_modal.py",
+                "tests/components/test_storage_s3.py",
+            ],
+        ),
+    ),
     "ingress": ComponentSpec(
         name="ingress",
         docs_path="components/ingress",

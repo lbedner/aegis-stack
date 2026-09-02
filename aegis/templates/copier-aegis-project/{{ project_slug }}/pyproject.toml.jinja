@@ -36,6 +36,9 @@ dependencies = [
 {%- if include_redis %}
     "redis==5.0.8",
 {%- endif %}
+{%- if include_storage %}
+    "boto3>=1.35",
+{%- endif %}
 {%- if include_worker %}
 {%- if worker_backend == "taskiq" %}
     "taskiq>=0.11.11",
@@ -188,6 +191,10 @@ dev = [
 {%- if include_worker or include_htmx %}
     # Auto-reload for workers; asset rebuilds for the web frontend watcher
     "watchdog==4.0.2",
+{%- endif %}
+{%- if include_storage %}
+    # A bucket in the test process, so the S3 backend's tests need no server.
+    "moto[s3]>=5.0",
 {%- endif %}
 ]
 docs = [

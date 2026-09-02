@@ -75,6 +75,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Base de datos con SQLModel ORM (SQLite o PostgreSQL)",
     "component.ingress": "Traefik reverse proxy y balanceador de carga",
     "component.observability": "Logfire observabilidad, trazas y métricas",
+    "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
     "service.auth": "Autenticación y autorización de usuarios con tokens JWT",
@@ -1118,6 +1119,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "Almacén de datos en memoria que actúa como caché y agente de mensajes. Impulsa las colas de tareas en segundo plano y la mensajería pub/sub entre tus servicios, y ofrece a los manejadores de peticiones una caché compartida y rápida.",
     "component.ingress.long": "Proxy inverso y enrutamiento de tráfico con Traefik: descubrimiento automático de servicios, protección de endpoints de administración y TLS opcional mediante Let's Encrypt. La puerta de entrada para los despliegues.",
     "component.observability.long": "Trazado distribuido, métricas y correlación de registros con Pydantic Logfire. Instrumenta tu aplicación automáticamente y se adapta a los componentes que actives, para que veas qué está haciendo realmente producción.",
+    "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Gestión completa de usuarios con autenticación JWT, cookies de sesión y rotación de tokens de actualización. Tres niveles: correo/contraseña básico, roles y permisos RBAC, u organizaciones multiinquilino. Incluye registro, inicio de sesión y una pestaña de panel de administración.",
     "service.ai.long": "Una plataforma de IA completa: chat multiproveedor, un catálogo de LLM con unos 2000 modelos, seguimiento de costes con analíticas de uso, RAG opcional para conversaciones que conocen tu código y voz opcional (TTS/STT). Elige Pydantic AI o LangChain como framework.",

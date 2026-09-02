@@ -34,6 +34,13 @@ class TestContentKey:
 
 
 class TestFilesystemStorage:
+    def test_it_offers_no_presigned_urls(self, tmp_path: Path) -> None:
+        """Files are served through the app; only a bucket can sign a link."""
+        store = FilesystemStorage(tmp_path)
+        key = asyncio.run(store.put(b"served by the app"))
+
+        assert asyncio.run(store.presigned_url(key, expires_seconds=60)) is None
+
     @pytest.mark.asyncio
     async def test_put_returns_a_key_that_gets_the_bytes_back(
         self, tmp_path: Path

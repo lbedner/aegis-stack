@@ -119,6 +119,22 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "apscheduler"],
     ),
     StackCombination(
+        name="storage",
+        components=["storage"],
+        description="Base stack with the S3 object store (SeaweedFS in dev)",
+        expected_files=[
+            "app/components/backend/",
+            "app/components/frontend/",
+            "app/components/storage/s3.py",
+            "app/components/frontend/dashboard/cards/storage_card.py",
+            "app/components/frontend/dashboard/modals/storage_modal.py",
+            "tests/components/test_storage_s3.py",
+            "docker-compose.yml",
+        ],
+        expected_docker_services=["webserver", "seaweedfs"],
+        expected_pyproject_deps=["fastapi", "flet", "boto3"],
+    ),
+    StackCombination(
         name="worker",
         components=["worker"],
         description="Base stack with worker queues (includes Redis)",

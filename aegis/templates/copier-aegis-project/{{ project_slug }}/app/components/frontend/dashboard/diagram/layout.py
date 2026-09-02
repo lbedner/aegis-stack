@@ -39,6 +39,7 @@ RADIAL_POSITIONS: dict[str, tuple[float, float]] = {
     "database": (-0.50, 0.0),  # Left
     "ollama": (0.50, 0.0),  # Right
     "cache": (-0.15, 0.30),  # Bottom-center-left
+    "storage": (-0.50, -0.25),  # Left, above database
     "service_auth": (0.15, 0.30),  # Bottom-center-right
     "service_ai": (0.50, 0.25),  # Bottom-right
     "service_comms": (-0.50, 0.25),  # Bottom-left

@@ -22,6 +22,7 @@ class ComponentNames:
     HTMX = "htmx"
     INGRESS = "ingress"
     OBSERVABILITY = "observability"
+    STORAGE = "storage"
 
     # Ordered list for interactive selection. Worker leads and redis
     # follows the steps that auto-add it (worker bundles redis), so most
@@ -33,6 +34,7 @@ class ComponentNames:
         SCHEDULER,
         DATABASE,
         REDIS,
+        STORAGE,
         INGRESS,
         OBSERVABILITY,
         HTMX,
@@ -199,6 +201,7 @@ class AnswerKeys:
     CACHE = "include_cache"
     INGRESS = "include_ingress"
     OBSERVABILITY = "include_observability"
+    STORAGE = "include_storage"
 
     # Service include flags
     AUTH = "include_auth"

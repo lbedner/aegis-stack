@@ -143,6 +143,11 @@ include_observability:
   help: "Include Logfire observability and tracing?"
   default: false
 
+include_storage:
+  type: bool
+  help: "Include S3 object storage (SeaweedFS container in dev)?"
+  default: false
+
 ingress_tls:
   type: bool
   help: "Enable TLS with Let's Encrypt?"

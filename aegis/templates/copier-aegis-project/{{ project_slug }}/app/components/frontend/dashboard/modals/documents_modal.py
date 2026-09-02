@@ -16,7 +16,7 @@ import flet as ft
 from app.components.frontend.controls import (
     DataTable,
     DataTableColumn,
-    FormDropdown,
+    NativeDropdown,
     PrimaryText,
     SecondaryText,
     ThemedSwitch,
@@ -54,6 +54,27 @@ def matching_documents(docs: list[dict[str, Any]], query: str) -> list[dict[str,
     ]
 
 
+def _filter_dropdown(
+    everything: str,
+    options: list[tuple[str, str]],
+    *,
+    width: int,
+    on_change: Any,
+) -> NativeDropdown:
+    """A toolbar filter: dense, unlabeled, first entry means no filter."""
+    return NativeDropdown(
+        value=ALL,
+        options=[
+            ft.dropdown.Option(key=ALL, text=everything),
+            *[ft.dropdown.Option(key=k, text=t) for k, t in options],
+        ],
+        width=width,
+        enable_filter=False,
+        enable_search=False,
+        on_change=on_change,
+    )
+
+
 def _title_cell(doc: dict[str, Any]) -> Any:
     """The title, with a lock beside it when the document is protected."""
     title = str(doc.get("title") or "-")
@@ -77,32 +98,32 @@ class DocumentsTab(ft.Container):
         self.page = page
         self._docs: list[dict[str, Any]] = []
         self._query = ""
-        self._kind = FormDropdown(
-            label="Kind",
-            value=ALL,
+        self._kind = _filter_dropdown(
+            "All kinds",
+            [(k, k.title()) for k in DOCUMENT_KINDS],
             width=150,
-            options=[(ALL, "All"), *[(k, k.title()) for k in DOCUMENT_KINDS]],
             on_change=lambda _: page.run_task(self._load),
         )
-        self._tag = FormDropdown(
-            label="Tag",
-            value=ALL,
-            width=180,
-            options=[(ALL, "All")],
+        self._channel = _filter_dropdown(
+            "Any channel",
+            [(c, c.title()) for c in CHANNELS],
+            width=150,
             on_change=lambda _: page.run_task(self._load),
         )
-        self._channel = FormDropdown(
-            label="Via",
-            value=ALL,
-            width=140,
-            options=[(ALL, "All"), *[(c, c.title()) for c in CHANNELS]],
-            on_change=lambda _: page.run_task(self._load),
+        self._tag = _filter_dropdown(
+            "Any tag", [], width=170, on_change=lambda _: page.run_task(self._load)
         )
         self._replaced = ThemedSwitch(
             value=False, on_change=lambda _: page.run_task(self._load)
         )
+        # The search takes whatever width the fixed filters leave, so the
+        # row can never overrun the pane beside it.
         self._search = StyledTextField(
-            compact=True, hint_text="Search", width=220, on_change=self._on_search
+            compact=True,
+            hint_text="Search title or tag",
+            prefix_icon=ft.Icons.SEARCH,
+            expand=True,
+            on_change=self._on_search,
         )
         self._table = ft.Container(
             content=EmptyStatePlaceholder("Loading documents..."), expand=True
@@ -110,23 +131,21 @@ class DocumentsTab(ft.Container):
         self._pane = DocumentDetailPane(page, on_change=self._load)
         self._uploads = BrowserUploads(on_file=self._file)
         self._uploads.mount(page)
+        # One line: search, the three filters, then the switch and the one
+        # primary action pushed to the right edge.
         toolbar = ft.Row(
             [
-                PulseButton(on_click_callable=self._pick, text="Upload", compact=True),
-                self._kind,
-                self._tag,
-                self._channel,
                 self._search,
-                ft.Row(
-                    [
-                        SecondaryText("Replaced too", size=Theme.Typography.BODY_SMALL),
-                        self._replaced,
-                    ],
-                    spacing=Theme.Spacing.XS,
-                ),
+                self._kind,
+                self._channel,
+                self._tag,
+                ft.Container(width=Theme.Spacing.SM),
+                SecondaryText("Replaced", size=Theme.Typography.BODY_SMALL),
+                self._replaced,
+                PulseButton(on_click_callable=self._pick, text="Upload", compact=True),
             ],
-            spacing=Theme.Spacing.MD,
-            vertical_alignment=ft.CrossAxisAlignment.END,
+            spacing=Theme.Spacing.SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
         # The pane sits beside toolbar AND table, so it starts at the top of
         # the tab and has the full height to show a document without scrolling.
@@ -138,7 +157,7 @@ class DocumentsTab(ft.Container):
                 self._pane,
             ],
             spacing=Theme.Spacing.MD,
-            vertical_alignment=ft.CrossAxisAlignment.START,
+            vertical_alignment=ft.CrossAxisAlignment.STRETCH,
             expand=True,
         )
         self.padding = ft.padding.all(Theme.Spacing.MD)
@@ -168,7 +187,14 @@ class DocumentsTab(ft.Container):
         self._docs = items if isinstance(items, list) else []
         tags = await api.get(f"{API}/tags")
         labels = [str(t["label"]) for t in tags] if isinstance(tags, list) else []
-        self._tag.set_options([(ALL, "All"), *[(t, t) for t in labels]])
+        self._tag.options = [
+            ft.dropdown.Option(key=ALL, text="Any tag"),
+            *[ft.dropdown.Option(key=t, text=t) for t in labels],
+        ]
+        if self._tag.value not in {ALL, *labels}:
+            self._tag.value = ALL
+        if self._tag.page is not None:
+            self._tag.update()
         self._render()
 
     def _on_search(self, e: ft.ControlEvent) -> None:
@@ -290,7 +316,7 @@ class DocumentsDetailDialog(BaseDetailPopup):
             ),
             sections=[tabs],
             scrollable=False,
-            width=1280,
-            height=840,
+            width=1600,
+            height=900,
             status_detail=get_status_detail(component_data),
         )

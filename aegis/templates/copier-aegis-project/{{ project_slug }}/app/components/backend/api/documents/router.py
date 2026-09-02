@@ -22,6 +22,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from app.components.backend.api.documents.pages import router as pages_router
 from app.services.documents.deps import get_document_service, get_owner_user_id
 from app.services.documents.models import Document
 from app.services.documents.service import DocumentService, ProtectedDocumentError
@@ -306,3 +307,7 @@ async def delete_document(
     if not retired:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# Extraction and page routes live in their own module; same prefix.
+router.include_router(pages_router)

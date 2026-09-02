@@ -1130,6 +1130,8 @@ SERVICES: dict[str, ServiceSpec] = {
         migrations=[DOCUMENTS_MIGRATION],
         pyproject_deps=[
             "alembic==1.16.5",
+            # PDFium: the text layer and page rendering behind extraction.
+            "pypdfium2>=5.0,<6",
         ],
         template_files=[
             "app/services/documents/",
@@ -1140,11 +1142,15 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/api/documents",
                 "app/services/documents",
                 "tests/services/test_documents_service.py",
+                "tests/services/test_document_extraction.py",
                 "tests/api/test_documents_endpoints.py",
+                "tests/api/test_document_pages.py",
+                "tests/_pdf.py",
                 "tests/components/frontend/test_documents_ui.py",
                 "app/components/frontend/dashboard/cards/documents_card.py",
                 "app/components/frontend/dashboard/modals/documents_modal.py",
                 "app/components/frontend/dashboard/modals/documents_detail_pane.py",
+                "app/components/frontend/dashboard/modals/documents_pages.py",
             ],
         ),
     ),

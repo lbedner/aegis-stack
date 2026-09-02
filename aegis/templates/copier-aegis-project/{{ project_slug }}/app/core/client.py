@@ -203,6 +203,11 @@ class APIClient:
             "POST", endpoint, files=files, params=params, timeout=timeout
         )
 
+    async def get_bytes(self, endpoint: str) -> bytes | None:
+        """A binary body (a page image); the standard path, body undecoded."""
+        result = await self._request("GET", endpoint, raw=True)
+        return result if isinstance(result, bytes) else None
+
     async def put(
         self, endpoint: str, json: dict[str, Any] | None = None
     ) -> dict | list | None:
@@ -357,8 +362,9 @@ class APIClient:
         form_data: dict[str, str] | None = None,
         files: dict[str, tuple[str, bytes, str]] | None = None,
         timeout: float | None = None,
+        raw: bool = False,
         _retry_on_401: bool = True,
-    ) -> dict | list | None:
+    ) -> Any:
         if method == "GET":
             return await self._perform_request(
                 method,
@@ -368,6 +374,7 @@ class APIClient:
                 form_data=form_data,
                 files=files,
                 timeout=timeout,
+                raw=raw,
                 _retry_on_401=_retry_on_401,
             )
         try:
@@ -379,6 +386,7 @@ class APIClient:
                 form_data=form_data,
                 files=files,
                 timeout=timeout,
+                raw=raw,
                 _retry_on_401=_retry_on_401,
             )
         finally:
@@ -395,8 +403,9 @@ class APIClient:
         form_data: dict[str, str] | None = None,
         files: dict[str, tuple[str, bytes, str]] | None = None,
         timeout: float | None = None,
+        raw: bool = False,
         _retry_on_401: bool = True,
-    ) -> dict | list | None:
+    ) -> Any:
         url = f"{self.base_url}{endpoint}"
         headers: dict[str, str] = {}
         if form_data is not None:
@@ -421,7 +430,7 @@ class APIClient:
             self.last_error = None
             if response.status_code == 204:
                 return None
-            return response.json()
+            return response.content if raw else response.json()
         except httpx.TimeoutException:
             budget = timeout if timeout is not None else self.timeout
             self.last_error = f"{method} {endpoint} timed out after {budget:g}s"
@@ -451,6 +460,7 @@ class APIClient:
                         form_data=form_data,
                         files=files,
                         timeout=timeout,
+                        raw=raw,
                         _retry_on_401=False,
                     )
                 await self._emit_unauthorized()

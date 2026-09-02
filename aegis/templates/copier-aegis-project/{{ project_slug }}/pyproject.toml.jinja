@@ -82,6 +82,11 @@ dependencies = [
 {%- if include_auth or include_payment or include_insights or include_blog or include_documents or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend == "postgres") %}
     "alembic==1.16.5",
 {%- endif %}
+{%- if include_documents %}
+{#- PDFium: the text layer and page rendering behind document extraction.
+    Binary wheels, no system packages; the PNG encoder is the stdlib. #}
+    "pypdfium2>=5.0,<6",
+{%- endif %}
 {%- if include_ai %}
 {%- if ai_framework == "pydantic-ai" %}
 {# Map provider names to pydantic-ai-slim extras. Every provider routed

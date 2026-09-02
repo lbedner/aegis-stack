@@ -68,6 +68,22 @@ def discover_worker_queues() -> list[str]:
     return sorted(queues)
 
 
+def queue_tasks(queue_name: str) -> dict[str, Any]:
+    """Tasks a queue registers, keyed by name.
+
+    ``WorkerSettings.functions`` is the queue's own list, so services that
+    append their tasks to it are visible here without a second list to keep
+    in step.
+    """
+    try:
+        settings_class = get_worker_settings(queue_name)
+    except (ImportError, AttributeError) as e:
+        logger.warning(f"Failed to read tasks for queue '{queue_name}': {e}")
+        return {}
+
+    return {fn.__name__: fn for fn in getattr(settings_class, "functions", [])}
+
+
 def get_queue_metadata(queue_name: str) -> dict[str, Any]:
     """Get metadata for a queue from its WorkerSettings class.
 
@@ -91,7 +107,7 @@ def get_queue_metadata(queue_name: str) -> dict[str, Any]:
             ),
             "max_jobs": getattr(settings_class, "max_jobs", 10),
             "timeout": getattr(settings_class, "job_timeout", 300),
-            "functions": [f.__name__ for f in getattr(settings_class, "functions", [])],
+            "functions": list(queue_tasks(queue_name)),
         }
 
         # Add description if available

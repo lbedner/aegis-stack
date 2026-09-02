@@ -13,40 +13,63 @@ from typing import Any
 
 import flet as ft
 
-from app.components.frontend.controls import SecondaryText
+from app.components.frontend.controls import PrimaryText, SecondaryText
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.theme import AegisTheme as Theme
 
 API = "/api/v1/documents"
 
 
+def has_unread_pages(rows: list[dict[str, Any]]) -> bool:
+    """Whether a run would do anything.
+
+    A document with no page rows has never been extracted, so there is
+    everything to do; one whose every page is read has nothing, and the
+    run would come back "Already extracted".
+    """
+    return not rows or any(row.get("status") != "read" for row in rows)
+
+
 def extraction_summary(result: dict[str, Any]) -> str:
-    """What the snackbar says when a run lands."""
-    read = int(result.get("read") or 0)
-    unread = int(result.get("unread") or 0)
-    if read == 0 and unread == 0:
-        return "Already read"
-    if unread == 0:
-        return f"{read} pages read" if read != 1 else "1 page read"
-    return f"{read} read, {unread} unread"
+    """What the snackbar says when a run lands.
+
+    "Extracted", not "read": reading is what a person does to the page
+    afterwards, and the count here is of pages this run took text out of.
+    A run that missed some says so against the total, since "5 extracted"
+    alone hides the two it could not do.
+    """
+    extracted = int(result.get("read") or 0)
+    missed = int(result.get("unread") or 0)
+    if extracted == 0 and missed == 0:
+        return "Already extracted"
+    if missed == 0:
+        return f"{extracted} pages extracted" if extracted != 1 else "1 page extracted"
+    return f"{extracted} of {extracted + missed} pages extracted"
 
 
 class PagesStrip(ft.Row):
     """One tile per extracted page; empty until extraction has run."""
 
     def __init__(
-        self, *, page: ft.Page, api: Callable[[], Any], document_id: int
+        self,
+        *,
+        page: ft.Page,
+        api: Callable[[], Any],
+        document_id: int,
+        on_loaded: Callable[[list[dict[str, Any]]], None] | None = None,
     ) -> None:
         super().__init__([], wrap=True, spacing=Theme.Spacing.XS)
         self._page = page
         self._api = api
         self._document_id = document_id
+        self._on_loaded = on_loaded
 
     async def load(self) -> None:
         api = self._api()
-        rows = await api.get(f"{API}/{self._document_id}/pages")
+        fetched = await api.get(f"{API}/{self._document_id}/pages")
+        rows: list[dict[str, Any]] = fetched if isinstance(fetched, list) else []
         tiles: list[ft.Control] = []
-        for row in rows if isinstance(rows, list) else []:
+        for row in rows:
             number = int(row.get("page_number") or 0)
             png = None
             if row.get("has_image"):
@@ -55,6 +78,8 @@ class PagesStrip(ft.Row):
                 )
             tiles.append(self._tile(number, png, row))
         self.controls = tiles
+        if self._on_loaded is not None:
+            self._on_loaded(rows)
         if self.page is not None:
             self.update()
 
@@ -108,12 +133,16 @@ class PagesStrip(ft.Row):
                 [
                     ft.Container(image, width=460, height=600),
                     ft.Container(
-                        SecondaryText(
-                            text or detail.get("detail") or "Not read yet",
+                        PrimaryText(
+                            text or detail.get("detail") or "Not extracted yet",
                             selectable=True,
+                            size=Theme.Typography.BODY,
                         ),
                         width=380,
                         height=600,
+                        bgcolor=Theme.Colors.SURFACE_0,
+                        border_radius=6,
+                        padding=Theme.Spacing.MD,
                     ),
                 ],
                 spacing=Theme.Spacing.MD,

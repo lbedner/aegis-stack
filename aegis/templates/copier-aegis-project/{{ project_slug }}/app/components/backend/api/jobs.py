@@ -36,6 +36,7 @@ class JobStatusResponse(BaseModel):
     label: str
     result: dict[str, Any] | None = None
     error: str | None = None
+    started_at: str = ""
 
 
 class JobStartedResponse(BaseModel):
@@ -44,10 +45,39 @@ class JobStartedResponse(BaseModel):
     job_id: str
 
 
+@router.get("", response_model=list[JobStatusResponse])
+async def list_jobs() -> list[JobStatusResponse]:
+    """Every job known here or in the shared store, running first."""
+    return [
+        JobStatusResponse(**snapshot.as_dict())
+        for snapshot in await get_job_runner().list_all()
+    ]
+
+
+@router.get("/events")
+async def all_job_events() -> StreamingResponse:
+    """SSE stream of every job's status changes, for a live activity view.
+
+    Stays open until the client leaves; each frame is one job snapshot.
+    """
+    runner = get_job_runner()
+    queue = runner.subscribe_all()
+
+    async def stream() -> AsyncIterator[str]:
+        try:
+            while True:
+                snapshot = await queue.get()
+                yield f"event: status\ndata: {json.dumps(snapshot)}\n\n"
+        finally:
+            runner.unsubscribe_all(queue)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
 @router.get("/{job_id}", response_model=JobStatusResponse)
 async def job_status(job_id: str) -> JobStatusResponse:
     """Point-in-time job state."""
-    snapshot = get_job_runner().get(job_id)
+    snapshot = await get_job_runner().lookup(job_id)
     if snapshot is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Unknown job."
@@ -64,7 +94,7 @@ async def job_events(job_id: str) -> StreamingResponse:
     just reads until the terminal status (or the stream ends).
     """
     runner = get_job_runner()
-    queue = runner.subscribe(job_id)
+    queue = await runner.subscribe_any(job_id)
     if queue is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Unknown job."

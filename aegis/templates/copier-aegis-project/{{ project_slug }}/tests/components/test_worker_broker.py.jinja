@@ -159,4 +159,16 @@ async def test_is_poison_fails_open_on_redis_error(
 
     assert await b._is_poison(conn, "q", b"1-0") is False
     conn.xack.assert_not_awaited()
+
+
+def test_a_new_consumer_group_starts_at_the_beginning_of_the_stream() -> None:
+    """Work enqueued before the worker ever ran must still be delivered.
+
+    A group created at "$" starts at the tail, so every message already in
+    the stream is skipped forever: the job sits queued, the queue reports
+    nothing waiting, and no worker ever sees it.
+    """
+    from app.components.worker.queues.system import broker as system_broker
+
+    assert system_broker.consumer_id == "0"
 {%- endif %}

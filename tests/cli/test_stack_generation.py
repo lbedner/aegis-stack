@@ -135,6 +135,21 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "boto3"],
     ),
     StackCombination(
+        name="documents_worker",
+        components=["worker", "database"],
+        services=["documents"],
+        description="Documents with a worker: extraction runs on the queue",
+        expected_files=[
+            "app/components/worker/",
+            "app/services/documents/dispatch.py",
+            "app/services/documents/extraction_job.py",
+            "app/components/worker/tasks/document_tasks.py",
+            "docker-compose.yml",
+        ],
+        expected_docker_services=["webserver", "redis", "worker-system"],
+        expected_pyproject_deps=["fastapi", "flet", "arq", "pypdfium2"],
+    ),
+    StackCombination(
         name="worker",
         components=["worker"],
         description="Base stack with worker queues (includes Redis)",

@@ -9,8 +9,8 @@ under its own surface so the cost of reading paper is visible.
 from __future__ import annotations
 
 from app.core.config import settings
-from app.services.ai.config import AIServiceConfig
-from app.services.ai.domains.llm.providers import ProviderError, model_for
+from app.services.ai.domains.llm import active_model
+from app.services.ai.domains.llm.providers import ProviderError
 from app.services.ai.usage_recording import extract_usage, record_usage
 from app.services.documents.extraction import VisionReader
 
@@ -29,7 +29,7 @@ async def read_page(image: bytes, media_type: str) -> tuple[str, str]:
     from pydantic_ai import Agent as PydanticAgent
     from pydantic_ai.messages import BinaryContent
 
-    model, model_name = model_for(AIServiceConfig.from_settings(settings), settings)
+    model, model_name = await active_model.model_for_active(settings)
     agent: PydanticAgent[None, str] = PydanticAgent(model, instructions=INSTRUCTIONS)
     result = await agent.run(
         ["Transcribe this page.", BinaryContent(data=image, media_type=media_type)]
@@ -40,11 +40,16 @@ async def read_page(image: bytes, media_type: str) -> tuple[str, str]:
     return str(result.output), model_name
 
 
-def vision_reader() -> VisionReader | None:
-    """The reader, or None when the configured provider cannot hand out
-    a bare model (the keyless public endpoints build their own client)."""
+async def vision_reader() -> VisionReader | None:
+    """The reader, or None when the provider in force cannot hand out
+    a bare model (the keyless public endpoints build their own client).
+
+    Asks the selection that is actually active, not the .env bootstrap:
+    a worker resolving the wrong provider would refuse to read a page the
+    chosen model can see, or hand one to a model that cannot.
+    """
     try:
-        model_for(AIServiceConfig.from_settings(settings), settings)
+        await active_model.model_for_active(settings)
     except ProviderError:
         return None
     return read_page
@@ -60,6 +65,7 @@ from __future__ import annotations
 from app.services.documents.extraction import VisionReader
 
 
-def vision_reader() -> VisionReader | None:
+async def vision_reader() -> VisionReader | None:
+    """No reader here; async to match the one the AI stack supplies."""
     return None
 {%- endif %}

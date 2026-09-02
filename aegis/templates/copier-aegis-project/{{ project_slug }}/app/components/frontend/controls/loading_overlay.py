@@ -19,7 +19,6 @@ Example::
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import flet as ft
@@ -173,40 +172,16 @@ class LoadingOverlay(ft.Container):
         (already shown) overlay's label in sync with the job's status
         events, then either clears the overlay and returns the job's
         result, or shows the job's real error and returns None.
-
         ``api`` is the session APIClient (its cookie jar rides along).
         """
-        endpoint = f"/api/v1/jobs/{job_id}/events"
-        try:
-            async with api.stream("GET", endpoint, timeout=_SSE_TIMEOUT) as response:
-                if response.status_code != 200:
-                    self.fail(
-                        f"Could not follow the job (HTTP {response.status_code}).",
-                        title=title,
-                    )
-                    return None
-                async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    snapshot = json.loads(line[len("data:") :])
-                    status = snapshot.get("status")
-                    if status == "running":
-                        label = snapshot.get("label")
-                        if label:
-                            self.update_label(label)
-                        continue
-                    if status == "done":
-                        self.hide()
-                        return snapshot.get("result") or {}
-                    self.fail(
-                        snapshot.get("error") or "The operation failed.", title=title
-                    )
-                    return None
-        except Exception as e:
-            self.fail(f"Lost the job stream: {e}", title=title)
+        from app.components.frontend.controls.jobs import follow_job
+
+        outcome = await follow_job(api, job_id, on_label=self.update_label)
+        if outcome.error is not None:
+            self.fail(outcome.error, title=title)
             return None
-        self.fail("The job stream ended without a result.", title=title)
-        return None
+        self.hide()
+        return outcome.result
 
     async def _close(self) -> None:
         self.hide()

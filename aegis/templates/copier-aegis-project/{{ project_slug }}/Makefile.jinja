@@ -245,7 +245,7 @@ db-fresh: db-clean serve ## Nuclear DB reset + restart
 {% endif %}
 {% endif %}
 
-{% if include_worker %}#=============================================================================
+{% if include_worker and worker_backend == "arq" %}#=============================================================================
 # WORKER DEBUGGING (arq)
 #=============================================================================
 
@@ -279,7 +279,7 @@ help: ## Show this help message
 	@echo
 	@echo "TIP: Use 'make refresh' when everything is broken!"
 
-.PHONY: build{% if include_htmx %} build-static lint-frontend format-frontend{% endif %} serve serve-bg serve-prod stop-prod stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% if database_engine == "postgres" %} db-clean db-fresh{% endif %}{% endif %}{% if include_worker %} worker-test{% endif %} status help
+.PHONY: build{% if include_htmx %} build-static lint-frontend format-frontend{% endif %} serve serve-bg serve-prod stop-prod stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% if database_engine == "postgres" %} db-clean db-fresh{% endif %}{% endif %}{% if include_worker and worker_backend == "arq" %} worker-test{% endif %} status help
 
 # Default target - show help
 .DEFAULT_GOAL := help

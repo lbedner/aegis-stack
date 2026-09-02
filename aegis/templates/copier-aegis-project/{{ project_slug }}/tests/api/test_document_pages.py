@@ -5,6 +5,8 @@ import pytest
 
 from app.components.backend.api.documents import pages
 from app.core.storage import FilesystemStorage, set_storage
+from app.services.documents import dispatch
+from tests._jobs import wait_for_job
 from tests._pdf import pdf_bytes
 
 
@@ -12,7 +14,13 @@ from tests._pdf import pdf_bytes
 def _storage(tmp_path, monkeypatch: pytest.MonkeyPatch):
     set_storage(FilesystemStorage(tmp_path))
     # No model in the test process: scans come back unread, deterministically.
-    monkeypatch.setattr(pages, "vision_reader", lambda: None)
+    async def _no_vision() -> None:
+        return None
+
+    monkeypatch.setattr(pages, "vision_reader", _no_vision)
+    # No worker in a test process: the background path runs in-process here
+    # whatever the stack ships.
+    monkeypatch.setattr(pages, "start_extraction", dispatch.start_extraction_in_process)
     yield
     set_storage(None)
 
@@ -80,9 +88,6 @@ class TestExtraction:
         # Drive the job to its end here: the runner's task only advances
         # while the test client is inside a request, and a job left
         # running would hold the shared test database into the next test.
-        for _ in range(50):
-            body = client.get(f"/api/v1/jobs/{job_id}").json()
-            if body["status"] != "running":
-                break
+        body = wait_for_job(client, job_id)
         assert body["status"] == "done", body
         assert body["result"]["read"] == 1

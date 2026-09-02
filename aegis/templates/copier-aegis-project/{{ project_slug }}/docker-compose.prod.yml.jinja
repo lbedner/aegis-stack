@@ -45,13 +45,6 @@ services:
       - dev
       - prod
 {% endif %}
-{% if include_storage %}
-  seaweedfs:
-    ports: []
-    profiles:
-      - dev
-      - prod
-{% endif %}
 {% if database_engine == "postgres" and postgres_provider == "container" %}
   postgres:
     ports: []  # No direct DB access in production

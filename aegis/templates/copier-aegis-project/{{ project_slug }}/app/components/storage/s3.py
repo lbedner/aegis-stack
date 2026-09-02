@@ -37,6 +37,7 @@ class S3Storage:
 
         self.bucket = bucket
         self.endpoint_url = endpoint_url
+        self.region = region
         self._client: Any = boto3.client(
             "s3",
             endpoint_url=endpoint_url,
@@ -80,7 +81,9 @@ class S3Storage:
     async def delete(self, key: str) -> bool:
         return await asyncio.to_thread(self._delete, validate_key(key))
 
-    async def presigned_url(self, key: str, *, expires_seconds: int = 600) -> str | None:
+    async def presigned_url(
+        self, key: str, *, expires_seconds: int = 600
+    ) -> str | None:
         """A time-limited link straight to the object, no app in the middle."""
         validate_key(key)
         return await asyncio.to_thread(
@@ -101,13 +104,28 @@ class S3Storage:
     # -- blocking halves, run in threads ----------------------------------
 
     def _ensure_bucket(self) -> None:
+        """Create the bucket only when it is genuinely absent.
+
+        A 404 means missing; anything else (AccessDenied, a bad endpoint)
+        is a real error that creating a bucket would only paper over.
+        """
         if self._bucket_ready:
             return
         try:
             self._client.head_bucket(Bucket=self.bucket)
-        except self._client.exceptions.ClientError:
-            self._client.create_bucket(Bucket=self.bucket)
+        except self._client.exceptions.ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code not in ("404", "NoSuchBucket", "NotFound"):
+                raise
+            self._client.create_bucket(Bucket=self.bucket, **self._create_args())
         self._bucket_ready = True
+
+    def _create_args(self) -> dict[str, Any]:
+        # AWS insists on a LocationConstraint outside us-east-1 and rejects
+        # one inside it; self-hosted stores ignore the field either way.
+        if self.endpoint_url is None and self.region != "us-east-1":
+            return {"CreateBucketConfiguration": {"LocationConstraint": self.region}}
+        return {}
 
     def _put(self, key: str, data: bytes, content_type: str | None) -> None:
         self._ensure_bucket()

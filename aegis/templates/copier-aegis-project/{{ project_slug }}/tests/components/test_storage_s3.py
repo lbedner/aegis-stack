@@ -31,6 +31,56 @@ def store(monkeypatch: pytest.MonkeyPatch):
         )
 
 
+class _FakeClientError(Exception):
+    def __init__(self, code: str) -> None:
+        self.response = {"Error": {"Code": code}}
+
+
+class _StubClient:
+    """Just enough of the boto3 client to drive ``_ensure_bucket``."""
+
+    def __init__(self, head_error: str | None) -> None:
+        self._head_error = head_error
+        self.created: list[dict] = []
+        self.exceptions = type("E", (), {"ClientError": _FakeClientError})
+
+    def head_bucket(self, **kwargs: str) -> None:
+        if self._head_error:
+            raise _FakeClientError(self._head_error)
+
+    def create_bucket(self, **kwargs) -> None:
+        self.created.append(kwargs)
+
+
+class TestEnsureBucket:
+    def _store(self, head_error: str | None, *, endpoint: str | None, region: str):
+        store = S3Storage.__new__(S3Storage)
+        store.bucket, store.endpoint_url, store.region = "b", endpoint, region
+        store._client, store._bucket_ready = _StubClient(head_error), False
+        return store
+
+    def test_a_missing_bucket_is_created(self) -> None:
+        store = self._store("404", endpoint="http://seaweedfs:8333", region="us-east-1")
+        store._ensure_bucket()
+        assert store._client.created == [{"Bucket": "b"}]
+
+    def test_aws_outside_us_east_1_names_the_region(self) -> None:
+        store = self._store("NoSuchBucket", endpoint=None, region="eu-west-1")
+        store._ensure_bucket()
+        assert store._client.created == [
+            {
+                "Bucket": "b",
+                "CreateBucketConfiguration": {"LocationConstraint": "eu-west-1"},
+            }
+        ]
+
+    def test_any_other_error_is_not_a_reason_to_create(self) -> None:
+        store = self._store("AccessDenied", endpoint=None, region="us-east-1")
+        with pytest.raises(_FakeClientError):
+            store._ensure_bucket()
+        assert store._client.created == []
+
+
 class TestS3Storage:
     def test_put_then_get_round_trips_under_the_content_key(self, store) -> None:
         key = asyncio.run(store.put(b"renewal request", content_type="text/plain"))

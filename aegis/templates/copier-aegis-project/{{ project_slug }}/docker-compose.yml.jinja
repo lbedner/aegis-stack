@@ -43,6 +43,7 @@ services:
 {%- if include_storage %}
       seaweedfs:
         condition: service_healthy
+        required: false
 {%- endif %}
 {%- if database_engine == "postgres" %}
       postgres:
@@ -279,7 +280,6 @@ services:
           cpus: '0.50'
     profiles:
       - dev
-      - prod
 {%- endif %}
 
 {%- if database_engine == "postgres" %}

@@ -5,14 +5,12 @@ document rows when the documents service is present, never from walking
 the bucket: the bucket knows keys, we know what they are.
 """
 
-import logging
 from urllib.parse import urlparse
 
 from app.core.config import settings
+from app.core.log import logger
 from app.core.storage import get_storage
 from app.services.system.models import ComponentStatus, ComponentStatusType
-
-logger = logging.getLogger(__name__)
 
 STORAGE_COMPONENT_NAME = "storage"
 
@@ -43,7 +41,7 @@ async def check_storage_health() -> ComponentStatus:
         metadata["objects"] = summary["total"]
         metadata["bytes"] = summary["bytes"]
     except Exception as e:  # noqa: BLE001 - counts are decoration, reachability is the check
-        logger.warning("Storage health could not count documents: %s", e)
+        logger.warning("storage.health.count_failed", error=str(e))
 {%- endif %}
     reachable = getattr(storage, "reachable", None)
     if reachable is None:

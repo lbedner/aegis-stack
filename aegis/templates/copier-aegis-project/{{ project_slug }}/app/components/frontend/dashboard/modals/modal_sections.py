@@ -346,7 +346,7 @@ class StatRowsSection(ft.Container):
     def __init__(
         self,
         title: str,
-        stats: dict[str, str],
+        stats: dict[str, str | ft.Control],
         label_width: int = 150,
     ) -> None:
         """
@@ -369,7 +369,7 @@ class StatRowsSection(ft.Container):
                             weight=Theme.Typography.WEIGHT_SEMIBOLD,
                             width=label_width,
                         ),
-                        BodyText(value),
+                        value if isinstance(value, ft.Control) else BodyText(value),
                     ],
                     spacing=Theme.Spacing.MD,
                 )

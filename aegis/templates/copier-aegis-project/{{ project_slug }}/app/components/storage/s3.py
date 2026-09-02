@@ -94,9 +94,11 @@ class S3Storage:
         )
 
     async def reachable(self) -> bool:
-        """One HEAD on the bucket: the health check's whole question."""
+        """Can we reach the bucket? A bucket that does not exist yet is
+        created here, the same as on first put: an empty store is healthy,
+        not unreachable."""
         try:
-            await asyncio.to_thread(self._client.head_bucket, Bucket=self.bucket)
+            await asyncio.to_thread(self._ensure_bucket)
         except Exception:  # noqa: BLE001 - any failure is "not reachable"
             return False
         return True

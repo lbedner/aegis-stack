@@ -5139,9 +5139,12 @@
 </span><span id="__span-26-3"><a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-26-4"><a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;task_name&quot;: &quot;io_simulation_task&quot;, &quot;queue_type&quot;: &quot;load_test&quot;}&#39;</span>
 </span><span id="__span-26-5"><a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>
-</span><span id="__span-26-6"><a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a><span class="c1"># Or use burst mode for one-off testing</span>
+</span><span id="__span-26-6"><a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a><span class="c1"># Or use burst mode for one-off testing (arq only)</span>
 </span><span id="__span-26-7"><a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>make<span class="w"> </span>worker-test
 </span></code></pre></div>
+<p>Burst mode is arq's: it drains the queue once and exits. TaskIQ and dramatiq
+have no run-once flag, so projects on those backends do not ship the
+<code>worker-test</code> target; enqueue a task and watch <code>make logs-worker</code> instead.</p>
 <h2 id="configuration">Configuration</h2>
 <p>Worker behavior is configured in <code>app/core/config.py</code>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="c1"># Redis connection (DSN format)</span>

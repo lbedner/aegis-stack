@@ -106,6 +106,13 @@ class TestS3Storage:
         assert asyncio.run(store.delete(key)) is True
         assert asyncio.run(store.exists(key)) is False
 
+    def test_an_empty_store_is_reachable_and_gets_its_bucket(self, store) -> None:
+        """Before the first upload there is no bucket; that is not an outage."""
+        assert asyncio.run(store.reachable()) is True
+        # The bucket itself now answers a HEAD; an object in it still does not.
+        store._client.head_bucket(Bucket=store.bucket)
+        assert asyncio.run(store.exists(content_key(b"anything"))) is False
+
     def test_a_presigned_url_names_the_key(self, store) -> None:
         key = asyncio.run(store.put(b"shareable"))
 

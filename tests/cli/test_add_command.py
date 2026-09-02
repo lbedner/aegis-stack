@@ -168,6 +168,25 @@ class TestAddCommand:
         # Verify database files were created
         assert (project_path / "app" / "core" / "db.py").exists()
 
+    def test_add_storage_to_base_project(self, project_factory: ProjectFactory) -> None:
+        """Adding the object store brings its backend, card and modal."""
+        project_path = project_factory("base")
+        assert load_copier_answers(project_path).get("include_storage") is False
+
+        result = run_aegis_command(
+            "add", "storage", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        assert load_copier_answers(project_path).get("include_storage") is True
+        for rel in (
+            "app/components/storage/s3.py",
+            "app/components/frontend/dashboard/cards/storage_card.py",
+            "app/components/frontend/dashboard/modals/storage_modal.py",
+        ):
+            assert (project_path / rel).exists(), rel
+        assert "seaweedfs" in (project_path / "docker-compose.yml").read_text()
+
     def test_add_database_already_enabled(
         self, project_factory: ProjectFactory
     ) -> None:

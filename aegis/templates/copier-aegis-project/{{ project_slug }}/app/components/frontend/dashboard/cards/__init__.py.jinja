@@ -42,6 +42,9 @@ from .ingress_card import IngressCard
 {%- if include_observability %}
 from .observability_card import ObservabilityCard
 {%- endif %}
+{%- if include_storage %}
+from .storage_card import StorageCard
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .ollama_card import OllamaCard
 {%- endif %}
@@ -101,6 +104,9 @@ __all__ = [
 {%- endif %}
 {%- if include_observability %}
     "ObservabilityCard",
+{%- endif %}
+{%- if include_storage %}
+    "StorageCard",
 {%- endif %}
 {%- if ollama_mode != "none" %}
     "OllamaCard",

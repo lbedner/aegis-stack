@@ -36,6 +36,7 @@ class TestSchedulerPersistenceTracking:
                 True,  # scheduler
                 True,  # persistence
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -69,6 +70,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # persistence
                 False,  # database
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -102,6 +104,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # scheduler
                 True,  # database
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -137,6 +140,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # scheduler
                 True,  # database
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -173,6 +177,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # persistence
                 True,  # database
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -214,6 +219,7 @@ class TestSchedulerPersistenceTracking:
                 True,  # worker
                 True,  # scheduler
                 True,  # persistence
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -253,6 +259,7 @@ class TestSchedulerPersistenceTracking:
                 True,  # scheduler
                 True,  # persistence
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -422,6 +429,7 @@ class TestSchedulerPersistenceLogic:
                 True,  # persistence
                 False,  # redis
                 # database skipped (added by scheduler)
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -457,6 +465,7 @@ class TestSchedulerPersistenceLogic:
                     True,  # scheduler
                     True,  # persistence
                     # database skipped (added by scheduler)
+                    False,  # storage
                     False,  # ingress
                     False,  # observability
                     False,  # htmx

@@ -54,6 +54,12 @@ services:
       # container still listens on 6379 for in-network clients.
       - "${REDIS_HOST_PORT:-6379}:6379"
 {%- endif %}
+{%- if include_storage %}
+
+  seaweedfs:
+    ports:
+      - "${SEAWEEDFS_HOST_PORT:-8333}:8333"
+{%- endif %}
 {%- if database_engine == "postgres" %}
 
   postgres:

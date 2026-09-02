@@ -34,11 +34,16 @@ services:
       # falls back to PORT for a raw `docker compose up`.
       - "${WEBSERVER_HOST_PORT:-${PORT:-8000}}:${PORT:-8000}"
 {%- endif %}
-{%- if include_redis or database_engine == "postgres" or ollama_mode == "docker" %}
+{%- if include_redis or include_storage or database_engine == "postgres" or ollama_mode == "docker" %}
     depends_on:
 {%- if include_redis %}
       redis:
         condition: service_healthy
+{%- endif %}
+{%- if include_storage %}
+      seaweedfs:
+        condition: service_healthy
+        required: false
 {%- endif %}
 {%- if database_engine == "postgres" %}
       postgres:
@@ -55,13 +60,20 @@ services:
         condition: service_healthy
 {%- endif %}
 {%- endif %}
-{%- if include_redis or include_observability %}
+{%- if include_redis or include_storage or include_observability %}
     environment:
       # Docker container marker
       - DOCKER_CONTAINER=1
 {%- if include_redis %}
       # Redis connection for health checks
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+{%- endif %}
+{%- if include_storage %}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://seaweedfs:8333}
+      - S3_BUCKET=${S3_BUCKET:-{{ project_slug }}}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-aegis}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-aegis-secret}
+      - S3_REGION=${S3_REGION:-us-east-1}
 {%- endif %}
 {%- if include_observability %}
       # Logfire observability token
@@ -247,6 +259,29 @@ services:
       - prod
 {%- endif %}
 
+{%- if include_storage %}
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.45
+    hostname: seaweedfs
+    command: server -s3 -dir=/data -ip=seaweedfs -ip.bind=0.0.0.0 -master.volumeSizeLimitMB=1024
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8333/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.50'
+    profiles:
+      - dev
+{%- endif %}
+
 {%- if database_engine == "postgres" %}
   # POSTGRESQL SERVICE
 
@@ -360,6 +395,9 @@ services:
 volumes:
   aegis-data:
   storage-data:
+{%- if include_storage %}
+  seaweedfs-data:
+{%- endif %}
 {%- if database_engine == "postgres" %}
   postgres-data:
 {%- endif %}

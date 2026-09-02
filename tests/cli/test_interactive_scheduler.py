@@ -48,6 +48,7 @@ class TestInteractiveSchedulerFlow:
                 True,  # scheduler
                 True,  # persistence
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -91,6 +92,7 @@ class TestInteractiveSchedulerFlow:
                 True,  # scheduler
                 True,  # persistence
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -127,6 +129,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no persistence
                 False,  # database=no
                 False,  # redis
+                False,  # storage
                 False,  # ingress=no
                 False,  # observability=no
                 False,  # htmx
@@ -159,6 +162,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # scheduler
                 False,  # database
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -197,6 +201,7 @@ class TestInteractiveSchedulerFlow:
                 True,  # scheduler
                 True,  # persistence
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -243,6 +248,7 @@ class TestInteractiveSchedulerFlow:
                 True,  # worker=yes (auto-adds redis; redis prompt skipped)
                 True,  # scheduler=yes
                 True,  # persistence=yes
+                False,  # storage
                 False,  # ingress=no
                 False,  # observability=no
                 False,  # htmx
@@ -281,6 +287,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # scheduler
                 True,  # database
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx

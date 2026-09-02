@@ -92,6 +92,7 @@ jobs:
           - payment
           - blog
           - documents
+          - storage
           - finance
           - finance_auth
           - comms

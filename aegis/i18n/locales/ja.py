@@ -68,6 +68,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "SQLModel ORM 付きデータベース（SQLite / PostgreSQL）",
     "component.ingress": "Traefik リバースプロキシ＆ロードバランサー",
     "component.observability": "Logfire による監視・トレース・メトリクス",
+    "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── サービス説明 ────────────────────────────────────────────────────
     "service.auth": "JWT トークンによるユーザー認証・認可",
@@ -1099,6 +1100,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "キャッシュおよびメッセージブローカーとして使われるインメモリデータストア。バックグラウンドのジョブキューやサービス間の pub/sub メッセージングを支え、リクエストハンドラーに高速な共有キャッシュを提供します。",
     "component.ingress.long": "Traefik によるリバースプロキシとトラフィックルーティング。サービスの自動検出、管理エンドポイントの保護、Let's Encrypt による任意の TLS を提供します。デプロイの玄関口です。",
     "component.observability.long": "Pydantic Logfire による分散トレーシング、メトリクス、ログ相関。アプリケーションを自動計装し、有効にしたコンポーネントに合わせて適応するので、本番環境の実際の挙動を把握できます。",
+    "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "JWT 認証、セッション Cookie、リフレッシュトークンのローテーションを備えた完全なユーザー管理。3 つのレベル：基本のメール/パスワード、RBAC のロールと権限、マルチテナント組織。登録、ログイン、管理ダッシュボードのタブを含みます。",
     "service.ai.long": "完全な AI プラットフォーム：マルチプロバイダーのチャット、約 2000 モデルの LLM カタログ、利用状況分析を伴うコスト追跡、コードベースを理解する会話のための任意の RAG、任意の音声（TTS/STT）。フレームワークは Pydantic AI または LangChain から選べます。",

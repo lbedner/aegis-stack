@@ -605,6 +605,13 @@ async def startup_hook() -> None:
     logger.info("Observability component health check registered")
     {%- endif %}
 
+    {%- if include_storage %}
+    # Register storage component health check (bucket reachability)
+    from app.components.storage.health import check_storage_health
+    register_health_check("storage", check_storage_health)
+    logger.info("Storage component health check registered")
+    {%- endif %}
+
     logger.info("Component health detection complete")
 
     # ==========================================

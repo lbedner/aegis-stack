@@ -47,6 +47,9 @@ from .ingress_modal import IngressDetailDialog
 {%- if include_observability %}
 from .observability_modal import ObservabilityDetailDialog
 {%- endif %}
+{%- if include_storage %}
+from .storage_modal import StorageDetailDialog
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .ollama_modal import OllamaDetailDialog
 {%- endif %}
@@ -100,6 +103,9 @@ __all__ = [
 {%- endif %}
 {%- if include_observability %}
     "ObservabilityDetailDialog",
+{%- endif %}
+{%- if include_storage %}
+    "StorageDetailDialog",
 {%- endif %}
 {%- if ollama_mode != "none" %}
     "OllamaDetailDialog",

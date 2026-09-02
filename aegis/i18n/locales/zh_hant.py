@@ -60,6 +60,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "數據庫，基於 SQLModel ORM（SQLite 或 PostgreSQL）",
     "component.ingress": "Traefik 反向代理與負載均衡",
     "component.observability": "Logfire 可觀測性、鏈路追蹤與指標監控",
+    "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── 服務描述 ────────────────────────────────────────────────────────
     "service.auth": "用戶認證與授權（JWT）",
@@ -951,6 +952,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "記憶體資料儲存，用作快取和訊息代理。為後臺任務佇列和服務間的發布/訂閱訊息提供支援，並為請求處理器提供快速的共享快取。",
     "component.ingress.long": "使用 Traefik 實現反向代理和流量路由：自動服務探索、管理端點保護，以及透過 Let's Encrypt 提供的可選 TLS。部署的入口。",
     "component.observability.long": "借助 Pydantic Logfire 實現分散式追蹤、指標和日誌關聯。自動為你的應用程式埋點，並適配你啟用的各個元件，讓你看清正式環境實際在做什麼。",
+    "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "完整的使用者管理，包含 JWT 認證、工作階段 Cookie 和重新整理權杖輪替。三個級別：基礎的電子郵件/密碼、RBAC 角色與權限，或多租戶組織。內含註冊、登入以及管理後臺分頁。",
     "service.ai.long": "一個完整的 AI 平台：多供應商對話、約 2000 個模型的 LLM 目錄、帶使用分析的成本追蹤、用於程式碼庫感知對話的可選 RAG，以及可選語音（TTS/STT）。框架可選 Pydantic AI 或 LangChain。",

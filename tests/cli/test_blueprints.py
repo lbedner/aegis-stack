@@ -214,8 +214,8 @@ class TestEscFromBlueprintReview:
         from aegis.cli.guided import run_guided_init_flow
 
         # Gallery door, open, pick finance, esc on review -> back at the
-        # doors (cursor on blank canvas), take it, decline all 14, build.
-        keys = ["down", "\r", "\r", "esc", "\r"] + ["n"] * 15 + ["\r"]
+        # doors (cursor on blank canvas), take it, decline all 15, build.
+        keys = ["down", "\r", "\r", "esc", "\r"] + ["n"] * 16 + ["\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         # Nothing from the blueprint survived: it was un-picked, not edited.

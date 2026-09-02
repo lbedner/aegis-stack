@@ -260,6 +260,7 @@ class TestInteractiveServiceSelection:
                 False,  # worker
                 False,  # scheduler
                 False,  # database
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -293,6 +294,7 @@ class TestInteractiveServiceSelection:
                 False,  # worker
                 False,  # scheduler
                 False,  # database
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx

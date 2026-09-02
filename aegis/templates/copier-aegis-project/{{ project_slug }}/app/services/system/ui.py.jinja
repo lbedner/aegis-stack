@@ -63,6 +63,9 @@ def get_component_title(component_name: str) -> str:
         {%- if include_observability %}
         "observability": "Observability",
         {%- endif %}
+        {%- if include_storage %}
+        "storage": "Storage",
+        {%- endif %}
         {%- if include_ollama %}
         "ollama": "Inference",
         {%- endif %}
@@ -144,6 +147,9 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
         {%- if include_ingress %}
         "ingress": "Traefik",
+        {%- endif %}
+        {%- if include_storage %}
+        "storage": "S3 object store",
         {%- endif %}
     }
     return mapping.get(component_name, component_name.replace("_", " ").title())

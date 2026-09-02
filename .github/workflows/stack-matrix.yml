@@ -92,6 +92,7 @@ jobs:
           - payment
           - blog
           - documents
+          - documents_worker
           - storage
           - finance
           - finance_auth

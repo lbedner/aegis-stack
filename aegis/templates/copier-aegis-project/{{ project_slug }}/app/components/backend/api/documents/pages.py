@@ -1,8 +1,9 @@
 """Extraction and the pages it produces.
 
-``POST /{id}/extract`` reads the document (synchronously by default, as a
-background job with ``?background=true`` so a 40-page statement can
-stream progress over the jobs SSE endpoint). The page routes read back
+``POST /{id}/extract`` reads the document: synchronously by default, or
+with ``?background=true`` as a job that runs on the worker when the stack
+has one and in-process otherwise, streaming progress over the jobs SSE
+endpoint either way. The page routes read back
 what extraction stored: status per page, one page's text, its image.
 """
 
@@ -12,20 +13,18 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.core.db import get_async_session
 from app.core.storage import get_storage
 from app.services.documents.deps import get_document_service, get_owner_user_id
+from app.services.documents.dispatch import start_extraction
 from app.services.documents.extraction import (
     DocumentContentMissingError,
     DocumentNotFoundError,
-    ExtractionResult,
     extract_document,
 )
 from app.services.documents.models import DocumentPage
 from app.services.documents.queries import page_for, pages_for
 from app.services.documents.service import DocumentService
 from app.services.documents.vision import vision_reader
-from app.services.system.jobs import JobHandle, get_job_runner
 
 router = APIRouter()
 
@@ -78,7 +77,7 @@ async def extract(
                 service.db,
                 document_id,
                 owner_user_id=owner_user_id,
-                vision=vision_reader(),
+                vision=await vision_reader(),
                 force=force,
             )
         except DocumentNotFoundError:
@@ -92,24 +91,8 @@ async def extract(
             ) from None
         return JSONResponse(result.as_dict())
 
-    async def work(handle: JobHandle) -> dict[str, int]:
-        def progress(page: int, total: int) -> None:
-            handle.set_label(f"Reading page {page} of {total}...")
-
-        async with get_async_session() as session:
-            result: ExtractionResult = await extract_document(
-                session,
-                document_id,
-                owner_user_id=owner_user_id,
-                vision=vision_reader(),
-                force=force,
-                progress=progress,
-            )
-            await session.commit()
-        return result.as_dict()
-
-    job_id = get_job_runner().start(
-        f"documents-extract:{document_id}", work, label="Opening the document..."
+    job_id = await start_extraction(
+        document_id, owner_user_id=owner_user_id, force=force
     )
     return JSONResponse({"job_id": job_id}, status_code=status.HTTP_202_ACCEPTED)
 

@@ -32,6 +32,31 @@ TASK_FUNCTIONS: list[Callable[..., Any]] = [
 ]
 
 
+def _registered_tasks() -> dict[str, Any]:
+    """Every task the queue modules register, keyed by name.
+
+    The queues are the source of truth. Services append their own tasks to
+    them, and a list kept here instead goes stale the moment one does — the
+    task runs, and the API that is supposed to offer it says it does not
+    exist.
+    """
+    from app.components.worker.registry import discover_worker_queues, queue_tasks
+
+    tasks: dict[str, Any] = {}
+    for queue_name in discover_worker_queues():
+        tasks.update(queue_tasks(queue_name))
+    return tasks
+
+
+def _underlying_function(task: Any) -> Callable[..., Any]:
+    """The plain function behind a queue entry.
+
+    TaskIQ and dramatiq hand out a wrapper; arq keeps the function itself.
+    Callers want the function — its name and its docstring live there.
+    """
+    return getattr(task, "original_func", None) or getattr(task, "fn", None) or task
+
+
 def get_task_by_name(task_name: str) -> Callable[..., Any] | None:
     """
     Get task function by name.
@@ -42,10 +67,8 @@ def get_task_by_name(task_name: str) -> Callable[..., Any] | None:
     Returns:
         Task function or None if not found
     """
-    for task_func in TASK_FUNCTIONS:
-        if task_func.__name__ == task_name:
-            return task_func
-    return None
+    task = _registered_tasks().get(task_name)
+    return _underlying_function(task) if task is not None else None
 
 
 def list_available_tasks() -> list[str]:
@@ -55,7 +78,7 @@ def list_available_tasks() -> list[str]:
     Returns:
         List of task function names
     """
-    return [task_func.__name__ for task_func in TASK_FUNCTIONS]
+    return list(_registered_tasks())
 
 
 def get_queue_functions(queue_type: str) -> list[Callable[..., Any]]:
@@ -104,17 +127,10 @@ def get_queue_for_task(task_name: str) -> str:
     Returns:
         Queue type that should handle this task
     """
-    # Task to queue mapping
-    task_queue_map = {
-        # Load test tasks
-        "load_test_orchestrator": "load_test",
-        "cpu_intensive_task": "load_test",
-        "io_simulation_task": "load_test",
-        "memory_operations_task": "load_test",
-        "failure_testing_task": "load_test",
-        # Future system and media tasks would go here
-    }
+    from app.components.worker.registry import discover_worker_queues, queue_tasks
 
-    return task_queue_map.get(
-        task_name, get_default_queue()
-    )  # Default to configured default queue
+    for queue_name in discover_worker_queues():
+        if task_name in queue_tasks(queue_name):
+            return queue_name
+
+    return get_default_queue()

@@ -1,0 +1,104 @@
+{%- if include_worker %}
+"""The registered-task list a queue reports must be the queue's own.
+
+Services add tasks to the queue modules (documents extraction, for one), so
+a list kept beside the module goes stale the moment one does, and the
+dashboard then shows a queue that is missing the task it is running.
+"""
+
+from __future__ import annotations
+
+import importlib
+from typing import Any
+
+import pytest
+
+from app.components.worker.registry import (
+    discover_worker_queues,
+    get_queue_metadata,
+)
+from app.components.worker.tasks import (
+    get_queue_for_task,
+    get_task_by_name,
+    list_available_tasks,
+)
+
+{%- if worker_backend == "taskiq" %}
+
+
+def _defined_tasks(module: Any) -> set[str]:
+    return {
+        name
+        for name, obj in vars(module).items()
+        if not name.startswith("_") and hasattr(obj, "kiq")
+    }
+{%- elif worker_backend == "dramatiq" %}
+
+
+def _defined_tasks(module: Any) -> set[str]:
+    import dramatiq
+
+    return {
+        name
+        for name, obj in vars(module).items()
+        if not name.startswith("_") and isinstance(obj, dramatiq.Actor)
+    }
+{%- else %}
+
+
+def _defined_tasks(module: Any) -> set[str]:
+    settings = module.WorkerSettings
+    return {fn.__name__ for fn in getattr(settings, "functions", [])}
+{%- endif %}
+
+
+@pytest.mark.parametrize("queue_name", discover_worker_queues())
+def test_queue_reports_every_task_it_defines(queue_name: str) -> None:
+    module = importlib.import_module(
+        f"app.components.worker.queues.{queue_name}"
+    )
+    reported = set(get_queue_metadata(queue_name)["functions"])
+    defined = _defined_tasks(module)
+
+    # A queue may legitimately define nothing yet; it may never run a task
+    # it does not report.
+    assert defined <= reported, (
+        f"{queue_name} runs tasks it does not report: {sorted(defined - reported)}"
+    )
+
+
+@pytest.mark.parametrize("queue_name", discover_worker_queues())
+def test_task_api_can_see_every_registered_task(queue_name: str) -> None:
+    """The enqueue API's task list is the queues' list.
+
+    It answers "task not found" with what it does know, so a task missing
+    here is a task nobody can enqueue through the API.
+    """
+    module = importlib.import_module(
+        f"app.components.worker.queues.{queue_name}"
+    )
+    available = set(list_available_tasks())
+
+    for task_name in _defined_tasks(module):
+        assert task_name in available, f"{task_name} is not offered by the task API"
+        assert get_task_by_name(task_name) is not None
+        assert get_queue_for_task(task_name) == queue_name
+
+
+def test_task_lookup_returns_the_function_itself() -> None:
+    """Callers read ``__doc__`` off what comes back (task history does).
+
+    TaskIQ and dramatiq hand out a wrapper around the function; the
+    docstring lives on the function.
+    """
+    queue_name = discover_worker_queues()[0]
+    module = importlib.import_module(
+        f"app.components.worker.queues.{queue_name}"
+    )
+    task_name = sorted(_defined_tasks(module))[0]
+
+    func = get_task_by_name(task_name)
+    assert func is not None
+    assert callable(func)
+    assert func.__doc__, f"{task_name} lookup lost its docstring"
+{%- endif %}

@@ -16,9 +16,11 @@ choice into each process as it boots.
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.log import logger
 from app.services.ai.models.llm import LLMActiveSelection
 
 # The .env-sourced model/provider, captured before the first override mutates
@@ -164,3 +166,36 @@ async def load_into_settings(
         settings, model_id=selection.model_id, provider=selection.provider
     )
     return True
+
+
+async def sync_from_db(settings: Any) -> bool:
+    """Adopt the stored selection into ``settings``. True when one applied.
+
+    Opens its own session, so a caller with no request and no session of its
+    own can still ask. A database without the catalog table yet (a fresh
+    install, a test) leaves the bootstrap defaults in place.
+    """
+    from app.core.db import get_async_session
+
+    try:
+        async with get_async_session() as session:
+            return await load_into_settings(session, settings)
+    except SQLAlchemyError as exc:
+        logger.debug(f"Active-model selection unavailable, using .env: {exc}")
+        return False
+
+
+async def model_for_active(settings: Any) -> tuple[Any, str]:
+    """A model instance for the selection actually in force, and its name.
+
+    The selection is a database row, and only the webserver re-reads it per
+    request. Anything headless - a worker task, a scheduled job - resolves
+    through here, or it runs on the .env bootstrap model while the dashboard
+    shows the model the user picked.
+    """
+    from app.services.ai.config import AIServiceConfig
+    from app.services.ai.domains.llm import providers
+
+    await sync_from_db(settings)
+    return providers.model_for(AIServiceConfig.from_settings(settings), settings)
+

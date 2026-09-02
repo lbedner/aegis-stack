@@ -118,6 +118,93 @@ class TestAddCommand:
             "Redis dependency not auto-added"
         )
 
+    @pytest.mark.parametrize(
+        ("backend", "launcher", "queue_marker"),
+        [
+            ("taskiq", "uv run taskiq worker", "broker.task"),
+            ("dramatiq", "uv run dramatiq", "dramatiq.actor"),
+        ],
+    )
+    def test_add_worker_with_backend_launches_that_backend(
+        self,
+        project_factory: ProjectFactory,
+        backend: str,
+        launcher: str,
+        queue_marker: str,
+    ) -> None:
+        """A worker added with a backend runs that backend, entrypoint included.
+
+        The entrypoint is the piece that crash-loops when it disagrees with
+        the queues: it launches a runner the project never installed.
+        """
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "add",
+            f"worker[{backend}]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+        assert result.success, f"Command failed: {result.stderr}"
+
+        answers = load_copier_answers(project_path)
+        assert answers.get("worker_backend") == backend
+
+        entrypoint = (project_path / "scripts/entrypoint.sh").read_text()
+        assert launcher in entrypoint, (
+            f"entrypoint does not launch {backend}: worker branch is\n"
+            + entrypoint[entrypoint.find('= "worker"') :][:400]
+        )
+        assert "python -m arq" not in entrypoint or backend == "arq"
+
+        queues = project_path / "app/components/worker/queues"
+        system = (queues / "system.py").read_text()
+        assert queue_marker in system, f"queues/system.py is not {backend}'s"
+        suffixes = tuple(f"_{b}.py" for b in ("arq", "dramatiq", "taskiq"))
+        leftovers = sorted(
+            f.name for f in queues.glob("*.py") if f.name.endswith(suffixes)
+        )
+        assert not leftovers, f"backend-suffixed files left behind: {leftovers}"
+
+        pyproject = (project_path / "pyproject.toml").read_text()
+        assert backend in pyproject
+
+        # Nothing else may offer an arq launcher either: a make target or
+        # poe task running a runner the project never installed is the same
+        # crash, one command further from the container.
+        for name in ("Makefile", "pyproject.toml"):
+            assert "python -m arq" not in (project_path / name).read_text(), (
+                f"{name} still launches arq on a {backend} project"
+            )
+
+    def test_add_worker_honours_backend_already_in_answers(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """The answers file, not the default, decides which worker is launched.
+
+        A project can carry a ``worker_backend`` before it has a worker: the
+        answer is written at init whatever the choice. Adding the worker then
+        has to honour it, entrypoint included, or the container launches a
+        runner that was never installed.
+        """
+        project_path = project_factory("base")
+        answers_file = project_path / ".copier-answers.yml"
+        answers_file.write_text(
+            answers_file.read_text().replace(
+                "worker_backend: arq", "worker_backend: taskiq"
+            )
+        )
+
+        result = run_aegis_command(
+            "add", "worker", "--project-path", str(project_path), "--yes"
+        )
+        assert result.success, f"Command failed: {result.stderr}"
+
+        entrypoint = (project_path / "scripts/entrypoint.sh").read_text()
+        assert "uv run taskiq worker" in entrypoint
+        assert "python -m arq" not in entrypoint
+
     def test_add_multiple_components(self, project_factory: ProjectFactory) -> None:
         """Test adding multiple components at once."""
         project_path = project_factory("base")

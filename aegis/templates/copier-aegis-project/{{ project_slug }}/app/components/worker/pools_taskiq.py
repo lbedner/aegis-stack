@@ -9,7 +9,9 @@ their own connections internally.
 from typing import Any
 
 import redis.asyncio as aioredis
+
 from app.components.worker.events import publish_event
+from app.components.worker.registry import queue_tasks
 from app.core.config import (
     get_available_queues,
     get_default_queue,
@@ -89,47 +91,16 @@ def get_task(task_name: str, queue_type: str | None = None) -> Any:
         The TaskIQ task callable.
 
     Raises:
-        ValueError: If task is not found.
+        ValueError: If the queue or the task is not found.
     """
     if queue_type is None:
         queue_type = get_default_queue()
 
-    # Direct import of tasks from queue modules
-    # TaskIQ's broker.tasks dict only exists in worker process context,
-    # so we import tasks directly for client-side access
-    # Also cache the broker for proper shutdown later
-    if queue_type == "load_test":
-        from app.components.worker.queues.load_test import (
-            broker,
-            cpu_intensive_task,
-            failure_testing_task,
-            io_simulation_task,
-            load_test_orchestrator,
-            memory_operations_task,
-        )
-
-        _broker_cache[queue_type] = broker
-        tasks = {
-            "cpu_intensive_task": cpu_intensive_task,
-            "io_simulation_task": io_simulation_task,
-            "memory_operations_task": memory_operations_task,
-            "failure_testing_task": failure_testing_task,
-            "load_test_orchestrator": load_test_orchestrator,
-        }
-    elif queue_type == "system":
-        from app.components.worker.queues.system import (
-            broker,
-            cleanup_temp_files,
-            system_health_check,
-        )
-
-        _broker_cache[queue_type] = broker
-        tasks = {
-            "system_health_check": system_health_check,
-            "cleanup_temp_files": cleanup_temp_files,
-        }
-    else:
+    tasks = queue_tasks(queue_type)
+    if not tasks:
         raise ValueError(f"Unknown queue type: {queue_type}")
+
+    _broker_cache[queue_type] = get_broker(queue_type)
 
     if task_name not in tasks:
         raise ValueError(f"Task '{task_name}' not found in {queue_type} queue")

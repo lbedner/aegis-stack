@@ -42,6 +42,7 @@ elif [ "$run_command" = "scheduler" ]; then
         # stack shape) - a missing watcher must not stop the scheduler.
         exec uv run python -m app.entrypoints.scheduler
     fi
+{%- if include_worker %}
 elif [ "$run_command" = "worker" ]; then
 {%- if worker_backend == "taskiq" %}
     # Worker component using TaskIQ
@@ -64,16 +65,20 @@ elif [ "$run_command" = "worker" ]; then
     # In dev (APP_ENV=dev or WORKER_WATCH=true) drop to one worker
     # process and skip the forkserver entirely. The single process
     # re-imports modules fresh on every restart, so new tasks register
-    # immediately. TaskIQ's built-in ``--reload`` flag is broken in
-    # current releases (FileWatcher: NoneType is not callable), so we
-    # rely on the outer docker-compose watch loop to bounce the single
-    # process when files change.
-    if [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; then
-        worker_processes=1
+    # immediately. TaskIQ's own ``--reload`` needs its ``reload`` extra
+    # and has been broken in released versions (FileWatcher: NoneType is
+    # not callable), so the restart comes from watchfiles, the same
+    # wrapper the scheduler and webserver branches use.
+    if { [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; } \
+        && uv run python -c "import watchfiles" 2>/dev/null; then
         echo "Starting ${queue_type} taskiq worker with auto-reload (1 process, forkserver disabled)..."
-    else
-        echo "Starting ${queue_type} taskiq worker with ${worker_processes} processes..."
+        exec uv run watchfiles --filter python \
+            "taskiq worker ${broker_module} --workers 1 $*" /code/app
     fi
+
+    # watchfiles ships via uvicorn[standard] (not guaranteed in every
+    # stack shape) - a missing watcher must not stop the worker.
+    echo "Starting ${queue_type} taskiq worker with ${worker_processes} processes..."
     exec uv run taskiq worker "${broker_module}" --workers "${worker_processes}" "$@"
 {%- elif worker_backend == "dramatiq" %}
     # Worker component using Dramatiq
@@ -119,6 +124,7 @@ elif [ "$run_command" = "worker" ]; then
         exec uv run python -m arq "${worker_module}" "$@"
     fi
 {%- endif %}
+{%- endif %}
 {%- if include_htmx %}
 elif [ "$run_command" = "build-watch" ]; then
     # Re-fingerprint web frontend assets whenever Tailwind (or a hand-edited
@@ -137,12 +143,14 @@ elif [ "$run_command" = "help" ]; then
     echo "Available commands:"
     echo "  webserver   - Run FastAPI + Flet web server"
     echo "  scheduler   - Run scheduler component"
+{%- if include_worker %}
 {%- if worker_backend == "taskiq" %}
     echo "  worker      - Run taskiq worker"
 {%- elif worker_backend == "dramatiq" %}
     echo "  worker      - Run dramatiq worker"
 {%- else %}
     echo "  worker      - Run arq worker (standard arq CLI patterns)"
+{%- endif %}
 {%- endif %}
 {%- if include_htmx %}
     echo "  build-watch - Re-fingerprint web frontend assets on change"
@@ -154,6 +162,6 @@ elif [ "$run_command" = "help" ]; then
     echo "  help        - Show this help message"
 else
     echo "Unknown command: $run_command"
-    echo "Available commands: webserver, scheduler, worker,{% if include_htmx %} build-watch,{% endif %} health, lint, typecheck, test, help"
+    echo "Available commands: webserver, scheduler,{% if include_worker %} worker,{% endif %}{% if include_htmx %} build-watch,{% endif %} health, lint, typecheck, test, help"
     exit 1
 fi

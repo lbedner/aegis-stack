@@ -198,8 +198,9 @@ async def run_deep_dive(
     from pydantic_ai.settings import ModelSettings
 
     from app.core.config import settings
-    from app.services.ai.domains.chat.agent_loader import resolve_agent
     from app.services.ai.config import AIServiceConfig
+    from app.services.ai.domains.chat.agent_loader import resolve_agent
+    from app.services.ai.domains.llm import active_model
     from app.services.ai.domains.llm.providers import model_for
     from app.services.ai.usage_recording import extract_usage, record_usage
 
@@ -217,6 +218,10 @@ async def run_deep_dive(
     if context is None:
         return None
 
+    # The stored selection first: this runs in a worker or a
+    # scheduled job, which never serves the request that would
+    # otherwise adopt it. An agent's own model_id still wins below.
+    await active_model.sync_from_db(settings)
     service_config = AIServiceConfig.from_settings(settings)
     update: dict[str, object] = {
         "temperature": agent_config.temperature,

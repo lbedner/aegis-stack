@@ -1,0 +1,96 @@
+{%- if include_worker %}
+"""Handing an extraction to the worker, and what happens when that fails.
+
+The job record outlives the request that made it, so anything that goes
+wrong between creating it and the worker picking it up has to be written
+into the record. Nobody is watching this process's logs.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from app.services.documents import dispatch, extraction_job
+
+
+class _FakeStore:
+    def __init__(self) -> None:
+        self.created: list[tuple[str, str, str]] = []
+        self.labels: list[str] = []
+        self.failed: list[tuple[str, str]] = []
+        self.finished: list[dict[str, Any]] = []
+        self.closed = False
+
+    async def create(self, job_id: str, name: str, label: str) -> None:
+        self.created.append((job_id, name, label))
+
+    async def set_label(self, job_id: str, label: str) -> None:
+        assert not self.closed, "a label was written after the store closed"
+        self.labels.append(label)
+
+    async def fail(self, job_id: str, error: str) -> None:
+        self.failed.append((job_id, error))
+
+    async def finish(self, job_id: str, result: dict[str, Any] | None) -> None:
+        self.finished.append(result or {})
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture
+def store(monkeypatch: pytest.MonkeyPatch) -> _FakeStore:
+    fake = _FakeStore()
+
+    class _Factory:
+        @staticmethod
+        def from_url(_url: str) -> _FakeStore:
+            return fake
+
+    monkeypatch.setattr(
+        "app.services.system.job_store.RedisJobStore", _Factory, raising=True
+    )
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_an_enqueue_that_fails_marks_the_job_failed(
+    store: _FakeStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _boom(*_args: Any, **_kwargs: Any) -> None:
+        raise ConnectionError("no broker")
+
+    monkeypatch.setattr(dispatch, "_enqueue", _boom)
+
+    with pytest.raises(ConnectionError):
+        await dispatch.start_extraction(1, owner_user_id=None, force=False)
+
+    assert store.created, "the job was never recorded"
+    assert store.failed, "a job nobody will run was left running"
+    assert "no broker" in store.failed[0][1]
+    assert store.closed
+
+
+@pytest.mark.asyncio
+async def test_progress_labels_are_flushed_before_the_store_closes(
+    store: _FakeStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The labels are written without waiting; they still have to land."""
+
+    async def _run(
+        document_id: int, *, owner_user_id: int | None, force: bool, report: Any
+    ) -> dict[str, int]:
+        report("Reading page 1 of 2...")
+        report("Reading page 2 of 2...")
+        return {"read": 2, "unread": 0, "skipped": 0}
+
+    monkeypatch.setattr(extraction_job, "run_extraction", _run)
+
+    result = await extraction_job.run_extraction_job("job", 1, None, False)
+
+    assert result == {"read": 2, "unread": 0, "skipped": 0}
+    assert store.labels == ["Reading page 1 of 2...", "Reading page 2 of 2..."]
+    assert store.closed
+{%- endif %}

@@ -34,6 +34,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
+from .documents_activity import ActivityTab
 from .documents_detail_pane import API, CHANNELS, DocumentDetailPane
 from .modal_sections import EmptyStatePlaceholder, row_matches
 
@@ -169,6 +170,12 @@ class DocumentsTab(ft.Container):
 
         return get_session_state(self.page).api_client
 
+    async def document_changed(self, document_id: int) -> None:
+        """A job for this document landed: the list and, if it is the one
+        in the pane, its page strip refresh."""
+        await self._load()
+        await self._pane.refresh_if_showing(document_id)
+
     async def _load(self) -> None:
         api = self._api()
         # ponytail: one page of 100, searched client-side; add paging when
@@ -292,16 +299,19 @@ class DocumentsDetailDialog(BaseDetailPopup):
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         tags_tab = TagsTab(page)
+        documents_tab = DocumentsTab(page)
+        activity_tab = ActivityTab(page, on_finished=documents_tab.document_changed)
 
         def _on_tab_change(e: ft.ControlEvent) -> None:
             # Tags are added on the Documents tab; the counts must follow.
-            if e.control.selected_index == 1:
+            if e.control.selected_index == 2:
                 page.run_task(tags_tab._load)
 
         tabs = PulseTabs(
             selected_index=0,
             tabs=[
-                ft.Tab(text="Documents", content=DocumentsTab(page)),
+                ft.Tab(text="Documents", content=documents_tab),
+                ft.Tab(text="Activity", content=activity_tab),
                 ft.Tab(text="Tags", content=tags_tab),
             ],
             expand=True,

@@ -359,9 +359,13 @@ curl -X POST http://localhost:8000/api/v1/tasks/enqueue \
   -H "Content-Type: application/json" \
   -d '{"task_name": "io_simulation_task", "queue_type": "load_test"}'
 
-# Or use burst mode for one-off testing
+# Or use burst mode for one-off testing (arq only)
 make worker-test
 ```
+
+Burst mode is arq's: it drains the queue once and exits. TaskIQ and dramatiq
+have no run-once flag, so projects on those backends do not ship the
+`worker-test` target; enqueue a task and watch `make logs-worker` instead.
 
 ## Configuration
 

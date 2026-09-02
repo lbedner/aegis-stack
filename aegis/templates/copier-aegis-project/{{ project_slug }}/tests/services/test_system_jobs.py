@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from app.services.system.jobs import JobHandle, JobRunner
+from app.services.system.jobs import JobHandle, JobRunner, JobSnapshot, now_iso
 
 
 class TestJobRunner:
@@ -159,3 +159,70 @@ class TestSubprocessRunsOffTheEventLoop:
         assert ok
         assert seen
         assert all(t is not threading.main_thread() for t in seen)
+
+
+class _FakeStore:
+    """A job store that can be told to fall over."""
+
+    def __init__(self, snapshot: JobSnapshot | None, *, raises: bool = False) -> None:
+        self.snapshot = snapshot
+        self.raises = raises
+        self.gets = 0
+
+    async def get(self, job_id: str) -> JobSnapshot | None:
+        self.gets += 1
+        if self.raises:
+            raise ConnectionError("redis is gone")
+        return self.snapshot
+
+    async def list_jobs(self) -> list[JobSnapshot]:
+        return [self.snapshot] if self.snapshot else []
+
+
+def _running(job_id: str = "remote") -> JobSnapshot:
+    return JobSnapshot(
+        job_id=job_id,
+        name="documents-extract:1",
+        status="running",
+        label="Queued...",
+        result=None,
+        error=None,
+        started_at=now_iso(),
+    )
+
+
+class TestRemoteJobs:
+    """A job on a worker is watched by polling the shared store."""
+
+    @pytest.mark.asyncio
+    async def test_a_store_that_falls_over_ends_the_stream(self) -> None:
+        """A stream that just stops is a client waiting forever."""
+        runner = JobRunner()
+        runner.attach_remote(_FakeStore(_running()), poll_seconds=0.01)
+
+        queue = await runner.subscribe_any("remote")
+        assert queue is not None
+        assert (await asyncio.wait_for(queue.get(), 1))["status"] == "running"
+
+        runner._remote.raises = True  # type: ignore[union-attr]
+
+        assert await asyncio.wait_for(queue.get(), 1) is None
+
+    @pytest.mark.asyncio
+    async def test_unsubscribing_stops_the_polling(self) -> None:
+        """Nobody is reading the queue; nothing should still be filling it."""
+        store = _FakeStore(_running())
+        runner = JobRunner()
+        runner.attach_remote(store, poll_seconds=0.01)
+
+        queue = await runner.subscribe_any("remote")
+        assert queue is not None
+        await asyncio.sleep(0.05)
+
+        runner.unsubscribe("remote", queue)
+        await asyncio.sleep(0.05)
+        polls = store.gets
+        await asyncio.sleep(0.05)
+
+        assert store.gets == polls, "the relay kept polling after nobody was left"
+

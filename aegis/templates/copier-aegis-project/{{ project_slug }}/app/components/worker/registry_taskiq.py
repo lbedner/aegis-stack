@@ -68,6 +68,27 @@ def discover_worker_queues() -> list[str]:
     return sorted(queues)
 
 
+def queue_tasks(queue_name: str) -> dict[str, Any]:
+    """Tasks a queue module registers, keyed by name, in definition order.
+
+    Read from the module rather than from a list kept beside it: services
+    add their own tasks to these modules, and a hand-kept list silently
+    omits them from the dashboard, the health check and the enqueue API
+    while the worker runs them perfectly well.
+    """
+    try:
+        module = importlib.import_module(f"app.components.worker.queues.{queue_name}")
+    except ImportError:
+        logger.warning(f"Queue module not importable: {queue_name}")
+        return {}
+
+    return {
+        name: obj
+        for name, obj in vars(module).items()
+        if not name.startswith("_") and hasattr(obj, "kiq")
+    }
+
+
 def get_queue_metadata(queue_name: str) -> dict[str, Any]:
     """Get metadata for a queue.
 
@@ -80,24 +101,7 @@ def get_queue_metadata(queue_name: str) -> dict[str, Any]:
         - tasks: List of registered task names
         - description: Human-readable description
     """
-    # Direct import of task names from queue modules
-    # TaskIQ's broker.tasks dict only exists in worker process context,
-    # so we define task names explicitly for client-side access
-    if queue_name == "load_test":
-        task_names = [
-            "cpu_intensive_task",
-            "io_simulation_task",
-            "memory_operations_task",
-            "failure_testing_task",
-            "load_test_orchestrator",
-        ]
-    elif queue_name == "system":
-        task_names = [
-            "system_health_check",
-            "cleanup_temp_files",
-        ]
-    else:
-        task_names = []
+    task_names = list(queue_tasks(queue_name))
 
     metadata = {
         "queue_name": queue_name,

@@ -8,6 +8,7 @@ content route, Delete retires the row.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 from typing import Any
 from urllib.parse import quote
 
@@ -26,14 +27,13 @@ from app.components.frontend.controls import (
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.form_fields import FormDateField
-from app.components.frontend.controls.loading_overlay import LoadingOverlay
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_bytes, format_date
 from app.core.log import logger
 from app.services.documents.models import DOCUMENT_KINDS
 
-from .documents_pages import PagesStrip, extraction_summary
+from .documents_pages import PagesStrip, has_unread_pages
 from .modal_sections import EmptyStatePlaceholder
 
 API = "/api/v1/documents"
@@ -138,10 +138,20 @@ class DocumentDetailPane(ft.Container):
         )
         self._protected = ThemedSwitch(value=bool(doc.get("protected")))
         self._pages = PagesStrip(
-            page=self.page, api=self._api, document_id=int(doc["id"])
+            page=self.page,
+            api=self._api,
+            document_id=int(doc["id"]),
+            on_loaded=self._sync_extract_state,
         )
         self._tag_input = FormTextField(
             label="Add tag", hint="Enter to add", on_submit=self._add_tag
+        )
+        self._force_extract = False
+        self._extract_button = PulseButton(
+            on_click_callable=self._extract,
+            text="Extract",
+            variant="muted",
+            compact=True,
         )
         hairline = ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT)
         header = ft.Column(
@@ -216,12 +226,7 @@ class DocumentDetailPane(ft.Container):
             [
                 PulseButton(on_click_callable=self._save, text="Save", compact=True),
                 ft.Container(expand=True),
-                PulseButton(
-                    on_click_callable=self._extract,
-                    text="Extract",
-                    variant="muted",
-                    compact=True,
-                ),
+                self._extract_button,
                 PulseButton(
                     on_click_callable=self._download,
                     text="Download",
@@ -246,26 +251,48 @@ class DocumentDetailPane(ft.Container):
             self.update()
             self.page.run_task(self._pages.load)
 
+    def _sync_extract_state(self, rows: list[dict[str, Any]]) -> None:
+        """Extract while a page is unread; a force once none is.
+
+        Plain Extract on a fully-read document does nothing - the run comes
+        back "Already extracted". Re-running is still worth offering, since the
+        model that reads a page can change, but as something asked for
+        rather than something that happens by pressing the same button.
+        """
+        self._force_extract = not has_unread_pages(rows)
+        button = self._extract_button
+        button.text = "Force extract" if self._force_extract else "Extract"
+        button.content = ft.Text(button.text, **asdict(button.text_style))
+        button.tooltip = (
+            "Extract every page again with the current model"
+            if self._force_extract
+            else None
+        )
+        if button.page is not None:
+            button.update()
+
     async def _extract(self) -> None:
-        """Read every page not yet read; progress rides the jobs stream."""
+        """Queue a read of every page not yet read and get out of the way.
+
+        Progress lives on the Activity tab, one row per job, whether the
+        job runs here or on a worker; the strip refreshes when it lands.
+        """
         if self._doc is None:
             return
-        overlay = LoadingOverlay(self.page)
-        overlay.show("Opening the document...")
-        started = await self._api().post(
-            f"{API}/{self._doc['id']}/extract?background=true"
-        )
+        query = "background=true&force=true" if self._force_extract else "background=true"
+        started = await self._api().post(f"{API}/{self._doc['id']}/extract?{query}")
         if not isinstance(started, dict) or not started.get("job_id"):
-            overlay.fail("Extraction could not start.", title="Extraction failed")
+            ErrorSnackBar("Extraction could not start.").launch(self.page)
             return
-        result = await overlay.run_job(
-            self._api(), str(started["job_id"]), title="Extraction failed"
+        title = str(self._doc.get("title") or "document")
+        SuccessSnackBar(f"Extracting {title}. Follow it on the Activity tab.").launch(
+            self.page
         )
-        if result is None:
-            return
-        SuccessSnackBar(extraction_summary(result)).launch(self.page)
-        await self._pages.load()
-        await self._on_change()
+
+    async def refresh_if_showing(self, document_id: int) -> None:
+        """A job for this document landed: refresh its pages if it is open."""
+        if self._doc is not None and self._doc.get("id") == document_id:
+            await self._pages.load()
 
     def _tag_chips(self) -> list[ft.Control]:
         tags = self._doc.get("tags", []) if self._doc else []

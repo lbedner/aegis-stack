@@ -1,0 +1,15 @@
+{%- if include_worker %}
+"""Point the job API at the shared store the worker writes to."""
+
+from app.core.config import settings
+from app.core.log import logger
+from app.services.system.job_store import RedisJobStore
+from app.services.system.jobs import get_job_runner
+
+
+async def startup_hook() -> None:
+    get_job_runner().attach_remote(RedisJobStore.from_url(settings.REDIS_URL))
+    logger.info("Job runner attached to the shared Redis job store")
+{%- else %}
+"""No worker in this stack: jobs run in-process and this hook has nothing to attach."""
+{%- endif %}

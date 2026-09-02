@@ -1,0 +1,92 @@
+"""Where an extraction job runs: the worker when the stack has one, else here.
+
+The Extract button, the jobs API and the SSE stream never know which. A
+job id comes back either way; progress and the result arrive through the
+same endpoints.
+"""
+
+from __future__ import annotations
+
+from app.services.documents.extraction_job import run_extraction
+from app.services.system.jobs import JobHandle, get_job_runner
+
+
+async def start_extraction_in_process(
+    document_id: int, *, owner_user_id: int | None, force: bool
+) -> str:
+    """Run the extraction as an asyncio task in this process."""
+
+    async def work(handle: JobHandle) -> dict[str, int]:
+        return await run_extraction(
+            document_id,
+            owner_user_id=owner_user_id,
+            force=force,
+            report=handle.set_label,
+        )
+
+    return get_job_runner().start(
+        f"documents-extract:{document_id}", work, label="Opening the document..."
+    )
+
+
+{%- if include_worker %}
+
+
+async def start_extraction(
+    document_id: int, *, owner_user_id: int | None, force: bool
+) -> str:
+    """Record the job in the shared store, then hand it to the worker."""
+    import uuid
+
+    from app.core.config import settings
+    from app.core.log import logger
+    from app.services.system.job_store import RedisJobStore
+
+    job_id = uuid.uuid4().hex
+    store = RedisJobStore.from_url(settings.REDIS_URL)
+    try:
+        await store.create(job_id, f"documents-extract:{document_id}", "Queued...")
+        try:
+            await _enqueue(job_id, document_id, owner_user_id, force)
+        except Exception as exc:
+            # The record outlives this function, so a failed hand-off has to
+            # be written into it: otherwise the job sits "Queued..." until it
+            # expires, with the reason only in this process's logs.
+            await store.fail(job_id, f"Could not queue the extraction: {exc}")
+            raise
+    finally:
+        await store.aclose()
+    logger.info("documents.extract.enqueued", job_id=job_id, document_id=document_id)
+    return job_id
+
+
+async def _enqueue(
+    job_id: str, document_id: int, owner_user_id: int | None, force: bool
+) -> None:
+{%- if worker_backend == "arq" %}
+    from app.components.worker.pools import get_queue_pool
+
+    pool, queue_name = await get_queue_pool("system")
+    await pool.enqueue_job(
+        "extract_document_task",
+        job_id,
+        document_id,
+        owner_user_id,
+        force,
+        _queue_name=queue_name,
+    )
+{%- elif worker_backend == "dramatiq" %}
+    from app.components.worker.queues.system import extract_document_task
+
+    extract_document_task.send(job_id, document_id, owner_user_id, force)
+{%- else %}
+    from app.components.worker.queues.system import extract_document_task
+
+    await extract_document_task.kiq(job_id, document_id, owner_user_id, force)
+{%- endif %}
+{%- else %}
+
+
+# No worker in this stack: the background path is this process.
+start_extraction = start_extraction_in_process
+{%- endif %}

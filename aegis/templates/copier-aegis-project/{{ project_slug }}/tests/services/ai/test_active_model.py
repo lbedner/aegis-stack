@@ -271,3 +271,44 @@ class TestClearOverride:
         assert active_model.env_default_model() is None
         active_model.apply_to_settings(settings, model_id="x", provider=None)
         assert active_model.env_default_model() == "auto"
+
+
+class TestHeadlessResolution:
+    """A worker resolving a model has no request to carry the selection.
+
+    The webserver adopts the stored selection on every ``/ai`` request and
+    the scheduler adopts it at boot. A task running in a worker does
+    neither, so without this it silently runs on the ``.env`` bootstrap
+    model while the dashboard shows the one that was actually chosen.
+    """
+
+    @pytest.mark.asyncio
+    async def test_resolution_adopts_the_stored_selection(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services.ai.domains.llm import providers
+
+        settings = _Settings()
+        settings.AI_PROVIDER = "ollama"
+        settings.AI_MODEL = "env-default"
+
+        async def _sync(target: object) -> bool:
+            active_model.apply_to_settings(
+                target, model_id="chosen-model", provider="ollama"
+            )
+            return True
+
+        seen: dict[str, str] = {}
+
+        def _model_for(config: object, _settings: object) -> tuple[str, str]:
+            seen["model"] = config.model  # type: ignore[attr-defined]
+            return "model-instance", config.model  # type: ignore[attr-defined]
+
+        monkeypatch.setattr(active_model, "sync_from_db", _sync)
+        monkeypatch.setattr(providers, "model_for", _model_for)
+
+        model, model_name = await active_model.model_for_active(settings)
+
+        assert seen["model"] == "chosen-model"
+        assert (model, model_name) == ("model-instance", "chosen-model")
+

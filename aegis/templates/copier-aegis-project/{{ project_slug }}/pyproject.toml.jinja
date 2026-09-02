@@ -555,7 +555,7 @@ sequence = ["db-clean", "serve"]
 
 {% endif %}
 {% endif %}
-{% if include_worker %}
+{% if include_worker and worker_backend == "arq" %}
 [tool.poe.tasks.worker-test]
 help = "Test workers in burst mode (process and exit)"
 cmd = "uv run python -m arq app.components.worker.queues.system.WorkerSettings --burst"

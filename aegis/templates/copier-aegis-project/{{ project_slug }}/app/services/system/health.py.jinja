@@ -9,10 +9,8 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 import os
-from pathlib import Path
-import re
 import sys
-from typing import Any, cast
+from typing import Any{%- if include_redis %}, cast{%- endif %}
 
 import psutil
 
@@ -51,6 +49,59 @@ def format_bytes(size: int) -> str:
                 return f"{size_float:.1f} {unit}"
         size_float /= 1024.0
     return f"{size_float:.1f} TB"
+
+
+def queue_status(
+    *,
+    worker_alive: bool,
+    has_functions: bool,
+    waiting: int,
+    failure_rate: float = 0.0,
+) -> tuple[ComponentStatusType, str]:
+    """What one worker queue's state means, for every backend alike.
+
+    A queue nobody consumes is a problem: with work waiting it is an
+    outage (UNHEALTHY), idle it is a warning. Info is only for a queue
+    with no functions registered, which cannot have a consumer that
+    matters. A live consumer is healthy until failures pile up.
+
+    Returns the status and the phrase the queue's message leads with.
+    """
+    if not has_functions:
+        return ComponentStatusType.INFO, "configured - no functions defined"
+    if not worker_alive:
+        if waiting > 0:
+            return ComponentStatusType.UNHEALTHY, f"no worker consuming, {waiting} waiting"
+        return ComponentStatusType.WARNING, "no worker consuming"
+    if failure_rate > 25:
+        return ComponentStatusType.UNHEALTHY, f"{failure_rate:.1f}% failing"
+    if failure_rate > 10:
+        return ComponentStatusType.WARNING, f"{failure_rate:.1f}% failing"
+    return ComponentStatusType.HEALTHY, ""
+
+
+def taskiq_group_stats(
+    groups: list[dict[str, Any]], stream_length: int
+) -> tuple[int, int, int, int]:
+    """Return (consumers, pending, entries_read, lag) for the ``taskiq`` group.
+
+    A stream nobody has ever consumed has no group at all, and Redis reports
+    that as an empty list rather than an error: every entry is then waiting.
+    """
+    for group in groups:
+        name = group.get("name", b"")
+        if isinstance(name, bytes):
+            name = name.decode()
+        if name != "taskiq":
+            continue
+        lag = group.get("lag")
+        return (
+            group.get("consumers", 0) or 0,
+            group.get("pending", 0) or 0,
+            group.get("entries-read", 0) or 0,
+            stream_length if lag is None else lag,
+        )
+    return 0, 0, 0, stream_length
 
 
 def propagate_status(child_statuses: list[ComponentStatusType]) -> ComponentStatusType:
@@ -933,38 +984,16 @@ async def check_worker_health() -> ComponentStatus:
                         raise
 
                 stream_length = stream_info.get("length", 0)
-                entries_added = stream_info.get("entries-added", 0)
 
-                # Get consumer group info using XINFO GROUPS
-                # This tells us actual queue state: pending (in-progress), lag (waiting)
-                consumer_count = 0
-                pending_count = 0
-                entries_read = 0
-                lag = 0
                 try:
                     groups_info = await redis_client.xinfo_groups(stream_name)
-                    for group in groups_info:
-                        # Group name may be bytes or string depending on Redis client
-                        group_name = group.get("name", b"")
-                        if isinstance(group_name, bytes):
-                            group_name = group_name.decode()
-                        if group_name == "taskiq":
-                            consumer_count = group.get("consumers", 0)
-                            pending_count = group.get("pending", 0)
-                            entries_read = group.get("entries-read", 0)
-                            lag = group.get("lag", 0)
-                            break
                 except aioredis.ResponseError:
-                    # No consumer groups yet - all entries are waiting
-                    lag = stream_length
-
-                # lag = tasks waiting to be picked up by workers
-                # pending = tasks currently being processed
-                # entries_read - pending = tasks completed
-                # Note: lag can be None if stream has no consumer groups
-                queued_jobs = lag if lag is not None else stream_length
-                jobs_ongoing = pending_count or 0
-                entries_read = entries_read or 0
+                    groups_info = []
+                consumer_count, pending_count, entries_read, lag = taskiq_group_stats(
+                    groups_info, stream_length
+                )
+                queued_jobs = lag
+                jobs_ongoing = pending_count
                 jobs_completed = (
                     entries_read - jobs_ongoing
                     if entries_read > jobs_ongoing
@@ -993,33 +1022,23 @@ async def check_worker_health() -> ComponentStatus:
                 if worker_alive:
                     active_workers += 1
 
-                # Create queue status message
-                status_parts = []
-                if not worker_alive:
-                    status_parts.append("no consumers connected")
-                elif jobs_ongoing > 0:
-                    status_parts.append(f"{jobs_ongoing} processing")
-                elif queued_jobs > 0:
-                    status_parts.append(f"{queued_jobs} queued")
-                else:
-                    status_parts.append("idle")
-
-                # Add throughput info
-                if jobs_completed > 0:
-                    status_parts.append(f"{jobs_completed} completed")
-
-                # Check if queue has tasks configured
                 queue_functions = queue_config.get("functions", [])
                 has_functions = len(queue_functions) > 0
-
-                # Determine queue status
-                if not worker_alive and not has_functions:
-                    queue_status = ComponentStatusType.INFO
-                    status_parts = ["configured - no functions defined"]
-                elif not worker_alive:
-                    queue_status = ComponentStatusType.INFO
-                else:
-                    queue_status = ComponentStatusType.HEALTHY
+                queue_state, lead = queue_status(
+                    worker_alive=worker_alive,
+                    has_functions=has_functions,
+                    waiting=queued_jobs,
+                )
+                status_parts = [lead] if lead else []
+                if worker_alive and has_functions:
+                    if jobs_ongoing > 0:
+                        status_parts.append(f"{jobs_ongoing} processing")
+                    elif queued_jobs > 0:
+                        status_parts.append(f"{queued_jobs} queued")
+                    else:
+                        status_parts.append("idle")
+                    if jobs_completed > 0:
+                        status_parts.append(f"{jobs_completed} completed")
 
                 queue_message = (
                     f"{queue_config['description']}: {', '.join(status_parts)}"
@@ -1042,7 +1061,7 @@ async def check_worker_health() -> ComponentStatus:
 
                 queue_sub_components[queue_type] = ComponentStatus(
                     name=queue_type,
-                    status=queue_status,
+                    status=queue_state,
                     message=queue_message,
                     response_time_ms=None,
                     metadata=queue_metadata,
@@ -1254,25 +1273,18 @@ async def check_worker_health() -> ComponentStatus:
                 if worker_alive:
                     active_workers += 1
 
-                # Build status message
-                status_parts = []
-                if not worker_alive:
-                    status_parts.append("no heartbeat detected")
-                elif queued_jobs > 0:
-                    status_parts.append(f"{queued_jobs} queued")
-                else:
-                    status_parts.append("idle")
-
                 queue_functions = queue_config.get("functions", [])
                 has_functions = len(queue_functions) > 0
-
-                if not worker_alive and not has_functions:
-                    queue_status = ComponentStatusType.INFO
-                    status_parts = ["configured - no functions defined"]
-                elif not worker_alive:
-                    queue_status = ComponentStatusType.INFO
-                else:
-                    queue_status = ComponentStatusType.HEALTHY
+                queue_state, lead = queue_status(
+                    worker_alive=worker_alive,
+                    has_functions=has_functions,
+                    waiting=queued_jobs,
+                )
+                status_parts = [lead] if lead else []
+                if worker_alive and has_functions:
+                    status_parts.append(
+                        f"{queued_jobs} queued" if queued_jobs > 0 else "idle"
+                    )
 
                 queue_message = (
                     f"{queue_config['description']}: {', '.join(status_parts)}"
@@ -1306,7 +1318,7 @@ async def check_worker_health() -> ComponentStatus:
 
                 queue_sub_components[queue_type] = ComponentStatus(
                     name=queue_type,
-                    status=queue_status,
+                    status=queue_state,
                     message=queue_message,
                     response_time_ms=None,
                     metadata=queue_metadata,
@@ -1566,49 +1578,27 @@ async def check_worker_health() -> ComponentStatus:
                     if worker_alive:
                         active_workers += 1
 
-                # Create queue status message
-                status_parts = []
-                if not worker_alive:
-                    status_parts.append("worker offline - no health check data")
-                elif j_ongoing > 0:
-                    status_parts.append(f"{j_ongoing} processing")
-                elif queue_length > 0:
-                    status_parts.append(f"{queue_length} queued")
-                else:
-                    status_parts.append("idle")
-
-                # Add job statistics to status if worker is alive
-                if worker_alive and (j_complete > 0 or j_failed > 0):
-                    if j_failed > 0:
-                        failure_rate = (j_failed / max(j_complete + j_failed, 1)) * 100
-                        status_parts.append(f"{j_failed} failed ({failure_rate:.1f}%)")
-                    if j_complete > 0:
-                        status_parts.append(f"{j_complete} completed")
-
-                # Check if queue has no functions configured (empty functions list)
                 queue_functions = queue_config.get("functions", [])
                 has_functions = len(queue_functions) > 0
-
-                # Determine queue status based on worker health and failure rate
-                failure_rate = (
-                    (j_failed / max(j_complete + j_failed, 1)) * 100
-                    if worker_alive
-                    else 100
+                failure_rate = (j_failed / max(j_complete + j_failed, 1)) * 100
+                queue_state, lead = queue_status(
+                    worker_alive=worker_alive,
+                    has_functions=has_functions,
+                    waiting=queue_length,
+                    failure_rate=failure_rate,
                 )
-
-                if not worker_alive and not has_functions:
-                    # Queue configured but no functions - show as INFO
-                    queue_status = ComponentStatusType.INFO
-                    status_parts = ["configured - no functions defined"]
-                elif not worker_alive:
-                    # Worker offline with functions defined - this is a warning
-                    queue_status = ComponentStatusType.WARNING
-                elif failure_rate > 25:  # Unhealthy threshold at 25%
-                    queue_status = ComponentStatusType.UNHEALTHY
-                elif failure_rate > 10:  # Warning threshold at 10%
-                    queue_status = ComponentStatusType.WARNING
-                else:
-                    queue_status = ComponentStatusType.HEALTHY
+                status_parts = [lead] if lead else []
+                if worker_alive and has_functions:
+                    if j_ongoing > 0:
+                        status_parts.append(f"{j_ongoing} processing")
+                    elif queue_length > 0:
+                        status_parts.append(f"{queue_length} queued")
+                    else:
+                        status_parts.append("idle")
+                    if j_failed > 0:
+                        status_parts.append(f"{j_failed} failed")
+                    if j_complete > 0:
+                        status_parts.append(f"{j_complete} completed")
 
                 queue_message = (
                     f"{queue_config['description']}: {', '.join(status_parts)}"
@@ -1642,7 +1632,7 @@ async def check_worker_health() -> ComponentStatus:
 
                 queue_sub_components[queue_type] = ComponentStatus(
                     name=queue_type,
-                    status=queue_status,
+                    status=queue_state,
                     message=queue_message,
                     response_time_ms=None,
                     metadata=queue_metadata,

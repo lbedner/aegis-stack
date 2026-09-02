@@ -273,3 +273,61 @@ class TestSummary:
         summary = await svc.summary(owner_user_id=99)
 
         assert summary == {"total": 0, "this_month": 0, "bytes": 0, "by_kind": {}}
+
+
+class TestLifecycle:
+    @pytest.mark.asyncio
+    async def test_a_newer_version_hides_the_one_it_replaces(self, svc) -> None:
+        draft = await svc.ingest(b"poa draft", title="POA draft", owner_user_id=1)
+        executed = await svc.ingest(
+            b"poa signed", title="POA executed", owner_user_id=1
+        )
+
+        await svc.update(executed.id, {"supersedes_id": draft.id}, owner_user_id=1)
+
+        heads, total = await svc.list_documents(owner_user_id=1)
+        assert [d.id for d in heads] == [executed.id] and total == 1
+        everything, _ = await svc.list_documents(
+            owner_user_id=1, include_superseded=True
+        )
+        assert {d.id for d in everything} == {draft.id, executed.id}
+
+    @pytest.mark.asyncio
+    async def test_a_chain_cannot_loop_or_point_at_itself(self, svc) -> None:
+        a = await svc.ingest(b"v1", title="v1", owner_user_id=1)
+        b = await svc.ingest(b"v2", title="v2", owner_user_id=1)
+        await svc.update(b.id, {"supersedes_id": a.id}, owner_user_id=1)
+
+        with pytest.raises(ValueError, match="itself"):
+            await svc.update(a.id, {"supersedes_id": a.id}, owner_user_id=1)
+        with pytest.raises(ValueError, match="loop"):
+            await svc.update(a.id, {"supersedes_id": b.id}, owner_user_id=1)
+        with pytest.raises(ValueError, match="Unknown"):
+            await svc.update(a.id, {"supersedes_id": 9999}, owner_user_id=1)
+
+    @pytest.mark.asyncio
+    async def test_a_protected_document_needs_its_title_to_be_retired(
+        self, svc
+    ) -> None:
+        from app.services.documents.service import ProtectedDocumentError
+
+        poa = await svc.ingest(b"executed poa", title="Executed POA", owner_user_id=1)
+        await svc.update(poa.id, {"protected": True}, owner_user_id=1)
+
+        with pytest.raises(ProtectedDocumentError):
+            await svc.soft_delete(poa.id, owner_user_id=1)
+        with pytest.raises(ProtectedDocumentError):
+            await svc.soft_delete(poa.id, owner_user_id=1, confirm="executed poa")
+        assert await svc.get(poa.id, owner_user_id=1) is not None
+
+        assert await svc.soft_delete(poa.id, owner_user_id=1, confirm="Executed POA")
+
+    @pytest.mark.asyncio
+    async def test_channel_records_how_the_paper_arrived(self, svc) -> None:
+        letter = await svc.ingest(b"county letter", title="Letter", owner_user_id=1)
+        await svc.ingest(b"chase pdf", title="Statement", owner_user_id=1)
+
+        await svc.update(letter.id, {"channel": "mail"}, owner_user_id=1)
+
+        rows, total = await svc.list_documents(owner_user_id=1, channel="mail")
+        assert total == 1 and rows[0].channel == "mail"

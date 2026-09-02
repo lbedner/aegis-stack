@@ -5,8 +5,8 @@ the property a retrying client depends on: the same file twice is one
 document, not two.
 """
 
-import pytest
 from fastapi.testclient import TestClient
+import pytest
 
 from app.core.storage import FilesystemStorage, set_storage
 
@@ -203,3 +203,89 @@ class TestDocumentEndpoints:
             client.delete(f"/api/v1/documents/{created['id']}/tags/tmp").status_code
             == 404
         )
+
+    def test_a_protected_document_refuses_a_bare_delete(
+        self, client: TestClient
+    ) -> None:
+        created = client.post(
+            "/api/v1/documents",
+            files={"file": ("poa.pdf", b"executed poa bytes", "application/pdf")},
+            data={"title": "Executed POA"},
+        ).json()
+        client.patch(f"/api/v1/documents/{created['id']}", json={"protected": True})
+
+        assert client.delete(f"/api/v1/documents/{created['id']}").status_code == 409
+        assert (
+            client.delete(
+                f"/api/v1/documents/{created['id']}", params={"confirm": "wrong"}
+            ).status_code
+            == 409
+        )
+        assert (
+            client.delete(
+                f"/api/v1/documents/{created['id']}",
+                params={"confirm": "Executed POA"},
+            ).status_code
+            == 204
+        )
+
+    def test_superseded_documents_leave_the_default_listing(
+        self, client: TestClient
+    ) -> None:
+        draft = client.post(
+            "/api/v1/documents",
+            files={"file": ("d.pdf", b"draft bytes", "application/pdf")},
+            data={"title": "Draft", "kind": "form"},
+        ).json()
+        final = client.post(
+            "/api/v1/documents",
+            files={"file": ("f.pdf", b"final bytes", "application/pdf")},
+            data={"title": "Final", "kind": "form"},
+        ).json()
+
+        patched = client.patch(
+            f"/api/v1/documents/{final['id']}", json={"supersedes_id": draft["id"]}
+        )
+
+        assert patched.status_code == 200
+        assert patched.json()["supersedes_id"] == draft["id"]
+        titles = [
+            d["title"]
+            for d in client.get("/api/v1/documents", params={"kind": "form"}).json()[
+                "items"
+            ]
+        ]
+        assert titles == ["Final"]
+        both = client.get(
+            "/api/v1/documents", params={"kind": "form", "include_superseded": True}
+        ).json()
+        assert both["total"] == 2
+
+    def test_protected_cannot_be_unset_to_null(self, client: TestClient) -> None:
+        created = client.post(
+            "/api/v1/documents",
+            files={"file": ("n.pdf", b"null protected", "application/pdf")},
+            data={"title": "N"},
+        ).json()
+
+        response = client.patch(
+            f"/api/v1/documents/{created['id']}", json={"protected": None}
+        )
+
+        assert response.status_code == 400
+        assert (
+            client.get(f"/api/v1/documents/{created['id']}").json()["protected"]
+            is False
+        )
+
+    def test_channel_is_filed_and_filterable(self, client: TestClient) -> None:
+        client.post(
+            "/api/v1/documents",
+            files={"file": ("m.pdf", b"mailed bytes", "application/pdf")},
+            data={"title": "Mailed", "channel": "mail"},
+        )
+
+        listed = client.get("/api/v1/documents", params={"channel": "mail"}).json()
+
+        assert listed["total"] == 1
+        assert listed["items"][0]["channel"] == "mail"

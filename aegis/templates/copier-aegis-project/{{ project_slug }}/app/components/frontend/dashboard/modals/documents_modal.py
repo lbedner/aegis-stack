@@ -13,7 +13,14 @@ from typing import Any
 
 import flet as ft
 
-from app.components.frontend.controls import DataTable, DataTableColumn, FormDropdown
+from app.components.frontend.controls import (
+    DataTable,
+    DataTableColumn,
+    FormDropdown,
+    PrimaryText,
+    SecondaryText,
+    ThemedSwitch,
+)
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
@@ -27,7 +34,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
-from .documents_detail_pane import API, DocumentDetailPane
+from .documents_detail_pane import API, CHANNELS, DocumentDetailPane
 from .modal_sections import EmptyStatePlaceholder, row_matches
 
 ALL = "all"
@@ -45,6 +52,21 @@ def matching_documents(docs: list[dict[str, Any]], query: str) -> list[dict[str,
         for doc in docs
         if row_matches(query, [doc.get("title"), *doc.get("tags", [])])
     ]
+
+
+def _title_cell(doc: dict[str, Any]) -> Any:
+    """The title, with a lock beside it when the document is protected."""
+    title = str(doc.get("title") or "-")
+    if not doc.get("protected"):
+        return title
+    return ft.Row(
+        [
+            PrimaryText(title),
+            ft.Icon(ft.Icons.LOCK_OUTLINE, size=14, color=ft.Colors.ON_SURFACE_VARIANT),
+        ],
+        tight=True,
+        spacing=Theme.Spacing.XS,
+    )
 
 
 class DocumentsTab(ft.Container):
@@ -69,6 +91,16 @@ class DocumentsTab(ft.Container):
             options=[(ALL, "All")],
             on_change=lambda _: page.run_task(self._load),
         )
+        self._channel = FormDropdown(
+            label="Via",
+            value=ALL,
+            width=140,
+            options=[(ALL, "All"), *[(c, c.title()) for c in CHANNELS]],
+            on_change=lambda _: page.run_task(self._load),
+        )
+        self._replaced = ThemedSwitch(
+            value=False, on_change=lambda _: page.run_task(self._load)
+        )
         self._search = StyledTextField(
             compact=True, hint_text="Search", width=220, on_change=self._on_search
         )
@@ -83,7 +115,15 @@ class DocumentsTab(ft.Container):
                 PulseButton(on_click_callable=self._pick, text="Upload", compact=True),
                 self._kind,
                 self._tag,
+                self._channel,
                 self._search,
+                ft.Row(
+                    [
+                        SecondaryText("Replaced too", size=Theme.Typography.BODY_SMALL),
+                        self._replaced,
+                    ],
+                    spacing=Theme.Spacing.XS,
+                ),
             ],
             spacing=Theme.Spacing.MD,
             vertical_alignment=ft.CrossAxisAlignment.END,
@@ -119,6 +159,10 @@ class DocumentsTab(ft.Container):
             params["kind"] = self._kind.value
         if self._tag.value != ALL:
             params["tag"] = self._tag.value
+        if self._channel.value != ALL:
+            params["channel"] = self._channel.value
+        if self._replaced.value:
+            params["include_superseded"] = "true"
         data = await api.get(API, params=params)
         items = data.get("items") if isinstance(data, dict) else None
         self._docs = items if isinstance(items, list) else []
@@ -142,7 +186,7 @@ class DocumentsTab(ft.Container):
         ]
         rows = [
             [
-                str(doc.get("title") or "-"),
+                _title_cell(doc),
                 str(doc.get("kind") or "-").title(),
                 display_date(doc) or "-",
                 format_bytes(int(doc.get("byte_size") or 0)),
@@ -155,7 +199,7 @@ class DocumentsTab(ft.Container):
             rows=rows,
             scroll_height=600,
             empty_message="No documents yet",
-            on_row_click=lambda i: self._pane.show(docs[i]),
+            on_row_click=lambda i: self._pane.show(docs[i], others=self._docs),
         )
         if self.page:
             self._table.update()

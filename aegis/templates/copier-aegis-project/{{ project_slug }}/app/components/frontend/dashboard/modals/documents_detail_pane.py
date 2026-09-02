@@ -19,8 +19,10 @@ from app.components.frontend.controls import (
     FormTextField,
     H3Text,
     SecondaryText,
+    ThemedSwitch,
 )
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.form_fields import FormDateField
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.theme import AegisTheme as Theme
@@ -32,6 +34,19 @@ from .modal_sections import EmptyStatePlaceholder
 
 API = "/api/v1/documents"
 KIND_OPTIONS = [(kind, kind.title()) for kind in DOCUMENT_KINDS]
+# How paper tends to arrive. Free text on the row; these are the offers.
+CHANNELS = ("mail", "download", "scan", "email", "upload")
+
+
+def replaces_options(
+    docs: list[dict[str, Any]], *, current_id: int | None
+) -> list[tuple[str, str]]:
+    """Dropdown options for "this replaces": nothing, or any other document."""
+    return [("", "Nothing")] + [
+        (str(doc["id"]), str(doc.get("title") or "Untitled"))
+        for doc in docs
+        if doc.get("id") != current_id
+    ]
 
 
 def _facts(doc: dict[str, Any]) -> str:
@@ -52,6 +67,7 @@ class DocumentDetailPane(ft.Container):
         self.page = page
         self._on_change = on_change
         self._doc: dict[str, Any] | None = None
+        self._others: list[dict[str, Any]] = []
         self.width = 380
         self.content = EmptyStatePlaceholder("Select a document")
 
@@ -66,8 +82,12 @@ class DocumentDetailPane(ft.Container):
         if self.page:
             self.update()
 
-    def show(self, doc: dict[str, Any]) -> None:
+    def show(
+        self, doc: dict[str, Any], others: list[dict[str, Any]] | None = None
+    ) -> None:
         self._doc = doc
+        if others is not None:
+            self._others = others
         self._title = FormTextField(label="Title", value=str(doc.get("title") or ""))
         self._kind = FormDropdown(
             label="Kind", value=str(doc.get("kind") or "other"), options=KIND_OPTIONS
@@ -82,6 +102,17 @@ class DocumentDetailPane(ft.Container):
             min_lines=2,
             max_lines=4,
         )
+        self._channel = FormDropdown(
+            label="Received via",
+            value=str(doc.get("channel") or ""),
+            options=[("", "Unknown"), *[(c, c.title()) for c in CHANNELS]],
+        )
+        self._replaces = FormDropdown(
+            label="Replaces",
+            value=str(doc.get("supersedes_id") or ""),
+            options=replaces_options(self._others, current_id=doc.get("id")),
+        )
+        self._protected = ThemedSwitch(value=bool(doc.get("protected")))
         self._tag_input = FormTextField(
             label="Add tag", hint="Enter to add", on_submit=self._add_tag
         )
@@ -92,6 +123,18 @@ class DocumentDetailPane(ft.Container):
                 self._title,
                 self._kind,
                 self._date,
+                self._channel,
+                self._replaces,
+                ft.Row(
+                    [
+                        SecondaryText(
+                            "Protected: delete asks for the title, never auto-purged",
+                            size=Theme.Typography.BODY_SMALL,
+                        ),
+                        self._protected,
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
                 self._note,
                 ft.Row(self._tag_chips(), wrap=True, spacing=Theme.Spacing.XS),
                 ft.Row(
@@ -163,6 +206,11 @@ class DocumentDetailPane(ft.Container):
             "kind": self._kind.value,
             "document_date": self._date.value or None,
             "note": self._note.value or None,
+            "channel": self._channel.value or None,
+            "supersedes_id": int(self._replaces.value)
+            if self._replaces.value
+            else None,
+            "protected": bool(self._protected.value),
         }
         code, body = await self._api().request_with_status(
             "PATCH", f"{API}/{self._doc['id']}", json=payload
@@ -206,6 +254,9 @@ class DocumentDetailPane(ft.Container):
         if self._doc is None:
             return
         title = str(self._doc.get("title") or "this document")
+        if self._doc.get("protected"):
+            self._confirm_protected_delete(title)
+            return
 
         async def _do_delete() -> None:
             if self._doc is None:
@@ -224,3 +275,51 @@ class DocumentDetailPane(ft.Container):
             destructive=True,
             on_confirm=_do_delete,
         ).show()
+
+    def _confirm_protected_delete(self, title: str) -> None:
+        """One more gate: the title, typed back, is the confirmation the
+        API requires too."""
+        typed = FormTextField(label="Title", hint=title)
+        dialog: StyledAlertDialog | None = None
+
+        async def _do_delete() -> None:
+            if self._doc is None:
+                return
+            code, body = await self._api().request_with_status(
+                "DELETE", f"{API}/{self._doc['id']}", params={"confirm": typed.value}
+            )
+            if code != 204:
+                detail = body.get("detail") if isinstance(body, dict) else None
+                ErrorSnackBar(str(detail or "The title did not match.")).launch(
+                    self.page
+                )
+                return
+            if dialog is not None:
+                dialog.open = False
+            self.clear()
+            await self._on_change()
+
+        dialog = StyledAlertDialog(
+            title="Delete protected document?",
+            body=ft.Column(
+                [
+                    SecondaryText(
+                        f'Type "{title}" to retire it. The stored file is kept.',
+                        size=Theme.Typography.BODY_SMALL,
+                    ),
+                    typed,
+                ],
+                spacing=Theme.Spacing.SM,
+                tight=True,
+            ),
+            actions=[
+                PulseButton(
+                    on_click_callable=_do_delete,
+                    text="Delete",
+                    variant="stop",
+                    compact=True,
+                )
+            ],
+            width=420,
+        )
+        self.page.open(dialog)

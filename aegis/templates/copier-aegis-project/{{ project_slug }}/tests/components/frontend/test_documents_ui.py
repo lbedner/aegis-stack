@@ -5,6 +5,9 @@ matches, and that the card renders the counts the health check hands it.
 """
 
 from app.components.frontend.dashboard.cards.documents_card import DocumentsCard
+from app.components.frontend.dashboard.modals.documents_detail_pane import (
+    replaces_options,
+)
 from app.components.frontend.dashboard.modals.documents_modal import (
     display_date,
     matching_documents,
@@ -52,3 +55,17 @@ def test_card_shows_the_counts_the_health_check_reports() -> None:
     assert "47" in shown
     assert "6" in shown
     assert "212.0 MB" in shown
+
+
+def test_replaces_options_offer_every_other_document_and_nothing() -> None:
+    docs = [
+        {"id": 1, "title": "POA draft"},
+        {"id": 2, "title": "POA executed"},
+        {"id": 3, "title": "Statement"},
+    ]
+
+    options = replaces_options(docs, current_id=2)
+
+    assert options[0] == ("", "Nothing")
+    assert [label for _, label in options[1:]] == ["POA draft", "Statement"]
+    assert all(key != "2" for key, _ in options)

@@ -12,16 +12,22 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.storage import content_key, get_storage
+from app.services.documents import queries
 from app.services.documents.models import DOCUMENT_KINDS, Document, DocumentTag, utcnow
 
 # The columns a client may change after the fact. Storage, hash, size and
 # provenance describe the bytes and are fixed by them.
-_EDITABLE = frozenset({"title", "kind", "document_date", "note"})
+_EDITABLE = frozenset(
+    {"title", "kind", "document_date", "note", "channel", "supersedes_id", "protected"}
+)
+
+
+class ProtectedDocumentError(PermissionError):
+    """Retiring a protected document needs its title typed back."""
 
 
 class DocumentService:
@@ -42,6 +48,7 @@ class DocumentService:
         source: str = "upload",
         note: str | None = None,
         page_count: int | None = None,
+        channel: str | None = None,
     ) -> Document:
         """Store bytes and record the document, or return the one that
         already holds these exact bytes. See ``store`` for the version
@@ -56,6 +63,7 @@ class DocumentService:
             source=source,
             note=note,
             page_count=page_count,
+            channel=channel,
         )
         return document
 
@@ -71,6 +79,7 @@ class DocumentService:
         source: str = "upload",
         note: str | None = None,
         page_count: int | None = None,
+        channel: str | None = None,
     ) -> tuple[Document, bool]:
         """Store bytes and record the document, or return the one that
         already holds these exact bytes, plus whether a row was created.
@@ -112,6 +121,7 @@ class DocumentService:
             received_at=utcnow(),
             source=source,
             note=note,
+            channel=channel,
         )
         self.db.add(document)
         await self.db.flush()
@@ -121,23 +131,16 @@ class DocumentService:
         self, key: str, *, owner_user_id: int | None = None
     ) -> Document | None:
         """The live document holding these bytes, if there is one."""
-        digest = key.rsplit("/", 1)[-1]
-        query = select(Document).where(
-            Document.content_hash == digest, Document.deleted_at.is_(None)
+        return await queries.document_by_content(
+            self.db, key, owner_user_id=owner_user_id
         )
-        if owner_user_id is not None:
-            query = query.where(Document.owner_user_id == owner_user_id)
-        return (await self.db.exec(query)).first()
 
     async def get(
         self, document_id: int, *, owner_user_id: int | None = None
     ) -> Document | None:
-        query = select(Document).where(
-            Document.id == document_id, Document.deleted_at.is_(None)
+        return await queries.document_by_id(
+            self.db, document_id, owner_user_id=owner_user_id
         )
-        if owner_user_id is not None:
-            query = query.where(Document.owner_user_id == owner_user_id)
-        return (await self.db.exec(query)).first()
 
     async def content(
         self, document_id: int, *, owner_user_id: int | None = None
@@ -155,35 +158,23 @@ class DocumentService:
         owner_user_id: int | None = None,
         kind: str | None = None,
         tag: str | None = None,
+        channel: str | None = None,
+        include_superseded: bool = False,
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[Document], int]:
-        """A page of live documents, newest first, plus the total."""
-        query = select(Document).where(Document.deleted_at.is_(None))
-        count_query = (
-            select(func.count())
-            .select_from(Document)
-            .where(Document.deleted_at.is_(None))
+        """A page of live documents, newest first, plus the total. Heads of
+        version chains only unless ``include_superseded``."""
+        return await queries.documents_page(
+            self.db,
+            owner_user_id=owner_user_id,
+            kind=kind,
+            tag=tag,
+            channel=channel,
+            include_superseded=include_superseded,
+            page=page,
+            page_size=page_size,
         )
-        if owner_user_id is not None:
-            query = query.where(Document.owner_user_id == owner_user_id)
-            count_query = count_query.where(Document.owner_user_id == owner_user_id)
-        if kind is not None:
-            query = query.where(Document.kind == kind)
-            count_query = count_query.where(Document.kind == kind)
-        if tag is not None:
-            tagged = select(DocumentTag.document_id).where(DocumentTag.label == tag)
-            query = query.where(Document.id.in_(tagged))
-            count_query = count_query.where(Document.id.in_(tagged))
-        total = (await self.db.exec(count_query)).one()
-        rows = (
-            await self.db.exec(
-                query.order_by(Document.created_at.desc(), Document.id.desc())
-                .offset((page - 1) * page_size)
-                .limit(page_size)
-            )
-        ).all()
-        return list(rows), int(total)
 
     async def update(
         self,
@@ -206,9 +197,15 @@ class DocumentService:
             )
         if "title" in fields and not (fields["title"] or "").strip():
             raise ValueError("A document needs a title.")
+        if "protected" in fields and not isinstance(fields["protected"], bool):
+            raise ValueError("protected must be true or false.")
         document = await self.get(document_id, owner_user_id=owner_user_id)
         if document is None:
             return None
+        if fields.get("supersedes_id") is not None:
+            await self._check_supersedes(
+                document_id, int(fields["supersedes_id"]), owner_user_id=owner_user_id
+            )
         for name, value in fields.items():
             setattr(document, name, value.strip() if name == "title" else value)
         document.updated_at = utcnow()
@@ -216,56 +213,32 @@ class DocumentService:
         await self.db.flush()
         return document
 
+    async def _check_supersedes(
+        self, document_id: int, target_id: int, *, owner_user_id: int | None
+    ) -> None:
+        """The target must exist, be someone else's version, and not
+        already descend from this document, or the chain would loop."""
+        if target_id == document_id:
+            raise ValueError("A document cannot replace itself.")
+        target = await self.get(target_id, owner_user_id=owner_user_id)
+        if target is None:
+            raise ValueError("Unknown document to replace.")
+        seen: set[int] = set()
+        while target is not None and target.supersedes_id is not None:
+            if target.supersedes_id == document_id or target.id in seen:
+                raise ValueError("That would make the version chain loop.")
+            seen.add(target.id or 0)
+            target = await self.get(target.supersedes_id, owner_user_id=owner_user_id)
+
     async def summary(self, *, owner_user_id: int | None = None) -> dict[str, Any]:
         """What the card shows: how much paper, how recent, how heavy."""
-        live = Document.deleted_at.is_(None)
-        if owner_user_id is not None:
-            live = live & (Document.owner_user_id == owner_user_id)
-        by_kind = (
-            await self.db.exec(
-                select(
-                    Document.kind,
-                    func.count(),
-                    func.coalesce(func.sum(Document.byte_size), 0),
-                )
-                .where(live)
-                .group_by(Document.kind)
-            )
-        ).all()
-        month_start = utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        this_month = (
-            await self.db.exec(
-                select(func.count())
-                .select_from(Document)
-                .where(live, Document.received_at >= month_start)
-            )
-        ).one()
-        return {
-            "total": sum(int(n) for _, n, _ in by_kind),
-            "this_month": int(this_month),
-            "bytes": sum(int(b) for _, _, b in by_kind),
-            "by_kind": {kind: int(n) for kind, n, _ in by_kind},
-        }
+        return await queries.store_summary(self.db, owner_user_id=owner_user_id)
 
     async def tag_counts(
         self, *, owner_user_id: int | None = None
     ) -> list[tuple[str, int]]:
         """Every label in use on live documents, most used first."""
-        query = (
-            select(DocumentTag.label, func.count())
-            .join(Document, Document.id == DocumentTag.document_id)
-            .where(Document.deleted_at.is_(None))
-        )
-        if owner_user_id is not None:
-            query = query.where(Document.owner_user_id == owner_user_id)
-        rows = (
-            await self.db.exec(
-                query.group_by(DocumentTag.label).order_by(
-                    func.count().desc(), DocumentTag.label
-                )
-            )
-        ).all()
-        return [(str(label), int(n)) for label, n in rows]
+        return await queries.tag_counts(self.db, owner_user_id=owner_user_id)
 
     async def untag(self, document_id: int, label: str) -> bool:
         """Take a label off; False when it was not there."""
@@ -307,46 +280,32 @@ class DocumentService:
         return row
 
     async def tags_for_many(self, document_ids: list[int]) -> dict[int, list[str]]:
-        """Tags for a page of documents in ONE query.
-
-        A per-row lookup is the N+1 the house rules forbid, and a listing
-        endpoint is exactly where it bites.
-        """
-        if not document_ids:
-            return {}
-        rows = (
-            await self.db.exec(
-                select(DocumentTag)
-                .where(DocumentTag.document_id.in_(document_ids))
-                .order_by(DocumentTag.document_id, DocumentTag.label)
-            )
-        ).all()
-        grouped: dict[int, list[str]] = {}
-        for row in rows:
-            grouped.setdefault(row.document_id, []).append(row.label)
-        return grouped
+        """Tags for a page of documents in one query, never one per row."""
+        return await queries.tags_for_many(self.db, document_ids)
 
     async def tags_for(self, document_id: int) -> list[str]:
-        rows = (
-            await self.db.exec(
-                select(DocumentTag)
-                .where(DocumentTag.document_id == document_id)
-                .order_by(DocumentTag.label)
-            )
-        ).all()
-        return [row.label for row in rows]
+        return await queries.tags_for(self.db, document_id)
 
     async def soft_delete(
-        self, document_id: int, *, owner_user_id: int | None = None
+        self,
+        document_id: int,
+        *,
+        owner_user_id: int | None = None,
+        confirm: str | None = None,
     ) -> bool:
         """Retire a document without touching storage.
 
         The bytes stay: another document may hold the same content hash,
         and an audit trail that loses its subject is not an audit trail.
+        A protected document goes only when ``confirm`` is its exact title.
         """
         document = await self.get(document_id, owner_user_id=owner_user_id)
         if document is None:
             return False
+        if document.protected and confirm != document.title:
+            raise ProtectedDocumentError(
+                "This document is protected; confirm by sending its exact title."
+            )
         document.deleted_at = utcnow()
         self.db.add(document)
         await self.db.flush()

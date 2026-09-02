@@ -511,6 +511,10 @@ class TestGenerateMigration:
         content = result.read_text()
         assert "'document'" in content
         assert "'document_tag'" in content
+        # SF-07 lifecycle columns ship in the squashed migration too.
+        assert "'supersedes_id'" in content
+        assert "'protected'" in content
+        assert "'channel'" in content
 
     def test_creates_versions_directory(self, tmp_path: Path) -> None:
         """Test creates versions directory if it doesn't exist."""

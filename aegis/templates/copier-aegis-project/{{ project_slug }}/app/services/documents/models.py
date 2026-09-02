@@ -62,6 +62,7 @@ class Document(SQLModel, table=True):
             postgresql_where=Column("deleted_at").is_(None),
         ),
         Index("ix_document_kind", "kind"),
+        Index("ix_document_supersedes", "supersedes_id"),
         CheckConstraint(
             "kind IN ('letter', 'statement', 'form', 'identification', "
             "'receipt', 'other')",
@@ -88,6 +89,15 @@ class Document(SQLModel, table=True):
     document_date: date | None = None
     received_at: datetime | None = None
     source: str = Field(default="upload", max_length=32)
+    # How the paper reached you (mail, download, scan, email), as opposed
+    # to ``source``, which is the mechanism that stored the bytes.
+    channel: str | None = Field(default=None, max_length=32)
+    # A newer version points at the one it replaces. The head of a chain
+    # is the copy to cite; the rest stay reachable beneath it. Supersede,
+    # never overwrite: the same rule facts follow.
+    supersedes_id: int | None = Field(default=None, foreign_key="document.id")
+    # One more gate on delete, and never auto-purged. Not an access tier.
+    protected: bool = Field(default=False)
     note: str | None = None
     meta_data: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("meta_data", JSON, nullable=False)

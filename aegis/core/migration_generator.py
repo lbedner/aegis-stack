@@ -1522,14 +1522,28 @@ DOCUMENTS_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec(
                     "source", "sa.String(32)", nullable=False, default="'upload'"
                 ),
+                # How the paper reached you, as opposed to ``source``, which
+                # is the mechanism that stored the bytes.
+                ColumnSpec("channel", "sa.String(32)", nullable=True),
+                # A newer version points at the one it replaces; the head of
+                # the chain is the copy to cite.
+                ColumnSpec("supersedes_id", "sa.Integer()", nullable=True),
+                # One more gate on delete, never auto-purged.
+                ColumnSpec(
+                    "protected", "sa.Boolean()", nullable=False, default="False"
+                ),
                 ColumnSpec("note", "sa.String()", nullable=True),
                 ColumnSpec("meta_data", "sa.JSON()", nullable=False, default="{}"),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
                 ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
                 ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
             ],
+            foreign_keys=[
+                ForeignKeySpec(["supersedes_id"], "document", ["id"]),
+            ],
             indexes=[
                 IndexSpec("ix_document_owner", ["owner_user_id"]),
+                IndexSpec("ix_document_supersedes", ["supersedes_id"]),
                 # The dedupe lookup: same bytes, same owner, same row.
                 # The dedupe rule, enforced rather than merely checked:
                 # ingest reads before it writes, and two concurrent

@@ -12,6 +12,9 @@ from app.components.frontend.dashboard.modals.documents_modal import (
     display_date,
     matching_documents,
 )
+from app.components.frontend.dashboard.modals.documents_pages import (
+    extraction_summary,
+)
 from app.services.documents.health import DOCUMENTS_MODAL_ID
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from tests.components.frontend._tree import texts
@@ -66,6 +69,21 @@ def test_replaces_options_offer_every_other_document_and_nothing() -> None:
 
     options = replaces_options(docs, current_id=2)
 
-    assert options[0] == ("", "Nothing")
+    assert options[0] == ("none", "Nothing")
     assert [label for _, label in options[1:]] == ["POA draft", "Statement"]
     assert all(key != "2" for key, _ in options)
+
+
+def test_extraction_summary_reads_like_a_sentence() -> None:
+    assert extraction_summary({"read": 7, "unread": 0, "skipped": 0}) == "7 pages read"
+    assert (
+        extraction_summary({"read": 5, "unread": 2, "skipped": 0}) == "5 read, 2 unread"
+    )
+    assert extraction_summary({"read": 0, "unread": 0, "skipped": 3}) == "Already read"
+
+
+def test_placeholders_save_as_no_value() -> None:
+    from app.components.frontend.dashboard.modals.documents_detail_pane import _chosen
+
+    assert _chosen("none") is None and _chosen("") is None and _chosen(None) is None
+    assert _chosen("mail") == "mail"

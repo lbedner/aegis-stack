@@ -126,3 +126,33 @@ class DocumentTag(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     document_id: int = Field(foreign_key="document.id")
     label: str = Field(max_length=64)
+
+
+class DocumentPage(SQLModel, table=True):
+    """One page of a document as extraction read it.
+
+    ``method`` says how the text was obtained (the PDF's own text layer,
+    a vision model over the rendered page, or none), so any claim built
+    on it later can cite both the page and the way it was read. A page
+    that could not be read is a row with ``status='unread'`` and the
+    reason in ``detail``, never an absence.
+    """
+
+    __tablename__ = "document_page"
+    __table_args__ = (
+        Index("ix_document_page_document", "document_id"),
+        Index("uq_document_page", "document_id", "page_number", unique=True),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    document_id: int = Field(foreign_key="document.id")
+    page_number: int
+    status: str = Field(default="unread", max_length=16)
+    method: str = Field(default="none", max_length=16)
+    text: str | None = None
+    # The rendered page in object storage, what the thumbnail strip shows.
+    image_key: str | None = Field(default=None, max_length=128)
+    model: str | None = Field(default=None, max_length=128)
+    detail: str | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime | None = None

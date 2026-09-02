@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.documents.models import Document, DocumentTag, utcnow
+from app.services.documents.models import Document, DocumentPage, DocumentTag, utcnow
 
 
 async def document_by_content(
@@ -175,3 +175,28 @@ async def tags_for(db: AsyncSession, document_id: int) -> list[str]:
         )
     ).all()
     return [row.label for row in rows]
+
+
+async def pages_for(db: AsyncSession, document_id: int) -> list[DocumentPage]:
+    """Every extracted page of a document, in page order."""
+    rows = (
+        await db.exec(
+            select(DocumentPage)
+            .where(DocumentPage.document_id == document_id)
+            .order_by(DocumentPage.page_number)
+        )
+    ).all()
+    return list(rows)
+
+
+async def page_for(
+    db: AsyncSession, document_id: int, page_number: int
+) -> DocumentPage | None:
+    return (
+        await db.exec(
+            select(DocumentPage).where(
+                DocumentPage.document_id == document_id,
+                DocumentPage.page_number == page_number,
+            )
+        )
+    ).first()

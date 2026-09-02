@@ -1568,6 +1568,36 @@ DOCUMENTS_MIGRATION = ServiceMigrationSpec(
                 ),
             ],
         ),
+        # One row per page as extraction read it: the method that produced
+        # the text (text layer, vision, none) rides along so any later
+        # claim can cite both the page and the way it was read.
+        TableSpec(
+            name="document_page",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("document_id", "sa.Integer()", nullable=False),
+                ColumnSpec("page_number", "sa.Integer()", nullable=False),
+                ColumnSpec(
+                    "status", "sa.String(16)", nullable=False, default="'unread'"
+                ),
+                ColumnSpec("method", "sa.String(16)", nullable=False, default="'none'"),
+                ColumnSpec("text", "sa.String()", nullable=True),
+                ColumnSpec("image_key", "sa.String(128)", nullable=True),
+                ColumnSpec("model", "sa.String(128)", nullable=True),
+                ColumnSpec("detail", "sa.String()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["document_id"], "document", ["id"], ondelete="CASCADE"),
+            ],
+            indexes=[
+                IndexSpec("ix_document_page_document", ["document_id"]),
+                IndexSpec(
+                    "uq_document_page", ["document_id", "page_number"], unique=True
+                ),
+            ],
+        ),
         # Free-form labels rather than a fixed taxonomy: the framework
         # stores paper, it does not decide what kinds of paper exist.
         TableSpec(

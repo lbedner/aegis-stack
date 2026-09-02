@@ -1,0 +1,65 @@
+{%- if include_ai and ai_framework == "pydantic-ai" %}
+"""The vision reader extraction hands a rendered page to.
+
+The same model the chat surface reads a pasted screenshot with, called
+headlessly: a page image in, its transcription out. Usage is recorded
+under its own surface so the cost of reading paper is visible.
+"""
+
+from __future__ import annotations
+
+from app.core.config import settings
+from app.services.ai.config import AIServiceConfig
+from app.services.ai.domains.llm.providers import ProviderError, model_for
+from app.services.ai.usage_recording import extract_usage, record_usage
+from app.services.documents.extraction import VisionReader
+
+SURFACE = "documents:extract"
+INSTRUCTIONS = (
+    "You transcribe one page of a scanned document. Return the page's text "
+    "faithfully in reading order, keeping headings, labels, amounts, dates "
+    "and account numbers exactly as printed. Render tables one row per "
+    "line with cells separated by ' | '. Do not summarize, interpret, or add "
+    "anything that is not on the page."
+)
+
+
+async def read_page(image: bytes, media_type: str) -> tuple[str, str]:
+    """Transcribe one page image; returns (text, model name)."""
+    from pydantic_ai import Agent as PydanticAgent
+    from pydantic_ai.messages import BinaryContent
+
+    model, model_name = model_for(AIServiceConfig.from_settings(settings), settings)
+    agent: PydanticAgent[None, str] = PydanticAgent(model, instructions=INSTRUCTIONS)
+    result = await agent.run(
+        ["Transcribe this page.", BinaryContent(data=image, media_type=media_type)]
+    )
+    record_usage(
+        action=SURFACE, model_name=model_name, usage=extract_usage(result), user_id=None
+    )
+    return str(result.output), model_name
+
+
+def vision_reader() -> VisionReader | None:
+    """The reader, or None when the configured provider cannot hand out
+    a bare model (the keyless public endpoints build their own client)."""
+    try:
+        model_for(AIServiceConfig.from_settings(settings), settings)
+    except ProviderError:
+        return None
+    return read_page
+{%- else %}
+"""No vision reader in this stack: scans stay unread with a reason.
+
+The AI service with the pydantic-ai framework supplies one; without it,
+extraction still reads every text layer and records the rest as unread.
+"""
+
+from __future__ import annotations
+
+from app.services.documents.extraction import VisionReader
+
+
+def vision_reader() -> VisionReader | None:
+    return None
+{%- endif %}

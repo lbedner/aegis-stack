@@ -18,31 +18,52 @@ from app.components.frontend.controls import (
     FormDropdown,
     FormTextField,
     H3Text,
+    LabelText,
+    PrimaryText,
     SecondaryText,
     ThemedSwitch,
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.form_fields import FormDateField
+from app.components.frontend.controls.loading_overlay import LoadingOverlay
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_bytes, format_date
 from app.core.log import logger
 from app.services.documents.models import DOCUMENT_KINDS
 
+from .documents_pages import PagesStrip, extraction_summary
 from .modal_sections import EmptyStatePlaceholder
 
 API = "/api/v1/documents"
 KIND_OPTIONS = [(kind, kind.title()) for kind in DOCUMENT_KINDS]
 # How paper tends to arrive. Free text on the row; these are the offers.
 CHANNELS = ("mail", "download", "scan", "email", "upload")
+# Flet's dropdown reports an option with an EMPTY key by its text, so
+# "no value" needs a real key or "Nothing" arrives as a value.
+NONE = "none"
+
+
+def _chosen(value: str | None) -> str | None:
+    """A dropdown value, with the placeholder read as no value."""
+    return None if value in (None, "", NONE) else value
+
+
+def _pair(left: ft.Control, right: ft.Control) -> ft.Row:
+    """Two fields on one line, equal width."""
+    return ft.Row(
+        [ft.Container(left, expand=True), ft.Container(right, expand=True)],
+        spacing=Theme.Spacing.SM,
+        vertical_alignment=ft.CrossAxisAlignment.START,
+    )
 
 
 def replaces_options(
     docs: list[dict[str, Any]], *, current_id: int | None
 ) -> list[tuple[str, str]]:
     """Dropdown options for "this replaces": nothing, or any other document."""
-    return [("", "Nothing")] + [
+    return [(NONE, "Nothing")] + [
         (str(doc["id"]), str(doc.get("title") or "Untitled"))
         for doc in docs
         if doc.get("id") != current_id
@@ -68,7 +89,10 @@ class DocumentDetailPane(ft.Container):
         self._on_change = on_change
         self._doc: dict[str, Any] | None = None
         self._others: list[dict[str, Any]] = []
-        self.width = 380
+        self.width = 400
+        self.padding = ft.padding.all(Theme.Spacing.MD)
+        self.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
+        self.border_radius = Theme.Components.CARD_RADIUS
         self.content = EmptyStatePlaceholder("Select a document")
 
     def _api(self) -> Any:
@@ -104,38 +128,71 @@ class DocumentDetailPane(ft.Container):
         )
         self._channel = FormDropdown(
             label="Received via",
-            value=str(doc.get("channel") or ""),
-            options=[("", "Unknown"), *[(c, c.title()) for c in CHANNELS]],
+            value=str(doc.get("channel") or NONE),
+            options=[(NONE, "Unknown"), *[(c, c.title()) for c in CHANNELS]],
         )
         self._replaces = FormDropdown(
             label="Replaces",
-            value=str(doc.get("supersedes_id") or ""),
+            value=str(doc.get("supersedes_id") or NONE),
             options=replaces_options(self._others, current_id=doc.get("id")),
         )
         self._protected = ThemedSwitch(value=bool(doc.get("protected")))
+        self._pages = PagesStrip(
+            page=self.page, api=self._api, document_id=int(doc["id"])
+        )
         self._tag_input = FormTextField(
             label="Add tag", hint="Enter to add", on_submit=self._add_tag
         )
-        self.content = ft.Column(
+        hairline = ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT)
+        header = ft.Column(
             [
-                H3Text(str(doc.get("title") or "Untitled")),
-                SecondaryText(_facts(doc), size=Theme.Typography.BODY_SMALL),
-                self._title,
-                self._kind,
-                self._date,
-                self._channel,
-                self._replaces,
                 ft.Row(
                     [
-                        SecondaryText(
-                            "Protected: delete asks for the title, never auto-purged",
-                            size=Theme.Typography.BODY_SMALL,
+                        ft.Container(
+                            H3Text(str(doc.get("title") or "Untitled")), expand=True
                         ),
-                        self._protected,
+                        ft.Icon(
+                            ft.Icons.LOCK_OUTLINE,
+                            size=16,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                            visible=bool(doc.get("protected")),
+                            tooltip="Protected",
+                        ),
                     ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                ),
+                SecondaryText(
+                    _facts(doc),
+                    size=Theme.Typography.BODY_SMALL,
+                    tooltip=str(doc.get("storage_key") or ""),
+                ),
+                self._pages,
+            ],
+            spacing=Theme.Spacing.XS,
+            tight=True,
+        )
+        body = ft.Column(
+            [
+                self._title,
+                _pair(self._kind, self._date),
+                _pair(self._channel, self._replaces),
+                ft.Column(
+                    [
+                        ft.Row(
+                            [PrimaryText("Protected"), self._protected],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        SecondaryText(
+                            "Delete asks for the title. Never auto-purged.",
+                            size=Theme.Typography.CAPTION,
+                        ),
+                    ],
+                    spacing=0,
+                    tight=True,
                 ),
                 self._note,
+                LabelText("Tags"),
                 ft.Row(self._tag_chips(), wrap=True, spacing=Theme.Spacing.XS),
                 ft.Row(
                     [
@@ -150,37 +207,65 @@ class DocumentDetailPane(ft.Container):
                     spacing=Theme.Spacing.SM,
                     vertical_alignment=ft.CrossAxisAlignment.END,
                 ),
-                SecondaryText(
-                    str(doc.get("storage_key") or ""),
-                    size=Theme.Typography.CAPTION,
-                    selectable=True,
-                ),
-                ft.Row(
-                    [
-                        PulseButton(
-                            on_click_callable=self._save, text="Save", compact=True
-                        ),
-                        PulseButton(
-                            on_click_callable=self._download,
-                            text="Download",
-                            variant="muted",
-                            compact=True,
-                        ),
-                        PulseButton(
-                            on_click_callable=self._confirm_delete,
-                            text="Delete",
-                            variant="stop",
-                            compact=True,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.SM,
-                ),
             ],
             spacing=Theme.Spacing.SM,
             scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+        footer = ft.Row(
+            [
+                PulseButton(on_click_callable=self._save, text="Save", compact=True),
+                ft.Container(expand=True),
+                PulseButton(
+                    on_click_callable=self._extract,
+                    text="Extract",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=self._download,
+                    text="Download",
+                    variant="muted",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=self._confirm_delete,
+                    text="Delete",
+                    variant="stop",
+                    compact=True,
+                ),
+            ],
+            spacing=Theme.Spacing.SM,
+        )
+        self.content = ft.Column(
+            [header, hairline, body, hairline, footer],
+            spacing=Theme.Spacing.SM,
+            expand=True,
         )
         if self.page:
             self.update()
+            self.page.run_task(self._pages.load)
+
+    async def _extract(self) -> None:
+        """Read every page not yet read; progress rides the jobs stream."""
+        if self._doc is None:
+            return
+        overlay = LoadingOverlay(self.page)
+        overlay.show("Opening the document...")
+        started = await self._api().post(
+            f"{API}/{self._doc['id']}/extract?background=true"
+        )
+        if not isinstance(started, dict) or not started.get("job_id"):
+            overlay.fail("Extraction could not start.", title="Extraction failed")
+            return
+        result = await overlay.run_job(
+            self._api(), str(started["job_id"]), title="Extraction failed"
+        )
+        if result is None:
+            return
+        SuccessSnackBar(extraction_summary(result)).launch(self.page)
+        await self._pages.load()
+        await self._on_change()
 
     def _tag_chips(self) -> list[ft.Control]:
         tags = self._doc.get("tags", []) if self._doc else []
@@ -201,15 +286,14 @@ class DocumentDetailPane(ft.Container):
     async def _save(self) -> None:
         if self._doc is None:
             return
+        replaces = _chosen(self._replaces.value)
         payload = {
             "title": self._title.value,
             "kind": self._kind.value,
             "document_date": self._date.value or None,
             "note": self._note.value or None,
-            "channel": self._channel.value or None,
-            "supersedes_id": int(self._replaces.value)
-            if self._replaces.value
-            else None,
+            "channel": _chosen(self._channel.value),
+            "supersedes_id": int(replaces) if replaces else None,
             "protected": bool(self._protected.value),
         }
         code, body = await self._api().request_with_status(

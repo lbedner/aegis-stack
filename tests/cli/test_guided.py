@@ -9,7 +9,7 @@ same state object.
 
 Confirm prompts accept ``y``/``n`` shortcuts; the engine asks about each
 optional component in INFRASTRUCTURE_ORDER (worker, scheduler, database,
-redis, ingress, observability, htmx) then every service grouped by
+redis, storage, ingress, observability, htmx) then every service grouped by
 ServiceType order (auth, payment, ai, comms, insights, blog, finance).
 """
 
@@ -42,10 +42,10 @@ def _drive(keys: list[str]):
     return run_guided_selection(_ui(keys))
 
 
-# worker scheduler database redis ingress observability htmx |
+# worker scheduler database redis storage ingress observability htmx |
 # auth payment ai comms insights blog finance documents
 # (redis is skipped entirely when an accepted worker already bundled it)
-_DECLINE_ALL = ["n"] * 15
+_DECLINE_ALL = ["n"] * 16
 
 # The full init flow opens with the starting-point screen; enter selects
 # Blank canvas. (run_guided_selection alone never shows it.)
@@ -73,7 +73,7 @@ class TestGuidedDrivesEngine:
 
     def test_add_database_only(self) -> None:
         # yes only on the 3rd confirm (database); engine screen -> enter = SQLite
-        keys = ["n", "n", "y", "\r"] + ["n"] * 12
+        keys = ["n", "n", "y", "\r"] + ["n"] * 13
         state = _drive(keys)
         assert state.components == ["database"]
         assert state.services == []
@@ -81,7 +81,7 @@ class TestGuidedDrivesEngine:
     def test_add_database_postgres_neon(self) -> None:
         # database yes -> engine: right+enter = PostgreSQL -> host: right+enter
         # = Neon. Encodes as database[neon] (engine normalizes to postgres).
-        keys = ["n", "n", "y", "right", "\r", "right", "\r"] + ["n"] * 12
+        keys = ["n", "n", "y", "right", "\r", "right", "\r"] + ["n"] * 13
         state = _drive(keys)
         assert state.components == ["database[neon]"]
         assert state.postgres_provider == "neon"
@@ -89,7 +89,7 @@ class TestGuidedDrivesEngine:
     def test_add_database_postgres_container(self) -> None:
         # database yes -> engine: right+enter = PostgreSQL -> host: enter =
         # local container (the default). Encodes as database[postgres].
-        keys = ["n", "n", "y", "right", "\r", "\r"] + ["n"] * 12
+        keys = ["n", "n", "y", "right", "\r", "\r"] + ["n"] * 13
         state = _drive(keys)
         assert state.components == ["database[postgres]"]
         assert state.postgres_provider == "container"
@@ -99,7 +99,7 @@ class TestGuidedDrivesEngine:
         # skips the redis screen entirely (no point asking for something
         # already added). worker(y) backend(enter), then decline the
         # remaining 5 asked components and all 7 services.
-        keys = ["y", "\r"] + ["n"] * 13
+        keys = ["y", "\r"] + ["n"] * 14
         state = _drive(keys)
         assert "redis" in state.components
         assert "worker" in state.components
@@ -109,7 +109,7 @@ class TestGuidedDrivesEngine:
         # screen: chips are [In-memory, SQLite, PostgreSQL] — right twice
         # lands on PostgreSQL, then the host screen: enter = local
         # container. Database is auto-skipped; redis still asks.
-        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 12
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 13
         state = _drive(keys)
         assert "scheduler[postgres]" in state.components
         assert "database[postgres]" in state.components
@@ -120,16 +120,16 @@ class TestGuidedDrivesEngine:
         # The scheduler is what pulls the database in, so IT must ask the
         # container-vs-Neon question — right+enter on the host screen picks
         # Neon and the auto-added database encodes it.
-        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 12
+        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 13
         state = _drive(keys)
         assert "scheduler[postgres]" in state.components
         assert "database[neon]" in state.components
         assert state.postgres_provider == "neon"
 
     def test_auth_configures_level(self) -> None:
-        # decline all 7 components, accept auth, pick RBAC (right+enter), then
+        # decline all 8 components, accept auth, pick RBAC (right+enter), then
         # confirm the "auth needs a database" prompt (y), decline the rest.
-        keys = _DECLINE_ALL[:7] + ["y", "right", "\r", "y"] + ["n"] * 7
+        keys = _DECLINE_ALL[:8] + ["y", "right", "\r", "y"] + ["n"] * 7
         state = _drive(keys)
         assert "auth[rbac]" in state.services
 
@@ -137,7 +137,7 @@ class TestGuidedDrivesEngine:
         # comms, insights, and payment were silently skipped by the old
         # hand-written AUTH/AI/CONTENT trio; accepting their confirms must
         # now land them in the selection.
-        keys = _DECLINE_ALL[:7] + ["n", "y", "n", "y", "y", "n", "n"]
+        keys = _DECLINE_ALL[:8] + ["n", "y", "n", "y", "y", "n", "n"]
         state = _drive(keys)
         assert state.services == ["payment", "comms", "insights"]
 
@@ -145,7 +145,7 @@ class TestGuidedDrivesEngine:
         # Accept AI: framework chip (enter = pydantic-ai), storage chip
         # (enter = memory), providers (up wraps to Continue, enter keeps
         # the recommended default), rag yes, voice no; rest declined.
-        keys = _DECLINE_ALL[:7] + ["n", "n", "y", "\r", "\r", "up", "\r", "y", "n"]
+        keys = _DECLINE_ALL[:8] + ["n", "n", "y", "\r", "\r", "up", "\r", "y", "n"]
         keys += ["n", "n", "n", "n"]
         state = _drive(keys)
         assert state.services == ["ai[memory,pydantic-ai,public,rag]"]
@@ -155,7 +155,7 @@ class TestGuidedDrivesEngine:
         # = PostgreSQL, then after the AI screens the host question fires —
         # right+enter picks Neon for the auto-added database.
         keys = (
-            _DECLINE_ALL[:7]
+            _DECLINE_ALL[:8]
             + ["n", "n", "y", "\r"]  # auth n, payment n, ai y -> framework
             + ["right", "right", "\r"]  # storage: PostgreSQL
             + ["up", "\r"]  # providers: Continue with the default
@@ -175,7 +175,7 @@ class TestGuidedDrivesEngine:
         keys = (
             ["n", "y", "right", "right", "\r", "\r"]  # worker n, scheduler ->
             # postgres, host -> local container
-            + ["n", "n", "n", "n"]  # redis, ingress, observability, htmx
+            + ["n", "n", "n", "n", "n"]  # redis, storage, ingress, observability, htmx
             # (db auto-skipped)
             + ["n", "n", "y", "\r", "up", "\r", "n", "n"]  # auth n, payment n,
             # ai y -> framework, providers (Continue), rag n, voice n
@@ -191,8 +191,8 @@ class TestGuidedDrivesEngine:
         # A plain database selection means the default engine (sqlite); AI
         # persists to it without asking.
         keys = (
-            ["n", "n", "y", "\r", "n", "n", "n", "n"]  # database accepted,
-            # engine=sqlite; then redis, ingress, observability, htmx
+            ["n", "n", "y", "\r", "n", "n", "n", "n", "n"]  # database accepted,
+            # engine=sqlite; then redis, storage, ingress, observability, htmx
             + ["n", "n", "y", "\r", "up", "\r", "n", "n"]  # ai: framework,
             # providers (Continue), rag, voice — no storage screen
             + ["n", "n", "n", "n"]
@@ -205,7 +205,7 @@ class TestGuidedDrivesEngine:
         # LLM7.io is pre-checked (recommended); enter on a focused row
         # TOGGLES it (OpenAI here), and only Continue advances.
         keys = (
-            _DECLINE_ALL[:7]
+            _DECLINE_ALL[:8]
             + ["n", "n", "y", "\r", "\r"]  # ai y, framework, storage memory
             + ["down", "\r", "up", "up", "\r"]  # toggle openai via enter,
             # wrap up to Continue, accept
@@ -218,7 +218,7 @@ class TestGuidedDrivesEngine:
     def test_ai_provider_none_selected_falls_back_to_default(self) -> None:
         # Unchecking everything still yields the free tier, like quick mode.
         keys = (
-            _DECLINE_ALL[:7]
+            _DECLINE_ALL[:8]
             + ["n", "n", "y", "\r", "\r"]
             + [" ", "up", "\r"]  # uncheck LLM7.io, Continue with none
             + ["n", "n"]
@@ -317,7 +317,7 @@ class TestReviewScreen:
     def test_review_enter_confirms_plan(self) -> None:
         # database accepted (engine screen -> enter = SQLite), everything else
         # declined, enter on REVIEW.
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 12 + ["\r"]
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 13 + ["\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
@@ -335,14 +335,14 @@ class TestReviewScreen:
         assert plan.services == []
 
     def test_review_detail_panes_toggle_harmlessly(self) -> None:
-        keys = _BLANK + ["n", "n", "y"] + ["n"] * 12 + ["f", "d", "f", "\r"]
+        keys = _BLANK + ["n", "n", "y"] + ["n"] * 13 + ["f", "d", "f", "\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
 
     def test_yes_skips_review(self) -> None:
         # With --yes the review is skipped entirely: no extra key consumed.
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 12
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 14
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", yes=True, ui=ui)
         assert "database" in plan.components
@@ -350,7 +350,7 @@ class TestReviewScreen:
     def test_plan_includes_dependency_auto_adds(self) -> None:
         # Worker accepted -> the resolved plan carries the auto-added redis
         # (same resolution quick mode runs; REVIEW shows it tagged "auto").
-        keys = _BLANK + ["y", "\r"] + ["n"] * 13 + ["\r"]
+        keys = _BLANK + ["y", "\r"] + ["n"] * 14 + ["\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         bases = [c.split("[", 1)[0] for c in plan.components]
@@ -371,7 +371,7 @@ class TestInExperienceBuild:
             calls.append(plan.project_name)
             return "/tmp/demo"
 
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 12 + ["\r", "\r"]
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 13 + ["\r", "\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow(
             "demo",
@@ -469,7 +469,7 @@ class TestBreadcrumbs:
     def test_crumbs_record_each_component_decision(self) -> None:
         # Worker leads now; accepting it amends its crumb with the backend
         # and pushes the auto-added redis crumb (capability-first name).
-        ui = GuidedSelectionUI(keys=["y", "\r"] + ["n"] * 13)
+        ui = GuidedSelectionUI(keys=["y", "\r"] + ["n"] * 14)
         run_guided_selection(ui)
         assert ui.breadcrumbs[0] == "Worker ✓ arq"
         assert "Cache/Broker/Pubsub ✓" in ui.breadcrumbs
@@ -482,7 +482,7 @@ class TestBreadcrumbs:
         # scheduler accepted, postgres backend (then host: enter = local
         # container): the engine choice attaches to the Scheduler crumb
         # instead of adding noise; the host screen leaves it alone.
-        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 12
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 14
         ui = _ui(keys)
         run_guided_selection(ui)
         assert "Scheduler ✓ postgres" in ui.breadcrumbs
@@ -490,7 +490,7 @@ class TestBreadcrumbs:
     def test_worker_auto_added_redis_pushes_its_crumb(self) -> None:
         # Worker accepted: the engine bundles redis and pushes its crumb
         # (the redis screen itself is skipped, so this is its only trace).
-        keys = ["y", "\r"] + ["n"] * 13
+        keys = ["y", "\r"] + ["n"] * 14
         ui = _ui(keys)
         run_guided_selection(ui)
         assert "Cache/Broker/Pubsub ✓" in ui.breadcrumbs
@@ -511,7 +511,7 @@ class TestBreadcrumbs:
     def test_auto_added_database_gets_its_own_crumb(self) -> None:
         # Picking a persistent scheduler backend pulls in Database; the
         # sidebar must show that, not hide it inside the Scheduler crumb.
-        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 12
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 14
         ui = _ui(keys)
         run_guided_selection(ui)
         assert "Database ✓ postgres" in ui.breadcrumbs
@@ -519,7 +519,7 @@ class TestBreadcrumbs:
     def test_auto_added_neon_database_crumb_shows_neon(self) -> None:
         # Same path but picking Neon on the host screen: the auto-added
         # Database crumb must say so.
-        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 12
+        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 14
         ui = _ui(keys)
         run_guided_selection(ui)
         assert "Database ✓ neon" in ui.breadcrumbs
@@ -531,7 +531,7 @@ class TestBreadcrumbs:
         # In-memory means no auto database, so the Database screen comes
         # back on the replayed pass: 12 declines, not 11.
         keys = ["n", "y", "right", "right", "\r", "esc"]
-        keys += ["left", "left", "\r"] + ["n"] * 13
+        keys += ["left", "left", "\r"] + ["n"] * 14
         ui = _ui(keys)
         run_guided_selection(ui)
         # The auto-pushed crumb is gone; what remains is the re-asked (and
@@ -543,7 +543,7 @@ class TestBreadcrumbs:
     def test_ai_persistent_storage_pushes_database_crumb(self) -> None:
         # AI alone choosing sqlite storage auto-adds Database — sidebar too.
         keys = (
-            _DECLINE_ALL[:7]
+            _DECLINE_ALL[:8]
             + ["n", "n", "y", "\r", "right", "\r", "up", "\r", "n", "n"]
             # ai -> framework, storage right (sqlite), providers Continue,
             # rag n, voice n
@@ -557,7 +557,7 @@ class TestBreadcrumbs:
         from rich.console import Console
 
         keys = (
-            _DECLINE_ALL[:7]
+            _DECLINE_ALL[:8]
             + ["n", "n", "y", "\r", "right", "\r", "up", "\r", "n", "n"]
             + ["n", "n", "n", "n"]
         )
@@ -787,7 +787,7 @@ class TestBreadcrumbs:
     def test_back_rewinds_the_trail(self) -> None:
         # Worker accepted then revised to declined via esc on the backend
         # chips: the trail must show the revised answer, not the original.
-        ui = GuidedSelectionUI(keys=["y", "esc"] + ["n"] * 15)
+        ui = GuidedSelectionUI(keys=["y", "esc"] + ["n"] * 16)
         run_guided_selection(ui)
         assert ui.breadcrumbs[0] == "Worker ✗"
         assert all("✓" not in crumb for crumb in ui.breadcrumbs)

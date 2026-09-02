@@ -36,6 +36,7 @@ class TestAIProviderSelection:
             False,  # worker
             False,  # scheduler
             False,  # database
+            False,  # storage
             False,  # ingress
             False,  # observability
             False,  # htmx
@@ -80,6 +81,7 @@ class TestAIProviderSelection:
             False,  # worker
             False,  # scheduler
             False,  # database
+            False,  # storage
             False,  # ingress
             False,  # observability
             False,  # htmx
@@ -125,6 +127,7 @@ class TestAIProviderSelection:
             False,  # worker
             False,  # scheduler
             False,  # database
+            False,  # storage
             False,  # ingress
             False,  # observability
             False,  # htmx
@@ -170,6 +173,7 @@ class TestAIProviderSelection:
             False,  # worker
             False,  # scheduler
             False,  # database
+            False,  # storage
             False,  # ingress
             False,  # observability
             False,  # htmx
@@ -218,6 +222,7 @@ class TestAIBackendSelection:
                 False,  # scheduler
                 False,  # database
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -277,6 +282,7 @@ class TestAIBackendSelection:
                 False,  # scheduler
                 True,  # database (yes)
                 False,  # redis
+                False,  # storage
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
@@ -327,6 +333,7 @@ class TestAIBackendSelection:
             False,  # worker
             False,  # scheduler
             False,  # database
+            False,  # storage
             False,  # ingress
             False,  # observability
             False,  # htmx
@@ -495,6 +502,7 @@ class TestAIConfigurationEndToEnd:
             False,  # worker
             False,  # scheduler
             False,  # database
+            False,  # storage
             False,  # ingress
             False,  # observability
             False,  # htmx
@@ -602,6 +610,7 @@ class TestOllamaModeSelection:
             False,  # worker
             False,  # scheduler
             False,  # database
+            False,  # storage
             False,  # ingress
             False,  # observability
             False,  # htmx

@@ -22,7 +22,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.constants import add_months
 from app.services.finance.domains.planning.budgets import queries
-from app.services.finance.domains.planning.budgets.lines import get_or_create_budget
+from app.services.finance.domains.planning.budgets.lines import (
+    get_or_create_budget,
+    lines_in_force,
+)
 from app.services.finance.models import FinanceAccount, FinanceTransaction
 from app.services.finance.utils import current_period_month
 
@@ -182,14 +185,13 @@ async def uncovered_spend_filters(
     window_end = date(today.year, today.month, 1)
     window_start = add_months(window_end, -lookback_months)
 
+    period = current_period_month(today)
     budget = await get_or_create_budget(
-        db, owner_user_id=owner_user_id, period_month=current_period_month()
+        db, owner_user_id=owner_user_id, period_month=period
     )
     budgeted_category_ids = {
         line.category_id
-        for line in await queries.budget_lines_for_period(
-            db, budget.id, current_period_month()
-        )
+        for line in await lines_in_force(db, budget_id=budget.id, period_month=period)
         if line.category_id is not None
     }
 

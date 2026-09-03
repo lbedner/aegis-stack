@@ -1,9 +1,10 @@
 """Recurring streams: the bills and income that repeat.
 
-Four concerns, one per module - ``streams`` for the row's lifecycle,
-``matching`` for reconciling a payment against a bill, ``forecast`` for
-walking a balance forward, ``queries`` for the reads only this domain
-issues. The package boundary is the API: callers reach every verb as
+Five concerns, one per module - ``streams`` for the row's lifecycle,
+``matching`` for reconciling a payment against a bill, ``schedule`` for
+when a stream is next expected to move money, ``forecast`` for walking a
+balance forward, ``queries`` for the reads only this domain issues. The
+package boundary is the API: callers reach every verb as
 ``recurring.foo(db, ...)`` and never import a submodule.
 """
 
@@ -11,6 +12,7 @@ from app.services.finance.domains.planning.recurring import (
     forecast,
     matching,
     queries,
+    schedule,
     streams,
 )
 from app.services.finance.domains.planning.recurring.forecast import (
@@ -21,6 +23,10 @@ from app.services.finance.domains.planning.recurring.forecast import (
 from app.services.finance.domains.planning.recurring.matching import (
     recurring_match_candidates,
 )
+from app.services.finance.domains.planning.recurring.schedule import (
+    Occurrence,
+    occurrences,
+)
 from app.services.finance.domains.planning.recurring.streams import (
     _STREAM_DIRECTIONS,
     _STREAM_FREQUENCIES,
@@ -30,10 +36,10 @@ from app.services.finance.domains.planning.recurring.streams import (
     create_recurring_stream,
     delete_recurring,
     get_recurring,
+    in_account_scope,
     list_recurring,
     mute_recurring,
     pause_recurring,
-    card_payment_stream_ids,
     payment_stream_ids,
     resume_recurring,
     stream_category_names,
@@ -43,6 +49,7 @@ from app.services.finance.domains.planning.recurring.streams import (
 )
 
 __all__ = [
+    "Occurrence",
     "_STREAM_DIRECTIONS",
     "_STREAM_FREQUENCIES",
     "attach_transaction_to_stream",
@@ -52,10 +59,12 @@ __all__ = [
     "delete_recurring",
     "forecast",
     "get_recurring",
+    "in_account_scope",
     "goal_drawdowns",
     "list_recurring",
     "matching",
     "mute_recurring",
+    "occurrences",
     "pause_recurring",
     "card_payment_stream_ids",
     "payment_stream_ids",
@@ -63,6 +72,7 @@ __all__ = [
     "queries",
     "recurring_match_candidates",
     "resume_recurring",
+    "schedule",
     "stream_category_names",
     "streams",
     "transfer_stream_ids",

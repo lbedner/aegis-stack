@@ -16,7 +16,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.constants import (
     CASH_ACCOUNT_TYPES,
-    ONE_TIME_FREQUENCY,
     add_months,
 )
 from app.services.finance.domains.detection.insights.commitments import (
@@ -26,7 +25,9 @@ from app.services.finance.domains.detection.insights.commitments import (
 from app.services.finance.domains.ledger import accounts
 from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.domains.planning import allocation, budgets, goals, queries
+from app.services.finance.domains.planning.recurring.schedule import occurrences
 from app.services.finance.domains.planning.recurring.streams import (
+    in_account_scope,
     list_recurring,
     payment_stream_ids,
     stream_category_names,
@@ -38,7 +39,6 @@ from app.services.finance.schemas import (
     ProjectionResponse,
 )
 from app.services.finance.utils import (
-    FREQUENCY_STEPS,
     current_period_month,
     display_cash_balance,
 )
@@ -112,7 +112,9 @@ async def project_balances(
     # below still applies - a detector average poisoned by a one-off
     # paydown must not walk the forecast until the user pins it.
     payment_ids = await payment_stream_ids(db, list(transfer_ids))
-    occurrences: list[tuple[date, FinanceRecurringStream, int]] = []
+    # (lands_on, stream, amount, due_on) - the two dates differ only
+    # when an overdue occurrence is carried onto today.
+    charges: list[tuple[date, FinanceRecurringStream, int, date]] = []
     for stream in streams:
         if (
             stream.is_muted
@@ -120,18 +122,7 @@ async def project_balances(
             or (stream.id in transfer_ids and stream.id not in payment_ids)
         ):
             continue
-        # ``account_id is None`` is a hand-entered bill that belongs
-        # to no account, so no account selection is a statement about
-        # it - the same rule AccountFilter.allows follows. Dropping
-        # it here made every typed-in bill vanish from the forecast
-        # the moment the view was narrowed.
-        if (
-            account_ids is not None
-            and stream.account_id is not None
-            and stream.account_id not in allowed
-        ):
-            continue
-        if stream.next_expected_date is None:
+        if not in_account_scope(stream, account_ids):
             continue
         # Both directions pass the commitment gate. Detected inflows
         # include refunds and brokerage-transfer rhythms; projecting
@@ -142,35 +133,10 @@ async def project_balances(
         if not is_commitment(stream):
             continue
         amount = stream.expected_amount or stream.average_amount or 0
-        if stream.frequency == ONE_TIME_FREQUENCY:
-            # One occurrence, never stepped, never re-charged from the
-            # past (chasing a missed payment is the insight rules' job).
-            when = stream.next_expected_date
-            if amount > 0 and today <= when <= horizon:
-                occurrences.append((when, stream, amount))
+        if amount <= 0:
             continue
-        step = FREQUENCY_STEPS.get(stream.frequency)
-        if step is None or amount <= 0:
-            continue
-        when = stream.next_expected_date
-        guard = 0
-        while when < today and guard < 400:
-            nxt = step(when)
-            if nxt > today:
-                # The latest missed occurrence is money still in
-                # flight - a day-late paycheck or an undrafted bill.
-                # Skipping it walks the forecast from a balance the
-                # check never reached; it lands on today's line
-                # instead. Older misses stay skipped: they are
-                # already inside the starting balance or the insight
-                # rules' missed-payment chase.
-                occurrences.append((today, stream, amount))
-            when = nxt
-            guard += 1
-        while when <= horizon and guard < 400:
-            occurrences.append((when, stream, amount))
-            when = step(when)
-            guard += 1
+        for due in occurrences(stream, today=today, through=horizon):
+            charges.append((due.lands_on, stream, amount, due.due_on))
 
     # Budget lines are the OTHER half of what leaves an account:
     # everyday spending nobody bills you for. A line draws down once a
@@ -183,7 +149,7 @@ async def project_balances(
     # pessimistic balance nobody can account for.
     billed_categories = {
         stream.category_id
-        for _when, stream, _amount in occurrences
+        for _when, stream, _amount, _due in charges
         if stream.category_id is not None
     }
     budget_points = await budget_drawdowns(
@@ -194,11 +160,11 @@ async def project_balances(
         skip_categories=billed_categories,
     )
 
-    occurrences.sort(key=lambda item: (item[0], item[1].name.casefold()))
+    charges.sort(key=lambda item: (item[0], item[1].name.casefold()))
 
     account_names = {a.id: a.name for a in account_rows}
     stream_categories = await stream_category_names(
-        db, {s.id for _, s, _ in occurrences}
+        db, {s.id for _, s, _, _ in charges}
     )
 
     # One timeline: bills and budgets interleaved by date, so the
@@ -213,9 +179,11 @@ async def project_balances(
                 "direction": stream.direction,
                 "account": account_names.get(stream.account_id),
                 "category": stream_categories.get(stream.id),
+                # Only when it differs from where it lands.
+                "due_date": due if due < when else None,
             },
         )
-        for when, stream, amount in occurrences
+        for when, stream, amount, due in charges
     ]
     walk.extend(budget_points)
     # Active goals drain the walk too - committing to a dream visibly
@@ -241,6 +209,7 @@ async def project_balances(
                 balance=balance,
                 account=extra.get("account"),
                 category=extra.get("category"),
+                due_date=extra.get("due_date"),
             )
         )
     return ProjectionResponse(
@@ -325,10 +294,19 @@ async def budget_drawdowns(
     bury the bills that DO. One visible step a month reads as "this is
     what I expect to spend", which is what a budget is.
     """
+    this_period = current_period_month(today)
     budget = await budgets.get_or_create_budget(
-        db, owner_user_id=owner_user_id, period_month=current_period_month()
+        db, owner_user_id=owner_user_id, period_month=this_period
     )
-    lines = await budgets.queries.allocated_budget_lines(db, budget.id)
+    # This period's envelopes, not every period's: the forecast walks
+    # forward from the budget in force, and older months are history.
+    lines = [
+        line
+        for line in await budgets.lines_in_force(
+            db, budget_id=budget.id, period_month=this_period
+        )
+        if line.allocated_amount > 0
+    ]
     if not lines:
         return []
     line_category_ids = {
@@ -381,11 +359,16 @@ async def budget_drawdowns(
         else:
             spent = 0
         remaining = allocated - spent
-        if remaining > 0:
+        this_month = _month_end(today)
+        if remaining > 0 and this_month <= horizon:
             # Dated at month END: it has not happened yet, so it must
             # not dent the line today. Dating these at ``today`` also
             # piled every budget line onto the first point of the walk.
-            out.append((_month_end(today), label, -remaining, extra))
+            #
+            # And only when the window reaches that date: the carry loop
+            # below has always asked, but this one did not, so a one-day
+            # projection on the 3rd showed the 30th's grocery envelope.
+            out.append((this_month, label, -remaining, extra))
 
         # Overspending is not a write-off. The overage carries into the
         # next envelope as a TIGHTER budget, so the forecast shows it

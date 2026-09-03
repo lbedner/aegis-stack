@@ -63,6 +63,28 @@ async def budget_lines_for_period(
     )
 
 
+async def latest_period_with_lines(
+    db: AsyncSession, budget_id: int, before_period: int
+) -> int | None:
+    """The most recent period before ``before_period`` that has any lines.
+
+    Not simply "last month": a month nobody opened should not break the
+    chain, or a budget set in August would be lost by skipping September
+    and looking at October.
+    """
+    return (
+        await db.exec(
+            select(FinanceBudgetCategory.period_month)
+            .where(
+                FinanceBudgetCategory.budget_id == budget_id,
+                FinanceBudgetCategory.period_month < before_period,
+            )
+            .order_by(FinanceBudgetCategory.period_month.desc())
+            .limit(1)
+        )
+    ).first()
+
+
 async def budget_lines_with_category(
     db: AsyncSession, budget_id: int
 ) -> list[FinanceBudgetCategory]:
@@ -249,19 +271,23 @@ async def category_dated_amounts_where(
 
 
 async def allocated_budget_lines(
-    db: AsyncSession, budget_id: int
+    db: AsyncSession, budget_id: int, period_month: int | None = None
 ) -> list[FinanceBudgetCategory]:
-    """Lines with a positive allocation, all periods."""
-    return list(
-        (
-            await db.exec(
-                select(FinanceBudgetCategory).where(
-                    FinanceBudgetCategory.budget_id == budget_id,
-                    FinanceBudgetCategory.allocated_amount > 0,
-                )
-            )
-        ).all()
-    )
+    """Lines with a positive allocation, for one period or all of them.
+
+    Allocations are per period, so a caller that means "the envelopes in
+    force now" has to say which month. Asking for all of them charged the
+    forecast once per period that ever had a budget - invisible while only
+    one period existed, and a duplicate of every line the moment a second
+    one did.
+    """
+    where = [
+        FinanceBudgetCategory.budget_id == budget_id,
+        FinanceBudgetCategory.allocated_amount > 0,
+    ]
+    if period_month is not None:
+        where.append(FinanceBudgetCategory.period_month == period_month)
+    return list((await db.exec(select(FinanceBudgetCategory).where(*where))).all())
 
 
 async def category_first_spend(

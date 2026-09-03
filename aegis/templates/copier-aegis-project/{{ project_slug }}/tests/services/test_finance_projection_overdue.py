@@ -116,22 +116,86 @@ class TestOverdueOccurrencesCarryToToday:
         assert due == [TODAY, date(2026, 9, 10)]
 
     @pytest.mark.asyncio
-    async def test_a_missed_one_time_bill_still_does_not_carry(
+    async def test_a_missed_one_time_bill_carries_like_any_other(
         self, svc: FinanceService
     ) -> None:
-        """One-time stays one-time: never stepped, never re-charged from
-        the past - chasing it is the insight rules' job."""
+        """One-time used to be the exception, and that was the bug.
+
+        It was never re-charged from the past on the grounds that chasing
+        a missed payment belongs to the insight rules. But a bill you owe
+        is money that has not left the account, whether or not it repeats,
+        and leaving it out let the forecast spend it twice.
+        """
         account = await seed_account(svc)
+        due = date(2026, 8, 15)
         await seed_stream(
             svc,
             name="PAY BACK BOB",
             direction="outflow",
             frequency="once",
             expected_amount=50_000,
-            next_expected_date=date(2026, 8, 15),
+            next_expected_date=due,
             account_id=account.id,
         )
 
         result = await svc.project_balances(owner_user_id=1, days=30, today=TODAY)
 
-        assert not [p for p in result.points if p.name == "PAY BACK BOB"]
+        owed = [p for p in result.points if p.name == "PAY BACK BOB"]
+        assert owed, "an overdue one-time bill vanished from the forecast"
+        assert owed[0].date == TODAY, "it lands on today - the money is still there"
+        assert owed[0].due_date == due, "and it says which day it was owed"
+
+
+class TestAnOverdueOneTimeBillIsStillOwed:
+    """A one-time bill dated in the past is the same money in flight.
+
+    The recurring walk carries its latest missed occurrence onto today, so
+    a late paycheck is not lost. A one-time bill was dropped instead - it
+    has no next occurrence to step to - which meant $1,000 owed since last
+    month appeared nowhere in the forecast while the table beside it read
+    "Overdue".
+    """
+
+    @pytest.mark.asyncio
+    async def test_it_lands_on_today(self, svc: FinanceService) -> None:
+        account = await seed_account(svc)
+        await seed_stream(
+            svc,
+            name="SCHOOL CLOTHES",
+            direction="outflow",
+            frequency="once",
+            expected_amount=24_000,
+            next_expected_date=date(2026, 8, 20),
+            account_id=account.id,
+        )
+
+        result = await svc.project_balances(owner_user_id=1, days=30, today=TODAY)
+
+        owed = [p for p in result.points if p.name.startswith("SCHOOL")]
+        assert owed, "an overdue one-time bill vanished from the forecast"
+        assert owed[0].date == TODAY, "it lands on today: the money has not left"
+        assert owed[0].due_date == date(2026, 8, 20), "and it keeps its due date"
+        assert owed[0].amount == -24_000
+
+    @pytest.mark.asyncio
+    async def test_a_future_one_time_bill_keeps_its_own_date(
+        self, svc: FinanceService
+    ) -> None:
+        """Only the overdue ones move; a scheduled bill is not brought forward."""
+        account = await seed_account(svc)
+        due = date(2026, 9, 10)
+        await seed_stream(
+            svc,
+            name="TUITION",
+            direction="outflow",
+            frequency="once",
+            expected_amount=50_000,
+            next_expected_date=due,
+            account_id=account.id,
+        )
+
+        result = await svc.project_balances(owner_user_id=1, days=30, today=TODAY)
+
+        scheduled = [p for p in result.points if p.name.startswith("TUITION")]
+        assert scheduled and scheduled[0].date == due
+

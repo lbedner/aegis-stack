@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.domains.ledger import accounts, categories
@@ -67,6 +68,61 @@ async def get_or_create_budget(
     db.add(budget)
     await db.flush()
     return budget
+
+
+async def lines_in_force(
+    db: AsyncSession, *, budget_id: int, period_month: int
+) -> list[FinanceBudgetCategory]:
+    """The plan this period runs on, inheriting the last one if empty.
+
+    A budget is a standing decision, not a monthly chore: allocations are
+    keyed by period, so without this every month opened as "everything
+    else" and the only way back was to type it all in again.
+
+    The ONLY read of a period's lines. Every surface that asks - the
+    budget page, the projection, the month strip, the uncovered-spend
+    rate - has to get the same answer, and while the summary was the
+    only caller that inherited, the same month read differently
+    depending on which tab was opened first.
+
+    Amounts only. Spend is computed from this period's transactions, and
+    a copied ``spent_amount`` would read as money already gone. A period
+    with any line of its own is a month someone has decided about, and is
+    never touched.
+    """
+    existing = await queries.budget_lines_for_period(db, budget_id, period_month)
+    if existing:
+        return existing
+
+    source = await queries.latest_period_with_lines(db, budget_id, period_month)
+    if source is None:
+        return []
+
+    copied = [
+        FinanceBudgetCategory(
+            owner_user_id=line.owner_user_id,
+            budget_id=budget_id,
+            period_month=period_month,
+            category_id=line.category_id,
+            payee_key=line.payee_key,
+            payee_label=line.payee_label,
+            allocated_amount=line.allocated_amount,
+            rollover_enabled=line.rollover_enabled,
+            currency=line.currency,
+        )
+        for line in await queries.budget_lines_for_period(db, budget_id, source)
+    ]
+    # The dashboard opens several panels at once and every one of them
+    # asks this question, so two callers can both find the period empty
+    # and both seed it. The partial unique index settles who wins; the
+    # loser wants the winner's rows, not a failed request. The savepoint
+    # keeps the rejection from poisoning the surrounding transaction.
+    try:
+        async with db.begin_nested():
+            db.add_all(copied)
+    except IntegrityError:
+        return await queries.budget_lines_for_period(db, budget_id, period_month)
+    return copied
 
 
 async def spend_for_target(

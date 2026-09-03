@@ -172,7 +172,7 @@ async def suggest_budget_lines(
             amount * factor
         )
     budget = await get_or_create_budget(
-        db, owner_user_id=owner_user_id, period_month=current_period_month()
+        db, owner_user_id=owner_user_id, period_month=current_period_month(today)
     )
     already = {
         line.category_id

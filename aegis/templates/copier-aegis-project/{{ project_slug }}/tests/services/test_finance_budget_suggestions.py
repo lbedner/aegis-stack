@@ -22,6 +22,15 @@ from tests.services._finance_factories import seed_category as _category
 from tests.services._finance_factories import seed_stream
 
 TODAY = date(2026, 8, 2)
+# Budget lines are keyed by period, and these tests project as of TODAY,
+# so they have to say which month they are budgeting - passing None means
+# "whatever month the suite happens to run in", which is a different
+# month's envelope than the one being walked.
+PERIOD = TODAY.year * 100 + TODAY.month
+# Far enough to contain the month end the budget remainder is dated at.
+# These tests are about which amount is charged; a window that stops short
+# of month end simply has no budget point to look at.
+WINDOW_PAST_MONTH_END = 40
 
 
 async def _spend(
@@ -150,7 +159,7 @@ class TestSuggestions:
         )
         await svc.upsert_budget_line(
             owner_user_id=1,
-            period_month=None,
+            period_month=PERIOD,
             category_id=groceries.id,
             payee_key=None,
             payee_label=None,
@@ -179,7 +188,7 @@ class TestBudgetsInTheForecast:
         account, groceries = await self._setup(svc, async_db_session)
         await svc.upsert_budget_line(
             owner_user_id=1,
-            period_month=None,
+            period_month=PERIOD,
             category_id=groceries.id,
             payee_key=None,
             payee_label=None,
@@ -209,7 +218,7 @@ class TestBudgetsInTheForecast:
         await svc.update_recurring(stream.id, owner_user_id=1, category_id=groceries.id)
         await svc.upsert_budget_line(
             owner_user_id=1,
-            period_month=None,
+            period_month=PERIOD,
             category_id=groceries.id,
             payee_key=None,
             payee_label=None,
@@ -473,7 +482,7 @@ class TestTheForecastStaysInSyncWithActuals:
         groceries = await _category(db, "Food & Dining:Groceries")
         await svc.upsert_budget_line(
             owner_user_id=1,
-            period_month=None,
+            period_month=PERIOD,
             category_id=groceries.id,
             payee_key=None,
             payee_label=None,
@@ -492,7 +501,7 @@ class TestTheForecastStaysInSyncWithActuals:
         account, groceries = await self._budgeted(svc, async_db_session)
         await _spend(svc, account.id, groceries.id, {8: 600})
 
-        result = await svc.project_balances(owner_user_id=1, days=20, today=TODAY)
+        result = await svc.project_balances(owner_user_id=1, days=WINDOW_PAST_MONTH_END, today=TODAY)
 
         points = self._budget_points(result)
         assert len(points) == 1
@@ -507,9 +516,9 @@ class TestTheForecastStaysInSyncWithActuals:
         forecast must land in exactly the same place."""
         account, groceries = await self._budgeted(svc, async_db_session)
 
-        before = await svc.project_balances(owner_user_id=1, days=20, today=TODAY)
+        before = await svc.project_balances(owner_user_id=1, days=WINDOW_PAST_MONTH_END, today=TODAY)
         await _spend(svc, account.id, groceries.id, {8: 600})
-        after = await svc.project_balances(owner_user_id=1, days=20, today=TODAY)
+        after = await svc.project_balances(owner_user_id=1, days=WINDOW_PAST_MONTH_END, today=TODAY)
 
         assert after.end_balance == before.end_balance
 
@@ -520,7 +529,7 @@ class TestTheForecastStaysInSyncWithActuals:
         account, groceries = await self._budgeted(svc, async_db_session)
         await _spend(svc, account.id, groceries.id, {8: 800})
 
-        result = await svc.project_balances(owner_user_id=1, days=20, today=TODAY)
+        result = await svc.project_balances(owner_user_id=1, days=WINDOW_PAST_MONTH_END, today=TODAY)
 
         assert self._budget_points(result) == []
 
@@ -533,7 +542,7 @@ class TestTheForecastStaysInSyncWithActuals:
         account, groceries = await self._budgeted(svc, async_db_session)
         await _spend(svc, account.id, groceries.id, {8: 950})
 
-        result = await svc.project_balances(owner_user_id=1, days=20, today=TODAY)
+        result = await svc.project_balances(owner_user_id=1, days=WINDOW_PAST_MONTH_END, today=TODAY)
 
         assert self._budget_points(result) == []
 
@@ -546,7 +555,7 @@ class TestTheForecastStaysInSyncWithActuals:
         start of the projection."""
         await self._budgeted(svc, async_db_session)
 
-        result = await svc.project_balances(owner_user_id=1, days=20, today=TODAY)
+        result = await svc.project_balances(owner_user_id=1, days=WINDOW_PAST_MONTH_END, today=TODAY)
 
         assert self._budget_points(result)[0].date == date(2026, 8, 31)
 
@@ -567,7 +576,7 @@ class TestAnOverageIsMadeUpNextMonth:
         groceries = await _category(db, "Food & Dining:Groceries")
         await svc.upsert_budget_line(
             owner_user_id=1,
-            period_month=None,
+            period_month=PERIOD,
             category_id=groceries.id,
             payee_key=None,
             payee_label=None,

@@ -1001,23 +1001,23 @@ def row_matches(query: str, values: Iterable[object]) -> bool:
     return any(needle in str(value).casefold() for value in values if value is not None)
 
 
-def date_cell(value: object, control: type[ft.Text] | None = None) -> ft.Control:
+def date_cell(
+    value: object, control: type[ft.Text] | None = None, *, sort_value: object = None
+) -> ft.Control:
     """A human-readable date cell that still sorts chronologically.
 
-    DataTable sorts on a cell's text (controls/data_table.py), so a
-    rendered "Aug 19, 2026" would sort alphabetically - August before
-    January, 2024 beside 2026. ``.data`` is the documented escape hatch
-    that ``_cell_text`` falls back to, so the ISO value rides along
-    invisibly and the column keeps sorting by actual date.
+    DataTable sorts on a cell's text (controls/data_table.py), so the
+    rendered "Aug 19, 2026" would sort alphabetically. ``.data`` is the
+    escape hatch ``_cell_text`` falls back to, so the ISO string rides
+    along invisibly and the column keeps sorting by date. ``sort_value``
+    is for a column that shows one date and sorts in the order of another.
     """
     from app.components.frontend.controls.table import TableCellText
     from app.core.formatting import format_date
 
     factory = control or TableCellText
     cell = factory(format_date(value))
-    # Sort key: the original ISO string, which is lexicographically
-    # chronological.
-    cell.data = str(value or "")
+    cell.data = str(sort_value if sort_value is not None else value or "")
     return cell
 
 

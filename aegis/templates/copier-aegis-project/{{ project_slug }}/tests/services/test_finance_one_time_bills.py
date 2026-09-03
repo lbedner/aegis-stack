@@ -57,16 +57,27 @@ class TestAOneTimeBill:
         assert hits[0].amount == -50_000
 
     @pytest.mark.asyncio
-    async def test_a_past_one_is_not_recharged(self, svc: FinanceService) -> None:
-        """Same rule every stream follows: the forecast never re-charges
-        the past. Chasing a missed payment is the insight rules' job."""
-        await _once_bill(svc, due=date(2026, 7, 1))
+    async def test_a_past_one_is_still_owed(self, svc: FinanceService) -> None:
+        """It landed in the past and nobody paid it, so it is still money.
 
-        result = await svc.project_balances(
-            owner_user_id=1, days=365, today=date(2026, 8, 8)
-        )
+        This used to be skipped on the rule that the forecast never
+        re-charges the past. But a recurring bill's latest missed
+        occurrence has always carried onto today, and a person looking at
+        four overdue bills does not think of two of them as a different
+        kind of debt. It carries, dated when it was due, however stale -
+        an obligation does not expire because a month went by, and the
+        bills table already marks how old it is.
+        """
+        due = date(2026, 7, 1)
+        today = date(2026, 8, 8)
+        await _once_bill(svc, due=due)
 
-        assert not [p for p in result.points if p.name == "Pay back Bob"]
+        result = await svc.project_balances(owner_user_id=1, days=365, today=today)
+
+        owed = [p for p in result.points if p.name == "Pay back Bob"]
+        assert owed, "a one-time bill nobody paid vanished from the forecast"
+        assert owed[0].date == today
+        assert owed[0].due_date == due
 
     @pytest.mark.asyncio
     async def test_it_stays_out_of_the_monthly_rollup(

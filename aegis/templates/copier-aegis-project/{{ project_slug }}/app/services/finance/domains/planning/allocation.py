@@ -25,10 +25,10 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.finance.constants import add_months
 from app.services.finance.domains.detection.insights.commitments import (
     commitment_rollup,
 )
-from app.services.finance.constants import add_months
 from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.domains.planning import recurring
 from app.services.finance.domains.planning.goals import (
@@ -86,7 +86,9 @@ class MonthlyFigures(BaseModel):
             # a plan for spending the transactions already record.
             return sum(measured.values())
         if scope:
-            named = {k: v for k, v in self.expense_base_by_account.items() if k in scope}
+            named = {
+                k: v for k, v in self.expense_base_by_account.items() if k in scope
+            }
             return sum(named.values()) + self.budget_allocated
         return (
             sum(self.expense_base_by_account.values())
@@ -282,13 +284,14 @@ async def month_figures(
     unattached = commitment_rollup(
         [s for s in spending if s.account_id is None], today=today
     )["monthly_total"]
+    period = current_period_month(today)
     budget = await budgets.get_or_create_budget(
-        db, owner_user_id=owner_user_id, period_month=current_period_month()
+        db, owner_user_id=owner_user_id, period_month=period
     )
     allocated = sum(
         line.allocated_amount
-        for line in await budgets.queries.budget_lines_for_period(
-            db, budget.id, current_period_month()
+        for line in await budgets.lines_in_force(
+            db, budget_id=budget.id, period_month=period
         )
     )
     observed = await observed_run_rate(db, owner_user_id=owner_user_id, today=today)

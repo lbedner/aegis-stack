@@ -261,6 +261,10 @@ class ProjectionPoint(BaseModel):
     balance: int  # projected running balance after this occurrence, cents
     account: str | None = None  # account name, when the stream is account-bound
     category: str | None = None  # category name, when the stream carries one
+    # When this occurrence was DUE, when that is not where it lands. An
+    # overdue bill is applied to today, because the money has not left
+    # yet, but the row still says which day it was owed.
+    due_date: date | None = None
 
 
 class ProjectionResponse(BaseModel):

@@ -80,12 +80,18 @@ def test_replaces_options_offer_every_other_document_and_nothing() -> None:
 
 
 def test_extraction_summary_reads_like_a_sentence() -> None:
-    assert extraction_summary({"read": 7, "unread": 0, "skipped": 0}) == "7 pages extracted"
+    assert (
+        extraction_summary({"read": 7, "unread": 0, "skipped": 0})
+        == "7 pages extracted"
+    )
     assert (
         extraction_summary({"read": 5, "unread": 2, "skipped": 0})
         == "5 of 7 pages extracted"
     )
-    assert extraction_summary({"read": 0, "unread": 0, "skipped": 3}) == "Already extracted"
+    assert (
+        extraction_summary({"read": 0, "unread": 0, "skipped": 3})
+        == "Already extracted"
+    )
 
 
 def test_placeholders_save_as_no_value() -> None:
@@ -133,12 +139,32 @@ def test_a_job_queued_too_long_says_no_worker_has_picked_it_up() -> None:
     old = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
     fresh = datetime.now(UTC).isoformat()
     jobs = [
-        {"job_id": "a", "name": "documents-extract:1", "status": "running", "label": "Queued...", "started_at": old},
-        {"job_id": "b", "name": "documents-extract:2", "status": "running", "label": "Queued...", "started_at": fresh},
-        {"job_id": "c", "name": "documents-extract:3", "status": "running", "label": "Reading page 2 of 5", "started_at": fresh},
+        {
+            "job_id": "a",
+            "name": "documents-extract:1",
+            "status": "running",
+            "label": "Queued...",
+            "started_at": old,
+        },
+        {
+            "job_id": "b",
+            "name": "documents-extract:2",
+            "status": "running",
+            "label": "Queued...",
+            "started_at": fresh,
+        },
+        {
+            "job_id": "c",
+            "name": "documents-extract:3",
+            "status": "running",
+            "label": "Reading page 2 of 5",
+            "started_at": fresh,
+        },
     ]
 
-    by_id = {r.job_id: r for r in activity_rows(jobs, {1: "Old", 2: "New", 3: "Working"})}
+    by_id = {
+        r.job_id: r for r in activity_rows(jobs, {1: "Old", 2: "New", 3: "Working"})
+    }
 
     assert by_id["a"].detail == "Queued for 2m, no worker has picked it up"
     assert by_id["b"].detail == "Queued..."
@@ -152,7 +178,13 @@ def test_a_job_queued_too_long_says_no_worker_has_picked_it_up() -> None:
 def test_a_job_with_no_timestamp_is_still_only_queued() -> None:
     """Age unknown is not permission to animate."""
     jobs = [
-        {"job_id": "a", "name": "documents-extract:1", "status": "running", "label": "Queued...", "started_at": ""},
+        {
+            "job_id": "a",
+            "name": "documents-extract:1",
+            "status": "running",
+            "label": "Queued...",
+            "started_at": "",
+        },
     ]
 
     row = activity_rows(jobs, {1: "Old"})[0]
@@ -260,7 +292,8 @@ def test_rows_carry_their_age_and_the_newest_is_first() -> None:
 
 
 def test_extract_is_offered_only_while_a_page_is_unread() -> None:
-    """"Already extracted" is a run that did nothing. Do not offer that run."""
+    """A run that did nothing is what "Already extracted" means. Do not
+    offer that run."""
     from app.components.frontend.dashboard.modals.documents_pages import (
         has_unread_pages,
     )
@@ -398,4 +431,3 @@ def test_a_run_that_left_pages_unread_is_not_drawn_as_a_success() -> None:
     assert "0 of 7 pages extracted" in texts(cell)
     assert cell.color == Theme.Colors.WARNING
     assert ActivityTab._status_cell(by_id["all-read"]).color == Theme.Colors.ACCENT
-

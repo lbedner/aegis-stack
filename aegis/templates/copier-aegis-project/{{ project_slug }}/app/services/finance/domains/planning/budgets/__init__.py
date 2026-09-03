@@ -19,6 +19,7 @@ from app.services.finance.domains.planning.budgets.lines import (
     budget_line_status,
     delete_budget_line,
     get_or_create_budget,
+    lines_in_force,
     spend_for_target,
     upsert_budget_line,
 )
@@ -66,6 +67,7 @@ __all__ = [
     "dismiss_budget_suggestions",
     "dismissal_markers",
     "get_or_create_budget",
+    "lines_in_force",
     "lines",
     "list_dismissed_suggestions",
     "month_bounds",

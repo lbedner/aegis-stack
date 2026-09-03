@@ -18,7 +18,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.finance.constants import (
     CADENCES,
     CASH_ACCOUNT_TYPES,
-    ONE_TIME_FREQUENCY,
     add_months,
 )
 from app.services.finance.domains.detection.insights.commitments import (
@@ -33,14 +32,16 @@ from app.services.finance.domains.planning import (
 )
 from app.services.finance.domains.planning import queries as planning_queries
 from app.services.finance.domains.planning.budgets import queries
-from app.services.finance.domains.planning.budgets.lines import get_or_create_budget
+from app.services.finance.domains.planning.budgets.lines import (
+    get_or_create_budget,
+    lines_in_force,
+)
 from app.services.finance.domains.planning.budgets.uncovered import (
     uncovered_spending_rate,
 )
 from app.services.finance.models import FinanceTransaction
 from app.services.finance.schemas import BudgetMonthOutlook, GoalParseResponse
 from app.services.finance.utils import (
-    FREQUENCY_STEPS,
     current_period_month,
     display_cash_balance,
     transaction_payee_key,
@@ -72,8 +73,7 @@ async def budget_month_outlook(
 
     streams = await recurring.list_recurring(db, owner_user_id=owner_user_id)
     # Same scoping rule as budget_summary, the header this pages.
-    if account_ids is not None:
-        streams = [s for s in streams if s.account_id in account_ids]
+    streams = [s for s in streams if recurring.in_account_scope(s, account_ids)]
     transfer_ids = await recurring.transfer_stream_ids(db, [s.id for s in streams])
     due_in: dict[tuple[int, int, str], int] = {}
     for stream in streams:
@@ -89,35 +89,24 @@ async def budget_month_outlook(
         if amount <= 0:
             continue
         direction = "in" if stream.direction == "inflow" else "out"
-        if stream.frequency == ONE_TIME_FREQUENCY:
-            when = stream.next_expected_date
-            if today <= when < horizon_end:
-                key = (when.year, when.month, direction)
-                due_in[key] = due_in.get(key, 0) + amount
-            continue
-        step = FREQUENCY_STEPS.get(stream.frequency)
-        if step is None:
-            continue
-        when = stream.next_expected_date
-        guard = 0
-        while when < today and guard < 400:
-            when = step(when)
-            guard += 1
-        while when < horizon_end and guard < 400:
-            key = (when.year, when.month, direction)
+        # ``through`` is inclusive; the horizon here is the first day of
+        # the month AFTER the last one shown. Overdue money lands on
+        # today, so it counts in the month the user is standing in
+        # rather than disappearing from the strip entirely.
+        for due in recurring.occurrences(
+            stream, today=today, through=horizon_end - timedelta(days=1)
+        ):
+            key = (due.lands_on.year, due.lands_on.month, direction)
             due_in[key] = due_in.get(key, 0) + amount
-            when = step(when)
-            guard += 1
 
     # The standing monthly asks - plans, identical every month.
+    period = current_period_month(today)
     budget = await get_or_create_budget(
-        db, owner_user_id=owner_user_id, period_month=current_period_month()
+        db, owner_user_id=owner_user_id, period_month=period
     )
     budgets_monthly = sum(
         line.allocated_amount
-        for line in await queries.budget_lines_for_period(
-            db, budget.id, current_period_month()
-        )
+        for line in await lines_in_force(db, budget_id=budget.id, period_month=period)
     )
     goals_monthly = sum(
         (

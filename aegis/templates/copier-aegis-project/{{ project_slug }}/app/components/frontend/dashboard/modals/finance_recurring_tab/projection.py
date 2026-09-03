@@ -38,6 +38,14 @@ from app.components.frontend.dashboard.modals.modal_sections import (
 from app.components.frontend.theme import AegisTheme as Theme
 
 
+class _OverdueDateText(SecondaryText):
+    """A date the money was owed on and did not leave."""
+
+    def __init__(self, value: str, **kwargs: object) -> None:
+        super().__init__(value, **kwargs)
+        self.color = Theme.Colors.WARNING
+
+
 class ProjectionPanel(FinancePanel):
     """Projected cash balance, the Quicken "Projected Balances" view:
     today's cash balance walked forward through scheduled bills and
@@ -240,7 +248,18 @@ class ProjectionPanel(FinancePanel):
         columns = projection_columns()
         rows = [
             [
-                date_cell(p.get("date"), SecondaryText),
+                # An overdue occurrence lands on today so the balance is
+                # right, but the row shows the day it was actually due,
+                # in the colour the bills table marks overdue with.
+                # Shows the day it was due, sorts by the day it lands.
+                # The Balance column is the running total in the order
+                # money moves, so a row sorted anywhere else would make
+                # that column read as nonsense.
+                date_cell(
+                    p.get("due_date") or p.get("date"),
+                    SecondaryText if not p.get("due_date") else _OverdueDateText,
+                    sort_value=p.get("date"),
+                ),
                 TableNameText(p.get("name") or ""),
                 SecondaryText(p.get("category") or "—"),
                 SecondaryText(p.get("account") or "—"),

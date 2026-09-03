@@ -45,6 +45,25 @@ async def list_recurring(
     return await queries.active_streams(db, owner_user_id=owner_user_id)
 
 
+def in_account_scope(
+    stream: FinanceRecurringStream, account_ids: list[int] | None
+) -> bool:
+    """Does this stream survive an account selection?
+
+    A stream with NO account always does. A bill typed in by hand has
+    ``account_id = None``, and asking "is None among the chosen
+    accounts" is always False - so any narrowing made every hand-entered
+    bill vanish. It belongs to no account, so no account selection is a
+    statement about it. Same rule the dialog's own filter follows; the
+    header, the outlook and the forecast each used to answer this
+    differently, which is how one bill showed on the projection and not
+    in the month beside it.
+    """
+    if account_ids is None or stream.account_id is None:
+        return True
+    return stream.account_id in account_ids
+
+
 async def create_recurring_stream(
     db: AsyncSession,
     *,

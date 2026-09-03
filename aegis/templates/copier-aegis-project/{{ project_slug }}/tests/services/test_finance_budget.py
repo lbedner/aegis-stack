@@ -338,6 +338,10 @@ class TestBudgetSummary:
                 payee_label=None,
                 allocated_amount=1_000,
             )
+        # Second warm-up, same reason: the first read of a month with no
+        # lines of its own seeds it from the last one that had them, and
+        # that one-off copy would otherwise land inside the first count.
+        await svc.budget_summary(owner_user_id=1, period_month=_MONTH)
         with _count_queries(async_engine) as count_at_two:
             await svc.budget_summary(owner_user_id=1, period_month=_MONTH)
         queries_at_two = count_at_two()
@@ -1036,7 +1040,9 @@ class TestMonthOutlook:
         groceries = await _category(async_db_session, "Groceries")
         await svc.upsert_budget_line(
             owner_user_id=1,
-            period_month=None,
+            # The month the outlook is asked about, not whichever month
+            # the suite runs in: allocations are keyed by period.
+            period_month=202608,
             category_id=groceries.id,
             payee_key=None,
             payee_label=None,
@@ -1111,6 +1117,66 @@ class TestMonthOutlook:
         assert first.end_balance == 50_000 + first.month_net
         assert second.start_balance == first.end_balance
         assert second.end_balance == second.start_balance + second.month_net
+
+    @pytest.mark.asyncio
+    async def test_an_overdue_bill_still_counts_this_month(
+        self, svc: FinanceService
+    ) -> None:
+        """Money late is money owed. The outlook used to step straight
+        past every missed occurrence, so a month reading $2,000 of bills
+        quietly excluded the $1,000 sitting overdue in the bills table -
+        the two pages disagreed about the same month."""
+        account_id = await self._base(svc)
+        await seed_stream(
+            svc,
+            name="Water",
+            frequency="once",
+            expected_amount=9_000,
+            next_expected_date=date(2026, 7, 20),
+            account_id=account_id,
+        )
+        await seed_stream(
+            svc,
+            name="Internet",
+            expected_amount=8_000,
+            next_expected_date=date(2026, 8, 4),
+            account_id=account_id,
+        )
+
+        outlook = await svc.budget_month_outlook(
+            owner_user_id=1, months=3, today=date(2026, 8, 10)
+        )
+
+        # Rent (Aug 1, missed) + Internet (Aug 4, missed) + the one-time
+        # Water bill from July: all still owed, all in this month.
+        assert outlook[0].bills_due == 200_000 + 8_000 + 9_000
+
+    @pytest.mark.asyncio
+    async def test_a_hand_entered_bill_survives_an_account_filter(
+        self, svc: FinanceService
+    ) -> None:
+        """A bill typed in by hand belongs to no account, so narrowing to
+        an account says nothing about it - the rule the forecast and
+        AccountFilter.allows both follow. The outlook dropped them, which
+        is why the same bill showed on the projection and vanished from
+        the month strip."""
+        checking_id = await self._base(svc)
+        await seed_stream(
+            svc,
+            name="Property tax",
+            expected_amount=45_000,
+            next_expected_date=date(2026, 9, 5),
+            account_id=None,
+        )
+
+        just_checking = await svc.budget_month_outlook(
+            owner_user_id=1,
+            months=3,
+            today=date(2026, 8, 10),
+            account_ids=[checking_id],
+        )
+
+        assert just_checking[1].bills_due == 200_000 + 45_000
 
 
 class TestStatDetails:
@@ -1288,7 +1354,9 @@ class TestEverythingElse:
         groceries = await _category(async_db_session, "Groceries")
         await svc.upsert_budget_line(
             owner_user_id=1,
-            period_month=None,
+            # The month the rate is asked about; None would budget
+            # whichever month the suite happens to run in.
+            period_month=202608,
             category_id=groceries.id,
             payee_key=None,
             payee_label=None,

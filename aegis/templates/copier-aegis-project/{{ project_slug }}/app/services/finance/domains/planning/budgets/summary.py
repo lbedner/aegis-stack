@@ -30,6 +30,7 @@ from app.services.finance.domains.planning.budgets import queries
 from app.services.finance.domains.planning.budgets.lines import (
     budget_line_status,
     get_or_create_budget,
+    lines_in_force,
 )
 from app.services.finance.domains.planning.budgets.uncovered import (
     uncovered_spend,
@@ -198,7 +199,9 @@ async def budget_summary(
     budget = await get_or_create_budget(
         db, owner_user_id=owner_user_id, period_month=month
     )
-    lines = await queries.budget_lines_for_period(db, budget.id, month)
+    # An empty month inherits the last one that was set; a month with
+    # its own lines is left exactly as it is.
+    lines = await lines_in_force(db, budget_id=budget.id, period_month=month)
 
     # 3. Category display names, batched.
     names = await categories.category_names(
@@ -256,8 +259,7 @@ async def budget_summary(
     streams = await recurring.list_recurring(db, owner_user_id=owner_user_id)
     transfer_ids = await recurring.transfer_stream_ids(db, [s.id for s in streams])
     streams = [s for s in streams if s.id not in transfer_ids]
-    if account_ids is not None:
-        streams = [s for s in streams if s.account_id in account_ids]
+    streams = [s for s in streams if recurring.in_account_scope(s, account_ids)]
     rollup = commitment_rollup(streams, today=today)
     stream_category_names = await recurring.stream_category_names(
         db,
@@ -485,7 +487,14 @@ async def budget_stat_details(
     by category, over the SAME filters as the rate.
     """
     today = today or date.today()
+    # The same stream set the cells are computed from, filtered the same
+    # way: a popup that explains a number has to be about that number.
+    # Without this, narrowing to one account left the cell filtered and
+    # its detail listing every account the owner has.
     streams = await recurring.list_recurring(db, owner_user_id=owner_user_id)
+    transfer_ids = await recurring.transfer_stream_ids(db, [s.id for s in streams])
+    streams = [s for s in streams if s.id not in transfer_ids]
+    streams = [s for s in streams if recurring.in_account_scope(s, account_ids)]
 
     income_rows = [
         StatDetailRow(

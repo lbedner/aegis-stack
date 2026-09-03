@@ -97,6 +97,17 @@
     display: none;
 }
 
+/* A setting name is one token: STORAGE_BACKEND broken across two lines
+   reads as two settings. Code spans in a table never wrap, and the column
+   holding them takes the width it needs. */
+.md-typeset table:not([class]) td code,
+.md-typeset table:not([class]) th code {
+    white-space: nowrap;
+}
+.md-typeset table:not([class]) td:first-child {
+    white-space: nowrap;
+}
+
 /* Alternating row striping for tables (matches GitHub) */
 .md-typeset table:not([class]) tbody tr:nth-child(even) {
     background-color: rgba(255, 255, 255, 0.025);

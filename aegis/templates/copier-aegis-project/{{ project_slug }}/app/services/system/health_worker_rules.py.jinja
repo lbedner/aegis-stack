@@ -1,0 +1,69 @@
+{#- aegis: no-backup -#}
+"""What every worker backend's health check decides the same way.
+
+The numbers come from somewhere different in each backend - a Redis
+stream, a list, arq's own health key - but the verdict does not depend on
+where they came from, and neither does the arithmetic that reads a
+consumer group.
+"""
+{% if include_worker %}
+from typing import Any
+
+from app.services.system.models import ComponentStatusType
+
+
+def taskiq_group_stats(
+    groups: list[dict[str, Any]], stream_length: int
+) -> tuple[int, int, int, int]:
+    """Return (consumers, pending, entries_read, lag) for the ``taskiq`` group.
+
+    A stream nobody has ever consumed has no group at all, and Redis reports
+    that as an empty list rather than an error: every entry is then waiting.
+    """
+    for group in groups:
+        name = group.get("name", b"")
+        if isinstance(name, bytes):
+            name = name.decode()
+        if name != "taskiq":
+            continue
+        lag = group.get("lag")
+        return (
+            group.get("consumers", 0) or 0,
+            group.get("pending", 0) or 0,
+            group.get("entries-read", 0) or 0,
+            stream_length if lag is None else lag,
+        )
+    return 0, 0, 0, stream_length
+
+
+def queue_status(
+    *,
+    worker_alive: bool,
+    has_functions: bool,
+    waiting: int,
+    failure_rate: float = 0.0,
+) -> tuple[ComponentStatusType, str]:
+    """What one worker queue's state means, for every backend alike.
+
+    A queue nobody consumes is a problem: with work waiting it is an
+    outage (UNHEALTHY), idle it is a warning. Info is only for a queue
+    with no functions registered, which cannot have a consumer that
+    matters. A live consumer is healthy until failures pile up.
+
+    Returns the status and the phrase the queue's message leads with.
+    """
+    if not has_functions:
+        return ComponentStatusType.INFO, "configured - no functions defined"
+    if not worker_alive:
+        if waiting > 0:
+            return (
+                ComponentStatusType.UNHEALTHY,
+                f"no worker consuming, {waiting} waiting",
+            )
+        return ComponentStatusType.WARNING, "no worker consuming"
+    if failure_rate > 25:
+        return ComponentStatusType.UNHEALTHY, f"{failure_rate:.1f}% failing"
+    if failure_rate > 10:
+        return ComponentStatusType.WARNING, f"{failure_rate:.1f}% failing"
+    return ComponentStatusType.HEALTHY, ""
+{% endif %}

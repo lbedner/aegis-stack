@@ -1,71 +1,43 @@
-"""
-Worker queue registry with dynamic discovery.
+"""Worker queue registry for arq.
 
-Pure arq implementation - WorkerSettings classes are the single source of truth.
-No configuration files, no abstractions, just arq as intended.
+A queue is a module with a ``WorkerSettings`` class, and that class is the
+source of truth for what the queue runs and how hard: its ``functions``
+list, its concurrency, its timeout, its lifecycle hooks. Everything that
+is not one of those answers lives in ``queue_discovery``.
 """
 
-import importlib
-from pathlib import Path
 from typing import Any
 
+from app.components.worker import queue_discovery as discovery
 from app.core.log import logger
 
 
 def get_worker_settings(queue_name: str) -> Any:
-    """Import and return WorkerSettings class for a queue.
-
-    Args:
-        queue_name: Name of the queue (e.g., 'system', 'load_test')
-
-    Returns:
-        WorkerSettings class from the queue module
+    """The queue's ``WorkerSettings`` class.
 
     Raises:
-        ImportError: If queue module doesn't exist
-        AttributeError: If WorkerSettings class not found
+        ImportError: if there is no such queue module
+        AttributeError: if the module defines no WorkerSettings
     """
+    module = discovery.queue_module(queue_name)
+    if module is None:
+        logger.error(f"Failed to import worker queue '{queue_name}'")
+        raise ImportError(f"No queue module named {queue_name}")
     try:
-        module = importlib.import_module(f"app.components.worker.queues.{queue_name}")
         return module.WorkerSettings
-    except ImportError as e:
-        logger.error(f"Failed to import worker queue '{queue_name}': {e}")
-        raise
     except AttributeError as e:
         logger.error(f"WorkerSettings class not found in '{queue_name}' queue: {e}")
         raise
 
 
+def _is_queue(queue_name: str) -> bool:
+    module = discovery.queue_module(queue_name)
+    return module is not None and hasattr(module, "WorkerSettings")
+
+
 def discover_worker_queues() -> list[str]:
-    """Discover all worker queues from the queues directory.
-
-    Scans app/components/worker/queues/ for Python files and treats each
-    file as a potential queue. Excludes __init__.py and other non-queue files.
-
-    Returns:
-        Sorted list of queue names
-    """
-    queues_dir = Path(__file__).parent / "queues"
-
-    if not queues_dir.exists():
-        logger.warning(f"Worker queues directory not found: {queues_dir}")
-        return []
-
-    queue_files = queues_dir.glob("*.py")
-    queues = []
-
-    for file in queue_files:
-        # Skip __init__.py and other special files
-        if file.stem not in ["__init__", "__pycache__"]:
-            # Verify the file has a WorkerSettings class
-            try:
-                get_worker_settings(file.stem)
-                queues.append(file.stem)
-            except (ImportError, AttributeError):
-                logger.debug(f"Skipping '{file.stem}' - no valid WorkerSettings class")
-                continue
-
-    return sorted(queues)
+    """Every queue module that defines WorkerSettings, sorted."""
+    return discovery.discover_queues(_is_queue)
 
 
 def queue_tasks(queue_name: str) -> dict[str, Any]:
@@ -85,130 +57,74 @@ def queue_tasks(queue_name: str) -> dict[str, Any]:
 
 
 def get_queue_metadata(queue_name: str) -> dict[str, Any]:
-    """Get metadata for a queue from its WorkerSettings class.
+    """Metadata for a queue, read from its WorkerSettings.
 
-    Args:
-        queue_name: Name of the queue
-
-    Returns:
-        Dictionary with queue metadata:
-        - queue_name: Redis queue name
-        - max_jobs: Maximum concurrent jobs
-        - timeout: Job timeout in seconds
-        - functions: List of function names in this queue
-        - description: Human-readable description (if available)
+    ``queue_name`` here is arq's Redis queue name rather than the module's,
+    because that is what the settings class calls it and what the health
+    check looks for in Redis.
     """
     try:
         settings_class = get_worker_settings(queue_name)
-
-        metadata = {
-            "queue_name": getattr(
-                settings_class, "queue_name", f"arq:queue:{queue_name}"
-            ),
-            "max_jobs": getattr(settings_class, "max_jobs", 10),
-            "timeout": getattr(settings_class, "job_timeout", 300),
-            "functions": list(queue_tasks(queue_name)),
-        }
-
-        # Add description if available
-        if hasattr(settings_class, "description"):
-            metadata["description"] = settings_class.description
-        elif hasattr(settings_class, "__doc__") and settings_class.__doc__:
-            metadata["description"] = settings_class.__doc__.strip()
-        else:
-            metadata["description"] = (
-                f"{queue_name.replace('_', ' ').title()} worker queue"
-            )
-
-        return metadata
-
     except (ImportError, AttributeError) as e:
         logger.error(f"Failed to get metadata for queue '{queue_name}': {e}")
-        return {
-            "queue_name": f"arq:queue:{queue_name}",
-            "max_jobs": 10,
-            "timeout": 300,
-            "functions": [],
-            "description": f"Unknown queue: {queue_name}",
-        }
+        return discovery.build_metadata(
+            f"arq:queue:{queue_name}", [], description=f"Unknown queue: {queue_name}"
+        )
+
+    doc = (getattr(settings_class, "__doc__", "") or "").strip()
+    return discovery.build_metadata(
+        getattr(settings_class, "queue_name", f"arq:queue:{queue_name}"),
+        list(queue_tasks(queue_name)),
+        max_jobs=getattr(settings_class, "max_jobs", discovery.DEFAULT_MAX_JOBS),
+        timeout=getattr(
+            settings_class, "job_timeout", discovery.DEFAULT_TIMEOUT_SECONDS
+        ),
+        description=getattr(settings_class, "description", None) or doc or None,
+    )
 
 
 def get_all_queue_metadata() -> dict[str, dict[str, Any]]:
-    """Get metadata for all discovered worker queues.
-
-    Returns:
-        Dictionary mapping queue names to their metadata
-    """
-    metadata = {}
-    for queue_name in discover_worker_queues():
-        metadata[queue_name] = get_queue_metadata(queue_name)
-    return metadata
+    """Metadata for every discovered queue, keyed by queue name."""
+    return discovery.collect_metadata(discover_worker_queues, get_queue_metadata)
 
 
 def get_queue_lifecycle(queue_name: str) -> dict[str, dict[str, str]]:
-    """Get lifecycle hook info for a queue.
-
-    In arq, lifecycle hooks are defined on the WorkerSettings class
-    (on_startup, on_shutdown, on_job_start, after_job_end).
-
-    Args:
-        queue_name: Name of the queue (e.g., 'system', 'load_test')
-
-    Returns:
-        Dictionary mapping hook names to their metadata.
-    """
+    """The hooks arq calls around a worker's life, as the queue defines them."""
     try:
         settings_class = get_worker_settings(queue_name)
     except (ImportError, AttributeError):
         return {}
 
-    hooks: dict[str, dict[str, str]] = {}
-    hook_names = ["on_startup", "on_shutdown", "on_job_start", "after_job_end"]
-
-    for hook_name in hook_names:
-        fn = getattr(settings_class, hook_name, None)
-        if fn and callable(fn):
-            hooks[hook_name] = {
-                "name": fn.__name__,
-                "module": f"{fn.__module__}.{fn.__qualname__}",
-                "description": (fn.__doc__ or "").strip(),
-            }
-
-    return hooks
+    return discovery.describe_hooks(
+        settings_class,
+        {
+            "on_startup": "on_startup",
+            "on_shutdown": "on_shutdown",
+            "on_job_start": "on_job_start",
+            "after_job_end": "after_job_end",
+        },
+    )
 
 
 def get_task_docstrings(queue_name: str) -> dict[str, dict[str, str]]:
-    """Get docstrings and module paths for all tasks in a queue.
-
-    In arq, task functions are listed in WorkerSettings.functions.
-
-    Args:
-        queue_name: Name of the queue (e.g., 'system', 'load_test')
-
-    Returns:
-        Dict mapping function name to {"description": ..., "module": ...}
-    """
-    try:
-        settings_class = get_worker_settings(queue_name)
-    except (ImportError, AttributeError):
-        return {}
-
-    result: dict[str, dict[str, str]] = {}
-    for fn in getattr(settings_class, "functions", []):
-        doc = (fn.__doc__ or "").strip() if hasattr(fn, "__doc__") else ""
-        mod = f"{fn.__module__}.{fn.__qualname__}" if hasattr(fn, "__module__") else ""
-        if doc or mod:
-            result[fn.__name__] = {"description": doc, "module": mod}
-    return result
+    """Each task's docstring and where it is defined."""
+    return discovery.docstrings_for(queue_tasks(queue_name), lambda fn: fn)
 
 
 def validate_queue_name(queue_name: str) -> bool:
-    """Check if a queue name is valid (has a corresponding WorkerSettings).
-
-    Args:
-        queue_name: Name to validate
-
-    Returns:
-        True if queue exists and has valid WorkerSettings
-    """
+    """Whether a queue by this name exists and has WorkerSettings."""
     return queue_name in discover_worker_queues()
+
+
+__all__ = [
+    "discover_worker_queues",
+    "get_all_queue_metadata",
+    "get_queue_lifecycle",
+    "get_queue_metadata",
+    "get_task_docstrings",
+    "get_worker_settings",
+    "queue_tasks",
+    "validate_queue_name",
+]
+
+logger.debug("arq queue registry ready")

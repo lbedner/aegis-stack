@@ -156,7 +156,9 @@ async def get_task_status(
 
         # Check if result exists
         try:
-            result = await asyncio.to_thread(
+            # Only whether it raises matters here; the payload is fetched by
+            # the result route below.
+            await asyncio.to_thread(
                 backend.get_result,
                 dramatiq.Message(
                     queue_name=queue_name,

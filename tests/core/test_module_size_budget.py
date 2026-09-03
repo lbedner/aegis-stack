@@ -56,7 +56,7 @@ BUDGET: dict[str, int] = {
     "components/frontend/dashboard/modals/finance_modal/overview_tab.py": 749,
     "components/frontend/dashboard/modals/finance_modal/budget_cards.py": 681,
     "components/frontend/dashboard/modals/insights_modal.py": 3940,
-    "services/system/health.py.jinja": 2413,
+    "services/system/health.py.jinja": 1456,
     "cli/ai.py.jinja": 2338,
     "components/frontend/dashboard/modals/modal_sections.py": 2093,
     "components/frontend/dashboard/modals/voice_settings_tab.py": 1649,

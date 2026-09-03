@@ -11,10 +11,41 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+import redis.asyncio as aioredis
+
+from app.core.config import settings
 from app.core.log import logger
 
 # Redis Stream name for worker events
 WORKER_EVENT_STREAM = "aegis:events:worker"
+
+
+_events_redis: "aioredis.Redis | None" = None
+
+
+async def events_redis() -> "aioredis.Redis":
+    """The Redis client this process publishes worker events through.
+
+    One per process, created on first use: every enqueue publishes, and
+    opening a connection per publish is a connection per enqueue.
+    """
+    global _events_redis
+    if _events_redis is None:
+        redis_url = (
+            settings.redis_url_effective
+            if hasattr(settings, "redis_url_effective")
+            else settings.REDIS_URL
+        )
+        _events_redis = aioredis.from_url(redis_url)
+    return _events_redis
+
+
+async def close_events_redis() -> None:
+    """Close the shared events client, if one was ever opened."""
+    global _events_redis
+    if _events_redis is not None:
+        await _events_redis.aclose()
+        _events_redis = None
 
 
 async def publish_event(

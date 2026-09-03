@@ -8,9 +8,11 @@ their own connections internally.
 
 from typing import Any
 
-import redis.asyncio as aioredis
-
-from app.components.worker.events import publish_event
+from app.components.worker.events import (
+    close_events_redis,
+    events_redis,
+    publish_event,
+)
 from app.components.worker.registry import queue_tasks
 from app.core.config import (
     get_available_queues,
@@ -24,20 +26,6 @@ from app.core.log import logger
 _broker_cache: dict[str, Any] = {}
 
 # Lazy-initialized Redis client for enqueue-side events
-_events_redis: aioredis.Redis | None = None
-
-
-async def _get_events_redis() -> aioredis.Redis:
-    """Get or create a Redis client for publishing enqueue events."""
-    global _events_redis
-    if _events_redis is None:
-        redis_url = (
-            settings.redis_url_effective
-            if hasattr(settings, "redis_url_effective")
-            else settings.REDIS_URL
-        )
-        _events_redis = aioredis.from_url(redis_url)
-    return _events_redis
 
 
 def get_broker(queue_type: str | None = None) -> Any:
@@ -152,9 +140,9 @@ async def enqueue_task(
 
     # Publish enqueue event for real-time dashboard updates
     try:
-        events_redis = await _get_events_redis()
+        redis_client = await events_redis()
         await publish_event(
-            events_redis,
+            redis_client,
             "job.enqueued",
             queue_type or get_default_queue(),
             {"job_id": str(task_handle.task_id), "task": task_name},
@@ -163,7 +151,7 @@ async def enqueue_task(
         from app.components.worker.task_history import record_task_enqueued
 
         await record_task_enqueued(
-            events_redis,
+            redis_client,
             str(task_handle.task_id),
             task_name,
             queue_type or get_default_queue(),
@@ -214,7 +202,6 @@ async def shutdown_brokers() -> None:
     Call this before exiting CLI commands to ensure Redis connections
     are properly closed and avoid 'Event loop is closed' errors.
     """
-    global _events_redis
     for queue_type, broker in _broker_cache.items():
         try:
             await broker.shutdown()
@@ -223,6 +210,4 @@ async def shutdown_brokers() -> None:
             logger.debug(f"Error shutting down broker for {queue_type}: {e}")
     _broker_cache.clear()
 
-    if _events_redis:
-        await _events_redis.aclose()
-        _events_redis = None
+    await close_events_redis()

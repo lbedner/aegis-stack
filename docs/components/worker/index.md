@@ -389,6 +389,7 @@ See **[Configuration](configuration.md)** for complete details including Docker,
 
 ## Next Steps
 
+- **[Background Jobs](jobs.md)** - Reporting progress back to callers and the dashboard
 - **[Examples](examples.md)** - Real-world task patterns and API reference
 - **[Configuration](configuration.md)** - Scaling and custom queues
 - **[Load Testing](extras/load-testing.md)** - Stress test your workers

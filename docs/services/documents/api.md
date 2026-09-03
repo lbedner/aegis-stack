@@ -6,7 +6,7 @@ Complete reference for all documents API endpoints. All routes are mounted under
 http://localhost:8000/api/v1/documents
 ```
 
-Extraction jobs are watched through the generic jobs surface at `/api/v1/jobs`, which is documented with the [worker component](../../components/worker/index.md).
+Extraction jobs are watched through the generic jobs surface at `/api/v1/jobs`, documented in [Background Jobs](../../components/worker/jobs.md).
 
 ---
 
@@ -117,4 +117,4 @@ The stream sends label updates and then exactly one terminal frame. `GET /api/v1
 - **[Getting Started](index.md)** - Service overview and data model
 - **[Dashboard](dashboard.md)** - The Overseer modal
 - **[Extraction](extraction.md)** - What each page status means
-- **[Worker Component](../../components/worker/index.md)** - The jobs surface behind `background=true`
+- **[Background Jobs](../../components/worker/jobs.md)** - The surface behind `background=true`

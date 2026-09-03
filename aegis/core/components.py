@@ -146,6 +146,11 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/services/test_load_test_models.py",
                 "tests/services/test_load_test_service.py",
                 "tests/services/test_worker_health_registration.py",
+                "tests/services/test_queue_status.py",
+                "app/services/system/health_worker.py",
+                "app/services/system/health_worker_taskiq.py",
+                "app/services/system/health_worker_dramatiq.py",
+                "app/services/system/health_worker_rules.py",
                 "app/components/backend/api/worker.py",
                 "app/components/backend/api/worker_taskiq.py",
                 # Entirely-gated stubs (templates wrapped in

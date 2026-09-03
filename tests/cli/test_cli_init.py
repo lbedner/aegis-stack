@@ -323,7 +323,9 @@ class TestCLIInit:
         component_health_content = component_health_file.read_text()
 
         # CRITICAL: This is what we're testing - worker health registration
-        expected_import = "from app.services.system.health import check_worker_health"
+        expected_import = (
+            "from app.services.system.health_worker import check_worker_health"
+        )
         assert expected_import in component_health_content
 
         registration_snippet = 'register_health_check("worker", check_worker_health)'

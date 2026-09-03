@@ -16,6 +16,6 @@ async def extract_document_task(
     owner_user_id: int | None,
     force: bool,
 ) -> dict[str, Any]:
-    from app.services.documents.extraction_job import run_extraction_job
+    from app.services.documents.domains.extraction.jobs import run_extraction_job
 
     return await run_extraction_job(job_id, document_id, owner_user_id, force)

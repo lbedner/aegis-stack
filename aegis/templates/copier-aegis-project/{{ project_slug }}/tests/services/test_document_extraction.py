@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.storage import FilesystemStorage, get_storage, set_storage
 from app.services.documents import DocumentService
-from app.services.documents.extraction import extract_document
+from app.services.documents.domains.extraction.pages import extract_document
 from app.services.documents.queries import pages_for
 from tests._pdf import pdf_bytes
 
@@ -177,7 +177,7 @@ class TestFailures:
 
 class TestPng:
     def test_only_rgb_and_rgba_buffers_are_encoded(self) -> None:
-        from app.services.documents.pdf import encode_png
+        from app.services.documents.domains.extraction.pdf import encode_png
 
         assert encode_png(1, 1, b"\x00\x00\x00\xff", 4, 4)[:8] == b"\x89PNG\r\n\x1a\n"
         with pytest.raises(ValueError, match="channels"):

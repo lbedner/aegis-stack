@@ -126,6 +126,11 @@ nav:
       - Dashboard: services/blog/dashboard.md
       - CLI Commands: services/blog/cli.md
       - Examples: services/blog/examples.md
+    - Documents:
+      - Getting Started: services/documents/index.md
+      - API Reference: services/documents/api.md
+      - Extraction: services/documents/extraction.md
+      - Dashboard: services/documents/dashboard.md
     - Communications:
       - Getting Started: services/comms/index.md
       - Provider Setup: services/comms/setup.md

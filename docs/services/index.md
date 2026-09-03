@@ -138,23 +138,62 @@ graph TB
 ## Service Development Patterns
 
 ### Service Structure
-Services follow a consistent structure in generated projects:
+
+Every service follows one layout, so the file you want is where you expect it
+whoever wrote the service. Names are positional - the file says what it *is*,
+not what it is called:
+
+| File | Holds |
+|------|-------|
+| `service.py` | the facade: the entry point callers reach for |
+| `models.py` | the service's tables |
+| `schemas.py` | request and response shapes |
+| `queries.py` | every read, batched; no business logic |
+| `deps.py` | the request-scoped wiring |
+| `health.py` | what the dashboard shows |
+| `jobs.py` | all background jobs |
+| `constants.py`, `utils.py` | shared values and helpers |
+
+A service grows into that layout in three steps, and stops at whichever one
+still fits: a small service keeps its logic in `service.py`; a larger one puts
+each subsystem in a package under `domains/`.
 
 ```
-app/
-├── components/backend/api/
-│   └── auth/                    # Service API routes
-│       ├── __init__.py
-│       └── router.py           # FastAPI routes
-├── models/
-│   └── user.py                 # Service data models
-├── services/auth/              # Service business logic
-│   ├── __init__.py
-│   ├── auth_service.py         # Core service logic
-│   └── user_service.py         # User management
-└── core/
-    └── security.py             # Service utilities
+app/services/
+├── documents/               # a spine, plus one domain
+│   ├── service.py models.py queries.py health.py deps.py
+│   └── domains/
+│       └── extraction/      # pages.py pdf.py vision.py dispatch.py jobs.py
+│
+└── finance/                 # several domains, each its own package
+    ├── service/ models/ schemas/ health.py jobs.py utils.py
+    └── domains/
+        ├── ledger/          # each with its own queries.py
+        ├── planning/
+        └── detection/
 ```
+
+Domains are plural nouns with no `_service` suffix, and their functions take
+the session first (`async def create_budget(db, ...)`). Everything a caller
+outside the service needs reaches it through `service.py`; the domain packages
+are how the service is organised, not its public surface.
+
+The `__init__.py` docstring is the domain map. It is the first thing anyone
+reads - a person opening the package or a coding agent deciding where a change
+belongs - so it names each domain and what it owns.
+
+!!! tip "The layout is tested, not just described"
+    Behavioural tests cannot see a layout: a service works the same whether it
+    is one flat package or four small ones. Finance and documents each carry a
+    `test_*_module_layout.py` stating which module defines what, so folding a
+    domain back together, or dropping a function into whichever file was open,
+    fails a test rather than passing quietly.
+
+!!! note "Services written before the standard"
+    `auth`, `blog` and `insights` still carry `<name>_service.py` names from
+    before this was settled. They work exactly as they always did; they are
+    moved onto the layout when there is a reason to be in them, not in a
+    sweep for its own sake.
 
 ### Service Integration Points
 
@@ -233,6 +272,7 @@ Services automatically appear in the health dashboard alongside components, prov
 - **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
 - **[Blog Service](blog/index.md)** - Markdown publishing with drafts, tags, and Overseer editor *(experimental)*
 - **[Communications Service](comms/index.md)** - Email, SMS, and voice via Resend/Twilio
+- **[Documents Service](documents/index.md)** - Content-addressed document store with page-addressed extraction
 - **[Insights Service](insights/index.md)** - Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit) *(experimental)*
 - **[Payment Service](payment/index.md)** - Payment processing with Stripe *(experimental)*
 - **[CLI Reference](../cli-reference.md)** - Service command reference

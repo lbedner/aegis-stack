@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.services.ai.domains.llm import active_model
 from app.services.ai.domains.llm.providers import ProviderError
 from app.services.ai.usage_recording import extract_usage, record_usage
-from app.services.documents.extraction import VisionReader
+from app.services.documents.domains.extraction.pages import VisionReader
 
 SURFACE = "documents:extract"
 INSTRUCTIONS = (
@@ -62,7 +62,7 @@ extraction still reads every text layer and records the rest as unread.
 
 from __future__ import annotations
 
-from app.services.documents.extraction import VisionReader
+from app.services.documents.domains.extraction.pages import VisionReader
 
 
 async def vision_reader() -> VisionReader | None:

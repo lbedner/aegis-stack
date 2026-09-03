@@ -12,8 +12,8 @@ from collections.abc import Callable
 from typing import Any
 
 from app.core.db import get_async_session
-from app.services.documents.extraction import extract_document
-from app.services.documents.vision import vision_reader
+from app.services.documents.domains.extraction.pages import extract_document
+from app.services.documents.domains.extraction.vision import vision_reader
 
 # Sync on purpose: extract_document calls it between pages from inside its
 # own loop. A store that writes asynchronously schedules the write.

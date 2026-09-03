@@ -141,8 +141,8 @@ STACK_COMBINATIONS = [
         description="Documents with a worker: extraction runs on the queue",
         expected_files=[
             "app/components/worker/",
-            "app/services/documents/dispatch.py",
-            "app/services/documents/extraction_job.py",
+            "app/services/documents/domains/extraction/dispatch.py",
+            "app/services/documents/domains/extraction/jobs.py",
             "app/components/worker/tasks/document_tasks.py",
             "docker-compose.yml",
         ],

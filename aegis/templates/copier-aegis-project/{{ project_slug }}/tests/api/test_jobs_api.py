@@ -5,7 +5,7 @@ import pytest
 
 from app.components.backend.api.documents import pages
 from app.core.storage import FilesystemStorage, set_storage
-from app.services.documents import dispatch
+from app.services.documents.domains.extraction import dispatch
 from tests._jobs import wait_for_job
 from tests._pdf import pdf_bytes
 

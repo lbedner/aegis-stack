@@ -21,8 +21,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
 from app.core.storage import get_storage
+from app.services.documents.domains.extraction.pdf import PNG_MEDIA_TYPE, PdfPages
 from app.services.documents.models import Document, DocumentPage, utcnow
-from app.services.documents.pdf import PNG_MEDIA_TYPE, PdfPages
 from app.services.documents.queries import document_by_id, pages_for
 
 # Reads one page image and returns (text, model name). None when the

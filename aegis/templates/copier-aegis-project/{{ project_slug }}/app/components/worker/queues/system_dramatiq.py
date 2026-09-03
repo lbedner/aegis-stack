@@ -54,6 +54,6 @@ async def extract_document_task(
     The documents service is imported lazily so a stack without it still
     loads this queue and simply never receives the task.
     """
-    from app.services.documents.extraction_job import run_extraction_job
+    from app.services.documents.domains.extraction.jobs import run_extraction_job
 
     return await run_extraction_job(job_id, document_id, owner_user_id, force)

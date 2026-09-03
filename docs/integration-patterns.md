@@ -18,7 +18,7 @@ Aegis Stack uses a **service layer** to keep business logic separate from infras
 - Database interactions, external API calls, file processing
 - Complex business logic and data transformations
 - Pure functions that can be unit tested
-- Single files (`report_service.py`) or folders (`system/health.py`) for complex domains
+- One package per service, entered through its `service.py`; larger ones split into `domains/` (see [Service Structure](services/index.md#service-structure))
 
 **Components** (`app/components/`):
 

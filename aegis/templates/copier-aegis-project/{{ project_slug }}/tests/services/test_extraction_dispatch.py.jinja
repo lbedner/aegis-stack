@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from app.services.documents import dispatch, extraction_job
+from app.services.documents.domains.extraction import dispatch, jobs as extraction_job
 
 
 class _FakeStore:

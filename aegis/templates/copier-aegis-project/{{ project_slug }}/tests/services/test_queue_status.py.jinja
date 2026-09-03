@@ -1,3 +1,4 @@
+{%- if include_worker %}
 """One rule for what a worker queue's state means, shared by every backend.
 
 A queue nobody is consuming is a problem, and the more is waiting the
@@ -5,7 +6,7 @@ bigger the problem; the check used to file both as Info, which is how a
 crash-looping worker read as a blue dot while jobs piled up.
 """
 
-from app.services.system.health import queue_status
+from app.services.system.health_worker_rules import queue_status
 from app.services.system.models import ComponentStatusType
 
 
@@ -43,14 +44,14 @@ def test_a_live_consumer_is_healthy_until_failures_pile_up() -> None:
 
 
 def test_stream_with_no_consumer_group_has_every_entry_waiting() -> None:
-    from app.services.system.health import taskiq_group_stats
+    from app.services.system.health_worker_rules import taskiq_group_stats
 
     consumers, pending, read, lag = taskiq_group_stats([], stream_length=3)
     assert (consumers, pending, read, lag) == (0, 0, 0, 3)
 
 
 def test_taskiq_group_reports_its_own_lag() -> None:
-    from app.services.system.health import taskiq_group_stats
+    from app.services.system.health_worker_rules import taskiq_group_stats
 
     groups = [
         {"name": b"other", "consumers": 9, "lag": 9},
@@ -60,7 +61,8 @@ def test_taskiq_group_reports_its_own_lag() -> None:
 
 
 def test_taskiq_group_with_unknown_lag_counts_the_stream() -> None:
-    from app.services.system.health import taskiq_group_stats
+    from app.services.system.health_worker_rules import taskiq_group_stats
 
     groups = [{"name": "taskiq", "consumers": 1, "pending": 0, "entries-read": None, "lag": None}]
     assert taskiq_group_stats(groups, stream_length=5) == (1, 0, 0, 5)
+{%- endif %}

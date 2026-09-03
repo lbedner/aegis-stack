@@ -6,26 +6,32 @@ from datetime import (
     date,
     datetime,
 )
+
 from pydantic import (
     BaseModel,
     Field,
 )
 from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.log import logger
-from app.services.finance.domains.detection.insights import format_usd
-from app.services.finance.models import FinanceInsight
-from app.services.finance.service import FinanceService
 from app.services.finance.domains.detection.analyst.activity import (
     _SEVERITY_ORDER,
 )
+from app.services.finance.domains.detection.analyst.report import build_finance_snapshot
 from app.services.finance.domains.detection.analyst.sections import (
     _signed,
     context_label,
 )
-from app.services.finance.domains.detection.analyst.report import build_finance_snapshot
-from app.services.finance.domains.detection.analyst.shared import DEEP_DIVE_AGENT_SLUG, DEEP_DIVE_INSIGHT_TYPE, DEEP_DIVE_SURFACE, _NOTE_INSIGHT_TYPES, user_id_for
-
-
+from app.services.finance.domains.detection.analyst.shared import (
+    _NOTE_INSIGHT_TYPES,
+    DEEP_DIVE_AGENT_SLUG,
+    DEEP_DIVE_INSIGHT_TYPE,
+    DEEP_DIVE_SURFACE,
+    user_id_for,
+)
+from app.services.finance.domains.detection.insights import format_usd
+from app.services.finance.models import FinanceInsight
+from app.services.finance.service import FinanceService
 
 
 class DeepDive(BaseModel):
@@ -50,8 +56,6 @@ _DEEP_DIVE_SECTIONS = (
 )
 
 
-
-
 def render_deep_dive(dive: DeepDive) -> str:
     """The review, in a fixed order with empty sections dropped.
 
@@ -65,8 +69,6 @@ def render_deep_dive(dive: DeepDive) -> str:
         if prose:
             blocks.append(f"**{label}**\n\n{prose}")
     return "\n\n".join(blocks)
-
-
 
 
 def findings_digest(insights: list[FinanceInsight]) -> str:
@@ -176,8 +178,6 @@ async def build_deep_dive_context(
         sections.append("\n".join(lines))
 
     return "\n\n".join(sections)
-
-
 
 
 async def run_deep_dive(

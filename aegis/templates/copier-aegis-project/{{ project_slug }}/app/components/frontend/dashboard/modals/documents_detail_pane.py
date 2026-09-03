@@ -8,14 +8,12 @@ content route, Delete retires the row.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import asdict
 from typing import Any
 from urllib.parse import quote
 
 import flet as ft
 
 from app.components.frontend.controls import (
-    ConfirmDialog,
     FormDropdown,
     FormTextField,
     H3Text,
@@ -25,7 +23,6 @@ from app.components.frontend.controls import (
     ThemedSwitch,
 )
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.form_fields import FormDateField
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.theme import AegisTheme as Theme
@@ -33,7 +30,8 @@ from app.core.formatting import format_bytes, format_date
 from app.core.log import logger
 from app.services.documents.models import DOCUMENT_KINDS
 
-from .documents_pages import PagesStrip, has_unread_pages
+from . import documents_actions as actions
+from .documents_pages import PagesStrip
 from .modal_sections import EmptyStatePlaceholder
 
 API = "/api/v1/documents"
@@ -252,41 +250,13 @@ class DocumentDetailPane(ft.Container):
             self.page.run_task(self._pages.load)
 
     def _sync_extract_state(self, rows: list[dict[str, Any]]) -> None:
-        """Extract while a page is unread; a force once none is.
-
-        Plain Extract on a fully-read document does nothing - the run comes
-        back "Already extracted". Re-running is still worth offering, since the
-        model that reads a page can change, but as something asked for
-        rather than something that happens by pressing the same button.
-        """
-        self._force_extract = not has_unread_pages(rows)
-        button = self._extract_button
-        button.text = "Force extract" if self._force_extract else "Extract"
-        button.content = ft.Text(button.text, **asdict(button.text_style))
-        button.tooltip = (
-            "Extract every page again with the current model"
-            if self._force_extract
-            else None
-        )
-        if button.page is not None:
-            button.update()
+        self._force_extract = actions.sync_extract_button(self._extract_button, rows)
 
     async def _extract(self) -> None:
-        """Queue a read of every page not yet read and get out of the way.
-
-        Progress lives on the Activity tab, one row per job, whether the
-        job runs here or on a worker; the strip refreshes when it lands.
-        """
         if self._doc is None:
             return
-        query = "background=true&force=true" if self._force_extract else "background=true"
-        started = await self._api().post(f"{API}/{self._doc['id']}/extract?{query}")
-        if not isinstance(started, dict) or not started.get("job_id"):
-            ErrorSnackBar("Extraction could not start.").launch(self.page)
-            return
-        title = str(self._doc.get("title") or "document")
-        SuccessSnackBar(f"Extracting {title}. Follow it on the Activity tab.").launch(
-            self.page
+        await actions.start_extraction(
+            self.page, self._api(), self._doc, force=self._force_extract
         )
 
     async def refresh_if_showing(self, document_id: int) -> None:
@@ -359,78 +329,16 @@ class DocumentDetailPane(ft.Container):
 
     async def _download(self) -> None:
         if self._doc is not None:
-            self.page.launch_url(f"{API}/{self._doc['id']}/content")
+            actions.download(self.page, self._doc)
 
     async def _confirm_delete(self) -> None:
         if self._doc is None:
             return
-        title = str(self._doc.get("title") or "this document")
-        if self._doc.get("protected"):
-            self._confirm_protected_delete(title)
-            return
 
-        async def _do_delete() -> None:
-            if self._doc is None:
-                return
-            await self._api().delete(f"{API}/{self._doc['id']}")
+        async def _deleted() -> None:
             self.clear()
             await self._on_change()
 
-        ConfirmDialog(
-            page=self.page,
-            title="Delete document?",
-            message=(
-                f'"{title}" will be retired from the list. The stored file is kept.'
-            ),
-            confirm_text="Delete",
-            destructive=True,
-            on_confirm=_do_delete,
-        ).show()
-
-    def _confirm_protected_delete(self, title: str) -> None:
-        """One more gate: the title, typed back, is the confirmation the
-        API requires too."""
-        typed = FormTextField(label="Title", hint=title)
-        dialog: StyledAlertDialog | None = None
-
-        async def _do_delete() -> None:
-            if self._doc is None:
-                return
-            code, body = await self._api().request_with_status(
-                "DELETE", f"{API}/{self._doc['id']}", params={"confirm": typed.value}
-            )
-            if code != 204:
-                detail = body.get("detail") if isinstance(body, dict) else None
-                ErrorSnackBar(str(detail or "The title did not match.")).launch(
-                    self.page
-                )
-                return
-            if dialog is not None:
-                dialog.open = False
-            self.clear()
-            await self._on_change()
-
-        dialog = StyledAlertDialog(
-            title="Delete protected document?",
-            body=ft.Column(
-                [
-                    SecondaryText(
-                        f'Type "{title}" to retire it. The stored file is kept.',
-                        size=Theme.Typography.BODY_SMALL,
-                    ),
-                    typed,
-                ],
-                spacing=Theme.Spacing.SM,
-                tight=True,
-            ),
-            actions=[
-                PulseButton(
-                    on_click_callable=_do_delete,
-                    text="Delete",
-                    variant="stop",
-                    compact=True,
-                )
-            ],
-            width=420,
+        actions.confirm_delete(
+            self.page, self._api(), self._doc, on_deleted=_deleted
         )
-        self.page.open(dialog)

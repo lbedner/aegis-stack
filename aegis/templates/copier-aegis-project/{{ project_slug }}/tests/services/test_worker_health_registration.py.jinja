@@ -32,7 +32,7 @@ class TestWorkerHealthRegistration:
 
         try:
             # Import and register worker health check (simulating startup)
-            from app.services.system.health import check_worker_health
+            from app.services.system.health_worker import check_worker_health
             register_health_check("worker", check_worker_health)
 
             # Verify registration worked

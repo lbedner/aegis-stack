@@ -197,14 +197,15 @@ class TestRemoteJobs:
     @pytest.mark.asyncio
     async def test_a_store_that_falls_over_ends_the_stream(self) -> None:
         """A stream that just stops is a client waiting forever."""
+        store = _FakeStore(_running())
         runner = JobRunner()
-        runner.attach_remote(_FakeStore(_running()), poll_seconds=0.01)
+        runner.attach_remote(store, poll_seconds=0.01)
 
         queue = await runner.subscribe_any("remote")
         assert queue is not None
         assert (await asyncio.wait_for(queue.get(), 1))["status"] == "running"
 
-        runner._remote.raises = True  # type: ignore[union-attr]
+        store.raises = True
 
         assert await asyncio.wait_for(queue.get(), 1) is None
 

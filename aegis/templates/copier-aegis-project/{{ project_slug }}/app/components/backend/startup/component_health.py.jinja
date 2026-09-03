@@ -565,7 +565,7 @@ async def startup_hook() -> None:
 
     {%- if include_worker %}
     # Register worker health check (shows queue status and job metrics)
-    from app.services.system.health import check_worker_health
+    from app.services.system.health_worker import check_worker_health
     register_health_check("worker", check_worker_health)
     logger.info("Worker component health check registered")
     {%- endif %}

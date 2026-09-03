@@ -1156,6 +1156,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/cards/documents_card.py",
                 "app/components/frontend/dashboard/modals/documents_modal.py",
                 "app/components/frontend/dashboard/modals/documents_detail_pane.py",
+                "app/components/frontend/dashboard/modals/documents_actions.py",
                 "app/components/frontend/dashboard/modals/documents_pages.py",
                 "app/services/documents/domains/extraction/jobs.py",
                 "app/components/frontend/dashboard/modals/documents_activity.py",

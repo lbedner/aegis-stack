@@ -129,6 +129,7 @@ def cleanup_worker_backend_files(project_path: Path, worker_backend: str) -> Non
     api_dir = project_path / "app/components/backend/api"
     services_dir = project_path / "app/services"
     lt_worker_dir = project_path / "app/services/load_test/worker"
+    system_dir = project_path / "app/services/system"
 
     # Helper: remove all files matching a suffix pattern
     def _remove_backend_files(suffix: str) -> None:
@@ -155,6 +156,9 @@ def cleanup_worker_backend_files(project_path: Path, worker_backend: str) -> Non
         lt_service = lt_worker_dir / f"service{suffix}"
         if lt_service.exists():
             lt_service.unlink()
+        health_worker = system_dir / f"health_worker{suffix}"
+        if health_worker.exists():
+            health_worker.unlink()
 
     # Helper: rename backend-specific files to canonical names
     def _rename_backend_files(suffix: str) -> set[str]:
@@ -179,6 +183,14 @@ def cleanup_worker_backend_files(project_path: Path, worker_backend: str) -> Non
                 if canonical.exists():
                     canonical.unlink()
                 backend_file.rename(canonical)
+
+        # Rename the worker health check (its canonical file is arq's)
+        health_backend = system_dir / f"health_worker{suffix}"
+        health_canonical = system_dir / "health_worker.py"
+        if health_backend.exists():
+            if health_canonical.exists():
+                health_canonical.unlink()
+            health_backend.rename(health_canonical)
 
         # Rename API file
         api_backend = api_dir / f"worker{suffix}"

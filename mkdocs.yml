@@ -91,6 +91,7 @@ nav:
     - Worker:
       - Getting Started: components/worker/index.md
       - Configuration: components/worker/configuration.md
+      - Background Jobs: components/worker/jobs.md
       - Examples: components/worker/examples.md
       - Extras:
         - Load Testing: components/worker/extras/load-testing.md

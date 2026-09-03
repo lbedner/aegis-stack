@@ -2,23 +2,32 @@
 """
 
 from datetime import date
+
 from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.log import logger
 from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
 from app.services.finance.domains.detection import queries
+from app.services.finance.domains.detection.analyst.context import load_report_context
+from app.services.finance.domains.detection.analyst.facts import (
+    SectionCommentary,
+    build_report_facts,
+    diff_facts,
+    save_snapshot,
+    snapshot_before,
+)
+from app.services.finance.domains.detection.analyst.report import (
+    build_finance_snapshot,
+    render_report,
+)
+from app.services.finance.domains.detection.analyst.shared import (
+    ANALYST_AGENT_SLUG,
+    ANALYST_SURFACE,
+    note_dedup_key,
+    user_id_for,
+)
 from app.services.finance.domains.detection.insights import create_insight_if_new
 from app.services.finance.models import FinanceInsight
-from app.services.finance.domains.detection.analyst.context import load_report_context
-from app.services.finance.domains.detection.analyst.facts import _note_on, SectionCommentary, build_report_facts, diff_facts, save_snapshot, snapshot_before
-from app.services.finance.domains.detection.analyst.report import build_finance_snapshot, render_report
-from app.services.finance.domains.detection.analyst.shared import note_dedup_key, ANALYST_AGENT_SLUG, ANALYST_SURFACE, user_id_for
-
-
-
-
-
-
-
 
 
 async def existing_note(
@@ -33,8 +42,6 @@ async def existing_note(
             FinanceInsight.dedup_key == note_dedup_key(today),
         ],
     )
-
-
 
 
 async def run_analyst_note(

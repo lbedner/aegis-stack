@@ -79,7 +79,7 @@ The service never touches a filesystem or a bucket directly. It calls the `Objec
 | `filesystem` (default) | `FilesystemStorage` | under `STORAGE_ROOT`, content-addressed |
 | `s3` | `S3Storage` | any S3-compatible endpoint; SeaweedFS in the dev stack |
 
-Adding the [storage component](../../components/storage.md) switches the default and adds the dev container. Because keys are hashes, switching backends is a copy of objects, not a migration of rows.
+Adding the [storage component](../../components/storage/index.md) switches the default and adds the dev container. Because keys are hashes, switching backends is a copy of objects, not a migration of rows.
 
 ## Generated Files
 
@@ -140,6 +140,6 @@ added the storage component sees `s3` here rather than what `.env` used to say.
 **Related:**
 
 - **[Services Overview](../index.md)** - Complete services architecture
-- **[Storage Component](../../components/storage.md)** - S3 backend for the same keys
+- **[Storage Component](../../components/storage/index.md)** - S3 backend for the same keys
 - **[Worker Component](../../components/worker/index.md)** - Where a background extraction runs
 - **[Database Component](../../components/database.md)** - Database component details

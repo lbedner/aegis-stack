@@ -308,19 +308,35 @@ Current active LLM configuration enriched with catalog data.
 
 ## Database Schema
 
-The catalog uses five tables:
+### LLMOrg
 
-### LLMVendor
+An organization in the model economy. One table, because a maker and a
+server are one kind of thing wearing different hats: OpenAI both builds
+weights and serves them, Meta builds and serves nothing, DeepInfra serves
+and builds nothing. Modelling those as separate tables duplicated every
+org that does both.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `name` | string, unique | Vendor name (e.g., "OpenAI") |
-| `description` | string | Vendor description |
+| `slug` | string, unique | Stable identifier (`meta-models`, `fireworks`) |
+| `name` | string, indexed | Display name (e.g., "OpenAI") |
+| `description` | string | Org description |
+| `homepage` | string | Where to read more |
 | `color` | string | UI color code |
-| `api_base` | string | API base URL |
+| `api_base` | string | API base URL; null for an org that only publishes weights |
 | `auth_method` | string | Authentication method |
 
-20+ vendors pre-configured with metadata (OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, etc.).
+20+ orgs pre-configured with metadata (OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, etc.).
+
+### LLMOrgRole
+
+Which hats an org wears. An org that both builds and serves has two rows,
+which is the whole reason this is a link table.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `org_id` | FK | The org, cascading on delete |
+| `role` | string | `maker` or `server`; unique per `(org_id, role)` |
 
 ### LargeLanguageModel
 
@@ -333,7 +349,8 @@ The catalog uses five tables:
 | `enabled` | boolean | Available for use |
 | `released_on` | string | Release date |
 | `family` | string | Model family |
-| `llm_vendor_id` | FK | Reference to vendor |
+| `served_by_org_id` | FK | The org serving this model |
+| `made_by_org_id` | FK | The org that built it |
 
 ### LLMModality
 

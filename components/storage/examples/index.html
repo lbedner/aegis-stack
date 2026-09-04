@@ -12,13 +12,13 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://docs.aegis-stack.io/components/frontend/api-client/">
+        <link rel="canonical" href="https://docs.aegis-stack.io/components/storage/examples/">
       
       
-        <link rel="prev" href="../state/">
+        <link rel="prev" href="../configuration/">
       
       
-        <link rel="next" href="../events/">
+        <link rel="next" href="../../worker/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>API Client - Aegis Stack</title>
+        <title>Examples - Aegis Stack</title>
       
     
     
@@ -100,7 +100,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#api-client" class="md-skip">
+        <a href="#examples" class="md-skip">
           Skip to content
         </a>
       
@@ -133,7 +133,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              API Client
+              Examples
             
           </span>
         </div>
@@ -1193,8 +1193,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1205,11 +1203,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
         
           
           <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
@@ -1230,7 +1228,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1245,8 +1243,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1257,11 +1253,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_1" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_1" >
         
           
           <label class="md-nav__link" for="__nav_3_4_1" id="__nav_3_4_1_label" tabindex="0">
@@ -1282,7 +1278,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_1_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_4_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1300,7 +1296,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../frontend/" class="md-nav__link">
         
   
   
@@ -1328,7 +1324,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/" class="md-nav__link">
+      <a href="../../frontend/architecture/" class="md-nav__link">
         
   
   
@@ -1356,7 +1352,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../routing/" class="md-nav__link">
+      <a href="../../frontend/routing/" class="md-nav__link">
         
   
   
@@ -1384,7 +1380,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../state/" class="md-nav__link">
+      <a href="../../frontend/state/" class="md-nav__link">
         
   
   
@@ -1409,37 +1405,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    API Client
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../frontend/api-client/" class="md-nav__link">
         
   
   
@@ -1455,103 +1424,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#shape" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Shape
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#one-client-per-session" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        One client per session
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-cookie-jar-and-the-auth-flow" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The cookie jar and the auth flow
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#on_unauthorized-the-401-handler" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        on_unauthorized: the 401 handler
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-the-api-client-deliberately-does-not-do" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What the API client deliberately does not do
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-this-lives-in-appcore-and-not-frontend" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why this lives in app/core/ and not frontend/
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1564,7 +1436,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../events/" class="md-nav__link">
+      <a href="../../frontend/events/" class="md-nav__link">
         
   
   
@@ -1592,7 +1464,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../example/" class="md-nav__link">
+      <a href="../../frontend/example/" class="md-nav__link">
         
   
   
@@ -2029,6 +1901,8 @@
                 
   
   
+    
+  
   
   
     
@@ -2039,11 +1913,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6" checked>
         
           
           <label class="md-nav__link" for="__nav_3_6" id="__nav_3_6_label" tabindex="0">
@@ -2064,7 +1938,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2082,7 +1956,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../storage/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -2110,7 +1984,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../storage/configuration/" class="md-nav__link">
+      <a href="../configuration/" class="md-nav__link">
         
   
   
@@ -2135,10 +2009,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../storage/examples/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -2154,6 +2055,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#storing-and-reading-bytes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storing and Reading Bytes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-link-instead-of-a-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A Link Instead of a Proxy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-against-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing Against Storage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#moving-a-running-project-to-a-bucket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Moving a Running Project to a Bucket
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -4745,10 +4721,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#shape" class="md-nav__link">
+  <a href="#storing-and-reading-bytes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Shape
+        Storing and Reading Bytes
       
     </span>
   </a>
@@ -4756,10 +4732,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#one-client-per-session" class="md-nav__link">
+  <a href="#a-link-instead-of-a-proxy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        One client per session
+        A Link Instead of a Proxy
       
     </span>
   </a>
@@ -4767,10 +4743,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-cookie-jar-and-the-auth-flow" class="md-nav__link">
+  <a href="#testing-against-storage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The cookie jar and the auth flow
+        Testing Against Storage
       
     </span>
   </a>
@@ -4778,32 +4754,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#on_unauthorized-the-401-handler" class="md-nav__link">
+  <a href="#moving-a-running-project-to-a-bucket" class="md-nav__link">
     <span class="md-ellipsis">
       
-        on_unauthorized: the 401 handler
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-the-api-client-deliberately-does-not-do" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What the API client deliberately does not do
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-this-lives-in-appcore-and-not-frontend" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why this lives in app/core/ and not frontend/
+        Moving a Running Project to a Bucket
       
     </span>
   </a>
@@ -4842,132 +4796,105 @@
   
 
 
-<h1 id="api-client">API Client</h1>
-<p><code>APIClient</code> (in <code>app/core/client.py</code>) is the <strong>One True Client</strong> for the
-Aegis frontend. Every server call from a view, modal, or service should go
-through it. Raw <code>httpx.AsyncClient</code> use outside this module is a code smell.</p>
-<p>It does three things that the rest of the frontend relies on:</p>
-<ol>
-<li>Wraps a long-lived <code>httpx.AsyncClient</code> whose cookie jar persists across
-   requests within a session.</li>
-<li>Carries the HttpOnly <code>aegis_session</code> cookie automatically once the
-   backend issues it.</li>
-<li>Calls an <code>on_unauthorized</code> handler on 401, which is what drives the
-   "session expired, send the user to /login" path.</li>
-</ol>
-<p>Although this lives under <code>app/core/</code>, the pattern is frontend-agnostic.
-A future htmx or other Python front end would use the same client; the
-fact that Flet hosts it is incidental.</p>
-<h2 id="shape">Shape</h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">APIClient</span><span class="p">:</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">on_unauthorized</span><span class="p">:</span> <span class="n">UnauthorizedHandler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">json</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">post_form</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">aclose</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">clear_cookies</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+<h1 id="examples">Examples</h1>
+<h2 id="storing-and-reading-bytes">Storing and Reading Bytes</h2>
+<p>Any service reaches storage the same way, whichever backend the project runs:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_storage</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">store_and_read</span><span class="p">(</span><span class="n">pdf_bytes</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">storage</span> <span class="o">=</span> <span class="n">get_storage</span><span class="p">()</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">key</span> <span class="o">=</span> <span class="k">await</span> <span class="n">storage</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">pdf_bytes</span><span class="p">,</span> <span class="n">content_type</span><span class="o">=</span><span class="s2">&quot;application/pdf&quot;</span><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="c1"># &#39;sha256/9f/2c/9f2c...&#39;</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">storage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>          <span class="c1"># bytes, or None</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">exists</span> <span class="o">=</span> <span class="k">await</span> <span class="n">storage</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">removed</span> <span class="o">=</span> <span class="k">await</span> <span class="n">storage</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>    <span class="c1"># False when there was nothing there</span>
 </span></code></pre></div>
-<p>The verbs return parsed JSON (<code>dict | list</code>) on 2xx and <code>None</code> on error.
-Errors are logged inside the client; callers check for <code>None</code> (or for the
-expected type) rather than catching exceptions on every call.</p>
-<h2 id="one-client-per-session">One client per session</h2>
-<p><code>APIClient</code> is constructed once during the per-session bootstrap and
-attached to <a href="../state/"><code>SessionState</code></a>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># app/components/frontend/main.py (excerpt)</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">api_client</span> <span class="o">=</span> <span class="n">APIClient</span><span class="p">(</span><span class="n">on_unauthorized</span><span class="o">=</span><span class="n">_handle_unauthorized</span><span class="p">)</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">init_session_state</span><span class="p">(</span><span class="n">page</span><span class="p">,</span> <span class="n">api_client</span><span class="o">=</span><span class="n">api_client</span><span class="p">)</span>
+<p>Keep the key. It is what a database row should store, alongside the backend name if the row might outlive a migration, which is exactly what the documents service records.</p>
+<h2 id="a-link-instead-of-a-proxy">A Link Instead of a Proxy</h2>
+<p>Serving a 40 MB scan through the app costs a worker for the length of the download. A presigned URL hands the browser a time-limited link to the object itself:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Response</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.responses</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedirectResponse</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_storage</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">()</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/documents/{key:path}&quot;</span><span class="p">)</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">storage</span> <span class="o">=</span> <span class="n">get_storage</span><span class="p">()</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">url</span> <span class="o">=</span> <span class="k">await</span> <span class="n">storage</span><span class="o">.</span><span class="n">presigned_url</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">expires_seconds</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="k">if</span> <span class="n">url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>        <span class="k">return</span> <span class="n">RedirectResponse</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">storage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>          <span class="c1"># no link to hand out: proxy it</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="mi">404</span><span class="p">)</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>    <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">media_type</span><span class="o">=</span><span class="s2">&quot;application/pdf&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Why per-session rather than per-call:</p>
-<ul>
-<li><strong>The cookie jar has to persist.</strong> A fresh <code>httpx.AsyncClient</code> on every
-  call would mean a fresh empty jar on every call. The <code>aegis_session</code>
-  cookie would never make it back to the server.</li>
-<li><strong>Connection pooling.</strong> httpx reuses keep-alive connections inside an
-  <code>AsyncClient</code>. Constructing a new client per call defeats it.</li>
-<li><strong>Isolation between sessions.</strong> Two browser tabs (two Flet sessions)
-  get two <code>APIClient</code> instances, so their cookie jars cannot bleed into
-  each other. Sign-in as User A in one tab does not authenticate User B's
-  tab.</li>
-</ul>
-<p><code>APIClient.aclose()</code> releases the underlying connection pool and runs
-exactly once per session, from <code>clear_session_state(page)</code>. See
-<a href="../state/#teardown">Session State</a> for why it does not fire on
-<code>on_disconnect</code>.</p>
-<h2 id="the-cookie-jar-and-the-auth-flow">The cookie jar and the auth flow</h2>
-<p>The backend issues <code>Set-Cookie: aegis_session=&lt;token&gt;; HttpOnly</code> on:</p>
-<ul>
-<li><code>POST /api/v1/auth/token</code> (username + password sign-in)</li>
-<li><code>POST /api/v1/auth/register</code></li>
-<li>The OAuth callback redirect</li>
-</ul>
-<p><code>httpx.AsyncClient</code> parses <code>Set-Cookie</code> and adds the cookie to its jar
-automatically. Every subsequent request on the same client includes it
-in the <code>Cookie:</code> header. The view code does not need to know about it.</p>
-<pre class="mermaid"><code>sequenceDiagram
-    participant V as View
-    participant C as APIClient
-    participant B as FastAPI backend
-
-    V-&gt;&gt;C: post_form to /auth/token with credentials
-    C-&gt;&gt;B: POST /auth/token
-    B--&gt;&gt;C: 200 plus Set-Cookie aegis_session
-    Note over C: cookie lands in httpx jar
-    V-&gt;&gt;C: get /api/v1/insights/projects
-    C-&gt;&gt;B: GET with Cookie aegis_session
-    B--&gt;&gt;C: 200 plus JSON payload</code></pre>
-<p>Logout (<code>sign_out(page)</code> in <code>app/components/frontend/auth/session.py</code>):</p>
-<ol>
-<li>POSTs <code>/api/v1/auth/logout</code> so the backend can revoke server-side.</li>
-<li>Calls <code>api.clear_cookies()</code> to drop the jar locally. This is
-   belt-and-braces against a partial-failure replay even if the
-   server-side <code>delete-cookie</code> response was honored.</li>
-</ol>
-<h2 id="on_unauthorized-the-401-handler"><code>on_unauthorized</code>: the 401 handler</h2>
-<p><code>APIClient</code> accepts a callback that fires when the backend returns 401.
-The Aegis bootstrap wires this to a handler that signs the user out
-locally and routes them to <code>/login</code>. The contract:</p>
-<ul>
-<li>The handler can be sync or async; <code>APIClient</code> dispatches both.</li>
-<li>A re-entry guard (<code>_in_unauthorized</code>) stops the canonical recursive
-  case from looping forever. <code>sign_out</code> itself calls <code>/auth/logout</code>,
-  which 401s when the cookie is already stale, which is exactly when the
-  handler is firing.</li>
-<li>A second guard (<code>_in_refresh</code>) covers the refresh-on-401 retry layer:
-  if <code>/auth/refresh</code> itself returns 401, the client does not try to
-  refresh again.</li>
-</ul>
-<h2 id="what-the-api-client-deliberately-does-not-do">What the API client deliberately does not do</h2>
-<ul>
-<li><strong>No response model coercion.</strong> Endpoints return JSON; the client
-  returns <code>dict | list | None</code>. Views are free to pass the payload to a
-  Pydantic model for validation, but the client does not enforce one.
-  This keeps it usable across every endpoint without per-call generics.</li>
-<li><strong>No retry loop.</strong> Exactly one retry is built in for the
-  refresh-on-401 path; everything else is a single shot. Aegis does not
-  silently retry user-initiated calls.</li>
-<li><strong>No caching.</strong> The client is a thin wrapper. Caching, when wanted,
-  goes one layer up (the view's <code>_reload</code> method, or a service that
-  memoizes on top of the client).</li>
-</ul>
-<h2 id="why-this-lives-in-appcore-and-not-frontend">Why this lives in <code>app/core/</code> and not <code>frontend/</code></h2>
-<p><code>app/core/</code> is app-scoped: nothing in it takes a <code>page</code>. <code>APIClient</code>
-qualifies because it has no Flet dependency; it is just an httpx wrapper.
-The fact that Aegis instantiates one per Flet session is an integration
-detail handled by <code>init_session_state</code>. A second front end (or a CLI
-client, or a script) could import <code>APIClient</code> directly without pulling
-Flet in.</p>
+<p><code>None</code> is not a failure. The filesystem backend has nothing to link to, so the fallback reads the bytes through the same protocol rather than reaching for a path. A caller that handles both cases works on every stack, and the same code gets faster when the project adopts a bucket.</p>
+<h2 id="testing-against-storage">Testing Against Storage</h2>
+<p>Swap the backend for the duration of a test; nothing else changes:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">FilesystemStorage</span><span class="p">,</span> <span class="n">set_storage</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">autouse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">_storage</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">set_storage</span><span class="p">(</span><span class="n">FilesystemStorage</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">))</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="k">yield</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">set_storage</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+</span></code></pre></div>
+<p>The S3 backend's own tests use <a href="https://github.com/getmoto/moto">moto</a>, so they need no server and no credentials.</p>
+<h2 id="moving-a-running-project-to-a-bucket">Moving a Running Project to a Bucket</h2>
+<p>Keys are derived from the bytes, so nothing in the database has to change. The move is a copy of objects and a setting:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># 1. add the component: the backend, the compose service, the card</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>storage
+</span></code></pre></div>
+<p>Adding it makes <code>s3</code> the default, so hold the app on disk while the copy runs:</p>
+<div class="language-ini highlight"><span class="filename">.env</span><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="na">STORAGE_BACKEND</span><span class="o">=</span><span class="s">filesystem</span>
+</span></code></pre></div>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># 2. copy what is already stored, preserving the key layout</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>aws<span class="w"> </span>s3<span class="w"> </span>sync<span class="w"> </span>storage_data/sha256<span class="w"> </span>s3://my-app/sha256
+</span></code></pre></div>
+<div class="language-ini highlight"><span class="filename">.env</span><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># 3. point the app at the bucket</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="na">STORAGE_BACKEND</span><span class="o">=</span><span class="s">s3</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="na">S3_ENDPOINT_URL</span><span class="o">=</span><span class="s">https://s3.example.com</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="na">S3_BUCKET</span><span class="o">=</span><span class="s">my-app</span>
+</span></code></pre></div>
+<p>Every stored reference resolves afterwards, because every reference is a key rather than a path.</p>
+<div class="admonition tip">
+<p class="admonition-title">Verify before switching, not after</p>
+<p>Adding the storage component makes <code>s3</code> the default, so pin <code>STORAGE_BACKEND=filesystem</code> in <code>.env</code> before the copy and only change it to <code>s3</code> once the objects are across. The dashboard's storage card reports reachability and object counts, so a bucket that is missing objects is visible before anything reads from it.</p>
+</div>
+<p>Going the other way works identically: copy the bucket down and set <code>STORAGE_BACKEND=filesystem</code>. That is worth knowing for a local reproduction of a production bug.</p>
 <h2 id="next-steps">Next Steps</h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="../configuration/">Configuration</a></strong></td>
+<td>Settings, targets, and the dev container</td>
+</tr>
+<tr>
+<td><strong><a href="../">Getting Started</a></strong></td>
+<td>The protocol and content-addressed keys</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><strong>Related:</strong></p>
 <ul>
-<li><a href="../events/">Events</a>: the page lifecycle that triggers
-  <code>is_authenticated()</code> (which uses the client) on every connect and
-  protected route change.</li>
-<li><a href="../example/">Example</a>: a view that uses the client end-to-end.</li>
+<li><strong><a href="../../../services/documents/extraction/">Documents Service</a></strong> - Page images stored the same way</li>
 </ul>
 
 

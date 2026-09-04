@@ -78,6 +78,19 @@ def _resolve_one(base: int, label: str, scheme: str = "http://") -> int:
     return port
 
 
+def docs_port(base: int | None = None) -> int:
+    """The host port ``make docs-serve`` should bind.
+
+    Same rule as every other host publish: take the base if it is free,
+    otherwise the next one that is. 8001 was hardcoded, which is exactly
+    the port a second stack's webserver resolves to, so previewing docs
+    beside a running app failed to bind.
+    """
+    if base is None:
+        base = int(os.environ.get("DOCS_PORT_BASE", "8001"))
+    return _resolve_one(base, "docs")
+
+
 def resolve_ports(
     *,
     ingress: bool,

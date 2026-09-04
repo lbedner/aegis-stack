@@ -203,9 +203,8 @@ clean-cache: ## Clean Python cache files
 # DOCUMENTATION
 #=============================================================================
 
-docs-serve: ## Serve documentation locally (http://localhost:8001)
-	@echo "Serving documentation on http://localhost:8001"
-	@uv run mkdocs serve --dev-addr 0.0.0.0:8001
+docs-serve: ## Serve documentation locally (port resolved like make serve)
+	@uv run python scripts/dev_tasks.py docs
 
 docs-build: ## Build static documentation
 	@echo "Building documentation..."

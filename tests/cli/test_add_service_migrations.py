@@ -123,9 +123,9 @@ class TestAddServiceSeedsAgents:
         assert db_path.exists(), "add-service should have created the database"
         with sqlite3.connect(db_path) as conn:
             agents = conn.execute("SELECT slug FROM agent").fetchall()
-            vendors = conn.execute("SELECT COUNT(*) FROM llm_vendor").fetchone()
+            orgs = conn.execute("SELECT COUNT(*) FROM llm_org").fetchone()
         assert ("assistant",) in agents, "default agent should be seeded"
-        assert vendors[0] > 0, "LLM catalog should be seeded"
+        assert orgs[0] > 0, "LLM catalog should be seeded"
 
 
 class TestAddServiceNoMigrationNeeded:
@@ -207,22 +207,25 @@ class TestAddServiceSharedFileReRendering:
     """Test that add-service re-renders shared template files."""
 
     @pytest.mark.slow
-    def test_add_ai_service_updates_card_utils(
+    def test_add_ai_service_updates_the_modal_registry(
         self, project_factory: ProjectFactory
     ) -> None:
-        """Test that adding AI service updates card_utils.py with AI modal mapping."""
+        """The dashboard has to know how to open the modal a new service
+        brought with it. The map lives in ``modal_registry.py``, a shared
+        file gated on ``include_ai`` - if the add path does not re-render
+        it, the card is there and clicking it does nothing."""
         # Get cached base project copy
         project_path = project_factory("base")
 
-        card_utils_path = (
-            project_path / "app/components/frontend/dashboard/cards/card_utils.py"
+        registry_path = (
+            project_path / "app/components/frontend/dashboard/modal_registry.py"
         )
 
         # Verify base project doesn't have AI in modal_map
-        assert card_utils_path.exists(), "card_utils.py should exist"
-        base_content = card_utils_path.read_text()
+        assert registry_path.exists(), "modal_registry.py should exist"
+        base_content = registry_path.read_text()
         assert "AIDetailDialog" not in base_content, (
-            "Base project should not have AIDetailDialog in card_utils.py"
+            "Base project should not have AIDetailDialog in modal_registry.py"
         )
 
         # Add ai service with bracket syntax to skip interactive prompts
@@ -236,13 +239,13 @@ class TestAddServiceSharedFileReRendering:
         )
         assert result.returncode == 0, f"Add-service failed: {result.stderr}"
 
-        # Verify card_utils.py now has AI modal mapping
-        updated_content = card_utils_path.read_text()
+        # Verify modal_registry.py now has AI modal mapping
+        updated_content = registry_path.read_text()
         assert "AIDetailDialog" in updated_content, (
-            "card_utils.py should have AIDetailDialog after add-service ai"
+            "modal_registry.py should have AIDetailDialog after add-service ai"
         )
-        assert '"ai": AIDetailDialog' in updated_content, (
-            "modal_map should include 'ai': AIDetailDialog"
+        assert '"service_ai": AIDetailDialog' in updated_content, (
+            "modal_map should include 'service_ai': AIDetailDialog"
         )
 
 

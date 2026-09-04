@@ -2878,10 +2878,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#llmvendor" class="md-nav__link">
+  <a href="#llmorg" class="md-nav__link">
     <span class="md-ellipsis">
       
-        LLMVendor
+        LLMOrg
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#llmorgrole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLMOrgRole
       
     </span>
   </a>
@@ -5170,10 +5181,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#llmvendor" class="md-nav__link">
+  <a href="#llmorg" class="md-nav__link">
     <span class="md-ellipsis">
       
-        LLMVendor
+        LLMOrg
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#llmorgrole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLMOrgRole
       
     </span>
   </a>
@@ -5609,8 +5631,12 @@
 </span></code></pre></div>
 <hr />
 <h2 id="database-schema">Database Schema</h2>
-<p>The catalog uses five tables:</p>
-<h3 id="llmvendor">LLMVendor</h3>
+<h3 id="llmorg">LLMOrg</h3>
+<p>An organization in the model economy. One table, because a maker and a
+server are one kind of thing wearing different hats: OpenAI both builds
+weights and serves them, Meta builds and serves nothing, DeepInfra serves
+and builds nothing. Modelling those as separate tables duplicated every
+org that does both.</p>
 <table>
 <thead>
 <tr>
@@ -5621,14 +5647,24 @@
 </thead>
 <tbody>
 <tr>
-<td><code>name</code></td>
+<td><code>slug</code></td>
 <td>string, unique</td>
-<td>Vendor name (e.g., "OpenAI")</td>
+<td>Stable identifier (<code>meta-models</code>, <code>fireworks</code>)</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string, indexed</td>
+<td>Display name (e.g., "OpenAI")</td>
 </tr>
 <tr>
 <td><code>description</code></td>
 <td>string</td>
-<td>Vendor description</td>
+<td>Org description</td>
+</tr>
+<tr>
+<td><code>homepage</code></td>
+<td>string</td>
+<td>Where to read more</td>
 </tr>
 <tr>
 <td><code>color</code></td>
@@ -5638,7 +5674,7 @@
 <tr>
 <td><code>api_base</code></td>
 <td>string</td>
-<td>API base URL</td>
+<td>API base URL; null for an org that only publishes weights</td>
 </tr>
 <tr>
 <td><code>auth_method</code></td>
@@ -5647,7 +5683,31 @@
 </tr>
 </tbody>
 </table>
-<p>20+ vendors pre-configured with metadata (OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, etc.).</p>
+<p>20+ orgs pre-configured with metadata (OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, etc.).</p>
+<h3 id="llmorgrole">LLMOrgRole</h3>
+<p>Which hats an org wears. An org that both builds and serves has two rows,
+which is the whole reason this is a link table.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>org_id</code></td>
+<td>FK</td>
+<td>The org, cascading on delete</td>
+</tr>
+<tr>
+<td><code>role</code></td>
+<td>string</td>
+<td><code>maker</code> or <code>server</code>; unique per <code>(org_id, role)</code></td>
+</tr>
+</tbody>
+</table>
 <h3 id="largelanguagemodel">LargeLanguageModel</h3>
 <table>
 <thead>
@@ -5694,9 +5754,14 @@
 <td>Model family</td>
 </tr>
 <tr>
-<td><code>llm_vendor_id</code></td>
+<td><code>served_by_org_id</code></td>
 <td>FK</td>
-<td>Reference to vendor</td>
+<td>The org serving this model</td>
+</tr>
+<tr>
+<td><code>made_by_org_id</code></td>
+<td>FK</td>
+<td>The org that built it</td>
 </tr>
 </tbody>
 </table>

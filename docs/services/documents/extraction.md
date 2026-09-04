@@ -96,4 +96,4 @@ Every page without a text layer is one vision call. A seven-page scan is seven c
 - **[Background Jobs](../../components/worker/jobs.md)** - The job record, the streams, and adding one to a service
 - **[Worker Component](../../components/worker/index.md)** - Where a background extraction runs
 - **[AI Service](../ai/index.md)** - Providers, the LLM catalog, and the active-model selection
-- **[Storage Component](../../components/storage.md)** - Where the page images live
+- **[Storage Component](../../components/storage/index.md)** - Where the page images live

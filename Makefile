@@ -51,8 +51,9 @@ clean: ## Clean up cache files
 	@find . -type f -name "*.pyc" -delete
 
 # Serve documentation locally
-docs-serve: ## Serve documentation locally on port 8001 (no live reload, avoids dev server starvation on image-heavy pages)
-	@uv run mkdocs serve --dev-addr 0.0.0.0:8001 --no-livereload
+docs-serve: ## Serve documentation locally (port resolved, no live reload: avoids dev server starvation on image-heavy pages)
+	@port=$$(uv run python scripts/docs_port.py) && \
+	uv run mkdocs serve --dev-addr 127.0.0.1:$$port --no-livereload
 
 # Build documentation
 docs-build: ## Build the static documentation site

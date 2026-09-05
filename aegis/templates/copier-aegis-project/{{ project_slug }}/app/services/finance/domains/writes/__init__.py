@@ -13,11 +13,13 @@ from app.services.finance.domains.writes.queue import (
     describe_change,
     get_change,
     list_changes,
+    outcome_of,
     propose,
     propose_many,
     reject,
     reject_batch,
     withdraw,
+    withdraw_batch,
 )
 from app.services.finance.domains.writes.registry import (
     ChangeExecutor,
@@ -37,9 +39,11 @@ __all__ = [
     "executor_for",
     "get_change",
     "list_changes",
+    "outcome_of",
     "propose",
     "register",
     "registered_change_types",
     "reject",
     "withdraw",
+    "withdraw_batch",
 ]

@@ -180,6 +180,10 @@ def _async_sqlite_take_over_transactions(
     dbapi_connection: Any, connection_record: Any
 ) -> None:
     dbapi_connection.isolation_level = None
+    # A chat run holds one connection while each tool call commits on its
+    # own; without a timeout the second writer fails at once with
+    # "database is locked" instead of waiting its turn.
+    dbapi_connection.execute("PRAGMA busy_timeout=30000")
 
 
 @event.listens_for(async_engine.sync_engine, "begin")

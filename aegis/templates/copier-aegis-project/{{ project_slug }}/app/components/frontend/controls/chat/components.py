@@ -41,11 +41,28 @@ _STATUS_COPY = {
     "pending": ("Awaiting your approval", Theme.Colors.WARNING),
     "approved": ("Approved", Theme.Colors.SUCCESS),
     "rejected": ("Rejected", Theme.Colors.ERROR),
+    "withdrawn": ("Withdrawn", ft.Colors.OUTLINE),
     "expired": ("Expired", ft.Colors.OUTLINE),
 }
 
 
+def _status_of(item: dict[str, Any]) -> tuple[str, str | None]:
+    """The status to SHOW, and the note to show under it.
+
+    A withdrawal lands in the queue as a rejection with a note, so the
+    audit trail stays one shape - but on the card it is not the user's
+    "no", it is the assistant taking its own proposal back, and the
+    reason it gave is the one line worth reading.
+    """
+    status = str(item.get("status", "pending"))
+    note = item.get("note") or (item.get("result") or {}).get("note")
+    if status == "rejected" and note and str(note).startswith("Withdrawn"):
+        return "withdrawn", str(note)
+    return status, None
+
+
 BatchAction = Callable[[str, str, list[int]], Awaitable[dict[str, Any] | None]]
+
 
 class PendingChangeBatchCard(ft.Container):
     """One decision over many rows: every proposal in the batch as a
@@ -110,7 +127,8 @@ class PendingChangeBatchCard(ft.Container):
         """ "1 approved, 1 rejected" - the resolved batch's one-line story."""
         counts: dict[str, int] = {}
         for item in items:
-            counts[str(item.get("status"))] = counts.get(str(item.get("status")), 0) + 1
+            status, _note = _status_of(item)
+            counts[status] = counts.get(status, 0) + 1
         return ", ".join(f"{n} {status}" for status, n in sorted(counts.items()))
 
     def render(self, items: list[dict[str, Any]]) -> None:
@@ -146,9 +164,9 @@ class PendingChangeBatchCard(ft.Container):
             return
         for item in items:
             item_id = int(item.get("id") or 0)
-            status = str(item.get("status", "pending"))
+            status, _note = _status_of(item)
             vetoed = item_id in self._excluded
-            dimmed = vetoed or status == "rejected"
+            dimmed = vetoed or status in ("rejected", "withdrawn")
             block = ft.Column(
                 _display_rows(item.get("display") or [], dimmed=dimmed),
                 spacing=2,
@@ -261,7 +279,7 @@ class PendingChangeCard(ft.Container):
 
     def render(self, data: dict[str, Any]) -> None:
         self._data = data
-        status = str(data.get("status", "pending"))
+        status, note = _status_of(data)
         copy, color = _STATUS_COPY.get(status, (status.title(), ft.Colors.OUTLINE))
         resolved = status != "pending"
         header: list[ft.Control] = [
@@ -287,6 +305,9 @@ class PendingChangeCard(ft.Container):
         rows: list[ft.Control] = [
             ft.Row(header, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         ]
+        if note:
+            # Shown folded or not: the reason is the point of the card now.
+            rows.append(SecondaryText(note))
         if resolved and not self._expanded:
             self.content = ft.Column(rows, spacing=Theme.Spacing.SM, tight=True)
             return
@@ -371,52 +392,70 @@ def components_from_trace(
     on_batch_action: BatchAction | None = None,
     fetch_items: Callable[[str], Awaitable[list[dict[str, Any]] | None]] | None = None,
 ) -> list[ft.Control]:
-    """Cards for the trace's propose results.
+    """Cards for the trace's propose results and pending listings.
 
     The tool trail is the transport: a ``propose`` (or ``propose_many``)
-    call's result IS the pending-change data. Anything that does not
-    parse as one is left to the trail's ordinary rendering.
+    call's result IS the pending-change data, and a ``pending`` listing
+    redraws every card the assistant still has open. Anything that does
+    not parse as one is left to the trail's ordinary rendering.
     """
     cards: list[ft.Control] = []
     for entry in trace:
-        if entry.get("tool") not in ("propose", "propose_many"):
+        if entry.get("tool") not in ("propose", "propose_many", "pending"):
             continue
-        # The compact marker is the contract: the result blob is
-        # display-clipped and a big batch truncates to invalid JSON.
-        # Cards built from the marker refresh their rows from the
-        # queue; parsing the result is the legacy fallback for traces
-        # recorded before the marker existed.
-        data: dict[str, Any] | None = None
-        marker = entry.get("component")
-        if isinstance(marker, dict) and marker.get("kind"):
-            data = {**marker, "items": []}
-        else:
-            result = entry.get("result")
-            if not isinstance(result, str):
-                continue
-            try:
-                parsed = json.loads(result)
-            except (TypeError, ValueError):
-                # Pre-marker traces clipped big results to invalid
-                # JSON. The identity fields lead the blob, so they
-                # survive the clip - salvage them; the card fetches
-                # its rows from the queue like any marker card.
-                parsed = _salvage_identity(result)
-            if isinstance(parsed, dict):
-                data = parsed
-        if data is None:
-            continue
-        card: ft.Control | None = None
-        if "batch_id" in data and isinstance(data.get("items"), list):
-            card = render_component(
-                "pending_change_batch",
+        for data in _card_data(entry):
+            card = _card_for(
                 data,
                 on_action=on_action,
                 on_batch_action=on_batch_action,
                 fetch_items=fetch_items,
             )
-        elif "pending_change_id" in data:
-            card = render_component("pending_change", data, on_action=on_action)
-        if card is not None:
-            cards.append(card)
+            if card is not None:
+                cards.append(card)
     return cards
+
+
+def _card_data(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    """The identities an entry renders: its compact markers (one per
+    card), else the parsed result for traces recorded before markers.
+
+    The compact marker is the contract: the result blob is display-
+    clipped and a big batch truncates to invalid JSON. Cards built from
+    the marker refresh their rows from the queue; parsing the result is
+    the legacy fallback. Pre-marker traces clipped big results to invalid
+    JSON - the identity fields lead the blob, so they survive the clip
+    and are salvaged; the card fetches its rows like any marker card.
+    """
+    marker = entry.get("component")
+    markers = marker if isinstance(marker, list) else [marker]
+    found = [{**m, "items": []} for m in markers if isinstance(m, dict) and m.get("kind")]
+    if found or entry.get("tool") == "pending":
+        return found
+    result = entry.get("result")
+    if not isinstance(result, str):
+        return []
+    try:
+        parsed = json.loads(result)
+    except (TypeError, ValueError):
+        parsed = _salvage_identity(result)
+    return [parsed] if isinstance(parsed, dict) else []
+
+
+def _card_for(
+    data: dict[str, Any],
+    *,
+    on_action: ChangeAction,
+    on_batch_action: BatchAction | None,
+    fetch_items: Callable[[str], Awaitable[list[dict[str, Any]] | None]] | None,
+) -> ft.Control | None:
+    if "batch_id" in data and isinstance(data.get("items"), list):
+        return render_component(
+            "pending_change_batch",
+            data,
+            on_action=on_action,
+            on_batch_action=on_batch_action,
+            fetch_items=fetch_items,
+        )
+    if "pending_change_id" in data:
+        return render_component("pending_change", data, on_action=on_action)
+    return None

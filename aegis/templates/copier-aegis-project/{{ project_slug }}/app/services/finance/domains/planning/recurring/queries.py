@@ -85,6 +85,36 @@ async def transfer_flagged_stream_ids(
     return {int(row) for row in rows}
 
 
+async def settled_account_ids(db: AsyncSession, stream_ids: Sequence[int]) -> set[int]:
+    """The liability accounts these payment streams actually pay into.
+
+    The other half of ``payment_flagged_stream_ids``: that one asks which
+    streams are card payments, this asks which cards. A projection that
+    suppresses envelopes for "the cards" over-suppresses in a two-card
+    household where only one is on autopay; this names the settled one.
+    """
+    if not stream_ids:
+        return set()
+    from_txn = select(FinanceTransaction.id).where(
+        FinanceTransaction.recurring_stream_id.in_(list(stream_ids))
+    )
+    rows = (
+        await db.exec(
+            select(FinanceTransaction.account_id)
+            .join(
+                FinanceTransfer,
+                FinanceTransfer.to_transaction_id == FinanceTransaction.id,
+            )
+            .where(
+                FinanceTransfer.status == "confirmed",
+                FinanceTransfer.from_transaction_id.in_(from_txn),
+            )
+            .distinct()
+        )
+    ).all()
+    return {row for row in rows if row is not None}
+
+
 async def payment_flagged_stream_ids(
     db: AsyncSession, stream_ids: Sequence[int]
 ) -> set[int]:

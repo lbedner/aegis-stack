@@ -8,6 +8,7 @@ code mode dispatches them as visible calls.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.db import get_async_session
@@ -209,12 +210,87 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def withdraw(pending_change_id: int) -> dict[str, Any]:
+async def pending(about: str | None = None) -> dict[str, Any]:
+    """YOUR OWN cards: {"pending": [...]} still awaiting the user and
+    {"decided": [...]} the user acted on in the last two weeks. One entry
+    per card, with exactly these keys: batch_id (null for a single
+    proposal), pending_change_ids (its rows), rows (how many), change_type,
+    title, status (pending, approved, rejected, withdrawn by you, or mixed),
+    filed_at, decided_at (null while pending), summary (one line: what the
+    card does, with one example row). Read this before filing a
+    replacement so you can withdraw what it supersedes yourself -
+    withdraw_batch(batch_id) for a whole card, withdraw(id) for one row -
+    instead of asking the user to reject them. Calling it also redraws the
+    listed cards in the chat, decided ones in their final state, so when
+    the user asks to see a card again or what became of it, call this and
+    point at the card. ``about`` narrows to cards mentioning it ("state
+    farm"): always pass it when the user asked about one card, or every
+    card you ever filed is redrawn. Other agents' cards and the user's own
+    are not listed and cannot be withdrawn."""
+    from app.services.ai.domains.chat.user_memory import current_agent_slug
+    from app.services.finance.domains import writes
+
+    needle = (about or "").strip().lower()
+    horizon = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=14)
+    async with get_async_session() as session:
+        rows = await writes.list_changes(
+            session,
+            owner_user_id=None,
+            status=None,
+            proposed_by_agent=current_agent_slug.get(),
+        )
+        cards: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            if row.status != "pending" and (
+                row.resolved_at is None or row.resolved_at < horizon
+            ):
+                continue
+            line = " / ".join(
+                f"{ln.label}: {ln.value}"
+                for ln in await writes.describe_change(session, row)
+            )
+            card = cards.setdefault(
+                row.batch_id or f"row-{row.id}",
+                {
+                    "batch_id": row.batch_id,
+                    "pending_change_ids": [],
+                    "rows": 0,
+                    "change_type": row.change_type,
+                    "title": writes.executor_for(row.change_type).title,
+                    "statuses": set(),
+                    "filed_at": row.created_at.isoformat(),
+                    "decided_at": row.resolved_at and row.resolved_at.isoformat(),
+                    "summary": line,
+                    "matches": False,
+                },
+            )
+            card["pending_change_ids"].append(row.id)
+            card["rows"] += 1
+            card["statuses"].add(writes.outcome_of(row))
+            card["matches"] |= not needle or needle in line.lower()
+    listing: dict[str, Any] = {"pending": [], "decided": []}
+    for card in cards.values():
+        if not card.pop("matches"):
+            continue
+        statuses = card.pop("statuses")
+        card["status"] = next(iter(statuses)) if len(statuses) == 1 else "mixed"
+        if card["rows"] > 1:
+            card["summary"] = f"{card['rows']} rows, e.g. {card['summary']}"
+        listing["pending" if "pending" in statuses else "decided"].append(card)
+    listing["note"] = (
+        "These cards are redrawn in the chat for the user, decided ones in "
+        "their final state. Point at them; never list their rows."
+    )
+    return listing
+
+
+async def withdraw(pending_change_id: int, reason: str | None = None) -> dict[str, Any]:
     """Retract one of YOUR OWN still-pending proposals - the cleanup
-    for a card you filed by mistake. It resolves as rejected with a
-    "withdrawn" note (the audit trail keeps it), and only the agent
-    that proposed a change can withdraw it. Use immediately when you
-    notice a bad card instead of asking the user to reject it."""
+    for a card you filed by mistake or have superseded. It resolves as
+    rejected with a "withdrawn" note the user can still see, so give a
+    short ``reason`` ("superseded by the five-row card"). Only the agent
+    that proposed a change can withdraw it. Use it yourself, immediately,
+    instead of asking the user to reject the card."""
     from app.services.ai.domains.chat.user_memory import current_agent_slug
     from app.services.finance.domains import writes
 
@@ -225,6 +301,7 @@ async def withdraw(pending_change_id: int) -> dict[str, Any]:
                 pending_change_id,
                 agent_slug=current_agent_slug.get(),
                 owner_user_id=None,
+                reason=reason,
             )
             await session.commit()
         except ValueError as e:
@@ -234,6 +311,29 @@ async def withdraw(pending_change_id: int) -> dict[str, Any]:
         "status": row.status,
         "note": (row.result or {}).get("note"),
     }
+
+
+async def withdraw_batch(batch_id: str, reason: str | None = None) -> dict[str, Any]:
+    """Retract a whole still-pending card of YOUR OWN in one step - every
+    row of one propose_many batch, one transaction, one reason the user
+    will see on the folded card ("superseded by the five-row card").
+    Prefer this over withdrawing a batch row by row."""
+    from app.services.ai.domains.chat.user_memory import current_agent_slug
+    from app.services.finance.domains import writes
+
+    async with get_async_session() as session:
+        try:
+            withdrawn = await writes.withdraw_batch(
+                session,
+                batch_id,
+                agent_slug=current_agent_slug.get(),
+                owner_user_id=None,
+                reason=reason,
+            )
+            await session.commit()
+        except ValueError as e:
+            return {"error": str(e)}
+    return {"batch_id": batch_id, "withdrawn": withdrawn}
 
 
 # Built-in registration: importing this module makes the tools grantable
@@ -277,9 +377,23 @@ register_tool(
     replace=True,
 )
 register_tool(
+    "pending",
+    pending,
+    description="Your own still-pending proposals, so you can withdraw what you supersede",
+    native_write=True,
+    replace=True,
+)
+register_tool(
     "withdraw",
     withdraw,
     description="Retract one of your own still-pending proposals",
+    native_write=True,
+    replace=True,
+)
+register_tool(
+    "withdraw_batch",
+    withdraw_batch,
+    description="Retract one of your own still-pending batch cards, all rows at once",
     native_write=True,
     replace=True,
 )

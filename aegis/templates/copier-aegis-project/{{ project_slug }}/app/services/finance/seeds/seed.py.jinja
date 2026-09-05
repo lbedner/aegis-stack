@@ -152,6 +152,13 @@ def seed_finance_tables(session: Session) -> None:
         if existing is None:
             session.add(FinanceCurrency(**currency))
 
+    # Before the profiles, not with them. A profile's ``currency`` is a
+    # foreign key onto ``code``, which is not the primary key, so the
+    # dependency is invisible to the insert sort - and the startup
+    # session runs with ``autoflush=False``, so nothing would reach the
+    # database until a commit that orders the children first and fails.
+    session.flush()
+
     for profile in CSV_IMPORT_PROFILES:
         existing = session.exec(
             select(FinanceImportProfile).where(

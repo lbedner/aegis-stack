@@ -1018,12 +1018,14 @@ class TestStreamStaleness:
 
 
 class TestAgainstTheDemoDataset:
-    """Every rule has to stay quiet on healthy data.
+    """Every rule has to stay quiet on ordinary data, and loud only where
+    the seed put something to find.
 
-    The demo dataset is months of deliberately ordinary activity: jittered
-    groceries, coffee, subscriptions paid on time. A rule that fires on any of
-    that is a rule that will bury a real finding, so this pins the silence
-    rather than any particular alert.
+    The demo household is months of jittered groceries, coffee and
+    subscriptions paid on time, plus a handful of planted anomalies inside
+    the rules' windows - a vet bill, an overdraft fee. A rule that fires
+    on the ordinary part will bury a real finding, so this pins both the
+    silence and the exact set of alerts the plants are allowed to raise.
     """
 
     @pytest.mark.asyncio
@@ -1042,11 +1044,15 @@ class TestAgainstTheDemoDataset:
         # passes here are already repeats and must add nothing.
         assert first.created == 0
         assert second.created == 0
-        assert len(rows) <= 5, (
+        assert len(rows) <= 8, (
             f"rules are firing on ordinary activity: {[r.title for r in rows]}"
         )
-        # Jittered groceries and coffee are never outliers.
-        assert await _insights_of(async_db_session, "large_transaction") == []
+        # Jittered groceries and coffee are never outliers; the one planted
+        # outlier - the vet bill - is, and it is the only one.
+        large = await _insights_of(async_db_session, "large_transaction")
+        assert [r.detected_amount for r in large] == [-38_940], (
+            f"an ordinary charge read as an outlier: {[r.title for r in large]}"
+        )
         # Every seeded stream is paid up to date.
         assert await _insights_of(async_db_session, "missed_recurring") == []
 

@@ -176,7 +176,6 @@ class FinanceDetailDialog(BaseDetailPopup):
                 "Review",
                 lambda: ReviewTab(
                     page,
-                    analyst_enabled=analyst_enabled,
                     account_filter=self._account_filter,
                     register_filter_listener=self.register_filter_listener,
                 ),

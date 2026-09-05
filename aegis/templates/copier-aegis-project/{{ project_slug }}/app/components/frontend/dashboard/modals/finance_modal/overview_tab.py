@@ -577,9 +577,12 @@ class OverviewTab(FinancePanel):
             )
         # Second row: the two ranked lists. Kept off the first row so the
         # plots there keep enough width to be readable.
+        # Two per row, not three. These are name-labelled lists, and at a
+        # third of the modal each the name column lost to the value and
+        # the count beside it: "Whole Foods Market" rendered as "Whol...".
         for row_cards in (
-            (payee_card, bills_card, recent_card),
-            (uncat_card,),
+            (payee_card, bills_card),
+            (recent_card, uncat_card),
         ):
             cards = [c for c in row_cards if c is not None]
             if not cards:

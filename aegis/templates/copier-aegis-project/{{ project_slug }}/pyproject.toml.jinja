@@ -512,8 +512,8 @@ help = "Clean Python cache files"
 script = "scripts.dev_tasks:clean_cache"
 
 [tool.poe.tasks.docs-serve]
-help = "Serve documentation locally (http://localhost:8001)"
-cmd = "uv run mkdocs serve --dev-addr 0.0.0.0:8001"
+help = "Serve documentation locally (port resolved like serve)"
+script = "scripts.dev_tasks:docs"
 
 [tool.poe.tasks.docs-build]
 help = "Build static documentation"

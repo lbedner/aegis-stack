@@ -142,7 +142,17 @@ nav:
       - CLI Commands: services/comms/cli.md
       - Examples: services/comms/examples.md
     - Finance:
-      - Analyst Notes: services/finance/analyst.md
+      - Getting Started: services/finance/index.md
+      - Accounts and the Register: services/finance/accounts.md
+      - Bills and Income: services/finance/bills.md
+      - Projected Balances: services/finance/projected.md
+      - Budget: services/finance/budget.md
+      - Review: services/finance/review.md
+      - Investments: services/finance/investments.md
+      - Importing and Connections: services/finance/imports.md
+      - Chat: services/finance/chat.md
+      - API Reference: services/finance/api.md
+      - CLI Commands: services/finance/cli.md
     - Insights (Experimental):
       - Getting Started: services/insights/index.md
       - Data Sources: services/insights/data-sources.md

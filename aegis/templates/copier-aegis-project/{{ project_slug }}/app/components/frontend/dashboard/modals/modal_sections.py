@@ -1254,6 +1254,7 @@ class RankedBarCard(ft.Container):
                                         color=Theme.Colors.TEXT_PRIMARY,
                                         max_lines=1,
                                         overflow=ft.TextOverflow.ELLIPSIS,
+                                        tooltip=row.label,  # clipped is still readable
                                     ),
                                     expand=True,
                                 ),
@@ -1277,9 +1278,8 @@ class RankedBarCard(ft.Container):
                         ),
                         # The track shows what "full" means, so a short bar
                         # reads as a small share rather than a rendering gap.
-                        # Fill and remainder are flex weights in a Row - the
-                        # bar cannot be a width, because the card's width is
-                        # only known at layout time.
+                        # Fill and remainder are flex weights: the bar cannot
+                        # be a width, the card's is known only at layout time.
                         ft.Container(
                             content=ft.Row(
                                 [

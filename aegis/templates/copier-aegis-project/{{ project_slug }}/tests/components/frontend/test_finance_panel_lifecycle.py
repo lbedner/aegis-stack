@@ -88,6 +88,17 @@ class TestEveryPanelInherits:
         for cls in self.ROSTER:
             assert callable(getattr(cls, "refresh_on_revisit", None)), cls.__name__
 
+    def test_no_panel_inherits_the_abstract_load(self) -> None:
+        """The base raises NotImplementedError so a panel cannot forget to
+        implement it. ReviewTab did forget: it is pure composition, its
+        four sub-tabs each own their own read, so it looked complete - and
+        logged a traceback on every mount and every account-filter change.
+        A composed panel still has to say so, with a no-op."""
+        for cls in self.ROSTER:
+            assert cls._load is not FinancePanel._load, (
+                f"{cls.__name__} inherits the abstract _load and will raise"
+            )
+
     def test_custom_filter_behavior_survives(self) -> None:
         """DRY must not steamroll deliberate differences: Bills & Income
         refilters its last fetch locally, Uncategorized debounces with

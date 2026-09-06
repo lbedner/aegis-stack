@@ -130,5 +130,5 @@ Edits through the API invalidate the loader's warm cache, so the next chat reque
 - [Memory Modules](memory-modules.md): reusable context blocks agents opt into
 - [RAG](rag.md): the retrieval pipeline agents scope over
 - [Cost Tracking](cost-tracking.md): usage rows carry per-agent attribution (`chat:<slug>`)
-- [Finance Analyst](../finance/analyst.md): a service-owned agent, and a worked
-  example of a headless run driven by a scheduled job rather than a chat turn
+- [Finance Chat](../finance/chat.md): a service-owned agent whose tools read
+  the ledger and whose only write files a proposal for the user to approve

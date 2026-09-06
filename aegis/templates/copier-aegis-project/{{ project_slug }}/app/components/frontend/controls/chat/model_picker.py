@@ -439,7 +439,12 @@ class ModelChipMixin:
                 v["name"]: v["icon_b64"] for v in (vendors or []) if v.get("icon_b64")
             }
             cache = (models or [], icons)
-            self._model_catalog_cache = cache
+            # An empty catalog is not an answer worth keeping. A stack
+            # whose models arrive after the panel was opened (an Ollama
+            # sync, a key added) would otherwise show an empty picker for
+            # the rest of the session, with a reload as the only cure.
+            if models:
+                self._model_catalog_cache = cache
         else:
             current = await api.get("/api/v1/llm/current")
         models_cached, vendor_icons = cache

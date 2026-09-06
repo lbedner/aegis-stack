@@ -132,9 +132,11 @@ FINANCE_CHAT_TOOL_NAMES = (
     "propose",
     # Same contract, many rows, one approval card with per-row veto.
     "propose_many",
-    # Propose's cleanup half: retract your OWN still-pending card filed
-    # by mistake, instead of asking the user to reject it.
+    # Propose's cleanup half: see your OWN open cards, and retract the
+    # ones a new proposal supersedes, instead of asking the user to.
+    "pending",
     "withdraw",
+    "withdraw_batch",
     # Durable extraction: what was read out of an ephemeral image must
     # be recorded before it is answered from - the recording is what
     # later turns get instead of the pixels.

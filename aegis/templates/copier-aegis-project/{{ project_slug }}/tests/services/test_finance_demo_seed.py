@@ -15,7 +15,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.finance.models import (
     FinanceAccount,
     FinanceImportBatch,
+    FinanceInsight,
     FinanceNetWorthSnapshot,
+    FinancePendingChange,
     FinanceRecurringStream,
     FinanceTransaction,
     FinanceTransactionSplit,
@@ -63,6 +65,82 @@ class TestLedgerPlan:
             counts[entry.name] = counts.get(entry.name, 0) + 1
         recurring = [name for name, count in counts.items() if count >= 6]
         assert len(recurring) >= 4, f"too few recurring payees: {counts}"
+
+
+class TestTheHouseholdIsLegible:
+    """The seed exists to make every surface show something.
+
+    A household with a large idle balance and four merchants demos
+    nothing: the projection cannot dip, the donut has no shape, and half
+    the app looks like an empty state. These pin the properties that make
+    the screenshots worth taking, and they are about SHAPE, not about
+    exact amounts - the amounts should stay free to be tuned.
+    """
+
+    ANCHOR = date(2026, 7, 1)
+    MONTHS = 12
+
+    def _ledger(self) -> tuple[demo_seed.PlannedTransaction, ...]:
+        return demo_seed.build_demo_ledger(anchor=self.ANCHOR, months=self.MONTHS)
+
+    def test_checking_does_not_quietly_accumulate_a_fortune(self) -> None:
+        """The one number that decides whether the app can show tension.
+
+        Income used to exceed outflow by thousands a month with nowhere
+        to go, so checking drifted to $55k. No bill sequence dips that
+        below zero, which means the Projected tab, the cash-runway rule
+        and the minimum-payment rule have nothing to say no matter what
+        else is seeded.
+        """
+        balance = 0
+        for entry in self._ledger():
+            if entry.account_key == "checking":
+                balance += entry.amount
+
+        opening = next(
+            a.opening_balance or 0
+            for a in demo_seed.DEMO_ACCOUNTS
+            if a.key == "checking"
+        )
+        closing = opening + balance
+        assert closing < 1_000_000, (
+            f"checking closes at ${closing / 100:,.0f}: too fat to ever dip"
+        )
+
+    def test_two_people_are_paid_on_different_rhythms(self) -> None:
+        """One salary on one cadence is a single-earner household, and it
+        makes every paycheck land on the same two days."""
+        income = {entry.name for entry in self._ledger() if entry.category == "INCOME"}
+        assert len(income) >= 2, f"only one income source: {income}"
+
+    def test_spending_covers_more_than_a_handful_of_categories(self) -> None:
+        """The donut folds its tail into "Other" - with four categories
+        that is the whole chart."""
+        spend = {
+            entry.category
+            for entry in self._ledger()
+            if entry.amount < 0 and entry.category
+        }
+        assert len(spend) >= 8, f"only {len(spend)} spending categories: {spend}"
+
+    def test_there_is_enough_activity_to_look_like_a_real_ledger(self) -> None:
+        """Two adults transact several times a day. One row a day leaves
+        every chart sparse."""
+        ledger = self._ledger()
+        span_days = (
+            max(e.txn_date for e in ledger) - min(e.txn_date for e in ledger)
+        ).days
+        assert len(ledger) / max(span_days, 1) >= 3, (
+            f"{len(ledger)} rows over {span_days} days is too thin"
+        )
+
+    def test_a_card_is_carried_rather_than_cleared_every_month(self) -> None:
+        """A card paid in full every month has no payoff story, no
+        interest, and nothing for the credit rules to notice."""
+        names = {entry.name for entry in self._ledger()}
+        assert any("Interest" in name for name in names), (
+            "no interest charge: nothing is being carried"
+        )
 
 
 class TestSeedDemo:
@@ -389,3 +467,129 @@ class TestClearDemo:
         assert real_leg.is_transfer is False
         assert real_leg.excluded_from_reports is False
         assert real_leg.transfer_group_id is None
+
+
+class TestTheReviewTabHasWork:
+    """Review is the tab you clear, and the seed used to leave it clear.
+
+    Every row was categorized, every payee named, nothing proposed, and
+    the planted anomalies sat outside the rules' lookback windows. Four
+    sub-tabs, all empty states. A demo of a review queue needs a queue.
+    """
+
+    ANCHOR = date(2026, 9, 5)
+
+    def test_some_rows_arrive_uncategorized(self) -> None:
+        ledger = demo_seed.build_demo_ledger(anchor=self.ANCHOR, months=12)
+        bare = [e for e in ledger if e.category is None and e.amount < 0]
+        assert len(bare) >= 3, "nothing for the Uncategorized queue"
+
+    def test_some_rows_arrive_with_no_payee(self) -> None:
+        ledger = demo_seed.build_demo_ledger(anchor=self.ANCHOR, months=12)
+        assert any(not e.payee for e in ledger), "nothing for the No payee queue"
+
+    @pytest.mark.asyncio
+    async def test_no_payee_holds_the_bare_rows_and_not_the_whole_ledger(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Imports leave every payee unassigned, so without curation the
+        queue is the ledger. The seed names what a person would have
+        named, and leaves only what a bank named unusably."""
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER, months=12)
+
+        unnamed = [
+            t
+            for t in await _transactions(async_db_session)
+            if t.merchant_id is None and t.amount < 0 and not t.is_transfer
+        ]
+
+        assert 1 <= len(unnamed) <= 20, f"{len(unnamed)} rows in No payee"
+
+    @pytest.mark.asyncio
+    async def test_proposals_are_waiting_for_approval(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Without the AI service nothing can file a proposal, so Approvals
+        - the highest-stakes queue - screenshots as an empty state."""
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER, months=12)
+
+        pending = (
+            await async_db_session.exec(
+                select(FinancePendingChange).where(
+                    FinancePendingChange.proposed_by_agent == "demo_seed"
+                )
+            )
+        ).all()
+
+        assert len(pending) >= 2
+        assert {p.status for p in pending} == {"pending"}
+        assert {p.change_type for p in pending} >= {
+            "transaction.categorize",
+            "transaction.assign_payee",
+        }
+        # The payee proposal is about a row the bank named unusably, never
+        # a transfer leg - a transfer already has its counterparty.
+        payee = next(p for p in pending if p.change_type == "transaction.assign_payee")
+        target = await async_db_session.get(
+            FinanceTransaction, payee.payload["transaction_id"]
+        )
+        assert target is not None and not target.is_transfer
+        assert target.name.startswith(("POS DEBIT", "ACH WITHDRAWAL"))
+
+    @pytest.mark.asyncio
+    async def test_the_planted_anomalies_actually_fire(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A one-off three months back is invisible to a rule with a 35-day
+        window. What the seed plants has to land where the rules look."""
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER, months=12)
+
+        kinds = {
+            i.insight_type
+            for i in (await async_db_session.exec(select(FinanceInsight))).all()
+        }
+
+        assert {"fee_charged", "large_transaction"} <= kinds, kinds
+
+    @pytest.mark.asyncio
+    async def test_clear_leaves_another_owners_proposals_alone(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The agent name says WHAT filed it; the owner says WHOSE it is.
+        One household clearing its demo must not take a neighbour's."""
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER, months=12)
+        neighbour = FinancePendingChange(
+            owner_user_id=OWNER + 1,
+            change_type="transaction.categorize",
+            payload={"transaction_id": 1, "category_id": 1},
+            proposed_by_agent="demo_seed",
+        )
+        async_db_session.add(neighbour)
+        await async_db_session.flush()
+
+        await demo_seed.clear_demo(async_db_session, owner_user_id=OWNER)
+
+        left = (
+            await async_db_session.exec(
+                select(FinancePendingChange).where(
+                    FinancePendingChange.proposed_by_agent == "demo_seed"
+                )
+            )
+        ).all()
+        assert [p.owner_user_id for p in left] == [OWNER + 1]
+
+    @pytest.mark.asyncio
+    async def test_clear_takes_the_proposals_with_it(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER, months=12)
+        await demo_seed.clear_demo(async_db_session, owner_user_id=OWNER)
+
+        left = (
+            await async_db_session.exec(
+                select(FinancePendingChange).where(
+                    FinancePendingChange.proposed_by_agent == "demo_seed"
+                )
+            )
+        ).all()
+        assert left == []

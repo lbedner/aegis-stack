@@ -516,6 +516,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 # Seeds the agent registry (agents, memory modules, tool
                 # rows) at boot. Pure AI surface, same as the module above.
                 "app/components/backend/startup/agent_registry.py",
+                "app/components/backend/startup/llm_catalog.py",
                 "app/components/frontend/dashboard/cards/ai_card.py",
                 "app/components/frontend/dashboard/modals/ai_modal.py",
                 "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
@@ -902,8 +903,7 @@ SERVICES: dict[str, ServiceSpec] = {
     ),
     "finance": ServiceSpec(
         name="finance",
-        # docs_path is set once the docs/services/finance page ships.
-        docs_path="",
+        docs_path="services/finance",
         marker_path="app/services/finance",
         type=ServiceType.FINANCE,
         description="Experimental: personal finance aggregation (accounts, transactions, net worth, import)",
@@ -1049,6 +1049,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_finance_module_layout.py",
                 "tests/services/test_finance_projection_filter.py",
                 "tests/services/test_finance_schedule.py",
+                "tests/services/test_finance_reference_seed.py",
                 "tests/services/test_finance_asof_today.py",
                 "tests/services/test_finance_projection_horizon.py",
                 "tests/services/test_finance_budget_carry_forward.py",

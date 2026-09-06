@@ -25,6 +25,7 @@ from app.services.finance.domains.detection.insights.commitments import (
 from app.services.finance.domains.ledger import accounts
 from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.domains.planning import allocation, budgets, goals, queries
+from app.services.finance.domains.planning.recurring import queries as recurring_queries
 from app.services.finance.domains.planning.recurring.schedule import occurrences
 from app.services.finance.domains.planning.recurring.streams import (
     in_account_scope,
@@ -98,6 +99,7 @@ async def project_balances(
         for a in account_rows
         if a.classification != "liability" and a.account_type in CASH_ACCOUNT_TYPES
     ]
+    cash_ids = {a.id for a in cash}
     totals = await accounts.account_transaction_totals(
         db, owner_user_id=owner_user_id, account_ids=[a.id for a in cash]
     )
@@ -123,6 +125,16 @@ async def project_balances(
         ):
             continue
         if not in_account_scope(stream, account_ids):
+            continue
+        # The walk starts from CASH, so only what moves cash belongs in
+        # it. A subscription billed to a credit card leaves no cash on
+        # the day it is charged - the card payment does that, and the
+        # payment is a stream in this same walk. Counting both charges
+        # the same dollars twice, which reads as a household that breaks
+        # even on paper projecting steadily into the red. A stream with
+        # no account is hand-entered and stays in: no account is no
+        # statement about which one it hits.
+        if stream.account_id is not None and stream.account_id not in cash_ids:
             continue
         # Both directions pass the commitment gate. Detected inflows
         # include refunds and brokerage-transfer rhythms; projecting
@@ -152,6 +164,27 @@ async def project_balances(
         for _when, stream, _amount, _due in charges
         if stream.category_id is not None
     }
+    # A card payment covers everything that was spent on that card, and
+    # it carries no category of its own - so without this the rule above
+    # sees nothing to suppress and a household that puts its groceries on
+    # a card gets them charged twice: once as the envelope, once inside
+    # the payment settling the statement.
+    # Only the cards a PROJECTED payment settles. "Every credit card" would
+    # silence the envelopes for a second card nobody is paying, and that
+    # card's spending is exactly the cash the walk still has to find.
+    projected_payments = [s.id for _w, s, _a, _d in charges if s.id in payment_ids]
+    settled = await recurring_queries.settled_account_ids(db, projected_payments)
+    billed_categories |= await card_paid_categories(
+        db,
+        owner_user_id=owner_user_id,
+        today=today,
+        card_ids=[
+            a.id
+            for a in account_rows
+            if a.id is not None and a.id in settled and a.account_type == "credit_card"
+        ],
+        has_payment=bool(projected_payments),
+    )
     budget_points = await budget_drawdowns(
         db,
         owner_user_id=owner_user_id,
@@ -277,6 +310,37 @@ async def goal_drawdowns(
                 )
             when = add_months(when, 1)
     return out
+
+
+async def card_paid_categories(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    today: date,
+    card_ids: list[int],
+    has_payment: bool,
+    lookback_days: int = 90,
+) -> set[int]:
+    """Categories already settled by a card payment in this walk.
+
+    Empty unless a card payment is actually being projected: a card
+    nobody pays settles nothing, and suppressing its envelopes would
+    understate the month rather than double-count it.
+
+    Reuses the same split-aware outflow read the budget header tallies,
+    so "what was spent on this card" means the same thing on both
+    surfaces.
+    """
+    if not has_payment or not card_ids:
+        return set()
+    rows = await budgets.queries.outflow_tuples(
+        db,
+        owner_user_id=owner_user_id,
+        start=today - timedelta(days=lookback_days),
+        end=today,
+        account_ids=card_ids,
+    )
+    return {row[0] for row in rows if row[0] is not None}
 
 
 async def budget_drawdowns(

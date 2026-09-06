@@ -13,6 +13,15 @@ from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.log import logger
+
+# Re-exported: callers have always reached the catalog readers through
+# this module, and moving them out did not move their address.
+from app.services.ai.domains.llm.etl.catalog_status import (  # noqa: F401
+    CatalogStats,
+    catalog_is_populated,
+    get_catalog_stats,
+    ollama_models_present,
+)
 from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMClient
 from app.services.ai.domains.llm.etl.clients.openrouter_client import (
     OpenRouterClient,
@@ -69,17 +78,6 @@ class SyncResult:
             + self.models_added
             + self.models_updated
         )
-
-
-@dataclass
-class CatalogStats:
-    """Statistics for the LLM catalog."""
-
-    vendor_count: int
-    model_count: int
-    deployment_count: int
-    price_count: int
-    top_vendors: list[tuple[str, int]]
 
 
 class LLMSyncService:
@@ -716,19 +714,6 @@ class LLMSyncService:
             logger.debug(f"Added Ollama model: {model_id}")
 
 
-def catalog_is_populated(session: Session) -> bool:
-    """Whether any model is already in the catalog.
-
-    The webserver startup hook syncs only into an EMPTY catalog; once
-    populated, the scheduler's periodic job owns freshness. Before this
-    guard every startup (and every dev hot-reload) re-ran a full sync -
-    tens of thousands of queries against a catalog that was already
-    current.
-    """
-    first = session.exec(select(LargeLanguageModel.id).limit(1)).first()
-    return first is not None
-
-
 async def sync_llm_catalog(
     session: Session,
     mode: str = "chat",
@@ -750,44 +735,3 @@ async def sync_llm_catalog(
     """
     service = LLMSyncService(session)
     return await service.sync(mode_filter=mode, source=source, dry_run=dry_run)
-
-
-def get_catalog_stats(session: Session) -> CatalogStats:
-    """Get LLM catalog statistics.
-
-    Args:
-        session: Database session.
-
-    Returns:
-        CatalogStats with counts and top vendors.
-    """
-    from sqlmodel import func
-
-    vendor_count = session.exec(select(func.count()).select_from(LLMOrg)).one()
-    model_count = session.exec(
-        select(func.count()).select_from(LargeLanguageModel)
-    ).one()
-    deployment_count = session.exec(
-        select(func.count()).select_from(LLMDeployment)
-    ).one()
-    price_count = session.exec(select(func.count()).select_from(LLMPrice)).one()
-
-    # Get top vendors by model count
-    top_vendors_result = session.exec(
-        select(
-            LLMOrg.name,
-            func.count(LargeLanguageModel.id).label("model_count"),
-        )
-        .join(LargeLanguageModel, isouter=True)
-        .group_by(LLMOrg.id)
-        .order_by(func.count(LargeLanguageModel.id).desc())
-        .limit(10)
-    ).all()
-
-    return CatalogStats(
-        vendor_count=vendor_count,
-        model_count=model_count,
-        deployment_count=deployment_count,
-        price_count=price_count,
-        top_vendors=list(top_vendors_result),
-    )

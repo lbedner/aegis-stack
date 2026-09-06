@@ -44,6 +44,7 @@ class PendingChangeResponse(BaseModel):
     conversation_id: str | None
     batch_id: str | None
     error: str | None
+    note: str | None = None
     created_at: datetime
     resolved_at: datetime | None
 
@@ -67,6 +68,7 @@ class PendingChangeResponse(BaseModel):
             conversation_id=row.conversation_id,
             batch_id=row.batch_id,
             error=(row.result or {}).get("error"),
+            note=(row.result or {}).get("note"),
             created_at=row.created_at,
             resolved_at=row.resolved_at,
         )

@@ -25,11 +25,10 @@ Two properties make it safe to re-run:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 import random
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -41,7 +40,9 @@ from app.services.finance.domains.detection import (
     generate_insights,
 )
 from app.services.finance.domains.investments.securities import market_value_cents
+from app.services.finance.domains.ledger import merchants as ledger_merchants
 from app.services.finance.domains.ledger import networth
+from app.services.finance.domains.writes import propose
 from app.services.finance.models import (
     FinanceAccount,
     FinanceBalanceSnapshot,
@@ -51,6 +52,7 @@ from app.services.finance.models import (
     FinanceInsight,
     FinanceLiabilityDetail,
     FinanceNetWorthSnapshot,
+    FinancePendingChange,
     FinanceRecurringStream,
     FinanceTrade,
     FinanceTransaction,
@@ -59,122 +61,47 @@ from app.services.finance.models import (
     FinanceTransfer,
     FinanceValuation,
 )
+from app.services.finance.seeds.demo_household import (
+    _COMMITMENT_PAYEES,
+    _NO_PAYEE,
+    DEMO_ACCOUNT_NAMES,
+    DEMO_ACCOUNTS,
+    DEMO_SECURITIES,
+    DemoAccountSpec,
+)
+from app.services.finance.seeds.demo_plan import (  # noqa: F401
+    _DEFAULT_MONTHS,
+    _SEED,
+    PlannedSplit,
+    PlannedTransaction,
+    _day_in_month,
+    _jitter,
+    _month_starts,
+    build_demo_ledger,
+)
 from app.services.finance.service import FinanceService
+
+# The household table moved modules; its address did not.
+__all__ = [
+    "DEMO_ACCOUNTS",
+    "DEMO_ACCOUNT_NAMES",
+    "DEMO_SECURITIES",
+    "DemoAccountSpec",
+    "PlannedSplit",
+    "PlannedTransaction",
+    "build_demo_ledger",
+    "clear_demo",
+    "count_foreign_accounts",
+    "seed_demo",
+]
+
 
 # Bumping this re-marks future seeds without invalidating older ones.
 DEMO_MARKER_KEY = "demo_seed"
 DEMO_MARKER_VALUE = 1
 
-_SEED = 20260838
-_DEFAULT_MONTHS = 8
-# The recent slice that arrives as a file import rather than direct writes.
 _IMPORT_WINDOW_DAYS = 30
 _QUANTITY_SCALE = 10**8
-
-
-class DemoAccountSpec(BaseModel):
-    """One seeded account. ``key`` is the ledger's stable handle for it."""
-
-    model_config = ConfigDict(frozen=True)
-
-    key: str
-    name: str
-    account_type: str
-    classification: str
-    opening_balance: int = 0
-
-
-DEMO_ACCOUNTS: tuple[DemoAccountSpec, ...] = (
-    DemoAccountSpec(
-        key="checking",
-        name="Chase Total Checking",
-        account_type="checking",
-        classification="asset",
-        opening_balance=482_355,
-    ),
-    DemoAccountSpec(
-        key="savings",
-        name="Ally Online Savings",
-        account_type="savings",
-        classification="asset",
-        opening_balance=1_845_000,
-    ),
-    DemoAccountSpec(
-        key="card",
-        name="Amex Blue Cash Preferred",
-        account_type="credit_card",
-        classification="liability",
-    ),
-    DemoAccountSpec(
-        key="home",
-        name="Primary Residence",
-        account_type="property",
-        classification="asset",
-        opening_balance=52_500_000,
-    ),
-    DemoAccountSpec(
-        key="brokerage",
-        name="Fidelity Brokerage",
-        account_type="brokerage",
-        classification="asset",
-    ),
-    DemoAccountSpec(
-        key="mortgage",
-        name="Mortgage",
-        account_type="loan",
-        classification="liability",
-        opening_balance=31_842_000,
-    ),
-)
-DEMO_ACCOUNT_NAMES: tuple[str, ...] = tuple(a.name for a in DEMO_ACCOUNTS)
-
-# Positions held in the brokerage account: (ticker, name, unit price in cents).
-DEMO_SECURITIES: tuple[tuple[str, str, int], ...] = (
-    ("VTI", "Vanguard Total Stock Market ETF", 29_142),
-    ("VXUS", "Vanguard Total International Stock ETF", 6_488),
-    ("BND", "Vanguard Total Bond Market ETF", 7_326),
-)
-
-# Monthly fixed bills on the checking account: (day, payee, amount, category).
-_FIXED_CHECKING: tuple[tuple[int, str, int, str], ...] = (
-    (1, "Mortgage Payment", -218_400, "LOAN_PAYMENTS"),
-    (12, "Comcast Xfinity", -8_999, "RENT_AND_UTILITIES"),
-)
-# Monthly subscriptions on the card: (day, payee, amount, category).
-_SUBSCRIPTIONS: tuple[tuple[int, str, int, str], ...] = (
-    (3, "Apple iCloud+", -299, "ENTERTAINMENT"),
-    (6, "Netflix", -1_549, "ENTERTAINMENT"),
-    (11, "Spotify", -1_199, "ENTERTAINMENT"),
-)
-_GROCERS: tuple[str, ...] = ("Whole Foods Market", "Trader Joe's")
-
-_TRANSFER_OUT_NAME = "Transfer to Ally Online Savings"
-_TRANSFER_IN_NAME = "Transfer from Chase Total Checking"
-_CARD_PAYMENT_OUT_NAME = "Amex Autopay Payment"
-_CARD_PAYMENT_IN_NAME = "Payment Received - Thank You"
-_PAYROLL_NAME = "Payroll Direct Deposit"
-
-
-@dataclass(frozen=True)
-class PlannedSplit:
-    """One part of a split transaction."""
-
-    amount: int
-    category: str
-    memo: str
-
-
-@dataclass(frozen=True)
-class PlannedTransaction:
-    """A single ledger entry, planned before anything touches the database."""
-
-    account_key: str
-    txn_date: date
-    amount: int
-    name: str
-    category: str | None = None
-    memo: str | None = None
-    splits: tuple[PlannedSplit, ...] = ()
 
 
 class DemoSeedResult(BaseModel):
@@ -195,208 +122,6 @@ class DemoSeedResult(BaseModel):
 
 def _today() -> date:
     return datetime.now(UTC).date()
-
-
-def _month_starts(anchor: date, months: int) -> list[date]:
-    """The first of each month in the window, oldest first."""
-    starts: list[date] = []
-    year, month = anchor.year, anchor.month
-    for _ in range(max(months, 1)):
-        starts.append(date(year, month, 1))
-        month -= 1
-        if month == 0:
-            month, year = 12, year - 1
-    return list(reversed(starts))
-
-
-def _day_in_month(month_start: date, day: int) -> date:
-    """``day`` of ``month_start``'s month, clamped to the month's length."""
-    if month_start.month == 12:
-        next_month = date(month_start.year + 1, 1, 1)
-    else:
-        next_month = date(month_start.year, month_start.month + 1, 1)
-    last_day = (next_month - timedelta(days=1)).day
-    return month_start.replace(day=min(day, last_day))
-
-
-def _jitter(rng: random.Random, amount: int, pct: float) -> int:
-    """``amount`` moved by up to +/-``pct``, keeping its sign."""
-    span = int(abs(amount) * pct)
-    return amount + rng.randint(-span, span) if span else amount
-
-
-def build_demo_ledger(
-    *, anchor: date, months: int = _DEFAULT_MONTHS
-) -> tuple[PlannedTransaction, ...]:
-    """Plan the whole ledger as pure data, oldest entry first.
-
-    Pure and seeded: the same ``anchor``/``months`` always yield the same
-    entries, which is what makes screenshots and docs reproducible. Nothing
-    here touches the database, so the shape of the dataset is testable on its
-    own.
-    """
-    rng = random.Random(_SEED)
-    entries: list[PlannedTransaction] = []
-    # The card is paid in arrears: each month's spend is paid the next month.
-    unpaid_card = 0
-    split_used = False
-
-    for month_start in _month_starts(anchor, months):
-        # -- Income: semi-monthly payroll ------------------------------- #
-        for day in (1, 15):
-            entries.append(
-                PlannedTransaction(
-                    "checking",
-                    _day_in_month(month_start, day),
-                    _jitter(rng, 419_500, 0.02),
-                    _PAYROLL_NAME,
-                    "INCOME",
-                )
-            )
-
-        # -- Fixed bills ------------------------------------------------ #
-        for day, payee, amount, category in _FIXED_CHECKING:
-            entries.append(
-                PlannedTransaction(
-                    "checking",
-                    _day_in_month(month_start, day),
-                    amount,
-                    payee,
-                    category,
-                )
-            )
-        entries.append(
-            PlannedTransaction(
-                "checking",
-                _day_in_month(month_start, 8),
-                _jitter(rng, -13_400, 0.30),
-                "Pacific Gas & Electric",
-                "RENT_AND_UTILITIES",
-            )
-        )
-
-        # -- Card spend ------------------------------------------------- #
-        month_card_spend = 0
-        card_entries: list[PlannedTransaction] = []
-
-        for day, payee, amount, category in _SUBSCRIPTIONS:
-            card_entries.append(
-                PlannedTransaction(
-                    "card", _day_in_month(month_start, day), amount, payee, category
-                )
-            )
-
-        for index in range(rng.randint(4, 6)):
-            grocer = _GROCERS[index % len(_GROCERS)]
-            amount = _jitter(rng, -9_450, 0.45)
-            day = _day_in_month(month_start, 2 + index * 5 + rng.randint(0, 2))
-            splits: tuple[PlannedSplit, ...] = ()
-            # One split transaction: a grocery run with household goods on it.
-            if not split_used and index == 1:
-                household = int(abs(amount) * 0.30)
-                splits = (
-                    PlannedSplit(
-                        -(abs(amount) - household), "FOOD_AND_DRINK", "Groceries"
-                    ),
-                    PlannedSplit(-household, "GENERAL_MERCHANDISE", "Household"),
-                )
-                split_used = True
-            card_entries.append(
-                PlannedTransaction(
-                    "card", day, amount, grocer, "FOOD_AND_DRINK", splits=splits
-                )
-            )
-
-        for index in range(rng.randint(6, 9)):
-            card_entries.append(
-                PlannedTransaction(
-                    "card",
-                    _day_in_month(month_start, 1 + index * 3 + rng.randint(0, 2)),
-                    _jitter(rng, -685, 0.35),
-                    "Starbucks",
-                    "FOOD_AND_DRINK",
-                )
-            )
-
-        for index in range(rng.randint(2, 3)):
-            card_entries.append(
-                PlannedTransaction(
-                    "card",
-                    _day_in_month(month_start, 7 + index * 9),
-                    _jitter(rng, -2_240, 0.30),
-                    "Chipotle",
-                    "FOOD_AND_DRINK",
-                )
-            )
-
-        for index in range(2):
-            card_entries.append(
-                PlannedTransaction(
-                    "card",
-                    _day_in_month(month_start, 5 + index * 14),
-                    _jitter(rng, -5_820, 0.25),
-                    "Shell",
-                    "TRANSPORTATION",
-                )
-            )
-
-        for index in range(rng.randint(2, 4)):
-            card_entries.append(
-                PlannedTransaction(
-                    "card",
-                    _day_in_month(month_start, 4 + index * 7),
-                    _jitter(rng, -4_310, 0.60),
-                    "Amazon",
-                    "GENERAL_MERCHANDISE",
-                )
-            )
-
-        month_card_spend = sum(abs(e.amount) for e in card_entries)
-        entries.extend(card_entries)
-
-        # -- Card payment for last month's balance (auto-pairs) --------- #
-        if unpaid_card:
-            pay_date = _day_in_month(month_start, 25)
-            entries.append(
-                PlannedTransaction(
-                    "checking",
-                    pay_date,
-                    -unpaid_card,
-                    _CARD_PAYMENT_OUT_NAME,
-                    "TRANSFER_OUT",
-                )
-            )
-            entries.append(
-                PlannedTransaction(
-                    "card",
-                    pay_date,
-                    unpaid_card,
-                    _CARD_PAYMENT_IN_NAME,
-                    "TRANSFER_IN",
-                )
-            )
-        unpaid_card = month_card_spend
-
-        # -- Monthly savings transfer (auto-pairs) ---------------------- #
-        transfer_date = _day_in_month(month_start, 20)
-        entries.append(
-            PlannedTransaction(
-                "checking",
-                transfer_date,
-                -75_000,
-                _TRANSFER_OUT_NAME,
-                "TRANSFER_OUT",
-            )
-        )
-        entries.append(
-            PlannedTransaction(
-                "savings", transfer_date, 75_000, _TRANSFER_IN_NAME, "TRANSFER_IN"
-            )
-        )
-
-    in_window = [e for e in entries if e.txn_date <= anchor]
-    in_window.sort(key=lambda e: (e.txn_date, e.account_key, e.name))
-    return tuple(in_window)
 
 
 # --------------------------------------------------------------------- #
@@ -502,6 +227,28 @@ async def _delete_demo_rows(
         (FinanceLiabilityDetail, FinanceLiabilityDetail.account_id),
     ):
         await _delete_where(db, model, column, account_ids)
+    # This owner's demo proposals only: the agent name marks what the seed
+    # filed, the owner clause keeps one household's clear from taking
+    # another's in a multi-user install.
+    owner_clause = (
+        FinancePendingChange.owner_user_id.is_(None)
+        if owner_user_id is None
+        else FinancePendingChange.owner_user_id == owner_user_id
+    )
+    proposal_ids = [
+        p.id
+        for p in (
+            await db.exec(
+                select(FinancePendingChange).where(
+                    FinancePendingChange.proposed_by_agent == "demo_seed", owner_clause
+                )
+            )
+        ).all()
+    ]
+    if proposal_ids:
+        await _delete_where(
+            db, FinancePendingChange, FinancePendingChange.id, proposal_ids
+        )
     await _delete_where(db, FinanceAccount, FinanceAccount.id, account_ids)
 
     # Net-worth snapshots are per-owner, not per-account, so they can't be
@@ -888,6 +635,132 @@ async def _write_investments(
     return trades, market_value
 
 
+async def _name_payees(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    account_ids: list[int],
+) -> int:
+    """Give every recognisable row its payee, the way a curated ledger has.
+
+    An import leaves ``merchant_id`` empty on everything - payees are a
+    curation step - so a freshly seeded household showed a thousand rows
+    in the No payee queue and the two deliberately bare ones were lost in
+    them. One merchant per distinct name, assigned in a batch; the bank's
+    own unusable names and the fee lines stay unnamed on purpose.
+    """
+    bare = {name for _m, _d, name, _a, _c in _NO_PAYEE} | {
+        "Interest Charge",
+        "Overdraft Fee",
+    }
+    rows = (
+        await db.exec(
+            select(FinanceTransaction).where(
+                FinanceTransaction.account_id.in_(account_ids),
+                FinanceTransaction.deleted_at.is_(None),
+                FinanceTransaction.is_transfer.is_(False),
+                FinanceTransaction.merchant_id.is_(None),
+            )
+        )
+    ).all()
+    by_name: dict[str, list[int]] = {}
+    for txn in rows:
+        if txn.name and txn.name not in bare and txn.id is not None:
+            by_name.setdefault(txn.name, []).append(txn.id)
+    named = 0
+    for name, ids in by_name.items():
+        merchant = await ledger_merchants.create_merchant(
+            db, name, owner_user_id=owner_user_id
+        )
+        named += await ledger_merchants.assign_merchant(
+            db, ids, merchant.id, owner_user_id=owner_user_id
+        )
+    return named
+
+
+async def _file_proposals(
+    db: AsyncSession,
+    service: FinanceService,
+    *,
+    owner_user_id: int | None,
+    account_ids: list[int],
+) -> int:
+    """Leave the Approvals queue with something to approve.
+
+    Without the AI service nothing files a proposal, so the highest-stakes
+    queue in Review screenshots as an empty state. Three cards, one per
+    change the app's own assistant most often proposes: a category for a
+    row that arrived without one, a payee for a row the bank named
+    unusably, and a split for the mixed Target run. Filed as
+    ``demo_seed`` so a clear can find them.
+    """
+    rows = (
+        await db.exec(
+            select(FinanceTransaction).where(
+                FinanceTransaction.account_id.in_(account_ids),
+                FinanceTransaction.deleted_at.is_(None),
+            )
+        )
+    ).all()
+    merchandise = await service.get_or_create_pfc_category("GENERAL_MERCHANDISE")
+    food = await service.get_or_create_pfc_category("FOOD_AND_DRINK")
+    filed = 0
+
+    bare = next((t for t in rows if t.category_id is None and t.amount < 0), None)
+    if bare is not None:
+        await propose(
+            db,
+            "transaction.categorize",
+            {"transaction_id": bare.id, "category_id": merchandise.id},
+            owner_user_id=owner_user_id,
+            proposed_by_agent="demo_seed",
+        )
+        filed += 1
+    # The bank's own unusable name, not a transfer leg: a transfer has a
+    # counterparty already, and "assign a coffee shop to a brokerage
+    # transfer" is not a proposal anyone should be asked to approve.
+    bare_names = {name for _m, _d, name, _a, _c in _NO_PAYEE}
+    unnamed = next(
+        (
+            t
+            for t in rows
+            if t.name in bare_names and t.merchant_id is None and not t.is_transfer
+        ),
+        None,
+    )
+    if unnamed is not None:
+        await propose(
+            db,
+            "transaction.assign_payee",
+            {"transaction_id": unnamed.id, "payee": "Hudson Valley Grounded"},
+            owner_user_id=owner_user_id,
+            proposed_by_agent="demo_seed",
+        )
+        filed += 1
+    target = next((t for t in rows if t.name == "Target" and t.amount == -14_237), None)
+    if target is not None:
+        await propose(
+            db,
+            "transaction.split",
+            {
+                "transaction_id": target.id,
+                "parts": [
+                    {"amount": 8_612, "category_id": food.id, "memo": "groceries"},
+                    {
+                        "amount": 3_400,
+                        "category_id": merchandise.id,
+                        "memo": "household",
+                    },
+                ],
+            },
+            owner_user_id=owner_user_id,
+            proposed_by_agent="demo_seed",
+        )
+        filed += 1
+    await db.flush()
+    return filed
+
+
 async def _count_derived(db: AsyncSession, account_ids: list[int]) -> tuple[int, int]:
     """``(transfers, recurring streams)`` the detectors left on these accounts."""
     transfers = (
@@ -1024,6 +897,9 @@ async def seed_demo(
     # Full history on purpose: the seed writes months of activity and the
     # demo should show transfers detected across all of it.
     await detect_transfers(db, owner_user_id=owner_user_id, lookback_days=0)
+    await _name_payees(
+        db, owner_user_id=owner_user_id, account_ids=[a.id for a in accounts.values()]
+    )
     await detect_recurring(db, owner_user_id=owner_user_id)
     # One more insight pass now that every leg is paired: the per-batch
     # passes above ran before some transfer partners existed, and the rules
@@ -1043,17 +919,23 @@ async def seed_demo(
         )
     ).all()
     for stream in demo_streams:
-        # Confirm the COMMITMENTS only. Confirming everything the detector
-        # found also promoted discretionary rhythms (a few jittered Amazon
-        # orders a month) into bills, and a bill that can be missed will
-        # eventually be missed: the household reads as delinquent on a
-        # shopping habit the moment one gap outruns the grace window.
-        # A fixed amount is what separates a commitment from a habit.
-        if stream.amount_is_variable and stream.direction != "inflow":
+        # Confirm what the household would: its income, its bills, its
+        # subscriptions. Not every rhythm the detector found - a grocery
+        # habit confirmed as a bill reads as delinquent the moment one gap
+        # outruns the grace window - and not by the fixed-amount flag,
+        # which skips the one subscription whose price changed: the
+        # stream a price-hike finding is about.
+        if stream.direction != "inflow" and stream.name not in _COMMITMENT_PAYEES:
             continue
         stream.is_user_confirmed = True
         db.add(stream)
     await db.flush()
+    await _file_proposals(
+        db,
+        service,
+        owner_user_id=owner_user_id,
+        account_ids=[a.id for a in accounts.values()],
+    )
     await generate_insights(db, owner_user_id=owner_user_id)
     net_worth_days = await networth.recompute_snapshots(
         db, owner_user_id=owner_user_id, start_date=window_start

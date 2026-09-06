@@ -838,6 +838,112 @@ class TestWithdraw:
         assert (withdrawn.result or {}).get("note") == "Withdrawn by finance-assistant."
 
     @pytest.mark.asyncio
+    async def test_a_withdraw_reason_rides_on_the_note(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The retracted card stays visible to the user, so it has to say
+        why it went - "superseded" reads as care, a bare "withdrawn" as
+        flailing."""
+        from app.services.finance.domains import writes
+
+        row = await self._proposed(svc, async_db_session, agent="finance-assistant")
+
+        withdrawn = await writes.withdraw(
+            async_db_session,
+            row.id,
+            agent_slug="finance-assistant",
+            owner_user_id=1,
+            reason="Superseded by the five-row card.",
+        )
+
+        assert (withdrawn.result or {}).get("note") == (
+            "Withdrawn by finance-assistant. Superseded by the five-row card."
+        )
+
+    @pytest.mark.asyncio
+    async def test_an_agent_can_list_only_its_own_open_cards(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """What ``pending()`` reads: before filing a replacement, the agent
+        sees what it already has open - and nothing anyone else filed."""
+        from app.services.finance.domains import writes
+
+        account = await _account(svc)
+        groceries = await _category(async_db_session, "Food & Dining:Groceries")
+        filed = []
+        for day, agent in ((10, "finance-assistant"), (11, "other-agent"), (12, None)):
+            txn = await _txn(svc, account.id, -897, date(2026, 6, day), name="Deli")
+            filed.append(
+                await svc.propose_change(
+                    "transaction.categorize",
+                    {"transaction_id": txn.id, "category_id": groceries.id},
+                    owner_user_id=1,
+                    proposed_by_agent=agent,
+                )
+            )
+        mine = filed[0]
+
+        rows = await writes.list_changes(
+            async_db_session, owner_user_id=1, proposed_by_agent="finance-assistant"
+        )
+
+        assert [r.id for r in rows] == [mine.id]
+
+    @pytest.mark.asyncio
+    async def test_sqlite_waits_for_a_busy_writer(self) -> None:
+        """Tool calls commit on their own connection while the chat run
+        holds another; SQLite must wait for the lock, not fail on it."""
+        from sqlalchemy import text
+
+        from app.core import db as app_db
+
+        if app_db.async_engine.dialect.name != "sqlite":
+            pytest.skip("busy_timeout is a SQLite knob")
+        async with app_db.async_engine.connect() as conn:
+            timeout = (await conn.execute(text("PRAGMA busy_timeout"))).scalar()
+        assert timeout == 30000
+
+    @pytest.mark.asyncio
+    async def test_a_whole_batch_withdraws_in_one_call(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """One card, one call, one reason - and a row the user already
+        decided is not dragged back into it."""
+        from app.services.finance.domains import writes
+
+        account = await _account(svc)
+        groceries = await _category(async_db_session, "Food & Dining:Groceries")
+        payloads = []
+        for day in (10, 11, 12):
+            txn = await _txn(svc, account.id, -897, date(2026, 6, day), name="Deli")
+            payloads.append({"transaction_id": txn.id, "category_id": groceries.id})
+        rows = await writes.propose_many(
+            async_db_session,
+            "transaction.categorize",
+            payloads,
+            owner_user_id=1,
+            proposed_by_agent="finance-assistant",
+        )
+        batch_id = rows[0].batch_id
+        await writes.reject(async_db_session, rows[0].id, owner_user_id=1)
+
+        withdrawn = await writes.withdraw_batch(
+            async_db_session,
+            batch_id,
+            agent_slug="finance-assistant",
+            owner_user_id=1,
+            reason="Superseded by the five-row card.",
+        )
+
+        assert withdrawn == 2
+        notes = {
+            (r.result or {}).get("note")
+            for r in await writes.batch_rows(async_db_session, batch_id, owner_user_id=1)
+        }
+        assert "Withdrawn by finance-assistant. Superseded by the five-row card." in notes
+        assert None in notes, "the row the user rejected kept its own resolution"
+
+    @pytest.mark.asyncio
     async def test_only_the_proposer_may_withdraw(
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:

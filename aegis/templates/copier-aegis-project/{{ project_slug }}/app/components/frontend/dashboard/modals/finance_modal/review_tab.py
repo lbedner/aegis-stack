@@ -77,7 +77,6 @@ class ReviewTab(FinancePanel):
         self,
         page: ft.Page,
         *,
-        analyst_enabled: bool = False,
         account_filter: AccountFilter | None = None,
         register_filter_listener: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
@@ -110,7 +109,7 @@ class ReviewTab(FinancePanel):
             AttentionTab,
         )
 
-        self._attention = AttentionTab(page, with_notes=analyst_enabled)
+        self._attention = AttentionTab(page)
 
         # Approvals lead: assistant proposals are the highest-stakes
         # queue here (they change the ledger on approval), and Overview
@@ -123,9 +122,7 @@ class ReviewTab(FinancePanel):
             ),
         )
         self._approvals = ft.Container(
-            content=ft.Column(
-                [self._pending], scroll=ft.ScrollMode.AUTO, expand=True
-            ),
+            content=ft.Column([self._pending], scroll=ft.ScrollMode.AUTO, expand=True),
             padding=ft.padding.all(Theme.Spacing.LG),
             expand=True,
         )
@@ -140,6 +137,17 @@ class ReviewTab(FinancePanel):
             ],
             expand=True,
         )
+
+    async def _load(self) -> None:
+        """Nothing of its own to read.
+
+        Every sub-tab here owns its query and its own account-filter
+        subscription, so this panel is composition and nothing else. The
+        base class calls ``_load`` on mount and again on every filter
+        change, and inheriting its ``raise NotImplementedError`` meant a
+        traceback in the log each time the Review tab was opened.
+        """
+        return
 
     def refresh_on_revisit(self) -> None:
         """Dialog revisit hook (and the Overview banner's jump): the

@@ -87,15 +87,18 @@ def record_tool_result(
         entry["nested"] = [{"tool": n, "args": a} for n, a in nested]
 
 
-def _component_marker(name: str, content: Any, text: str) -> dict[str, Any] | None:
+def _component_marker(
+    name: str, content: Any, text: str
+) -> dict[str, Any] | list[dict[str, Any]] | None:
     """A compact, parse-safe payload for results the UI must RENDER.
 
     The result field above is clipped for display; a large proposal
     batch truncates to invalid JSON, and a card built by parsing it
     silently vanished. The card needs only identity - the queue is
-    fetched for the rows - so identity rides here, under any cap.
+    fetched for the rows - so identity rides here, under any cap. A
+    ``pending`` listing carries one identity per card it holds.
     """
-    if name not in ("propose", "propose_many"):
+    if name not in ("propose", "propose_many", "pending"):
         return None
     data: Any = content
     if isinstance(content, str):
@@ -105,6 +108,26 @@ def _component_marker(name: str, content: Any, text: str) -> dict[str, Any] | No
             return None
     if not isinstance(data, dict) or data.get("error"):
         return None
+    if name == "pending":
+        rows = (data.get("pending") or []) + (data.get("decided") or [])
+        return _pending_markers(rows) or None
+    return _identity_marker(data)
+
+
+def _pending_markers(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One marker per listed card, in listing order."""
+    identities = [
+        {
+            **card,
+            "count": card.get("rows"),
+            "pending_change_id": (card.get("pending_change_ids") or [None])[0],
+        }
+        for card in cards
+    ]
+    return [m for m in map(_identity_marker, identities) if m is not None]
+
+
+def _identity_marker(data: dict[str, Any]) -> dict[str, Any] | None:
     if data.get("batch_id"):
         return {
             "kind": "pending_change_batch",

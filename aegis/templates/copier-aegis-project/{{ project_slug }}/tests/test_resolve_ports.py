@@ -20,7 +20,12 @@ from pathlib import Path
 import pytest
 
 from scripts import resolve_ports as resolve_ports_module
-from scripts.resolve_ports import _find_free_port, _is_free, resolve_ports
+from scripts.resolve_ports import (
+    _find_free_port,
+    _is_free,
+    docs_port,
+    resolve_ports,
+)
 
 
 def _listen_free() -> socket.socket:
@@ -215,3 +220,37 @@ class TestResolvePorts:
         )
 
         assert "STALE_KEY" not in ports_file.read_text()
+
+
+class TestDocsPort:
+    """``make docs-serve`` picks a port the way ``make serve`` does.
+
+    A hardcoded 8001 is the port a second stack's webserver lands on and
+    the port this project's own compose publishes, so the docs server
+    failed to bind whenever anything else was already up. Nothing about
+    a docs preview needs a fixed port.
+    """
+
+    def test_it_takes_the_base_port_when_free(self) -> None:
+        base = _free_port()
+        assert docs_port(base) == base
+
+    def test_it_steps_past_a_busy_port(self) -> None:
+        blocker = _listen_free()
+        try:
+            taken = blocker.getsockname()[1]
+            assert docs_port(taken) > taken
+        finally:
+            blocker.close()
+
+    def test_it_says_where_the_docs_landed(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A resolved port is useless if the user cannot see it."""
+        blocker = _listen_free()
+        try:
+            taken = blocker.getsockname()[1]
+            chosen = docs_port(taken)
+        finally:
+            blocker.close()
+        assert str(chosen) in capsys.readouterr().err

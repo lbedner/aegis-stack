@@ -73,6 +73,26 @@ class TestPendingChangeCard:
         assert "Approve" not in tokens  # the button label, gone
         assert "Reject" not in tokens
 
+    def test_a_withdrawn_card_says_so_and_why(self) -> None:
+        """A withdrawal is stored as a rejection with a note, but it is not
+        the user's "no" - it is the assistant taking its own card back.
+        The card says Withdrawn, and shows the reason, even folded."""
+        from app.components.frontend.controls.chat.components import (
+            render_component,
+        )
+        from tests.components.frontend._tree import texts
+
+        withdrawn = {
+            **_CHANGE,
+            "status": "rejected",
+            "note": "Withdrawn by finance-assistant. Superseded by the five-row card.",
+        }
+        card = render_component("pending_change", withdrawn, on_action=_noop_action)
+        tokens = texts(card)
+        assert "Withdrawn" in tokens
+        assert "Rejected" not in tokens
+        assert any("Superseded by the five-row card" in t for t in tokens)
+
     def test_an_execution_error_is_shown_on_the_card(self) -> None:
         from app.components.frontend.controls.chat.components import (
             render_component,
@@ -273,6 +293,22 @@ class TestBatchTraceExtraction:
         assert "Approve all (2)" in rendered(cards[0])
 
 
+class TestWithdrawnOutcomeSummary:
+    def test_a_withdrawn_batch_says_withdrawn_not_rejected(self) -> None:
+        """The assistant retracting its own card is not the user saying
+        no; the folded summary keeps that distinction."""
+        from app.components.frontend.controls.chat.components import (
+            PendingChangeBatchCard,
+        )
+
+        items = [
+            {"id": 1, "status": "rejected", "result": {"note": "Withdrawn by x."}},
+            {"id": 2, "status": "rejected", "result": {"note": "Withdrawn by x."}},
+            {"id": 3, "status": "rejected"},
+        ]
+        assert PendingChangeBatchCard._outcome_summary(items) == "1 rejected, 2 withdrawn"
+
+
 class TestResolvedCardsCollapse:
     def test_a_resolved_card_collapses_to_one_line(self) -> None:
         """A decided card is history, not homework: it folds to its
@@ -451,9 +487,7 @@ class TestReadableDetailRows:
             render_component,
         )
 
-        card = render_component(
-            "pending_change", _SPLIT_CHANGE, on_action=_noop_action
-        )
+        card = render_component("pending_change", _SPLIT_CHANGE, on_action=_noop_action)
 
         assert "School supplies" in rendered(card)
         assert "Groceries" in rendered(card)
@@ -461,7 +495,7 @@ class TestReadableDetailRows:
         assert "School supplies  ·" not in rendered(card)
 
     def test_a_memo_carrying_value_teals_only_the_price(self) -> None:
-        """"$3.99 · groceries" highlights the money, not the prose - a
+        """ "$3.99 · groceries" highlights the money, not the prose - a
         wall of teal marks nothing."""
         from app.components.frontend.controls.chat.components import (
             render_component,
@@ -486,9 +520,7 @@ class TestReadableDetailRows:
             render_component,
         )
 
-        card = render_component(
-            "pending_change", _SPLIT_CHANGE, on_action=_noop_action
-        )
+        card = render_component("pending_change", _SPLIT_CHANGE, on_action=_noop_action)
 
         teal = self._teal(card)
         assert "$3.99" in teal
@@ -610,6 +642,42 @@ class TestMarkerTraceExtraction:
         assert len(cards) == 1
         assert cards[0]._change_id == 7
 
+    def test_a_pending_listing_redraws_every_card(self) -> None:
+        """"Show the card again" is a pending() call: its marker is a list,
+        one entry per card the assistant still has open."""
+        from app.components.frontend.controls.chat.components import (
+            components_from_trace,
+        )
+
+        trace = [
+            {
+                "tool": "pending",
+                "args": "",
+                "result": '{"pending": [...]}',
+                "component": [
+                    {
+                        "kind": "pending_change_batch",
+                        "batch_id": "b-1",
+                        "change_type": "transaction.categorize",
+                        "title": "Categorize",
+                        "count": 5,
+                    },
+                    {
+                        "kind": "pending_change",
+                        "pending_change_id": 7,
+                        "change_type": "transaction.tag",
+                        "title": "Tag",
+                        "status": "pending",
+                    },
+                ],
+            },
+        ]
+        cards = components_from_trace(
+            trace, on_action=_noop_action, on_batch_action=_noop_batch_action
+        )
+        assert [getattr(c, "_batch_id", None) for c in cards] == ["b-1", None]
+        assert cards[1]._change_id == 7
+
     def test_a_pre_marker_truncated_result_still_yields_the_card(self) -> None:
         """Traces recorded before the marker existed clipped big batch
         results to invalid JSON. The identity fields lead the blob, so
@@ -677,6 +745,48 @@ class TestReplayAffordance:
 
         assert self._replay_buttons(assistant) == []
         assert self._replay_buttons(plain_user) == []
+
+
+class TestCopyButton:
+    """A finished answer can be copied whole: the button sits by the model
+    footer, invisible until the pointer is over the message."""
+
+    def _copy_buttons(self, bubble: Any) -> list[Any]:
+        from app.components.frontend.controls.buttons import IconCopyButton
+        from tests.components.frontend._tree import walk
+
+        return [node for node in walk(bubble) if isinstance(node, IconCopyButton)]
+
+    def _finished(self) -> Any:
+        from app.components.frontend.controls.chat.message import ChatMessageBubble
+
+        bubble = ChatMessageBubble(role="assistant")
+        bubble.finalize("Done. Five rows.", {"model": "qwen"})
+        return bubble
+
+    def test_the_footer_carries_one_copy_button(self) -> None:
+        (button,) = self._copy_buttons(self._finished())
+        assert button.get_text() == "Done. Five rows."
+
+    def test_it_hides_until_hovered(self) -> None:
+        bubble = self._finished()
+        (button,) = self._copy_buttons(bubble)
+        assert button.opacity == 0
+
+        bubble.on_hover(_Hover("true"))
+        assert button.opacity == 1
+        bubble.on_hover(_Hover("false"))
+        assert button.opacity == 0
+
+    def test_user_bubbles_have_nothing_to_copy(self) -> None:
+        from app.components.frontend.controls.chat.message import ChatMessageBubble
+
+        assert self._copy_buttons(ChatMessageBubble(role="user", text="hi")) == []
+
+
+class _Hover:
+    def __init__(self, data: str) -> None:
+        self.data = data
 
 
 class TestReplayRetention:
@@ -765,6 +875,4 @@ class TestAttachmentChips:
 
         chip = self._chip()
         assert "order.png" in rendered(chip)
-        assert any(
-            getattr(n, "tooltip", None) == "Remove" for n in walk(chip)
-        )
+        assert any(getattr(n, "tooltip", None) == "Remove" for n in walk(chip))

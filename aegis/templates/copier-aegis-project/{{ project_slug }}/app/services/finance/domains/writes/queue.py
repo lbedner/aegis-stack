@@ -186,13 +186,18 @@ async def list_changes(
     *,
     owner_user_id: int | None = None,
     status: str | None = "pending",
+    proposed_by_agent: str | None = None,
 ) -> list[FinancePendingChange]:
-    """Newest first. ``status=None`` returns the full audit trail."""
+    """Newest first. ``status=None`` returns the full audit trail;
+    ``proposed_by_agent`` narrows to one proposer's cards, which is how an
+    agent sees its own open work before filing more."""
     query = select(FinancePendingChange).order_by(
         FinancePendingChange.id.desc()  # type: ignore[attr-defined]
     )
     if status is not None:
         query = query.where(FinancePendingChange.status == status)
+    if proposed_by_agent is not None:
+        query = query.where(FinancePendingChange.proposed_by_agent == proposed_by_agent)
     if owner_user_id is not None:
         query = query.where(FinancePendingChange.owner_user_id == owner_user_id)
     return list((await db.exec(query)).all())
@@ -220,9 +225,7 @@ async def _describe_row(
     except ValidationError:
         return [
             ChangeDisplayRow(label="Change", value=executor.title),
-            ChangeDisplayRow(
-                label="Payload (no longer valid)", value=str(row.payload)
-            ),
+            ChangeDisplayRow(label="Payload (no longer valid)", value=str(row.payload)),
         ]
     return await executor.describe(db, model, row.owner_user_id)
 
@@ -281,6 +284,7 @@ async def withdraw(
     *,
     agent_slug: str | None,
     owner_user_id: int | None = None,
+    reason: str | None = None,
 ) -> FinancePendingChange:
     """An agent retracting ITS OWN pending proposal - propose's cleanup
     half. Guarded to the proposer, so one agent (or a slug-less caller)
@@ -294,8 +298,43 @@ async def withdraw(
         db,
         change_id,
         owner_user_id=owner_user_id,
-        note=f"Withdrawn by {agent_slug}.",
+        # The reason rides on the card: a retracted proposal the user can
+        # still see needs to say why, or it reads as the agent flailing.
+        note=f"Withdrawn by {agent_slug}." + (f" {reason.strip()}" if reason else ""),
     )
+
+
+async def withdraw_batch(
+    db: AsyncSession,
+    batch_id: str,
+    *,
+    agent_slug: str | None,
+    owner_user_id: int | None = None,
+    reason: str | None = None,
+) -> int:
+    """Withdraw every still-pending row of one of the agent's OWN batches,
+    in one transaction. Twelve separate withdrawals were twelve commits
+    racing the chat run's own connection, which is how SQLite reported
+    "database is locked" halfway through a cleanup. Returns how many rows
+    went; rows already decided are left as they are."""
+    withdrawn = 0
+    for row in await batch_rows(db, batch_id, owner_user_id=owner_user_id):
+        if row.status != "pending" or row.id is None:
+            continue
+        await withdraw(
+            db, row.id, agent_slug=agent_slug, owner_user_id=owner_user_id, reason=reason
+        )
+        withdrawn += 1
+    return withdrawn
+
+
+def outcome_of(row: FinancePendingChange) -> str:
+    """The row's status as a person reads it: a rejection the proposing
+    agent filed against itself is "withdrawn", not the user saying no."""
+    note = str((row.result or {}).get("note") or "")
+    if row.status == "rejected" and note.startswith("Withdrawn"):
+        return "withdrawn"
+    return row.status
 
 
 async def describe_change(

@@ -3323,6 +3323,55 @@ async def test_pending_change_reject_keeps_the_audit_row(
 
 
 @pytest.mark.asyncio
+async def test_a_withdrawn_row_tells_the_card_why(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """The batch card refreshes from this endpoint, and it shows a
+    withdrawal as the assistant taking its card back - so the row must
+    carry the note, not just a bare "rejected"."""
+    from app.services.finance.domains import writes
+
+    service = FinanceService(async_db_session)
+    account = await service.create_manual_account(
+        owner_user_id=acting_owner_user_id,
+        name="Checking",
+        account_type="checking",
+        classification="asset",
+    )
+    category = await service.get_or_create_category_from_hint("Food & Dining:Groceries")
+    txn = await service.create_transaction(
+        owner_user_id=acting_owner_user_id,
+        account_id=account.id,
+        amount=-1_000,
+        txn_date=date(2026, 8, 1),
+        name="Store",
+    )
+    (row,) = await writes.propose_many(
+        async_db_session,
+        "transaction.categorize",
+        [{"transaction_id": txn.id, "category_id": category.id}],
+        owner_user_id=acting_owner_user_id,
+        proposed_by_agent="finance-assistant",
+    )
+    await writes.withdraw(
+        async_db_session,
+        row.id,
+        agent_slug="finance-assistant",
+        owner_user_id=acting_owner_user_id,
+        reason="Superseded.",
+    )
+    await async_db_session.commit()
+
+    (item,) = authenticated_client.get(
+        f"/api/v1/finance/changes/batch/{row.batch_id}"
+    ).json()["items"]
+    assert item["status"] == "rejected"
+    assert item["note"] == "Withdrawn by finance-assistant. Superseded."
+
+
+@pytest.mark.asyncio
 async def test_batch_approve_with_a_veto(
     authenticated_client: TestClient,
     async_db_session: AsyncSession,

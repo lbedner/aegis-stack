@@ -9,7 +9,12 @@ from sqlmodel import Session, select
 
 from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMModel
 from app.services.ai.domains.llm.etl.clients.openrouter_client import OpenRouterModel
-from app.services.ai.domains.llm.etl.llm_sync_service import LLMSyncService, SyncResult
+from app.services.ai.domains.llm.etl.llm_sync_service import (
+    LLMSyncService,
+    SyncResult,
+    get_catalog_stats,
+    ollama_models_present,
+)
 from app.services.ai.models.llm import (
     Direction,
     LargeLanguageModel,
@@ -669,6 +674,63 @@ class TestCatalogPopulated:
         sync_db_session.flush()
 
         assert catalog_is_populated(sync_db_session) is True
+
+
+class TestCatalogStats:
+    """``llm status`` reads these; it has to survive the org model.
+
+    A model carries two keys onto ``llm_org`` - who made it and who
+    serves it - so a join that names neither is ambiguous, and the CLI
+    died with AmbiguousForeignKeysError on a freshly generated project.
+    """
+
+    @staticmethod
+    def _served_model(service: LLMSyncService, vendor: str, model_id: str) -> None:
+        org = service._upsert_vendor(vendor, SyncResult(), dry_run=False)
+        service.session.add(
+            LargeLanguageModel(model_id=model_id, title=model_id, served_by_org_id=org.id)
+        )
+        service.session.flush()
+
+    def test_it_counts_models_by_the_org_that_serves_them(
+        self, sync_db_session: Session
+    ) -> None:
+        service = LLMSyncService(sync_db_session)
+        self._served_model(service, "openai", "openai/gpt-4o")
+        self._served_model(service, "openai", "openai/gpt-4o-mini")
+
+        stats = get_catalog_stats(sync_db_session)
+
+        assert stats.model_count == 2
+        assert stats.top_vendors[0] == ("openai", 2)
+
+    def test_an_org_with_no_models_still_lists(self, sync_db_session: Session) -> None:
+        """Outer join: a maker that serves nothing is a vendor, not a gap."""
+        LLMSyncService(sync_db_session)._upsert_vendor("anthropic", SyncResult(), dry_run=False)
+        sync_db_session.flush()
+
+        assert ("anthropic", 0) in get_catalog_stats(sync_db_session).top_vendors
+
+
+class TestOllamaModelsPresent:
+    """The picker's ``usable`` filter shows only vendors the install can
+    call. With no API keys that is Ollama alone, and the remote catalog
+    never carries a local tag - so a fresh Ollama stack opened an empty
+    picker until someone knew to run ``llm sync --source ollama``. The
+    startup hook syncs local tags when none are present; this is the
+    check it asks."""
+
+    def test_false_on_an_empty_catalog(self, sync_db_session: Session) -> None:
+        assert ollama_models_present(sync_db_session) is False
+
+    def test_false_when_only_cloud_models_exist(self, sync_db_session: Session) -> None:
+        TestCatalogStats._served_model(LLMSyncService(sync_db_session), "openai", "openai/gpt-4o")
+        assert ollama_models_present(sync_db_session) is False
+
+    def test_true_once_a_local_tag_is_registered(self, sync_db_session: Session) -> None:
+        TestCatalogStats._served_model(LLMSyncService(sync_db_session), "ollama", "gpt-oss:20b")
+        assert ollama_models_present(sync_db_session) is True
+
 {% else %}
 # ETL sync service tests require database backend (ai_backend != "memory")
 # These tests are skipped when using memory-only AI backend
@@ -681,3 +743,4 @@ def test_sync_service_requires_database() -> None:
     """Placeholder test - sync service requires database backend."""
     pass
 {% endif %}
+

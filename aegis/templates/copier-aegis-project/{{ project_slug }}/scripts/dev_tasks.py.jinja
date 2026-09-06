@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.resolve_ports import resolve_ports
+from scripts.resolve_ports import docs_port, resolve_ports
 
 _COMPOSE_DEV = [
     "docker",
@@ -73,6 +73,15 @@ def serve_prod() -> None:
     subprocess.run(
         [*_COMPOSE_PROD, "--profile", "prod", "up", "--remove-orphans"],
         env=env,
+        check=True,
+    )
+
+
+def docs() -> None:
+    """Serve the documentation on a port that is actually free."""
+    port = docs_port()
+    subprocess.run(
+        ["uv", "run", "mkdocs", "serve", "--dev-addr", f"0.0.0.0:{port}"],
         check=True,
     )
 
@@ -157,6 +166,7 @@ def main(argv: list[str] | None = None) -> None:
             "serve",
             "serve-bg",
             "serve-prod",
+            "docs",
             {%- if include_database %}
             "migrate-reset",
             {%- endif %}
@@ -171,6 +181,8 @@ def main(argv: list[str] | None = None) -> None:
             serve_bg()
         elif args.action == "serve-prod":
             serve_prod()
+        elif args.action == "docs":
+            docs()
         {%- if include_database %}
         else:
             migrate_reset()

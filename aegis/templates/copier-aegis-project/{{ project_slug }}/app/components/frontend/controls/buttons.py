@@ -13,6 +13,7 @@ import flet as ft
 
 from app.components.frontend import styles
 from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.snack_bar import SuccessSnackBar
 from app.components.frontend.controls.text import BodyText
 
 AsyncClickCallable = Callable[[], Awaitable[None]]
@@ -324,6 +325,23 @@ class IconRefreshButton(BaseIconButton):
             disabled=disabled,
             **kwargs,
         )
+
+
+class IconCopyButton(BaseIconButton):
+    """Copies whatever ``get_text`` returns and confirms with a snack bar.
+    Reads the text at click time, so it follows a body that keeps changing."""
+
+    def __init__(self, get_text: Callable[[], str], **kwargs: Any) -> None:
+        super().__init__(
+            self._copy, icon=ft.Icons.CONTENT_COPY_OUTLINED, tooltip="Copy", **kwargs
+        )
+        self.get_text = get_text
+
+    async def _copy(self) -> None:
+        if self.page is None:
+            return
+        self.page.set_clipboard(self.get_text())
+        SuccessSnackBar("Copied").launch(self.page)
 
 
 class IconDeleteButton(BaseIconButton):

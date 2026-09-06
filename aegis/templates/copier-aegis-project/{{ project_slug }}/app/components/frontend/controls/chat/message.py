@@ -6,6 +6,7 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls.busy_bar import busy_bar
+from app.components.frontend.controls.buttons import IconCopyButton
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.markdown import markdown_control
 from app.components.frontend.controls.text import LabelText, SecondaryText
@@ -62,9 +63,26 @@ class ChatMessageBubble(ft.Container):
             )
 
         self._body = markdown_control(text, color=Theme.Colors.TEXT_PRIMARY)
-        self._footer = SecondaryText(
-            "", size=Theme.Typography.BODY_SMALL, visible=False
+        self._footer = SecondaryText("", size=Theme.Typography.BODY_SMALL)
+        # Copy the whole answer: parked by the footer, shown on hover only.
+        self._copy = IconCopyButton(
+            lambda: self._body.value or "",
+            icon_size=14,
+            style=ft.ButtonStyle(padding=0),
+            width=22,
+            height=22,
+            opacity=0,
+            animate_opacity=150,
         )
+        self._footer_row = ft.Row(
+            [self._footer] if is_user else [self._footer, self._copy],
+            spacing=Theme.Spacing.XS,
+            tight=True,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            visible=False,
+        )
+        if not is_user:
+            self.on_hover = self._reveal_copy
         self._trail = ft.Column([], spacing=2, tight=True, visible=False)
         # In-conversation components (approval cards, future previews):
         # system-rendered from typed tool-result data, never model layout.
@@ -90,7 +108,7 @@ class ChatMessageBubble(ft.Container):
                 self._body,
                 self._components,
                 self._waiting,
-                self._footer,
+                self._footer_row,
             ],
             spacing=Theme.Spacing.XS,
             tight=True,
@@ -221,6 +239,11 @@ class ChatMessageBubble(ft.Container):
 
     # -- streaming ---------------------------------------------------------
 
+    def _reveal_copy(self, e: ft.ControlEvent) -> None:
+        self._copy.opacity = 1 if e.data == "true" else 0
+        if self._copy.page:
+            self._copy.update()
+
     def set_streaming_text(self, text: str) -> None:
         """Replace the body with an in-flight snapshot (already balanced)."""
         self._stop_thinking()
@@ -253,6 +276,6 @@ class ChatMessageBubble(ft.Container):
         line = footer_line(meta)
         if line:
             self._footer.value = line
-            self._footer.visible = True
+            self._footer_row.visible = True
         if self.page:
             self.update()

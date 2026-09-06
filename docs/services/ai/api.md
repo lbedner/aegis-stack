@@ -20,7 +20,7 @@ http://localhost:8000/ai
 
     Send chat message and receive AI response
 
-    [:octicons-arrow-right-24: Details](#post-aichat)
+    [:octicons-arrow-right-24: Details](#post-apiv1aichat)
 
 -   :material-broadcast: **POST `/api/v1/ai/chat/stream`**
 
@@ -28,7 +28,7 @@ http://localhost:8000/ai
 
     Stream AI responses with Server-Sent Events
 
-    [:octicons-arrow-right-24: Details](#post-aichatstream)
+    [:octicons-arrow-right-24: Details](#post-apiv1aichatstream)
 
 -   :material-format-list-bulleted: **GET `/api/v1/ai/conversations`**
 
@@ -36,7 +36,7 @@ http://localhost:8000/ai
 
     List user conversations with metadata
 
-    [:octicons-arrow-right-24: Details](#get-aiconversations)
+    [:octicons-arrow-right-24: Details](#get-apiv1aiconversations)
 
 -   :material-message-reply-text: **GET `/api/v1/ai/conversations/{id}`**
 
@@ -44,7 +44,7 @@ http://localhost:8000/ai
 
     Get conversation with full message history
 
-    [:octicons-arrow-right-24: Details](#get-aiconversationsconversation_id)
+    [:octicons-arrow-right-24: Details](#get-apiv1aiconversationsconversation_id)
 
 -   :material-heart-pulse: **GET `/api/v1/ai/health`**
 
@@ -52,7 +52,7 @@ http://localhost:8000/ai
 
     Check AI service health status
 
-    [:octicons-arrow-right-24: Details](#get-aihealth)
+    [:octicons-arrow-right-24: Details](#get-apiv1aihealth)
 
 -   :material-account-group: **GET `/api/v1/ai/agents`**
 

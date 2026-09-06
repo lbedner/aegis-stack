@@ -215,6 +215,18 @@ def _preview_edits(preview: dict[str, Any]) -> list[ft.Control]:
     return rows
 
 
+def _preview_target_line(preview: dict[str, Any]) -> list[ft.Control]:
+    """"Chase Credit Card layout into Amex" - the one line that catches a
+    statement aimed at the wrong account before Import is pressed."""
+    layout, account = preview.get("layout"), preview.get("account_name")
+    if not layout and not account:
+        return []
+    text = f"{layout} layout" if layout else "Layout"
+    if account:
+        text += f" into {account}"
+    return [SecondaryText(text, size=Theme.Typography.BODY_SMALL)]
+
+
 def import_preview_body(preview: dict[str, Any], file_name: str) -> ft.Column:
     """The body of the import review dialog: what a commit would do.
 
@@ -307,6 +319,7 @@ def import_preview_body(preview: dict[str, Any], file_name: str) -> ft.Column:
             f"{preview.get('rows_total', 0):,} rows read from {file_name}",
             size=Theme.Typography.BODY_SMALL,
         ),
+        *_preview_target_line(preview),
         metrics,
         dot_row,
     ]

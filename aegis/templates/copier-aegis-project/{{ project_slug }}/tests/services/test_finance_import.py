@@ -127,6 +127,47 @@ class TestImportPipeline:
         assert total == 6  # unchanged
 
     @pytest.mark.asyncio
+    async def test_an_empty_field_is_not_an_edit(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """A statement whose memo column is blank re-imports as "already
+        have", not as 235 rows "changed in place": an empty cell and a
+        missing one are the same absence."""
+        account = await _account(async_db_session)
+        data = _qif()
+        await imports.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="qif",
+            file_name="q.qif",
+            file_bytes=data,
+            parsed=parse_qif(data, source="qif"),
+            default_account_id=account.id,
+        )
+        rows, _total = await svc.list_transactions(owner_user_id=1, account_id=account.id)
+        target = rows[0]
+
+        same_money_blank_memo = ParsedTransaction(
+            date=target.date_,
+            amount=target.amount,
+            name=target.name,
+            source="qif",
+            memo="",
+        )
+        result = await imports.ingest_transactions(
+            async_db_session,
+            owner_user_id=1,
+            source_type="qif",
+            file_name="q2.qif",
+            file_bytes=b"different bytes",
+            parsed=[same_money_blank_memo],
+            default_account_id=account.id,
+        )
+
+        assert result.rows_updated == 0
+        assert result.rows_inserted == 0
+
+    @pytest.mark.asyncio
     async def test_edited_row_updates_in_place_instead_of_duplicating(
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
@@ -564,6 +605,56 @@ async def _seed_csv_profiles(session: AsyncSession) -> None:
     for profile in _profiles():
         session.add(profile)
     await session.flush()
+
+
+class TestPreviewNeedsAnAccount:
+    """A single-account layout with no target is not an error to throw
+    back: the preview says so, and names the layout, so the client can
+    ask which account the statement belongs to before anything else."""
+
+    @pytest.mark.asyncio
+    async def test_no_target_previews_as_a_question(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        await _seed_csv_profiles(async_db_session)
+
+        plan = await imports.preview_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="card.csv",
+            file_bytes=_csv("sample_chase_cc.csv"),
+            account_id=None,
+        )
+
+        assert plan.needs_account is True
+        assert plan.layout == "Chase Credit Card"
+        assert plan.rows_total > 0
+        assert plan.rows == []
+
+    @pytest.mark.asyncio
+    async def test_a_targeted_preview_names_layout_and_account(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The review dialog shows "Chase Credit Card layout into Checking"
+        so a statement aimed at the wrong account is caught by eye."""
+        from app.components.backend.api.finance.declare import _preview_payload
+
+        await _seed_csv_profiles(async_db_session)
+        account = await _account(async_db_session)
+
+        plan = await imports.preview_file(
+            async_db_session,
+            owner_user_id=1,
+            file_name="card.csv",
+            file_bytes=_csv("sample_chase_cc.csv"),
+            account_id=account.id,
+        )
+        response = await _preview_payload(async_db_session, plan)
+
+        assert plan.needs_account is False
+        assert response.layout == "Chase Credit Card"
+        assert response.account_name == account.name
+        assert response.needs_account is False
 
 
 class TestCsvProfiles:
@@ -1498,7 +1589,10 @@ class TestParseRunsOffTheEventLoop:
         import threading
 
         seen: list[threading.Thread] = []
-        monkeypatch.setattr(imports, "_parse_by_extension", self._spy(seen))
+        from app.services.finance.adapters.importers import preview
+
+        # The preview binds the parser at import time in its own module.
+        monkeypatch.setattr(preview, "_parse_by_extension", self._spy(seen))
         await imports.preview_file(
             async_db_session, owner_user_id=1, file_name="a.qfx", file_bytes=b"x"
         )

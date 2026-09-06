@@ -45,6 +45,13 @@ async def _preview_payload(db, plan: imports.ImportPlan) -> ImportPreviewRespons
             identical_batch_id=plan.identical_batch_id,
             rows_duplicate=plan.rows_total,
         )
+    if plan.needs_account:
+        return ImportPreviewResponse(
+            file_name=plan.file_name,
+            rows_total=plan.rows_total,
+            needs_account=True,
+            layout=plan.layout,
+        )
 
     # One pass for the names the display needs: real accounts touched by
     # the plan, and every category id an edit mentions.
@@ -132,6 +139,8 @@ async def _preview_payload(db, plan: imports.ImportPlan) -> ImportPreviewRespons
     return ImportPreviewResponse(
         file_name=plan.file_name,
         rows_total=plan.rows_total,
+        layout=plan.layout,
+        account_name=plan.account_name,
         rows_inserted=plan.count("inserted"),
         rows_updated=plan.count("updated"),
         rows_duplicate=plan.count("duplicate"),

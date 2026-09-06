@@ -46,6 +46,7 @@ from app.services.finance.adapters.importers.base import (
     assign_import_hashes,
 )
 from app.services.finance.models import (
+    FinanceAccount,
     FinanceImportBatch,
     FinanceImportBatchRow,
     FinanceImportProfile,
@@ -201,6 +202,11 @@ class ImportPlan(BaseModel):
     rows_total: int = 0
     # Set when the exact file bytes were already imported: nothing to do.
     identical_batch_id: int | None = None
+    # A single-account layout previewed with no target: the client asks
+    # which account the statement belongs to, then previews again.
+    needs_account: bool = False
+    layout: str | None = None
+    account_name: str | None = None
 
     def count(self, status: str) -> int:
         return sum(1 for row in self.rows if row.status == status)
@@ -446,9 +452,9 @@ async def plan_transactions(
             ("check_number", txn.check_number),
         ):
             current = getattr(existing, field_name)
-            # A source that simply stopped carrying a field must not blank
-            # out data already held locally.
-            if incoming is None or incoming == current:
+            # A source that stopped carrying a field must not blank out data
+            # held locally; an empty cell is the same absence, not an edit.
+            if not incoming or incoming == current:
                 continue
             row.field_changes.append((field_name, current, incoming))
         resolved = await _resolve_category(txn.category_hint)
@@ -1089,79 +1095,6 @@ async def import_file(
     )
 
 
-async def preview_file(
-    db: AsyncSession,
-    *,
-    owner_user_id: int | None,
-    file_name: str | None,
-    file_bytes: bytes,
-    account_id: int | None = None,
-) -> ImportPlan:
-    """What ``import_file`` WOULD do, as a pure read.
-
-    Same dispatch, same account requirements, same classification — via the
-    same ``plan_transactions`` the commit executes — but nothing is written:
-    no batch (not even the failed-batch record on an unknown CSV layout — the
-    ``UnknownCsvLayoutError`` still raises), no accounts, no categories.
-    An exact-bytes re-upload returns a plan carrying ``identical_batch_id``
-    and no rows: importing it again would change nothing.
-    """
-    batch_owner = 0 if owner_user_id is None else owner_user_id
-    file_sha256 = hashlib.sha256(file_bytes).hexdigest()
-    prior = await _prior_batch(db, batch_owner=batch_owner, file_sha256=file_sha256)
-    if prior is not None:
-        return ImportPlan(
-            rows=[],
-            parsed=[],
-            account_by_key={},
-            new_accounts={},
-            new_category_hints=[],
-            existing_by_id={},
-            file_name=file_name,
-            rows_total=prior.rows_total,
-            identical_batch_id=prior.id,
-        )
-
-    if _extension(file_name) == "csv":
-        from app.services.finance.adapters.importers import csv_profiles
-
-        profiles = await _csv_profiles(db)
-        profile, header_index = _detect_csv(file_bytes, profiles)
-        if profile is None:
-            raise csv_profiles.UnknownCsvLayoutError(
-                csv_profiles.header_preview(file_bytes),
-                [p.name for p in profiles],
-                batch_id=None,
-            )
-        parsed = await asyncio.to_thread(
-            csv_profiles.parse_csv, file_bytes, profile, header_index=header_index
-        )
-        multi_account = "account" in profile.column_mapping.values()
-        if not multi_account and account_id is None:
-            raise ValueError("CSV import requires a target account_id for this layout.")
-        plan = await plan_transactions(
-            db,
-            owner_user_id=owner_user_id,
-            parsed=parsed,
-            default_account_id=None if multi_account else account_id,
-            auto_create_accounts=multi_account,
-        )
-    else:
-        source_type, parsed = await asyncio.to_thread(
-            _parse_by_extension, file_name, file_bytes
-        )
-        if source_type == "qif" and account_id is None:
-            raise ValueError("QIF import requires a target account_id.")
-        plan = await plan_transactions(
-            db,
-            owner_user_id=owner_user_id,
-            parsed=parsed,
-            default_account_id=account_id,
-        )
-    plan.file_name = file_name
-    return plan
-
-
 async def get_import_batch(
     db: AsyncSession, batch_id: int, *, owner_user_id: int | None = None
 ) -> FinanceImportBatch | None:
@@ -1187,3 +1120,10 @@ async def list_import_batch_rows(
     db: AsyncSession, batch_id: int
 ) -> list[FinanceImportBatchRow]:
     return await queries.import_batch_rows(db, batch_id)
+
+
+# The preview lives in its own module; re-exported so callers keep saying
+# ``imports.preview_file`` (the API router and the service facade both do).
+from app.services.finance.adapters.importers.preview import (  # noqa: E402
+    preview_file as preview_file,
+)

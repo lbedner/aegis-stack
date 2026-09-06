@@ -5,6 +5,8 @@ One mixin of ``TransactionsPanel`` - state contract in ``base``.
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from uuid import uuid4
 
 import flet as ft
@@ -17,6 +19,7 @@ from app.components.frontend.controls.form_fields import (
 )
 from app.components.frontend.controls.loading_overlay import LoadingOverlay
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
+from app.components.frontend.controls.text import SecondaryText
 from app.components.frontend.controls.uploads import signed_upload_url
 from app.components.frontend.dashboard.modals.finance_modal.constants import (
     _NEW_ACCOUNT_KEY,
@@ -26,6 +29,7 @@ from app.components.frontend.dashboard.modals.finance_modal.import_preview impor
 )
 from app.components.frontend.dashboard.modals.finance_modal.import_summary import (
     _suggested_account_name,
+    account_target_options,
     import_summary_body,
     import_up_to_date_body,
     investment_import_preview_body,
@@ -33,20 +37,45 @@ from app.components.frontend.dashboard.modals.finance_modal.import_summary impor
     investment_target_options,
     nothing_to_import,
 )
+from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.imports_target import (
+    _IMPORT_TIMEOUT_SECONDS,
+    ImportTargetMixin,
+)
 from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.base import (
     TransactionsPanelState,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.constants import dashboard_upload_dir
 
-# Import uploads parse the file and run the reconciliation plan inside
-# the request, so they legitimately outlive the client-wide 10s UI
-# budget. The commit path is exempt: it returns a job id immediately
-# and streams progress over SSE.
-_IMPORT_TIMEOUT_SECONDS = 120.0
+async def _settled_upload(
+    path: Path, *, attempts: int = 30, pause: float = 0.1
+) -> bytes | None:
+    """Read an uploaded file once it has fully landed, then remove it.
+
+    Flet reports upload progress from the browser's side: 1.0 means the last
+    byte was SENT, while the server may still be writing. Reading at that
+    instant said "file did not arrive" about a file that arrived a moment
+    later. So: wait for it to exist and stop growing, up to a few seconds.
+    """
+    size = -1
+    for _ in range(attempts):
+        try:
+            current = path.stat().st_size
+        except OSError:
+            current = -1
+        if current >= 0 and current == size:
+            break
+        size = current
+        await asyncio.sleep(pause)
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+    finally:
+        path.unlink(missing_ok=True)
 
 
-class ImportsFlowMixin(TransactionsPanelState):
+class ImportsFlowMixin(ImportTargetMixin):
     """The file-import flow: picker, upload, preview, run, summary dialogs."""
 
     # -- File import (OFX/QFX/QIF/CSV, or a custodian ledger for a
@@ -132,17 +161,13 @@ class ImportsFlowMixin(TransactionsPanelState):
         pending, self._pending_upload = self._pending_upload, None
         if pending is None:
             return
-        upload_path = dashboard_upload_dir() / pending
-        try:
-            data = upload_path.read_bytes()
-        except OSError:
+        data = await _settled_upload(dashboard_upload_dir() / pending)
+        if data is None:
             overlay.fail(
                 "Upload failed: file did not arrive on the server.",
                 title="Import failed",
             )
             return
-        finally:
-            upload_path.unlink(missing_ok=True)
 
         original_name = pending.split("-", 1)[1]
         if self._import_is_investment:
@@ -172,6 +197,11 @@ class ImportsFlowMixin(TransactionsPanelState):
             )
             return
         overlay.hide()
+        if preview.get("needs_account"):
+            await self._ask_target_account(
+                preview, data, original_name, then=self._show_import_preview
+            )
+            return
         await self._show_import_preview(preview, data, original_name)
 
     async def _finish_investment_import(self, data: bytes, original_name: str) -> None:
@@ -199,90 +229,8 @@ class ImportsFlowMixin(TransactionsPanelState):
         account_rows = accounts.get("items", []) if isinstance(accounts, dict) else []
         overlay.hide()
         await self._show_investment_import_review(
-            preview, account_rows, data, original_name
+            preview, account_rows, data, original_name, commit=self._run_investment_import
         )
-
-    async def _show_investment_import_review(
-        self,
-        preview: dict,
-        accounts: list[dict],
-        data: bytes,
-        original_name: str,
-    ) -> None:
-        """The pre-commit review: what the ledger replays to, and where it
-        goes - an existing investment account, or one created on the spot
-        (the same courtesy OFX ingest extends to unknown accounts)."""
-        selected_id = self._account.get("id") if self._account is not None else None
-        options, default = investment_target_options(accounts, selected_id)
-        name_field = FormTextField(
-            label="New account name",
-            value=_suggested_account_name(original_name),
-        )
-        name_host = ft.Container(
-            content=name_field, visible=default == _NEW_ACCOUNT_KEY
-        )
-
-        def _target_changed(event: ft.ControlEvent) -> None:
-            name_host.visible = event.control.value == _NEW_ACCOUNT_KEY
-            if name_host.page is not None:
-                name_host.update()
-
-        target_dd = FormDropdown(
-            label="Into account",
-            options=options,
-            value=default,
-            on_change=_target_changed,
-        )
-        dialog: StyledAlertDialog | None = None
-
-        async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
-
-        async def _commit() -> None:
-            choice = target_dd.value or _NEW_ACCOUNT_KEY
-            params: dict[str, object] = {}
-            if choice == _NEW_ACCOUNT_KEY:
-                name = (name_field.value or "").strip()
-                if not name:
-                    name_field.set_error("Name the new account.")
-                    return
-                params["account_name"] = name
-            else:
-                params["account_id"] = int(choice)
-            await _close()
-            await self._run_investment_import(data, original_name, params)
-
-        dialog = StyledAlertDialog(
-            title=f"Import {original_name}",
-            body=ft.Column(
-                [
-                    investment_import_preview_body(preview),
-                    ft.Container(height=Theme.Spacing.SM),
-                    target_dd,
-                    name_host,
-                ],
-                spacing=Theme.Spacing.SM,
-                tight=True,
-            ),
-            actions=[
-                PulseButton(
-                    on_click_callable=_close,
-                    text="Cancel",
-                    variant="muted",
-                    compact=True,
-                ),
-                PulseButton(
-                    on_click_callable=_commit,
-                    text="Import",
-                    variant="teal",
-                    compact=True,
-                ),
-            ],
-            width=560,
-        )
-        self.page.open(dialog)
 
     async def _run_investment_import(
         self, data: bytes, original_name: str, params: dict[str, object]
@@ -342,14 +290,20 @@ class ImportsFlowMixin(TransactionsPanelState):
         )
         self.page.open(dialog)
 
-    async def _run_import(self, data: bytes, original_name: str) -> None:
-        """Commit a previewed file: the background import job path."""
+    async def _run_import(
+        self, data: bytes, original_name: str, account_id: int | None = None
+    ) -> None:
+        """Commit a previewed file: the background import job path.
+        ``account_id`` is the target the user picked for a file that names
+        none; otherwise the sidebar selection stands."""
         from app.components.frontend.state.session_state import get_session_state
 
         overlay = LoadingOverlay.of(self.page)
         overlay.show(f"Importing {original_name}...")
         params: dict[str, object] = {"background": "true"}
-        if self._account is not None:
+        if account_id is not None:
+            params["account_id"] = account_id
+        elif self._account is not None:
             params["account_id"] = self._account["id"]
         else:
             params.update(self._account_filter.params())
@@ -387,7 +341,11 @@ class ImportsFlowMixin(TransactionsPanelState):
             await self._reload_accounts(account_id)
 
     async def _show_import_preview(
-        self, preview: dict, data: bytes, original_name: str
+        self,
+        preview: dict,
+        data: bytes,
+        original_name: str,
+        account_id: int | None = None,
     ) -> None:
         """The pre-commit review: what this file will do, before it does it.
 
@@ -428,7 +386,7 @@ class ImportsFlowMixin(TransactionsPanelState):
 
         async def _confirm() -> None:
             await _close()
-            await self._run_import(data, original_name)
+            await self._run_import(data, original_name, account_id)
 
         changes = inserted + updated
         plural_changes = "s" if changes != 1 else ""

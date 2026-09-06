@@ -79,10 +79,8 @@ with open("README.md") as readme:
         # Check if it's a directory with index.md
         if check_path.exists():
             return f"]({path}/index.md{anchor})"
-        else:
-            # Top-level page, convert to .md
-            print(f"  DEBUG: {check_path} does not exist, using {path}.md")
-            return f"]({path}.md{anchor})"
+        # No folder with an index: it is a top-level page.
+        return f"]({path}.md{anchor})"
 
     content = re.sub(
         r"\]\(([a-z][a-z0-9-/]*)/(#[^)]*)?\)",

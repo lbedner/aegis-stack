@@ -60,6 +60,11 @@ class ImportPreviewResponse(BaseModel):
     # Set when these exact bytes were already imported: re-importing is a
     # no-op, so there is nothing to preview.
     identical_batch_id: int | None = None
+    # A single-account layout previewed with no target account: the client
+    # asks which account the statement belongs to, then previews again.
+    needs_account: bool = False
+    layout: str | None = None
+    account_name: str | None = None
     rows_inserted: int = 0
     rows_updated: int = 0
     rows_duplicate: int = 0

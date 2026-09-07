@@ -18,7 +18,7 @@ _SIDEBAR_WIDTH = 320
 # into a count. A Quicken tree can carry hundreds of new categories, and a
 # dialog that scrolls for a page stops being read at all.
 _PREVIEW_DETAIL_CAP = 10
-_PREVIEW_DETAIL_HEIGHT = 260
+_PREVIEW_DETAIL_HEIGHT = 440
 # One height for every Overview card, so the row has a single baseline.
 _OVERVIEW_CARD_HEIGHT = 320
 # Named slices in the spending donut (and rows in the list under it) before

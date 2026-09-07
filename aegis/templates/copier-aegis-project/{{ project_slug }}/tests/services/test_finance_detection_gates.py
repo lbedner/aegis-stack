@@ -29,6 +29,12 @@ from tests.services._finance_factories import seed_account as _account
 from tests.services._finance_factories import seed_spend_series as _spend
 
 
+# The fixtures below spend on fixed 2026 dates, and detection asks how long a
+# stream has been quiet relative to today - so "today" is pinned too, or the
+# suite starts failing the day the calendar drifts past the silence window.
+_TODAY = date(2026, 9, 6)
+
+
 class TestCadenceTolerance:
     def test_a_year_no_longer_has_a_five_month_window(self) -> None:
         """+/-20% of 365 is +/-73 days, so anything from 292 to 438 days
@@ -70,7 +76,7 @@ class TestDetectionEndToEnd:
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
 
-        result = await detect_recurring(async_db_session, owner_user_id=1)
+        result = await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
 
         assert result.detected == 1
 
@@ -89,7 +95,7 @@ class TestDetectionEndToEnd:
         ]
         await _spend(svc, account.id, days, name="STEWART'S SHOPS")
 
-        result = await detect_recurring(async_db_session, owner_user_id=1)
+        result = await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
 
         assert result.detected == 0
 
@@ -105,7 +111,7 @@ class TestDetectionEndToEnd:
             name="ANNUAL DUES",
         )
 
-        result = await detect_recurring(async_db_session, owner_user_id=1)
+        result = await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
 
         assert result.detected == 1
 
@@ -118,7 +124,7 @@ class TestDetectionEndToEnd:
 
         account = await _account(svc)
         await _spend(svc, account.id, [date(2026, m, 9) for m in range(1, 6)])
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
         steady = (await async_db_session.exec(select(FinanceRecurringStream))).one()
 
         assert steady.confidence is not None and steady.confidence >= 85
@@ -147,7 +153,7 @@ class TestStreamsThatNoLongerQualify:
         txns = await _spend(
             svc, account.id, [date(2026, m, 9) for m in range(1, 6)], name="ACME"
         )
-        assert (await detect_recurring(async_db_session, owner_user_id=1)).detected == 1
+        assert (await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)).detected == 1
         stream = (await async_db_session.exec(select(FinanceRecurringStream))).one()
 
         # Now the rhythm breaks: the remaining history is noise.
@@ -157,7 +163,7 @@ class TestStreamsThatNoLongerQualify:
             async_db_session.add(txn)
         await async_db_session.flush()
 
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
 
         live = (
             await async_db_session.exec(
@@ -582,7 +588,7 @@ class TestExcludedRowsFeedNoDetection:
             async_db_session.add(row)
         await async_db_session.flush()
 
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
 
         assert await _live_streams(async_db_session) == []
 
@@ -595,7 +601,7 @@ class TestExcludedRowsFeedNoDetection:
         days = [date(2026, m, 16) for m in range(1, 7)]
         await _spend(svc, account.id, days, cents=-3_080, name="NETFLIX")
 
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
 
         assert len(await _live_streams(async_db_session)) == 1
 
@@ -649,7 +655,7 @@ class TestPaymentLegsAreDetectable:
             async_db_session, owner_user_id=1, today=date(2026, 7, 1), lookback_days=0
         )
 
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
 
         streams = await _live_streams(async_db_session)
         payment = [s for s in streams if s.account_id == checking.id]
@@ -693,7 +699,7 @@ class TestPaymentLegsAreDetectable:
             async_db_session, owner_user_id=1, today=date(2026, 7, 1), lookback_days=0
         )
 
-        await detect_recurring(async_db_session, owner_user_id=1)
+        await detect_recurring(async_db_session, owner_user_id=1, today=_TODAY)
 
         assert await _live_streams(async_db_session) == []
 
@@ -737,7 +743,7 @@ class TestPaymentStreamsReachTheForecast:
         await detect_transfers(
             db, owner_user_id=1, today=date(2026, 7, 1), lookback_days=0
         )
-        await detect_recurring(db, owner_user_id=1)
+        await detect_recurring(db, owner_user_id=1, today=_TODAY)
         streams = await _live_streams(db)
         assert len(streams) == 1
         return streams[0], checking

@@ -176,6 +176,16 @@ class TestSeedDemo:
         assert span_days >= 150, "expected at least ~6 months of history"
 
     @pytest.mark.asyncio
+    async def test_rows_look_imported(self, async_db_session: AsyncSession) -> None:
+        """A bank import always fills original_description; a seeded row
+        without it re-imports as an edit instead of a duplicate."""
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+
+        rows = await _transactions(async_db_session)
+        assert rows
+        assert all(r.original_description == r.name for r in rows)
+
+    @pytest.mark.asyncio
     async def test_records_splits_and_a_confirmed_transfer(
         self, async_db_session: AsyncSession
     ) -> None:
@@ -372,6 +382,31 @@ class TestClearDemo:
         assert await _accounts(async_db_session) == []
         assert await _transactions(async_db_session) == []
         assert (await async_db_session.exec(select(FinanceTransfer))).all() == []
+
+    @pytest.mark.asyncio
+    async def test_clear_takes_proposals_against_demo_rows_with_them(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A card the assistant filed against a seeded transaction is an
+        orphan once that transaction is gone; the clear removes it rather
+        than leaving a proposal pointing at nothing."""
+        from app.services.finance.domains import writes
+
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        txn = (await _transactions(async_db_session))[0]
+        await writes.propose(
+            async_db_session,
+            "transaction.categorize",
+            {"transaction_id": txn.id, "category_id": txn.category_id},
+            owner_user_id=OWNER,
+            proposed_by_agent="finance-assistant",
+        )
+        await async_db_session.commit()
+
+        await demo_seed.clear_demo(async_db_session, owner_user_id=OWNER)
+        await async_db_session.commit()
+
+        assert (await async_db_session.exec(select(FinancePendingChange))).all() == []
 
     @pytest.mark.asyncio
     async def test_clear_repairs_the_net_worth_history(

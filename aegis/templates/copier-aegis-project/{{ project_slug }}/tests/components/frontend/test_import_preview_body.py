@@ -99,6 +99,17 @@ class TestCoverage:
         body = import_preview_body(PREVIEW, "export.csv")
         assert any("export.csv" in text for text in _texts(body))
 
+    def test_the_layout_and_target_account_are_named(self) -> None:
+        """The one line that catches a statement aimed at the wrong account."""
+        preview = {
+            **PREVIEW,
+            "layout": "Chase Credit Card",
+            "account_name": "Amex Blue Cash Preferred",
+        }
+        rendered = " ".join(_texts(import_preview_body(preview, "export.csv")))
+        assert "Chase Credit Card" in rendered
+        assert "Amex Blue Cash Preferred" in rendered
+
     def test_new_accounts_and_categories_are_named(self) -> None:
         """A commit that quietly mints an account is the complaint this
         dialog exists to answer, so the names go on screen, not a count."""

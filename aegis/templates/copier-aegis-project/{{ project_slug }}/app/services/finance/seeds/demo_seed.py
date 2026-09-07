@@ -227,23 +227,23 @@ async def _delete_demo_rows(
         (FinanceLiabilityDetail, FinanceLiabilityDetail.account_id),
     ):
         await _delete_where(db, model, column, account_ids)
-    # This owner's demo proposals only: the agent name marks what the seed
-    # filed, the owner clause keeps one household's clear from taking
+    # This owner's proposals that the seed filed, plus any card aimed at a
+    # transaction that is going: a proposal outliving its subject points at
+    # nothing. The owner clause keeps one household's clear from taking
     # another's in a multi-user install.
     owner_clause = (
         FinancePendingChange.owner_user_id.is_(None)
         if owner_user_id is None
         else FinancePendingChange.owner_user_id == owner_user_id
     )
+    gone = set(txn_ids)
     proposal_ids = [
         p.id
         for p in (
-            await db.exec(
-                select(FinancePendingChange).where(
-                    FinancePendingChange.proposed_by_agent == "demo_seed", owner_clause
-                )
-            )
+            await db.exec(select(FinancePendingChange).where(owner_clause))
         ).all()
+        if p.proposed_by_agent == "demo_seed"
+        or (p.payload or {}).get("transaction_id") in gone
     ]
     if proposal_ids:
         await _delete_where(
@@ -456,6 +456,7 @@ async def _write_transactions(
             amount=entry.amount,
             txn_date=entry.txn_date,
             name=entry.name,
+            original_description=entry.name,
             memo=entry.memo,
             category_id=category_id,
             category_source="rule" if category_id else "unset",

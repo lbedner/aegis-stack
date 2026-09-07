@@ -167,28 +167,43 @@ def import_summary_body(result: dict[str, Any]) -> ft.Column:
     )
 
 
-def investment_target_options(
-    accounts: list[dict[str, Any]], selected_id: int | None
+def account_target_options(
+    accounts: list[dict[str, Any]],
+    selected_id: int | None,
+    *,
+    types: frozenset[str] | None = None,
+    allow_new: bool = False,
 ) -> tuple[list[tuple[str, str]], str]:
-    """(options, default key) for the investment import's account picker.
+    """(options, default key) for an import's "into account" picker.
 
-    Only investment-typed accounts are offered - aiming a trade ledger at
-    a checking account is never right - plus a create-new entry, so the
-    picker is never a dead end on a fresh project with no brokerage
-    accounts at all. The default follows the sidebar selection only when
-    that selection is itself an investment account; otherwise it lands on
-    create-new rather than guessing.
+    ``types`` narrows the offer (a trade ledger never belongs in checking);
+    ``allow_new`` adds a create-new entry so the picker is never a dead end.
+    The default follows the sidebar selection when it is on offer, else
+    create-new when allowed, else the first account.
     """
     options = [
         (str(a["id"]), str(a.get("name", "")))
         for a in accounts
-        if a.get("account_type") in _INVESTMENT_TYPES and a.get("id") is not None
+        if a.get("id") is not None
+        and (types is None or a.get("account_type") in types)
     ]
-    options.append((_NEW_ACCOUNT_KEY, "Create a new account..."))
-    default = _NEW_ACCOUNT_KEY
+    if allow_new:
+        options.append((_NEW_ACCOUNT_KEY, "Create a new account..."))
+    default = _NEW_ACCOUNT_KEY if allow_new else (options[0][0] if options else "")
     if selected_id is not None and any(k == str(selected_id) for k, _ in options):
         default = str(selected_id)
     return options, default
+
+
+def investment_target_options(
+    accounts: list[dict[str, Any]], selected_id: int | None
+) -> tuple[list[tuple[str, str]], str]:
+    """The investment import's picker: investment-typed accounts plus
+    create-new, defaulting to the sidebar selection only when that is
+    itself an investment account."""
+    return account_target_options(
+        accounts, selected_id, types=_INVESTMENT_TYPES, allow_new=True
+    )
 
 
 def _suggested_account_name(file_name: str) -> str:

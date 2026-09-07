@@ -1309,6 +1309,95 @@ class TestSyncRemovesFilesTheTemplateDropped:
         assert not stale.exists()
         assert "app/models.py" in result.removed
 
+    def test_a_formatted_but_unedited_file_dropped_by_the_template_is_deleted(
+        self, tmp_path: Path
+    ) -> None:
+        """init's post-gen ruff-formats every file, so a pristine project file
+        differs from the raw old render byte-wise. That is not an edit: the
+        module the template moved elsewhere must still go, or a stale copy
+        stays importable at the old path."""
+        answers = {"project_slug": "my-project"}
+        raw_render = "import os\nimport sys\n\n\n\n\nVALUE = os.sep + sys.platform\n"
+        formatted = "import os\nimport sys\n\n\nVALUE = os.sep + sys.platform\n"
+        stale = tmp_path / "app" / "old_module.py"
+        stale.parent.mkdir(parents=True)
+        stale.write_text(formatted)
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project",
+                old={"app/old_module.py": raw_render},
+                new={"app/new_home/module.py": raw_render},
+            ),
+        ):
+            result = sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v1.0.0", old_commit="abc123"
+            )
+
+        assert not stale.exists()
+        assert "app/old_module.py" in result.removed
+        assert "app/old_module.py" not in result.stale
+
+    def test_a_dropped_package_goes_even_with_its_pycache(self, tmp_path: Path) -> None:
+        """Init imports the modules it generates, so every package carries
+        a ``__pycache__``. A moved package whose directory survives on the
+        strength of stale bytecode is still a package to Python: an empty
+        `app/services/finance/importers/` shadows nothing but still fails
+        a layout check and confuses a reader. Bytecode is not content."""
+        answers = {"project_slug": "my-project"}
+        package = tmp_path / "app" / "old_pkg"
+        (package / "__pycache__").mkdir(parents=True)
+        (package / "__pycache__" / "mod.cpython-313.pyc").write_bytes(b"\x00")
+        (package / "mod.py").write_text("# mod")
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project",
+                old={"app/old_pkg/mod.py": "# mod"},
+                new={"app/new_pkg/mod.py": "# mod"},
+            ),
+        ):
+            sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v1.0.0", old_commit="abc123"
+            )
+
+        assert not package.exists()
+
+    def test_sync_never_creates_files_of_an_unselected_component(
+        self, tmp_path: Path
+    ) -> None:
+        """The raw render carries every component; init prunes what the
+        stack did not select. The sync loop's create-missing-file backstop
+        read the raw render, so a local-template update re-created storage,
+        documents, and blog files in a project that has none of them, right
+        after component cleanup had removed them. Renders are pruned the
+        way init prunes."""
+        answers = {"project_slug": "my-project", "include_storage": False}
+        card = "app/components/frontend/dashboard/cards/storage_card.py"
+        (tmp_path / "app").mkdir()
+
+        with patch(
+            "copier.run_copy",
+            side_effect=self._renders(
+                "my-project",
+                old={"app/keep.py": "# keep"},
+                new={"app/keep.py": "# keep", card: "# storage card"},
+            ),
+        ):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v1.0.0",
+                template_changed_files={card, "app/keep.py"},
+                old_commit="abc123",
+            )
+
+        assert not (tmp_path / card).exists()
+        assert card not in result.synced
+
     def test_customized_file_dropped_by_the_template_is_kept_and_reported(
         self, tmp_path: Path
     ) -> None:

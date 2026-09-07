@@ -283,6 +283,18 @@
 
 ### Fixed
 
+- **`aegis update` left stale modules behind when the template moved
+  them**: the removal pass compared each dropped file byte-for-byte with
+  the old render, but init's post-gen step ruff-formats every file, so
+  any module the formatter had touched read as "customized" and was kept.
+  A 0.10.1 project updated to this release kept importable copies of the
+  finance and AI packages at their old paths. Removal now looks through
+  formatting the same way the sync loop does; a real edit is still kept
+  and reported.
+  The sync loop also compared against the unpruned template render, so
+  an update from a local template checkout re-created storage, documents,
+  and blog files in a project that selected none of them; both renders
+  are now pruned the way init prunes before anything is compared.
 - **Re-importing a statement counted every row as an edit**: an empty
   memo cell was treated as a change against a missing memo, and the demo
   seed left `original_description` empty, which no bank import does.

@@ -12,6 +12,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -426,6 +427,7 @@ def sync_template_changes(
         new_rendered_dir = new_render / project_slug
         if not new_rendered_dir.exists():
             return SyncResult()
+        _prune_render(new_rendered_dir, answers)
 
         # Render the OLD template version (for 3-way merge base)
         old_rendered_dir: Path | None = None
@@ -443,6 +445,7 @@ def sync_template_changes(
                 )
                 candidate = old_render / project_slug
                 if candidate.exists():
+                    _prune_render(candidate, answers)
                     old_rendered_dir = candidate
             except Exception as e:
                 verbose_print(
@@ -567,6 +570,21 @@ def sync_template_changes(
     return result
 
 
+def _prune_render(rendered_dir: Path, answers: dict[str, Any]) -> None:
+    """Make a raw render look like init's output for this stack.
+
+    The template carries every component; ``aegis init`` prunes what the
+    answers did not select. Comparing against the unpruned render made the
+    create-missing-file backstop resurrect storage, documents, and blog
+    files in a project that has none of them, moments after component
+    cleanup had removed them. Pruning both renders keeps every comparison
+    on the file set this stack actually owns.
+    """
+    from aegis.core.post_gen_tasks import cleanup_components  # circular at module load
+
+    cleanup_components(rendered_dir, answers)
+
+
 def _remove_dropped_files(
     project_path: Path,
     old_rendered_dir: Path | None,
@@ -606,7 +624,7 @@ def _remove_dropped_files(
         if not project_file.exists():
             continue
         try:
-            if project_file.read_bytes() != old_file.read_bytes():
+            if not _unedited(project_file, old_file, relative, project_path):
                 result.stale.append(str(relative))
                 verbose_print(
                     f"   Kept customized file no longer in template: {relative}"
@@ -621,22 +639,59 @@ def _remove_dropped_files(
         verbose_print(f"   Removed file no longer in template: {relative}")
 
     # Prune directories the deletions emptied, deepest first so a nested tree
-    # collapses in one pass.
+    # collapses in one pass. Stale bytecode does not count as content: init
+    # imports what it generates, so every package carries a ``__pycache__``,
+    # and a moved package kept alive by its .pyc files is still a package.
     for parent in sorted(
         {p.parent for p in removed_paths}, key=lambda p: len(p.parts), reverse=True
     ):
         current = parent
         while current != project_path and current.is_relative_to(project_path):
             try:
-                if not current.exists() or any(current.iterdir()):
+                if not current.exists() or not _only_bytecode(current):
                     break
-                current.rmdir()
+                shutil.rmtree(current)
                 verbose_print(
                     f"   Removed empty directory: {current.relative_to(project_path)}"
                 )
             except OSError:
                 break
             current = current.parent
+
+
+def _only_bytecode(directory: Path) -> bool:
+    """True when nothing but ``__pycache__`` trees remain under ``directory``."""
+    return all(
+        entry.is_dir() and entry.name == "__pycache__" for entry in directory.iterdir()
+    )
+
+
+def _unedited(
+    project_file: Path, old_file: Path, relative: Path, project_path: Path
+) -> bool:
+    """Is the project file the old render, give or take formatting?
+
+    ``aegis init`` post-gen ruff-formats every file, so a byte comparison
+    against the raw render calls every formatted module "customized". For
+    Python that is the same look-through-formatting test the sync loop
+    applies; anything else is compared byte-wise. Ruff unavailable means
+    the conservative answer: treat as edited.
+    """
+    project_bytes, old_bytes = project_file.read_bytes(), old_file.read_bytes()
+    if project_bytes == old_bytes:
+        return True
+    if relative.suffix != ".py":
+        return False
+    rel = relative.as_posix()
+    project_norm = run_ruff_on_text(
+        project_bytes.decode("utf-8"), project_path, "", rel_path=rel
+    )
+    old_norm = run_ruff_on_text(
+        old_bytes.decode("utf-8"), project_path, "", rel_path=rel
+    )
+    if project_norm is None or old_norm is None:
+        return False
+    return normalize_for_compare(project_norm) == normalize_for_compare(old_norm)
 
 
 def _warn_raw_merge_fallback(relative: Path) -> None:

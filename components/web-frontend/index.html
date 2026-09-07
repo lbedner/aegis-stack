@@ -1680,7 +1680,7 @@
   <span class="md-ellipsis">
     
   
-    Templates & Partials
+    Templates & Rendering
   
 
     
@@ -5092,25 +5092,30 @@ symmetric: <code>aegis remove htmx</code> deletes the component tree and regener
 shared files that referenced it.</p>
 <h2 id="what-ships">What ships</h2>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>app/components/web_frontend/
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>├── main.py                  # Jinja2 env, static() helper, CachedStaticFiles
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>├── build.py                 # asset fingerprinting -&gt; static/dist/manifest.json
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>├── build_watch.py           # dev watcher: re-fingerprint on change
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>├── routes/
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>│   ├── pages.py             # full-page GETs (the landing, auth pages)
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>│   └── partials/            # htmx fragment routes
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>├── templates/
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>│   ├── base.html            # layout every page extends
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>│   ├── pages/               # one template per page
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>│   └── components/          # macros, snackbar, landing sections
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>└── static/
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    ├── input.css            # Tailwind entry
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    ├── css/app.css          # hand-authored styles
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    └── js/app.js            # htmx lifecycle hooks
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>package.json                 # Tailwind + DaisyUI + Biome (devDependencies only)
-</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>tailwind.config.js           # theme + the single rebrand point
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>├── main.py                  # router wiring
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>├── rendering.py             # Jinja2 env, render() (page or fragment), with_toast()
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>├── assets.py                # static() helper, CachedStaticFiles
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>├── filters.py               # money / short_date / pct
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>├── build.py                 # asset fingerprinting -&gt; static/dist/manifest.json
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>├── build_watch.py           # dev watcher: re-fingerprint on change
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>├── routes/
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>│   ├── pages.py             # page handlers (the landing, auth pages)
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>│   └── partials/            # fragment-only routes
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>├── templates/
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>│   ├── base.html            # document skeleton every page extends
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>│   ├── layouts/             # page.html and fragment.html, picked by render()
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>│   ├── pages/               # one template per page
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>│   └── components/          # macros, feedback macros, landing sections
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>└── static/
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    ├── input.css            # Tailwind entry
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>    ├── css/app.css          # hand-authored styles
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    └── js/app.js            # toasts and htmx error hooks
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>package.json                 # Tailwind + DaisyUI + Biome (devDependencies only)
+</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>tailwind.config.js           # theme + the single rebrand point
 </span></code></pre></div>
-<p>Plus a gated test module (<code>tests/components/test_web_frontend.py</code>), Makefile
+<p>Plus gated tests (<code>tests/components/test_web_frontend.py</code> and the web test
+kit under <code>tests/web/</code>), Makefile
 targets (<code>build-static</code>, <code>lint-frontend</code>, <code>format-frontend</code>), a Docker
 <code>css-build</code> stage, and two dev-only compose services for hot CSS rebuild.</p>
 <h2 id="first-custom-page">First custom page</h2>
@@ -5140,7 +5145,7 @@ back to unhashed asset paths and pages render immediately. Run
 <code>make build-static</code> when you want the fingerprinted, long-cacheable variant.</p>
 <h2 id="the-rest-of-these-docs">The rest of these docs</h2>
 <ul>
-<li><a href="templates-and-partials/">Templates and partials</a>: the base layout,
+<li><a href="templates-and-partials/">Templates and rendering</a>: the base layout,
   the htmx conventions, and two rules that are load-bearing.</li>
 <li><a href="styling/">Styling and theming</a>: the DaisyUI theme and the one place
   brand colors live.</li>

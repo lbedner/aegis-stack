@@ -7,7 +7,94 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-06
+
 ### Added
+
+- **Agents and memory modules**: the AI service gains first-class agent
+  rows (system prompt, model pin, granted tools, editable from the
+  dashboard and the CLI) and memory modules that are fetched into
+  context before a turn, so an agent opens a conversation already
+  briefed rather than spending its first turns discovering the
+  situation. Documented under `docs/services/ai/` (agents, memory
+  modules, providers, API, CLI).
+
+- **Code mode**: an agent flagged `code_mode` writes one Python script
+  that calls its granted tools as functions, run in a sandbox, instead
+  of a chain of tool round-trips. Writes never ride the sandbox: a tool
+  registered as a native write stays a visible call in the trail. The
+  finance service ships host tools for it (ledger, accounts, bills,
+  quotes) and a research-agent guide.
+
+- **An embeddable chat surface**: a reusable `ChatPanel` control
+  (streaming transcript, resume-latest, per-surface history, model
+  picker) and its first consumer, a Chat tab in the finance modal bound
+  to a seeded finance assistant. Answers carry a hover-to-copy button.
+  The assistant can list its own open and recently decided cards with
+  `pending()`, retract a superseded card whole with `withdraw_batch`
+  and a reason the user sees, and redraw cards on request instead of
+  retyping their rows; a withdrawn card reads "withdrawn", not
+  "rejected".
+
+- **Finance write surface**: agents propose ledger mutations through a
+  `propose`/`propose_many` queue and nothing runs until the user
+  approves. Every proposal is a `finance_pending_change` row rendered
+  by one component registry on the in-chat card and the Review >
+  Approvals queue; batches share one card with a per-row veto.
+  Registered change types cover categorize, assign payee, tag/untag,
+  split, and recurring match. Money movement is deliberately not on the
+  list.
+
+- **Finance planning surfaces**: budgets with envelopes that auto-credit
+  on a schedule, goals stated as accounts (a goal can be sized in months
+  of measured expenses rather than a fixed sum, resolved on read),
+  net-worth history, spending summary, and a secured-debt link that
+  records which property secures a liability so equity and LTV derive
+  from it everywhere accounts are read.
+
+- **Finance findings**: deterministic rules (large transaction, fee,
+  overspend, price hike, missed payment) raise findings on the Review >
+  Attention tab with the house severity dot and a dismiss.
+
+- **Finance documentation**: a page per tab and per domain under
+  `docs/services/finance/` (accounts, bills, projected, budget, review,
+  investments, imports, chat, API, CLI), with screenshots from a demo
+  household redesigned to have something to show: two earners on
+  different rhythms, thin cash with the surplus invested, a carried
+  card, a quarterly property tax, and a Review tab with work in it.
+  `make docs-serve` resolves a free port like every other host publish.
+
+- **Imports ask which account a statement belongs to**: a single-account
+  CSV or QIF with no target no longer fails with a bare 400. The preview
+  says the account is missing, the client asks, and the review dialog
+  names layout and target ("Chase Credit Card layout into Amex") so a
+  statement aimed at the wrong account is caught before Import.
+
+- **Storage component**: `include_storage` adds an `S3Storage` backend
+  for any S3-compatible bucket (boto3, SigV4, presigned URLs) behind the
+  same `ObjectStorage` protocol the filesystem backend implements, with
+  SeaweedFS in the dev compose stack, a health check, and a card and
+  modal. Documented under `docs/components/storage/`.
+
+- **Documents on the worker, with a jobs surface**: document extraction
+  reads each page once (text layer where there is one, the vision model
+  where there is not) and keeps the readings; with a worker in the
+  stack the run is a queued job on arq, dramatiq, or taskiq alike, and
+  without one it is the same in-process task as before. The generic
+  jobs surface (a job record, two SSE streams, an in-process runner and
+  a Redis-backed store) is documented for the next consumer. Documents
+  also gained a lifecycle: supersession chains, a typed-title
+  protection gate on delete, and a channel recording how the paper
+  arrived. Documented under `docs/services/documents/`.
+
+- **Init blueprints**: `aegis init` can start from a named blueprint
+  (the first is `finance`) that selects the components and services a
+  purpose needs, with a guided picker and a `blueprints` command to list
+  them.
+
+- **Plugins register their own CLI verbs**: a component or service spec
+  declares the `aegis` subcommands it contributes, and the generic
+  schema engine gates migrations on what the stack actually selected.
 
 - **Document store service**: an optional `documents` service that keeps
   the paper an application accumulates - scans, statements, letters,
@@ -26,6 +113,7 @@
   Re-attaching the same image costs nothing (content addressing), and a
   storage failure never costs the user their message: the question still
   reaches the model, the picture is simply not kept.
+
 - **Finance rows say whose money they describe**: a `finance_subject`
   table plus a nullable `subject_id` on accounts and recurring streams.
   Households manage money for other people (a parent in care, a child's
@@ -35,6 +123,7 @@
   a question anyone could ask. Null means the household's own, so every
   existing ledger and query reads exactly as before; accounts can be
   narrowed to one subject, or to the household alone.
+
 - **Durable storage for bytes, addressed by content**: `app/core/storage.py`
   introduces the seam every future backend implements - put, get, exists,
   delete - with a filesystem backend and a named docker volume behind it.
@@ -45,96 +134,17 @@
   change and no key rewriting. Callers keep the key and the backend name,
   never a path.
 
-### Changed
-
-- **Model vendors and labs are one thing now**: the catalog kept
-  "who serves a model" and "who made it" in separate tables, which
-  duplicated every organization that does both and could not say the
-  two OpenAIs were the same one. A single `llm_org` table holds every
-  organization, and `llm_org_role` records which hats each wears -
-  maker, server, or both. A model row now carries two org references,
-  `served_by_org_id` and `made_by_org_id`, and prices and deployments
-  key on the org. Who made a model is resolved from the public model
-  registry at sync time (following a derivative upload back to the
-  weights it came from) rather than guessed from the model id, so a
-  lab shipping under a new product name is picked up automatically
-  and a model nobody published stays honestly unmarked.
-
-### Added
-
 - **Payee assignment through the approval queue**: a
   `transaction.assign_payee` change type completes the curation write
   surface. The payload names the payee rather than an id, because the
   payee may not exist yet; approval find-or-creates it by normalized
   name, so two spellings cannot mint two rows. Batch-capable through
   `propose_many`, with the usual before/after card copy.
+
 - **A house control for bare text inputs**: `StyledTextField` wears
   the shared input recipe as a control rather than each surface
   splicing kwargs into a raw field. The chat composer and the model
   picker's search both use it.
-
-### Fixed
-
-- **The model picker was slow for three separate reasons**: the
-  catalog ran one database query per vendor sequentially, each opening
-  its own session, with the result limit applied per vendor so a
-  request for 200 models fetched far more; the client awaited its
-  three API calls one after another before the dialog could open; and
-  every model row was built as controls up front, including inside
-  collapsed groups, then rebuilt from scratch on every filter change.
-  The catalog is now one query with the per-vendor fairness cap
-  applied after it, the client fetches concurrently and caches for the
-  session, and group rows are built on first expand.
-- **Models nobody could call appeared in the picker**: the cloud
-  catalog lists local-runner entries under an `ollama/` prefix, which
-  is a runner namespace rather than a callable vendor. Those rows were
-  filed under the local runner's own vendor and passed the "models
-  this install can call" gate, so uninstallable models (and cloud
-  variants needing a key the install has no concept of) were offered.
-  The local runner's catalog is now owned by the local sync alone.
-- **The demo dataset confirmed shopping habits as bills**: the seed
-  confirmed every stream the detector found, which promoted
-  discretionary rhythms (a few jittered orders a month) into
-  commitments. A bill that can be missed eventually is: the household
-  read as delinquent on a shopping habit the moment one gap outran the
-  grace window. Only fixed-amount streams and income are confirmed now.
-- **Clearing demo data left insights pointing at deleted rows**: the
-  teardown released transaction back-references but not the insights
-  raised about those accounts, transactions, and streams, so the stream
-  foreign key refused the delete.
-- **A seeding process registered no reading tool**: the fixture loader
-  force-imports the modules whose tools must exist before grants are
-  written, and the durable-readings module was never added, so
-  `record_reading` silently got no row in any process that seeds
-  without building a chat agent.
-- **Overdue occurrences vanished from the balance forecast**: the
-  projection fast-forwarded every stream past occurrences dated before
-  today, so a day-late paycheck read as "you are $5,000 poorer for the
-  next two weeks" - the walk started from a balance the check never
-  reached and charged it nowhere. A stream's latest missed occurrence
-  now carries to today's line (money still in flight, both directions);
-  older misses stay with the insight rules' missed-payment chase, and
-  one-time bills are unchanged.
-- **The match picker offered nothing for income**: a candidate already
-  carrying a merchant was treated as "identified as someone else", and
-  paycheck deposits always arrive pre-labelled with the payroll
-  processor's merchant - which never equals the human-named stream.
-  Category agreement now outranks the merchant mismatch, so a deposit
-  sharing the stream's own category stays offered; bills keep their
-  noise protection.
-
-### Removed
-
-- **The Transfers review queue**: the suggested-transfer lane
-  (detection's suggest threshold, the confirm/reject endpoints and
-  service methods, the Review > Transfers sub-tab, and the transfer
-  response schemas) is gone end to end. Transfer detection now pairs
-  ONLY high-confidence matches, automatically; a fuzzy near-miss simply
-  stays visible as ordinary spend/income instead of queueing for a
-  review nobody performed. Auto-pairing, category-classified flagging,
-  and adjustment-pair handling are unchanged.
-
-### Added
 
 - **Durable readings from image turns**: attachment bytes ride one turn
   by design, but the extraction no longer dies with them. A generic
@@ -182,6 +192,7 @@
   split/unsplit API endpoints, a register split editor with a live
   remainder line, and a `transaction.split` change type on the agent
   propose/approve queue.
+
 - **Chat image attachments**: the embeddable chat panel can attach
   images (screenshots, receipts) to a turn. Fully generic across the AI
   system: attachments ride the chat request body, the service hands them
@@ -190,6 +201,7 @@
   finance assistant uses this to read itemized order screenshots and
   propose a transaction split, with the approval card listing every line
   (item memo, category, amount, remainder) before anything is written.
+
 - **Paste images anywhere on the dashboard**: Flet has no
   clipboard-image API, so a capture script spliced into the dashboard
   page posts pasted images to a new generic `/api/v1/pastebox` endpoint
@@ -201,6 +213,7 @@
   image..." busy indicator bridges the upload gap: the capture script
   announces the paste before uploading, and both the paste and picker
   paths show the same indicator until the chip lands.
+
 - **Replay a chat message**: every user bubble (live or reloaded from
   history) carries a replay control that re-sends the same text as a
   fresh turn, riding whatever attachments are staged at that moment.
@@ -210,6 +223,7 @@
   click. Sent images stay replayable from session memory (bounded to
   the last 8 image-carrying turns; never persisted), so a replay
   re-sends the original screenshots without re-pasting.
+
 - **Agent proposal hygiene**: `transaction.split` payloads are validated
   at propose time (positive magnitudes, at least one part), so a card
   that can never execute is refused at the door and the error loops back
@@ -224,23 +238,160 @@
   queue - plain dicts exist only in the frozen audit JSON and at the
   agent tool-result boundary.
 
-
 ### Changed
+
+- **Add, remove, and update share one engine**: the hand-kept lists of
+  shared files to regenerate are gone. A render-diff engine renders the
+  template tree at the old and the new answers and three-way merges
+  each shared file, with policy stated as a template-header annotation
+  (user-owned, warn-if-diverged, no-backup) instead of a central table.
+  Component-owned files stay declared on their own spec's `FileManifest`.
+
+- **The AI service follows the service structure standard**: a facade
+  package plus `domains/` (llm, chat, voice) in place of one
+  flat directory of thirty-five modules and a 1,900-line service file.
+
+- **The worker has one copy of each shape**: queue discovery, task
+  metadata, and lifecycle hooks live once and each backend registry is
+  the two answers that differ; worker health is a selector plus one
+  module per backend, and a dramatiq stack that failed lint and typecheck
+  unseen is clean again.
+
+- **Forward-looking finance surfaces ask one schedule**: the projection,
+  the month strip, and the budget outlook consumed their own loops and
+  disagreed. `recurring/schedule.py` answers when a stream moves money,
+  including overdue occurrences carried onto today; one account-scope
+  rule and one read of a period's budget lines serve every surface.
+
+- **Model vendors and labs are one thing now**: the catalog kept
+  "who serves a model" and "who made it" in separate tables, which
+  duplicated every organization that does both and could not say the
+  two OpenAIs were the same one. A single `llm_org` table holds every
+  organization, and `llm_org_role` records which hats each wears -
+  maker, server, or both. A model row now carries two org references,
+  `served_by_org_id` and `made_by_org_id`, and prices and deployments
+  key on the org. Who made a model is resolved from the public model
+  registry at sync time (following a derivative upload back to the
+  weights it came from) rather than guessed from the model id, so a
+  lab shipping under a new product name is picked up automatically
+  and a model nobody published stays honestly unmarked.
+
 - Generated projects default to Python 3.14. The RAG option no longer pins
   projects below 3.14 (onnxruntime now ships 3.14 wheels), so the interactive
   RAG compatibility warning is gone. Any supported version (3.11 to 3.14) can
   still be selected with `--python-version`.
 
 ### Fixed
+
+- **Re-importing a statement counted every row as an edit**: an empty
+  memo cell was treated as a change against a missing memo, and the demo
+  seed left `original_description` empty, which no bank import does.
+  Empty and missing are the same absence now, and the seed writes the
+  description. Also: the import read the uploaded file before the
+  server finished writing it and reported "file did not arrive"; it
+  waits for the file to settle. `seed-demo --clear` removes proposals
+  aimed at the transactions it deletes instead of leaving orphans.
+
+- **Projection and budget double-counted card spend**: card-account
+  streams were charged against cash and the card payment charged again;
+  budget envelopes did the same. Card streams are out of the cash walk
+  and a card payment suppresses the envelopes for what was spent on it,
+  scoped to the cards the payment actually settles.
+
+- **A fresh finance-plus-AI stack had several dead ends**: the reference
+  seed rolled back on a fresh database, `llm status` raised on an
+  ambiguous join, a fresh Ollama install showed an empty model picker
+  (local tags are registered at startup and an empty catalog is never
+  cached), the Review tab raised on mount from an inherited abstract
+  loader, and three ranked lists clipped names to a few characters.
+
+- **Chat writes locked SQLite**: many sequential tool calls each
+  committing on their own connection raced the chat run's connection;
+  SQLite now waits for a busy writer instead of failing at once, and a
+  whole card withdraws in one transaction.
+
+- **Adding a service to an existing project converges on fresh-init
+  output**: a parity test diffs every file the documents service owns
+  between a fresh stack and an add, and found a module no manifest
+  claimed and a test shipped to stacks that could not import it. The
+  `add-service ai` tests named tables and files a merged refactor had
+  renamed.
+
+- **The model picker was slow for three separate reasons**: the
+  catalog ran one database query per vendor sequentially, each opening
+  its own session, with the result limit applied per vendor so a
+  request for 200 models fetched far more; the client awaited its
+  three API calls one after another before the dialog could open; and
+  every model row was built as controls up front, including inside
+  collapsed groups, then rebuilt from scratch on every filter change.
+  The catalog is now one query with the per-vendor fairness cap
+  applied after it, the client fetches concurrently and caches for the
+  session, and group rows are built on first expand.
+
+- **Models nobody could call appeared in the picker**: the cloud
+  catalog lists local-runner entries under an `ollama/` prefix, which
+  is a runner namespace rather than a callable vendor. Those rows were
+  filed under the local runner's own vendor and passed the "models
+  this install can call" gate, so uninstallable models (and cloud
+  variants needing a key the install has no concept of) were offered.
+  The local runner's catalog is now owned by the local sync alone.
+
+- **The demo dataset confirmed shopping habits as bills**: the seed
+  confirmed every stream the detector found, which promoted
+  discretionary rhythms (a few jittered orders a month) into
+  commitments. A bill that can be missed eventually is: the household
+  read as delinquent on a shopping habit the moment one gap outran the
+  grace window. Only fixed-amount streams and income are confirmed now.
+
+- **Clearing demo data left insights pointing at deleted rows**: the
+  teardown released transaction back-references but not the insights
+  raised about those accounts, transactions, and streams, so the stream
+  foreign key refused the delete.
+
+- **A seeding process registered no reading tool**: the fixture loader
+  force-imports the modules whose tools must exist before grants are
+  written, and the durable-readings module was never added, so
+  `record_reading` silently got no row in any process that seeds
+  without building a chat agent.
+
+- **Overdue occurrences vanished from the balance forecast**: the
+  projection fast-forwarded every stream past occurrences dated before
+  today, so a day-late paycheck read as "you are $5,000 poorer for the
+  next two weeks" - the walk started from a balance the check never
+  reached and charged it nowhere. A stream's latest missed occurrence
+  now carries to today's line (money still in flight, both directions);
+  older misses stay with the insight rules' missed-payment chase, and
+  one-time bills are unchanged.
+
+- **The match picker offered nothing for income**: a candidate already
+  carrying a merchant was treated as "identified as someone else", and
+  paycheck deposits always arrive pre-labelled with the payroll
+  processor's merchant - which never equals the human-named stream.
+  Category agreement now outranks the merchant mismatch, so a deposit
+  sharing the stream's own category stays offered; bills keep their
+  noise protection.
+
 - Generated projects on the AI memory backend now pass lint, typecheck and
   tests: `memory_user` and the active-model selector no longer leak into the
   memory backend, and DB-only endpoint tests are gated out.
+
 - RAG chunking: an overlap at or above the chunk size no longer loops
   forever (default overlap is a fifth of the chunk size, larger values are
   rejected), documents that fit in one chunk are kept whole, a min chunk
   size at or above the chunk size no longer filters everything, and
   `estimate_chunks` no longer overcounts by one. The RAG service tests use
   `RAGServiceConfig` instead of a stale settings mock.
+
+### Removed
+
+- **The Transfers review queue**: the suggested-transfer lane
+  (detection's suggest threshold, the confirm/reject endpoints and
+  service methods, the Review > Transfers sub-tab, and the transfer
+  response schemas) is gone end to end. Transfer detection now pairs
+  ONLY high-confidence matches, automatically; a fuzzy near-miss simply
+  stays visible as ordinary spend/income instead of queueing for a
+  review nobody performed. Auto-pairing, category-classified flagging,
+  and adjustment-pair handling are unchanged.
 
 ## [0.10.1] - 2026-07-20
 

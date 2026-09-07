@@ -6,7 +6,7 @@
 # - Update support
 
 _min_copier_version: "9.0.0"
-_version: "0.10.1"
+_version: "0.11.0rc1"
 
 # IMPORTANT: Template content is in subdirectory
 # This allows the template to be recognized as git-tracked (aegis-stack repo root has .git)

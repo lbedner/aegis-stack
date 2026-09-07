@@ -50,26 +50,31 @@ shared files that referenced it.
 
 ```
 app/components/web_frontend/
-├── main.py                  # Jinja2 env, static() helper, CachedStaticFiles
+├── main.py                  # router wiring
+├── rendering.py             # Jinja2 env, render() (page or fragment), with_toast()
+├── assets.py                # static() helper, CachedStaticFiles
+├── filters.py               # money / short_date / pct
 ├── build.py                 # asset fingerprinting -> static/dist/manifest.json
 ├── build_watch.py           # dev watcher: re-fingerprint on change
 ├── routes/
-│   ├── pages.py             # full-page GETs (the landing, auth pages)
-│   └── partials/            # htmx fragment routes
+│   ├── pages.py             # page handlers (the landing, auth pages)
+│   └── partials/            # fragment-only routes
 ├── templates/
-│   ├── base.html            # layout every page extends
+│   ├── base.html            # document skeleton every page extends
+│   ├── layouts/             # page.html and fragment.html, picked by render()
 │   ├── pages/               # one template per page
-│   └── components/          # macros, snackbar, landing sections
+│   └── components/          # macros, feedback macros, landing sections
 └── static/
     ├── input.css            # Tailwind entry
     ├── css/app.css          # hand-authored styles
-    └── js/app.js            # htmx lifecycle hooks
+    └── js/app.js            # toasts and htmx error hooks
 
 package.json                 # Tailwind + DaisyUI + Biome (devDependencies only)
 tailwind.config.js           # theme + the single rebrand point
 ```
 
-Plus a gated test module (`tests/components/test_web_frontend.py`), Makefile
+Plus gated tests (`tests/components/test_web_frontend.py` and the web test
+kit under `tests/web/`), Makefile
 targets (`build-static`, `lint-frontend`, `format-frontend`), a Docker
 `css-build` stage, and two dev-only compose services for hot CSS rebuild.
 
@@ -102,7 +107,7 @@ back to unhashed asset paths and pages render immediately. Run
 
 ## The rest of these docs
 
-- [Templates and partials](templates-and-partials.md): the base layout,
+- [Templates and rendering](templates-and-partials.md): the base layout,
   the htmx conventions, and two rules that are load-bearing.
 - [Styling and theming](styling.md): the DaisyUI theme and the one place
   brand colors live.

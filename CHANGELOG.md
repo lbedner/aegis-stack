@@ -7,6 +7,38 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **htmx web frontend: one route, two render paths.** `rendering.render()`
+  serves a full page (`layouts/page.html`) or a bare fragment
+  (`layouts/fragment.html`) from the same handler based on `HX-Request`,
+  with `Vary: HX-Request` and a `status_code` passthrough for validation
+  re-renders. The htmx config gains `responseHandling` so a 422 swaps and
+  other 4xx/5xx raise `htmx:responseError`; the SSE extension loads after
+  core. `main.py` is now wiring only: `assets.py` (fingerprinted URLs,
+  cache policy), `filters.py` (`money`, `short_date`, `pct`), and
+  `rendering.py` own the rest. The unused `strftime` filter is gone.
+- **htmx feedback is an `HX-Trigger` toast.** `with_toast(response, text,
+  tone)` plus a live region mounted by the base layout replace the
+  sessionStorage-and-reload snackbar. `app.js` no longer re-executes
+  swapped `<script>` tags; the auth pages' components moved into
+  `auth.js` as `Alpine.data(...)` registrations, so no page carries an
+  inline script. `components/macros/feedback.html` adds `empty_state` and
+  `error_banner`.
+- **htmx projects ship a web test kit** under `tests/web/`: an `hx` client
+  fixture, `add_template`, and DOM helpers (`select`, `one`, `none`,
+  `text`) backed by lxml + cssselect in the dev extra, with the kit's own
+  tests.
+
+### Fixed
+
+- **htmx dev stack no longer breaks host tooling.** The tailwind container
+  installs `node_modules` into a named volume instead of the bind mount, so
+  a macOS or Windows host never inherits Linux binaries that make
+  `make lint-frontend` fail.
+- **Generated `test_app_js_is_loaded` no longer fails once assets are
+  built**: it accepts the fingerprinted path as well as the source path.
+
 ## [0.11.0] - 2026-09-06
 
 ### Added

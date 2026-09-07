@@ -302,6 +302,9 @@ class TestWebFrontendScaffolding:
         for rel in (
             "__init__.py",
             "main.py",
+            "assets.py",
+            "filters.py",
+            "rendering.py",
             "routes/__init__.py",
             # Gated: the auth handlers only exist when the auth service does.
             "routes/pages.py.jinja",
@@ -315,9 +318,11 @@ class TestWebFrontendScaffolding:
         root = _web_frontend_tree()
         for rel in (
             "templates/base.html",
+            "templates/layouts/page.html",
+            "templates/layouts/fragment.html",
             "templates/pages/landing.html",
-            "templates/components/snackbar.html",
             "templates/components/macros.html",
+            "templates/components/macros/feedback.html",
             "templates/components/landing/navbar.html",
             "templates/components/landing/hero.html",
             "templates/components/landing/features.html",
@@ -346,6 +351,54 @@ class TestWebFrontendScaffolding:
             "password_input",
             "or_divider",
         }
+
+    def test_main_is_wiring_only(self) -> None:
+        """The environment, filters and asset handling each own a module;
+        main.py builds the router and nothing else."""
+        root = _web_frontend_tree()
+        main = (root / "main.py").read_text()
+        assert "Jinja2Templates(" not in main
+        assert "class CachedStaticFiles" not in main
+        assert "Jinja2Templates(" in (root / "rendering.py").read_text()
+        assert "class CachedStaticFiles" in (root / "assets.py").read_text()
+        assert "def render(" in (root / "rendering.py").read_text()
+        assert "def with_toast(" in (root / "rendering.py").read_text()
+
+    def test_no_snackbar_and_no_script_re_execution(self) -> None:
+        """Feedback is an HX-Trigger toast, not a sessionStorage reload;
+        fragments carry no inline scripts, so nothing re-runs them."""
+        root = _web_frontend_tree()
+        assert not (root / "templates/components/snackbar.html").exists()
+        assert "htmx:afterSwap" not in (root / "static/js/app.js").read_text()
+        base = (root / "templates/base.html").read_text()
+        assert "snackbar" not in base
+        assert "toast_region()" in base
+
+    def test_base_layout_lets_validation_errors_swap(self) -> None:
+        """Without a responseHandling rule htmx drops 4xx bodies, so a 422
+        re-rendered form could never land."""
+        base = (_web_frontend_tree() / "templates/base.html").read_text()
+        assert '"responseHandling"' in base
+        assert '{"code": "422", "swap": true}' in base
+        assert '{"code": "[45]..", "swap": false, "error": true}' in base
+
+    def test_base_layout_loads_sse_extension_after_core(self) -> None:
+        base = (_web_frontend_tree() / "templates/base.html").read_text()
+        assert base.index("htmx.org@") < base.index("htmx-ext-sse@")
+
+    def test_base_content_area_is_the_swap_target(self) -> None:
+        base = (_web_frontend_tree() / "templates/base.html").read_text()
+        assert '<main id="app-content"' in base
+
+    def test_layouts_share_the_app_content_block(self) -> None:
+        """One page template renders both ways by extending ``layout``."""
+        root = _web_frontend_tree() / "templates/layouts"
+        page = (root / "page.html").read_text()
+        fragment = (root / "fragment.html").read_text()
+        assert 'extends "base.html"' in page
+        assert "block app_content" in page
+        assert "block app_content" in fragment
+        assert 'extends "base.html"' not in fragment
 
     def test_base_layout_declares_the_block_structure(self) -> None:
         source = (_web_frontend_tree() / "templates/base.html").read_text()
@@ -630,6 +683,17 @@ class TestDockerAndComposeWiring:
         assert 'CHOKIDAR_USEPOLLING: "true"' in rendered
         assert 'CHOKIDAR_INTERVAL: "1000"' in rendered
 
+    def test_dev_tailwind_node_modules_stay_off_the_host(self) -> None:
+        """npm install runs in the Linux container; on the bind mount its
+        binaries would land on a macOS or Windows host and break biome."""
+        on = _render("docker-compose.dev.yml.jinja", _ctx(include_htmx=True))
+        assert "tailwind-node-modules:/code/node_modules" in on
+        assert "\nvolumes:\n" in on
+        assert "  tailwind-node-modules:" in on
+        assert "tailwind-node-modules" not in _render(
+            "docker-compose.dev.yml.jinja", _ctx()
+        )
+
     def test_dev_watchers_are_dev_profile_only(self) -> None:
         rendered = _render("docker-compose.dev.yml.jinja", _ctx(include_htmx=True))
         watcher_block = rendered.split("build-static-watcher:", 1)[1]
@@ -812,12 +876,63 @@ class TestAuthPages:
         assert "app/components/web_frontend/templates/pages/auth" in cleanup
         assert "app/components/web_frontend/static/js/auth.js" in cleanup
 
+    def test_auth_pages_carry_no_inline_scripts(self) -> None:
+        """Page behaviour lives in auth.js as Alpine.data components, so
+        the pages need no script re-execution and a CSP stays possible."""
+        root = _web_frontend_tree() / "templates/pages/auth"
+        for page in root.glob("*.html"):
+            assert "<script" not in page.read_text(), page.name
+        auth_js = (_web_frontend_tree() / "static/js/auth.js").read_text()
+        for component in (
+            "loginForm",
+            "registerForm",
+            "forgotForm",
+            "resetForm",
+            "verifyEmail",
+            "verifyPending",
+        ):
+            assert f"Alpine.data('{component}'" in auth_js, component
+
     def test_auth_pages_carry_no_pulse_copy(self) -> None:
         root = _web_frontend_tree() / "templates/pages/auth"
         for page in root.glob("*.html"):
             text = page.read_text().lower()
             assert "pulse" not in text, page.name
             assert "four sources" not in text, page.name
+
+
+class TestGeneratedWebTestKit:
+    """``tests/web/``: the hx client, DOM helpers, and the kit's own tests."""
+
+    FILES = (
+        "__init__.py",
+        "conftest.py",
+        "dom.py",
+        "test_helpers.py",
+        "test_render.py",
+        "test_feedback.py",
+        "test_filters.py",
+        "test_htmx_config.py",
+        "test_fragment_layout.py",
+    )
+
+    def test_kit_ships(self) -> None:
+        root = get_template_path() / PROJECT_SLUG_PLACEHOLDER / "tests" / "web"
+        for rel in self.FILES:
+            assert (root / rel).is_file(), rel
+
+    def test_kit_is_owned_by_the_htmx_manifest(self) -> None:
+        """Plain .py files: only cleanup keeps them out of non-htmx stacks."""
+        from aegis.core.components import COMPONENTS
+
+        assert "tests/web" in COMPONENTS["htmx"].files.primary
+
+    def test_kit_deps_ride_the_dev_extra_only_with_htmx(self) -> None:
+        on = _render("pyproject.toml.jinja", _ctx(include_htmx=True))
+        off = _render("pyproject.toml.jinja", _ctx())
+        for dep in ("lxml", "cssselect"):
+            assert dep in on, dep
+            assert dep not in off, dep
 
 
 class TestGeneratedWebFrontendTests:

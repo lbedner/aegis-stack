@@ -377,6 +377,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/components/web_frontend",
                 "tests/components/test_web_frontend.py",
+                "tests/web",
                 # The Tailwind/DaisyUI pipeline. Non-.jinja assets can't be
                 # body-gated, so post-gen cleanup is what keeps them out of
                 # projects without the htmx frontend.

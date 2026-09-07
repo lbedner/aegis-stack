@@ -182,6 +182,11 @@ dev = [
     # Cross-platform task runner; `uv run poe <target>` mirrors `make <target>`
     # for Windows, where `make` isn't a native binary.
     "poethepoet==0.48.0",
+{%- if include_htmx %}
+    # DOM assertions for the web test kit (tests/web/dom.py)
+    "lxml>=6.1.3",
+    "cssselect>=1.5.0",
+{%- endif %}
 {%- if include_database and database_engine != 'sqlite' %}
     # Tests use in-memory SQLite for speed/isolation regardless of the
     # production backend, so aiosqlite is required as a test dep even when

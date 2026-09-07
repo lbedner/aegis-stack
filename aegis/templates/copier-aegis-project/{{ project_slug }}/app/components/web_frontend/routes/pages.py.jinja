@@ -11,7 +11,7 @@ from urllib.parse import quote
 from app.components.backend.api.auth.router import login as api_login
 from app.components.backend.api.auth.router import register as api_register
 from app.components.backend.api.deps import login_rate_limit, register_rate_limit
-from app.components.web_frontend.main import templates
+from app.components.web_frontend.rendering import templates
 from app.core.audit import AuditEmitter, get_audit
 from app.core.security import REFRESH_COOKIE_NAME, clear_session_cookie
 from app.models.user import User, UserCreate
@@ -31,7 +31,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 {%- else %}
 
-from app.components.web_frontend.main import templates
+from app.components.web_frontend.rendering import templates
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 {%- endif %}

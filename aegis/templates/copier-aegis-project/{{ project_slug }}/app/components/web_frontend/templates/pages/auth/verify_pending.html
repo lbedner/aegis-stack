@@ -4,7 +4,7 @@
 {% block title %}Verify your email - {{ project_name }}{% endblock %}
 
 {% block auth_form %}
-<div x-data="verifyPending()">
+<div x-data="verifyPending">
   <h1 class="text-2xl font-semibold text-white mb-2">Verify your email</h1>
   <p class="text-sm text-aegis-muted mb-8">
     We sent a link to
@@ -24,38 +24,6 @@
   </div>
 </div>
 
-<script>
-function verifyPending() {
-  return {
-    loading: false,
-    error: '',
-    sent: '',
-
-    async resend() {
-      this.loading = true;
-      this.error = '';
-      this.sent = '';
-      let resp;
-      try {
-        resp = await fetch('/api/v1/auth/resend-verification', {
-          method: 'POST',
-          credentials: 'same-origin',
-        });
-      } catch (_) {
-        this.loading = false;
-        this.error = 'Could not reach the server. Try again.';
-        return;
-      }
-      this.loading = false;
-      if (resp.ok) {
-        this.sent = 'Sent. Check your inbox.';
-        return;
-      }
-      this.error = 'Could not send right now. Try again shortly.';
-    },
-  };
-}
-</script>
 {% endblock %}
 
 {% block auth_footer %}

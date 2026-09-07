@@ -1,4 +1,4 @@
-# Templates and Partials
+# Templates and Rendering
 
 ## The base layout
 
@@ -12,7 +12,7 @@ exposes these blocks:
 | `head_extra` | Per-page head additions: meta description, OG tags. |
 | `navbar` | Replace the default bar (the landing does). |
 | `page_body` | The whole `<main>` wrapper. Rarely overridden. |
-| `content` | The page body. The block you normally use. |
+| `content` | The page body, inside `<main id="app-content">`. |
 | `footer` | Empty by default. |
 | `scripts` | Per-page scripts, loaded after `app.js`. |
 
@@ -20,141 +20,132 @@ Override `content` for an ordinary page. Reach for `page_body` only when a
 page needs to replace the entire main wrapper (the auth pages do, for their
 split-screen shell).
 
-The base loads htmx and Alpine from pinned CDN URLs. The Alpine *collapse
-plugin* is loaded before Alpine core, deliberately: Alpine registers plugin
-directives at init, so loading core first leaves `x-collapse` silently dead.
+The base loads htmx, the htmx SSE extension, and Alpine from pinned CDN URLs.
+The Alpine *collapse plugin* is loaded before Alpine core, deliberately: Alpine
+registers plugin directives at init, so loading core first leaves `x-collapse`
+silently dead. The SSE extension is loaded after htmx core for the mirror
+reason: it registers against the global htmx defines.
 
-## Pages vs partials
+## One route, two render paths
 
-The convention that keeps htmx code navigable:
+A view has one URL and one template. Whether the browser gets a full page or
+just the part htmx will swap in is decided per request by
+`rendering.render()`:
 
-- **`routes/pages.py`** holds full-page GETs. One handler per page; build the
-  context, hand it to a template under `templates/pages/`.
-- **`routes/partials/`** holds fragment routes. A partial backs an
-  `hx-get`/`hx-post` on some element, returns an HTML fragment, and htmx swaps
-  it into the DOM. Mount them under a `/partials/...` prefix in
-  `create_web_frontend_app()`.
+```python
+from app.components.web_frontend.rendering import render
+from fastapi import APIRouter, Request
+from starlette.responses import Response
 
-A useful test for which side something belongs on: if the browser URL should
-change, it is a page; if an element on the current page should update, it is a
-partial.
-
-## Your first partial
-
-A complete worked example: a button that fetches the current component health
-and swaps it into the page without a reload.
-
-1. The fragment template. Fragments have no `{% extends %}`; they are just
-   the HTML that will be swapped in:
-
-    ```html
-    <!-- templates/partials/health_summary.html -->
-    <ul class="text-sm text-aegis-muted space-y-1">
-      {% for name, status in checks.items() %}
-      <li>
-        <span class="text-white">{{ name }}</span>: {{ status }}
-      </li>
-      {% endfor %}
-    </ul>
-    ```
-
-2. The fragment route:
-
-    ```python
-    # app/components/web_frontend/routes/partials/system.py
-    from app.components.web_frontend.main import templates
-    from fastapi import APIRouter, Request
-    from fastapi.responses import HTMLResponse
-
-    router = APIRouter()
+router = APIRouter()
 
 
-    @router.get("/health-summary", response_class=HTMLResponse, include_in_schema=False)
-    async def health_summary(request: Request) -> HTMLResponse:
-        from app.services.system.health import get_health_status
+@router.get("/accounts", include_in_schema=False)
+async def accounts(request: Request) -> Response:
+    rows = await load_accounts()
+    return render(request, "pages/accounts.html", {"rows": rows})
+```
 
-        health = await get_health_status()
-        return templates.TemplateResponse(
-            request=request,
-            name="partials/health_summary.html",
-            context={"checks": {c.name: c.status for c in health.components.values()}},
-        )
-    ```
+The page template ends with `{% extends layout %}` and fills one block:
 
-3. Mount it in `main.py`'s `create_web_frontend_app()`:
+```html
+{% extends layout %}
 
-    ```python
-    from app.components.web_frontend.routes.partials.system import (
-        router as system_partials_router,
-    )
+{% block title %}Accounts - {{ project_name }}{% endblock %}
 
-    router.include_router(system_partials_router, prefix="/partials/system")
-    ```
+{% block app_content %}
+<h1>Accounts</h1>
+...
+{% endblock %}
+```
 
-4. Use it from any page:
+`render()` sets `layout` to `layouts/page.html` on a cold load, which places
+`app_content` inside the base layout's `<main id="app-content">`, and to
+`layouts/fragment.html` when the request carries `HX-Request: true`, which
+renders the block bare. A boosted request (`hx-boost`) still gets the full
+page, since it replaces the whole body. The response carries `Vary:
+HX-Request` so a cache never serves a fragment to a cold load.
 
-    ```html
-    <button hx-get="/partials/system/health-summary"
-            hx-target="#health-box"
-            class="text-sm text-aegis-teal hover:text-white transition-colors">
-      Check health
-    </button>
-    <div id="health-box"></div>
-    ```
+A link that works both ways points its `href` and its `hx-get` at the same
+URL:
 
-Clicking the button issues a GET, and htmx swaps the returned fragment into
-`#health-box`. If the fragment carries an inline `<script>`, it runs; that is
-the re-execution rule below doing its job.
+```html
+<a href="/accounts"
+   hx-get="/accounts" hx-target="#app-content" hx-push-url="true">Accounts</a>
+```
+
+`render()` also takes `status_code`. A form handler that fails validation
+re-renders the form template with `status_code=422`; the base layout's htmx
+configuration lets a 422 swap, so the errors land where the form was.
+
+To give an app its own chrome, such as a sidebar shell, add a sibling under
+`templates/layouts/` that extends `base.html` and keeps the `app_content`
+block, and point `rendering.PAGE_LAYOUT` at it.
+
+### Fragment-only routes
+
+Some responses are only ever swapped in: a table row after an edit, a search
+result list, a dialog body. Those handlers return the fragment directly with
+`templates.TemplateResponse` and live under `routes/partials/`, mounted with a
+`/partials/...` prefix in `create_web_frontend_app()`. Fragment templates have
+no `{% extends %}`.
+
+## Feedback
+
+### Toasts
+
+A route attaches a toast to any response:
+
+```python
+from app.components.web_frontend.rendering import render, with_toast
+
+response = render(request, "pages/accounts.html", {"rows": rows})
+return with_toast(response, "Account saved")
+```
+
+`with_toast` writes an `HX-Trigger` header. htmx raises a `toast` DOM event,
+and the region the base layout mounts (`toast_region()` from
+`components/macros/feedback.html`) shows it: four seconds for a confirmation,
+eight for `tone="error"`, dismissable early. No reload, no storage. The
+header merges with triggers already on the response.
+
+Server and network failures need no code: the base layout's htmx
+configuration stops 4xx/5xx bodies from swapping, and `app.js` turns the
+resulting `htmx:responseError` and `htmx:sendError` events into an error
+toast.
+
+### Empty states and form errors
+
+`components/macros/feedback.html` also ships `empty_state(title, hint=None)`
+for a list with nothing in it and `error_banner(errors)` for a form's
+validation errors. `error_banner` renders nothing for an empty list, so a form
+template calls it unconditionally.
 
 ## Two load-bearing rules
 
 Both of these exist because of real failure modes. Keep them.
 
-### Inline scripts re-execute after swaps
+### Fragments carry no inline scripts
 
-Browsers do not run `<script>` tags injected via `innerHTML`, and `innerHTML`
-is exactly how htmx inserts a swapped fragment. Without intervention, an
-inline init script inside a partial silently never runs.
-
-`static/js/app.js` fixes this with an `htmx:afterSwap` hook that replaces each
-script node in the swapped content with a freshly created one, which the
-browser does execute. This is what makes the "partial carries its own little
-init script" pattern work. If you remove the hook, partials with inline
-scripts break with no error anywhere.
+Browsers do not run `<script>` tags injected via `innerHTML`, which is how
+htmx inserts a swapped fragment. Rather than re-executing them (which also
+rules out a Content Security Policy), behaviour that needs JavaScript is
+registered once from a static file and keyed off DOM events or Alpine
+components. The auth pages are the worked example: each page's `x-data` names
+an `Alpine.data(...)` component registered in `static/js/auth.js`.
 
 ### htmx history is disabled
 
-The base layout sets:
-
-```html
-<meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
-```
+The base layout sets `historyCacheSize: 0` and `refreshOnHistoryMiss: true`
+in the `htmx-config` meta tag.
 
 htmx's default back-button behavior snapshots the live DOM into localStorage
 and re-injects it on history navigation. This DOM is full of Alpine-expanded
-templates (`x-if`/`x-for` clones, `x-teleport` copies) and script tags.
-Restoring a snapshot re-runs scripts ("identifier already declared") and makes
-Alpine re-expand already-expanded templates, duplicating page content once per
-back/forward press.
-
-`historyCacheSize: 0` makes every restore a cache miss, and
-`refreshOnHistoryMiss` turns a miss into a clean full-page load. Back and
-forward still work; they just re-render instead of restoring a snapshot.
-
-## The snackbar
-
-`templates/components/snackbar.html` is included by the base layout, so every
-page has a toast surface. It is driven by `sessionStorage`, which means it
-survives a reload:
-
-```js
-window.appFlashSnackbar('Project saved');
-window.location.reload();
-```
-
-The snackbar reads the message on mount, clears the key, shows for four
-seconds, and can be dismissed early. Use it for any "do something, reload,
-confirm it happened" flow.
+templates (`x-if`/`x-for` clones, `x-teleport` copies). Restoring a snapshot
+makes Alpine re-expand already-expanded templates, duplicating page content
+once per back/forward press. With the cache disabled every restore is a miss,
+and a miss is a clean full-page load. Back and forward still work; they just
+re-render instead of restoring a snapshot.
 
 ## The macro kit
 
@@ -183,9 +174,41 @@ Macros that take a body use `{% call %}`:
 {% call info_tooltip() %}<p>Explanation here.</p>{% endcall %}
 ```
 
+## Filters
+
+`filters.py` registers the formatting filters templates use, so numbers and
+dates are never formatted by hand in markup:
+
+| Filter | What it does |
+|---|---|
+| `money(cents, currency="USD")` | Integer minor units to `-$1,234.56`; honours the currency code. |
+| `short_date(value)` | `Jul 15` this year, `Jul 15, 2025` otherwise; accepts dates, datetimes, ISO strings. |
+| `pct(ratio, digits=0)` | A 0-1 ratio to `15%`. |
+
 ## Template context
 
 Three globals are available in every template, so routes never need to pass
 them: `project_name`, `project_description`, and `static()` (covered in
 [Asset pipeline](asset-pipeline.md)). Projects with the auth service also get
-`auth_enabled` and `registration_enabled`.
+`auth_enabled` and `registration_enabled`. `render()` adds `layout` and
+`current_path` to each page's context.
+
+## Testing pages
+
+The generated project ships a web test kit under `tests/web/`:
+
+- the `hx` fixture, a test client that sends `HX-Request: true`, so every
+  route is tested both ways alongside the plain `client`;
+- `add_template(name, source)`, which registers a throwaway page against the
+  real environment for one test;
+- `dom.select`, `one`, `none` and `text`, so assertions target elements
+  rather than substrings of the response.
+
+```python
+from tests.web.dom import none, one, text
+
+def test_accounts_fragment(hx):
+    fragment = hx.get("/accounts").text
+    assert text(one(fragment, "h1")) == "Accounts"
+    none(fragment, "html")
+```

@@ -5,7 +5,7 @@
 {% block title %}Create an account - {{ project_name }}{% endblock %}
 
 {% block auth_form %}
-<div x-data="registerForm()">
+<div x-data="registerForm">
   <h1 class="text-2xl font-semibold text-white mb-2">Create an account</h1>
   <p class="text-sm text-aegis-muted mb-8">It takes a moment.</p>
 
@@ -25,26 +25,6 @@
   </form>
 </div>
 
-<script>
-function registerForm() {
-  return {
-    loading: false,
-    error: '',
-
-    init() {
-      const p = new URLSearchParams(window.location.search);
-      const err = p.get('error');
-      if (err === 'exists') {
-        this.error = 'That email is already registered. Try signing in instead.';
-      } else if (err === 'closed') {
-        this.error = 'Signups are closed right now.';
-      } else if (err === 'invalid') {
-        this.error = 'Check the details and try again.';
-      }
-    },
-  };
-}
-</script>
 {% endblock %}
 
 {% block auth_footer %}

@@ -5,7 +5,7 @@
 {% block title %}Sign in - {{ project_name }}{% endblock %}
 
 {% block auth_form %}
-<div x-data="loginForm()">
+<div x-data="loginForm">
   <h1 class="text-2xl font-semibold text-white mb-2">Welcome back</h1>
   <p class="text-sm text-aegis-muted mb-8">Sign in to continue.</p>
 
@@ -33,32 +33,6 @@
   </form>
 </div>
 
-<script>
-function loginForm() {
-  return {
-    loading: false,
-    error: '',
-    success: '',
-
-    init() {
-      // Banner text is driven by the query string: the server-side handlers
-      // redirect back here with a reason rather than rendering the message
-      // themselves, so a refresh never re-posts the form.
-      const p = new URLSearchParams(window.location.search);
-      if (p.get('registered')) this.success = 'Account created. Check your email to verify it.';
-      if (p.get('verified')) this.success = 'Email verified. Sign in to continue.';
-      if (p.get('reset')) this.success = 'Password updated. Sign in with your new password.';
-
-      const err = p.get('error');
-      if (err === 'invalid') {
-        this.error = 'Incorrect email or password.';
-      } else if (err === 'locked') {
-        this.error = 'Account temporarily locked after too many failed attempts. Try again shortly.';
-      }
-    },
-  };
-}
-</script>
 {% endblock %}
 
 {% block auth_footer %}

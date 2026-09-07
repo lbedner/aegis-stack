@@ -77,7 +77,7 @@ nav:
         - Example: components/frontend/example.md
       - Web Frontend (htmx):
         - Overview: components/web-frontend/index.md
-        - Templates & Partials: components/web-frontend/templates-and-partials.md
+        - Templates & Rendering: components/web-frontend/templates-and-partials.md
         - Styling & Theming: components/web-frontend/styling.md
         - Asset Pipeline: components/web-frontend/asset-pipeline.md
         - Auth Pages: components/web-frontend/auth-pages.md

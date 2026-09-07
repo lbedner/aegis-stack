@@ -1,0 +1,10 @@
+{# The full-page layout ``render()`` picks on a cold load.
+
+   A page template ends with ``{% extends layout %}`` and fills
+   ``app_content``; this layout puts that block inside base.html's
+   ``#app-content`` main, and ``layouts/fragment.html`` renders the same
+   block bare for htmx. Override this file (or add a sibling layout) to
+   give an app its own chrome, such as a sidebar shell. #}
+{% extends "base.html" %}
+
+{% block content %}{% block app_content %}{% endblock %}{% endblock %}

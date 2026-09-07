@@ -5,7 +5,7 @@
 {% block auth_form %}
 {# The token is consumed on load rather than behind a button: the user
    already expressed intent by clicking the link in the email. #}
-<div x-data="verifyEmail()" x-init="verify()">
+<div x-data="verifyEmail" x-init="verify()">
   <template x-if="state === 'working'">
     <div>
       <h1 class="text-2xl font-semibold text-white mb-2">Verifying your email</h1>
@@ -36,39 +36,4 @@
   </template>
 </div>
 
-<script>
-function verifyEmail() {
-  return {
-    state: 'working',
-    error: '',
-
-    async verify() {
-      const token = new URLSearchParams(window.location.search).get('token') || '';
-      if (!token) {
-        this.state = 'failed';
-        this.error = 'This verification link is incomplete.';
-        return;
-      }
-      let resp;
-      try {
-        resp = await fetch('/api/v1/auth/verify-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: token }),
-        });
-      } catch (_) {
-        this.state = 'failed';
-        this.error = 'Could not reach the server. Try the link again.';
-        return;
-      }
-      if (resp.ok) {
-        this.state = 'ok';
-        return;
-      }
-      this.state = 'failed';
-      this.error = 'This link has expired or already been used.';
-    },
-  };
-}
-</script>
 {% endblock %}

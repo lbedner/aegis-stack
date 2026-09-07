@@ -101,6 +101,7 @@ services:
     working_dir: /code
     volumes:
       - .:/code
+      - tailwind-node-modules:/code/node_modules
     environment:
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "1000"
@@ -131,4 +132,9 @@ services:
     restart: unless-stopped
     profiles:
       - dev
+{%- endif %}
+{%- if include_htmx %}
+
+volumes:
+  tailwind-node-modules:
 {%- endif %}

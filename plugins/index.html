@@ -5113,6 +5113,12 @@ upgrade, and <code>aegis remove scraper</code> walks the spec's file manifest to
 it out again.</p>
 <p>A plugin that declares <code>migrations</code> gets them written and applied on
 <code>aegis add</code>, with a Postgres schema of its own when it declares one.</p>
+<p>Dependencies can name a variant. <code>required_services = ["auth[org]"]</code> asks
+for auth at org level: <code>aegis add</code> installs it at that level when the
+project has no auth, upgrades it when the project is at basic or rbac,
+and does nothing when org is already there. A request that would swap an
+unordered choice, such as <code>ai[langchain]</code> on a pydantic-ai project, is
+refused with a message rather than applied silently.</p>
 <h2 id="publish-and-get-listed">Publish and get listed</h2>
 <p>Publish to PyPI as you would any package. The plugin directory at
 <a href="https://aegis-stack.io/plugins">aegis-stack.io/plugins</a> sweeps PyPI nightly

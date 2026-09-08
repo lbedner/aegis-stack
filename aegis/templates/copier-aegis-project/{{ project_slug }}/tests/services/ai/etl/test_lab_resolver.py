@@ -9,8 +9,6 @@ repository IS the lab.
 
 from typing import Any
 
-import pytest
-
 from app.services.ai.domains.llm.etl.lab_resolver import (
     pick_repo,
     strip_local_tag,
@@ -36,14 +34,20 @@ class TestPickRepo:
         """The most-downloaded hit is often a re-quantizer's upload; it
         names its origin, so the origin is the answer."""
         candidates = [
-            _repo("unsloth/Muse-Glimmer-30B-GGUF", base=["meta-models/Muse-Glimmer-30B"], downloads=982_083),
+            _repo(
+                "unsloth/Muse-Glimmer-30B-GGUF",
+                base=["meta-models/Muse-Glimmer-30B"],
+                downloads=982_083,
+            ),
             _repo("meta-models/Muse-Glimmer-30B", downloads=600_273),
         ]
         assert pick_repo(candidates, "muse-glimmer") == "meta-models/Muse-Glimmer-30B"
 
     def test_an_original_wins_on_name_affinity_not_popularity(self) -> None:
         candidates = [
-            _repo("Blackfrost-AI/Muse-Glimmer-30B-Abliterated-GGUF", downloads=9_000_000),
+            _repo(
+                "Blackfrost-AI/Muse-Glimmer-30B-Abliterated-GGUF", downloads=9_000_000
+            ),
             _repo("meta-models/Muse-Glimmer-30B", downloads=1),
         ]
         assert pick_repo(candidates, "muse-glimmer") == "meta-models/Muse-Glimmer-30B"

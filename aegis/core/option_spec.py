@@ -78,6 +78,17 @@ class OptionSpec:
         auto_requires=lambda v: [f"database[{v}]"] if v != "memory" else []
     """
 
+    answer_key: str | None = None
+    """Where this option's chosen value lives in the project's answers
+    (``auth_level``, ``ai_framework``). Set only on SINGLE options whose
+    value is project-wide state; it is what lets a dependency such as
+    ``auth[org]`` be compared against what the project already has."""
+
+    ordered: bool = False
+    """``choices`` are ascending levels (auth: basic < rbac < org). A
+    request at or below the project's current value is satisfied; above
+    it is an upgrade. Unordered options treat any mismatch as a conflict."""
+
 
 # ---------------------------------------------------------------------
 # Parsing
@@ -148,7 +159,7 @@ def parse_options(spec_str: str, plugin_spec: Any) -> dict[str, Any]:
     # Bracket values are case-insensitive (matches the pre-R3 auth /
     # insights behaviour; safe for AI since its choices are already
     # lowercase).
-    values = [v.strip().lower() for v in content.split(",") if v.strip()]
+    values = _bracket_values(content)
 
     # Track per-option occurrences (so we can reject duplicates in SINGLE
     # and duplicates in MULTI / FLAG).
@@ -193,6 +204,102 @@ def parse_options(spec_str: str, plugin_spec: Any) -> dict[str, Any]:
             result[opt.name] = True
 
     return result
+
+
+class VariantConflictError(ValueError):
+    """A bracket request names a value the project holds differently on an
+    unordered option (``ai[langchain]`` on a pydantic-ai project). Never
+    swapped silently: the caller reports it."""
+
+
+def _bracket_values(content: str) -> list[str]:
+    """Bracket content split into normalised values (case-insensitive,
+    matching the pre-R3 auth / insights behaviour)."""
+    return [v.strip().lower() for v in content.split(",") if v.strip()]
+
+
+def variant_answers(spec_str: str, plugin_spec: Any) -> dict[str, Any]:
+    """The answers a request such as ``auth[org]`` names: ``{answer_key:
+    value}`` for every option spelled out in the brackets that maps to an
+    answer. A bare name, or a flag with no ``answer_key``, names nothing.
+    This is what a fresh install applies; it looks at nothing the project
+    already holds (copier records defaults such as ``ai_backend: memory``
+    even for services that are not installed, so comparing there would
+    invent conflicts).
+    """
+    options: list[OptionSpec] = list(getattr(plugin_spec, "options", []) or [])
+    content = _bracket_content(spec_str, plugin_spec.name)
+    if not content or not options:
+        return {}
+    parsed = parse_options(spec_str, plugin_spec)
+    explicit = {
+        opt.name
+        for value in _bracket_values(content)
+        if (opt := _find_option_for_value(value, options)) is not None
+    }
+    return {
+        opt.answer_key: parsed[opt.name]
+        for opt in options
+        if opt.name in explicit
+        and opt.answer_key is not None
+        and opt.mode is OptionMode.SINGLE
+    }
+
+
+def variant_delta(
+    spec_str: str, plugin_spec: Any, answers: dict[str, Any]
+) -> dict[str, Any]:
+    """Answers a request such as ``auth[org]`` would still change on a
+    project that HAS the service: :func:`variant_answers` filtered through
+    :func:`answers_delta`."""
+    return answers_delta(plugin_spec, variant_answers(spec_str, plugin_spec), answers)
+
+
+def answers_delta(
+    plugin_spec: Any, requested: dict[str, Any], answers: dict[str, Any]
+) -> dict[str, Any]:
+    """The subset of ``requested`` (``{answer_key: value}``) the project's
+    answers do not already satisfy.
+
+    An answer that is missing or not one of the option's choices is
+    treated as unset. Ordered options are satisfied by any current value
+    at or above the request; unordered ones raise
+    :class:`VariantConflictError` on a mismatch. Shared by the resolver,
+    ``add-service`` and ``ManualUpdater``, so a downgrade request is
+    "already satisfied" everywhere and never rewrites a level.
+    """
+    by_key = {
+        opt.answer_key: opt
+        for opt in (getattr(plugin_spec, "options", []) or [])
+        if opt.answer_key is not None
+    }
+    delta: dict[str, Any] = {}
+    for key, wanted in requested.items():
+        opt = by_key.get(key)
+        if opt is None:
+            continue
+        current = answers.get(key)
+        if current not in opt.choices:
+            delta[key] = wanted
+        elif opt.ordered:
+            if opt.choices.index(wanted) > opt.choices.index(current):
+                delta[key] = wanted
+        elif current != wanted:
+            raise VariantConflictError(
+                f"{plugin_spec.name}[{wanted}] conflicts with the project's "
+                f"{key}={current!r}; change it deliberately rather than "
+                "through a dependency"
+            )
+    return delta
+
+
+def variant_answer_keys(plugin_spec: Any) -> list[str]:
+    """The answer keys a spec's options map to, in declaration order."""
+    return [
+        opt.answer_key
+        for opt in (getattr(plugin_spec, "options", []) or [])
+        if opt.answer_key is not None
+    ]
 
 
 def _find_option_for_value(value: str, options: list[OptionSpec]) -> OptionSpec | None:

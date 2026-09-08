@@ -75,26 +75,108 @@ class TestServiceDeps:
 
 
 class TestBracketVariants:
-    def test_bracket_variant_resolves_to_base_service(self) -> None:
-        """``required_services=["auth[org]"]`` should canonicalize to
-        ``auth`` and queue the base service. Variant-aware install
-        (actually picking the org variant) is intentionally out of
-        scope for the resolver; the registry keys on base names so
-        without bracket stripping the lookup raises
-        ``UnknownDependencyError`` despite ``auth`` being present."""
-        target = _spec("stripe", required_services=["auth[org]"])
-        registry = {
-            "stripe": target,
-            "auth": _spec("auth"),
-        }
-        result = resolve_dependencies(target, answers={}, registry=registry)
-        assert [d.name for d in result.to_install] == ["auth"]
+    """A dep like ``auth[org]`` is a request for a service AT a level.
+    Presence of the base service is not enough; the resolver compares the
+    requested variant against the project's answers and queues an
+    upgrade when the project falls short."""
 
-    def test_bracket_variant_already_installed_skipped(self) -> None:
-        """Bracket variant should also collapse for the
-        ``already-installed`` short-circuit. ``required_components=
-        ["database[sqlite]"]`` against a project with ``include_database:
-        true`` must NOT re-queue the dep."""
+    @staticmethod
+    def _auth() -> PluginSpec:
+        """The real auth spec: its level option carries the answer key and
+        ordering the resolver relies on."""
+        from aegis.core.services import SERVICES
+
+        return SERVICES["auth"]
+
+    @classmethod
+    def _registry(cls, target: PluginSpec) -> dict[str, PluginSpec]:
+        """Target, the real auth spec, and the database component auth
+        itself requires; every test marks database installed so only
+        auth's own state is under test."""
+        return {
+            target.name: target,
+            "auth": cls._auth(),
+            "database": _spec("database", kind=PluginKind.COMPONENT),
+        }
+
+    def test_missing_service_is_queued_with_its_variant(self) -> None:
+        target = _spec("stripe", required_services=["auth[org]"])
+        registry = self._registry(target)
+        result = resolve_dependencies(
+            target, answers={"include_database": True}, registry=registry
+        )
+        (dep,) = result.to_install
+        assert dep.name == "auth"
+        assert dep.variant == "auth[org]"
+        assert dep.answers_delta == {"auth_level": "org"}
+
+    def test_missing_service_ignores_stale_default_answers(self) -> None:
+        """Answers hold ``auth_level: basic`` from an earlier install or a
+        copier default while ``include_auth`` is false. The service is
+        absent, so the request is applied, never compared."""
+        target = _spec("stripe", required_services=["auth[org]"])
+        registry = self._registry(target)
+        result = resolve_dependencies(
+            target,
+            answers={
+                "include_database": True,
+                "include_auth": False,
+                "auth_level": "basic",
+            },
+            registry=registry,
+        )
+        (dep,) = result.to_install
+        assert dep.answers_delta == {"auth_level": "org"}
+
+    def test_lower_level_installed_is_queued_as_upgrade(self) -> None:
+        target = _spec("stripe", required_services=["auth[org]"])
+        registry = self._registry(target)
+        result = resolve_dependencies(
+            target,
+            answers={
+                "include_database": True,
+                "include_auth": True,
+                "auth_level": "basic",
+            },
+            registry=registry,
+        )
+        (dep,) = result.to_install
+        assert dep.name == "auth"
+        assert dep.answers_delta == {"auth_level": "org"}
+
+    def test_same_level_installed_is_satisfied(self) -> None:
+        target = _spec("stripe", required_services=["auth[org]"])
+        registry = self._registry(target)
+        result = resolve_dependencies(
+            target,
+            answers={
+                "include_database": True,
+                "include_auth": True,
+                "auth_level": "org",
+            },
+            registry=registry,
+        )
+        assert result.is_empty
+
+    def test_base_name_dep_on_installed_service_is_satisfied(self) -> None:
+        """No brackets means any level will do."""
+        target = _spec("stripe", required_services=["auth"])
+        registry = self._registry(target)
+        result = resolve_dependencies(
+            target,
+            answers={
+                "include_database": True,
+                "include_auth": True,
+                "auth_level": "basic",
+            },
+            registry=registry,
+        )
+        assert result.is_empty
+
+    def test_bracket_variant_already_installed_component_skipped(self) -> None:
+        """A component with no declared options still collapses to
+        presence: ``database[sqlite]`` against ``include_database: true``
+        must not re-queue."""
         target = _spec("stripe", required_components=["database[sqlite]"])
         registry = {
             "stripe": target,

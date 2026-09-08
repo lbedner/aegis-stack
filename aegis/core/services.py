@@ -224,6 +224,8 @@ SERVICES: dict[str, ServiceSpec] = {
                 name="level",
                 mode=OptionMode.SINGLE,
                 choices=list(AuthLevels.ALL),
+                answer_key=AnswerKeys.AUTH_LEVEL,
+                ordered=True,
                 default=AuthLevels.BASIC,
             ),
             OptionSpec(
@@ -425,6 +427,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 mode=OptionMode.SINGLE,
                 choices=list(AIFrameworks.ALL),
                 default=AIFrameworks.PYDANTIC_AI,
+                answer_key=AnswerKeys.AI_FRAMEWORK,
             ),
             OptionSpec(
                 name="backend",
@@ -435,6 +438,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     StorageBackends.POSTGRES,
                 ],
                 default=StorageBackends.MEMORY,
+                answer_key=AnswerKeys.AI_BACKEND,
                 # Persistence backends auto-add the matching database engine.
                 auto_requires=lambda v: [f"{ComponentNames.DATABASE}[{v}]"]
                 if v != StorageBackends.MEMORY

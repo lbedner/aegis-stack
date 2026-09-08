@@ -26,6 +26,7 @@ from aegis.constants import (
 from aegis.i18n import t
 
 from ..cli import brand
+from .auth_service_parser import auth_level_answers
 from .component_files import (
     JINJA_EXTENSION,
     MIGRATION_SKILL_FILE,
@@ -110,6 +111,12 @@ _SERVICE_ANSWER_KEYS = (
     AnswerKeys.DOCUMENTS,
     AnswerKeys.FINANCE,
 )
+
+
+def _true_flags(answers: dict[str, Any]) -> dict[str, Any]:
+    """Marker inference only ever asserts what it can see; a flag it
+    cannot confirm stays as the project recorded it."""
+    return {k: v for k, v in answers.items() if v is not False}
 
 
 def _is_empty_stub(path: Path) -> bool:
@@ -425,19 +432,19 @@ class ManualUpdater:
         try:
             # Check if already enabled
             include_key = AnswerKeys.include_key(component)
-            if self.answers.get(include_key) is True:
-                # Allow auth level upgrades (basic → rbac → org)
-                is_auth_upgrade = (
-                    component == AnswerKeys.SERVICE_AUTH
-                    and additional_data
-                    and AnswerKeys.AUTH_LEVEL in additional_data
-                )
-                if not is_auth_upgrade:
-                    raise ValueError(f"Component '{component}' is already enabled")
+            is_variant_upgrade = self._is_variant_upgrade(component, additional_data)
+            if self.answers.get(include_key) is True and not is_variant_upgrade:
+                raise ValueError(f"Component '{component}' is already enabled")
 
             # Merge additional data
-            update_data = additional_data or {}
+            update_data = dict(additional_data or {})
             update_data[include_key] = True
+            # A level implies its include_auth_* flags; derive them here so
+            # every caller that sets a level lands the same answers.
+            if AnswerKeys.AUTH_LEVEL in update_data:
+                update_data.update(
+                    auth_level_answers(update_data[AnswerKeys.AUTH_LEVEL])
+                )
 
             # Update answers with new component
             updated_answers = {**self.answers, **update_data}
@@ -496,9 +503,10 @@ class ManualUpdater:
                     # Check for conflicts
                     if output_path.exists():
                         # Some files have conditional content and must be regenerated
-                        is_auth_upgrade = (
-                            additional_data
-                            and AnswerKeys.AUTH_LEVEL in additional_data
+                        # Files whose body depends on the variant. Only auth
+                        # has entries today; the trigger itself is generic.
+                        regenerate_for_variant = (
+                            is_variant_upgrade
                             and relative_path in REGENERATE_ON_AUTH_LEVEL_CHANGE
                         )
                         # Existing-but-empty files are empty stubs left behind
@@ -509,7 +517,7 @@ class ManualUpdater:
                         is_empty_stub = _is_empty_stub(output_path)
                         if (
                             relative_path in REGENERATE_ON_COMPONENT_CHANGE
-                            or is_auth_upgrade
+                            or regenerate_for_variant
                             or is_empty_stub
                         ):
                             self._write_rendered(output_path, content)
@@ -634,6 +642,7 @@ class ManualUpdater:
             MIGRATION_SPECS,
             bootstrap_alembic,
             generate_migration,
+            generate_missing_migrations,
             service_has_migration,
         )
         from .post_gen_tasks import run_migrations
@@ -650,6 +659,9 @@ class ManualUpdater:
                 # Answers carry the project's database engine, which decides
                 # whether a spec's Postgres schema survives — SQLite has none.
                 generate_migration(self.project_path, service, self.answers)
+            # Level-specific revisions the new answers call for (an auth
+            # upgrade to org needs auth_rbac and auth_org).
+            generate_missing_migrations(self.project_path, self.answers)
             # run_migrations failure is non-fatal — match
             # add_service_command's behaviour. The user can ``alembic
             # upgrade head`` manually later.
@@ -1485,6 +1497,36 @@ class ManualUpdater:
         generate_plugin_migrations(self.project_path, spec, self.answers)
         run_migrations(self.project_path, include_migrations=True)
 
+    def _is_variant_upgrade(
+        self, component: str, additional_data: dict[str, Any] | None
+    ) -> bool:
+        """An already-enabled service asked for a variant above its current one.
+
+        The spec's options say which answers hold its variant
+        (``auth_level``, ``ai_framework``). ``answers_delta`` applies the
+        one rule every caller shares: at or below the current level is
+        satisfied (so a downgrade never rewrites a level), above it is an
+        upgrade, an unordered mismatch is a conflict. ``add-service
+        auth[org]`` on basic auth and the resolver installing a plugin
+        that requires ``auth[org]`` both land here.
+        """
+        if (
+            not additional_data
+            or self.answers.get(AnswerKeys.include_key(component)) is not True
+        ):
+            return False
+        from .option_spec import answers_delta, variant_answer_keys
+
+        spec = self._spec_for(component)
+        if spec is None:
+            return False
+        requested = {
+            key: additional_data[key]
+            for key in variant_answer_keys(spec)
+            if key in additional_data
+        }
+        return bool(answers_delta(spec, requested, self.answers))
+
     def _save_answers(self, answers: dict[str, Any]) -> None:
         """
         Save updated answers to .copier-answers.yml.
@@ -1607,12 +1649,9 @@ class ManualUpdater:
                 except (OSError, UnicodeDecodeError):
                     has_require_role = False
             if auth_module("orgs.py", "org_service.py") is not None:
-                inferred[AnswerKeys.AUTH_LEVEL] = AuthLevels.ORG
-                inferred[AnswerKeys.AUTH_ORG] = True
-                inferred[AnswerKeys.AUTH_RBAC] = True
+                inferred.update(_true_flags(auth_level_answers(AuthLevels.ORG)))
             elif has_require_role:
-                inferred[AnswerKeys.AUTH_LEVEL] = AuthLevels.RBAC
-                inferred[AnswerKeys.AUTH_RBAC] = True
+                inferred.update(_true_flags(auth_level_answers(AuthLevels.RBAC)))
 
         # Auth OAuth marker — file may exist as a non-stub when oauth was wired
         if has_file("app", "components", "backend", "api", "auth", "oauth.py"):

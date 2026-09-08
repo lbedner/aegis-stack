@@ -9,6 +9,14 @@
 
 ### Changed
 
+- **Plugin dependencies can name a service variant.** A plugin declaring
+  `required_services=["auth[org]"]` now gets auth at org level: installed
+  fresh at that level, upgraded when the project has a lower level, left
+  alone when it already satisfies the request. The spec's options say
+  where a variant lives in the answers (`answer_key`) and whether its
+  choices are ordered levels; `add-service auth[org]` on basic auth uses
+  the same rule, and the level-specific migrations are generated on both
+  paths. Unordered mismatches are refused, not swapped (docs, Plugins).
 - **Plugin packages are named `aegis-stack-<name>`.** `aegis plugins create`
   now scaffolds `aegis-stack-<name>` with the `aegis_stack_<name>` import
   package, replacing `aegis-plugin-<name>`. `aegis-stack-` is the one

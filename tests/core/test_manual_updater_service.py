@@ -234,3 +234,136 @@ class TestAddComponentRunPostGenFlag:
             updater.add_component("worker", None)
 
         run_post_gen_mock.assert_called_once()
+
+
+class TestAddServiceVariantUpgrade:
+    """``add_service("auth", {"auth_level": "org"})`` against installed
+    basic auth is an upgrade, not an "already enabled" error, and the
+    level-specific migrations the new answers call for get generated."""
+
+    @staticmethod
+    def _project_with_basic_auth(tmp_path: Path) -> Path:
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace(
+                "include_auth: false", "include_auth: true\nauth_level: basic"
+            )
+        )
+        return project
+
+    def test_variant_upgrade_is_allowed_and_recorded(self, tmp_path: Path) -> None:
+        project = self._project_with_basic_auth(tmp_path)
+        with (
+            patch("aegis.core.migration_generator.bootstrap_alembic"),
+            patch("aegis.core.migration_generator.generate_migration"),
+            patch(
+                "aegis.core.migration_generator.service_has_migration",
+                return_value=True,
+            ),
+            patch("aegis.core.post_gen_tasks.run_migrations"),
+            patch.object(
+                ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+            ),
+            patch("aegis.core.manual_updater.get_component_files", return_value=[]),
+        ):
+            result = _make_updater(project).add_service(
+                "auth", {AnswerKeys.AUTH_LEVEL: "org"}, run_post_gen=False
+            )
+        assert result.success, result.error_message
+        answers = _make_updater(project).answers
+        assert answers[AnswerKeys.AUTH_LEVEL] == "org"
+
+    def test_same_variant_is_still_already_enabled(self, tmp_path: Path) -> None:
+        project = self._project_with_basic_auth(tmp_path)
+        with patch.object(
+            ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+        ):
+            result = _make_updater(project).add_service(
+                "auth", {AnswerKeys.AUTH_LEVEL: "basic"}, run_post_gen=False
+            )
+        assert not result.success
+        assert _make_updater(project).answers[AnswerKeys.AUTH_LEVEL] == "basic"
+
+    def test_lower_variant_is_already_satisfied(self, tmp_path: Path) -> None:
+        """A downgrade request never rewrites the level: org stays org."""
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace(
+                "include_auth: false", "include_auth: true\nauth_level: org"
+            )
+        )
+        with patch.object(
+            ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+        ):
+            result = _make_updater(project).add_service(
+                "auth", {AnswerKeys.AUTH_LEVEL: "basic"}, run_post_gen=False
+            )
+        assert not result.success
+        assert _make_updater(project).answers[AnswerKeys.AUTH_LEVEL] == "org"
+
+    def test_upgrade_generates_level_migrations(self, tmp_path: Path) -> None:
+        """The migration tail asks ``get_services_needing_migrations`` with
+        the post-upgrade answers and writes every one still missing, so
+        the org tables exist after ``add_service`` alone."""
+        project = self._project_with_basic_auth(tmp_path)
+        generated: list[str] = []
+        with (
+            patch("aegis.core.migration_generator.bootstrap_alembic"),
+            patch(
+                "aegis.core.migration_generator.generate_migration",
+                side_effect=lambda _p, name, _a=None: generated.append(name),
+            ),
+            patch(
+                "aegis.core.migration_generator.service_has_migration",
+                return_value=False,
+            ),
+            patch("aegis.core.post_gen_tasks.run_migrations"),
+            patch.object(
+                ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+            ),
+            patch("aegis.core.manual_updater.get_component_files", return_value=[]),
+        ):
+            _make_updater(project).add_service(
+                "auth", {AnswerKeys.AUTH_LEVEL: "org"}, run_post_gen=False
+            )
+        assert "auth_org" in generated
+
+
+class TestAuthLevelDerivedFlags:
+    """``auth_level`` implies ``include_auth_rbac`` / ``include_auth_org``.
+    The updater derives them itself, so every caller that sets a level
+    (``add-service auth[org]``, the resolver installing a plugin that
+    requires ``auth[org]``) lands the same answers and the org templates
+    render."""
+
+    def test_upgrade_to_org_sets_both_flags(self, tmp_path: Path) -> None:
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace(
+                "include_auth: false",
+                "include_auth: true\nauth_level: basic\n"
+                "include_auth_rbac: false\ninclude_auth_org: false",
+            )
+        )
+        with (
+            patch("aegis.core.migration_generator.bootstrap_alembic"),
+            patch("aegis.core.migration_generator.generate_migration"),
+            patch(
+                "aegis.core.migration_generator.service_has_migration",
+                return_value=True,
+            ),
+            patch("aegis.core.post_gen_tasks.run_migrations"),
+            patch.object(
+                ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+            ),
+            patch("aegis.core.manual_updater.get_component_files", return_value=[]),
+        ):
+            _make_updater(project).add_service(
+                "auth", {AnswerKeys.AUTH_LEVEL: "org"}, run_post_gen=False
+            )
+        answers = _make_updater(project).answers
+        assert answers[AnswerKeys.AUTH_RBAC] is True
+        assert answers[AnswerKeys.AUTH_ORG] is True

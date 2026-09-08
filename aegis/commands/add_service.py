@@ -18,14 +18,9 @@ from ..cli.validation import (
 from ..constants import (
     AIProviders,
     AnswerKeys,
-    AuthLevels,
     ComponentNames,
     Messages,
     StorageBackends,
-)
-from ..core.auth_service_parser import (
-    is_auth_service_with_options,
-    parse_auth_service_config,
 )
 from ..core.component_utils import (
     extract_base_component_name,
@@ -38,8 +33,13 @@ from ..core.migration_generator import (
     MIGRATION_SPECS,
     bootstrap_alembic,
     generate_migration,
-    get_services_needing_migrations,
+    generate_missing_migrations,
     service_has_migration,
+)
+from ..core.option_spec import (
+    VariantConflictError,
+    variant_answers,
+    variant_delta,
 )
 from ..core.project_map import render_project_map
 from ..core.service_resolver import ServiceResolver
@@ -59,6 +59,16 @@ def _translated_service_desc(name: str, fallback: str) -> str:
     key = f"service.{name}"
     result = t(key)
     return result if result != key else fallback
+
+
+def warn_experimental(services: list[str]) -> None:
+    """One warning line per experimental service being added.
+
+    A line, never a prompt: ``-y`` semantics and scripted installs are
+    unchanged. Silent for an empty list.
+    """
+    for service in services:
+        brand.warn(f"\n{t('add_service.experimental_warning', service=service)}")
 
 
 def add_service_command(
@@ -175,24 +185,16 @@ def add_service_command(
         base_service = service_base_map[service]
         include_key = AnswerKeys.include_key(base_service)
         if existing_answers.get(include_key) is True:
-            # Special case: auth level upgrades (basic → rbac → org)
-            if base_service == AnswerKeys.SERVICE_AUTH and is_auth_service_with_options(
-                service
-            ):
-                auth_config = parse_auth_service_config(service)
-                current_level = existing_answers.get(
-                    AnswerKeys.AUTH_LEVEL, AuthLevels.BASIC
-                )
-                level_order = {
-                    AuthLevels.BASIC: 0,
-                    AuthLevels.RBAC: 1,
-                    AuthLevels.ORG: 2,
-                }
-                if level_order.get(auth_config.level, 0) > level_order.get(
-                    current_level, 0
-                ):
-                    # Upgrading auth level — don't skip
-                    continue
+            # A bracket request against an installed service is an upgrade
+            # when the project's answers fall short of it (auth basic ->
+            # org); the spec's options decide, not a per-service table.
+            try:
+                delta = variant_delta(service, SERVICES[base_service], existing_answers)
+            except VariantConflictError as exc:
+                brand.error(str(exc), err=True)
+                raise typer.Exit(1) from None
+            if delta:
+                continue
             already_enabled.append(service)
 
     if already_enabled:
@@ -280,6 +282,7 @@ def add_service_command(
 
     # Show what will be added
     brand.accent(f"\n{t('add_service.services_to_add')}", bold=True)
+    experimental: list[str] = []
     for service in services_to_add:
         base_service = service_base_map[service]
         if base_service in SERVICES:
@@ -287,6 +290,9 @@ def add_service_command(
                 base_service, SERVICES[base_service].description
             )
             typer.echo(f"   • {service}: {desc}")
+            if SERVICES[base_service].experimental:
+                experimental.append(service)
+    warn_experimental(experimental)
 
     # Show component requirements
     if missing_components:
@@ -389,17 +395,10 @@ def add_service_command(
             # Get base service name (strips variant syntax like [langchain,sqlite])
             base_service = service_base_map[service]
 
-            # For auth service, pass auth level data
-            if base_service == AnswerKeys.SERVICE_AUTH and is_auth_service_with_options(
-                service
-            ):
-                auth_config = parse_auth_service_config(service)
-                service_data[AnswerKeys.AUTH_LEVEL] = auth_config.level
-                service_data[AnswerKeys.AUTH_RBAC] = auth_config.level in (
-                    AuthLevels.RBAC,
-                    AuthLevels.ORG,
-                )
-                service_data[AnswerKeys.AUTH_ORG] = auth_config.level == AuthLevels.ORG
+            # Answers the bracket request names (auth level today); the
+            # updater derives whatever a level implies. Upgrades of an
+            # installed service were filtered above through variant_delta.
+            service_data.update(variant_answers(service, SERVICES[base_service]))
 
             # For AI service, use the captured configuration
             if base_service == AnswerKeys.SERVICE_AI:
@@ -503,21 +502,12 @@ def add_service_command(
                         f"   {t('add_service.generated_migration', name=migration_path.name)}"
                     )
 
-        # For auth level upgrades, generate any missing level-specific migrations
-        # (e.g., auth_rbac, auth_org, auth_tokens)
-        updated_answers = updater.answers
-        needed_migrations = get_services_needing_migrations(updated_answers)
-        for migration_service in needed_migrations:
-            if migration_service in MIGRATION_SPECS and not service_has_migration(
-                target_path, migration_service
-            ):
-                migration_path = generate_migration(
-                    target_path, migration_service, updated_answers
-                )
-                if migration_path:
-                    brand.success(
-                        f"   {t('add_service.generated_migration', name=migration_path.name)}"
-                    )
+        # Level-specific revisions the new answers call for (an auth upgrade
+        # to org needs auth_rbac and auth_org).
+        for migration_path in generate_missing_migrations(target_path, updater.answers):
+            brand.success(
+                f"   {t('add_service.generated_migration', name=migration_path.name)}"
+            )
 
         # Auto-run migrations for services that need them
         # Exclude AI service with memory backend (doesn't need migrations)

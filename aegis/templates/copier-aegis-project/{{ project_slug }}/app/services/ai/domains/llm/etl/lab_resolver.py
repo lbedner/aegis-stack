@@ -14,12 +14,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.core.log import logger
+from app.services.ai.domains.llm.etl import queries
 from app.services.ai.models.llm import (
     ROLE_MAKER,
-    LargeLanguageModel,
     LLMOrg,
     LLMOrgRole,
 )
@@ -148,9 +148,7 @@ def _grant_role(session: Session, org: LLMOrg, role: str) -> None:
     """Record a hat this org wears; roles are additive and idempotent."""
     if org.id is None:
         return
-    existing = session.exec(
-        select(LLMOrgRole).where(LLMOrgRole.org_id == org.id, LLMOrgRole.role == role)
-    ).first()
+    existing = queries.org_role(session, org.id, role)
     if existing is None:
         session.add(LLMOrgRole(org_id=org.id, role=role))
 
@@ -163,9 +161,7 @@ async def attach_labs(session: Session, model_ids: list[str]) -> None:
     not know keeps a null lab - unmarked beats mislabelled.
     """
     for model_id in model_ids:
-        model = session.exec(
-            select(LargeLanguageModel).where(LargeLanguageModel.model_id == model_id)
-        ).first()
+        model = queries.llm_by_model_id(session, model_id)
         if model is None or model.made_by_org_id is not None:
             continue
         info = await resolve_lab(model_id)
@@ -174,7 +170,7 @@ async def attach_labs(session: Session, model_ids: list[str]) -> None:
         # The maker may already exist as a SERVING org (OpenAI serves
         # what it builds); that is one row wearing a second hat, not a
         # second row.
-        org = session.exec(select(LLMOrg).where(LLMOrg.slug == info.slug)).first()
+        org = queries.org_by_slug(session, info.slug)
         if org is None:
             org = LLMOrg(
                 slug=info.slug,

@@ -12,14 +12,12 @@ Deliberately free of any provider client, so ``plaid_sync`` and
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.adapters.providers import queries
 from app.services.finance.constants import Provider
-from app.services.finance.models import FinanceConnection
+from app.services.finance.models import FinanceAccount, FinanceConnection
 
 # The named slot a connection's encrypted credential occupies. Each provider
 # stores a different secret (Plaid an access token, SnapTrade a user secret),
@@ -27,10 +25,6 @@ from app.services.finance.models import FinanceConnection
 # from ever being decrypted as the other.
 _ACCESS_TOKEN_CONTEXT = "finance.plaid.access_token"
 _SNAPTRADE_SECRET_CONTEXT = "finance.snaptrade.user_secret"
-
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _to_cents(amount: float | None) -> int | None:
@@ -100,3 +94,28 @@ async def _recompute_net_worth(
     await detect_recurring(db, owner_user_id=owner_user_id)
     await generate_insights(db, owner_user_id=owner_user_id)
     await networth.recompute_snapshots(db, owner_user_id=owner_user_id)
+
+
+async def relinked_account(
+    db: AsyncSession,
+    connection: FinanceConnection,
+    *,
+    provider: str,
+    name: str,
+    mask: str | None,
+) -> FinanceAccount | None:
+    """The account a re-linked connection is really the same as: same
+    owner, provider, name and mask. Providers regenerate their ids per
+    link (Plaid per Item, SnapTrade sandbox always), but name and mask
+    are stable, so this is the fallback when no persistent id matched."""
+    filters = [
+        FinanceAccount.provider == provider,
+        FinanceAccount.name == name,
+        FinanceAccount.deleted_at.is_(None),
+        FinanceAccount.mask == mask
+        if mask is not None
+        else FinanceAccount.mask.is_(None),
+    ]
+    if connection.owner_user_id is not None:
+        filters.append(FinanceAccount.owner_user_id == connection.owner_user_id)
+    return await queries.account_first_where(db, filters)

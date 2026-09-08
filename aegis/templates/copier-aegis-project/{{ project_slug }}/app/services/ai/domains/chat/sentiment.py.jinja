@@ -14,9 +14,6 @@ because every scored conversation costs model tokens.
 import json
 from typing import Any
 
-from sqlalchemy import func
-from sqlalchemy.orm import selectinload
-from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
@@ -24,6 +21,7 @@ from app.core.db import get_async_session
 from app.core.log import logger
 from app.models.conversation import Conversation
 from app.services.ai.config import AIServiceConfig
+from app.services.ai.domains.chat import queries
 from app.services.ai.models.sentiment import (
     PERFORMANCE_VALUES,
     SENTIMENT_VALUES,
@@ -137,21 +135,9 @@ async def _unscored_batch(
     Materialized eagerly, BEFORE any commit in the scoring loop expires
     the loaded ORM instances (async sessions cannot lazy-load).
     """
-    stmt = (
-        select(Conversation)
-        .outerjoin(
-            SentimentAnalysis,
-            SentimentAnalysis.conversation_id == Conversation.id,  # type: ignore[arg-type]
-        )
-        .where(SentimentAnalysis.id == None)  # noqa: E711 - SQL IS NULL
-        .options(selectinload(Conversation.messages))  # type: ignore[arg-type]
-        .order_by(Conversation.updated_at)  # type: ignore[arg-type]
-        .limit(limit)
-    )
-    result = await session.exec(stmt)
     return [
         (conversation.id, _build_transcript(conversation))
-        for conversation in result.all()
+        for conversation in await queries.unscored_conversations(session, limit)
     ]
 
 
@@ -214,40 +200,15 @@ async def sentiment_stats(
             return await sentiment_stats(session=owned_session)
 
     distribution = dict.fromkeys(SENTIMENT_VALUES, 0)
-    sentiment_rows = await session.exec(
-        select(
-            SentimentAnalysis.overall_sentiment,
-            func.count(),  # type: ignore[arg-type]
-        ).group_by(SentimentAnalysis.overall_sentiment)  # type: ignore[arg-type]
-    )
-    for sentiment, count in sentiment_rows.all():
+    for sentiment, count in await queries.sentiment_counts(session):
         distribution[sentiment] = count
 
     performance = dict.fromkeys(PERFORMANCE_VALUES, 0)
-    performance_rows = await session.exec(
-        select(
-            SentimentAnalysis.assistant_performance,
-            func.count(),  # type: ignore[arg-type]
-        ).group_by(SentimentAnalysis.assistant_performance)  # type: ignore[arg-type]
-    )
-    for performance_value, count in performance_rows.all():
+    for performance_value, count in await queries.performance_counts(session):
         performance[performance_value] = count
 
-    average_row = await session.exec(
-        select(func.avg(SentimentAnalysis.overall_score))  # type: ignore[arg-type]
-    )
-    average_score = average_row.one_or_none() or 0.0
+    average_score = await queries.average_sentiment_score(session) or 0.0
 
-    negatives_result = await session.exec(
-        select(SentimentAnalysis)
-        .where(
-            col(SentimentAnalysis.overall_sentiment).in_(
-                ["negative", "frustrated"]
-            )
-        )
-        .order_by(col(SentimentAnalysis.created_at).desc())
-        .limit(RECENT_NEGATIVE_LIMIT)
-    )
     recent_negatives = [
         {
             "conversation_id": row.conversation_id,
@@ -255,7 +216,9 @@ async def sentiment_stats(
             "summary": row.summary,
             "created_at": row.created_at.isoformat(),
         }
-        for row in negatives_result.all()
+        for row in await queries.recent_negative_sentiments(
+            session, RECENT_NEGATIVE_LIMIT
+        )
     ]
 
     return {

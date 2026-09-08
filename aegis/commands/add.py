@@ -29,6 +29,7 @@ from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
 from ..core.option_spec import is_spec_with_options, parse_options
 from ..core.plugins.discovery import discover_plugins
+from ..core.plugins.naming import dist_name
 from ..core.plugins.spec import PluginSpec
 from ..core.project_map import render_project_map
 from ..core.services import SERVICES
@@ -53,7 +54,7 @@ def _resolve_plugin(spec_str: str) -> tuple[PluginSpec, str] | None:
     discovered external plugin.
 
     Returns ``(spec, module_name)`` where ``module_name`` is the
-    importable Python package (e.g. ``"aegis_plugin_scraper"``) — the
+    importable Python package (e.g. ``"aegis_stack_scraper"``) — the
     spec's ``name`` is a logical identifier and may differ. The module
     name is what the template resolver and the runtime importer need.
     Returns ``None`` if no plugin matches.
@@ -78,7 +79,7 @@ def _resolve_plugin(spec_str: str) -> tuple[PluginSpec, str] | None:
             # the instance shape and fall through to the plugin.name
             # fallback below — which usually picks the wrong module
             # name when the package directory differs from the spec
-            # name (e.g. ``aegis_plugin_scraper`` vs ``scraper``).
+            # name (e.g. ``aegis_stack_scraper`` vs ``scraper``).
             try:
                 loader = ep.load()
                 ep_spec = loader() if callable(loader) else loader
@@ -193,6 +194,12 @@ def _install_plugin(
     except UnknownDependencyError as e:
         brand.error(str(e), err=True)
         raise typer.Exit(1) from e
+    except ValueError as e:
+        # A variant the project cannot satisfy without a deliberate change
+        # (``ai[langchain]`` on a pydantic-ai project), or a bracket value
+        # the spec does not know.
+        brand.error(str(e), err=True)
+        raise typer.Exit(1) from e
 
     if plan.unresolved_plugins:
         brand.error(
@@ -200,7 +207,7 @@ def _install_plugin(
             err=True,
         )
         for missing in plan.unresolved_plugins:
-            typer.echo(f"   pip install aegis-plugin-{missing}", err=True)
+            typer.echo(f"   pip install {dist_name(missing)}", err=True)
         typer.echo(
             "\n   Install them and re-run ``aegis add``.",
             err=True,
@@ -242,13 +249,17 @@ def _install_plugin(
     # syncs. Recursive calls pass ``yes=True`` because the user
     # already confirmed the full plan.
     for dep in plan.to_install:
-        typer.echo(f"\n→ Installing dependency: {dep.name}")
+        typer.echo(f"\n→ Installing dependency: {dep.variant or dep.name}")
+        # A variant dep (``auth[org]``) carries the answers it changes;
+        # ``add_service`` treats a delta on an installed service as an
+        # upgrade. Bare deps pass None and get the defaults.
+        data = dep.answers_delta or None
         if dep.kind == PluginKind.COMPONENT:
             dep_updater = ManualUpdater(target_path)
-            dep_result = dep_updater.add_component(dep.name, None, run_post_gen=False)
+            dep_result = dep_updater.add_component(dep.name, data, run_post_gen=False)
         elif dep.name in SERVICES:
             dep_updater = ManualUpdater(target_path)
-            dep_result = dep_updater.add_service(dep.name, None, run_post_gen=False)
+            dep_result = dep_updater.add_service(dep.name, data, run_post_gen=False)
         else:
             _install_plugin(
                 dep.name, target_path, yes=True, force=force, run_post_gen=False

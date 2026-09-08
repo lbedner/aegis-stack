@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.domains.ledger import categories, queries, transactions
 from app.services.finance.models import (
     FinanceMerchant,
@@ -16,7 +17,6 @@ from app.services.finance.models import (
 from app.services.finance.schemas import MerchantCategorySummary, PayeeGroup
 from app.services.finance.utils import (
     transaction_payee_key,
-    utcnow,
 )
 
 # Sentinel for "caller did not mention this field", so that None can

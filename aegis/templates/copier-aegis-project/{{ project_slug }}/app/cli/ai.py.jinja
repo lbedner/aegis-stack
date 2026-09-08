@@ -1342,40 +1342,11 @@ def usage(
     from datetime import datetime
 
     import httpx
-    from pydantic import BaseModel
 
     from app.core.constants import APIEndpoints, Defaults
     from app.core.formatting import format_cost, format_number, format_percentage
+    from app.services.ai.schemas import UsageStatsResponse
 
-    # Response models matching API schema
-    class ModelUsageStats(BaseModel):
-        model_id: str
-        model_title: str
-        vendor: str
-        vendor_color: str
-        requests: int
-        tokens: int
-        cost: float
-        percentage: float
-
-    class RecentActivity(BaseModel):
-        timestamp: str
-        model: str
-        input_tokens: int
-        output_tokens: int
-        cost: float
-        success: bool
-        action: str
-
-    class UsageStatsResponse(BaseModel):
-        total_tokens: int
-        input_tokens: int
-        output_tokens: int
-        total_cost: float
-        total_requests: int
-        success_rate: float
-        models: list[ModelUsageStats]
-        recent_activity: list[RecentActivity]
 
     # CLI-specific color utilities
     def get_success_color(rate: float) -> str:

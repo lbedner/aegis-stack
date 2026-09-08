@@ -67,6 +67,6 @@ def test_blog_router_rbac_requires_admin_or_moderator() -> None:
     rendered = _render_blog_router(context)
 
     ast.parse(rendered)
-    assert "from app.services.auth.auth_service import require_role" in rendered
+    assert "from app.services.auth.service import require_role" in rendered
     assert 'require_blog_writer = require_role("admin", "moderator")' in rendered
     assert "get_current_active_user" not in rendered

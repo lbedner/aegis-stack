@@ -599,6 +599,8 @@ def _step_services_of_type(
     ui.echo(header if first else f"\n{header}")
     for service_name, service_spec in type_services.items():
         desc = _translated_desc(service_name, service_spec.description)
+        if service_spec.experimental:
+            desc = f"{desc} {brand.experimental_badge()}"
         if not ui.confirm(
             f"  {t('interactive.add_prompt', description=desc)}",
             context=service_spec,

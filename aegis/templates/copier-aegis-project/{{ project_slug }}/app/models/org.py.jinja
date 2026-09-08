@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
+
 
 # Org membership role constants
 ORG_ROLE_OWNER = "owner"
@@ -51,7 +53,7 @@ class Organization(OrganizationBase, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     updated_at: datetime | None = None
     deleted_at: datetime | None = Field(default=None, index=True)
@@ -70,7 +72,7 @@ class OrganizationMember(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     role: str = Field(default=ORG_ROLE_MEMBER)
     joined_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
 
@@ -118,7 +120,7 @@ class OrgInvite(SQLModel, table=True):
     status: str = Field(default="pending")  # pending, accepted
     token: str = Field(unique=True, index=True)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     # Nullable so legacy rows backfilled by the expiry migration don't
     # break. New invites always get a value via ``_default_invite_expiry``;

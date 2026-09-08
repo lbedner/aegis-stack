@@ -67,6 +67,7 @@ from app.services.finance.models import (
     FinanceRecurringStream,
     FinanceTransaction,
 )
+from app.services.shared.queries import owner_clause
 
 PRICE_HIKE_THRESHOLD = 1.10  # >10% over the stream's average
 OVERSPEND_MULTIPLE = 1.5  # > 1.5x the 3-month median
@@ -117,7 +118,7 @@ def live_account_ids(owner_user_id: int | None):
     """Subquery selecting the owner's non-deleted account ids."""
     return select(FinanceAccount.id).where(
         FinanceAccount.deleted_at.is_(None),
-        queries.owner_clause(FinanceAccount.owner_user_id, owner_user_id),
+        owner_clause(FinanceAccount.owner_user_id, owner_user_id),
     )
 
 
@@ -145,7 +146,7 @@ async def monthly_category_spend(
     rows = await queries.transaction_rows_where(
         db,
         [
-            queries.owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+            owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
             FinanceTransaction.deleted_at.is_(None),
             FinanceTransaction.dedup_status != "duplicate",
             FinanceTransaction.excluded_from_reports.is_(False),
@@ -300,7 +301,7 @@ async def _fees(
 ) -> int:
     """Bank/finance fees + interest charges dated inside the lookback window."""
     filters = [
-        queries.owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+        owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
         FinanceTransaction.deleted_at.is_(None),
         FinanceTransaction.dedup_status != "duplicate",
         FinanceTransaction.excluded_from_reports.is_(False),
@@ -406,7 +407,7 @@ async def _large_transactions(
     rows = await queries.transaction_rows_where(
         db,
         [
-            queries.owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+            owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
             FinanceTransaction.deleted_at.is_(None),
             FinanceTransaction.dedup_status != "duplicate",
             FinanceTransaction.excluded_from_reports.is_(False),
@@ -536,7 +537,6 @@ async def _missed_recurring(
     if retracted_any:
         await db.flush()
 
-
     if not streams:
         return 0
 
@@ -654,7 +654,7 @@ async def _liquid_cash(db: AsyncSession, owner_user_id: int | None) -> int:
     accounts = await queries.account_rows_where(
         db,
         [
-            queries.owner_clause(FinanceAccount.owner_user_id, owner_user_id),
+            owner_clause(FinanceAccount.owner_user_id, owner_user_id),
             FinanceAccount.deleted_at.is_(None),
             FinanceAccount.classification == "asset",
             FinanceAccount.account_type.in_(CASH_ACCOUNT_TYPES),
@@ -706,7 +706,7 @@ async def _credit_cards(
     accounts = await queries.account_rows_where(
         db,
         [
-            queries.owner_clause(FinanceAccount.owner_user_id, owner_user_id),
+            owner_clause(FinanceAccount.owner_user_id, owner_user_id),
             FinanceAccount.deleted_at.is_(None),
             FinanceAccount.classification == "liability",
             FinanceAccount.is_closed.is_(False),
@@ -900,7 +900,7 @@ async def _subscription_creep(
     txns = await queries.transaction_rows_where(
         db,
         [
-            queries.owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+            owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
             FinanceTransaction.deleted_at.is_(None),
             FinanceTransaction.dedup_status != "duplicate",
             FinanceTransaction.excluded_from_reports.is_(False),

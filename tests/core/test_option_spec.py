@@ -14,9 +14,12 @@ import pytest
 from aegis.core.option_spec import (
     OptionMode,
     OptionSpec,
+    VariantConflictError,
     compute_auto_requires,
     is_spec_with_options,
     parse_options,
+    variant_answers,
+    variant_delta,
 )
 
 
@@ -279,3 +282,108 @@ class TestComputeAutoRequires:
             "two",
             "three",
         ]
+
+
+class TestVariantDelta:
+    """``variant_delta`` decides whether a bracket request is already met
+    by the project's answers, needs an upgrade, or conflicts.
+
+    Options declare where their value lives in the answers
+    (``answer_key``); ordered options (auth level) treat a lower request
+    as satisfied, unordered ones (AI framework) treat any mismatch as a
+    conflict rather than a silent swap."""
+
+    @staticmethod
+    def _auth() -> _FakeSpec:
+        return _FakeSpec(
+            "auth",
+            [
+                OptionSpec(
+                    name="level",
+                    mode=OptionMode.SINGLE,
+                    choices=["basic", "rbac", "org"],
+                    default="basic",
+                    answer_key="auth_level",
+                    ordered=True,
+                ),
+                OptionSpec(
+                    name="oauth", mode=OptionMode.FLAG, choices=["oauth"], default=False
+                ),
+            ],
+        )
+
+    @staticmethod
+    def _ai() -> _FakeSpec:
+        return _FakeSpec(
+            "ai",
+            [
+                OptionSpec(
+                    name="framework",
+                    mode=OptionMode.SINGLE,
+                    choices=["pydantic-ai", "langchain"],
+                    default="pydantic-ai",
+                    answer_key="ai_framework",
+                ),
+            ],
+        )
+
+    def test_missing_service_returns_every_requested_option(self) -> None:
+        assert variant_delta("auth[org]", self._auth(), {}) == {"auth_level": "org"}
+
+    def test_no_brackets_requests_nothing(self) -> None:
+        assert variant_delta("auth", self._auth(), {"auth_level": "basic"}) == {}
+
+    def test_ordered_option_already_at_or_above_is_satisfied(self) -> None:
+        assert variant_delta("auth[org]", self._auth(), {"auth_level": "org"}) == {}
+        assert variant_delta("auth[basic]", self._auth(), {"auth_level": "org"}) == {}
+
+    def test_ordered_option_below_needs_upgrade(self) -> None:
+        assert variant_delta("auth[org]", self._auth(), {"auth_level": "basic"}) == {
+            "auth_level": "org"
+        }
+
+    def test_installed_without_a_recorded_level_needs_the_request(self) -> None:
+        """Auth installed before levels existed, or a hand-edited answer
+        that is not a choice: treated as unset, so the request applies."""
+        assert variant_delta("auth[rbac]", self._auth(), {"include_auth": True}) == {
+            "auth_level": "rbac"
+        }
+        assert variant_delta("auth[rbac]", self._auth(), {"auth_level": "weird"}) == {
+            "auth_level": "rbac"
+        }
+
+    def test_options_without_answer_key_are_ignored(self) -> None:
+        """Flags such as ``oauth`` have no project-level answer to compare;
+        they never drive an upgrade."""
+        assert variant_delta("auth[oauth]", self._auth(), {"auth_level": "basic"}) == {}
+
+    def test_unordered_mismatch_is_a_conflict(self) -> None:
+        with pytest.raises(VariantConflictError, match="ai_framework"):
+            variant_delta("ai[langchain]", self._ai(), {"ai_framework": "pydantic-ai"})
+
+    def test_fresh_install_ignores_recorded_defaults(self) -> None:
+        """Copier records ``ai_backend: memory`` even when AI is not
+        installed. A fresh ``ai[sqlite]`` names sqlite and compares with
+        nothing; only ``variant_delta`` looks at the project."""
+        ai = _FakeSpec(
+            "ai",
+            [
+                OptionSpec(
+                    name="backend",
+                    mode=OptionMode.SINGLE,
+                    choices=["memory", "sqlite", "postgres"],
+                    default="memory",
+                    answer_key="ai_backend",
+                )
+            ],
+        )
+        assert variant_answers("ai[sqlite]", ai) == {"ai_backend": "sqlite"}
+        assert variant_answers("ai", ai) == {}
+        with pytest.raises(VariantConflictError):
+            variant_delta("ai[sqlite]", ai, {"ai_backend": "memory"})
+
+    def test_unordered_match_is_satisfied(self) -> None:
+        assert (
+            variant_delta("ai[langchain]", self._ai(), {"ai_framework": "langchain"})
+            == {}
+        )

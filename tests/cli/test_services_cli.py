@@ -63,6 +63,16 @@ class TestServicesCommand:
         # Check for usage guidance
         assert "Use 'aegis init PROJECT_NAME --services auth' to add services" in output
 
+    def test_services_command_badges_experimental_services(self):
+        """The listing marks experimental specs; everything else is plain."""
+        result = run_aegis_command("services")
+        assert result.returncode == 0
+        lines = strip_ansi_codes(result.stdout).splitlines()
+        finance = next(line for line in lines if line.strip().startswith("finance "))
+        auth = next(line for line in lines if line.strip().startswith("auth "))
+        assert "experimental" in finance
+        assert "experimental" not in auth
+
     def test_services_command_help(self):
         """Test that services command help works."""
         result = run_aegis_command("services", "--help")

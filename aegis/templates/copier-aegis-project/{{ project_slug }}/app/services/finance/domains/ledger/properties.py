@@ -17,9 +17,10 @@ from datetime import date
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
-from sqlmodel import Field, select
+from sqlmodel import Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.finance.domains.ledger import queries
 from app.services.finance.models import FinanceAccount, FinanceLiabilityDetail
 
 PROPERTY_ACCOUNT_TYPE = "property"
@@ -200,8 +201,8 @@ async def set_property_details(
     ``None`` means "not provided" and leaves the stored value alone;
     ``False`` is a value and is written.
     """
+    from app.core.time import utcnow
     from app.services.finance.domains.ledger.accounts import get_account
-    from app.services.finance.utils import utcnow
 
     account = await get_account(db, account_id, owner_user_id=owner_user_id)
     if account is None:
@@ -268,8 +269,8 @@ async def set_secured_debt(
     lien position with it. Equity and LTV derive from the link at read
     time and are never stored.
     """
+    from app.core.time import utcnow
     from app.services.finance.domains.ledger.accounts import get_account
-    from app.services.finance.utils import utcnow
 
     liability = await get_account(db, account_id, owner_user_id=owner_user_id)
     if liability is None:
@@ -291,13 +292,9 @@ async def set_secured_debt(
         if lien_position is not None and lien_position < 1:
             raise ValueError("lien_position counts from 1 (first mortgage).")
 
-    detail = (
-        await db.exec(
-            select(FinanceLiabilityDetail).where(
-                FinanceLiabilityDetail.account_id == account_id
-            )
-        )
-    ).first()
+    detail = (await queries.liability_details_by_account(db, [account_id])).get(
+        account_id
+    )
     if detail is None:
         detail = FinanceLiabilityDetail(
             owner_user_id=owner_user_id, account_id=account_id

@@ -9,6 +9,8 @@
 //    refreshes once on 401, and bounces to /login (or /verify-pending on an
 //    email-not-verified 403).
 // 2. Global htmx hook - mirrors the same 401/403 handling for hx-get/post.
+// 3. The auth pages' Alpine components, registered at the bottom so the
+//    pages themselves carry no inline scripts.
 
 function _loginUrlWithNext() {
   // Preserve the current page path as ?next= so a successful sign-in returns
@@ -102,3 +104,176 @@ document.addEventListener('htmx:responseError', (evt) => {
 });
 
 window.fetchAuth = fetchAuth;
+
+// Auth page components. Each page's x-data names one of these; Alpine
+// calls init() itself where a component defines one.
+document.addEventListener('alpine:init', () => {
+  Alpine.data('loginForm', () => ({
+      loading: false,
+      error: '',
+      success: '',
+
+      init() {
+        // Banner text is driven by the query string: the server-side handlers
+        // redirect back here with a reason rather than rendering the message
+        // themselves, so a refresh never re-posts the form.
+        const p = new URLSearchParams(window.location.search);
+        if (p.get('registered')) this.success = 'Account created. Check your email to verify it.';
+        if (p.get('verified')) this.success = 'Email verified. Sign in to continue.';
+        if (p.get('reset')) this.success = 'Password updated. Sign in with your new password.';
+
+        const err = p.get('error');
+        if (err === 'invalid') {
+          this.error = 'Incorrect email or password.';
+        } else if (err === 'locked') {
+          this.error = 'Account temporarily locked after too many failed attempts. Try again shortly.';
+        }
+      },
+  }));
+
+  Alpine.data('registerForm', () => ({
+      loading: false,
+      error: '',
+
+      init() {
+        const p = new URLSearchParams(window.location.search);
+        const err = p.get('error');
+        if (err === 'exists') {
+          this.error = 'That email is already registered. Try signing in instead.';
+        } else if (err === 'closed') {
+          this.error = 'Signups are closed right now.';
+        } else if (err === 'invalid') {
+          this.error = 'Check the details and try again.';
+        }
+      },
+  }));
+
+  Alpine.data('forgotForm', () => ({
+      loading: false,
+      error: '',
+      sent: '',
+
+      async submit() {
+        if (this.loading) return;
+        this.loading = true;
+        this.error = '';
+        this.sent = '';
+        const email = this.$el.querySelector('input[name=email]').value;
+        try {
+          await fetch('/api/v1/auth/password-reset/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email }),
+          });
+        } catch (_) {
+          this.loading = false;
+          this.error = 'Could not reach the server. Try again.';
+          return;
+        }
+        this.loading = false;
+        // Always the same answer, whether or not the address exists: telling
+        // the difference would turn this form into an account-enumeration
+        // oracle. The API is deliberately silent about it too.
+        this.sent = 'If that email has an account, a reset link is on its way.';
+      },
+  }));
+
+  Alpine.data('resetForm', () => ({
+      loading: false,
+      error: '',
+
+      async submit() {
+        if (this.loading) return;
+        this.loading = true;
+        this.error = '';
+        const token = new URLSearchParams(window.location.search).get('token') || '';
+        if (!token) {
+          this.loading = false;
+          this.error = 'This reset link is incomplete. Request a new one.';
+          return;
+        }
+        const password = this.$el.querySelector('input[name=password]').value;
+        let resp;
+        try {
+          resp = await fetch('/api/v1/auth/password-reset/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: token, new_password: password }),
+          });
+        } catch (_) {
+          this.loading = false;
+          this.error = 'Could not reach the server. Try again.';
+          return;
+        }
+        if (resp.ok) {
+          // Land on /login with the banner rather than rendering "done" here:
+          // the next thing to do is sign in, so send them there.
+          window.location = '/login?reset=1';
+          return;
+        }
+        this.loading = false;
+        this.error = 'That reset link has expired or already been used. Request a new one.';
+      },
+  }));
+
+  Alpine.data('verifyEmail', () => ({
+      state: 'working',
+      error: '',
+
+      async verify() {
+        const token = new URLSearchParams(window.location.search).get('token') || '';
+        if (!token) {
+          this.state = 'failed';
+          this.error = 'This verification link is incomplete.';
+          return;
+        }
+        let resp;
+        try {
+          resp = await fetch('/api/v1/auth/verify-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: token }),
+          });
+        } catch (_) {
+          this.state = 'failed';
+          this.error = 'Could not reach the server. Try the link again.';
+          return;
+        }
+        if (resp.ok) {
+          this.state = 'ok';
+          return;
+        }
+        this.state = 'failed';
+        this.error = 'This link has expired or already been used.';
+      },
+  }));
+
+  Alpine.data('verifyPending', () => ({
+      loading: false,
+      error: '',
+      sent: '',
+
+      async resend() {
+        this.loading = true;
+        this.error = '';
+        this.sent = '';
+        let resp;
+        try {
+          resp = await fetch('/api/v1/auth/resend-verification', {
+            method: 'POST',
+            credentials: 'same-origin',
+          });
+        } catch (_) {
+          this.loading = false;
+          this.error = 'Could not reach the server. Try again.';
+          return;
+        }
+        this.loading = false;
+        if (resp.ok) {
+          this.sent = 'Sent. Check your inbox.';
+          return;
+        }
+        this.error = 'Could not send right now. Try again shortly.';
+      },
+  }));
+});

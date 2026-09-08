@@ -84,6 +84,23 @@ def warn_text(text: str, *, bold: bool = False) -> str:
     return typer.style(text, fg=_WARNING, bold=bold or None)
 
 
+def experimental_label() -> str:
+    """The one-word experimental marker, unstyled.
+
+    Renderers that style text themselves (the Rich-based guided setup)
+    take this and apply ``AEGIS_WARNING``; typer surfaces take
+    :func:`experimental_badge`. One word, one key, two render paths.
+    """
+    from ..i18n import t
+
+    return t("common.experimental")
+
+
+def experimental_badge() -> str:
+    """:func:`experimental_label` in the warning colour."""
+    return warn_text(experimental_label())
+
+
 def muted_text(text: str, *, bold: bool = False) -> str:
     """Style ``text`` de-emphasized (terminal dim) for inline composition."""
     return typer.style(text, dim=True, bold=bold or None)

@@ -10,13 +10,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import re
 
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlmodel import Session
 
+from app.services.ai.domains.llm import queries as llm_queries
 from app.services.ai.models.llm import (
     Direction,
     LargeLanguageModel,
-    LLMOrg,
     Modality,
 )
 
@@ -139,9 +138,7 @@ class LLMCatalogContext:
             LLMCatalogContext with top models from each vendor.
         """
         # Query 1: Get all featured vendors in one query
-        vendors = session.exec(
-            select(LLMOrg).where(LLMOrg.name.in_(FEATURED_VENDORS))
-        ).all()
+        vendors = llm_queries.orgs_named(session, FEATURED_VENDORS)
 
         if not vendors:
             return cls([])
@@ -152,16 +149,7 @@ class LLMCatalogContext:
 
         # Query 2: Get all models for featured vendors with eager loading
         # This fetches models + prices + deployments + modalities in ~3 queries
-        stmt = (
-            select(LargeLanguageModel)
-            .where(LargeLanguageModel.served_by_org_id.in_(vendor_ids))
-            .options(
-                selectinload(LargeLanguageModel.llm_prices),
-                selectinload(LargeLanguageModel.deployments),
-                selectinload(LargeLanguageModel.modalities),
-            )
-        )
-        all_models = session.exec(stmt).all()
+        all_models = llm_queries.models_served_by(session, vendor_ids)
 
         # Group models by vendor, filtering out aliases (-latest, etc.)
         vendor_models: dict[int, list[LargeLanguageModel]] = defaultdict(list)

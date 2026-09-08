@@ -1,7 +1,12 @@
-"""Smoke test that the plugin's spec is well-formed."""
+"""Smoke test that the plugin's spec is well-formed and discoverable."""
+
+import tomllib
+from pathlib import Path
 
 from aegis.core.plugins.spec import PluginKind, PluginSpec
-from aegis_plugin_{{ name }}.plugin import get_spec
+from {{ pkg }}.plugin import get_spec
+
+PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 
 
 def test_get_spec_returns_pluginspec() -> None:
@@ -9,3 +14,13 @@ def test_get_spec_returns_pluginspec() -> None:
     assert isinstance(spec, PluginSpec)
     assert spec.name == "{{ name }}"
     assert spec.kind == PluginKind.SERVICE
+
+
+def test_entry_point_is_what_aegis_and_the_directory_look_for() -> None:
+    """``aegis add`` discovers the plugin through the ``aegis.plugins`` entry
+    point, and the plugin directory on aegis-stack.io verifies a package by
+    reading the same entry point out of the wheel. A rename here breaks both."""
+    project = tomllib.loads(PYPROJECT.read_text())["project"]
+    entry_points = project["entry-points"]["aegis.plugins"]
+    assert entry_points["{{ name }}"] == "{{ pkg }}.plugin:get_spec"
+    assert "aegis-stack-plugin" in project["keywords"]

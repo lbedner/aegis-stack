@@ -440,7 +440,7 @@ async def user_factory(async_db_session: AsyncSession):
     import uuid
 
     from app.models.user import UserCreate
-    from app.services.auth.user_service import UserService
+    from app.services.auth.users import UserService
 
     user_service = UserService(async_db_session)
     counter = {"n": 0}
@@ -465,7 +465,7 @@ async def org_factory(async_db_session: AsyncSession):
     import uuid
 
     from app.models.org import OrgCreate
-    from app.services.auth.org_service import OrgService
+    from app.services.auth.orgs import OrgService
 
     org_service = OrgService(async_db_session)
     counter = {"n": 0}
@@ -491,7 +491,7 @@ async def owner_with_org(async_db_session: AsyncSession, user_factory, org_facto
     as setup but doesn't care about the specific details.
     """
     from app.models.org import ORG_ROLE_OWNER
-    from app.services.auth.membership_service import MembershipService
+    from app.services.auth.memberships import MembershipService
 
     user = await user_factory()
     org = await org_factory()
@@ -549,7 +549,7 @@ async def admin_user(async_db_session: AsyncSession):
     "first user becomes admin" rule auto-promotes it to ``role="admin"``.
     """
     from app.models.user import UserCreate
-    from app.services.auth.user_service import UserService
+    from app.services.auth.users import UserService
 
     user_service = UserService(async_db_session)
     return await user_service.create_user(
@@ -589,7 +589,7 @@ async def auth_user(async_db_session: AsyncSession):
     """Create a generic authenticated user. Basic auth has no role
     concept, so this is just "a logged-in user" — no admin claim."""
     from app.models.user import UserCreate
-    from app.services.auth.user_service import UserService
+    from app.services.auth.users import UserService
 
     user_service = UserService(async_db_session)
     return await user_service.create_user(

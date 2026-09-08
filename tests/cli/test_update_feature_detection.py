@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from aegis.commands.update import _detect_existing_features
 
 
@@ -73,12 +75,22 @@ class TestDetectionCharacterization:
         assert detected.get("include_worker") is True
         assert detected.get("include_scheduler") is True
 
+    @pytest.mark.parametrize(
+        "registration",
+        [
+            "app/services/insights/adapters/collectors/collection.py",
+            "app/services/insights/collector_service.py",
+        ],
+        ids=["current-layout", "pre-restructure-layout"],
+    )
     def test_insights_subflags_from_collector_registration(
-        self, tmp_path: Path
+        self, tmp_path: Path, registration: str
     ) -> None:
-        """Sub-flags come from collector_service.py content, not file presence."""
+        """Sub-flags come from the registration's content, not file
+        presence, on the current layout and the one it replaced."""
         _touch(tmp_path, "app/services/insights/")
-        collector = tmp_path / "app/services/insights/collector_service.py"
+        collector = tmp_path / registration
+        collector.parent.mkdir(parents=True, exist_ok=True)
         collector.write_text("from x import GitHubTrafficCollector, PyPICollector\n")
         detected = _detect_existing_features(tmp_path)
         assert detected["insights_github"] is True

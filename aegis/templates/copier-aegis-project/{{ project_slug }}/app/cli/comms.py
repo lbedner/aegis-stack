@@ -60,7 +60,7 @@ app.add_typer(call_app, name="call")
 
 @app.command(help=lazy_t("comms.help_status"))
 def status() -> None:
-    from app.services.comms.call import get_call_status, validate_call_config
+    from app.services.comms.calls import get_call_status, validate_call_config
     from app.services.comms.email import get_email_status, validate_email_config
     from app.services.comms.sms import get_sms_status, validate_sms_config
 
@@ -318,7 +318,7 @@ def call_make(
 
 async def _call_make(to: str, twiml_url: str, timeout: int) -> None:
     """Async implementation of make call."""
-    from app.services.comms.call import CallConfigurationError, CallError, make_call
+    from app.services.comms.calls import CallConfigurationError, CallError, make_call
     from app.services.comms.models import MakeCallRequest
 
     try:

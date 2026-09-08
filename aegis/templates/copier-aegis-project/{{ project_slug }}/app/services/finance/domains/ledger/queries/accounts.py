@@ -57,6 +57,18 @@ async def account_by_id(
     return (await db.exec(query)).first()
 
 
+async def account_owner_ids(db: AsyncSession) -> list[int | None]:
+    """Every owner with a live account; ``None`` is the no-auth owner."""
+    rows = (
+        await db.exec(
+            select(FinanceAccount.owner_user_id)
+            .where(FinanceAccount.deleted_at.is_(None))
+            .distinct()
+        )
+    ).all()
+    return list(rows)
+
+
 async def accounts_page(
     db: AsyncSession,
     *,

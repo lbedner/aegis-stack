@@ -3,14 +3,18 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "aegis-plugin-{{ name }}"
+name = "{{ dist }}"
 version = "0.0.1"
 description = "{{ description }}"
 authors = [{ name = "{{ author }}" }]
 requires-python = ">=3.11"
+keywords = ["aegis-stack", "aegis-stack-plugin"]
 dependencies = [
     "aegis-stack",
 ]
+
+[project.urls]
+"Aegis Plugin" = "https://aegis-stack.io/plugins/{{ dist }}"
 
 [project.optional-dependencies]
 dev = [
@@ -20,10 +24,10 @@ dev = [
 ]
 
 [project.entry-points."aegis.plugins"]
-{{ name }} = "aegis_plugin_{{ name }}.plugin:get_spec"
+{{ name }} = "{{ pkg }}.plugin:get_spec"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/aegis_plugin_{{ name }}"]
+packages = ["src/{{ pkg }}"]
 
 [tool.ruff]
 line-length = 88

@@ -23,20 +23,21 @@ together.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import httpx
 from app.components.backend.security.rate_limit import get_session_metadata
 from app.core.db import get_async_db
+from app.core.time import utcnow
 from app.services.auth.deps import get_refresh_service, get_user_service
 from app.core.config import settings
 from app.core.log import logger
 from app.core.security import create_access_token, set_refresh_cookie, set_session_cookie
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.deps import get_current_active_user
-from app.services.auth.refresh_service import RefreshService
-from app.services.auth.user_service import RegistrationClosed, UserService
+from app.services.auth.refresh_tokens import RefreshService
+from app.services.auth.users import RegistrationClosed, UserService
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response
@@ -151,7 +152,7 @@ async def _finalize_oauth_signin(
     UI can show how each session was created.
     """
     await user_service.update_user(
-        user.id, last_login=datetime.now(UTC).replace(tzinfo=None)
+        user.id, last_login=utcnow()
     )
     jwt = create_access_token({"sub": user.email})
     refresh_token = await refresh_service.mint(

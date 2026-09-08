@@ -5,8 +5,9 @@ from datetime import datetime
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.core.time import utcnow
+
 from .agent_tool import AgentTool
-from .timestamps import utcnow_naive
 from .tool import Tool
 
 
@@ -40,7 +41,7 @@ class Agent(SQLModel, table=True):
     # runs it in the Monty interpreter. Off by default; flipping it is a
     # capability grant, deliberately DB-driven like tool attachments.
     code_mode: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=utcnow_naive)
-    updated_at: datetime = Field(default_factory=utcnow_naive)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
     tools: list[Tool] = Relationship(link_model=AgentTool)

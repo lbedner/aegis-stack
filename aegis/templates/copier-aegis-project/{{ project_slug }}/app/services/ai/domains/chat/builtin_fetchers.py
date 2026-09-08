@@ -9,11 +9,10 @@ should follow the same pattern in their own modules.
 
 from datetime import UTC, datetime, timedelta
 
-from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
-from app.models.conversation import Conversation
+from app.services.ai.domains.chat import queries
 
 from .fetchers import FetchContext, register_fetcher
 
@@ -23,17 +22,12 @@ RECENT_CONVERSATION_LIMIT = 5
 async def _recent_conversations_for(
     session: AsyncSession, ctx: FetchContext
 ) -> str | None:
-    stmt = (
-        select(Conversation)
-        .where(Conversation.user_id == ctx.user_id)
-        .order_by(col(Conversation.updated_at).desc())
-        .limit(RECENT_CONVERSATION_LIMIT)
-    )
+    since = None
     if ctx.days_back is not None:
-        cutoff = datetime.now(UTC) - timedelta(days=ctx.days_back)
-        stmt = stmt.where(col(Conversation.updated_at) >= cutoff)
-    result = await session.exec(stmt)
-    conversations = list(result.all())
+        since = datetime.now(UTC) - timedelta(days=ctx.days_back)
+    conversations = await queries.recent_conversations_for(
+        session, user_id=ctx.user_id, limit=RECENT_CONVERSATION_LIMIT, since=since
+    )
     if not conversations:
         return None
     lines = "\n".join(

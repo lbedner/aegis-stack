@@ -348,3 +348,118 @@ class TestBackupLabelSegmentsArePathSafe:
         majority — or backup paths stop being recognizable."""
         for ordinary in ("scraper", "metrics_hub", "1.2.0", "2.0.0-rc1"):
             assert _safe_path_segment(ordinary) == ordinary
+
+
+class TestAddPluginRunsMigrationTail:
+    """A plugin that declares ``migrations`` gets the same tail
+    ``add_service`` gives in-tree services: alembic bootstrapped when
+    missing, its migrations generated, migrations run. Without it the
+    plugin's tables never exist (``aegis add crawl4ai`` shipped a router
+    over a table nobody created)."""
+
+    @staticmethod
+    def _spec_with_migrations() -> object:
+        from dataclasses import replace
+
+        from aegis_plugin_test.spec import get_spec
+
+        from aegis.core.migration_spec import (
+            ColumnSpec,
+            MigrationSpec,
+            TableSpec,
+        )
+
+        migration = MigrationSpec(
+            service_name="test_plugin",
+            description="Test plugin table",
+            tables=[
+                TableSpec(
+                    name="test_plugin_thing",
+                    columns=[
+                        ColumnSpec(
+                            "id", "sa.Integer()", nullable=False, primary_key=True
+                        )
+                    ],
+                )
+            ],
+        )
+        return replace(get_spec(), migrations=[migration])
+
+    @staticmethod
+    def _quiet(monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            ManualUpdater, "run_post_generation_tasks", lambda self: None
+        )
+        monkeypatch.setattr(
+            ManualUpdater,
+            "_regenerate_shared_files",
+            lambda self, ans: ([], [], []),
+        )
+
+    def test_plugin_with_migrations_bootstraps_generates_and_runs(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import patch
+
+        self._quiet(monkeypatch)
+        spec = self._spec_with_migrations()
+        with (
+            patch("aegis.core.migration_generator.bootstrap_alembic") as bootstrap,
+            patch(
+                "aegis.core.migration_generator.generate_plugin_migrations",
+                return_value=[fake_project / "alembic" / "versions" / "0001_x.py"],
+            ) as generate,
+            patch("aegis.core.post_gen_tasks.run_migrations") as run,
+        ):
+            result = ManualUpdater(fake_project).add_plugin(
+                spec=spec, plugin_module_name="aegis_plugin_test"
+            )
+
+        assert result.success
+        bootstrap.assert_called_once()
+        generate.assert_called_once()
+        # The project's answers ride along so the engine gates the schema.
+        assert generate.call_args.args[1] is spec
+        assert "project_slug" in generate.call_args.args[2]
+        run.assert_called_once_with(fake_project, include_migrations=True)
+
+    def test_plugin_without_migrations_skips_tail(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import patch
+
+        from aegis_plugin_test.spec import get_spec
+
+        self._quiet(monkeypatch)
+        with (
+            patch("aegis.core.migration_generator.bootstrap_alembic") as bootstrap,
+            patch("aegis.core.post_gen_tasks.run_migrations") as run,
+        ):
+            result = ManualUpdater(fake_project).add_plugin(
+                spec=get_spec(), plugin_module_name="aegis_plugin_test"
+            )
+
+        assert result.success
+        bootstrap.assert_not_called()
+        run.assert_not_called()
+
+    def test_existing_alembic_is_not_rebootstrapped(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import patch
+
+        self._quiet(monkeypatch)
+        (fake_project / "alembic").mkdir()
+        with (
+            patch("aegis.core.migration_generator.bootstrap_alembic") as bootstrap,
+            patch(
+                "aegis.core.migration_generator.generate_plugin_migrations",
+                return_value=[],
+            ),
+            patch("aegis.core.post_gen_tasks.run_migrations"),
+        ):
+            ManualUpdater(fake_project).add_plugin(
+                spec=self._spec_with_migrations(),
+                plugin_module_name="aegis_plugin_test",
+            )
+        bootstrap.assert_not_called()

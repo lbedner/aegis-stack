@@ -204,9 +204,9 @@ class TestSerializer:
             description="",
             wiring=PluginWiring(
                 routers=[
-                    RouterWiring(module="aegis_plugin_scraper.api"),
+                    RouterWiring(module="aegis_stack_scraper.api"),
                     RouterWiring(
-                        module="aegis_plugin_scraper.admin",
+                        module="aegis_stack_scraper.admin",
                         symbol="admin_router",
                     ),
                 ],

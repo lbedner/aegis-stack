@@ -10,7 +10,8 @@ from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.documents.models import Document, DocumentPage, DocumentTag, utcnow
+from app.core.time import utcnow
+from app.services.documents.models import Document, DocumentPage, DocumentTag
 
 
 async def document_by_content(

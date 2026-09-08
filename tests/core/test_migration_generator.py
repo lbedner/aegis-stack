@@ -7,6 +7,7 @@ Alembic migration files on-demand for services like auth and AI.
 
 import ast
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1718,3 +1719,79 @@ class TestSchemaEngineGating:
         )
         content = self._generate(tmp_path, "plain", StorageBackends.POSTGRES)
         assert "CREATE SCHEMA" not in content
+
+
+class TestPluginMigrations:
+    """Third-party plugins ship ``PluginSpec.migrations``; ``aegis add
+    <plugin>`` writes them through the same rail in-tree services use,
+    without the plugin having to be in the static registry."""
+
+    @staticmethod
+    def _plugin_spec(schema: str | None = "crawler") -> Any:
+        from types import SimpleNamespace
+
+        migration = ServiceMigrationSpec(
+            service_name="crawler",
+            description="Crawler documents store",
+            schema=schema,
+            tables=[
+                TableSpec(
+                    name="documents",
+                    columns=[
+                        ColumnSpec(
+                            "id", "sa.Integer()", nullable=False, primary_key=True
+                        ),
+                        ColumnSpec("source_url", "sa.Text()", nullable=False),
+                    ],
+                ),
+            ],
+        )
+        return SimpleNamespace(name="crawl4ai", migrations=[migration])
+
+    def test_writes_one_file_per_migration_spec(self, tmp_path: Path) -> None:
+        from aegis.core.migration_generator import generate_plugin_migrations
+
+        (tmp_path / "alembic" / "versions").mkdir(parents=True)
+        written = generate_plugin_migrations(
+            tmp_path,
+            self._plugin_spec(),
+            {AnswerKeys.DATABASE_ENGINE: StorageBackends.SQLITE},
+        )
+        assert [p.name.split("_", 1)[1] for p in written] == ["crawler.py"]
+        content = written[0].read_text()
+        ast.parse(content)
+        assert "'documents'" in content
+
+    def test_schema_gated_by_engine(self, tmp_path: Path) -> None:
+        from aegis.core.migration_generator import generate_plugin_migrations
+
+        (tmp_path / "alembic" / "versions").mkdir(parents=True)
+        sqlite = generate_plugin_migrations(
+            tmp_path / "a" if False else tmp_path,
+            self._plugin_spec(),
+            {AnswerKeys.DATABASE_ENGINE: StorageBackends.SQLITE},
+        )[0].read_text()
+        assert "schema='crawler'" not in sqlite
+
+        pg_root = tmp_path / "pg"
+        (pg_root / "alembic" / "versions").mkdir(parents=True)
+        postgres = generate_plugin_migrations(
+            pg_root,
+            self._plugin_spec(),
+            {AnswerKeys.DATABASE_ENGINE: StorageBackends.POSTGRES},
+        )[0].read_text()
+        assert 'CREATE SCHEMA IF NOT EXISTS "crawler"' in postgres
+        assert "schema='crawler'" in postgres
+
+    def test_idempotent_on_rerun(self, tmp_path: Path) -> None:
+        """A second ``aegis add`` of the same plugin must not stack a
+        duplicate migration."""
+        from aegis.core.migration_generator import generate_plugin_migrations
+
+        (tmp_path / "alembic" / "versions").mkdir(parents=True)
+        context = {AnswerKeys.DATABASE_ENGINE: StorageBackends.SQLITE}
+        first = generate_plugin_migrations(tmp_path, self._plugin_spec(), context)
+        second = generate_plugin_migrations(tmp_path, self._plugin_spec(), context)
+        assert len(first) == 1
+        assert second == []
+        assert len(list((tmp_path / "alembic" / "versions").glob("*.py"))) == 1

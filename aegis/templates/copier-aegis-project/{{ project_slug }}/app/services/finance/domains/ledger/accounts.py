@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.constants import (
     RECONCILE_MARKER,
     Provider,
@@ -21,7 +22,6 @@ from app.services.finance.models import (
 from app.services.finance.schemas import ReconcileResponse
 from app.services.finance.utils import (
     DEFAULT_CURRENCY,
-    utcnow,
 )
 
 

@@ -7,6 +7,69 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Plugin dependencies can name a service variant.** A plugin declaring
+  `required_services=["auth[org]"]` now gets auth at org level: installed
+  fresh at that level, upgraded when the project has a lower level, left
+  alone when it already satisfies the request. The spec's options say
+  where a variant lives in the answers (`answer_key`) and whether its
+  choices are ordered levels; `add-service auth[org]` on basic auth uses
+  the same rule, and the level-specific migrations are generated on both
+  paths. Unordered mismatches are refused, not swapped (docs, Plugins).
+- **Plugin packages are named `aegis-stack-<name>`.** `aegis plugins create`
+  now scaffolds `aegis-stack-<name>` with the `aegis_stack_<name>` import
+  package, replacing `aegis-plugin-<name>`. `aegis-stack-` is the one
+  prefix this project owns on PyPI (rationale: docs, Plugins, Naming). The
+  install identifier is unchanged: `aegis add <name>`.
+- **Scaffolded plugins carry directory discovery metadata.** `pyproject.toml`
+  gains `keywords = ["aegis-stack", "aegis-stack-plugin"]` and an
+  `Aegis Plugin` project URL, the README explains how a published plugin
+  gets listed on aegis-stack.io, and the generated test pins the
+  `aegis.plugins` entry point value. A new Plugins page under Reference
+  documents create, discovery, publish and naming.
+- **Experimental is a field on the spec.** `PluginSpec.experimental` replaces
+  the "Experimental:" prose that prefixed finance's registry strings.
+  `aegis services` and the init wizard badge experimental services in the
+  warning colour, and `aegis add-service` prints one warning line for them
+  without prompting. Finance is the first to carry the flag.
+- **htmx web frontend: one route, two render paths.** `rendering.render()`
+  serves a full page (`layouts/page.html`) or a bare fragment
+  (`layouts/fragment.html`) from the same handler based on `HX-Request`,
+  with `Vary: HX-Request` and a `status_code` passthrough for validation
+  re-renders. The htmx config gains `responseHandling` so a 422 swaps and
+  other 4xx/5xx raise `htmx:responseError`; the SSE extension loads after
+  core. `main.py` is now wiring only: `assets.py` (fingerprinted URLs,
+  cache policy), `filters.py` (`money`, `short_date`, `pct`), and
+  `rendering.py` own the rest. The unused `strftime` filter is gone.
+- **htmx feedback is an `HX-Trigger` toast.** `with_toast(response, text,
+  tone)` plus a live region mounted by the base layout replace the
+  sessionStorage-and-reload snackbar. `app.js` no longer re-executes
+  swapped `<script>` tags; the auth pages' components moved into
+  `auth.js` as `Alpine.data(...)` registrations, so no page carries an
+  inline script. `components/macros/feedback.html` adds `empty_state` and
+  `error_banner`.
+- **htmx projects ship a web test kit** under `tests/web/`: an `hx` client
+  fixture, `add_template`, and DOM helpers (`select`, `one`, `none`,
+  `text`) backed by lxml + cssselect in the dev extra, with the kit's own
+  tests.
+
+### Fixed
+
+- **htmx dev stack no longer breaks host tooling.** The tailwind container
+  installs `node_modules` into a named volume instead of the bind mount, so
+  a macOS or Windows host never inherits Linux binaries that make
+  `make lint-frontend` fail.
+- **Generated `test_app_js_is_loaded` no longer fails once assets are
+  built**: it accepts the fingerprinted path as well as the source path.
+- **`aegis add <plugin>` creates the plugin's tables.** A third-party
+  plugin's `migrations` were never written: `add_plugin` skipped the
+  migration tail in-tree services get, and the generator only resolved
+  names from the static registry. The plugin's revisions are now rendered
+  straight from its spec (`generate_plugin_migrations`), with alembic
+  bootstrapped when missing, schema dropped on SQLite, and re-adding the
+  plugin never stacking a duplicate revision.
+
 ## [0.11.0] - 2026-09-06
 
 ### Added

@@ -13,11 +13,11 @@ from sqlalchemy import (
 )
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
     _bigint,
-    _utcnow,
 )
 
 
@@ -73,7 +73,7 @@ class FinanceAnalystSnapshot(SQLModel, table=True):
     open_warning: int = Field(default=0)
     goals_total_saved: int | None = _bigint("goals_total_saved")
 
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceTransactionChangelog(SQLModel, table=True):
@@ -97,4 +97,4 @@ class FinanceTransactionChangelog(SQLModel, table=True):
     new_value: str | None = Field(default=None)
     change_source: str
     sync_cursor: str | None = Field(default=None)
-    changed_at: datetime = Field(default_factory=_utcnow)
+    changed_at: datetime = Field(default_factory=utcnow)

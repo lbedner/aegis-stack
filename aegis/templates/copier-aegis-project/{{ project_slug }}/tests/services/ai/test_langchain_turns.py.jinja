@@ -1,0 +1,145 @@
+{%- if ai_framework == "langchain" -%}
+"""The LangChain turn, end to end, on both entrypoints.
+
+LangChain streams text deltas and nothing else: no tool events, no
+staged readings, no per-run usage. Both ``chat()`` and ``stream_chat()``
+must finish a turn on exactly that. This is the path the pydantic-ai
+harness cannot reach, and the one that broke when the post-stream
+bookkeeping assumed the pydantic-ai event stream had run.
+"""
+
+from collections.abc import AsyncIterator
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+
+import app.services.ai.service.chat as chat_module
+from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG, AgentConfig
+from app.services.ai.service import AIService
+
+PIECES = ("Hel", "lo ", "there")
+
+
+class _Chunk:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class _FakeLLM:
+    """What ``_prepare_llm_and_messages`` hands back under LangChain."""
+
+    async def ainvoke(self, messages: Any) -> _Chunk:
+        return _Chunk("".join(PIECES))
+
+    async def astream(self, messages: Any) -> AsyncIterator[_Chunk]:
+        for piece in PIECES:
+            yield _Chunk(piece)
+
+
+def _default_config() -> AgentConfig:
+    return AgentConfig(
+        slug=DEFAULT_AGENT_SLUG,
+        name="Assistant",
+        system_prompt="You help.",
+        model_id=None,
+        temperature=0.2,
+        max_tokens=512,
+    )
+
+
+@pytest.fixture
+def harness(
+    mock_ai_settings: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> tuple[AIService, MagicMock]:
+    """AIService with contexts, the agent row and the runtime faked out, so
+    the turn runs on the fake LLM alone."""
+    service = AIService(mock_ai_settings)
+
+    async def no_health(self: AIService) -> tuple[None, None]:
+        return (None, None)
+
+    monkeypatch.setattr(AIService, "_build_health_context", no_health)
+    monkeypatch.setattr(AIService, "_build_usage_context", lambda self: None)
+    monkeypatch.setattr(AIService, "_build_catalog_context", lambda self: None)
+
+    async def resolve(slug: str = DEFAULT_AGENT_SLUG, **kwargs: object) -> AgentConfig:
+        return _default_config()
+
+    monkeypatch.setattr(chat_module, "resolve_agent", resolve)
+
+    recorder = MagicMock()
+{%- if ai_backend != "memory" %}
+
+    async def no_memory(user_id: str, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(chat_module, "build_user_memory_context", no_memory)
+    monkeypatch.setattr(service, "_record_usage", recorder)
+{%- endif %}
+
+    def fake_prepare(self: AIService, conversation: Any, *args: Any, **kwargs: Any) -> Any:
+        return _FakeLLM(), ["messages"]
+
+    monkeypatch.setattr(AIService, "_prepare_llm_and_messages", fake_prepare)
+    return service, recorder
+
+
+class TestLangChainChat:
+    async def test_chat_returns_the_model_reply(
+        self, harness: tuple[AIService, MagicMock]
+    ) -> None:
+        service, recorder = harness
+
+        message = await service.chat("hello")
+
+        assert message.content == "Hello there"
+        assert message.metadata["conversation_id"]
+{%- if ai_backend != "memory" %}
+        recorder.assert_called_once()
+        assert recorder.call_args.args[0] == f"chat:{DEFAULT_AGENT_SLUG}"
+{%- endif %}
+
+
+class TestLangChainStreaming:
+    async def test_stream_yields_deltas_then_one_final_chunk(
+        self, harness: tuple[AIService, MagicMock]
+    ) -> None:
+        service, recorder = harness
+
+        chunks = [
+            chunk
+            async for chunk in service.stream_chat("hello", stream_delta=True)
+        ]
+
+        deltas = [c for c in chunks if not c.is_final]
+        assert [c.content for c in deltas] == list(PIECES)
+        final = chunks[-1]
+        assert final.is_final
+        assert final.content == "Hello there"
+        assert final.metadata["stream_complete"] is True
+        # No tools ran, so no trail is attached.
+        assert "tool_trace" not in final.metadata
+{%- if ai_backend != "memory" %}
+        # LangChain reports no token counts while streaming: the turn is
+        # ledgered at zero rather than not at all.
+        recorder.assert_called_once_with(
+            f"stream_chat:{DEFAULT_AGENT_SLUG}",
+            {"input_tokens": 0, "output_tokens": 0},
+            "default",
+        )
+        assert final.metadata["input_tokens"] == 0
+        assert final.metadata["output_tokens"] == 0
+{%- endif %}
+
+    async def test_stream_persists_the_assembled_reply(
+        self, harness: tuple[AIService, MagicMock]
+    ) -> None:
+        service, _recorder = harness
+
+        final = [chunk async for chunk in service.stream_chat("hello")][-1]
+
+        saved = service.conversation_manager.get_conversation(final.conversation_id)
+        assert saved is not None
+        assert saved.messages[-1].content == "Hello there"
+{%- endif %}

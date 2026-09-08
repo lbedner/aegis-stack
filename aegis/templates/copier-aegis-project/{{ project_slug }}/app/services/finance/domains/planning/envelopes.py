@@ -18,14 +18,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.domains.ledger import accounts, valuations
 from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.domains.planning import queries
 from app.services.finance.models import (
     FinanceAccount,
-)
-from app.services.finance.utils import (
-    utcnow,
 )
 
 ENVELOPE_ACCOUNT_TYPE = "envelope"

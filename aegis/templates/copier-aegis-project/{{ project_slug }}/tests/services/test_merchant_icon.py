@@ -12,10 +12,10 @@ from datetime import timedelta
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.domains.ledger import merchant_icon
 from app.services.finance.domains.ledger.merchant_icon import merchant_icon_domain
 from app.services.finance.models import FinanceIcon
-from app.services.finance.utils import utcnow
 
 
 class TestMerchantIconDomain:

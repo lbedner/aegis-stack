@@ -16,12 +16,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func
-from sqlmodel import select
-
 from app.core.log import logger
+from app.services.ai.domains.llm import queries as llm_queries
 
-from app.services.ai.models.llm import LLMUsage
 from .models import BudgetStatus
 
 
@@ -50,13 +47,12 @@ class BudgetGuard:
     async def check(self, session: Any, user_id: str) -> BudgetStatus:
         """Sum today's spend for this user + action family; allow if under."""
         try:
-            row = await session.exec(
-                select(func.coalesce(func.sum(LLMUsage.total_cost), 0.0))
-                .where(LLMUsage.user_id == user_id)
-                .where(LLMUsage.action.like(f"{self.action_prefix}%"))  # type: ignore[attr-defined]
-                .where(LLMUsage.timestamp >= _utc_day_start())
+            spent = await llm_queries.spend_since(
+                session,
+                user_id=user_id,
+                action_prefix=self.action_prefix,
+                since=_utc_day_start(),
             )
-            spent = float(row.one())
         except Exception as exc:  # noqa: BLE001 - fail open, see module docstring
             logger.warning(
                 "chat budget check failed; allowing turn",

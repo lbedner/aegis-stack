@@ -77,7 +77,7 @@ class RouterWiring:
 
     module: str
     """Import path of the module exposing the router, e.g.
-    ``"aegis_plugin_scraper.api"``."""
+    ``"aegis_stack_scraper.api"``."""
 
     symbol: str = "router"
     """Name of the ``APIRouter`` instance inside that module."""
@@ -110,7 +110,7 @@ class FrontendWidgetWiring:
     """How a plugin's dashboard card or modal registers with the frontend."""
 
     module: str
-    """Import path, e.g. ``"aegis_plugin_scraper.frontend"``."""
+    """Import path, e.g. ``"aegis_stack_scraper.frontend"``."""
 
     symbol: str
     """Class name, e.g. ``"ScraperCard"`` or ``"ScraperModal"``."""
@@ -303,6 +303,10 @@ class PluginSpec:
     # Plugin metadata
     version: str = "0.0.0"
     verified: bool = True
+    # Schema, APIs and CLI surface may change between releases. A field, not
+    # a word in ``description``: listings and the init wizard badge it, and
+    # ``add-service`` warns once. Never a confirmation prompt.
+    experimental: bool = False
 
     # PEP 440 specifier string (e.g. ``">=0.6,<0.8"``) declaring which
     # aegis-stack CLI versions this plugin supports. Empty string means

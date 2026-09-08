@@ -1,0 +1,457 @@
+"""
+Goal service — CRUD + progress computation for user goals.
+
+Progress is derived live from `insight_metric` time-series; no snapshot table.
+The resolver in `goal_catalog` maps user-facing `metric_key` values to the
+underlying (source_key, metric_type_key) tuple used by queries.
+
+Gated on `insights_per_user` because the `Goal` model carries a
+`project_id` FK and only ships when per-user mode is enabled.
+"""
+{% if insights_per_user %}
+import logging
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
+
+from app.core.time import utcnow
+from app.services.insights import queries
+from app.services.insights.domains.goal_catalog import AggregationStrategy, get_metric_info
+from app.services.insights.models import (
+    Goal,
+    GoalKind,
+    GoalMetric,
+    GoalStatus,
+    InsightMetric,
+)
+from app.services.insights.utils import day_end, day_start
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class GoalProgress:
+    """Snapshot of where a goal stands right now.
+
+    `current_value` is the relevant aggregate for the goal's kind:
+    - ABSOLUTE: sum-to-date
+    - DELTA:    sum over the window clamped to goal.created_at
+    - RATE:     same as DELTA — rolling window clamped to creation
+
+    `baseline_value` is the value at goal creation (ABSOLUTE only). Non-zero
+    for absolute goals created against a metric that already had data; lets
+    the UI render a two-tone bar distinguishing pre-goal from earned-since.
+    Always 0 for DELTA/RATE since their progress is already clamped at the
+    service layer.
+
+    `percent` is clamped to [0, ∞) — overshoots are allowed and shown honestly.
+    """
+
+    goal_id: int
+    current_value: float
+    baseline_value: float
+    target_value: float
+    percent: float
+    on_track: bool
+    days_remaining: int | None  # None if no target_date or rate-without-deadline
+
+
+class GoalService:
+    """CRUD + progress computation for user goals."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    # -------------------------------------------------------------------
+    # CRUD
+    # -------------------------------------------------------------------
+
+    async def list_for_user(
+        self,
+        user_id: int,
+        status: GoalStatus | None = None,
+    ) -> list[Goal]:
+        """All goals for a user, optionally filtered by status."""
+        return await queries.goals_for_user(self.db, user_id, status=status)
+
+    async def get(self, goal_id: int, user_id: int) -> Goal | None:
+        """Get one goal, scoped to owner. Returns None if not found or not owned."""
+        goal = await self.db.get(Goal, goal_id)
+        if goal is None or goal.user_id != user_id:
+            return None
+        return goal
+
+    async def create(
+        self,
+        *,
+        user_id: int,
+        project_id: int,
+        metric_key: GoalMetric,
+        kind: GoalKind,
+        target_value: float,
+        window_days: int | None = None,
+        target_date: date | None = None,
+    ) -> Goal:
+        """Create a new goal. Validates kind-specific required fields."""
+        _validate_goal_shape(kind, window_days, target_date)
+
+        goal = Goal(
+            user_id=user_id,
+            project_id=project_id,
+            metric_key=metric_key,
+            kind=kind,
+            target_value=target_value,
+            window_days=window_days,
+            target_date=target_date,
+        )
+        self.db.add(goal)
+        await self.db.commit()
+        await self.db.refresh(goal)
+        return goal
+
+    async def update(
+        self,
+        goal_id: int,
+        user_id: int,
+        **updates: object,
+    ) -> Goal | None:
+        """Partial update. Only known fields are applied.
+
+        ``project_id`` is intentionally NOT in the allow-list — moving a
+        goal across projects changes ownership semantics and cascade
+        boundaries; force callers to delete and re-create instead.
+        """
+        goal = await self.get(goal_id, user_id)
+        if goal is None:
+            return None
+
+        allowed = {
+            "metric_key",
+            "kind",
+            "target_value",
+            "window_days",
+            "target_date",
+            "status",
+        }
+        for field, value in updates.items():
+            if field in allowed:
+                setattr(goal, field, value)
+
+        # Re-validate shape if kind/window/date touched
+        _validate_goal_shape(goal.kind, goal.window_days, goal.target_date)
+
+        goal.updated_at = utcnow()
+        self.db.add(goal)
+        await self.db.commit()
+        await self.db.refresh(goal)
+        return goal
+
+    async def delete(self, goal_id: int, user_id: int) -> bool:
+        """Delete a goal. Returns False if not found or not owned."""
+        goal = await self.get(goal_id, user_id)
+        if goal is None:
+            return False
+        await self.db.delete(goal)
+        await self.db.commit()
+        return True
+
+    # -------------------------------------------------------------------
+    # Progress
+    # -------------------------------------------------------------------
+
+    async def current_value(
+        self,
+        metric_key: GoalMetric,
+        kind: GoalKind = GoalKind.ABSOLUTE,
+        window_days: int | None = None,
+    ) -> float:
+        """Live reference value for a metric, contextualized by goal kind.
+
+        - ABSOLUTE: sum-to-today (used to block pre-achieved goals).
+        - DELTA:    sum over the last `window_days` (matches the goal window).
+        - RATE:     sum over the last `window_days` (current rate in-window).
+
+        Honors the metric's aggregation strategy (SUM vs COUNT) via the
+        shared resolver.
+        """
+        info = get_metric_info(metric_key)
+        today = datetime.now(UTC).date()  # UTC for consistency with stored timestamps
+
+        if kind == GoalKind.ABSOLUTE:
+            return await self._aggregate_up_to(
+                info.source_key,
+                info.metric_type_key,
+                info.aggregation,
+                to_date=today,
+            )
+
+        # DELTA and RATE both look at the rolling window ending today.
+        window = window_days or (30 if kind == GoalKind.DELTA else 7)
+        start = today - timedelta(days=window)
+        return await self._aggregate_between(
+            info.source_key,
+            info.metric_type_key,
+            info.aggregation,
+            start,
+            today,
+        )
+
+    async def compute_progress(self, goal: Goal) -> GoalProgress:
+        """Current progress for a goal, derived from insight_metric.
+
+        Thin delegate to `compute_progress_batch` so the kind-specific
+        branch logic (absolute vs delta vs rate, baseline clamping,
+        on-track heuristic) lives in exactly one place. Single-goal
+        callers pay a slightly wider SELECT (all rows for the metric
+        instead of a single aggregate) but save the round trip that the
+        per-goal path used for the ABSOLUTE baseline query — net neutral
+        or better for typical metric row counts.
+        """
+        results = await self.compute_progress_batch([goal])
+        return results[goal.id or 0]
+
+    # -------------------------------------------------------------------
+    # Internal query helpers
+    # -------------------------------------------------------------------
+
+    async def _aggregate_between(
+        self,
+        source_key: str,
+        metric_type_key: str,
+        strategy: AggregationStrategy,
+        start: date,
+        end: date,
+    ) -> float:
+        """Aggregate (sum or count) rows in [start, end] for source+metric."""
+        return await queries.aggregate_metric(
+            self.db,
+            source_key=source_key,
+            metric_type_key=metric_type_key,
+            strategy=strategy,
+            since=day_start(start),
+            until=day_end(end),
+        )
+
+    async def _aggregate_up_to(
+        self,
+        source_key: str,
+        metric_type_key: str,
+        strategy: AggregationStrategy,
+        to_date: date,
+    ) -> float:
+        """Aggregate from epoch up to `to_date` inclusive."""
+        return await queries.aggregate_metric(
+            self.db,
+            source_key=source_key,
+            metric_type_key=metric_type_key,
+            strategy=strategy,
+            until=day_end(to_date),
+        )
+
+    # -------------------------------------------------------------------
+    # Batched progress computation — kills the N+1 on list endpoints.
+    # -------------------------------------------------------------------
+
+    async def compute_progress_batch(
+        self, goals: list[Goal]
+    ) -> dict[int, GoalProgress]:
+        """Compute progress for many goals with a constant number of queries.
+
+        Replaces the per-goal `compute_progress` loop on hot list endpoints
+        (`GET /api/v1/insights/goals` is the main one). Issues one fetch
+        per distinct `(source_key, metric_type_key)` group across the input
+        — three queries for goals tracking three different metrics, not
+        N queries for N goals. Per-goal progress is then computed in
+        Python from the pre-fetched rows.
+
+        Returns `{goal.id: GoalProgress}`. Same shape `compute_progress`
+        produces; callers can drop-in replace the loop.
+        """
+        if not goals:
+            return {}
+
+        today = datetime.now(UTC).date()
+
+        # Resolve metric metadata up-front so we group + iterate without
+        # re-resolving inside the inner loop.
+        goal_info = {goal.id: get_metric_info(goal.metric_key) for goal in goals}
+
+        groups: dict[tuple[str, str], AggregationStrategy] = {}
+        for goal in goals:
+            info = goal_info[goal.id]
+            groups[(info.source_key, info.metric_type_key)] = info.aggregation
+
+        # Bound the SELECT to the earliest row any goal in the group could
+        # need. ABSOLUTE goals are summed from epoch (their baseline is
+        # "everything before creation"), so they pin the bound to None for
+        # any group containing one. DELTA / RATE goals only need the rolling
+        # window clamped to creation, so groups consisting only of those
+        # can be bounded at `min(creation_dates) - max(window_days) - 1`.
+        # Without any bound, we'd full-scan high-volume metrics
+        # (e.g. `new_star`) on every list call.
+        group_goals: dict[tuple[str, str], list[Goal]] = {}
+        for goal in goals:
+            info = goal_info[goal.id]
+            key = (info.source_key, info.metric_type_key)
+            group_goals.setdefault(key, []).append(goal)
+
+        # One query per group; per-goal date filtering then happens in
+        # Python below since each goal can have its own window and baseline
+        # cutoff.
+        group_rows: dict[tuple[str, str], list[InsightMetric]] = {}
+        for (source_key, mt_key), goals_in_group in group_goals.items():
+            since: datetime | None = None
+            has_absolute = any(
+                g.kind == GoalKind.ABSOLUTE for g in goals_in_group
+            )
+            if not has_absolute:
+                creation_dates = [
+                    (g.created_at.date() if g.created_at else today)
+                    for g in goals_in_group
+                ]
+                max_window = max((g.window_days or 0) for g in goals_in_group)
+                earliest_needed = (
+                    min(creation_dates) - timedelta(days=max_window + 1)
+                )
+                since = day_start(earliest_needed)
+            group_rows[(source_key, mt_key)] = await queries.metrics_for_source_metric(
+                self.db, source_key=source_key, metric_type_key=mt_key, since=since
+            )
+
+        out: dict[int, GoalProgress] = {}
+        for goal in goals:
+            info = goal_info[goal.id]
+            rows = group_rows[(info.source_key, info.metric_type_key)]
+            out[goal.id or 0] = self._progress_from_rows(
+                goal, rows, info.aggregation, today
+            )
+        return out
+
+    @staticmethod
+    def _agg_python(rows: list[InsightMetric], strategy: AggregationStrategy) -> float:
+        """In-memory mirror of `_agg_expr` — count of rows or sum of values."""
+        if strategy == AggregationStrategy.COUNT:
+            return float(len(rows))
+        return float(sum(r.value for r in rows if r.value is not None))
+
+    def _progress_from_rows(
+        self,
+        goal: Goal,
+        rows: list[InsightMetric],
+        aggregation: AggregationStrategy,
+        today: date,
+    ) -> GoalProgress:
+        """Compute one GoalProgress from pre-fetched rows.
+
+        Kind-specific logic is small:
+        - ABSOLUTE: sum everything up to today; baseline = sum up to the
+          day before goal creation (drives the UI's two-tone progress bar).
+        - DELTA / RATE: sum inside a rolling window clamped to creation
+          (fresh goals start at 0 regardless of pre-existing data).
+          Default window is 30d for delta, 7d for rate.
+
+        Aggregation, percent, and on-track logic is shared — lives below
+        the branch.
+        """
+        end_dt = datetime.combine(today, datetime.max.time())
+
+        if goal.kind == GoalKind.ABSOLUTE:
+            current = self._agg_python(
+                [r for r in rows if r.date <= end_dt], aggregation
+            )
+            # Baseline = aggregate up to the day before creation. UI
+            # renders this as the dotted "already there" portion.
+            baseline = 0.0
+            if goal.created_at is not None:
+                baseline_end = datetime.combine(
+                    goal.created_at.date() - timedelta(days=1), datetime.max.time()
+                )
+                baseline = self._agg_python(
+                    [r for r in rows if r.date <= baseline_end], aggregation
+                )
+        else:
+            default_window = 30 if goal.kind == GoalKind.DELTA else 7
+            window = goal.window_days or default_window
+            start_dt = datetime.combine(
+                _window_start(today, window, goal.created_at), datetime.min.time()
+            )
+            current = self._agg_python(
+                [r for r in rows if start_dt <= r.date <= end_dt], aggregation
+            )
+            baseline = 0.0  # window is clamped to creation; no pre-goal baseline
+
+        percent = (current / goal.target_value * 100.0) if goal.target_value else 0.0
+        days_remaining = (goal.target_date - today).days if goal.target_date else None
+        return GoalProgress(
+            goal_id=goal.id or 0,
+            current_value=current,
+            baseline_value=baseline,
+            target_value=goal.target_value,
+            percent=max(percent, 0.0),
+            on_track=_is_on_track(goal, current, today),
+            days_remaining=days_remaining,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Validation + heuristics (module-level; no DB access)
+# ---------------------------------------------------------------------------
+
+
+def _window_start(today: date, window_days: int, created_at: datetime | None) -> date:
+    """Start of the rolling window for progress computation.
+
+    Normally `today - window_days`, but clamped forward to `created_at` so
+    data from before the goal was created doesn't inflate progress. Fresh
+    rate/delta goals start at 0 and grow through their first window.
+    """
+    naive_start = today - timedelta(days=window_days)
+    if created_at is None:
+        return naive_start
+    created_date = created_at.date()
+    return max(naive_start, created_date)
+
+
+def _validate_goal_shape(
+    kind: GoalKind,
+    window_days: int | None,
+    target_date: date | None,
+) -> None:
+    """Enforce kind-specific required fields. Raises ValueError on bad shape."""
+    if kind == GoalKind.ABSOLUTE:
+        if target_date is None:
+            raise ValueError("absolute goals require target_date")
+    elif kind == GoalKind.DELTA:
+        if window_days is None or window_days <= 0:
+            raise ValueError("delta goals require positive window_days")
+    elif kind == GoalKind.RATE and (window_days is None or window_days <= 0):
+        raise ValueError("rate goals require positive window_days")
+
+
+def _is_on_track(goal: Goal, current: float, today: date) -> bool:
+    """Rough 'are they on pace?' heuristic. Never raises.
+
+    - ABSOLUTE: linear pace from created_at to target_date. If no target_date,
+                any non-zero progress counts as on-track.
+    - DELTA:    on track if current >= target_value * (elapsed / window)
+    - RATE:     on track if rolling-window value >= target_value
+    """
+    if goal.kind == GoalKind.RATE:
+        return current >= goal.target_value
+
+    if goal.kind == GoalKind.DELTA:
+        window = goal.window_days or 30
+        # Delta windows are rolling-to-today, so elapsed == window; user just
+        # wants current >= target_value at the end of the window.
+        return current >= goal.target_value * (window / max(window, 1))
+
+    # ABSOLUTE
+    if goal.target_date is None:
+        return current > 0
+
+    start = goal.created_at.date() if goal.created_at else today
+    total_days = max((goal.target_date - start).days, 1)
+    elapsed = max((today - start).days, 0)
+    expected = goal.target_value * min(elapsed / total_days, 1.0)
+    return current >= expected
+{% endif %}

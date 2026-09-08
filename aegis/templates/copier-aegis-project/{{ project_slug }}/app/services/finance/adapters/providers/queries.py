@@ -84,6 +84,23 @@ async def provider_rows_for_accounts(
     )
 
 
+async def connected_owner_ids(
+    db: AsyncSession, providers: tuple[str, ...]
+) -> list[int | None]:
+    """Every owner with a live connection to one of ``providers``."""
+    rows = (
+        await db.exec(
+            select(FinanceConnection.owner_user_id)
+            .where(
+                FinanceConnection.provider.in_(providers),
+                FinanceConnection.deleted_at.is_(None),
+            )
+            .distinct()
+        )
+    ).all()
+    return list(rows)
+
+
 async def connections_for_owner(
     db: AsyncSession,
     *,

@@ -4,7 +4,7 @@ from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_db
-from app.services.payment.payment_service import PaymentService
+from app.services.payment.service import PaymentService
 
 
 async def get_payment_service(

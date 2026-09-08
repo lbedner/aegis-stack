@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.services.ai.models.agents.timestamps import utcnow_naive
+from app.core.time import utcnow
 
 if TYPE_CHECKING:
     from .large_language_model import LargeLanguageModel
@@ -42,7 +42,7 @@ class LLMOrg(SQLModel, table=True):
     api_base: str | None = None
     auth_method: str = Field(default="api-key")
     source: str = Field(default="catalog")
-    created_at: datetime = Field(default_factory=utcnow_naive)
+    created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime | None = None
 
     roles: list["LLMOrgRole"] = Relationship(

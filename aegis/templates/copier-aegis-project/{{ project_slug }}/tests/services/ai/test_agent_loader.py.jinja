@@ -9,7 +9,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.ai.domains.chat.agent_loader import (
     DEFAULT_AGENT_SLUG,
     AgentConfig,
+{%- if ai_framework == "pydantic-ai" %}
     agent_capabilities,
+{%- endif %}
     default_agent_config,
     invalidate_agent_cache,
     resolve_agent,
@@ -100,6 +102,7 @@ class TestResolveFromDb:
         assert config.tool_names == ("lookup",)
 
 
+{%- if ai_framework == "pydantic-ai" %}
 class TestCodeModeSplitsReadsFromWrites:
     """Code mode sandboxes the data tools, never the memory writes.
 
@@ -182,6 +185,7 @@ class TestCodeModeSplitsReadsFromWrites:
         )
 
         assert self._code_mode_tools(config) == ["ledger", "accounts"]
+{%- endif %}
 
 
 class TestFallback:

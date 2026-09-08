@@ -6,27 +6,16 @@ Provides business logic for listing, viewing, and switching LLM models.
 from datetime import datetime
 
 from pydantic import BaseModel
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.core.config import settings
 from app.core.db import engine, get_async_session
 from app.core.log import logger
-from app.services.ai.domains.llm import active_model
-from app.services.ai.domains.llm.catalog_queries import (
-    LLMListResult as LLMListResult,
-)
-from app.services.ai.domains.llm.catalog_queries import (
-    list_models as list_models,
-)
+from app.services.ai.domains.llm import active_model, queries
+from app.services.ai.domains.llm.catalog import LLMListResult as LLMListResult
+from app.services.ai.domains.llm.catalog import list_models as list_models
 from app.services.ai.domains.llm.provider_management import update_env_file
 from app.services.ai.models import AIProvider
-from app.services.ai.models.llm import (
-    LargeLanguageModel,
-    LLMModality,
-    LLMOrg,
-    LLMPrice,
-)
 
 
 class VendorListResult(BaseModel):
@@ -139,34 +128,15 @@ async def get_current_config() -> CurrentLLMConfig:
 
     # Try to enrich from catalog
     async with get_async_session() as session:
-        stmt = select(LargeLanguageModel).where(
-            LargeLanguageModel.model_id == config.model
-        )
-        result = await session.exec(stmt)
-        model = result.first()
-
-        if model:
+        model = await queries.llm_by_model_id(session, config.model)
+        if model and model.id is not None:
             config.in_catalog = True
             config.context_window = model.context_window
-
-            # Get latest price
-            price_stmt = (
-                select(LLMPrice)
-                .where(LLMPrice.llm_id == model.id)
-                .order_by(LLMPrice.effective_date.desc())
-                .limit(1)
-            )
-            price_result = await session.exec(price_stmt)
-            price = price_result.first()
+            price = await queries.latest_price_for(session, model.id)
             if price:
                 config.input_price = price.input_cost_per_token * 1_000_000
                 config.output_price = price.output_cost_per_token * 1_000_000
-
-            # Get modalities
-            modality_stmt = select(LLMModality).where(LLMModality.llm_id == model.id)
-            modality_result = await session.exec(modality_stmt)
-            modalities = modality_result.all()
-            config.modalities = list({str(m.modality) for m in modalities})
+            config.modalities = await queries.modalities_for(session, model.id)
 
     return config
 
@@ -234,15 +204,7 @@ async def set_active_model(model_id: str, force: bool = False) -> SetModelResult
     if not force:
         # Lookup model in catalog
         async with get_async_session() as session:
-            stmt = (
-                select(LargeLanguageModel)
-                .join(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
-                .options(selectinload(LargeLanguageModel.served_by))
-                .where(LargeLanguageModel.model_id == model_id)
-            )
-            result = await session.exec(stmt)
-            model = result.first()
-
+            model = await queries.llm_with_vendor(session, model_id)
             if model:
                 vendor_name = model.served_by.name if model.served_by else None
             else:
@@ -322,32 +284,11 @@ async def get_model_info(model_id: str) -> LLMDetails | None:
         LLMDetails with full model information, or None if not found
     """
     async with get_async_session() as session:
-        stmt = (
-            select(LargeLanguageModel)
-            .join(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
-            .options(selectinload(LargeLanguageModel.served_by))
-            .where(LargeLanguageModel.model_id == model_id)
-        )
-        result = await session.exec(stmt)
-        model = result.first()
-
-        if not model:
+        model = await queries.llm_with_vendor(session, model_id)
+        if not model or model.id is None:
             return None
-
-        # Get latest price
-        price_stmt = (
-            select(LLMPrice)
-            .where(LLMPrice.llm_id == model.id)
-            .order_by(LLMPrice.effective_date.desc())
-            .limit(1)
-        )
-        price_result = await session.exec(price_stmt)
-        price = price_result.first()
-
-        # Get modalities
-        modality_stmt = select(LLMModality).where(LLMModality.llm_id == model.id)
-        modality_result = await session.exec(modality_stmt)
-        modalities = modality_result.all()
+        price = await queries.latest_price_for(session, model.id)
+        modalities = await queries.modalities_for(session, model.id)
 
         return LLMDetails(
             model_id=model.model_id,
@@ -360,7 +301,7 @@ async def get_model_info(model_id: str) -> LLMDetails | None:
             released_on=model.released_on.isoformat() if model.released_on else None,
             input_price=price.input_cost_per_token * 1_000_000 if price else None,
             output_price=price.output_cost_per_token * 1_000_000 if price else None,
-            modalities=list({str(m.modality) for m in modalities}),
+            modalities=modalities,
         )
 
 
@@ -370,27 +311,10 @@ def list_vendors() -> list[VendorListResult]:
     Returns:
         List of VendorListResult sorted alphabetically by name.
     """
-    from sqlmodel import func
-
     with Session(engine) as session:
-        results = session.exec(
-            select(
-                LLMOrg.name,
-                func.count(LargeLanguageModel.id).label("model_count"),
-            )
-            # Two FKs point here now (served_by, made_by); this list is
-            # the SERVING surface, so the join must say so.
-            .join(
-                LargeLanguageModel,
-                LargeLanguageModel.served_by_org_id == LLMOrg.id,
-                isouter=True,
-            )
-            .group_by(LLMOrg.id)
-            .order_by(LLMOrg.name)
-        ).all()
-
         return [
-            VendorListResult(name=name, model_count=count) for name, count in results
+            VendorListResult(name=name, model_count=count)
+            for name, count in queries.vendor_model_counts(session)
         ]
 
 
@@ -400,19 +324,8 @@ def list_modalities() -> list[ModalityListResult]:
     Returns:
         List of ModalityListResult sorted alphabetically.
     """
-    from sqlmodel import func
-
     with Session(engine) as session:
-        results = session.exec(
-            select(
-                LLMModality.modality,
-                func.count(func.distinct(LLMModality.llm_id)).label("model_count"),
-            )
-            .group_by(LLMModality.modality)
-            .order_by(LLMModality.modality)
-        ).all()
-
         return [
             ModalityListResult(modality=str(mod), model_count=count)
-            for mod, count in results
+            for mod, count in queries.modality_model_counts(session)
         ]

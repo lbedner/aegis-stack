@@ -20,7 +20,7 @@ from app.services.payment.models import (
     PaymentSubscription,
     PaymentTransaction,
 )
-from app.services.payment.payment_service import PaymentService
+from app.services.payment.service import PaymentService
 from app.services.payment.providers.base import (
     CheckoutResult,
     CustomerResult,

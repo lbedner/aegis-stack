@@ -17,11 +17,11 @@ from sqlalchemy import (
 )
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
 from app.services.finance.models.base import (
     _ENCRYPTED_COLUMNS,
     _FK,
     _SCHEMA,
-    _utcnow,
 )
 
 # ---------------------------------------------------------------------------
@@ -74,8 +74,8 @@ class FinanceInstitution(SQLModel, table=True):
     metadata_: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceConnection(SQLModel, table=True):
@@ -174,8 +174,8 @@ class FinanceConnection(SQLModel, table=True):
     metadata_: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
     def __repr__(self) -> str:
         """Logging-safe repr — credential columns masked."""
@@ -230,5 +230,5 @@ class FinanceWebhookEvent(SQLModel, table=True):
     )
     status: str = Field(default="received", max_length=16)
     error: str | None = Field(default=None)
-    received_at: datetime = Field(default_factory=_utcnow)
+    received_at: datetime = Field(default_factory=utcnow)
     processed_at: datetime | None = Field(default=None)

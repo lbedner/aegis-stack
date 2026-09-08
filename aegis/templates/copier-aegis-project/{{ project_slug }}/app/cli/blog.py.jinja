@@ -104,7 +104,7 @@ def status() -> None:
 
 async def _status() -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
 
     async with get_async_session() as session:
         service = BlogService(session)
@@ -181,7 +181,7 @@ def posts(
 
 async def _posts(status_filter: str | None, tag: str | None, limit: int) -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
 
     page_size = min(max(limit, 1), _PAGE_SIZE_MAX)
 
@@ -236,7 +236,7 @@ def post_show(
 
 async def _post_show(slug: str) -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
 
     async with get_async_session() as session:
         service = BlogService(session)
@@ -299,7 +299,7 @@ def tags() -> None:
 
 async def _tags() -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
 
     async with get_async_session() as session:
         service = BlogService(session)
@@ -347,7 +347,7 @@ def publish(
 
 async def _publish(slug: str) -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
 
     async with get_async_session() as session:
         service = BlogService(session)
@@ -388,7 +388,7 @@ def archive(
 
 async def _archive(slug: str) -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
 
     async with get_async_session() as session:
         service = BlogService(session)
@@ -435,7 +435,7 @@ def delete(
 
 async def _delete(slug: str, yes: bool) -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
 
     if not yes:
         confirmed = typer.confirm(t("blog.confirm_delete_post", slug=slug))
@@ -493,7 +493,7 @@ def tag_create(
 
 async def _tag_create(name: str, slug: str | None) -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
     from app.services.blog.schemas import BlogTagCreate
 
     async with get_async_session() as session:
@@ -543,7 +543,7 @@ def tag_update(
 
 async def _tag_update(slug: str, name: str | None, new_slug: str | None) -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
     from app.services.blog.schemas import BlogTagUpdate
 
     async with get_async_session() as session:
@@ -598,7 +598,7 @@ def tag_delete(
 
 async def _tag_delete(slug: str, yes: bool) -> None:
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
 
     if not yes:
         confirmed = typer.confirm(t("blog.confirm_delete_tag", slug=slug))
@@ -655,7 +655,7 @@ async def _export(path: str, fmt: str, status_filter: str | None) -> None:
     from pathlib import Path
 
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
     from app.services.blog.serialization import (
         post_to_markdown,
         posts_to_json,
@@ -725,7 +725,7 @@ async def _import(path: str, on_conflict: "ImportConflictPolicy") -> None:
     from pathlib import Path
 
     from app.core.db import get_async_session
-    from app.services.blog.blog_service import BlogService
+    from app.services.blog.service import BlogService
     from app.services.blog.schemas import ImportedPost
     from app.services.blog.serialization import (
         json_to_posts,

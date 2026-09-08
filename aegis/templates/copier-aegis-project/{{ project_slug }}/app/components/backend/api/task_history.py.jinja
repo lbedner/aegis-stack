@@ -23,7 +23,7 @@ from fastapi import APIRouter, HTTPException
 {%- if include_auth %}
 from fastapi import Depends
 {%- if include_auth_rbac %}
-from app.services.auth.auth_service import require_role
+from app.services.auth.service import require_role
 {%- else %}
 from app.services.auth.deps import get_current_active_user
 {%- endif %}

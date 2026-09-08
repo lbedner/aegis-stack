@@ -35,10 +35,6 @@ class _StreamFacts(BaseModel):
     curated: int = 0
 
 
-def _owner_clause(column, owner_user_id: int | None):
-    return column.is_(None) if owner_user_id is None else column == owner_user_id
-
-
 async def promote_curated_streams(
     db: AsyncSession, *, owner_user_id: int | None
 ) -> int:

@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from app.models.user import User
 from app.services.insights.constants import Periods, SourceKeys
-from app.services.insights.goal_service import (
+from app.services.insights.domains.goals import (
     GoalService,
     _is_on_track,
     _validate_goal_shape,

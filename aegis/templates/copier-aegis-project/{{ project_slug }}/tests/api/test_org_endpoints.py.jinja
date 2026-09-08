@@ -20,7 +20,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.models.org import ORG_ROLE_OWNER
-from app.services.auth.membership_service import MembershipService
+from app.services.auth.memberships import MembershipService
 
 
 @pytest.fixture(autouse=False)

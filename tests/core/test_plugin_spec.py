@@ -71,7 +71,7 @@ class TestPluginSpec:
     def test_unverified_third_party_default_pattern(self) -> None:
         """A third-party plugin would set ``verified=False`` explicitly."""
         spec = PluginSpec(
-            name="aegis-plugin-scraper",
+            name="aegis-stack-scraper",
             kind=PluginKind.SERVICE,
             description="Web scraping",
             verified=False,

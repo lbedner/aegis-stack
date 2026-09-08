@@ -23,7 +23,11 @@ from ..constants import (
     WorkerBackends,
 )
 from .ai_service_parser import is_ai_service_with_options, parse_ai_service_config
-from .auth_service_parser import is_auth_service_with_options, parse_auth_service_config
+from .auth_service_parser import (
+    auth_level_answers,
+    is_auth_service_with_options,
+    parse_auth_service_config,
+)
 from .component_utils import (
     extract_base_component_name,
     extract_base_service_name,
@@ -254,12 +258,13 @@ class TemplateGenerator:
             "needs_redis": ComponentNames.REDIS in self.components,
             # Auth level selection (basic, rbac, or org)
             AnswerKeys.AUTH_LEVEL: (auth_level := self._get_auth_level()),
-            # Derived auth level flags for template conditionals
-            # Org level implies RBAC (org gets both roles and orgs)
-            AnswerKeys.AUTH_RBAC: "yes"
-            if auth_level in (AuthLevels.RBAC, AuthLevels.ORG)
-            else "no",
-            AnswerKeys.AUTH_ORG: "yes" if auth_level == AuthLevels.ORG else "no",
+            # Derived auth level flags for template conditionals, as the
+            # yes/no strings copier expects.
+            **{
+                key: "yes" if value else "no"
+                for key, value in auth_level_answers(auth_level).items()
+                if key != AnswerKeys.AUTH_LEVEL
+            },
             # OAuth social login (GitHub + Google) — opt-in via the
             # ``auth[oauth]`` modifier in the bracket syntax (composes
             # with ``auth[rbac,oauth]`` etc.). Defaults off so existing

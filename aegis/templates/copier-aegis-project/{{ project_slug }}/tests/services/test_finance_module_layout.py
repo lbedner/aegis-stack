@@ -284,6 +284,7 @@ def test_dispatch_across_providers_lives_only_in_the_registry() -> None:
 # made a 1,383-line shared file the wrong shape for them.
 LEDGER_QUERY_OWNERS = {
     "account_by_id": "accounts",
+    "account_owner_ids": "accounts",
     "account_rollup": "networth",
     "accounts_page": "accounts",
     "alias_by_normalized_global": "categories",
@@ -329,6 +330,8 @@ LEDGER_QUERY_OWNERS = {
     "spending_rows": "categories",
     "split_aware_category_clause": "filters",
     "splits_for_parents": "splits",
+    "subject_by_id": "subjects",
+    "subjects_for_owner": "subjects",
     "tag_by_normalized_name": "transactions",
     "tag_links": "transactions",
     "tagged_transaction_ids": "transactions",

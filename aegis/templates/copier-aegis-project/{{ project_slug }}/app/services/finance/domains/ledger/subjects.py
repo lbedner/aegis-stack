@@ -8,11 +8,11 @@ every existing ledger reads unchanged.
 
 from __future__ import annotations
 
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
+from app.services.finance.domains.ledger import queries
 from app.services.finance.models import FinanceAccount, FinanceSubject
-from app.services.finance.utils import utcnow
 
 # What a subject can be. The table constrains these too; validating here
 # turns a flush-time IntegrityError into an answer the caller can read.
@@ -47,21 +47,13 @@ async def create_subject(
 async def list_subjects(
     db: AsyncSession, *, owner_user_id: int | None = None
 ) -> list[FinanceSubject]:
-    query = select(FinanceSubject).where(FinanceSubject.deleted_at.is_(None))
-    if owner_user_id is not None:
-        query = query.where(FinanceSubject.owner_user_id == owner_user_id)
-    return list((await db.exec(query.order_by(FinanceSubject.name))).all())
+    return await queries.subjects_for_owner(db, owner_user_id=owner_user_id)
 
 
 async def get_subject(
     db: AsyncSession, subject_id: int, *, owner_user_id: int | None = None
 ) -> FinanceSubject | None:
-    query = select(FinanceSubject).where(
-        FinanceSubject.id == subject_id, FinanceSubject.deleted_at.is_(None)
-    )
-    if owner_user_id is not None:
-        query = query.where(FinanceSubject.owner_user_id == owner_user_id)
-    return (await db.exec(query)).first()
+    return await queries.subject_by_id(db, subject_id, owner_user_id=owner_user_id)
 
 
 async def assign_subject(
@@ -73,12 +65,7 @@ async def assign_subject(
 ) -> FinanceAccount | None:
     """Point an account at whose money it holds; None releases it back
     to the household."""
-    query = select(FinanceAccount).where(
-        FinanceAccount.id == account_id, FinanceAccount.deleted_at.is_(None)
-    )
-    if owner_user_id is not None:
-        query = query.where(FinanceAccount.owner_user_id == owner_user_id)
-    account = (await db.exec(query)).first()
+    account = await queries.account_by_id(db, account_id, owner_user_id=owner_user_id)
     if account is None:
         return None
     if subject_id is not None:

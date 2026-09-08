@@ -224,6 +224,8 @@ SERVICES: dict[str, ServiceSpec] = {
                 name="level",
                 mode=OptionMode.SINGLE,
                 choices=list(AuthLevels.ALL),
+                answer_key=AnswerKeys.AUTH_LEVEL,
+                ordered=True,
                 default=AuthLevels.BASIC,
             ),
             OptionSpec(
@@ -425,6 +427,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 mode=OptionMode.SINGLE,
                 choices=list(AIFrameworks.ALL),
                 default=AIFrameworks.PYDANTIC_AI,
+                answer_key=AnswerKeys.AI_FRAMEWORK,
             ),
             OptionSpec(
                 name="backend",
@@ -435,6 +438,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     StorageBackends.POSTGRES,
                 ],
                 default=StorageBackends.MEMORY,
+                answer_key=AnswerKeys.AI_BACKEND,
                 # Persistence backends auto-add the matching database engine.
                 auto_requires=lambda v: [f"{ComponentNames.DATABASE}[{v}]"]
                 if v != StorageBackends.MEMORY
@@ -906,10 +910,9 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/finance",
         marker_path="app/services/finance",
         type=ServiceType.FINANCE,
-        description="Experimental: personal finance aggregation (accounts, transactions, net worth, import)",
+        description="Personal finance aggregation (accounts, transactions, net worth, import)",
+        experimental=True,
         long_description=(
-            "EXPERIMENTAL: schema, APIs, and CLI surface may change between "
-            "releases. "
             "Aggregates bank, credit-card, and brokerage accounts, imports "
             "Quicken/OFX/CSV files, tracks net worth over time, and surfaces "
             "recurring-spend insights. Connectivity ships behind provider "

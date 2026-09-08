@@ -1,6 +1,7 @@
 """Shared formatting utilities for display across CLI and frontend."""
 
 from datetime import UTC, datetime
+import re
 
 
 def format_number(num: int) -> str:
@@ -120,3 +121,8 @@ def format_relative_time(
         return dt.strftime("%b %d %H:%M")
     except (ValueError, TypeError, IndexError):
         return str(iso_str)
+
+
+def slugify(value: str) -> str:
+    """Lowercase, hyphen-separated, ASCII; empty when nothing survives."""
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")

@@ -1,7 +1,7 @@
 """Blog dependencies for FastAPI route injection."""
 
 from app.core.db import get_async_db
-from app.services.blog.blog_service import BlogService
+from app.services.blog.service import BlogService
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 

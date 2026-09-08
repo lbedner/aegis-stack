@@ -3,7 +3,10 @@
    Blocks: title, favicon, head_extra, navbar, page_body, content, footer,
    scripts. Override ``content`` for an ordinary page; reach for
    ``page_body`` only when a page needs to replace the whole main wrapper.
+   ``#app-content`` is the element htmx swaps fragments into (see
+   ``render()`` in rendering.py and the two layouts under layouts/).
 #}
+{% from "components/macros/feedback.html" import toast_region %}
 <!DOCTYPE html>
 <html lang="en" data-theme="aegis">
 <head>
@@ -31,8 +34,14 @@
      whole page once per back/forward press. historyCacheSize 0 makes every
      restore a cache miss; refreshOnHistoryMiss turns a miss into a clean
      full-page load instead of an AJAX restore. #}
-  <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
+  {# responseHandling (first matching rule wins, RegExp.test semantics):
+     a 422 carries a re-rendered form and must swap; other 4xx/5xx never
+     swap and raise htmx:responseError, which app.js turns into a toast. #}
+  <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}, {"code": "...", "swap": true}]}'>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  {# SSE extension (hx-ext="sse") for job progress streams; registers
+     against the global htmx, so it must follow core. #}
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.3/sse.js"></script>
 
   {# Alpine.js — the collapse plugin MUST load before core so its directive
      is registered when Alpine inits. Both deferred, plugin first. #}
@@ -54,14 +63,14 @@
   {% endblock %}
 
   {% block page_body %}
-  <main class="max-w-screen-xl mx-auto px-6 lg:px-16 py-6">
+  <main id="app-content" class="max-w-screen-xl mx-auto px-6 lg:px-16 py-6">
     {% block content %}{% endblock %}
   </main>
   {% endblock %}
 
   {% block footer %}{% endblock %}
 
-  {% include "components/snackbar.html" %}
+  {{ toast_region() }}
 
   <script src="{{ static('js/app.js') }}"></script>
   {% if auth_enabled %}<script src="{{ static('js/auth.js') }}"></script>{% endif %}

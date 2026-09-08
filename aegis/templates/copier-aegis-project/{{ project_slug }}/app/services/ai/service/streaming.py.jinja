@@ -7,9 +7,7 @@ captured after the stream drains.
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-{%- if ai_rag or ai_framework == "pydantic-ai" %}
 from typing import Any
-{%- endif %}
 import uuid
 
 {%- if ai_framework == "pydantic-ai" %}
@@ -27,30 +25,18 @@ from pydantic_ai.run import AgentRunResultEvent
 {%- endif %}
 
 from app.core.log import logger
-from app.services.ai.domains.chat.agent_loader import (
-    DEFAULT_AGENT_SLUG,
-    resolve_agent,
-)
-from app.services.ai.domains.chat.attachments import (
-    ChatAttachment,
-    prepare_turn,
-    build_user_content,
-)
-{%- if ai_backend != "memory" %}
-from app.services.ai.domains.chat.module_context import render_memory_modules
-{%- endif %}
+{%- if ai_framework == "pydantic-ai" %}
+from app.services.ai.domains.chat.attachments import ChatAttachment, build_user_content
 from app.services.ai.domains.chat.readings import (
     merge_staged_readings,
     reading_stage,
 )
-{%- if ai_rag %}
-from app.services.ai.domains.chat.rag_context import RAGContext
+{%- else %}
+from app.services.ai.domains.chat.attachments import ChatAttachment
+from app.services.ai.domains.chat.readings import merge_staged_readings
 {%- endif %}
-{%- if ai_backend != "memory" %}
-from app.services.ai.domains.chat.user_memory import (
-    build_user_memory_context,
-    memory_user,
-)
+{%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+from app.services.ai.domains.chat.user_memory import memory_user
 {%- endif %}
 from app.services.ai.domains.llm.providers import ProviderNotInstalledError
 from app.services.ai.models import (
@@ -65,7 +51,6 @@ from app.services.ai.service.base import (
 {%- endif %}
 )
 from app.services.ai.service.chat import ChatMixin
-from app.services.ai.service.prompt import history_char_budget
 {%- if ai_framework == "pydantic-ai" %}
 from app.services.ai.service.trace import (
     call_args_preview,
@@ -141,128 +126,56 @@ class StreamingMixin(ChatMixin):
             raise AIServiceError("AI service is disabled")
 
         try:
-            # Get fresh config for metadata (reflects current .env after use-provider)
             current = self.config
-
-            # Resolve the requested agent definition (DB row or code default)
-            if agent_slug:
-                agent_config = await resolve_agent(agent_slug)
-            else:
-                agent_config = await resolve_agent()
-
-            # Setup conversation and add user message. The stored text
-            # carries the attachment marker; the bytes ride only this
-            # turn's model call (history replays as text).
-            # Kept, not just carried: the bytes ride this turn's model
-            # call and the message remembers where the image was stored,
-            # so reopening the conversation still shows it.
-            stored_text, stored_metadata = await prepare_turn(message, attachments)
-            conversation = self._setup_conversation(
-                stored_text,
-                conversation_id,
-                user_id,
-                config=current,
+            setup = await self._assemble_turn(
+                message,
+                conversation_id=conversation_id,
+                user_id=user_id,
+                agent_slug=agent_slug,
                 surface=surface,
-                metadata=stored_metadata,
+                attachments=attachments,
+{% if ai_rag %}
+                use_rag=use_rag,
+                rag_collection=rag_collection,
+                rag_top_k=rag_top_k,
+{% endif %}
             )
-
-            # Create streaming conversation wrapper
+            conversation = setup.conversation
+{%- if ai_backend != "memory" %}
+            agent_config = setup.agent_config  # usage is attributed to the agent
+{%- endif %}
+{% if ai_rag %}
+            rag_context = setup.rag_context
+{% endif %}
             streaming_conv = StreamingConversation(conversation=conversation)
             streaming_conv.reset_stream()
-
-{% if ai_rag %}
-            # Build RAG context if enabled
-            rag_context: RAGContext | None = None
-            if use_rag:
-                rag_context = await self._build_rag_context(
-                    query=message,
-                    collection=rag_collection,
-                    top_k=rag_top_k,
-                    allowed_collections=agent_config.knowledge_base_ids,
-                )
-
-{% endif %}            # Build health context (always included, refreshed per message)
-            health_context, health_warning = await self._build_health_context()
-
-            # Usage and model-catalog self-awareness belong to the
-            # default ops assistant; custom agents (a finance analyst,
-            # say) would pay their token cost every turn without ever
-            # using them.
-            is_default_agent = (
-                agent_config is None or agent_config.slug == DEFAULT_AGENT_SLUG
-            )
-            usage_context = self._build_usage_context() if is_default_agent else None
-            catalog_context = (
-                self._build_catalog_context() if is_default_agent else None
-            )
-{% if ai_rag %}
-            # Build RAG stats context (always included when RAG enabled)
-            rag_stats_context = await self._build_rag_stats_context()
-
-{% endif %}
-{%- if ai_backend != "memory" %}
-            # Guarded per-user memory block (saved via the save_memory tool)
-            memory_context = await build_user_memory_context(user_id)
-
-            # History budget scales with the EFFECTIVE model for this
-            # request (the agent's pin wins over the active default).
-            from app.services.ai.domains.llm.catalog import context_window_for
-
-            effective_model = (
-                agent_config.model_id
-                if agent_config is not None and agent_config.model_id
-                else current.model
-            )
-            history_budget = history_char_budget(
-                await context_window_for(effective_model)
-            )
-
-            # The agent row's memory modules (e.g. the finance snapshot)
-            agent_modules_context = await render_memory_modules(
-                agent_config.memory_modules, user_id=user_id
-            )
-{% endif %}
 {%- if ai_framework == "pydantic-ai" %}
-            # Prepare agent and conversation context
-            agent, conversation_context = self._prepare_agent_and_context(
-                conversation,
-{% if ai_rag %}
-                rag_context=rag_context,
-                rag_stats_context=rag_stats_context,
-{% endif %}                health_context=health_context,
-                health_warning=health_warning,
-                usage_context=usage_context,
-                catalog_context=catalog_context,
-                agent_config=agent_config,
-{% if ai_backend != "memory" %}                memory_context=memory_context,
-                agent_modules_context=agent_modules_context,
-                history_budget=history_budget,
-{% endif %}            )
-{% else %}
-            # Prepare LLM and messages with full context
-            llm, messages = self._prepare_llm_and_messages(
-{% if ai_rag %}
-                conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
-{% else %}
-                conversation, None, None, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
-{% endif %}
-            )
+            agent, conversation_context = setup.agent, setup.conversation_context
+{%- else %}
+            llm, messages = setup.llm, setup.messages
 {%- endif %}
+
             # Start streaming
             start_time = datetime.now(UTC)
 
             # Generate a message ID for the streaming response
             message_id = str(uuid.uuid4())
+
+            # Turn state the bookkeeping after the stream reads, whichever
+            # framework produced the stream. Pydantic AI fills all of it
+            # from its event stream; LangChain streams text deltas only
+            # (no tool events, no per-run usage), so under LangChain these
+            # stay empty and usage is recorded as zero.
+{% if ai_backend != "memory" %}
+            stream_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+{% endif %}
+            tool_trace: list[dict[str, Any]] = []
 {% if ai_framework == "pydantic-ai" %}
             # Event-based streaming: unlike ``run_stream`` (which treats the
             # first text output as THE answer and stops), the event stream
             # crosses tool boundaries, so a model that narrates before
             # calling a tool - "let me pull that together" then run_code -
             # streams its preamble, runs the tool, and keeps talking.
-{% if ai_backend != "memory" %}
-            stream_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
-{% endif %}
-            tool_trace: list[dict[str, Any]] = []
             # The turn's user rides a ContextVar for the whole stream:
             # a memory write lands mid-stream, inside a tool call, and
             # has no other way to know whose fact it is.
@@ -365,7 +278,9 @@ class StreamingMixin(ChatMixin):
                             },
                         )
 {%- else %}
-            # Use LangChain's astream method for streaming
+            # LangChain: ``astream`` yields text deltas and nothing else, so
+            # no tool ever runs and no reading is ever staged.
+            staged_readings: list[dict[str, Any]] = []
             async for chunk in llm.astream(messages):
                 # Get content from chunk
                 text_chunk = chunk.content if hasattr(chunk, 'content') else str(chunk)
@@ -421,15 +336,11 @@ class StreamingMixin(ChatMixin):
 
 {% endif %}
 {%- if ai_backend != "memory" %}
-{%- if ai_framework == "pydantic-ai" %}            # Record usage tracking (PydanticAI provides streaming usage)
+            # Record usage, attributed to the resolved agent. Zero under
+            # LangChain, which reports no token counts while streaming.
             self._record_usage(
                 f"stream_chat:{agent_config.slug}", stream_usage, user_id
             )
-{% else %}
-            # LangChain streaming doesn't provide token counts
-            # Record with zero tokens - actual usage tracking requires non-streaming
-            self._record_usage(f"stream_chat:{agent_config.slug}", {"input_tokens": 0, "output_tokens": 0}, user_id)
-{% endif %}
 {%- endif %}
             # Extractions recorded mid-run outlive the image: fold them
             # into the conversation before finalize persists it.

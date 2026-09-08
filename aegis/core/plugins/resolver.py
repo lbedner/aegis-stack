@@ -21,7 +21,7 @@ Design:
   already installed is silently skipped.
 * External-plugin dependencies that aren't pip-installed surface
   as ``unresolved_plugins`` — the CLI tells the user to
-  ``pip install aegis-plugin-<name>`` and re-run. Auto-pip-install
+  ``pip install aegis-stack-<name>`` and re-run. Auto-pip-install
   is intentionally out of scope: a network-side-effect from a
   ``configure`` verb is the wrong default.
 """
@@ -34,9 +34,11 @@ from typing import Any
 
 from ..component_utils import extract_base_component_name
 from ..components import COMPONENTS, CORE_COMPONENTS
+from ..option_spec import variant_answers, variant_delta
 from ..services import SERVICES
 from .compat import _installed_plugins, _is_present, _plugin_name_only
 from .discovery import discover_plugins
+from .naming import dist_name
 from .spec import PluginKind, PluginSpec
 
 
@@ -66,11 +68,19 @@ class UnknownDependencyError(Exception):
 
 @dataclass(frozen=True)
 class ResolvedDep:
-    """One dependency the resolver wants the CLI to install."""
+    """One dependency the resolver wants the CLI to install.
+
+    ``variant`` is the constraint as declared (``"auth[org]"``) and
+    ``answers_delta`` the answers it changes on this project
+    (``{"auth_level": "org"}``); both empty for a bare-name dep. When the
+    base service is already installed the delta is an upgrade.
+    """
 
     name: str
     kind: PluginKind
     spec: PluginSpec
+    variant: str | None = None
+    answers_delta: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -199,51 +209,63 @@ def _resolve_one(
 ) -> None:
     """Process one entry from ``required_*``.
 
-    Strips any version-constraint suffix (``"auth>=1.0"`` → ``"auth"``)
-    AND any bracket-variant suffix (``"auth[org]"`` → ``"auth"``) so the
-    registry lookup matches the base-name keys ``SERVICES``/``COMPONENTS``
-    use. Variant-aware install (actually installing the ``[org]`` variant
-    rather than the base) is intentionally out of scope here — the
-    resolver canonicalises and the caller installs the base spec.
+    Strips any version-constraint suffix (``"auth>=1.0"`` → ``"auth"``);
+    the registry keys on the base name, so the bracket variant
+    (``"auth[org]"``) is kept aside and compared against the project's
+    answers through the spec's options. Decides whether the dep is:
 
-    With both suffixes stripped, decides whether the dep is:
-
-    * already installed (skip),
+    * already installed at a level that satisfies the request (skip),
+    * installed below the requested level (queue an upgrade carrying the
+      answers delta),
     * known to the registry but missing from the project (queue for
-      install + recurse for transitive deps),
+      install with the delta, and recurse for transitive deps),
     * a plugin name we have no spec for (record as unresolved and
       stop — can't recurse without a spec).
     """
-    dep_name = _plugin_name_only(dep_constraint)
-    # Collapse bracket variants AFTER version stripping. ``_is_present``
-    # already canonicalises internally, but the registry lookup further
-    # down keys on the bare name, so we have to canonicalise here too —
-    # otherwise ``"auth[org]"`` falls through to ``UnknownDependencyError``
-    # despite ``auth`` being in the registry.
-    dep_name = extract_base_component_name(dep_name)
-    if _is_present(dep_name, answers, plugins_present) or dep_name in CORE_COMPONENTS:
-        return
-
+    requested = _plugin_name_only(dep_constraint)
+    dep_name = extract_base_component_name(requested)
+    variant = requested if requested != dep_name else None
     spec = registry.get(dep_name)
-    if spec is None:
-        # Plugin-kind misses are recoverable: tell the user to pip
-        # install the package and re-run. Service/component misses are
-        # not — those specs are seeded from in-tree registries that are
-        # always present, so a miss is a typo or stale declaration on
-        # the parent spec. Fail loud rather than silently no-op.
-        if kind_hint == "plugin":
-            if dep_name not in result.unresolved_plugins:
-                result.unresolved_plugins.append(dep_name)
-            return
-        raise UnknownDependencyError(
-            f"required {kind_hint} {dep_name!r} declared on a plugin "
-            f"spec is not in the registry (typo or stale declaration?)"
-        )
 
-    # Recurse first so deepest-first ordering is preserved.
-    recurse(spec)
-    if not any(d.name == dep_name for d in result.to_install):
-        result.to_install.append(ResolvedDep(name=dep_name, kind=spec.kind, spec=spec))
+    if _is_present(dep_name, answers, plugins_present) or dep_name in CORE_COMPONENTS:
+        # Installed: a bracket request is met only if the project's
+        # answers already satisfy it; otherwise this is an upgrade.
+        if spec is None or variant is None:
+            return
+        delta = variant_delta(requested, spec, answers)
+        if not delta:
+            return
+    else:
+        if spec is None:
+            # Plugin-kind misses are recoverable: tell the user to pip
+            # install the package and re-run. Service/component misses are
+            # not — those specs are seeded from in-tree registries that are
+            # always present, so a miss is a typo or stale declaration on
+            # the parent spec. Fail loud rather than silently no-op.
+            if kind_hint == "plugin":
+                if dep_name not in result.unresolved_plugins:
+                    result.unresolved_plugins.append(dep_name)
+                return
+            raise UnknownDependencyError(
+                f"required {kind_hint} {dep_name!r} declared on a plugin "
+                f"spec is not in the registry (typo or stale declaration?)"
+            )
+        # Recurse first so deepest-first ordering is preserved. A fresh
+        # install applies what the brackets name; nothing to compare.
+        recurse(spec)
+        delta = variant_answers(requested, spec) if variant else {}
+
+    if spec is None or any(d.name == dep_name for d in result.to_install):
+        return
+    result.to_install.append(
+        ResolvedDep(
+            name=dep_name,
+            kind=spec.kind,
+            spec=spec,
+            variant=variant,
+            answers_delta=delta,
+        )
+    )
 
 
 def format_plan(result: ResolutionResult, target_name: str) -> str:
@@ -262,7 +284,7 @@ def format_plan(result: ResolutionResult, target_name: str) -> str:
     lines: list[str] = [f"Installing {target_name!r} requires:"]
     by_kind: dict[PluginKind, list[str]] = {}
     for dep in result.to_install:
-        by_kind.setdefault(dep.kind, []).append(dep.name)
+        by_kind.setdefault(dep.kind, []).append(dep.variant or dep.name)
 
     for kind in (PluginKind.COMPONENT, PluginKind.SERVICE):
         names = by_kind.get(kind)
@@ -273,7 +295,7 @@ def format_plan(result: ResolutionResult, target_name: str) -> str:
     if result.unresolved_plugins:
         lines.append(
             "   Missing pip packages: "
-            + ", ".join(f"aegis-plugin-{n}" for n in result.unresolved_plugins)
+            + ", ".join(dist_name(n) for n in result.unresolved_plugins)
         )
 
     return "\n".join(lines)

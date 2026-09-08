@@ -87,6 +87,7 @@ jobs:
           - auth_basic
           - auth_org
           - ai_service
+          - ai_langchain
           - insights
           - insights_per_user
           - payment

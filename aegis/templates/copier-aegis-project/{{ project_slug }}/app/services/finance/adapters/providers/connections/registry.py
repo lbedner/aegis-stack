@@ -20,6 +20,7 @@ import httpx
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.encryption import decrypt_secret
+from app.core.time import utcnow
 from app.services.finance.adapters.providers import queries
 from app.services.finance.adapters.providers.connections import (
     plaid_sync,
@@ -30,7 +31,6 @@ from app.services.finance.adapters.providers.connections.common import (
     _SNAPTRADE_SECRET_CONTEXT,
     SyncResult,
     _recompute_net_worth,
-    _utcnow,
     get_connection,
     list_plaid_connections,
     list_provider_connections,
@@ -146,7 +146,7 @@ async def disconnect_connection(
 
             revoke = _revoke_plaid
 
-    now = _utcnow()
+    now = utcnow()
     accounts = await queries.live_accounts_for_connection(db, connection_id)
     for account in accounts:
         account.deleted_at = now
@@ -181,7 +181,7 @@ async def _sync_isolated(
         connection.status = "error"
         connection.status_detail = str(exc)[:500]
         connection.last_error_code = getattr(exc, "error_code", None)
-        connection.last_sync_attempt_at = _utcnow()
+        connection.last_sync_attempt_at = utcnow()
         db.add(connection)
         await db.flush()
         return None

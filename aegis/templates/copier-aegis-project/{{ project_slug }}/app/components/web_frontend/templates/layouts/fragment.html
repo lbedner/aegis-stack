@@ -1,0 +1,6 @@
+{# What an htmx request gets instead of the shell: the page's
+   ``app_content`` block and nothing else, ready to swap into
+   ``#app-content``. A page template picks this or ``app_shell.html`` via
+   ``{% extends layout %}``; the render helper (P1.4) sets ``layout`` from
+   the ``HX-Request`` header. #}
+{%- block app_content %}{% endblock -%}

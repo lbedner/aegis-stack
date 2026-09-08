@@ -26,6 +26,7 @@ from aegis.constants import (
 from aegis.i18n import t
 
 from ..cli import brand
+from .auth_service_parser import auth_level_answers
 from .component_files import (
     JINJA_EXTENSION,
     MIGRATION_SKILL_FILE,
@@ -110,6 +111,12 @@ _SERVICE_ANSWER_KEYS = (
     AnswerKeys.DOCUMENTS,
     AnswerKeys.FINANCE,
 )
+
+
+def _true_flags(answers: dict[str, Any]) -> dict[str, Any]:
+    """Marker inference only ever asserts what it can see; a flag it
+    cannot confirm stays as the project recorded it."""
+    return {k: v for k, v in answers.items() if v is not False}
 
 
 def _is_empty_stub(path: Path) -> bool:
@@ -205,10 +212,10 @@ REGENERATE_ON_AUTH_LEVEL_CHANGE = {
     "app/models/user.py",
     "app/models/org.py",
     "app/core/security.py",
-    "app/services/auth/auth_service.py",
-    "app/services/auth/org_service.py",
-    "app/services/auth/membership_service.py",
-    "app/services/auth/invite_service.py",
+    "app/services/auth/service.py",
+    "app/services/auth/orgs.py",
+    "app/services/auth/memberships.py",
+    "app/services/auth/invites.py",
     "app/components/backend/api/auth/router.py",
     "app/components/backend/api/orgs/router.py",
     "app/components/backend/api/orgs/__init__.py",
@@ -264,6 +271,37 @@ class UpdateResult(BaseModel):
     error_message: str | None = Field(
         default=None, description="Error message if operation failed"
     )
+
+
+# The module that registers a project's insight collectors, newest layout
+# first. The older path stays so a project generated before the insights
+# restructure still detects its sources when it updates.
+INSIGHTS_COLLECTION_PATHS = (
+    "app/services/insights/adapters/collectors/collection.py",
+    "app/services/insights/collector_service.py",
+)
+
+
+def detect_insights_sources(project_path: Path) -> dict[str, bool] | None:
+    """Which insight sources the project has wired up, by sub-flag key.
+
+    The collector files alone are no signal: older templates shipped
+    them all unconditionally. What counts is whether the collection
+    module registers the collector. None when the project has no
+    insights service.
+    """
+    for rel in INSIGHTS_COLLECTION_PATHS:
+        path = project_path / rel
+        if not path.is_file():
+            continue
+        src = path.read_text()
+        return {
+            AnswerKeys.INSIGHTS_GITHUB: "GitHubTrafficCollector" in src,
+            AnswerKeys.INSIGHTS_PYPI: "PyPICollector" in src,
+            AnswerKeys.INSIGHTS_PLAUSIBLE: "PlausibleCollector" in src,
+            AnswerKeys.INSIGHTS_REDDIT: "RedditCollector" in src,
+        }
+    return None
 
 
 class ManualUpdater:
@@ -394,19 +432,19 @@ class ManualUpdater:
         try:
             # Check if already enabled
             include_key = AnswerKeys.include_key(component)
-            if self.answers.get(include_key) is True:
-                # Allow auth level upgrades (basic → rbac → org)
-                is_auth_upgrade = (
-                    component == AnswerKeys.SERVICE_AUTH
-                    and additional_data
-                    and AnswerKeys.AUTH_LEVEL in additional_data
-                )
-                if not is_auth_upgrade:
-                    raise ValueError(f"Component '{component}' is already enabled")
+            is_variant_upgrade = self._is_variant_upgrade(component, additional_data)
+            if self.answers.get(include_key) is True and not is_variant_upgrade:
+                raise ValueError(f"Component '{component}' is already enabled")
 
             # Merge additional data
-            update_data = additional_data or {}
+            update_data = dict(additional_data or {})
             update_data[include_key] = True
+            # A level implies its include_auth_* flags; derive them here so
+            # every caller that sets a level lands the same answers.
+            if AnswerKeys.AUTH_LEVEL in update_data:
+                update_data.update(
+                    auth_level_answers(update_data[AnswerKeys.AUTH_LEVEL])
+                )
 
             # Update answers with new component
             updated_answers = {**self.answers, **update_data}
@@ -465,9 +503,10 @@ class ManualUpdater:
                     # Check for conflicts
                     if output_path.exists():
                         # Some files have conditional content and must be regenerated
-                        is_auth_upgrade = (
-                            additional_data
-                            and AnswerKeys.AUTH_LEVEL in additional_data
+                        # Files whose body depends on the variant. Only auth
+                        # has entries today; the trigger itself is generic.
+                        regenerate_for_variant = (
+                            is_variant_upgrade
                             and relative_path in REGENERATE_ON_AUTH_LEVEL_CHANGE
                         )
                         # Existing-but-empty files are empty stubs left behind
@@ -478,7 +517,7 @@ class ManualUpdater:
                         is_empty_stub = _is_empty_stub(output_path)
                         if (
                             relative_path in REGENERATE_ON_COMPONENT_CHANGE
-                            or is_auth_upgrade
+                            or regenerate_for_variant
                             or is_empty_stub
                         ):
                             self._write_rendered(output_path, content)
@@ -603,6 +642,7 @@ class ManualUpdater:
             MIGRATION_SPECS,
             bootstrap_alembic,
             generate_migration,
+            generate_missing_migrations,
             service_has_migration,
         )
         from .post_gen_tasks import run_migrations
@@ -619,6 +659,9 @@ class ManualUpdater:
                 # Answers carry the project's database engine, which decides
                 # whether a spec's Postgres schema survives — SQLite has none.
                 generate_migration(self.project_path, service, self.answers)
+            # Level-specific revisions the new answers call for (an auth
+            # upgrade to org needs auth_rbac and auth_org).
+            generate_missing_migrations(self.project_path, self.answers)
             # run_migrations failure is non-fatal — match
             # add_service_command's behaviour. The user can ``alembic
             # upgrade head`` manually later.
@@ -1410,6 +1453,13 @@ class ManualUpdater:
                     )
                 )
 
+            # Migration tail, the same one ``add_service`` gives in-tree
+            # services: a plugin that declares tables needs alembic
+            # bootstrapped, its revisions written, and applied. Without
+            # it the router mounts over tables nobody created.
+            if getattr(spec, "migrations", None):
+                self._run_plugin_migrations(spec)
+
             # Post-gen — uv sync picks up the plugin's pyproject deps,
             # make fix re-formats anything we touched. Skipped when the
             # caller (resolver flow) is batching installs and will run
@@ -1432,6 +1482,50 @@ class ManualUpdater:
                 success=False,
                 error_message=str(e),
             )
+
+    def _run_plugin_migrations(self, spec: Any) -> None:
+        """Bootstrap alembic if missing, write the plugin's migrations, run
+        them. ``run_migrations`` failure is non-fatal, as in ``add_service``:
+        the user can ``alembic upgrade head`` later."""
+        from .migration_generator import bootstrap_alembic, generate_plugin_migrations
+        from .post_gen_tasks import run_migrations
+
+        if not (self.project_path / "alembic").exists():
+            bootstrap_alembic(self.project_path, self.jinja_env, self.answers)
+        # Answers carry the database engine, which decides whether a
+        # spec's Postgres schema survives; SQLite has none.
+        generate_plugin_migrations(self.project_path, spec, self.answers)
+        run_migrations(self.project_path, include_migrations=True)
+
+    def _is_variant_upgrade(
+        self, component: str, additional_data: dict[str, Any] | None
+    ) -> bool:
+        """An already-enabled service asked for a variant above its current one.
+
+        The spec's options say which answers hold its variant
+        (``auth_level``, ``ai_framework``). ``answers_delta`` applies the
+        one rule every caller shares: at or below the current level is
+        satisfied (so a downgrade never rewrites a level), above it is an
+        upgrade, an unordered mismatch is a conflict. ``add-service
+        auth[org]`` on basic auth and the resolver installing a plugin
+        that requires ``auth[org]`` both land here.
+        """
+        if (
+            not additional_data
+            or self.answers.get(AnswerKeys.include_key(component)) is not True
+        ):
+            return False
+        from .option_spec import answers_delta, variant_answer_keys
+
+        spec = self._spec_for(component)
+        if spec is None:
+            return False
+        requested = {
+            key: additional_data[key]
+            for key in variant_answer_keys(spec)
+            if key in additional_data
+        }
+        return bool(answers_delta(spec, requested, self.answers))
 
     def _save_answers(self, answers: dict[str, Any]) -> None:
         """
@@ -1503,10 +1597,19 @@ class ManualUpdater:
                     continue
             return False
 
+        def auth_module(name: str, legacy: str) -> Path | None:
+            """The auth module at its current name, else at the name it had
+            before the auth restructure, so an older project still infers."""
+            for candidate in (name, legacy):
+                path = proj / "app" / "services" / "auth" / candidate
+                if path.is_file():
+                    return path
+            return None
+
         # Services
-        if has_file("app", "services", "auth", "auth_service.py"):
+        if auth_module("service.py", "auth_service.py") is not None:
             inferred[AnswerKeys.AUTH] = True
-        if has_file("app", "services", "ai", "ai_service.py"):
+        if has_nonstub_dir("app", "services", "ai"):
             inferred[AnswerKeys.AI] = True
         if has_nonstub_dir("app", "services", "insights"):
             inferred[AnswerKeys.INSIGHTS] = True
@@ -1534,24 +1637,21 @@ class ManualUpdater:
         # Auth level — only meaningful if auth itself is installed.
         # RBAC is gated by inline ``{% if include_auth_rbac %}`` blocks
         # in existing files rather than a dedicated module, so we sniff
-        # ``def require_role`` in the rendered auth_service.py — that
+        # ``def require_role`` in the rendered auth service module — that
         # symbol is only emitted when RBAC is on. Org is detected via
-        # the org_service.py module (whole-file gated).
+        # the orgs module (whole-file gated).
         if inferred.get(AnswerKeys.AUTH) or self.answers.get(AnswerKeys.AUTH):
-            auth_svc = proj / "app" / "services" / "auth" / "auth_service.py"
+            auth_svc = auth_module("service.py", "auth_service.py")
             has_require_role = False
-            if auth_svc.is_file():
+            if auth_svc is not None:
                 try:
                     has_require_role = "def require_role" in auth_svc.read_text()
                 except (OSError, UnicodeDecodeError):
                     has_require_role = False
-            if has_file("app", "services", "auth", "org_service.py"):
-                inferred[AnswerKeys.AUTH_LEVEL] = AuthLevels.ORG
-                inferred[AnswerKeys.AUTH_ORG] = True
-                inferred[AnswerKeys.AUTH_RBAC] = True
+            if auth_module("orgs.py", "org_service.py") is not None:
+                inferred.update(_true_flags(auth_level_answers(AuthLevels.ORG)))
             elif has_require_role:
-                inferred[AnswerKeys.AUTH_LEVEL] = AuthLevels.RBAC
-                inferred[AnswerKeys.AUTH_RBAC] = True
+                inferred.update(_true_flags(auth_level_answers(AuthLevels.RBAC)))
 
         # Auth OAuth marker — file may exist as a non-stub when oauth was wired
         if has_file("app", "components", "backend", "api", "auth", "oauth.py"):
@@ -1565,16 +1665,9 @@ class ManualUpdater:
                 pass
 
         # Insights sub-flags
-        collectors_dir = proj / "app" / "services" / "insights" / "collectors"
-        if collectors_dir.is_dir():
-            for source, key in (
-                ("github", AnswerKeys.INSIGHTS_GITHUB),
-                ("pypi", AnswerKeys.INSIGHTS_PYPI),
-                ("plausible", AnswerKeys.INSIGHTS_PLAUSIBLE),
-                ("reddit", AnswerKeys.INSIGHTS_REDDIT),
-            ):
-                if (collectors_dir / f"{source}_collector.py").is_file():
-                    inferred[key] = True
+        for key, registered in (detect_insights_sources(proj) or {}).items():
+            if registered:
+                inferred[key] = True
 
         return inferred
 

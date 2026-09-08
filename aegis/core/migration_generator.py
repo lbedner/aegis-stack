@@ -4522,13 +4522,20 @@ def _resolve_spec(
             schema=DatabaseSchemas.FINANCE, user_ref_schema=DatabaseSchemas.PUBLIC
         )
 
-    spec = migration_specs[service_name]
+    return _gate_schema(migration_specs[service_name], context)
 
-    # Engines without schema support drop the qualifier entirely; the tables
-    # still get created, just in the single unscoped namespace.
+
+def _gate_schema(
+    spec: ServiceMigrationSpec, context: dict[str, Any] | None
+) -> ServiceMigrationSpec:
+    """Drop a spec's schema qualifier on engines without schema support.
+
+    The tables still get created, just in the single unscoped namespace.
+    A ``None`` context carries no engine information and leaves the spec
+    as declared.
+    """
     if spec.schema is not None and context is not None and not _is_postgres(context):
         return replace(spec, schema=None)
-
     return spec
 
 
@@ -4553,26 +4560,65 @@ def generate_migration(
     spec = _resolve_spec(service_name, context)
     if spec is None:
         return None
+    return _write_migration(project_path, spec)
 
+
+def _write_migration(project_path: Path, spec: ServiceMigrationSpec) -> Path:
+    """Render ``spec`` as the next revision under ``alembic/versions``."""
     versions_dir = get_versions_dir(project_path)
-
-    # Ensure versions directory exists
     versions_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get revision info
     revision = get_next_revision_id(project_path)
     down_revision = get_previous_revision(project_path)
-
-    # Render migration content
     content = _render_migration(spec, revision, down_revision)
 
-    # Write migration file
-    filename = f"{revision}_{service_name}.py"
-    migration_path = versions_dir / filename
-
+    migration_path = versions_dir / f"{revision}_{spec.service_name}.py"
     migration_path.write_text(content)
-
     return migration_path
+
+
+def generate_missing_migrations(
+    project_path: Path, answers: dict[str, Any]
+) -> list[Path]:
+    """Write every migration the project's answers call for that has no
+    revision yet. An auth level upgrade is the common case: the answers
+    now say ``auth_level: org``, so ``auth_rbac`` and ``auth_org`` are
+    needed and missing. Shared by ``add-service`` and the resolver's
+    ``ManualUpdater.add_service`` so both tails agree."""
+    written: list[Path] = []
+    specs = _get_migration_specs()
+    for service_name in get_services_needing_migrations(answers):
+        if service_name in specs and not service_has_migration(
+            project_path, service_name
+        ):
+            path = generate_migration(project_path, service_name, answers)
+            if path is not None:
+                written.append(path)
+    return written
+
+
+def generate_plugin_migrations(
+    project_path: Path,
+    plugin_spec: Any,
+    context: dict[str, Any] | None = None,
+) -> list[Path]:
+    """Write every migration a plugin declares, once.
+
+    Third-party plugins are not in the static registry ``generate_migration``
+    resolves names against, but ``aegis add <plugin>`` holds the spec in
+    hand, so its ``migrations`` list is rendered directly. Each spec gets
+    the same engine gating in-tree services get, and one that already has
+    a file in ``alembic/versions`` is skipped, so re-adding a plugin never
+    stacks a duplicate revision.
+
+    Returns the paths written, in declaration order.
+    """
+    written: list[Path] = []
+    for migration in getattr(plugin_spec, "migrations", None) or []:
+        if service_has_migration(project_path, migration.service_name):
+            continue
+        written.append(_write_migration(project_path, _gate_schema(migration, context)))
+    return written
 
 
 def generate_migrations_for_services(

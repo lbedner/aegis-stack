@@ -1,6 +1,6 @@
 """User data models."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -8,6 +8,8 @@ from pydantic import EmailStr
 import sqlalchemy as sa
 from sqlalchemy import CheckConstraint, Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
 
 
 class OAuthProvider(StrEnum):
@@ -52,10 +54,10 @@ class UserOAuthIdentity(SQLModel, table=True):
     provider_email: str | None = Field(default=None, max_length=255)
     avatar_url: str | None = Field(default=None, max_length=512)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None),
+        default_factory=lambda: utcnow(),
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None),
+        default_factory=lambda: utcnow(),
     )
 
 
@@ -68,7 +70,7 @@ class PasswordResetToken(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     token: str = Field(unique=True, index=True)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     used: bool = Field(default=False)
 
@@ -82,7 +84,7 @@ class EmailVerificationToken(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     token: str = Field(unique=True, index=True)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     used: bool = Field(default=False)
 
@@ -187,7 +189,7 @@ class User(UserBase, table=True):
     hashed_password: str
     last_login: datetime | None = None
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     updated_at: datetime | None = None
     deleted_at: datetime | None = Field(default=None, index=True)

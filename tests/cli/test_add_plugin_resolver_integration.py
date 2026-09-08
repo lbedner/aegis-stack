@@ -142,6 +142,90 @@ class TestResolverIntegration:
             "add_plugin:needs_auth",
         ]
 
+    def test_variant_dep_upgrades_installed_service(self, fake_project: Path) -> None:
+        """Project has basic auth; the plugin requires ``auth[org]``. The
+        resolver must not treat auth as present: ``add_service`` is called
+        with the org level so the upgrade path runs."""
+        answers = fake_project / ".copier-answers.yml"
+        answers.write_text(
+            answers.read_text().replace(
+                "include_auth: false", "include_auth: true\nauth_level: basic"
+            )
+        )
+        spec = PluginSpec(
+            name="needs_org",
+            kind=PluginKind.SERVICE,
+            description="Plugin that depends on org-level auth",
+            version="0.0.1",
+            verified=False,
+            required_services=["auth[org]"],
+        )
+        calls: list[tuple[str, dict | None]] = []
+
+        def _add_service_side_effect(name: str, data, **_kw) -> MagicMock:
+            calls.append((name, data))
+            return MagicMock(success=True, error_message=None)
+
+        mock_updater = MagicMock()
+        mock_updater.add_service.side_effect = _add_service_side_effect
+        mock_updater.add_component.return_value = MagicMock(success=True)
+        mock_updater.add_plugin.return_value = MagicMock(success=True)
+
+        with (
+            patch(
+                "aegis.commands.add._resolve_plugin",
+                return_value=(spec, "fake_module"),
+            ),
+            patch("aegis.commands.add.ManualUpdater", return_value=mock_updater),
+            patch(
+                "aegis.commands.add.validate_version_compatibility",
+                return_value=None,
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["needs_org", "--project-path", str(fake_project), "--yes"],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert calls == [("auth", {"auth_level": "org"})]
+
+    def test_conflicting_variant_dep_is_refused(self, fake_project: Path) -> None:
+        """``ai[langchain]`` required on a pydantic-ai project is a conflict:
+        the command exits non-zero before installing anything."""
+        answers = fake_project / ".copier-answers.yml"
+        answers.write_text(
+            answers.read_text() + "include_ai: true\nai_framework: pydantic-ai\n"
+        )
+        spec = PluginSpec(
+            name="needs_langchain",
+            kind=PluginKind.SERVICE,
+            description="Plugin that depends on the LangChain framework",
+            version="0.0.1",
+            verified=False,
+            required_services=["ai[langchain]"],
+        )
+        mock_updater = MagicMock()
+        with (
+            patch(
+                "aegis.commands.add._resolve_plugin",
+                return_value=(spec, "fake_module"),
+            ),
+            patch("aegis.commands.add.ManualUpdater", return_value=mock_updater),
+            patch(
+                "aegis.commands.add.validate_version_compatibility",
+                return_value=None,
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["needs_langchain", "--project-path", str(fake_project), "--yes"],
+            )
+
+        assert result.exit_code == 1
+        mock_updater.add_service.assert_not_called()
+        mock_updater.add_plugin.assert_not_called()
+
     def test_dep_install_runs_post_gen_exactly_once(self, fake_project: Path) -> None:
         """Adding a plugin with N transitive deps must trigger exactly
         ONE ``run_post_generation_tasks`` invocation across the whole
@@ -256,7 +340,7 @@ class TestResolverIntegration:
     ) -> None:
         """A ``required_plugins`` entry whose package isn't pip-installed
         is unresolvable — the CLI should abort and tell the user to
-        ``pip install aegis-plugin-<name>``."""
+        ``pip install aegis-stack-<name>``."""
         spec = PluginSpec(
             name="needs_base",
             kind=PluginKind.SERVICE,
@@ -288,4 +372,4 @@ class TestResolverIntegration:
             )
 
         assert result.exit_code == 1
-        assert "pip install aegis-plugin-base" in result.output
+        assert "pip install aegis-stack-base" in result.output

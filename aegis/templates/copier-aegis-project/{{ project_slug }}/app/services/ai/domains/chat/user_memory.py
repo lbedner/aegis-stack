@@ -19,14 +19,14 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.core.time import utcnow
+from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.tools import register_tool
 from app.services.ai.models.agents import AgentUserMemory
-from app.services.ai.models.agents.timestamps import utcnow_naive
 
 MEMORY_CATEGORIES = (
     "family",
@@ -99,10 +99,7 @@ async def get_user_memory(
     session: AsyncSession, user_id: str
 ) -> AgentUserMemory | None:
     """Fetch the memory row for a user, or None if none saved yet."""
-    result = await session.exec(
-        select(AgentUserMemory).where(AgentUserMemory.user_id == user_id)
-    )
-    return result.first()
+    return await queries.user_memory_for(session, user_id)
 
 
 def _facts(row: AgentUserMemory) -> list[dict[str, Any]]:
@@ -148,7 +145,7 @@ async def save_user_fact(
         }
     )
     row.memory = {**row.memory, "structured_facts": facts}
-    row.updated_at = utcnow_naive()
+    row.updated_at = utcnow()
     session.add(row)
     await session.commit()
     logger.info("Saved user fact", user_id=user_id, category=category)
@@ -172,7 +169,7 @@ async def replace_user_memory(
     if row is None:
         row = AgentUserMemory(user_id=user_id)
     row.memory = {**row.memory, "structured_facts": facts}
-    row.updated_at = utcnow_naive()
+    row.updated_at = utcnow()
     session.add(row)
     await session.commit()
     logger.info("Replaced user memory", user_id=user_id, fact_count=len(facts))
@@ -205,7 +202,7 @@ async def _rewrite_facts(
     if row is None:
         raise IndexError(f"No saved memory for user {user_id}")
     row.memory = {**row.memory, "structured_facts": facts}
-    row.updated_at = utcnow_naive()
+    row.updated_at = utcnow()
     session.add(row)
     await session.commit()
 

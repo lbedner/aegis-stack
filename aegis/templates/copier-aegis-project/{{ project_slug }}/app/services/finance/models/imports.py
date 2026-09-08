@@ -17,10 +17,10 @@ from sqlalchemy import (
 )
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
-    _utcnow,
 )
 
 
@@ -78,8 +78,8 @@ class FinanceImportProfile(SQLModel, table=True):
     )
     is_system: bool = Field(default=False)
     deleted_at: datetime | None = Field(default=None)
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceImportBatch(SQLModel, table=True):
@@ -145,8 +145,8 @@ class FinanceImportBatch(SQLModel, table=True):
     error: str | None = Field(default=None)
     started_at: datetime | None = Field(default=None)
     finished_at: datetime | None = Field(default=None)
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceImportBatchRow(SQLModel, table=True):
@@ -195,7 +195,7 @@ class FinanceImportBatchRow(SQLModel, table=True):
         default=None, foreign_key=f"{_FK}finance_trade.id"
     )
     reason: str | None = Field(default=None)
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceAttachment(SQLModel, table=True):
@@ -233,5 +233,5 @@ class FinanceAttachment(SQLModel, table=True):
     storage_key: str
     sha256: str | None = Field(default=None)
     deleted_at: datetime | None = Field(default=None)
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

@@ -1,12 +1,13 @@
 """Authentication API routes."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.core.audit import get_audit
+from app.core.time import utcnow
 from app.services.auth.deps import get_refresh_service, get_user_service
 {% if include_auth_org %}
 from app.services.auth.deps import get_invite_service
@@ -47,18 +48,18 @@ from app.models.user import (
     UserCreate,
     UserResponse,
 )
-from app.services.auth.auth_service import get_current_user_from_token
+from app.services.auth.service import get_current_user_from_token
 from app.services.auth.deps import get_current_active_user, get_session_token
-from app.services.auth.refresh_service import RefreshService
-from app.services.auth.user_service import RestoreConflictError, UserService
+from app.services.auth.refresh_tokens import RefreshService
+from app.services.auth.users import RestoreConflictError, UserService
 {% if include_auth_org %}
-from app.services.auth.invite_service import InviteService
+from app.services.auth.invites import InviteService
 {% endif %}
 {% if include_auth_rbac %}
 from pydantic import BaseModel
 
 from app.core.security import VALID_ROLES
-from app.services.auth.auth_service import require_role
+from app.services.auth.service import require_role
 
 
 class RoleUpdateRequest(BaseModel):
@@ -207,7 +208,7 @@ async def login(
 
     # Update last_login timestamp
     await user_service.update_user(
-        user.id, last_login=datetime.now(UTC).replace(tzinfo=None)
+        user.id, last_login=utcnow()
     )
 
     # Create access token

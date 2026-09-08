@@ -14,7 +14,8 @@ from typing import Any
 from sqlalchemy import JSON, CheckConstraint, Column, Index
 from sqlmodel import Field, SQLModel
 
-from app.services.finance.models.base import _SCHEMA, _utcnow
+from app.core.time import utcnow
+from app.services.finance.models.base import _SCHEMA
 
 PENDING_CHANGE_STATUSES = ("pending", "approved", "rejected", "expired")
 
@@ -56,6 +57,6 @@ class FinancePendingChange(SQLModel, table=True):
     result: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("result", JSON, nullable=False)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
     resolved_at: datetime | None = Field(default=None)

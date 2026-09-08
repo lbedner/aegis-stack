@@ -18,8 +18,8 @@ import pytest
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.models.refresh_token import RefreshToken
-from app.services.auth.refresh_service import REUSE_GRACE_SECONDS
-from app.services.auth.user_service import UserService
+from app.services.auth.refresh_tokens import REUSE_GRACE_SECONDS
+from app.services.auth.users import UserService
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
@@ -843,7 +843,7 @@ class TestSessionsEndpoints:
 
         # Plant a second session for the user directly via the service
         # so we don't have to juggle two cookie jars in the same TestClient.
-        from app.services.auth.refresh_service import RefreshService
+        from app.services.auth.refresh_tokens import RefreshService
 
         rs = RefreshService(async_db_session)
         await rs.mint(user.id, source="oauth:github", user_agent="other-device")

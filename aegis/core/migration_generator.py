@@ -4577,6 +4577,26 @@ def _write_migration(project_path: Path, spec: ServiceMigrationSpec) -> Path:
     return migration_path
 
 
+def generate_missing_migrations(
+    project_path: Path, answers: dict[str, Any]
+) -> list[Path]:
+    """Write every migration the project's answers call for that has no
+    revision yet. An auth level upgrade is the common case: the answers
+    now say ``auth_level: org``, so ``auth_rbac`` and ``auth_org`` are
+    needed and missing. Shared by ``add-service`` and the resolver's
+    ``ManualUpdater.add_service`` so both tails agree."""
+    written: list[Path] = []
+    specs = _get_migration_specs()
+    for service_name in get_services_needing_migrations(answers):
+        if service_name in specs and not service_has_migration(
+            project_path, service_name
+        ):
+            path = generate_migration(project_path, service_name, answers)
+            if path is not None:
+                written.append(path)
+    return written
+
+
 def generate_plugin_migrations(
     project_path: Path,
     plugin_spec: Any,

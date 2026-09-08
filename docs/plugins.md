@@ -44,6 +44,13 @@ it out again.
 A plugin that declares `migrations` gets them written and applied on
 `aegis add`, with a Postgres schema of its own when it declares one.
 
+Dependencies can name a variant. `required_services = ["auth[org]"]` asks
+for auth at org level: `aegis add` installs it at that level when the
+project has no auth, upgrades it when the project is at basic or rbac,
+and does nothing when org is already there. A request that would swap an
+unordered choice, such as `ai[langchain]` on a pydantic-ai project, is
+refused with a message rather than applied silently.
+
 ## Publish and get listed
 
 Publish to PyPI as you would any package. The plugin directory at

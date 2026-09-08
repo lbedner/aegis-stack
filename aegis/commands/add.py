@@ -194,6 +194,12 @@ def _install_plugin(
     except UnknownDependencyError as e:
         brand.error(str(e), err=True)
         raise typer.Exit(1) from e
+    except ValueError as e:
+        # A variant the project cannot satisfy without a deliberate change
+        # (``ai[langchain]`` on a pydantic-ai project), or a bracket value
+        # the spec does not know.
+        brand.error(str(e), err=True)
+        raise typer.Exit(1) from e
 
     if plan.unresolved_plugins:
         brand.error(
@@ -243,13 +249,17 @@ def _install_plugin(
     # syncs. Recursive calls pass ``yes=True`` because the user
     # already confirmed the full plan.
     for dep in plan.to_install:
-        typer.echo(f"\n→ Installing dependency: {dep.name}")
+        typer.echo(f"\n→ Installing dependency: {dep.variant or dep.name}")
+        # A variant dep (``auth[org]``) carries the answers it changes;
+        # ``add_service`` treats a delta on an installed service as an
+        # upgrade. Bare deps pass None and get the defaults.
+        data = dep.answers_delta or None
         if dep.kind == PluginKind.COMPONENT:
             dep_updater = ManualUpdater(target_path)
-            dep_result = dep_updater.add_component(dep.name, None, run_post_gen=False)
+            dep_result = dep_updater.add_component(dep.name, data, run_post_gen=False)
         elif dep.name in SERVICES:
             dep_updater = ManualUpdater(target_path)
-            dep_result = dep_updater.add_service(dep.name, None, run_post_gen=False)
+            dep_result = dep_updater.add_service(dep.name, data, run_post_gen=False)
         else:
             _install_plugin(
                 dep.name, target_path, yes=True, force=force, run_post_gen=False

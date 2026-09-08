@@ -36,20 +36,20 @@ from app.models.org import (
     TransferOwnershipRequest,
     UserMembershipResponse,
 )
-from app.services.auth.auth_service import (
+from app.services.auth.service import (
     get_current_user_from_token,
 {%- if include_auth_rbac %}
     require_role,
 {%- endif %}
 )
 from app.services.auth.deps import get_session_token
-from app.services.auth.invite_service import InviteService
-from app.services.auth.membership_service import MembershipService
-from app.services.auth.org_service import (
+from app.services.auth.invites import InviteService
+from app.services.auth.memberships import MembershipService
+from app.services.auth.orgs import (
     OrgService,
     RestoreConflictError as OrgRestoreConflictError,
 )
-from app.services.auth.user_service import UserService
+from app.services.auth.users import UserService
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -10,12 +10,10 @@ from pydantic import BaseModel
 from sqlalchemy import JSON, CheckConstraint, Column, String, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
+
 from .constants import BlogPostStatus
 
-
-def utcnow_naive() -> datetime:
-    """Return a UTC timestamp stored as naive datetime for DB portability."""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class BlogStatus(StrEnum):
@@ -48,8 +46,8 @@ class BlogPost(SQLModel, table=True):
     )
     author_id: int | None = Field(default=None, index=True)
     author_name: str | None = Field(default=None, max_length=200)
-    created_at: datetime = Field(default_factory=utcnow_naive, index=True)
-    updated_at: datetime = Field(default_factory=utcnow_naive)
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+    updated_at: datetime = Field(default_factory=utcnow)
     published_at: datetime | None = Field(default=None, index=True)
     seo_title: str | None = Field(default=None, max_length=200)
     seo_description: str | None = Field(default=None, max_length=320)
@@ -75,7 +73,7 @@ class BlogTag(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(max_length=80, index=True)
     slug: str = Field(max_length=100, index=True)
-    created_at: datetime = Field(default_factory=utcnow_naive)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class BlogPostTag(SQLModel, table=True):
@@ -85,7 +83,7 @@ class BlogPostTag(SQLModel, table=True):
 
     post_id: int = Field(foreign_key="blog_post.id", primary_key=True, index=True)
     tag_id: int = Field(foreign_key="blog_tag.id", primary_key=True, index=True)
-    created_at: datetime = Field(default_factory=utcnow_naive)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class BlogHealthSummary(BaseModel):

@@ -23,7 +23,7 @@ from app.core.security import VALID_ROLES
 {%- endif %}
 from app.i18n import lazy_t, t
 from app.models.user import UserCreate
-from app.services.auth.user_service import UserService
+from app.services.auth.users import UserService
 
 app = typer.Typer(help=lazy_t("auth.help"))
 console = theme.console()

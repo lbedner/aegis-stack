@@ -12,12 +12,14 @@ Plus one non-table value type:
 - PaymentStatusSummary: in-process snapshot returned by PaymentService
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import JSON, Column, Index, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
+
+from app.core.time import utcnow
 
 # ---------------------------------------------------------------------------
 # PaymentProvider
@@ -38,7 +40,7 @@ class PaymentProvider(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships
@@ -73,7 +75,7 @@ class PaymentCustomer(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships
@@ -111,10 +113,10 @@ class PaymentTransaction(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships
@@ -179,10 +181,10 @@ class PaymentSubscription(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships
@@ -242,10 +244,10 @@ class PaymentDispute(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships

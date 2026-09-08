@@ -34,7 +34,7 @@ def status() -> None:
 async def _status() -> None:
     """Async implementation of status command."""
     from app.core.db import get_async_session
-    from app.services.payment.payment_service import PaymentService
+    from app.services.payment.service import PaymentService
 
     async with get_async_session() as session:
         service = PaymentService(session)
@@ -100,7 +100,7 @@ def transactions(
 async def _transactions(limit: int, status_filter: str | None) -> None:
     """Async implementation of transactions command."""
     from app.core.db import get_async_session
-    from app.services.payment.payment_service import PaymentService
+    from app.services.payment.service import PaymentService
 
     async with get_async_session() as session:
         service = PaymentService(session)
@@ -159,7 +159,7 @@ def disputes(
 async def _disputes(status_filter: str | None) -> None:
     """Async implementation of disputes command."""
     from app.core.db import get_async_session
-    from app.services.payment.payment_service import PaymentService
+    from app.services.payment.service import PaymentService
 
     async with get_async_session() as session:
         service = PaymentService(session)
@@ -235,8 +235,8 @@ def seed(
 async def _seed(reset: bool, clear: bool) -> None:
     """Async implementation of seed command."""
     from app.core.db import get_async_session, init_database
-    from app.services.payment.fake_data import clear_fake_data, seed_fake_data
-    from app.services.payment.payment_service import PaymentService
+    from app.services.payment.demo_seed import clear_fake_data, seed_fake_data
+    from app.services.payment.service import PaymentService
 
     # Ensure tables exist when running the CLI against a fresh DB.
     init_database()
@@ -559,7 +559,7 @@ async def _e2e(
         PaymentCustomer,
         PaymentTransaction,
     )
-    from app.services.payment.payment_service import PaymentService
+    from app.services.payment.service import PaymentService
 
     primary = primary_price
     secondary = secondary_price

@@ -86,7 +86,7 @@ class TestSendSMS:
         """Test successful SMS send."""
         with (
             patch("app.services.comms.sms.settings") as mock_settings,
-            patch("app.services.comms.sms.Client") as mock_client_class,
+            patch("app.services.comms.twilio.Client") as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -114,7 +114,7 @@ class TestSendSMS:
         """Test that SMS segments are calculated correctly."""
         with (
             patch("app.services.comms.sms.settings") as mock_settings,
-            patch("app.services.comms.sms.Client") as mock_client_class,
+            patch("app.services.comms.twilio.Client") as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -160,7 +160,7 @@ class TestSendSMS:
         """Test SMS send fails when phone number is missing."""
         with (
             patch("app.services.comms.sms.settings") as mock_settings,
-            patch("app.services.comms.sms.Client"),
+            patch("app.services.comms.twilio.Client"),
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -186,7 +186,7 @@ class TestSendSMSSimple:
         """Test simple SMS send."""
         with (
             patch("app.services.comms.sms.settings") as mock_settings,
-            patch("app.services.comms.sms.Client") as mock_client_class,
+            patch("app.services.comms.twilio.Client") as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"

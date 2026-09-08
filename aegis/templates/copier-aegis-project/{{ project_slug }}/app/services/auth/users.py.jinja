@@ -1,0 +1,783 @@
+"""User management service."""
+
+import secrets
+from datetime import datetime, timedelta
+
+{% if include_auth_rbac %}
+from sqlalchemy import func
+{% endif %}
+from sqlmodel import delete, select, update
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.security import get_password_hash, verify_password
+from app.core.time import utcnow
+from app.services.auth.hooks import run_post_user_created
+{% if include_auth_org %}
+from app.models.org import (
+    ORG_ROLE_OWNER,
+    Organization,
+    OrganizationMember,
+    OrgInvite,
+)
+{% endif %}
+from app.models.refresh_token import RefreshToken
+from app.models.user import EmailVerificationToken, PasswordResetToken, User, UserCreate
+{% if include_oauth %}
+from app.models.user import OAuthProvider, UserOAuthIdentity
+
+
+class RegistrationClosed(Exception):
+    """Raised by ``upsert_from_oauth`` when a brand-new user attempts to
+    sign in via OAuth and ``settings.REGISTRATION_ENABLED`` is False.
+
+    Exists so the OAuth callback can translate this into a friendly
+    redirect (``/login?oauth_error=signup_closed``) instead of a 500.
+    Existing users who already have an OAuthIdentity link, or whose
+    email matches an existing local account, sign in normally.
+    """
+{% endif %}
+
+
+class RestoreConflictError(Exception):
+    """Raised by ``restore_user`` when the soft-deleted user's email is
+    already held by another live user. The partial unique index
+    ``ix_user_email`` allows re-registration after a soft delete, so
+    blindly clearing ``deleted_at`` could produce two live rows with the
+    same email — a constraint violation. The endpoint layer translates
+    this into a 409.
+    """
+
+
+class UserService:
+    """Service for managing users with async database operations."""
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create_user(self, user_data: UserCreate) -> User:
+        """Create a new user asynchronously.
+{%- if include_auth_rbac %}
+
+        The very first user in the system is auto-promoted to ``admin`` so
+        the operator who runs ``aegis init`` and registers can reach the
+        admin-gated tabs (Users, Orgs) without a manual SQL update.
+{%- endif %}
+        """
+        # Hash the password
+        hashed_password = get_password_hash(user_data.password)
+
+{%- if include_auth_rbac %}
+        # First user becomes admin
+        count_result = await self.db.exec(select(func.count()).select_from(User))
+        is_first_user = count_result.one() == 0
+
+{%- endif %}
+        # Create user object.
+        #
+        # ``is_active`` is hardcoded True rather than read from input: the
+        # narrowed ``UserCreate`` no longer exposes it, and a fresh signup
+        # is by definition active. Deactivation is an admin action that
+        # goes through ``deactivate_user``.
+        user = User(
+            email=user_data.email.lower(),
+            full_name=user_data.full_name,
+            hashed_password=hashed_password,
+            is_active=True,
+{%- if include_auth_rbac %}
+            role="admin" if is_first_user else "user",
+{%- endif %}
+            created_at=utcnow(),
+        )
+
+        # Save to database. Flush so ``user.id`` is populated before
+        # hooks run; they get a real id (e.g. for FK rows they stage).
+        self.db.add(user)
+        await self.db.flush()
+        await run_post_user_created(self.db, user)
+        await self.db.commit()
+        await self.db.refresh(user)
+
+        return user
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        """Get user by email address asynchronously. Skips soft-deleted users."""
+        statement = select(User).where(
+            User.email == email.lower(),
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return result.first()
+
+    async def get_user_by_id(self, user_id: int) -> User | None:
+        """Get user by ID asynchronously. Skips soft-deleted users."""
+        statement = select(User).where(
+            User.id == user_id,
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return result.first()
+
+    async def update_user(self, user_id: int, **updates) -> User | None:
+        """Update user data asynchronously."""
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            return None
+
+        for field, value in updates.items():
+            if hasattr(user, field):
+                setattr(user, field, value)
+
+        user.updated_at = utcnow()
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+
+        return user
+
+    async def deactivate_user(self, user_id: int) -> User | None:
+        """Deactivate a user account asynchronously."""
+        return await self.update_user(user_id, is_active=False)
+
+    async def activate_user(self, user_id: int) -> User | None:
+        """Activate a user account asynchronously."""
+        return await self.update_user(user_id, is_active=True)
+
+    async def delete_user(self, user_id: int) -> bool:
+        """Soft-delete a user by setting ``deleted_at``.
+
+        The row stays in the database but is invisible to ``get_user_*``
+        and ``list_users``. Side-effects intended to neutralize the
+        user's live footprint:
+
+        - Revokes every live refresh-token row for the user so any
+          long-lived session is severed. On restore the user has to
+          sign in again.
+{%- if include_auth_org %}
+        - Hard-deletes any pending ``OrgInvite`` rows the user created
+          (the invitee shouldn't be able to accept into an account
+          that's been deactivated). Memberships are left in place so a
+          restore can re-grant access without re-inviting.
+        - Soft-deletes any org the user solely owns (sole member + owner),
+          so the delete doesn't leave an orphan no one can remove. Shared
+          orgs are untouched. See issue #709.
+{%- endif %}
+
+        Use ``hard_delete_user`` for permanent removal.
+        """
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            return False
+
+        now = utcnow()
+        user.deleted_at = now
+        self.db.add(user)
+
+        # Revoke every live refresh token for this user. Bulk UPDATE so
+        # we don't have to load N rows; mirrors ``revoke_family``.
+        await self.db.exec(
+            update(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+{%- if include_auth_org %}
+
+        # Drop pending invites authored by this user.
+        await self.db.exec(
+            delete(OrgInvite).where(OrgInvite.invited_by == user_id)
+        )
+
+        # Cascade: soft-delete any org this user solely owns. Otherwise the
+        # delete orphans the org — its owner row tombstones and the owner-only
+        # delete path can never be satisfied again. See issue #709.
+        orphan_org_ids = await self.orphaned_sole_owner_org_ids(user_id)
+        if orphan_org_ids:
+            await self.db.exec(
+                update(Organization)
+                .where(
+                    Organization.id.in_(orphan_org_ids),
+                    Organization.deleted_at.is_(None),
+                )
+                .values(deleted_at=now)
+            )
+{%- endif %}
+
+        await self.db.commit()
+        return True
+{% if include_auth_org %}
+    async def orphaned_sole_owner_org_ids(
+        self, user_id: int, *, include_deleted: bool = False
+    ) -> list[int]:
+        """Org ids where ``user_id`` is the sole member and the owner.
+
+        Deleting the user would orphan these — the owner membership tombstones
+        and no one can remove the org through the owner-only delete path (issue
+        #709). Used to cascade their soft-delete in :meth:`delete_user` and to
+        emit the ``auth.org_deleted`` audit trail at the caller. Orgs with any
+        other member are excluded, so a user's departure never removes an org
+        other people still use.
+
+        By default only *live* orgs count; pass ``include_deleted=True`` so a
+        hard delete also purges an org that an earlier soft delete already
+        tombstoned.
+        """
+        owner_query = (
+            select(OrganizationMember.organization_id)
+            .join(
+                Organization,
+                Organization.id == OrganizationMember.organization_id,
+            )
+            .where(
+                OrganizationMember.user_id == user_id,
+                OrganizationMember.role == ORG_ROLE_OWNER,
+            )
+        )
+        if not include_deleted:
+            owner_query = owner_query.where(Organization.deleted_at.is_(None))
+        owned_org_ids = (await self.db.exec(owner_query)).all()
+        if not owned_org_ids:
+            return []
+        member_counts = (
+            await self.db.exec(
+                select(OrganizationMember.organization_id, func.count())
+                .where(OrganizationMember.organization_id.in_(owned_org_ids))
+                .group_by(OrganizationMember.organization_id)
+            )
+        ).all()
+        return [org_id for org_id, member_count in member_counts if member_count == 1]
+{% endif %}
+    async def hard_delete_user(self, user_id: int) -> bool:
+        """Permanently delete a user and every row that FKs to them.
+
+        Skips the ``deleted_at`` filter so already-soft-deleted users can
+        also be purged. Tests pass without this cleanup because
+        ``SQLModel.metadata.create_all`` doesn't enforce FK constraints
+        the way Postgres does — production would raise an integrity
+        error otherwise.
+
+        Cleaned tables (all FK ``user.id`` without ``ON DELETE CASCADE``):
+
+        - ``refresh_token``
+        - ``password_reset_token``
+        - ``email_verification_token``
+{%- if include_oauth %}
+        - ``user_oauth_identity``
+{%- endif %}
+{%- if include_auth_org %}
+        - ``organization_member`` (user_id)
+        - ``org_invite`` (invited_by)
+        - any org the user solely owns, plus that org's remaining invites and
+          members (permanent counterpart of ``delete_user``'s cascade — a hard
+          delete must not leave an orphan behind either, issue #709)
+{%- endif %}
+        """
+        statement = select(User).where(User.id == user_id)
+        result = await self.db.exec(statement)
+        user = result.first()
+        if not user:
+            return False
+{%- if include_auth_org %}
+
+        # Capture solo-owned orgs before their membership rows are deleted
+        # below. ``include_deleted`` so an org an earlier soft delete already
+        # tombstoned is purged too, not left as a dangling row.
+        orphan_org_ids = await self.orphaned_sole_owner_org_ids(
+            user_id, include_deleted=True
+        )
+{%- endif %}
+
+        await self.db.exec(
+            delete(RefreshToken).where(RefreshToken.user_id == user_id)
+        )
+        await self.db.exec(
+            delete(PasswordResetToken).where(
+                PasswordResetToken.user_id == user_id
+            )
+        )
+        await self.db.exec(
+            delete(EmailVerificationToken).where(
+                EmailVerificationToken.user_id == user_id
+            )
+        )
+{% if include_oauth %}
+        await self.db.exec(
+            delete(UserOAuthIdentity).where(
+                UserOAuthIdentity.user_id == user_id
+            )
+        )
+{% endif %}
+{% if include_auth_org %}
+        await self.db.exec(
+            delete(OrganizationMember).where(OrganizationMember.user_id == user_id)
+        )
+        await self.db.exec(
+            delete(OrgInvite).where(OrgInvite.invited_by == user_id)
+        )
+        # Purge the solo-owned orgs. Clear their remaining invites and members
+        # first so the FK to ``organization`` is satisfiable when the org rows
+        # go (both tables FK ``organization.id``).
+        if orphan_org_ids:
+            await self.db.exec(
+                delete(OrgInvite).where(
+                    OrgInvite.organization_id.in_(orphan_org_ids)
+                )
+            )
+            await self.db.exec(
+                delete(OrganizationMember).where(
+                    OrganizationMember.organization_id.in_(orphan_org_ids)
+                )
+            )
+            await self.db.exec(
+                delete(Organization).where(Organization.id.in_(orphan_org_ids))
+            )
+{% endif %}
+        await self.db.delete(user)
+        await self.db.commit()
+        return True
+
+    async def list_users(self) -> list[User]:
+        """List all users in the system asynchronously. Skips soft-deleted users."""
+        statement = (
+            select(User)
+            .where(User.deleted_at.is_(None))
+            .order_by(User.created_at.desc())
+        )
+        result = await self.db.exec(statement)
+        return list(result.all())
+
+    async def restore_user(self, user_id: int) -> User | None:
+        """Clear ``deleted_at`` on a previously soft-deleted user.
+
+        Looks the row up directly (bypassing the soft-delete filter on
+        ``get_user_by_id``). Returns ``None`` if the row doesn't exist or
+        is already live. Raises ``RestoreConflictError`` if another live user
+        has claimed the email since the soft delete (partial unique
+        index ``ix_user_email`` would reject the commit otherwise).
+        """
+        statement = select(User).where(User.id == user_id)
+        result = await self.db.exec(statement)
+        user = result.first()
+        if not user or user.deleted_at is None:
+            return None
+
+        # Conflict check: did re-registration with the same email
+        # happen while this user was soft-deleted?
+        conflict_stmt = select(User).where(
+            User.email == user.email,
+            User.deleted_at.is_(None),
+            User.id != user.id,
+        )
+        conflict = (await self.db.exec(conflict_stmt)).first()
+        if conflict is not None:
+            raise RestoreConflictError(
+                f"Email '{user.email}' is already in use by an active account"
+            )
+
+        user.deleted_at = None
+        user.updated_at = utcnow()
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def find_existing_emails_with_prefix(
+        self, prefix: str, domain: str
+    ) -> list[str]:
+        """Find existing emails matching ``prefix{number}@domain``.
+
+        Filters out soft-deleted users so callers using this to pick a
+        unique email don't get blocked by a stale row.
+        """
+        pattern = f"{prefix}%@{domain}"
+        statement = select(User.email).where(
+            User.email.like(pattern),
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return list(result.all())
+
+    async def create_password_reset_token(self, email: str) -> str | None:
+        """Create a password reset token for a user.
+
+        Returns the token string if the user exists, None otherwise.
+        Callers should not reveal whether the user exists.
+        """
+        email = email.lower()
+        user = await self.get_user_by_email(email)
+        if not user:
+            return None
+
+        token = secrets.token_urlsafe(32)
+        reset_token = PasswordResetToken(user_id=user.id, token=token)
+        self.db.add(reset_token)
+        await self.db.commit()
+        await self.db.refresh(reset_token)
+        return token
+
+    async def reset_password(self, token: str, new_password: str) -> None:
+        """Reset a user's password using a valid reset token.
+
+        Raises ValueError if the token is invalid, expired, or already used.
+        """
+        statement = select(PasswordResetToken).where(
+            PasswordResetToken.token == token,
+            PasswordResetToken.used == False,  # noqa: E712
+        )
+        result = await self.db.exec(statement)
+        reset_token = result.first()
+
+        if not reset_token:
+            raise ValueError("Invalid or expired token")
+
+        # Check expiry
+        now = utcnow()
+        expires_at = reset_token.created_at + timedelta(
+            minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES
+        )
+        if expires_at < now:
+            raise ValueError("Invalid or expired token")
+
+        # Update password
+        user = await self.get_user_by_id(reset_token.user_id)
+        if not user:
+            raise ValueError("Invalid or expired token")
+
+        user.hashed_password = get_password_hash(new_password)
+        self.db.add(user)
+
+        # Mark token as used
+        reset_token.used = True
+        self.db.add(reset_token)
+
+        # Revoke every live refresh token for this user as part of the
+        # same transaction: password change, token-used flag, and
+        # revoke commit together or not at all. Otherwise a revoke
+        # failure leaves the password changed and the reset token
+        # consumed while the response 500s, blocking retry.
+        from app.services.auth.refresh_tokens import RefreshService
+
+        await RefreshService(self.db).revoke_all_for_user(reset_token.user_id)
+
+        await self.db.commit()
+
+    async def change_password(
+        self, user_id: int, current_password: str, new_password: str
+    ) -> bool:
+        """Verify the caller's current password and set a new one.
+
+        Returns ``False`` if the current password is wrong so the API can
+        surface a 400 without leaking internal state. Raises ``ValueError``
+        if the user doesn't exist (caller's auth context got us here, so
+        this is an invariant violation, not a normal flow).
+        """
+        user = await self.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError("User not found")
+
+        if not verify_password(current_password, user.hashed_password):
+            return False
+
+        user.hashed_password = get_password_hash(new_password)
+        self.db.add(user)
+        await self.db.commit()
+        return True
+
+    async def authenticate_credentials(
+        self, email: str, password: str
+    ) -> tuple[User | None, str | None]:
+        """Validate email + password and return the user on success.
+
+        Shared between the API ``/token`` endpoint and any web ``/login``
+        form handler so both paths stay in lockstep (lockout, failed-attempt
+        counters, last_login bump). Callers own rate-limiting and audit
+        emission — those vary by entry point.
+
+        Returns ``(user, None)`` on success, or ``(None, "locked" | "invalid")``
+        on failure. The error string lets the caller choose 403 vs 401 or a
+        redirect destination without re-implementing the check.
+        """
+        user = await self.get_user_by_email(email)
+
+        if user and await self.is_account_locked(user):
+            return None, "locked"
+
+        if not user or not verify_password(password, user.hashed_password):
+            if user:
+                await self.record_failed_login(email)
+            return None, "invalid"
+
+        await self.reset_login_attempts(user.id)
+        await self.update_user(
+            user.id, last_login=utcnow()
+        )
+        return user, None
+
+    async def create_email_verification_token(self, user_id: int) -> str:
+        """Create an email verification token for a user.
+
+        Invalidates any previously-issued unused tokens for this user first,
+        so a resend immediately locks out the old link. Prevents an
+        intercepted email from remaining live after the user hits "Resend".
+        Returns the new token string.
+        """
+        await self._invalidate_prior_email_verification_tokens(user_id)
+
+        token = secrets.token_urlsafe(32)
+        verification_token = EmailVerificationToken(user_id=user_id, token=token)
+        self.db.add(verification_token)
+        await self.db.commit()
+        await self.db.refresh(verification_token)
+        return token
+
+    async def _invalidate_prior_email_verification_tokens(self, user_id: int) -> None:
+        """Mark all unused email-verification tokens for this user as used.
+
+        Called whenever a fresh token is about to be issued.
+        """
+        stmt = select(EmailVerificationToken).where(
+            EmailVerificationToken.user_id == user_id,
+            EmailVerificationToken.used == False,  # noqa: E712
+        )
+        result = await self.db.exec(stmt)
+        for tok in result.all():
+            tok.used = True
+            self.db.add(tok)
+
+    async def record_failed_login(self, email: str) -> None:
+        """Increment failed login attempts and lock account if threshold reached."""
+        user = await self.get_user_by_email(email)
+        if not user:
+            return
+
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= settings.ACCOUNT_LOCKOUT_ATTEMPTS:
+            user.locked_until = utcnow() + timedelta(
+                minutes=settings.ACCOUNT_LOCKOUT_MINUTES
+            )
+
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+
+    async def reset_login_attempts(self, user_id: int) -> None:
+        """Reset failed login attempts and unlock account."""
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            return
+
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+
+    async def is_account_locked(self, user: User) -> bool:
+        """Check if an account is currently locked.
+
+        If locked_until is in the past, auto-unlock, persist to DB, and return False.
+        """
+        if user.locked_until is None:
+            return False
+
+        now = utcnow()
+        if user.locked_until > now:
+            return True
+
+        # Auto-unlock: lockout has expired — persist to DB
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return False
+
+{% if include_oauth %}
+    async def upsert_from_oauth(
+        self,
+        *,
+        provider: OAuthProvider,
+        provider_user_id: str,
+        email: str,
+        provider_username: str | None = None,
+        avatar_url: str | None = None,
+    ) -> User:
+        """Resolve an OAuth callback to a local user, creating one if needed.
+
+        Three paths:
+        1. ``(provider, provider_user_id)`` already linked → return the linked
+           user, opportunistically refreshing display metadata.
+        2. Identity is new but ``email`` matches an existing user → link the
+           identity to that user. Bridges previously password-only accounts
+           into OAuth without forcing a separate sign-up.
+        3. Neither exists → create a new user (no password,
+           ``is_verified=True`` since the provider already confirmed the
+           email) and link. Refused with ``RegistrationClosed`` when
+           ``settings.REGISTRATION_ENABLED`` is False.
+        """
+        email = email.lower().strip()
+
+        # Path 1: existing linked identity.
+        stmt = select(UserOAuthIdentity).where(
+            UserOAuthIdentity.provider == provider,
+            UserOAuthIdentity.provider_user_id == provider_user_id,
+        )
+        result = await self.db.exec(stmt)
+        identity = result.first()
+        if identity is not None:
+            user = await self.get_user_by_id(identity.user_id)
+            if user is None:
+                # ``get_user_by_id`` filters out soft-deleted rows. Look the
+                # user up directly to distinguish the two cases:
+                #
+                # - soft-deleted user → auto-restore on OAuth re-sign-in
+                #   so "deleted my account, changed my mind" recovers
+                #   the original account cleanly (avatar, history, etc.).
+                # - truly missing (hard delete or never existed) → delete
+                #   the orphan identity row and fall through to Path 2/3
+                #   for a fresh signup.
+                raw_user = (
+                    await self.db.exec(
+                        select(User).where(User.id == identity.user_id)
+                    )
+                ).first()
+                if raw_user is not None and raw_user.deleted_at is not None:
+                    # Same conflict guard as ``restore_user``: if someone
+                    # re-registered with this email while the user was
+                    # soft-deleted, we can't restore the old row without
+                    # violating the partial unique index. Drop the orphan
+                    # identity and fall through so Path 2/3 produces a
+                    # fresh account (best-effort UX; admin can hard-delete
+                    # the soft-deleted row later if needed).
+                    conflict_stmt = select(User).where(
+                        User.email == raw_user.email,
+                        User.deleted_at.is_(None),
+                        User.id != raw_user.id,
+                    )
+                    conflict = (await self.db.exec(conflict_stmt)).first()
+                    if conflict is None:
+                        raw_user.deleted_at = None
+                        raw_user.updated_at = utcnow()
+                        self.db.add(raw_user)
+                        identity.provider_username = provider_username
+                        identity.provider_email = email
+                        identity.avatar_url = avatar_url
+                        identity.updated_at = utcnow()
+                        self.db.add(identity)
+                        await self.db.commit()
+                        await self.db.refresh(raw_user)
+                        return raw_user
+                await self.db.delete(identity)
+                await self.db.commit()
+            else:
+                # Refresh display metadata (username can change on GitHub,
+                # avatar definitely can).
+                identity.provider_username = provider_username
+                identity.provider_email = email
+                identity.avatar_url = avatar_url
+                identity.updated_at = utcnow()
+                self.db.add(identity)
+                await self.db.commit()
+                return user
+
+        # Path 2: email matches an existing account — link into it.
+        user = await self.get_user_by_email(email)
+        if user is not None:
+            self.db.add(
+                UserOAuthIdentity(
+                    user_id=user.id,
+                    provider=provider,
+                    provider_user_id=provider_user_id,
+                    provider_username=provider_username,
+                    provider_email=email,
+                    avatar_url=avatar_url,
+                )
+            )
+            # Provider already verified the email; flip the local account if
+            # it hasn't been verified yet.
+            if not user.is_verified:
+                user.is_verified = True
+                self.db.add(user)
+            await self.db.commit()
+            return user
+
+        # Path 3: brand-new user.
+        if not settings.REGISTRATION_ENABLED:
+            raise RegistrationClosed()
+{%- if include_auth_rbac %}
+        # First user becomes admin (matches password-registration behavior).
+        count_result = await self.db.exec(select(func.count()).select_from(User))
+        is_first_user = count_result.one() == 0
+{%- endif %}
+        user = User(
+            email=email,
+            full_name=provider_username or email.split("@")[0],
+            # OAuth-only accounts can't password-login; the column is
+            # NOT NULL so we store an empty string as a sentinel.
+            hashed_password="",
+            is_active=True,
+            is_verified=True,  # provider guarantees email ownership
+{%- if include_auth_rbac %}
+            role="admin" if is_first_user else "user",
+{%- endif %}
+        )
+        self.db.add(user)
+        await self.db.flush()  # need user.id for the identity row
+        self.db.add(
+            UserOAuthIdentity(
+                user_id=user.id,
+                provider=provider,
+                provider_user_id=provider_user_id,
+                provider_username=provider_username,
+                provider_email=email,
+                avatar_url=avatar_url,
+            )
+        )
+        # OAuth signup creates a new local user — same hook fires as
+        # password signup so downstream tenancy/onboarding logic only
+        # has one place to subscribe.
+        await run_post_user_created(self.db, user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+{% endif %}
+    async def verify_email(self, token: str) -> None:
+        """Verify a user's email using a valid verification token.
+
+        Sets user.is_verified=True and marks the token as used.
+        Raises ValueError if the token is invalid, expired, or already used.
+        """
+        statement = select(EmailVerificationToken).where(
+            EmailVerificationToken.token == token,
+            EmailVerificationToken.used == False,  # noqa: E712
+        )
+        result = await self.db.exec(statement)
+        verification_token = result.first()
+
+        if not verification_token:
+            raise ValueError("Invalid or expired token")
+
+        # Check expiry
+        now = utcnow()
+        expires_at = verification_token.created_at + timedelta(
+            hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS
+        )
+        if expires_at < now:
+            raise ValueError("Invalid or expired token")
+
+        # Set user as verified
+        user = await self.get_user_by_id(verification_token.user_id)
+        if not user:
+            raise ValueError("Invalid or expired token")
+
+        user.is_verified = True
+        self.db.add(user)
+
+        # Mark token as used
+        verification_token.used = True
+        self.db.add(verification_token)
+
+        await self.db.commit()

@@ -10,8 +10,8 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.log import logger
+from app.services.comms.twilio import credential_errors, twilio_client
 from twilio.base.exceptions import TwilioRestException
-from twilio.rest import Client
 
 from .models import MessageStatus, SendSMSRequest, SMSResponse
 
@@ -28,25 +28,6 @@ class SMSConfigurationError(SMSError):
     pass
 
 
-def _get_twilio_client() -> Client:
-    """
-    Get a configured Twilio client.
-
-    Returns:
-        Client: Configured Twilio REST client
-
-    Raises:
-        SMSConfigurationError: If Twilio credentials are not set
-    """
-    if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_AUTH_TOKEN:
-        raise SMSConfigurationError(
-            "Twilio credentials not set. "
-            "Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables. "
-            "Sign up at https://www.twilio.com/try-twilio"
-        )
-
-    return Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-
 
 async def send_sms(request: SendSMSRequest) -> SMSResponse:
     """
@@ -62,7 +43,7 @@ async def send_sms(request: SendSMSRequest) -> SMSResponse:
         SMSConfigurationError: If Twilio is not configured
         SMSError: If sending fails
     """
-    client = _get_twilio_client()
+    client = twilio_client(settings, SMSConfigurationError)
 
     # Determine sender phone number
     from_number = request.from_number or settings.TWILIO_PHONE_NUMBER
@@ -174,17 +155,7 @@ def validate_sms_config() -> list[str]:
     Returns:
         list[str]: List of configuration errors (empty if valid)
     """
-    errors = []
-
-    if not settings.TWILIO_ACCOUNT_SID:
-        errors.append(
-            "TWILIO_ACCOUNT_SID is not set. Find it in your Twilio Console dashboard."
-        )
-
-    if not settings.TWILIO_AUTH_TOKEN:
-        errors.append(
-            "TWILIO_AUTH_TOKEN is not set. Find it in your Twilio Console dashboard."
-        )
+    errors = credential_errors(settings)
 
     # Need either Messaging Service SID (preferred) or phone number
     if not settings.TWILIO_MESSAGING_SERVICE_SID and not settings.TWILIO_PHONE_NUMBER:

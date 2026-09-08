@@ -6,6 +6,8 @@ from typing import Any
 
 import flet as ft
 
+from app.core.formatting import slugify
+
 from app.components.frontend.controls import (
     ActionMenu,
     ActionMenuItem,
@@ -1374,9 +1376,7 @@ class EditorTab(ft.Container):
 
     @staticmethod
     def _slugify(value: str) -> str:
-        import re
-
-        return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+        return slugify(value)
 
 
 class BlogDetailDialog(BaseDetailPopup):

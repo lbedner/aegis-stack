@@ -15,13 +15,13 @@ from __future__ import annotations
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.domains.ledger import queries
 from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransactionSplit,
 )
 from app.services.finance.schemas import SplitPart
-from app.services.finance.utils import utcnow
 
 
 async def _parent_or_raise(

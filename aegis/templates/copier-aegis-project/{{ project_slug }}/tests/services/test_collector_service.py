@@ -6,8 +6,8 @@ from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from app.services.insights.collector_service import CollectorService
-from app.services.insights.collectors.base import CollectionResult
+from app.services.insights.adapters.collectors.collection import CollectorService
+from app.services.insights.adapters.collectors.base import CollectionResult
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import (
     InsightMetric,
@@ -95,7 +95,7 @@ class TestCollectSource:
         assert "disabled" in (result.error or "")
 
     @pytest.mark.asyncio
-    @patch("app.services.insights.collectors.github_traffic.settings")
+    @patch("app.services.insights.adapters.collectors.base.settings")
     async def test_collect_updates_last_collected_at(
         self, mock_settings: AsyncMock, async_db_session: AsyncSession
     ) -> None:
@@ -111,7 +111,7 @@ class TestCollectSource:
         # so last_collected_at won't be updated. We need a success path.
         # Patch the collector's collect method directly for a clean test.
         with patch(
-            "app.services.insights.collector_service.COLLECTOR_REGISTRY",
+            "app.services.insights.adapters.collectors.collection.COLLECTOR_REGISTRY",
             {SourceKeys.GITHUB_TRAFFIC: _make_mock_collector_cls(success=True)},
         ):
             service = CollectorService(async_db_session)
@@ -147,7 +147,7 @@ class TestCollectAll:
         }
 
         with patch(
-            "app.services.insights.collector_service.COLLECTOR_REGISTRY", registry
+            "app.services.insights.adapters.collectors.collection.COLLECTOR_REGISTRY", registry
         ):
             service = CollectorService(async_db_session)
             results = await service.collect_all()
@@ -266,7 +266,7 @@ class TestGetRegisteredSources:
         false), so we re-derive expected from the registry rather than
         hard-coding all 6 — that would fail any default-config init.
         """
-        from app.services.insights.collector_service import COLLECTOR_REGISTRY
+        from app.services.insights.adapters.collectors.collection import COLLECTOR_REGISTRY
 
         service = CollectorService(AsyncMock())
         sources = service.get_registered_sources()

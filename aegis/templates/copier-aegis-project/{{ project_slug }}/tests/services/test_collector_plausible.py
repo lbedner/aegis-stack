@@ -6,7 +6,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from app.services.insights.collectors.plausible import PlausibleCollector
+from app.services.insights.adapters.collectors.plausible import PlausibleCollector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
 
@@ -144,12 +144,12 @@ class TestPlausibleCollectorSuccess:
         mock_client.post = mock_post
 
         with patch(
-            "app.services.insights.collectors.plausible.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.plausible.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.plausible.settings"
+                "app.services.insights.adapters.collectors.plausible.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
@@ -182,7 +182,7 @@ class TestPlausibleCollectorSuccess:
         )
 
         with patch(
-            "app.services.insights.collectors.plausible.settings"
+            "app.services.insights.adapters.collectors.plausible.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_PLAUSIBLE_API_KEY = None
             mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
@@ -211,12 +211,12 @@ class TestPlausibleCollectorSuccess:
         mock_client.get = AsyncMock(side_effect=error)
 
         with patch(
-            "app.services.insights.collectors.plausible.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.plausible.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.plausible.settings"
+                "app.services.insights.adapters.collectors.plausible.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
@@ -281,12 +281,12 @@ class TestPlausibleCollectorSuccess:
         mock_client.post = mock_post
 
         with patch(
-            "app.services.insights.collectors.plausible.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.plausible.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.plausible.settings"
+                "app.services.insights.adapters.collectors.plausible.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
@@ -324,12 +324,12 @@ class TestPlausibleCollectorSuccess:
         mock_client.get = mock_get
 
         with patch(
-            "app.services.insights.collectors.plausible.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.plausible.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.plausible.settings"
+                "app.services.insights.adapters.collectors.plausible.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"

@@ -1,0 +1,72 @@
+"""Reads for the insights service.
+
+One module per section, matching the sibling that consumes it:
+``metrics`` (sources, metric types, metric rows, records) and
+``events`` for every stack{% if insights_per_user %}; ``projects`` and ``goals`` for the
+per-user tables{% endif %}. Callers say ``queries.foo(db, ...)`` whichever
+module ``foo`` lives in.
+
+Project scoping is a runtime argument (``project_id=None`` means no
+filter), so the same statement serves the single-tenant and per-user
+builds. Statement builders only - no business logic, no writes.
+"""
+
+from app.services.insights.queries import events, metrics
+from app.services.insights.queries.events import events_where
+from app.services.insights.queries.metrics import (
+    latest_created_at,
+    metric_count,
+    metric_on,
+    metric_type_by_key,
+    metric_types,
+    metric_types_by_keys,
+    metrics_joined,
+    metrics_where,
+    record_for_type,
+    records,
+    source_by_key,
+    sources,
+    sum_metric_values,
+)
+{%- if insights_per_user %}
+from app.services.insights.queries import goals, projects
+from app.services.insights.queries.goals import (
+    aggregate_metric,
+    goals_for_user,
+    metrics_for_source_metric,
+)
+from app.services.insights.queries.projects import (
+    project_by_slug,
+    projects_for_owner,
+    projects_matching,
+)
+{%- endif %}
+
+__all__ = [
+    "events",
+    "events_where",
+    "latest_created_at",
+    "metric_count",
+    "metric_on",
+    "metric_type_by_key",
+    "metric_types",
+    "metric_types_by_keys",
+    "metrics",
+    "metrics_joined",
+    "metrics_where",
+    "record_for_type",
+    "records",
+    "source_by_key",
+    "sources",
+    "sum_metric_values",
+{%- if insights_per_user %}
+    "aggregate_metric",
+    "goals",
+    "goals_for_user",
+    "metrics_for_source_metric",
+    "project_by_slug",
+    "projects",
+    "projects_for_owner",
+    "projects_matching",
+{%- endif %}
+]

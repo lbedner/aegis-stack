@@ -1,0 +1,77 @@
+{%- if insights_per_user -%}
+"""Reads for user goals and the metric aggregates their progress is
+derived from."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import func
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.insights.domains.goal_catalog import AggregationStrategy
+from app.services.insights.models import (
+    Goal,
+    GoalStatus,
+    InsightMetric,
+    InsightMetricType,
+    InsightSource,
+)
+
+
+async def goals_for_user(
+    db: AsyncSession, user_id: int, *, status: GoalStatus | None = None
+) -> list[Goal]:
+    stmt = select(Goal).where(Goal.user_id == user_id)
+    if status is not None:
+        stmt = stmt.where(Goal.status == status)
+    stmt = stmt.order_by(Goal.created_at.desc())  # type: ignore[union-attr]
+    return list((await db.exec(stmt)).all())
+
+
+def _by_source_metric(stmt, source_key: str, metric_type_key: str):  # type: ignore[no-untyped-def]
+    return (
+        stmt.join(InsightMetricType, InsightMetric.metric_type_id == InsightMetricType.id)
+        .join(InsightSource, InsightMetricType.source_id == InsightSource.id)
+        .where(InsightSource.key == source_key)
+        .where(InsightMetricType.key == metric_type_key)
+    )
+
+
+async def aggregate_metric(
+    db: AsyncSession,
+    *,
+    source_key: str,
+    metric_type_key: str,
+    strategy: AggregationStrategy,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> float:
+    """Sum or count of one source's metric between two inclusive bounds."""
+    if strategy == AggregationStrategy.COUNT:
+        agg = func.coalesce(func.count(InsightMetric.id), 0)
+    else:
+        agg = func.coalesce(func.sum(InsightMetric.value), 0.0)
+    stmt = _by_source_metric(select(agg), source_key, metric_type_key)
+    if since is not None:
+        stmt = stmt.where(InsightMetric.date >= since)
+    if until is not None:
+        stmt = stmt.where(InsightMetric.date <= until)
+    return float((await db.exec(stmt)).one())
+
+
+async def metrics_for_source_metric(
+    db: AsyncSession,
+    *,
+    source_key: str,
+    metric_type_key: str,
+    since: datetime | None = None,
+) -> list[InsightMetric]:
+    """Every row of one source's metric from ``since`` on - the batch
+    progress computation's one fetch per (source, metric) group."""
+    stmt = _by_source_metric(select(InsightMetric), source_key, metric_type_key)
+    if since is not None:
+        stmt = stmt.where(InsightMetric.date >= since)
+    return list((await db.exec(stmt)).all())
+{%- endif %}

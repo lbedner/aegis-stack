@@ -9,19 +9,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.core.config import settings
 from app.core.log import logger
 
 # Re-exported: callers have always reached the catalog readers through
 # this module, and moving them out did not move their address.
-from app.services.ai.domains.llm.etl.catalog_status import (  # noqa: F401
-    CatalogStats,
-    catalog_is_populated,
-    get_catalog_stats,
-    ollama_models_present,
-)
+from app.services.ai.domains.llm.etl import queries
 from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMClient
 from app.services.ai.domains.llm.etl.clients.openrouter_client import (
     OpenRouterClient,
@@ -32,6 +27,12 @@ from app.services.ai.domains.llm.etl.mappers.llm_mapper import (
     MergedLLMData,
     is_cloud_syncable,
     merge_model_data,
+)
+from app.services.ai.domains.llm.etl.queries import (  # noqa: F401
+    CatalogStats,
+    catalog_is_populated,
+    get_catalog_stats,
+    ollama_models_present,
 )
 from app.services.ai.domains.llm.etl.vendor_metadata import (
     VENDOR_METADATA as VENDOR_METADATA,
@@ -223,19 +224,19 @@ class LLMSyncService:
         models a single stray per-model lookup is 3,000 queries per run
         (observed live before deployments/prices/modalities were cached).
         """
-        vendors = self.session.exec(select(LLMOrg)).all()
+        vendors = queries.all_rows(self.session, LLMOrg)
         self._vendor_cache = {v.name: v for v in vendors}
 
-        models = self.session.exec(select(LargeLanguageModel)).all()
+        models = queries.all_rows(self.session, LargeLanguageModel)
         self._model_cache = {m.model_id: m for m in models}
 
-        deployments = self.session.exec(select(LLMDeployment)).all()
+        deployments = queries.all_rows(self.session, LLMDeployment)
         self._deployment_cache = {(d.llm_id, d.org_id): d for d in deployments}
 
-        prices = self.session.exec(select(LLMPrice)).all()
+        prices = queries.all_rows(self.session, LLMPrice)
         self._price_cache = {(p.llm_id, p.org_id): p for p in prices}
 
-        modalities = self.session.exec(select(LLMModality)).all()
+        modalities = queries.all_rows(self.session, LLMModality)
         self._modality_cache = {}
         for record in modalities:
             per_model = self._modality_cache.setdefault(record.llm_id, {})

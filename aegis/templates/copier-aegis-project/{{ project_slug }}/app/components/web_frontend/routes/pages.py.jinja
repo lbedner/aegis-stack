@@ -22,10 +22,10 @@ from app.services.auth.deps import (
 )
 {%- if include_auth_org %}
 from app.services.auth.deps import get_invite_service
-from app.services.auth.invite_service import InviteService
+from app.services.auth.invites import InviteService
 {%- endif %}
-from app.services.auth.refresh_service import RefreshService
-from app.services.auth.user_service import UserService
+from app.services.auth.refresh_tokens import RefreshService
+from app.services.auth.users import UserService
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm

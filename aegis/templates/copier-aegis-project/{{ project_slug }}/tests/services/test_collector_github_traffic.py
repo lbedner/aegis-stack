@@ -8,7 +8,7 @@ and error handling for the GitHub Traffic insight collector.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from app.services.insights.collectors.github_traffic import GitHubTrafficCollector
+from app.services.insights.adapters.collectors.github_traffic import GitHubTrafficCollector
 from app.services.insights.constants import MetricKeys, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType
 
@@ -93,7 +93,7 @@ class TestGitHubTrafficCollectorSuccess:
 
         # Mock settings
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "test-token"
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -151,7 +151,7 @@ class TestGitHubTrafficCollectorMissingConfig:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = ""
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -173,7 +173,7 @@ class TestGitHubTrafficCollectorMissingConfig:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "test-token"
             mock_settings.INSIGHT_GITHUB_OWNER = ""
@@ -193,7 +193,7 @@ class TestGitHubTrafficCollectorMissingConfig:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "test-token"
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -222,7 +222,7 @@ class TestGitHubTrafficCollectorDeduplication:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "test-token"
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -283,7 +283,7 @@ class TestGitHubTrafficCollectorAPIErrors:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "invalid-token"
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -322,7 +322,7 @@ class TestGitHubTrafficCollectorAPIErrors:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "test-token"
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -361,7 +361,7 @@ class TestGitHubTrafficCollectorAPIErrors:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "test-token"
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -487,7 +487,7 @@ class TestGitHubTrafficCollectorHeaders:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "test-token-123"
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -526,7 +526,7 @@ class TestGitHubTrafficCollectorHeaders:
         collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
-            "app.services.insights.collectors.github_traffic.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_TOKEN = "test-token"
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"

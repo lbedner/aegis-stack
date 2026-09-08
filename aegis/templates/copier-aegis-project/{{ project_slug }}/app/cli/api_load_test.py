@@ -244,7 +244,7 @@ async def _ensure_active_verified_user(email: str) -> None:
 
     from app.core.db import get_async_session
     from app.models.user import UserCreate
-    from app.services.auth.user_service import UserService
+    from app.services.auth.users import UserService
 
     async with get_async_session() as session:
         user_service = UserService(session)

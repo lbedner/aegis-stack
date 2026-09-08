@@ -18,7 +18,6 @@ import statistics
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import or_
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
@@ -31,10 +30,10 @@ from app.services.finance.domains.detection.recurring.cadence import (
 )
 from app.services.finance.domains.detection.recurring.detect import (
     _inherited_curation,
-    _payment_leg,
     _purge_orphaned_proposals,
     _resolve_payee_key,
     _upsert_stream,
+    candidate_filters,
 )
 from app.services.finance.domains.detection.recurring.resolve import (
     _sibling_streams,
@@ -42,6 +41,7 @@ from app.services.finance.domains.detection.recurring.resolve import (
 from app.services.finance.models import (
     FinanceTransaction,
 )
+from app.services.shared.queries import owner_clause
 
 
 class RecurringPlanGroup(BaseModel):
@@ -124,7 +124,7 @@ async def plan_recurring(
         [
             FinanceTransaction.id.in_(list(ids)),
             FinanceTransaction.deleted_at.is_(None),
-            queries.owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+            owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
         ],
     )
     if not selected:
@@ -142,24 +142,7 @@ async def plan_recurring(
     # The sweep. Same filters detection uses, so a declared stream and a
     # detected one are made of the same kind of rows.
     candidates = await queries.transaction_rows_where(
-        db,
-        [
-            queries.owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
-            FinanceTransaction.deleted_at.is_(None),
-            FinanceTransaction.dedup_status != "duplicate",
-            # Ordinary rows only - transfer legs and excluded
-            # bookkeeping recur with steady descriptors, exactly the
-            # shape this hunts, and must not become "bills". The one
-            # carve-out is the cash leg of a card/loan payment (see
-            # _payment_leg): a payment is a transfer that the cash
-            # forecast genuinely has to know about.
-            or_(
-                (FinanceTransaction.is_transfer.is_(False))
-                & (FinanceTransaction.excluded_from_reports.is_(False)),
-                _payment_leg(),
-            ),
-            FinanceTransaction.status == "posted",
-        ],
+        db, candidate_filters(owner_user_id)
     )
     # Rows the user unticked in the preview. Dropped AFTER the sweep, so
     # excluding one charge never drops its siblings with it - and because

@@ -17,6 +17,8 @@ from typing import Any
 from sqlalchemy import JSON, CheckConstraint, Column, Index
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
+
 # What kind of paper this is. Coarse on purpose: a fixed taxonomy would
 # be the framework deciding what documents exist, which it should not.
 # Anything finer rides tags.
@@ -28,18 +30,6 @@ DOCUMENT_KINDS = (
     "receipt",
     "other",
 )
-
-
-def utcnow() -> datetime:
-    """Naive UTC, matching the timestamp columns across services.
-
-    A local-time timestamp reads differently depending on where the
-    process runs, which makes "received on the 27th" a question about
-    the server rather than about the document.
-    """
-    from datetime import UTC
-
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Document(SQLModel, table=True):

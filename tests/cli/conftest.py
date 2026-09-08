@@ -113,6 +113,9 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "ai_with_database": ProjectTemplateSpec(
         components=("database",), services=("ai[sqlite]",)
     ),
+    "ai_langchain": ProjectTemplateSpec(
+        components=("database",), services=("ai[sqlite,langchain,openai]",)
+    ),
     "insights_full": ProjectTemplateSpec(
         components=("database", "scheduler"), services=("insights",)
     ),

@@ -12,7 +12,7 @@ from app.services.insights.models import (
     InsightMetricType,
     InsightSource,
 )
-from app.services.insights.query_service import (
+from app.services.insights.domains.metrics import (
     DAILY_KEYS,
     EVENT_KEYS,
     InsightQueryService,

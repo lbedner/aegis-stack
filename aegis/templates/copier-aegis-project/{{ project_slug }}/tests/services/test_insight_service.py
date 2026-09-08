@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
-from app.services.insights.insight_service import InsightService
+from app.services.insights.service import InsightService
 from app.services.insights.models import (
     InsightMetric,
     InsightMetricType,

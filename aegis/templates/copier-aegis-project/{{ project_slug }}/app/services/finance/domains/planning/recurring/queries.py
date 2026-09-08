@@ -25,12 +25,6 @@ from app.services.finance.models import (
 )
 
 
-def owner_clause_txn(column, owner_user_id: int | None):
-    """NULL-owner (standalone) rows match IS NULL, same convention the
-    categorize package uses."""
-    return column.is_(None) if owner_user_id is None else column == owner_user_id
-
-
 async def all_live_streams(db: AsyncSession) -> list[FinanceRecurringStream]:
     return list(
         (

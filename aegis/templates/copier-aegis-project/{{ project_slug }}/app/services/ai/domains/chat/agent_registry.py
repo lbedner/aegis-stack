@@ -7,12 +7,11 @@ sees the change.
 
 from typing import Any
 
-from sqlalchemy.orm import selectinload
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.agent_loader import invalidate_agent_cache
 from app.services.ai.models.agents import Agent
 
@@ -79,12 +78,7 @@ async def list_agents(*, session: AsyncSession | None = None) -> list[Agent]:
     if session is None:
         async with get_async_session() as owned_session:
             return await list_agents(session=owned_session)
-    result = await session.exec(
-        select(Agent)
-        .options(selectinload(Agent.tools))  # type: ignore[arg-type]
-        .order_by(Agent.slug)  # type: ignore[arg-type]
-    )
-    return list(result.all())
+    return list(await queries.all_agents(session))
 
 
 async def update_agent(
@@ -99,8 +93,7 @@ async def update_agent(
             return await update_agent(slug, changes, session=owned_session)
 
     _validate_changes(changes)
-    result = await session.exec(select(Agent).where(Agent.slug == slug))
-    agent = result.first()
+    agent = await queries.agent_by_slug(session, slug)
     if agent is None:
         raise AgentNotFoundError(f"Agent '{slug}' not found")
     for field, value in changes.items():
@@ -111,12 +104,10 @@ async def update_agent(
     logger.info("Agent updated", agent_slug=slug, fields=sorted(changes))
     # Commit expires the instance; re-select (tools eager) so callers can
     # serialize without triggering sync lazy-loads in async land.
-    refreshed = await session.exec(
-        select(Agent)
-        .options(selectinload(Agent.tools))  # type: ignore[arg-type]
-        .where(Agent.slug == slug)
-    )
-    return refreshed.one()
+    refreshed = await queries.agent_by_slug(session, slug)
+    if refreshed is None:
+        raise AgentNotFoundError(f"Agent '{slug}' vanished after update")
+    return refreshed
 
 
 async def set_agent_active(

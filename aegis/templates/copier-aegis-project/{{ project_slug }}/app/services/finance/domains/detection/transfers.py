@@ -35,6 +35,7 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransfer,
 )
+from app.services.shared.queries import owner_clause
 
 WINDOW_DAYS = 5
 AMOUNT_EXACT_TOLERANCE_CENTS = 200  # $2 fee tolerance -> full amount score
@@ -55,11 +56,6 @@ class TransferDetectionResult(BaseModel):
     adjustment_flagged: int = 0
     # Historical card/loan payments paired outside the lookback window.
     payment_paired: int = 0
-
-
-def _owner_clause(column, owner_user_id: int | None):
-    """Scan the owner's rows; a NULL owner (standalone, no auth) uses IS NULL."""
-    return column.is_(None) if owner_user_id is None else column == owner_user_id
 
 
 def _within_band(out_amount: int, in_amount: int) -> bool:
@@ -148,7 +144,7 @@ async def _pair_transfers(
 
     acct_filters = [
         FinanceAccount.deleted_at.is_(None),
-        _owner_clause(FinanceAccount.owner_user_id, owner_user_id),
+        owner_clause(FinanceAccount.owner_user_id, owner_user_id),
     ]
     accounts = await queries.account_rows_where(db, acct_filters)
     account_type = {a.id: a.account_type for a in accounts}
@@ -165,7 +161,7 @@ async def _pair_transfers(
         FinanceTransaction.is_transfer.is_(False),
         FinanceTransaction.transfer_group_id.is_(None),
         FinanceTransaction.account_id.in_(list(account_type.keys())),
-        _owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+        owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
     ]
     if lookback_days:
         txn_filters.append(
@@ -274,7 +270,7 @@ async def _flag_category_transfers(
             FinanceTransaction.is_transfer.is_(False),
             FinanceTransaction.transfer_group_id.is_(None),
             FinanceTransaction.category_id.in_(queries.transfer_category_ids()),
-            _owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+            owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
         ],
     )
     for txn in rows:
@@ -336,7 +332,7 @@ async def _flag_adjustment_pairs(db: AsyncSession, *, owner_user_id: int | None)
         FinanceTransaction.excluded_from_reports.is_(False),
         FinanceTransaction.is_transfer.is_(False),
         FinanceTransaction.amount != 0,
-        _owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+        owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
     ]
 
     # Two-step fetch so the whole ledger is never loaded: a coarse SQL
@@ -415,7 +411,7 @@ async def _pair_payment_history(db: AsyncSession, *, owner_user_id: int | None) 
         db,
         [
             FinanceAccount.deleted_at.is_(None),
-            _owner_clause(FinanceAccount.owner_user_id, owner_user_id),
+            owner_clause(FinanceAccount.owner_user_id, owner_user_id),
         ],
     )
     liability_ids = {a.id for a in acct_rows if a.classification == "liability"}
@@ -433,7 +429,7 @@ async def _pair_payment_history(db: AsyncSession, *, owner_user_id: int | None) 
             FinanceTransaction.transfer_group_id.is_(None),
             amount_clause,
             FinanceTransaction.account_id.in_(account_ids),
-            _owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+            owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
         ]
 
     inflows = await queries.transaction_rows_where(

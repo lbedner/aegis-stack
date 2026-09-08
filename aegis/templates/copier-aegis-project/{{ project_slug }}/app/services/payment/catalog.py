@@ -10,7 +10,7 @@ independent: different endpoint, different consumer, different cache.
 import logging
 import time
 
-from .payment_service import PaymentService
+from .service import PaymentService
 from .providers.base import CatalogEntry
 
 logger = logging.getLogger(__name__)

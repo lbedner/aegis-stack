@@ -23,13 +23,7 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransfer,
 )
-
-
-def owner_clause(column, owner_user_id: int | None):
-    """Detection's owner scope: NULL-owner rows match IS NULL (standalone
-    installs), unlike the API layer's skip-when-None convention."""
-    return column.is_(None) if owner_user_id is None else column == owner_user_id
-
+from app.services.shared.queries import owner_clause
 
 # -- generic executors --------------------------------------------------------
 

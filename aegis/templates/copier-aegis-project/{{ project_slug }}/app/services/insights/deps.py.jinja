@@ -16,9 +16,9 @@ is prevented structurally rather than via per-handler checks.
 from __future__ import annotations
 
 from app.core.db import get_async_db
-from app.services.insights.collector_service import CollectorService
-from app.services.insights.insight_service import InsightService
-from app.services.insights.query_service import InsightQueryService
+from app.services.insights.adapters.collectors.collection import CollectorService
+from app.services.insights.service import InsightService
+from app.services.insights.domains.metrics import InsightQueryService
 from fastapi import Depends
 {% if insights_per_user -%}
 from fastapi import HTTPException, status
@@ -26,7 +26,7 @@ from fastapi import HTTPException, status
 from app.models.user import User
 from app.services.auth.deps import get_current_active_user
 from app.services.insights.models import Project
-from app.services.insights.project_service import ProjectService
+from app.services.insights.domains.projects import ProjectService
 {%- endif %}
 from sqlmodel.ext.asyncio.session import AsyncSession
 

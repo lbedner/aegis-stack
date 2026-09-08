@@ -14,7 +14,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 
-from app.services.blog.blog_service import BlogService
+from app.services.blog.service import BlogService
 from app.services.blog.constants import ImportConflictPolicy
 from app.services.blog.deps import get_blog_service
 from app.services.blog.schemas import (
@@ -38,7 +38,7 @@ from app.services.blog.serialization import (
 {% if include_auth %}
 from app.models.user import User
 {%- if include_auth_rbac %}
-from app.services.auth.auth_service import require_role
+from app.services.auth.service import require_role
 {%- else %}
 from app.services.auth.deps import get_current_active_user
 {%- endif %}

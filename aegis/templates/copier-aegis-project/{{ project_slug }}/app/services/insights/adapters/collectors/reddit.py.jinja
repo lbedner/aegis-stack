@@ -1,0 +1,142 @@
+"""
+Reddit post tracker.
+
+Lightweight collector — primarily manual entry via CLI/API.
+Stores post stats as snapshot rows with metadata.
+"""
+
+import logging
+
+import httpx
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.insights import queries
+from app.services.insights.constants import MetricKeys, Periods, SourceKeys
+from app.services.insights.schemas import RedditPostMetadata
+from .base import BaseCollector, CollectionResult, today as today_midnight
+
+logger = logging.getLogger(__name__)
+
+
+class RedditCollector(BaseCollector):
+    """Tracks Reddit post stats."""
+
+    @property
+    def source_key(self) -> str:
+        return SourceKeys.REDDIT
+
+    async def collect(self) -> CollectionResult:
+        """Refresh stats for all tracked posts. Not scheduled — called on demand."""
+        return CollectionResult(
+            source_key=self.source_key,
+            success=True,
+            error="Reddit collection is on-demand only. Use add_post() or refresh_post().",
+        )
+
+    async def add_post(self, url: str) -> CollectionResult:
+        """
+        Add a Reddit post to track by fetching its current stats.
+
+        Args:
+            url: Reddit post URL (e.g., https://reddit.com/r/python/comments/abc123/...)
+        """
+        rows_written = 0
+
+        try:
+            post_type = await self.get_metric_type(MetricKeys.POST_STATS)
+
+            # Fetch post data via Reddit JSON API (append .json to URL)
+            json_url = url.rstrip("/") + ".json"
+
+            async with httpx.AsyncClient(
+                timeout=15.0,
+                headers={"User-Agent": "aegis-insights/1.0"},
+                follow_redirects=True,
+            ) as client:
+                resp = await client.get(json_url)
+                resp.raise_for_status()
+                data = resp.json()
+
+            # Reddit returns an array of listings
+            post_data = data[0]["data"]["children"][0]["data"]
+
+            post_id = post_data.get("id", "")
+            metadata = RedditPostMetadata(
+                post_id=post_id,
+                subreddit=post_data.get("subreddit", ""),
+                title=post_data.get("title", ""),
+                comments=post_data.get("num_comments", 0),
+                views=post_data.get("view_count"),
+                upvote_ratio=post_data.get("upvote_ratio"),
+                url=url,
+            )
+
+            today = today_midnight()
+            upvotes = post_data.get("ups", 0)
+
+            await self.upsert_metric(
+                metric_type=post_type,
+                date=today,
+                value=float(upvotes),
+                period=Periods.EVENT,
+                metadata=metadata.model_dump(),
+            )
+            rows_written += 1
+
+            # Also create an event for the timeline
+            from app.services.insights.models import InsightEvent
+
+            # Only create event if one doesn't exist for this post
+            existing_events = await queries.events_where(
+                self.db,
+                event_types=["reddit_post"],
+                order=None,
+                project_id=self.project_id,
+            )
+            already_tracked = any(
+                (ev.metadata_ or {}).get("post_id") == post_id
+                for ev in existing_events
+            )
+            if not already_tracked:
+                subreddit = post_data.get("subreddit", "")
+                title = post_data.get("title", "")
+                from datetime import datetime
+
+                created = post_data.get("created_utc", 0)
+                post_date = (
+                    datetime.fromtimestamp(created).replace(tzinfo=None)
+                    if created
+                    else today
+                )
+
+                event = InsightEvent(
+                    date=post_date,
+                    event_type="reddit_post",
+                    description=f"r/{subreddit} — {title[:80]}",
+                    metadata_={"post_id": post_id, "subreddit": subreddit, "url": url},
+                    {% if insights_per_user -%}
+                    project_id=self.project_id,
+                    {%- endif %}
+                )
+                self.db.add(event)
+
+            await self.db.commit()
+
+            logger.info(
+                "Reddit post added: %s (%d upvotes)",
+                post_id,
+                upvotes,
+            )
+
+            return CollectionResult(
+                source_key=self.source_key,
+                success=True,
+                rows_written=rows_written,
+            )
+
+        except httpx.HTTPStatusError as e:
+            return self._error(f"Reddit API error: {e.response.status_code}")
+        except (KeyError, IndexError) as e:
+            return self._error(f"Failed to parse Reddit response: {e}")
+        except Exception as e:
+            return self._error(f"Reddit post tracking failed: {e}")

@@ -21,6 +21,7 @@ from typing import Any
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.encryption import decrypt_secret, encrypt_secret
+from app.core.time import utcnow
 from app.services.finance.adapters.providers import queries
 from app.services.finance.adapters.providers.connections import snaptrade_mapping
 from app.services.finance.adapters.providers.connections.common import (
@@ -28,8 +29,8 @@ from app.services.finance.adapters.providers.connections.common import (
     SyncResult,
     _recompute_net_worth,
     _to_cents,
-    _utcnow,
     list_provider_connections,
+    relinked_account,
 )
 from app.services.finance.adapters.providers.snaptrade import (
     SnapTradeClient,
@@ -219,17 +220,9 @@ async def _find_snaptrade_account(
     )
     if found is not None:
         return found
-    filters = [
-        FinanceAccount.provider == Provider.SNAPTRADE,
-        FinanceAccount.name == name,
-        FinanceAccount.deleted_at.is_(None),
-        FinanceAccount.mask == mask
-        if mask is not None
-        else FinanceAccount.mask.is_(None),
-    ]
-    if connection.owner_user_id is not None:
-        filters.append(FinanceAccount.owner_user_id == connection.owner_user_id)
-    return await queries.account_first_where(db, filters)
+    return await relinked_account(
+        db, connection, provider=Provider.SNAPTRADE, name=name, mask=mask
+    )
 
 
 async def _upsert_snaptrade_accounts(
@@ -270,7 +263,7 @@ async def _upsert_snaptrade_accounts(
         account.name = name
         account.mask = mask
         account.current_balance = _to_cents(total.get("amount"))
-        account.balance_as_of = _utcnow()
+        account.balance_as_of = utcnow()
         account.deleted_at = None
         db.add(account)
         await db.flush()
@@ -310,7 +303,7 @@ async def _apply_snaptrade_positions(
             owner_user_id=owner_user_id,
             account_id=account_id,
             security_id=security.id,
-            as_of_date=_utcnow().date(),
+            as_of_date=utcnow().date(),
             quantity_e8=round(units * 10**8),
             price=price_cents,
             cost_basis=(
@@ -408,7 +401,7 @@ async def sync_snaptrade_connection(
     client = client or SnapTradeClient()
     service = FinanceService(db)
     result = SyncResult(connection_id=connection.id)
-    connection.last_sync_attempt_at = _utcnow()
+    connection.last_sync_attempt_at = utcnow()
     if not connection.access_token_encrypted or not connection.provider_item_id:
         return result
     user_id = "" if client.is_personal else _snaptrade_user_id(connection.owner_user_id)
@@ -425,7 +418,7 @@ async def sync_snaptrade_connection(
     account_map = await _upsert_snaptrade_accounts(db, service, connection, accounts)
     result.accounts = len(account_map)
 
-    today = _utcnow().date()
+    today = utcnow().date()
     last_pull = (
         date.fromisoformat(connection.sync_cursor) if connection.sync_cursor else None
     )
@@ -472,7 +465,7 @@ async def sync_snaptrade_connection(
         connection.sync_cursor = today.isoformat()
     connection.status = "healthy"
     connection.needs_user_action = False
-    connection.last_successful_sync_at = _utcnow()
+    connection.last_successful_sync_at = utcnow()
     db.add(connection)
     await db.flush()
     return result

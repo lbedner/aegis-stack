@@ -3,7 +3,7 @@
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.blog.blog_service import BlogService
+from app.services.blog.service import BlogService
 from app.services.blog.constants import BlogPostStatus, ImportConflictPolicy
 from app.services.blog.schemas import (
     BlogPostCreate,

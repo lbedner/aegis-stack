@@ -5,7 +5,7 @@ import logging
 from app.core.db import get_async_session
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
-from .blog_service import BlogService
+from .service import BlogService
 from .constants import BLOG_COMPONENT_NAME
 
 logger = logging.getLogger(__name__)

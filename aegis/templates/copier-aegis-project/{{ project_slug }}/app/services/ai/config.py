@@ -61,6 +61,23 @@ def _resolve_effort(value: object) -> str | None:
     return None
 
 
+# The settings field / environment variable each keyed provider reads its
+# API key from. Providers absent here need no key from settings.
+API_KEY_ENV: dict[AIProvider, str] = {
+    AIProvider.OPENAI: "OPENAI_API_KEY",
+    AIProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
+    AIProvider.GOOGLE: "GOOGLE_API_KEY",
+    AIProvider.GROQ: "GROQ_API_KEY",
+    AIProvider.MISTRAL: "MISTRAL_API_KEY",
+    AIProvider.COHERE: "COHERE_API_KEY",
+}
+
+
+def api_key_env(provider: AIProvider) -> str:
+    """The environment variable named in "set X to use this provider" copy."""
+    return API_KEY_ENV.get(provider, f"{provider.value.upper()}_API_KEY")
+
+
 class AIServiceConfig(BaseModel):
     """
     AI service configuration that integrates with main app settings.
@@ -107,22 +124,15 @@ class AIServiceConfig(BaseModel):
 
     def get_provider_config(self, settings: Any) -> ProviderConfig:
         """Get provider-specific configuration."""
-        # Get API key based on provider
-        api_key_mapping = {
-            AIProvider.OPENAI: getattr(settings, "OPENAI_API_KEY", None),
-            AIProvider.ANTHROPIC: getattr(settings, "ANTHROPIC_API_KEY", None),
-            AIProvider.GOOGLE: getattr(settings, "GOOGLE_API_KEY", None),
-            AIProvider.GROQ: getattr(settings, "GROQ_API_KEY", None),
-            AIProvider.MISTRAL: getattr(settings, "MISTRAL_API_KEY", None),
-            AIProvider.COHERE: getattr(settings, "COHERE_API_KEY", None),
-            AIProvider.OLLAMA: None,  # Local provider, no API key required
-            AIProvider.PUBLIC: None,  # LLM7 key read directly in the provider path
-            AIProvider.POLLINATIONS: None,  # Key read directly in the provider path
-        }
+        # Keyed providers read their key from settings; the local and
+        # keyless ones (ollama, public, pollinations) read it in their own
+        # provider path.
+        env_var = API_KEY_ENV.get(self.provider)
+        api_key = getattr(settings, env_var, None) if env_var else None
 
         return ProviderConfig(
             name=self.provider,
-            api_key=api_key_mapping.get(self.provider),
+            api_key=api_key,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             timeout_seconds=self.timeout_seconds,

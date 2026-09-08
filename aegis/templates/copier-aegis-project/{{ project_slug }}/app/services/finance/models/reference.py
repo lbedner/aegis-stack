@@ -15,10 +15,10 @@ from sqlalchemy import (
 )
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
-    _utcnow,
 )
 
 # ---------------------------------------------------------------------------
@@ -51,8 +51,8 @@ class FinanceCurrency(SQLModel, table=True):
     decimals: int = Field(default=2)
     kind: str = Field(default="fiat", max_length=8, index=True)
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceFxRate(SQLModel, table=True):
@@ -99,7 +99,7 @@ class FinanceFxRate(SQLModel, table=True):
     rate_date: date
     rate_e8: int = Field(sa_column=Column("rate_e8", BigInteger, nullable=False))
     source: str = Field(default="manual", max_length=16)
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceIcon(SQLModel, table=True):
@@ -119,7 +119,7 @@ class FinanceIcon(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     domain: str = Field(index=True, unique=True, max_length=255)
     icon_b64: str | None = Field(default=None)
-    fetched_at: datetime = Field(default_factory=_utcnow)
+    fetched_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceSubject(SQLModel, table=True):
@@ -150,6 +150,6 @@ class FinanceSubject(SQLModel, table=True):
     name: str = Field(max_length=128)
     kind: str = Field(default="person", max_length=16)
     note: str | None = None
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime | None = None
     deleted_at: datetime | None = None

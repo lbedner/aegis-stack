@@ -4,6 +4,7 @@ Services command implementation.
 
 import typer
 
+from ..cli import brand
 from ..core.services import (
     SERVICE_TYPE_I18N_KEYS as _SERVICE_TYPE_KEYS,
 )
@@ -42,7 +43,8 @@ def services_command() -> None:
 
             for name, spec in type_services.items():
                 desc = _translated_service_desc(name, spec.description)
-                typer.echo(f"  {name:12} - {desc}")
+                badge = f" {brand.experimental_badge()}" if spec.experimental else ""
+                typer.echo(f"  {name:12} - {desc}{badge}")
                 if spec.required_components:
                     typer.echo(
                         f"               {t('services.requires_components', deps=', '.join(spec.required_components))}"

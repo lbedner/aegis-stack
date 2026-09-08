@@ -17,7 +17,7 @@ providers, etc. — and contribute via wiring data alone).
 Lookup uses ``importlib.resources`` and supports filesystem-backed
 plugin installs:
 
-* installed packages (``pip install aegis-plugin-scraper``)
+* installed packages (``pip install aegis-stack-scraper``)
 * development editable installs (``pip install -e .``)
 
 Zipped wheels are **not** supported today — the caller
@@ -52,7 +52,7 @@ def get_plugin_template_root(plugin_module_name: str) -> Path | None:
 
     Args:
         plugin_module_name: Top-level module name of the plugin package
-            (e.g. ``"aegis_plugin_scraper"``). Must be importable.
+            (e.g. ``"aegis_stack_scraper"``). Must be importable.
 
     Returns:
         Path to the templates directory if the package has one, else

@@ -1,4 +1,4 @@
-# aegis-plugin-{{ name }}
+# {{ dist }}
 
 {{ description }}
 
@@ -7,7 +7,7 @@ An [Aegis Stack](https://github.com/lbedner/aegis-stack) plugin.
 ## Install
 
 ```bash
-pip install aegis-plugin-{{ name }}
+pip install {{ dist }}
 ```
 
 Or for local development:
@@ -26,16 +26,16 @@ aegis add {{ name }}
 
 That will:
 - Append a `_plugins` entry to your project's `.copier-answers.yml`
-- Render any templates this plugin ships under `src/aegis_plugin_{{ name }}/templates/{% raw %}{{ project_slug }}/{% endraw %}` into your project tree
+- Render any templates this plugin ships under `src/{{ pkg }}/templates/{% raw %}{{ project_slug }}/{% endraw %}` into your project tree
 - Regenerate aegis-stack shared files so the plugin's wiring (routers, deps,
   cards, etc.) takes effect
 
 ## Layout
 
 ```
-aegis-plugin-{{ name }}/
+{{ dist }}/
 ├── pyproject.toml
-├── src/aegis_plugin_{{ name }}/
+├── src/{{ pkg }}/
 │   ├── __init__.py
 │   ├── plugin.py                 ← exposes get_spec() (the entry point)
 │   └── templates/
@@ -43,6 +43,14 @@ aegis-plugin-{{ name }}/
 └── tests/
     └── test_plugin.py
 ```
+
+## Get listed
+
+Publish to PyPI and the plugin is listed at
+[aegis-stack.io/plugins](https://aegis-stack.io/plugins) after the nightly
+sweep; the markers it looks for are already set in `pyproject.toml`. How the
+listing works, and same-day submission:
+[docs.aegis-stack.io/plugins](https://docs.aegis-stack.io/plugins/).
 
 ## Develop
 

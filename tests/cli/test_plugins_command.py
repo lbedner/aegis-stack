@@ -213,7 +213,7 @@ class TestPluginsSearch:
         result = runner.invoke(plugins_app, ["search", "anything"])
         assert result.exit_code == 0
         assert "not yet available" in result.stdout
-        assert "pip install aegis-plugin-<name>" in result.stdout
+        assert "pip install aegis-stack-<name>" in result.stdout
 
     def test_search_without_keyword_still_works(self, runner: CliRunner) -> None:
         result = runner.invoke(plugins_app, ["search"])

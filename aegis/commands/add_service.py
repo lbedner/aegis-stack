@@ -61,6 +61,16 @@ def _translated_service_desc(name: str, fallback: str) -> str:
     return result if result != key else fallback
 
 
+def warn_experimental(services: list[str]) -> None:
+    """One warning line per experimental service being added.
+
+    A line, never a prompt: ``-y`` semantics and scripted installs are
+    unchanged. Silent for an empty list.
+    """
+    for service in services:
+        brand.warn(f"\n{t('add_service.experimental_warning', service=service)}")
+
+
 def add_service_command(
     services: str | None = typer.Argument(
         None,
@@ -280,6 +290,7 @@ def add_service_command(
 
     # Show what will be added
     brand.accent(f"\n{t('add_service.services_to_add')}", bold=True)
+    experimental: list[str] = []
     for service in services_to_add:
         base_service = service_base_map[service]
         if base_service in SERVICES:
@@ -287,6 +298,9 @@ def add_service_command(
                 base_service, SERVICES[base_service].description
             )
             typer.echo(f"   • {service}: {desc}")
+            if SERVICES[base_service].experimental:
+                experimental.append(service)
+    warn_experimental(experimental)
 
     # Show component requirements
     if missing_components:

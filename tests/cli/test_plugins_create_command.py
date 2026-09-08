@@ -37,7 +37,7 @@ class TestArgValidation:
         assert "does not exist" in result.output
 
     def test_existing_output_dir_errors(self, tmp_path: Path) -> None:
-        (tmp_path / "aegis-plugin-scraper").mkdir()
+        (tmp_path / "aegis-stack-scraper").mkdir()
         result = runner.invoke(
             plugins_app,
             ["create", "scraper", "--target-dir", str(tmp_path), "--yes"],
@@ -66,7 +66,7 @@ class TestSuccessFlow:
         assert "Created" in result.output
         assert "Next steps:" in result.output
         # Spot-check that the scaffold actually landed.
-        assert (tmp_path / "aegis-plugin-scraper" / "pyproject.toml").is_file()
+        assert (tmp_path / "aegis-stack-scraper" / "pyproject.toml").is_file()
 
     def test_cancellation_creates_nothing(self, tmp_path: Path) -> None:
         # No --yes; simulate the user typing 'n' at the prompt.
@@ -77,4 +77,4 @@ class TestSuccessFlow:
         )
         assert result.exit_code == 0
         assert "Cancelled" in result.output
-        assert not (tmp_path / "aegis-plugin-scraper").exists()
+        assert not (tmp_path / "aegis-stack-scraper").exists()

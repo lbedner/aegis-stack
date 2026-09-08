@@ -175,6 +175,7 @@ nav:
     - Getting Started: deployment/index.md
   - Reference:
     - CLI Reference: cli-reference.md
+    - Plugins: plugins.md
     - Evolving Your Stack: evolving-your-stack.md
     - Integration Patterns: integration-patterns.md
 

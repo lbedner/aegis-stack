@@ -18,7 +18,7 @@ Commands:
                             the official registry.
 
 There is intentionally no ``aegis plugins install``. Putting an external
-plugin's bytes on disk is ``pip install aegis-plugin-<name>`` (or ``uv
+plugin's bytes on disk is ``pip install aegis-stack-<name>`` (or ``uv
 pip install …``) — wrapping that adds no value, and the meaningful work
 of integrating a plugin into a *project* (rendering files, running
 migrations, updating answers, wiring config / DI / routes) lives in the
@@ -38,6 +38,7 @@ from ..constants import AnswerKeys
 from ..core.components import COMPONENTS
 from ..core.plugins.compat import CompatStatus, check_compat
 from ..core.plugins.discovery import discover_plugin_cli_apps, discover_plugins
+from ..core.plugins.naming import dist_name
 from ..core.plugins.spec import PluginKind, PluginSpec
 from ..core.services import SERVICES
 from ..i18n import lazy_t, t
@@ -460,8 +461,8 @@ def plugins_update_command(
     pip-installed version.
 
     Workflow: plugin author publishes a new version of
-    ``aegis-plugin-foo`` to PyPI; user runs
-    ``pip install -U aegis-plugin-foo`` to pull the new bits onto
+    ``aegis-stack-foo`` to PyPI; user runs
+    ``pip install -U aegis-stack-foo`` to pull the new bits onto
     disk; this command re-runs the project-configure step so the
     plugin's updated templates / wiring / migrations land in the
     project tree. Only plugins whose pip-installed version differs
@@ -519,7 +520,11 @@ def plugins_update_command(
             failed.append(
                 (
                     name,
-                    t("plugins.update_not_pip_installed", name=name),
+                    t(
+                        "plugins.update_not_pip_installed",
+                        name=name,
+                        dist=dist_name(name),
+                    ),
                 )
             )
             continue
@@ -626,13 +631,13 @@ def plugins_create_command(
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
 ) -> None:
-    """Scaffold a new ``aegis-plugin-<name>`` Python package.
+    """Scaffold a new ``aegis-stack-<name>`` Python package.
 
     Generates a self-contained, pip-installable plugin project under
-    ``<target-dir>/aegis-plugin-<name>``. After creation:
+    ``<target-dir>/aegis-stack-<name>``. After creation:
 
     \b
-        cd aegis-plugin-<name>
+        cd aegis-stack-<name>
         pip install -e .
         aegis plugins list   # plugin shows up under "External plugins"
 
@@ -655,7 +660,7 @@ def plugins_create_command(
         brand.error(t("plugins.create_target_missing", target=target), err=True)
         raise typer.Exit(1)
 
-    output_root = target / f"aegis-plugin-{name}"
+    output_root = target / dist_name(name)
     if output_root.exists():
         brand.error(t("plugins.create_already_exists", output=output_root), err=True)
         typer.echo(
@@ -705,7 +710,7 @@ def plugins_search_command(
     """Search the official plugin registry.
 
     Stub until ticket #773 ships the official registry. Until then,
-    plugin authors instruct users to ``pip install aegis-plugin-<name>``
+    plugin authors instruct users to ``pip install aegis-stack-<name>``
     directly.
     """
     brand.warn(t("plugins.search_not_available"))

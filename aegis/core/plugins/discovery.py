@@ -26,10 +26,10 @@ module level — call :func:`clear_cache` from tests that mock entry points.
 Example ``pyproject.toml`` for a third-party plugin::
 
     [project.entry-points."aegis.plugins"]
-    scraper = "aegis_plugin_scraper:get_spec"
+    scraper = "aegis_stack_scraper:get_spec"
 
     [project.entry-points."aegis.plugins.cli"]
-    scraper = "aegis_plugin_scraper.cli:app"
+    scraper = "aegis_stack_scraper.cli:app"
 """
 
 from __future__ import annotations

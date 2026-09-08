@@ -27,8 +27,8 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from datetime import UTC, datetime
 from datetime import date as date_cls
+from datetime import datetime
 import hashlib
 from typing import Any
 
@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.adapters.importers import queries
 from app.services.finance.adapters.importers.base import (
     ImportResult,
@@ -46,17 +47,12 @@ from app.services.finance.adapters.importers.base import (
     assign_import_hashes,
 )
 from app.services.finance.models import (
-    FinanceAccount,
     FinanceImportBatch,
     FinanceImportBatchRow,
     FinanceImportProfile,
     FinanceTransaction,
     FinanceTransactionTag,
 )
-
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 async def _resolve_account_id(
@@ -232,7 +228,7 @@ async def plan_transactions(
     from app.services.finance.service import FinanceService
 
     service = FinanceService(db)
-    today = _utcnow().date()
+    today = utcnow().date()
 
     # Held out of EVERY pass below, not just the insert. Letting scheduled
     # rows into the hash grouping would shift the within-day ordinals of
@@ -645,7 +641,7 @@ async def ingest_transactions(
         import_profile_id=import_profile_id,
         status="processing",
         rows_total=len(parsed),
-        started_at=_utcnow(),
+        started_at=utcnow(),
     )
     try:
         async with db.begin_nested():
@@ -784,7 +780,7 @@ async def ingest_transactions(
         # A preserved user category is a decision worth recording, but not
         # a mutation - only real field changes restamp updated_at.
         if [c for c in changes if c != CATEGORY_KEPT_NOTE]:
-            existing.updated_at = _utcnow()
+            existing.updated_at = utcnow()
             db.add(existing)
         return "; ".join(changes)
 
@@ -917,7 +913,7 @@ async def ingest_transactions(
         # Posted rows only: a scheduled row's running balance is a
         # PROJECTED figure, and taking it as the account's real balance
         # would book money that has not moved.
-        today = _utcnow().date()
+        today = utcnow().date()
         balanced = [
             (txn.date, i, txn.running_balance)
             for i, txn in enumerate(parsed)
@@ -942,7 +938,7 @@ async def ingest_transactions(
     batch.rows_duplicate = duplicate
     batch.rows_error = error
     batch.status = "committed"
-    batch.finished_at = _utcnow()
+    batch.finished_at = utcnow()
     db.add(batch)
     await db.flush()
 
@@ -1022,8 +1018,8 @@ async def import_csv(
             status="failed",
             rows_total=0,
             error=f"Unknown CSV layout; header {header}",
-            started_at=_utcnow(),
-            finished_at=_utcnow(),
+            started_at=utcnow(),
+            finished_at=utcnow(),
         )
         db.add(failed)
         # Commit the failed batch before raising: get_async_db rolls the session

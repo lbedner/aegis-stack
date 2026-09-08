@@ -29,8 +29,15 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.core.constants import COUNTRY_NAMES
 from app.services.insights.models import EVENT_TYPE_LABELS
 from app.services.insights.schemas import BulkInsightsResponse
-from app.services.insights.view_schemas import OverviewHero
-from app.services.insights.view_service import InsightViewService
+from app.services.insights.schemas.views import OverviewHero
+from app.services.insights.views import InsightViewService
+from app.services.insights.views.formatting import pct as pct_change
+from app.services.insights.views.events import (
+    DOCS_EVENT_TYPES,
+    GITHUB_EVENT_TYPES,
+    PYPI_EVENT_TYPES,
+    group_events,
+)
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -72,35 +79,6 @@ RANGE_OPTIONS = [
     ("All", 9999),
 ]
 
-# Event types relevant to each tab
-GITHUB_EVENT_TYPES = {
-    "release",
-    "fork",
-    "star",
-    "feature",
-    "milestone_github",
-    "anomaly_github",
-    "localization",
-    "external",
-}
-PYPI_EVENT_TYPES = {
-    "release",
-    "reddit_post",
-    "star",
-    "feature",
-    "milestone_pypi",
-    "localization",
-    "external",
-}
-DOCS_EVENT_TYPES = {
-    "release",
-    "reddit_post",
-    "star",
-    "feature",
-    "localization",
-    "external",
-}
-
 # Milestone category config (for Overview trophy cards)
 CATEGORY_CONFIG: dict[str, dict[str, str]] = {
     "daily_clones": {"label": "GitHub 1-Day Clones", "color": "#2563eb"},
@@ -128,13 +106,6 @@ EVENT_STATUS_MAP: dict[str, str] = {
     "anomaly_github": "error",
     "external": "info",
 }
-
-
-def _pct(current: float, previous: float) -> float | None:
-    """Compute period-over-period percentage change."""
-    if previous > 0:
-        return (current - previous) / previous * 100
-    return None
 
 
 def _build_overview_goals(bulk: BulkInsightsResponse | None) -> ft.Column:
@@ -556,7 +527,9 @@ class InsightsTab(ft.Container):
             (d, lbl, t) for d, lbl, t in all_events if t in self._selected_event_types
         ]
 
-        grouped = _group_events(visible_events, self._days)
+        # The service groups newest-first for the timeline; the chip strip
+        # reads left to right, oldest first.
+        grouped = list(reversed(group_events(visible_events, self._days)))
         if not all_events:
             # Nothing to filter and nothing to show — hide the toolbar
             # entirely so empty tabs don't get a stray "Events" button.
@@ -707,7 +680,7 @@ class InsightsTab(ft.Container):
 
 def _build_db_from_bulk(bulk: BulkInsightsResponse) -> dict[str, Any]:
     """Transform bulk-loaded data into the db dict consumed by OverviewTab and SettingsTab."""  # noqa: E501
-    from app.services.insights.query_service import InsightQueryService
+    from app.services.insights.domains.metrics import InsightQueryService
 
     cutoff_14d, _ = InsightQueryService.compute_cutoffs(14)
 
@@ -951,35 +924,35 @@ class OverviewTab(ft.Container):
                     "Stars",
                     str(stars_total),
                     "#FFD700",
-                    change_pct=_pct(recent_stars, prev_star_count),
+                    change_pct=pct_change(recent_stars, prev_star_count),
                     prev_value=f"+{today_stars} today",
                 ),
                 MetricCard(
                     "PyPI Downloads",
                     f"{db['pypi_total']:,}",
                     "#FF69B4",
-                    change_pct=_pct(pypi_14d, pypi_prev14d),
+                    change_pct=pct_change(pypi_14d, pypi_prev14d),
                     prev_value=f"+{latest_downloads:,} {dl_label}",
                 ),
                 MetricCard(
                     "14d Clones",
                     f"{total_clones:,}",
                     Theme.Colors.PRIMARY,
-                    change_pct=_pct(total_clones, prev_clones),
+                    change_pct=pct_change(total_clones, prev_clones),
                     prev_value=f"+{latest_clones:,} {clones_label}",
                 ),
                 MetricCard(
                     "14d Unique",
                     f"{total_unique:,}",
                     Theme.Colors.INFO,
-                    change_pct=_pct(total_unique, prev_unique),
+                    change_pct=pct_change(total_unique, prev_unique),
                     prev_value=f"+{latest_unique:,} {unique_label}",
                 ),
                 MetricCard(
                     "14d Views",
                     f"{total_views:,}",
                     Theme.Colors.SUCCESS,
-                    change_pct=_pct(total_views, prev_views),
+                    change_pct=pct_change(total_views, prev_views),
                     prev_value=f"+{latest_views:,} {views_label}",
                 ),
             ],
@@ -1333,7 +1306,7 @@ class GitHubTrafficTab(InsightsTab):
         )
 
         # Previous period avg stars (from bulk data)
-        from app.services.insights.query_service import InsightQueryService
+        from app.services.insights.domains.metrics import InsightQueryService
 
         cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(self._days)
         prev_star_rows = [
@@ -1357,14 +1330,14 @@ class GitHubTrafficTab(InsightsTab):
                         "Clones",
                         f"{total_clones:,}",
                         Theme.Colors.PRIMARY,
-                        change_pct=_pct(total_clones, prev_c),
+                        change_pct=pct_change(total_clones, prev_c),
                         prev_value=f"+{last_clones:,} {_day_label}",
                     ),
                     MetricCard(
                         "Unique",
                         f"{total_unique:,}",
                         Theme.Colors.INFO,
-                        change_pct=_pct(total_unique, prev_u),
+                        change_pct=pct_change(total_unique, prev_u),
                         prev_value=f"+{last_unique:,} {_day_label}",
                         tooltip="Unique cloners per day, counted independently by GitHub. Not deduplicated across days.",  # noqa: E501
                     ),
@@ -1372,14 +1345,14 @@ class GitHubTrafficTab(InsightsTab):
                         "Views",
                         f"{total_views:,}",
                         Theme.Colors.SUCCESS,
-                        change_pct=_pct(total_views, prev_v),
+                        change_pct=pct_change(total_views, prev_v),
                         prev_value=f"+{last_views:,} {_day_label}",
                     ),
                     MetricCard(
                         "Visitors",
                         f"{total_visitors:,}",
                         Theme.Colors.WARNING,
-                        change_pct=_pct(total_visitors, prev_vis),
+                        change_pct=pct_change(total_visitors, prev_vis),
                         prev_value=f"+{last_visitors:,} {_day_label}",
                     ),
                     MetricCard(
@@ -1757,7 +1730,7 @@ class GitHubTrafficTab(InsightsTab):
 
     def _load_data(self, days: int = 14) -> dict[str, Any]:
         """Load GitHub data from bulk pre-loaded data with date cutoff."""
-        from app.services.insights.query_service import InsightQueryService
+        from app.services.insights.domains.metrics import InsightQueryService
 
         cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
 
@@ -1917,7 +1890,7 @@ class GitHubTrafficTab(InsightsTab):
         all_events.sort(key=lambda x: x[0])
 
         # Average unique cloners by day-of-week (Sun..Sat) — sourced from
-        # view_service so this stays consistent with whatever the rest of
+        # views package so this stays consistent with whatever the rest of
         # the app shows. Empty list when there's no cloner data, so the
         # builder can hide the chart instead of rendering an empty axis.
         github_view = InsightViewService(self._bulk).github(days=days)
@@ -2094,7 +2067,7 @@ class StarsTab(InsightsTab):
 
     def _load_data(self, days: int = 9999) -> dict[str, Any]:
         """Load star data from bulk pre-loaded data with date cutoff."""
-        from app.services.insights.query_service import InsightQueryService
+        from app.services.insights.domains.metrics import InsightQueryService
 
         cutoff, _ = InsightQueryService.compute_cutoffs(days)
 
@@ -2262,7 +2235,7 @@ class PyPITab(InsightsTab):
                     "Total Downloads",
                     total_display,
                     ChartColors.TEAL,
-                    change_pct=_pct(cur_val, prev_val),
+                    change_pct=pct_change(cur_val, prev_val),
                     prev_value=f"+{last_dl:,} {_dl_label}",
                 ),
                 MetricCard(
@@ -2707,7 +2680,7 @@ class PyPITab(InsightsTab):
 
     def _load_data(self, days: int = 14) -> dict:
         """Load PyPI data from bulk pre-loaded data."""
-        from app.services.insights.query_service import InsightQueryService
+        from app.services.insights.domains.metrics import InsightQueryService
 
         cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
 
@@ -2909,13 +2882,13 @@ class DocsTab(InsightsTab):
                         "Visitors",
                         f"{total_visitors:,}",
                         ChartColors.TEAL,
-                        change_pct=_pct(total_visitors, prev_v),
+                        change_pct=pct_change(total_visitors, prev_v),
                     ),
                     MetricCard(
                         "Pageviews",
                         f"{total_pageviews:,}",
                         ChartColors.INDIGO,
-                        change_pct=_pct(total_pageviews, prev_pv),
+                        change_pct=pct_change(total_pageviews, prev_pv),
                     ),
                     MetricCard(
                         "Views/Visit", f"{views_per_visit:.1f}", Theme.Colors.SUCCESS
@@ -2924,14 +2897,14 @@ class DocsTab(InsightsTab):
                         "Bounce Rate",
                         f"{avg_bounce:.0f}%",
                         Theme.Colors.WARNING if avg_bounce > 50 else Theme.Colors.INFO,
-                        change_pct=_pct(avg_bounce, prev_b),
+                        change_pct=pct_change(avg_bounce, prev_b),
                         invert=True,
                     ),
                     MetricCard(
                         "Avg Duration",
                         f"{duration_min}m {duration_sec}s",
                         "#A855F7",
-                        change_pct=_pct(avg_duration, prev_d),
+                        change_pct=pct_change(avg_duration, prev_d),
                     ),
                 ],
                 spacing=Theme.Spacing.MD,
@@ -3209,7 +3182,7 @@ class DocsTab(InsightsTab):
                 d_sec = int(seconds % 60)
                 return f"{d_min}m {d_sec}s" if d_min else f"{d_sec}s"
 
-            def _format_pct(value: float | None) -> str:
+            def _formatpct(value: float | None) -> str:
                 return "-" if value is None else f"{value:.1f}%"
 
             def _page_link(url: str) -> ft.Container:
@@ -3250,9 +3223,9 @@ class DocsTab(InsightsTab):
                     _page_link(p["url"]),
                     f"{p['visitors']:,}",
                     f"{p['pageviews']:,}",
-                    _format_pct(p.get("bounce_rate")),
+                    _formatpct(p.get("bounce_rate")),
                     _format_duration(p.get("time_s") or 0),
-                    _format_pct(p.get("scroll")),
+                    _formatpct(p.get("scroll")),
                 ]
                 for p in top_pages
             ]
@@ -3313,7 +3286,7 @@ class DocsTab(InsightsTab):
 
     def _load_data(self, days: int = 30) -> dict[str, Any]:
         """Load Plausible data from bulk pre-loaded data."""
-        from app.services.insights.query_service import InsightQueryService
+        from app.services.insights.domains.metrics import InsightQueryService
 
         cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
 
@@ -3682,86 +3655,6 @@ class RedditTab(ft.Container):
 # ---------------------------------------------------------------------------
 # Modal
 # ---------------------------------------------------------------------------
-
-
-def _group_events(
-    events: list[tuple[str, str, str]],
-    days: int,
-) -> list[tuple[str, str, str, set[str]]]:
-    """Group same-type events by time bucket for cleaner display.
-
-    Returns list of (display_date, label, type, dates_set).
-    At small ranges (<=30d), no grouping — each event gets its own chip.
-    """
-    from datetime import datetime as dt  # noqa: I001
-    import re
-
-    # Always return with dates_set for consistent interface
-    if days <= 30 or not events:
-        return [(date, label, etype, {date}) for date, label, etype in events]
-
-    # Determine bucket size
-    if days <= 90:
-
-        def bucket_key(date_str: str) -> str:
-            d = dt.strptime(date_str, "%Y-%m-%d")
-            # ISO week: YYYY-WNN
-            return f"{d.isocalendar()[0]}-W{d.isocalendar()[1]:02d}"
-    else:
-
-        def bucket_key(date_str: str) -> str:
-            return date_str[:7]  # YYYY-MM
-
-    # Group by (bucket, type)
-    buckets: dict[tuple[str, str], list[tuple[str, str]]] = {}
-    for date, label, etype in events:
-        key = (bucket_key(date), etype)
-        buckets.setdefault(key, []).append((date, label))
-
-    result: list[tuple[str, str, str, set[str]]] = []
-    for (_, etype), items in buckets.items():
-        dates = {d for d, _ in items}
-        first_date = min(dates)
-
-        if len(items) == 1:
-            result.append((items[0][0], items[0][1], etype, dates))
-            continue
-
-        if etype == "release":
-            tags = [lbl for _, lbl in sorted(items)]
-            label = f"{tags[0]}\u2013{tags[-1]}" if len(tags) > 1 else tags[0]
-        elif etype == "star":
-            # Extract star numbers from labels like "⭐ #80-#85 (6 stars)" or "⭐ #99 — user"  # noqa: E501
-            nums: list[int] = []
-            for _, lbl in items:
-                for m in re.findall(r"#(\d+)", lbl):
-                    nums.append(int(m))
-            if nums:
-                label = f"\u2b50 #{min(nums)}-#{max(nums)} ({len(items)} events)"
-            else:
-                label = f"\u2b50 ({len(items)} stars)"
-        elif etype == "reddit_post":
-            # Keep individual reddit posts — don't group
-            for date, lbl in items:
-                result.append((date, lbl, etype, {date}))
-            continue
-        else:
-            label = f"{etype} ({len(items)})"
-
-        result.append((first_date, label, etype, dates))
-
-    result.sort(key=lambda x: x[0])
-    return result
-
-
-def _extract_max_number(text: str) -> str:
-    """Extract the largest number from a text string (e.g., '5,292 clones' -> '5,292')."""  # noqa: E501
-    import re
-
-    numbers = re.findall(r"\d[\d,]*", text)
-    if not numbers:
-        return ""
-    return max(numbers, key=lambda n: int(n.replace(",", "")))
 
 
 def _smart_step(max_val: float) -> int:

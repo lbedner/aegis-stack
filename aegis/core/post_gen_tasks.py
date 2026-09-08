@@ -360,9 +360,9 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     # Remove auth org files if org level not selected (but auth is enabled)
     if is_enabled(AnswerKeys.AUTH) and not is_enabled(AnswerKeys.AUTH_ORG):
         remove_file(project_path, "app/models/org.py")
-        remove_file(project_path, "app/services/auth/org_service.py")
-        remove_file(project_path, "app/services/auth/membership_service.py")
-        remove_file(project_path, "app/services/auth/invite_service.py")
+        remove_file(project_path, "app/services/auth/orgs.py")
+        remove_file(project_path, "app/services/auth/memberships.py")
+        remove_file(project_path, "app/services/auth/invites.py")
         remove_dir(project_path, "app/components/backend/api/orgs")
         remove_file(
             project_path,
@@ -405,6 +405,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/ai/test_module_context.py")
         # Sentiment scoring reads/writes conversation + sentiment tables.
         remove_file(project_path, "app/services/ai/domains/chat/sentiment.py")
+        # Every chat read goes through the queries module; its tables are gone.
+        remove_file(project_path, "app/services/ai/domains/chat/queries.py")
         remove_file(project_path, "app/services/ai/models/sentiment.py")
         remove_file(project_path, "tests/services/ai/test_sentiment.py")
         # Agent registry CLI inspects DB rows.
@@ -431,7 +433,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Remove persistence-related contexts (keep usage_context.py - no DB deps)
         remove_file(project_path, "app/services/ai/domains/chat/llm_catalog_context.py")
         remove_file(project_path, "app/services/ai/domains/llm/llm_service.py")
-        remove_file(project_path, "app/services/ai/domains/llm/catalog_queries.py")
+        remove_file(project_path, "app/services/ai/domains/llm/catalog.py")
+        remove_file(project_path, "app/services/ai/domains/llm/queries.py")
         remove_file(project_path, "app/services/ai/domains/llm/provider_management.py")
         # Remove persistence-related tests
         remove_dir(project_path, "tests/services/ai/etl")
@@ -475,13 +478,14 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/components/frontend/dashboard/modals/rag_tab.py")
 
     # chat_kit is a pydantic-ai chat engine (imports ``pydantic_ai``); it has
-    # no langchain path, so strip it (and its ledger helper) on langchain.
+    # no langchain path, so strip it on langchain. ``usage_recording`` stays:
+    # pricing and the ledger write are framework-neutral and both chat
+    # paths delegate to it.
     if (
         is_enabled(AnswerKeys.AI)
         and context.get(AnswerKeys.AI_FRAMEWORK) != AIFrameworks.PYDANTIC_AI
     ):
         remove_dir(project_path, "app/services/ai/domains/chat/chat_kit")
-        remove_file(project_path, "app/services/ai/usage_recording.py")
         remove_dir(project_path, "tests/services/ai/chat_kit")
 
     # Remove voice (TTS/STT) if not enabled

@@ -1,0 +1,249 @@
+{% if insights_per_user -%}
+"""ProjectService — multi-tenant CRUD for the insights ``project`` table.
+
+The single seam between application code and the project row. All
+encryption / decryption of credential columns (``github_token``,
+``plausible_api_key``) lives here so callers never deal with ciphertext.
+
+Decryption happens after expunging the loaded instance from the session,
+so mutating the returned Project's plaintext credentials cannot accidentally
+flush plaintext back to the DB. Updates go through ``update()``, which
+takes plaintext kwargs and re-encrypts before commit.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from app.core.encryption import decrypt_secret, encrypt_secret
+from app.core.time import utcnow
+from app.services.insights import queries
+from app.services.insights.models import Project
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+
+# Columns whose values are stored encrypted at rest. The service
+# encrypts on write and decrypts on read; callers see plaintext.
+_ENCRYPTED_COLUMNS: tuple[str, ...] = ("github_token", "plausible_api_key")
+
+
+
+class ProjectService:
+    """Per-user CRUD for projects + transparent credential encryption."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    # ---- CRUD ---------------------------------------------------------
+
+    async def create(
+        self,
+        *,
+        owner_user_id: int,
+        organization_id: int,
+        slug: str,
+        name: str,
+        github_owner: str | None = None,
+        github_repo: str | None = None,
+        github_token: str | None = None,
+        pypi_package: str | None = None,
+        plausible_site: str | None = None,
+        plausible_api_key: str | None = None,
+        reddit_subreddits: str | None = None,
+    ) -> Project:
+        """Create a new project. Credentials are encrypted before insert.
+
+        ``organization_id`` is required — every project belongs to one
+        org. Downstream apps resolve it from their own policy (personal
+        org per user, active team org from a header, etc.).
+        ``owner_user_id`` stays as the implicit owner-membership
+        lookup; v2 reads will swap to membership-based resolution.
+
+        The returned Project carries plaintext credentials (whatever the
+        caller passed in). The DB row holds ciphertext.
+        """
+        now = utcnow()
+        project = Project(
+            owner_user_id=owner_user_id,
+            organization_id=organization_id,
+            slug=slug,
+            name=name,
+            github_owner=github_owner,
+            github_repo=github_repo,
+            github_token=_maybe_encrypt(github_token),
+            pypi_package=pypi_package,
+            plausible_site=plausible_site,
+            plausible_api_key=_maybe_encrypt(plausible_api_key),
+            reddit_subreddits=reddit_subreddits,
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.add(project)
+        await self.db.commit()
+        await self.db.refresh(project)
+        # Detach so mutating plaintext fields can't flush ciphertext loss.
+        self.db.expunge(project)
+        # Caller passed plaintext; re-attach plaintext to the returned
+        # instance so they don't see ciphertext on the values they sent.
+        project.github_token = github_token
+        project.plausible_api_key = plausible_api_key
+        return project
+
+    async def list_for_user(self, owner_user_id: int) -> list[Project]:
+        """All projects owned by a user, newest first. Credentials decrypted."""
+        projects = await queries.projects_for_owner(self.db, owner_user_id)
+        for p in projects:
+            self.db.expunge(p)
+            _decrypt_in_place(p)
+        return projects
+
+    # ---- collector orchestration helpers ------------------------------
+    #
+    # The scheduler iterates ``list_with_<source>()`` to dispatch one
+    # ``CollectorService`` run per (source, project). Cross-user; the
+    # scheduler doesn't care which user owns each project — only that the
+    # project has the source configured.
+
+    async def _list_where(self, *predicates) -> list[Project]:
+        """Internal: run a SELECT with the given WHERE predicates and decrypt."""
+        projects = await queries.projects_matching(self.db, list(predicates))
+        for p in projects:
+            self.db.expunge(p)
+            _decrypt_in_place(p)
+        return projects
+
+    async def list_with_github(self) -> list[Project]:
+        """All projects with a GitHub repo configured (across all owners)."""
+        return await self._list_where(
+            Project.github_owner.isnot(None),  # type: ignore[union-attr]
+            Project.github_repo.isnot(None),  # type: ignore[union-attr]
+        )
+
+    async def list_with_pypi(self) -> list[Project]:
+        """All projects with a PyPI package configured."""
+        return await self._list_where(
+            Project.pypi_package.isnot(None),  # type: ignore[union-attr]
+        )
+
+    async def list_with_plausible(self) -> list[Project]:
+        """All projects with both Plausible site + API key configured."""
+        return await self._list_where(
+            Project.plausible_site.isnot(None),  # type: ignore[union-attr]
+            Project.plausible_api_key.isnot(None),  # type: ignore[union-attr]
+        )
+
+    async def get_by_slug_for_user(
+        self, slug: str, owner_user_id: int
+    ) -> Project | None:
+        """Look up by URL slug, scoped to owner. Returns None on miss."""
+        project = await queries.project_by_slug(
+            self.db, slug, owner_user_id=owner_user_id
+        )
+        if project is None:
+            return None
+        self.db.expunge(project)
+        _decrypt_in_place(project)
+        return project
+
+    async def get_by_id_for_user(
+        self, project_id: int, owner_user_id: int
+    ) -> Project | None:
+        """Look up by primary key, scoped to owner. Returns None on miss."""
+        project = await self.db.get(Project, project_id)
+        if project is None or project.owner_user_id != owner_user_id:
+            return None
+        self.db.expunge(project)
+        _decrypt_in_place(project)
+        return project
+
+    async def update(
+        self,
+        slug: str,
+        owner_user_id: int,
+        **updates: Any,
+    ) -> Project | None:
+        """Partial update. Credential fields are re-encrypted before commit.
+
+        Only the fields the caller provides are touched. Unknown fields
+        are silently ignored — the project_id, owner_user_id, id, slug
+        cannot be changed via update (slug is the lookup key; changing
+        ownership is a v2 concern).
+        """
+        # Re-fetch attached so we can flush updates.
+        project = await queries.project_by_slug(
+            self.db, slug, owner_user_id=owner_user_id
+        )
+        if project is None:
+            return None
+
+        allowed = {
+            "name",
+            "github_owner",
+            "github_repo",
+            "github_token",
+            "pypi_package",
+            "plausible_site",
+            "plausible_api_key",
+            "reddit_subreddits",
+        }
+        plaintext_credentials: dict[str, str | None] = {}
+        for field_name, value in updates.items():
+            if field_name not in allowed:
+                continue
+            if field_name in _ENCRYPTED_COLUMNS:
+                plaintext_credentials[field_name] = value
+                value = _maybe_encrypt(value)
+            setattr(project, field_name, value)
+        project.updated_at = utcnow()
+
+        await self.db.commit()
+        await self.db.refresh(project)
+        self.db.expunge(project)
+        _decrypt_in_place(project)
+        # Caller-supplied plaintext wins over decrypted (cheap consistency
+        # for fields they just set).
+        for field_name, value in plaintext_credentials.items():
+            setattr(project, field_name, value)
+        return project
+
+    async def delete(self, slug: str, owner_user_id: int) -> bool:
+        """Delete a project + cascade its metrics/events/goals.
+
+        Cascade is wired via SQLModel relationships (``cascade=all,
+        delete-orphan`` + ``passive_deletes=True``) so the DB drops
+        children in one statement instead of N+1 loads.
+        """
+        project = await queries.project_by_slug(
+            self.db, slug, owner_user_id=owner_user_id
+        )
+        if project is None:
+            return False
+        await self.db.delete(project)
+        await self.db.commit()
+        return True
+
+
+# ---- module-level helpers ------------------------------------------------
+
+
+def _maybe_encrypt(value: str | None) -> str | None:
+    """Encrypt a non-empty string; pass None / empty through unchanged."""
+    if value is None or value == "":
+        return value
+    return encrypt_secret(value)
+
+
+def _maybe_decrypt(value: str | None) -> str | None:
+    """Decrypt a non-empty ciphertext; pass None / empty through unchanged."""
+    if value is None or value == "":
+        return value
+    return decrypt_secret(value)
+
+
+def _decrypt_in_place(project: Project) -> None:
+    """Replace each encrypted column on ``project`` with its plaintext."""
+    for column in _ENCRYPTED_COLUMNS:
+        ciphertext = getattr(project, column, None)
+        setattr(project, column, _maybe_decrypt(ciphertext))
+{%- endif %}

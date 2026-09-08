@@ -8,10 +8,11 @@ code mode dispatches them as visible calls.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from app.core.db import get_async_session
+from app.core.time import utcnow
 from app.services.ai.domains.chat.tools import register_tool
 
 
@@ -75,18 +76,10 @@ async def categories() -> dict[str, Any]:
     ('expense' | 'income' | 'transfer'). The id is what a
     transaction.categorize proposal's 'category_id' takes.
     """
-    from sqlmodel import select
-
-    from app.services.finance.models import FinanceCategory
+    from app.services.finance.domains.ledger import queries as ledger_queries
 
     async with get_async_session() as session:
-        rows = (
-            await session.exec(
-                select(FinanceCategory)
-                .where(FinanceCategory.is_archived == False)  # noqa: E712
-                .order_by(FinanceCategory.name)
-            )
-        ).all()
+        rows = await ledger_queries.all_categories(session, include_archived=False)
     return {
         "categories": [
             {"id": row.id, "name": row.name, "classification": row.classification}
@@ -231,7 +224,7 @@ async def pending(about: str | None = None) -> dict[str, Any]:
     from app.services.finance.domains import writes
 
     needle = (about or "").strip().lower()
-    horizon = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=14)
+    horizon = utcnow() - timedelta(days=14)
     async with get_async_session() as session:
         rows = await writes.list_changes(
             session,

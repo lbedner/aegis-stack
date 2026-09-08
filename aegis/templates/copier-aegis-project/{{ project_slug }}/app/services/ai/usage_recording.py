@@ -11,12 +11,11 @@ lookup lives in exactly one place.
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlmodel import select
-
 from app.core.db import db_session
 from app.core.log import logger
+from app.services.ai.domains.llm import queries as llm_queries
 
-from .models.llm import LargeLanguageModel, LLMPrice, LLMUsage
+from .models.llm import LLMUsage
 
 
 def _bare_model_name(model_name: str) -> str:
@@ -66,20 +65,6 @@ def extract_usage(result: Any) -> dict[str, int]:
     }
 
 
-def _latest_price(session: Any, model_name: str) -> LLMPrice | None:
-    """Current price row for a bare model name, or None if uncataloged."""
-    llm = session.exec(
-        select(LargeLanguageModel).where(LargeLanguageModel.model_id == model_name)
-    ).first()
-    if not llm:
-        return None
-    return session.exec(
-        select(LLMPrice)
-        .where(LLMPrice.llm_id == llm.id)
-        .order_by(LLMPrice.effective_date.desc())
-    ).first()
-
-
 def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> float:
     """Full-rate cost estimate in USD, 0.0 when model/price is uncataloged.
 
@@ -92,7 +77,7 @@ def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> fl
     bare = _bare_model_name(model_name)
     try:
         with db_session() as session:
-            price = _latest_price(session, bare)
+            price = llm_queries.latest_price_for_model(session, bare)
             if not price:
                 return 0.0
             return (
@@ -150,7 +135,7 @@ def record_usage(
     total_cost = 0.0
     try:
         with db_session() as session:
-            price = _latest_price(session, bare)
+            price = llm_queries.latest_price_for_model(session, bare)
             if price:
                 total_cost = (
                     _priced_input_cost(usage, price.input_cost_per_token)

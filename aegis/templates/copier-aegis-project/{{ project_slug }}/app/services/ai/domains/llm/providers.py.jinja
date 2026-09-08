@@ -7,6 +7,12 @@ Uses PydanticAI agents with support for multiple providers.
 Uses LangChain chat models with support for multiple providers.
 {% endif %}
 """
+
+from typing import Any
+
+from app.core.log import logger
+from app.services.ai.config import AIServiceConfig, api_key_env
+from app.services.ai.models import AIProvider
 {% if ai_framework == "pydantic-ai" %}
 {#- The ``openai`` package + pydantic-ai's OpenAI model ship only with the
     openai extra, which is installed only for OpenAI-compatible providers.
@@ -17,7 +23,6 @@ Uses LangChain chat models with support for multiple providers.
 import json
 import os
 from collections.abc import Sequence
-from typing import Any
 
 import httpx
 {%- if _has_openai %}
@@ -29,9 +34,62 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 {%- endif %}
 from pydantic_ai.settings import ModelSettings
+{% endif %}
 
-from app.core.log import logger
 
+class ProviderError(Exception):
+    """Exception raised when provider setup fails."""
+
+
+class ProviderNotInstalledError(ProviderError):
+    """Raised when a provider's dependencies are not installed."""
+
+    def __init__(self, provider: str, cli_command: str):
+        self.provider = provider
+        self.cli_command = cli_command
+        super().__init__(f"{provider} provider is not installed")
+
+
+SUPPORTED_PROVIDERS: tuple[AIProvider, ...] = (
+    AIProvider.OPENAI,
+    AIProvider.ANTHROPIC,
+    AIProvider.GOOGLE,
+    AIProvider.GROQ,
+    AIProvider.MISTRAL,
+    AIProvider.COHERE,
+    AIProvider.OLLAMA,
+    AIProvider.PUBLIC,
+    AIProvider.POLLINATIONS,
+)
+
+# Where a free key comes from, for the providers that hand them out.
+_FREE_KEY_HINTS: dict[AIProvider, str] = {
+    AIProvider.GOOGLE: "Get a free key at: https://aistudio.google.com/app/apikey",
+    AIProvider.GROQ: "Get a free key at: https://console.groq.com/keys",
+}
+
+
+def get_supported_providers() -> list[AIProvider]:
+    """Get list of supported providers."""
+    return list(SUPPORTED_PROVIDERS)
+
+
+def require_api_key(config: AIServiceConfig, settings: Any) -> str:
+    """The configured key for a keyed provider, or the ``ProviderError``
+    that says which variable to set and where a free key comes from."""
+    api_key = config.get_provider_config(settings).api_key
+    if api_key:
+        return api_key
+    hint = _FREE_KEY_HINTS.get(config.provider)
+    raise ProviderError(
+        f"No API key configured for {config.provider.value}. "
+        f"Set {api_key_env(config.provider)} environment variable. "
+        + (f"{hint} " if hint else "")
+        + "For free usage without API keys, try the keyless 'public' or "
+        "'pollinations' providers, or Groq: https://console.groq.com/keys"
+    )
+
+{% if ai_framework == "pydantic-ai" %}
 # Re-exported so tests can patch ``app.services.ai.domains.llm.providers.<Name>``
 # directly — patch targets follow the import path, not the source path,
 # for clarity in test failure output.
@@ -42,9 +100,6 @@ __all__ = [
     "OpenAIChatModel",
     "OpenAIProvider",
 ]
-
-from app.services.ai.config import AIServiceConfig
-from app.services.ai.models import AIProvider
 
 {%- if not _has_openai %}
 
@@ -105,21 +160,6 @@ def _get_model_class(provider: AIProvider):
         return OpenAIChatModel  # Pollinations uses OpenAI-compatible API
     else:
         raise ProviderError(f"Unsupported provider: {provider}")
-
-
-class ProviderError(Exception):
-    """Exception raised when provider setup fails."""
-
-    pass
-
-
-class ProviderNotInstalledError(ProviderError):
-    """Raised when a provider's dependencies are not installed."""
-
-    def __init__(self, provider: str, cli_command: str):
-        self.provider = provider
-        self.cli_command = cli_command
-        super().__init__(f"{provider} provider is not installed")
 
 
 def _supports_custom_temperature(model: str | None) -> bool:
@@ -200,16 +240,8 @@ def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
             "it builds its own client. Use get_agent() instead."
         )
 
-    provider_config = config.get_provider_config(settings)
-    if not provider_config.api_key:
-        raise ProviderError(
-            f"No API key configured for {config.provider}. "
-            f"Set {_get_env_var_name(config.provider)} environment variable. "
-            f"For free usage without API keys, try the keyless 'public' or "
-            f"'pollinations' providers, or Groq: https://console.groq.com/keys"
-        )
     # PydanticAI 1.0+ reads credentials from the environment, not kwargs.
-    _set_provider_env_var(config.provider, provider_config.api_key)
+    os.environ[api_key_env(config.provider)] = require_api_key(config, settings)
 
     model_kwargs: dict[str, Any] = {"model_name": config.model}
     if config.provider == AIProvider.MISTRAL:
@@ -591,45 +623,6 @@ def _create_ollama_agent(
         raise ProviderError(error_msg) from e
 
 
-def _get_env_var_name(provider: AIProvider) -> str:
-    """Get the environment variable name for a provider."""
-    env_var_map = {
-        AIProvider.OPENAI: "OPENAI_API_KEY",
-        AIProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
-        AIProvider.GOOGLE: "GOOGLE_API_KEY",
-        AIProvider.GROQ: "GROQ_API_KEY",
-        AIProvider.MISTRAL: "MISTRAL_API_KEY",
-        AIProvider.COHERE: "COHERE_API_KEY",
-        AIProvider.OLLAMA: "OLLAMA_API_KEY",
-        AIProvider.PUBLIC: "PUBLIC_API_KEY",
-        AIProvider.POLLINATIONS: "POLLINATIONS_API_KEY",
-    }
-
-    result = env_var_map.get(provider)
-    if result:
-        return result
-    else:
-        return f"{str(provider).upper()}_API_KEY"
-
-
-def _set_provider_env_var(provider: AIProvider, api_key: str) -> None:
-    """Set environment variable for provider API key."""
-    env_var_map = {
-        AIProvider.OPENAI: "OPENAI_API_KEY",
-        AIProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
-        AIProvider.GOOGLE: "GOOGLE_API_KEY",
-        AIProvider.GROQ: "GROQ_API_KEY",
-        AIProvider.MISTRAL: "MISTRAL_API_KEY",
-        AIProvider.COHERE: "COHERE_API_KEY",
-        AIProvider.OLLAMA: "OLLAMA_API_KEY",
-        AIProvider.PUBLIC: "PUBLIC_API_KEY",
-        AIProvider.POLLINATIONS: "POLLINATIONS_API_KEY",
-    }
-
-    env_var = env_var_map.get(provider)
-    if env_var and api_key:
-        os.environ[env_var] = api_key
-
 
 def validate_provider_support(provider: AIProvider) -> bool:
     """Check if a provider is supported in the current install.
@@ -647,56 +640,37 @@ def validate_provider_support(provider: AIProvider) -> bool:
         return False
 
 
-def get_supported_providers() -> list[AIProvider]:
-    """Get list of supported providers."""
-    return [
-        AIProvider.OPENAI,
-        AIProvider.ANTHROPIC,
-        AIProvider.GOOGLE,
-        AIProvider.GROQ,
-        AIProvider.MISTRAL,
-        AIProvider.COHERE,
-        AIProvider.OLLAMA,
-        AIProvider.PUBLIC,
-        AIProvider.POLLINATIONS,
-    ]
-
-
 def get_provider_model_class(provider: AIProvider):
     """Get the PydanticAI model class for a provider."""
     return _get_model_class(provider)
 
 {% else %}
 # LangChain implementation
-
-from typing import Any
-
-from app.core.log import logger
-
-from app.services.ai.config import AIServiceConfig
-from app.services.ai.models import AIProvider
-
-
-# System prompt used for all conversations
-SYSTEM_PROMPT = (
-    "You are a helpful AI assistant. Provide clear, accurate, "
-    "and concise responses. Be friendly and professional."
-)
-
-
-class ProviderError(Exception):
-    """Exception raised when provider setup fails."""
-
-    pass
-
-
-class ProviderNotInstalledError(ProviderError):
-    """Raised when a provider's dependencies are not installed."""
-
-    def __init__(self, provider: str, cli_command: str):
-        self.provider = provider
-        self.cli_command = cli_command
-        super().__init__(f"{provider} provider is not installed")
+# provider -> (module, chat model class, default model, key kwarg). The six
+# keyed vendors differ only here; ``_create_keyed_llm`` builds all of them.
+_KEYED_CHAT_MODELS: dict[AIProvider, tuple[str, str, str, str]] = {
+    AIProvider.OPENAI: ("langchain_openai", "ChatOpenAI", "gpt-4o-mini", "api_key"),
+    AIProvider.ANTHROPIC: (
+        "langchain_anthropic",
+        "ChatAnthropic",
+        "claude-3-5-sonnet-20241022",
+        "api_key",
+    ),
+    AIProvider.GOOGLE: (
+        "langchain_google_genai",
+        "ChatGoogleGenerativeAI",
+        "gemini-1.5-flash",
+        "google_api_key",
+    ),
+    AIProvider.GROQ: ("langchain_groq", "ChatGroq", "llama-3.1-70b-versatile", "api_key"),
+    AIProvider.MISTRAL: (
+        "langchain_mistralai",
+        "ChatMistralAI",
+        "mistral-large-latest",
+        "api_key",
+    ),
+    AIProvider.COHERE: ("langchain_cohere", "ChatCohere", "command-r-plus", "cohere_api_key"),
+}
 
 
 def get_llm(config: AIServiceConfig, settings: Any):
@@ -716,26 +690,15 @@ def get_llm(config: AIServiceConfig, settings: Any):
     try:
         provider = config.provider
 
-        if provider == AIProvider.OPENAI:
-            return _create_openai_llm(config, settings)
-        elif provider == AIProvider.ANTHROPIC:
-            return _create_anthropic_llm(config, settings)
-        elif provider == AIProvider.GOOGLE:
-            return _create_google_llm(config, settings)
-        elif provider == AIProvider.GROQ:
-            return _create_groq_llm(config, settings)
-        elif provider == AIProvider.MISTRAL:
-            return _create_mistral_llm(config, settings)
-        elif provider == AIProvider.COHERE:
-            return _create_cohere_llm(config, settings)
-        elif provider == AIProvider.OLLAMA:
+        if provider in _KEYED_CHAT_MODELS:
+            return _create_keyed_llm(config, settings)
+        if provider == AIProvider.OLLAMA:
             return _create_ollama_llm(config, settings)
-        elif provider == AIProvider.PUBLIC:
+        if provider == AIProvider.PUBLIC:
             return _create_public_llm(config)
-        elif provider == AIProvider.POLLINATIONS:
+        if provider == AIProvider.POLLINATIONS:
             return _create_pollinations_llm(config)
-        else:
-            raise ProviderError(f"Unsupported provider: {provider}")
+        raise ProviderError(f"Unsupported provider: {provider}")
 
     except ImportError as e:
         error_msg = f"Missing LangChain package for {config.provider}: {e}"
@@ -747,125 +710,21 @@ def get_llm(config: AIServiceConfig, settings: Any):
         raise ProviderError(error_msg) from e
 
 
-def _create_openai_llm(config: AIServiceConfig, settings: Any):
-    """Create OpenAI chat model."""
-    from langchain_openai import ChatOpenAI
+def _create_keyed_llm(config: AIServiceConfig, settings: Any):
+    """A vendor's LangChain chat model, from the table above and the
+    configured key."""
+    import importlib
 
-    api_key = getattr(settings, "OPENAI_API_KEY", None)
-    if not api_key:
-        raise ProviderError(
-            "No API key configured for OpenAI. "
-            "Set OPENAI_API_KEY environment variable."
-        )
-
-    return ChatOpenAI(
-        model=config.model or "gpt-4o-mini",
+    module_name, class_name, default_model, key_kwarg = _KEYED_CHAT_MODELS[
+        config.provider
+    ]
+    chat_model = getattr(importlib.import_module(module_name), class_name)
+    return chat_model(
+        model=config.model or default_model,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
-        api_key=api_key,
         timeout=config.timeout_seconds,
-    )
-
-
-def _create_anthropic_llm(config: AIServiceConfig, settings: Any):
-    """Create Anthropic chat model."""
-    from langchain_anthropic import ChatAnthropic
-
-    api_key = getattr(settings, "ANTHROPIC_API_KEY", None)
-    if not api_key:
-        raise ProviderError(
-            "No API key configured for Anthropic. "
-            "Set ANTHROPIC_API_KEY environment variable."
-        )
-
-    return ChatAnthropic(
-        model=config.model or "claude-3-5-sonnet-20241022",
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        api_key=api_key,
-        timeout=config.timeout_seconds,
-    )
-
-
-def _create_google_llm(config: AIServiceConfig, settings: Any):
-    """Create Google Generative AI chat model."""
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    api_key = getattr(settings, "GOOGLE_API_KEY", None)
-    if not api_key:
-        raise ProviderError(
-            "No API key configured for Google. "
-            "Set GOOGLE_API_KEY environment variable. "
-            "Get a free key at: https://aistudio.google.com/app/apikey"
-        )
-
-    return ChatGoogleGenerativeAI(
-        model=config.model or "gemini-1.5-flash",
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        google_api_key=api_key,
-        timeout=config.timeout_seconds,
-    )
-
-
-def _create_groq_llm(config: AIServiceConfig, settings: Any):
-    """Create Groq chat model."""
-    from langchain_groq import ChatGroq
-
-    api_key = getattr(settings, "GROQ_API_KEY", None)
-    if not api_key:
-        raise ProviderError(
-            "No API key configured for Groq. "
-            "Set GROQ_API_KEY environment variable. "
-            "Get a free key at: https://console.groq.com/keys"
-        )
-
-    return ChatGroq(
-        model=config.model or "llama-3.1-70b-versatile",
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        api_key=api_key,
-        timeout=config.timeout_seconds,
-    )
-
-
-def _create_mistral_llm(config: AIServiceConfig, settings: Any):
-    """Create Mistral chat model."""
-    from langchain_mistralai import ChatMistralAI
-
-    api_key = getattr(settings, "MISTRAL_API_KEY", None)
-    if not api_key:
-        raise ProviderError(
-            "No API key configured for Mistral. "
-            "Set MISTRAL_API_KEY environment variable."
-        )
-
-    return ChatMistralAI(
-        model=config.model or "mistral-large-latest",
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        api_key=api_key,
-        timeout=config.timeout_seconds,
-    )
-
-
-def _create_cohere_llm(config: AIServiceConfig, settings: Any):
-    """Create Cohere chat model."""
-    from langchain_cohere import ChatCohere
-
-    api_key = getattr(settings, "COHERE_API_KEY", None)
-    if not api_key:
-        raise ProviderError(
-            "No API key configured for Cohere. "
-            "Set COHERE_API_KEY environment variable."
-        )
-
-    return ChatCohere(
-        model=config.model or "command-r-plus",
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        cohere_api_key=api_key,
-        timeout=config.timeout_seconds,
+        **{key_kwarg: require_api_key(config, settings)},
     )
 
 
@@ -950,31 +809,13 @@ def _create_pollinations_llm(config: AIServiceConfig):
 
 def validate_provider_support(provider: AIProvider) -> bool:
     """Check if a provider is supported."""
-    supported = [
-        AIProvider.OPENAI,
-        AIProvider.ANTHROPIC,
-        AIProvider.GOOGLE,
-        AIProvider.GROQ,
-        AIProvider.MISTRAL,
-        AIProvider.COHERE,
-        AIProvider.OLLAMA,
-        AIProvider.PUBLIC,
-        AIProvider.POLLINATIONS,
-    ]
-    return provider in supported
+    return provider in SUPPORTED_PROVIDERS
 
 
-def get_supported_providers() -> list[AIProvider]:
-    """Get list of supported providers."""
-    return [
-        AIProvider.OPENAI,
-        AIProvider.ANTHROPIC,
-        AIProvider.GOOGLE,
-        AIProvider.GROQ,
-        AIProvider.MISTRAL,
-        AIProvider.COHERE,
-        AIProvider.OLLAMA,
-        AIProvider.PUBLIC,
-        AIProvider.POLLINATIONS,
-    ]
+def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
+    """The LangChain chat model for ``config``, plus the model name it
+    resolved to - the same shape the pydantic-ai branch returns, so
+    headless callers (``active_model.model_for_active``) need no
+    framework branch of their own."""
+    return get_llm(config, settings), config.model
 {% endif %}

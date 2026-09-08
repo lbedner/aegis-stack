@@ -13,14 +13,14 @@ keeps the resolution path untouched, and the startup hook replays the stored
 choice into each process as it boots.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
+from app.core.time import utcnow
+from app.services.ai.domains.llm import queries
 from app.services.ai.models.llm import LLMActiveSelection
 
 # The .env-sourced model/provider, captured before the first override mutates
@@ -49,12 +49,6 @@ def env_default_model() -> str | None:
     return None if _env_defaults is None else _env_defaults["model"]
 
 
-def _owner_clause(owner_user_id: int | None):
-    """Match one owner's row; a NULL owner is the install-wide default."""
-    column = LLMActiveSelection.owner_user_id
-    return column.is_(None) if owner_user_id is None else column == owner_user_id
-
-
 async def get_active_override(
     db: AsyncSession, *, owner_user_id: int | None = None
 ) -> LLMActiveSelection | None:
@@ -63,8 +57,7 @@ async def get_active_override(
     Pass no owner for the install-wide default. Use ``resolve_override`` when
     you want the fallback chain rather than one exact row.
     """
-    query = select(LLMActiveSelection).where(_owner_clause(owner_user_id))
-    return (await db.exec(query)).first()
+    return await queries.active_selection(db, owner_user_id=owner_user_id)
 
 
 async def resolve_override(
@@ -84,7 +77,7 @@ async def resolve_override(
 
 async def list_overrides(db: AsyncSession) -> list[LLMActiveSelection]:
     """Every stored selection, across owners."""
-    return list((await db.exec(select(LLMActiveSelection))).all())
+    return await queries.active_selections(db)
 
 
 async def set_active_override(
@@ -108,7 +101,7 @@ async def set_active_override(
     else:
         selection.model_id = model_id
         selection.provider = provider
-        selection.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        selection.updated_at = utcnow()
     db.add(selection)
     await db.flush()
     return selection
@@ -198,4 +191,3 @@ async def model_for_active(settings: Any) -> tuple[Any, str]:
 
     await sync_from_db(settings)
     return providers.model_for(AIServiceConfig.from_settings(settings), settings)
-

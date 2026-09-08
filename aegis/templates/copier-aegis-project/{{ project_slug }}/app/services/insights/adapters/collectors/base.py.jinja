@@ -1,0 +1,307 @@
+"""
+Base collector for insight data sources.
+
+All collectors inherit from BaseCollector and implement:
+- source_key: which insight_source this collector writes to
+- collect(): run the collection, return a CollectionResult
+{% if insights_per_user %}
+
+When ``auth`` is on the collector ALSO takes a ``Project``: every metric
+and event row stamps ``project_id`` so multi-tenant queries can scope
+by it. The scheduler loops over projects with the relevant source
+configured (``project.github_repo`` set, ``project.pypi_package`` set,
+etc.) and calls one collector instance per (source, project).
+{% endif %}
+"""
+
+import logging
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any
+
+import httpx
+from pydantic import BaseModel, Field
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.time import utcnow
+from app.core.config import settings
+from app.services.insights import queries
+from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
+from app.services.insights.utils import today as today  # re-exported for the collectors
+{% if insights_per_user -%}
+from app.services.insights.models import Project
+{%- endif %}
+
+logger = logging.getLogger(__name__)
+
+
+class CollectionResult(BaseModel):
+    """Result of a collection run."""
+
+    source_key: str
+    success: bool
+    # ``skipped`` distinguishes "ran cleanly, did nothing because the
+    # source isn't configured for this project" from a real failure.
+    # The CLI / job runner render it as yellow notice instead of red
+    # error so unconfigured optional sources don't look broken.
+    skipped: bool = False
+    rows_written: int = Field(default=0, ge=0)
+    rows_skipped: int = Field(default=0, ge=0)
+    records_broken: list[str] = Field(default_factory=list)
+    error: str | None = None
+    collected_at: datetime = Field(
+        default_factory=lambda: utcnow()
+    )
+
+
+# -- Shared helpers -----------------------------------------------------------
+
+CLICKHOUSE_URL = "https://sql-clickhouse.clickhouse.com"
+CLICKHOUSE_PARAMS = {"user": "play", "default_format": "JSONCompact"}
+
+
+def parse_date(date_str: str) -> datetime:
+    """Parse YYYY-MM-DD date string to datetime."""
+    return datetime.strptime(date_str, "%Y-%m-%d")
+
+
+def parse_github_date(timestamp: str) -> datetime:
+    """Parse GitHub API timestamp (ISO 8601) to date-only datetime."""
+    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+
+
+async def clickhouse_query(client: httpx.AsyncClient, sql: str) -> list[list]:
+    """Execute a ClickHouse SQL query and return rows."""
+    resp = await client.post(
+        CLICKHOUSE_URL,
+        params=CLICKHOUSE_PARAMS,
+        content=sql.strip(),
+    )
+    resp.raise_for_status()
+    return resp.json().get("data", [])
+
+
+class BaseCollector(ABC):
+    """Base class for all insight data collectors.
+    {% if insights_per_user %}
+
+    The optional ``project`` arg makes the collector multi-tenant:
+    rows are stamped with ``project.id``, and source config (GitHub
+    repo, PyPI package, etc.) reads from the project row instead of
+    env vars. ``project=None`` falls back to env-var single-tenant
+    behavior — kept for tooling that wants a global view, never
+    used by the scheduler when auth is on.
+    {% endif %}
+    """
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        {% if insights_per_user -%}
+        project: Project | None = None,
+        {%- endif %}
+    ) -> None:
+        self.db = db
+        {% if insights_per_user -%}
+        self.project = project
+        {%- endif %}
+
+    @property
+    def project_id(self) -> int | None:
+        """The bound project's id; None when this collector isn't project-scoped."""
+        {% if insights_per_user -%}
+        return self.project.id if self.project is not None else None
+        {%- else %}
+        return None
+        {%- endif %}
+
+    @property
+    @abstractmethod
+    def source_key(self) -> str:
+        """The insight_source.key this collector writes to."""
+        ...
+
+    @abstractmethod
+    async def collect(self) -> CollectionResult:
+        """Run collection. Returns what was collected."""
+        ...
+
+    # -- Result helpers -------------------------------------------------------
+
+    def _setting(self, project_attr: str, env_name: str) -> str | None:
+        """One collector setting: the bound project's column when
+        project-scoped, else the operator's env var.
+
+        Project-bound resolution deliberately never falls back to the env
+        var: the operator's token can reach data the project owner cannot
+        (private stargazer lists, traffic of repos they lack push to).
+        """
+        {% if insights_per_user -%}
+        if self.project is not None:
+            return getattr(self.project, project_attr) or None
+        {%- endif %}
+        return getattr(settings, env_name) or None
+
+    def _github_repo(self) -> tuple[str, str, str] | CollectionResult:
+        """(token, owner, repo) for the GitHub REST collectors, or the
+        error result naming what is missing on the caller's config
+        surface (project columns or env vars)."""
+        token = self._setting("github_token", "INSIGHT_GITHUB_TOKEN")
+        owner = self._setting("github_owner", "INSIGHT_GITHUB_OWNER")
+        repo = self._setting("github_repo", "INSIGHT_GITHUB_REPO")
+        if token and owner and repo:
+            return token, owner, repo
+        labels = {
+            "token": "INSIGHT_GITHUB_TOKEN",
+            "owner": "INSIGHT_GITHUB_OWNER",
+            "repo": "INSIGHT_GITHUB_REPO",
+        }
+        {% if insights_per_user -%}
+        if self.project is not None:
+            labels = {
+                "token": "GitHub authorisation for this project "
+                "(paste a PAT in project settings)",
+                "owner": "github_owner (project setting)",
+                "repo": "github_repo (project setting)",
+            }
+        {%- endif %}
+        present = {"token": token, "owner": owner, "repo": repo}
+        missing = [labels[key] for key, value in present.items() if not value]
+        return self._error("Missing: " + "; ".join(missing))
+
+    def _validate_config(self, **required: Any) -> CollectionResult | None:
+        """Check required config values. Returns error result if any are falsy."""
+        missing = [k for k, v in required.items() if not v]
+        if missing:
+            return self._error(f"Missing {', '.join(missing)}")
+        return None
+
+    def _error(
+        self,
+        msg: str,
+        rows_written: int = 0,
+        rows_skipped: int = 0,
+    ) -> CollectionResult:
+        """Build a failure CollectionResult and log the error."""
+        logger.error(msg)
+        return CollectionResult(
+            source_key=self.source_key,
+            success=False,
+            rows_written=rows_written,
+            rows_skipped=rows_skipped,
+            error=msg,
+        )
+
+    def _success(
+        self,
+        rows_written: int,
+        rows_skipped: int = 0,
+        detail: str = "",
+    ) -> CollectionResult:
+        """Log and return a success CollectionResult; ``detail`` is appended
+        to the log line for source-specific figures."""
+        logger.info(
+            "%s collected: %d written, %d skipped%s",
+            self.source_key,
+            rows_written,
+            rows_skipped,
+            detail,
+        )
+        return CollectionResult(
+            source_key=self.source_key,
+            success=True,
+            rows_written=rows_written,
+            rows_skipped=rows_skipped,
+        )
+
+    async def get_source(self) -> InsightSource:
+        """Look up this collector's source row."""
+        source = await queries.source_by_key(self.db, self.source_key)
+        if source is None:
+            raise RuntimeError(
+                f"InsightSource '{self.source_key}' not found. "
+                "Run seed_insight_tables() first."
+            )
+        return source
+
+    async def get_metric_type(self, key: str) -> InsightMetricType:
+        """Look up a metric type by key within this source."""
+        source = await self.get_source()
+        metric_type = await queries.metric_type_by_key(self.db, key, source_id=source.id)
+        if metric_type is None:
+            raise RuntimeError(
+                f"InsightMetricType '{key}' not found for source '{self.source_key}'. "
+                "Run seed_insight_tables() first."
+            )
+        return metric_type
+
+    async def upsert_metric(
+        self,
+        metric_type: InsightMetricType,
+        date: datetime,
+        value: float,
+        period: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> tuple[InsightMetric, bool]:
+        """
+        Insert or update a metric row.
+
+        Deduplicates on (metric_type_id, date, period) for non-event periods.
+        Event period rows (e.g., new stars) are always inserted.
+
+        Returns:
+            Tuple of (metric, was_created). was_created=False means updated existing.
+        """
+        if metric_type.id is None:
+            raise RuntimeError("MetricType has no id — was it persisted?")
+
+        # Event rows are always new (multiple stars per day, etc.)
+        from app.services.insights.constants import Periods
+
+        if period == Periods.EVENT:
+            metric = InsightMetric(
+                date=date,
+                metric_type_id=metric_type.id,
+                {% if insights_per_user -%}
+                project_id=self.project_id,
+                {%- endif %}
+                value=value,
+                period=period,
+                metadata_=metadata or {},
+            )
+            self.db.add(metric)
+            return metric, True
+
+        # For other periods, check for existing row. Dedup is now scoped
+        # by project_id when set — same (date, period) on different
+        # projects are independent rows.
+        existing = await queries.metric_on(
+            self.db,
+            metric_type.id,
+            date=date,
+            period=period,
+            project_id=self.project_id,
+        )
+
+        if existing is not None:
+            # Update existing row
+            existing.value = value
+            if metadata is not None:
+                existing.metadata_ = metadata
+            self.db.add(existing)
+            return existing, False
+
+        # Create new row
+        metric = InsightMetric(
+            date=date,
+            metric_type_id=metric_type.id,
+            {% if insights_per_user -%}
+            project_id=self.project_id,
+            {%- endif %}
+            value=value,
+            period=period,
+            metadata_=metadata or {},
+        )
+        self.db.add(metric)
+        return metric, True

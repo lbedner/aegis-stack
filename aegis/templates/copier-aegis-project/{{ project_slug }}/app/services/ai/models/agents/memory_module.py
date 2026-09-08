@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlmodel import Field, SQLModel
 
-from .timestamps import utcnow_naive
+from app.core.time import utcnow
 
 
 class MemoryModule(SQLModel, table=True):
@@ -34,5 +34,5 @@ class MemoryModule(SQLModel, table=True):
     priority: int = Field(default=100)
     token_estimate: int = Field(default=0)
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=utcnow_naive)
-    updated_at: datetime = Field(default_factory=utcnow_naive)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

@@ -1,0 +1,284 @@
+"""
+Insight service — query layer for all insight data.
+
+Provides methods to read metrics, manage records, and generate summaries.
+"""
+
+import logging
+from datetime import date, datetime, timedelta
+from typing import Any
+
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from . import queries
+from .constants import MetricKeys, Periods
+from .models import (
+    EventOrigin,
+    InsightEvent,
+    InsightMetric,
+    InsightMetricType,
+    InsightRecord,
+    InsightSource,
+)
+from .utils import day_end, day_start
+
+logger = logging.getLogger(__name__)
+
+
+class InsightService:
+    """Query layer for all insight data.
+    {% if insights_per_user %}
+
+    When ``project_id`` is set, ``add_event`` stamps it on every new
+    InsightEvent row so the timeline stays project-scoped. Unset =
+    single-tenant fallback (auth=off mode).
+    {% endif %}
+    """
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        {% if insights_per_user -%}
+        project_id: int | None = None,
+        {%- endif %}
+    ) -> None:
+        self.db = db
+        {% if insights_per_user -%}
+        self.project_id = project_id
+        {%- endif %}
+
+    # -------------------------------------------------------------------
+    # Metrics
+    # -------------------------------------------------------------------
+
+    async def get_metrics(
+        self,
+        source_key: str | None = None,
+        metric_keys: list[str] | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[InsightMetric]:
+        """Query metrics with optional filters."""
+        return await queries.metrics_joined(
+            self.db,
+            source_key=source_key,
+            metric_keys=metric_keys,
+            since=day_start(from_date),
+            until=day_end(to_date),
+        )
+
+    async def get_rolling_14d(self, metric_type_id: int) -> float:
+        """Compute rolling 14-day sum for a metric type."""
+        cutoff = datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=14)
+
+        return await queries.sum_metric_values(
+            self.db, metric_type_id, period=Periods.DAILY, since=cutoff
+        )
+
+    # -------------------------------------------------------------------
+    # Records
+    # -------------------------------------------------------------------
+
+    async def get_records(self) -> list[InsightRecord]:
+        """Get all current records with metric type info."""
+        return await queries.records(self.db)
+
+    async def check_and_update_records(
+        self,
+        metric_type_id: int,
+        value: float,
+        achieved_date: datetime,
+        context: str | None = None,
+    ) -> bool:
+        """
+        Compare value against stored record. Update if exceeded.
+
+        Returns True if a new record was set.
+        """
+        record = await queries.record_for_type(self.db, metric_type_id)
+
+        if record is None:
+            # First record for this metric
+            self.db.add(
+                InsightRecord(
+                    metric_type_id=metric_type_id,
+                    value=value,
+                    date_achieved=achieved_date,
+                    context=context,
+                )
+            )
+            return True
+
+        if value > record.value:
+            # New record — shift current to previous
+            record.previous_value = record.value
+            record.previous_date = record.date_achieved
+            record.value = value
+            record.date_achieved = achieved_date
+            record.context = context
+            record.updated_at = datetime.now().replace(tzinfo=None)
+            self.db.add(record)
+            return True
+
+        return False
+
+    # -------------------------------------------------------------------
+    # Stars
+    # -------------------------------------------------------------------
+
+    async def get_stars(self, limit: int = 50, offset: int = 0) -> list[InsightMetric]:
+        """Get star event rows with profiles, newest first."""
+        star_type = await self._get_metric_type_by_key(MetricKeys.NEW_STAR)
+        if star_type is None:
+            return []
+
+        return await queries.metrics_where(
+            self.db,
+            [star_type.id],
+            period=Periods.EVENT,
+            order="value_desc",
+            offset=offset,
+            limit=limit,
+        )
+
+    # -------------------------------------------------------------------
+    # Sources & Types
+    # -------------------------------------------------------------------
+
+    async def get_sources(self) -> list[InsightSource]:
+        """Get all sources."""
+        return await queries.sources(self.db)
+
+    async def get_metric_types(
+        self, source_id: int | None = None
+    ) -> list[InsightMetricType]:
+        """Get metric types, optionally filtered by source."""
+        return await queries.metric_types(self.db, source_id=source_id)
+
+    # -------------------------------------------------------------------
+    # Referrers
+    # -------------------------------------------------------------------
+
+    async def get_referrers(
+        self,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[InsightMetric]:
+        """Get referrer rows with JSONB breakdown."""
+        referrer_type = await self._get_metric_type_by_key(MetricKeys.REFERRERS)
+        if referrer_type is None:
+            return []
+
+        return await queries.metrics_where(
+            self.db,
+            [referrer_type.id],
+            since=day_start(from_date),
+            until=day_end(to_date),
+            order="date_desc",
+        )
+
+    # -------------------------------------------------------------------
+    # Reddit
+    # -------------------------------------------------------------------
+
+    async def get_reddit_posts(self) -> list[InsightMetric]:
+        """Get latest snapshot per tracked Reddit post."""
+        post_type = await self._get_metric_type_by_key(MetricKeys.POST_STATS)
+        if post_type is None:
+            return []
+
+        return await queries.metrics_where(self.db, [post_type.id], order="date_desc")
+
+    # -------------------------------------------------------------------
+    # Events
+    # -------------------------------------------------------------------
+
+    async def get_events(
+        self,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[InsightEvent]:
+        """Get events, optionally filtered by date range."""
+        return await queries.events_where(
+            self.db, since=day_start(from_date), until=day_end(to_date)
+        )
+
+    async def add_event(
+        self,
+        event_type: str,
+        description: str,
+        event_date: date | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> InsightEvent:
+        """Create a new contextual event.
+
+        Origin is `USER` — this method is only called from user-initiated
+        paths (CLI `insights event`). Collectors construct `InsightEvent`
+        directly and set origin explicitly.
+        """
+        event = InsightEvent(
+            date=datetime.combine(event_date or date.today(), datetime.min.time()),
+            event_type=event_type,
+            description=description,
+            metadata_=metadata or {},
+            origin=EventOrigin.USER,
+            {% if insights_per_user -%}
+            project_id=self.project_id,
+            {%- endif %}
+        )
+        self.db.add(event)
+        await self.db.flush()
+        return event
+
+    # -------------------------------------------------------------------
+    # Summary
+    # -------------------------------------------------------------------
+
+    async def get_status_summary(self) -> dict[str, Any]:
+        """Build a status summary across all sources."""
+        sources = await self.get_sources()
+        records = await self.get_records()
+
+        # Get latest metric date per source
+        source_status: list[dict[str, Any]] = []
+        for source in sources:
+            metric_types = await self.get_metric_types(source.id)
+            type_ids = [mt.id for mt in metric_types if mt.id is not None]
+
+            last_collected = await queries.latest_created_at(self.db, type_ids)
+
+            source_status.append(
+                {
+                    "key": source.key,
+                    "display_name": source.display_name,
+                    "enabled": source.enabled,
+                    "last_collected": last_collected,
+                    "metric_count": len(metric_types),
+                }
+            )
+
+        total_metrics = await queries.metric_count(self.db)
+
+        return {
+            "sources": source_status,
+            "records": [
+                {
+                    "metric_type_id": r.metric_type_id,
+                    "value": r.value,
+                    "date_achieved": r.date_achieved,
+                    "previous_value": r.previous_value,
+                }
+                for r in records
+            ],
+            "total_metrics": total_metrics,
+        }
+
+    # -------------------------------------------------------------------
+    # Internal helpers
+    # -------------------------------------------------------------------
+
+    async def _get_metric_type_by_key(self, key: str) -> InsightMetricType | None:
+        """Look up a metric type by key."""
+        return await queries.metric_type_by_key(self.db, key)

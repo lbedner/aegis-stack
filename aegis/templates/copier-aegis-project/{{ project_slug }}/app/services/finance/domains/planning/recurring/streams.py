@@ -12,6 +12,7 @@ from datetime import date
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.constants import CADENCE_KEYS, ONE_TIME_FREQUENCY
 from app.services.finance.domains.ledger import accounts
 from app.services.finance.domains.ledger import queries as ledger_queries
@@ -23,8 +24,8 @@ from app.services.finance.models import (
 from app.services.finance.utils import (
     DEFAULT_CURRENCY,
     FREQUENCY_STEPS,
-    utcnow,
 )
+from app.services.shared.queries import owner_clause
 
 _STREAM_DIRECTIONS = frozenset({"inflow", "outflow"})
 
@@ -223,9 +224,7 @@ async def attach_transaction_to_stream(
             exclude_transaction_id=txn.id,
             merchant_id=txn.merchant_id,
             inflow=stream.direction == "inflow",
-            owner_clause=queries.owner_clause_txn(
-                FinanceTransaction.owner_user_id, owner_user_id
-            ),
+            owner_clause=owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
         )
         for stray in strays:
             stray.recurring_stream_id = stream.id

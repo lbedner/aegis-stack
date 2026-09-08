@@ -148,6 +148,14 @@ def _seed_answers(project: Path, body: str) -> None:
     (project / ".copier-answers.yml").write_text(body)
 
 
+# (service module, orgs module) at the current names and at the names the
+# auth restructure replaced, so an older project still infers on update.
+AUTH_LAYOUTS = [
+    pytest.param("service.py", "orgs.py", id="current-layout"),
+    pytest.param("auth_service.py", "org_service.py", id="pre-restructure-layout"),
+]
+
+
 class TestReconcileAnswersFromDisk:
     def test_infers_include_insights_from_services_dir(
         self, fake_project: Path
@@ -163,10 +171,11 @@ class TestReconcileAnswersFromDisk:
 
         assert inferred.get("include_insights") is True
 
+    @pytest.mark.parametrize(("service_name", "orgs_name"), AUTH_LAYOUTS)
     def test_infers_include_auth_from_auth_service_module(
-        self, fake_project: Path
+        self, fake_project: Path, service_name: str, orgs_name: str
     ) -> None:
-        auth_svc = fake_project / "app" / "services" / "auth" / "auth_service.py"
+        auth_svc = fake_project / "app" / "services" / "auth" / service_name
         auth_svc.parent.mkdir(parents=True)
         auth_svc.write_text("class AuthService: ...\n")
 
@@ -175,11 +184,14 @@ class TestReconcileAnswersFromDisk:
 
         assert inferred.get("include_auth") is True
 
-    def test_infers_auth_level_org_from_org_service(self, fake_project: Path) -> None:
-        auth_svc = fake_project / "app" / "services" / "auth" / "auth_service.py"
+    @pytest.mark.parametrize(("service_name", "orgs_name"), AUTH_LAYOUTS)
+    def test_infers_auth_level_org_from_org_service(
+        self, fake_project: Path, service_name: str, orgs_name: str
+    ) -> None:
+        auth_svc = fake_project / "app" / "services" / "auth" / service_name
         auth_svc.parent.mkdir(parents=True)
         auth_svc.write_text("class AuthService: ...\n")
-        org_svc = fake_project / "app" / "services" / "auth" / "org_service.py"
+        org_svc = fake_project / "app" / "services" / "auth" / orgs_name
         org_svc.write_text("class OrgService: ...\n")
 
         updater = ManualUpdater(fake_project)
@@ -187,12 +199,13 @@ class TestReconcileAnswersFromDisk:
 
         assert inferred.get("auth_level") == "org"
 
+    @pytest.mark.parametrize(("service_name", "orgs_name"), AUTH_LAYOUTS)
     def test_infers_auth_level_rbac_from_require_role_symbol(
-        self, fake_project: Path
+        self, fake_project: Path, service_name: str, orgs_name: str
     ) -> None:
         """RBAC has no dedicated module — it's an inline gate. Sniff
-        ``def require_role`` in the rendered auth_service.py instead."""
-        auth_svc = fake_project / "app" / "services" / "auth" / "auth_service.py"
+        ``def require_role`` in the rendered auth service module instead."""
+        auth_svc = fake_project / "app" / "services" / "auth" / service_name
         auth_svc.parent.mkdir(parents=True)
         auth_svc.write_text(
             "class AuthService: ...\n\n"
@@ -206,12 +219,13 @@ class TestReconcileAnswersFromDisk:
         assert inferred.get("auth_level") == "rbac"
         assert inferred.get("include_auth_rbac") is True
 
+    @pytest.mark.parametrize(("service_name", "orgs_name"), AUTH_LAYOUTS)
     def test_does_not_infer_rbac_when_require_role_absent(
-        self, fake_project: Path
+        self, fake_project: Path, service_name: str, orgs_name: str
     ) -> None:
-        """Basic auth (no RBAC) — auth_service.py exists but lacks
+        """Basic auth (no RBAC) — the service module exists but lacks
         ``def require_role``. Must not flip RBAC on."""
-        auth_svc = fake_project / "app" / "services" / "auth" / "auth_service.py"
+        auth_svc = fake_project / "app" / "services" / "auth" / service_name
         auth_svc.parent.mkdir(parents=True)
         auth_svc.write_text("class AuthService: ...\n")
 
@@ -220,6 +234,19 @@ class TestReconcileAnswersFromDisk:
 
         assert inferred.get("auth_level") != "rbac"
         assert inferred.get("include_auth_rbac") is not True
+
+    def test_infers_include_ai_from_service_package(self, fake_project: Path) -> None:
+        """AI's entry point is the ``service`` package, not a flat module;
+        any non-stub file under the service counts."""
+        service = fake_project / "app" / "services" / "ai" / "service"
+        service.mkdir(parents=True)
+        (service / "__init__.py").write_text("class AIService: ...\n")
+        (service / "chat.py").write_text("class ChatMixin: ...\n")
+
+        updater = ManualUpdater(fake_project)
+        inferred = updater.reconcile_answers_from_disk()
+
+        assert inferred.get("include_ai") is True
 
     def test_never_demotes_existing_true_flag(self, fake_project: Path) -> None:
         """Disk has no insights marker, but answers say True. Reconcile must
@@ -239,10 +266,13 @@ class TestReconcileAnswersFromDisk:
     def test_infers_insights_sub_flags_from_collectors(
         self, fake_project: Path
     ) -> None:
-        collectors = fake_project / "app" / "services" / "insights" / "collectors"
+        collectors = (
+            fake_project / "app" / "services" / "insights" / "adapters" / "collectors"
+        )
         collectors.mkdir(parents=True)
-        (collectors / "github_collector.py").write_text("x = 1\n")
-        (collectors / "pypi_collector.py").write_text("x = 1\n")
+        (collectors / "collection.py").write_text(
+            "from x import GitHubTrafficCollector, PyPICollector\n"
+        )
 
         updater = ManualUpdater(fake_project)
         inferred = updater.reconcile_answers_from_disk()

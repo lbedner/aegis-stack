@@ -342,7 +342,7 @@ class TestListModels:
     async def test_empty_catalog(self, mock_async_session) -> None:
         """Should return empty list when no models exist."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(pattern="test")
@@ -356,7 +356,7 @@ class TestListModels:
     ) -> None:
         """Should filter by model_id pattern."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(pattern="claude")
@@ -371,7 +371,7 @@ class TestListModels:
     ) -> None:
         """Should filter by title pattern."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(pattern="Opus")
@@ -386,7 +386,7 @@ class TestListModels:
     ) -> None:
         """Should filter by vendor name."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(vendor="openai")
@@ -401,7 +401,7 @@ class TestListModels:
     ) -> None:
         """Should filter by modality."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(modality=Modality.IMAGE)
@@ -416,7 +416,7 @@ class TestListModels:
     ) -> None:
         """Should respect limit parameter."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(pattern="", limit=2, include_disabled=True)
@@ -424,7 +424,7 @@ class TestListModels:
         # Note: pattern="" won't match anything, need at least pattern/vendor/modality
         # Let's use vendor instead
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(vendor="anthropic", limit=1)
@@ -447,7 +447,7 @@ class TestListModels:
             return mock_async_session()
 
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             counting_factory,
         ):
             results = await list_models(vendors=["anthropic", "openai"], limit=1)
@@ -466,7 +466,7 @@ class TestListModels:
         """``vendors`` is a whitelist of exact names, not a pattern - an
         install keyed for "open" must not pull "openai" and "openrouter"."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(vendors=["open"])
@@ -480,7 +480,7 @@ class TestListModels:
     ) -> None:
         """Should include disabled models when flag is set."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(vendor="openai", include_disabled=True)
@@ -494,7 +494,7 @@ class TestListModels:
     ) -> None:
         """Should exclude disabled models by default."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(vendor="openai")
@@ -510,7 +510,7 @@ class TestListModels:
     ) -> None:
         """Should include pricing data when available."""
         with patch(
-            "app.services.ai.domains.llm.catalog_queries.get_async_session",
+            "app.services.ai.domains.llm.catalog.get_async_session",
             mock_async_session,
         ):
             results = await list_models(pattern="gpt-4o")

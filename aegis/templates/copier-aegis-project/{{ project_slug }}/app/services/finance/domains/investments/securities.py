@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.constants import (
     Provider,
 )
@@ -20,7 +21,6 @@ from app.services.finance.models import (
 )
 from app.services.finance.utils import (
     DEFAULT_CURRENCY,
-    utcnow,
 )
 
 # Holdings store quantity as units x 1e8 (``quantity_e8``); prices are scaled

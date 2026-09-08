@@ -1,0 +1,159 @@
+"""Organization service for CRUD operations."""
+{% if include_auth_org %}
+
+from datetime import datetime
+
+from sqlmodel import delete, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.time import utcnow
+from app.models.org import OrgCreate, Organization, OrganizationMember, OrgInvite
+
+
+class RestoreConflictError(Exception):
+    """Raised by ``restore_org`` when the soft-deleted org's slug is
+    already held by another live org. The partial unique index
+    ``ix_organization_slug`` would reject the commit otherwise. The
+    endpoint layer translates this into a 409.
+    """
+
+
+class OrgService:
+    """Service for managing organizations."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def create_org(self, org_data: OrgCreate) -> Organization:
+        """Create a new organization."""
+        org = Organization.model_validate(org_data)
+        self.db.add(org)
+        await self.db.commit()
+        await self.db.refresh(org)
+        return org
+
+    async def get_org_by_id(self, org_id: int) -> Organization | None:
+        """Get an organization by ID. Skips soft-deleted orgs."""
+        statement = select(Organization).where(
+            Organization.id == org_id,
+            Organization.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return result.first()
+
+    async def get_org_by_slug(self, slug: str) -> Organization | None:
+        """Get an organization by slug. Skips soft-deleted orgs."""
+        statement = select(Organization).where(
+            Organization.slug == slug,
+            Organization.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return result.first()
+
+    async def update_org(self, org_id: int, **updates: str) -> Organization | None:
+        """Update an organization's fields."""
+        org = await self.get_org_by_id(org_id)
+        if not org:
+            return None
+        for field, value in updates.items():
+            if hasattr(org, field):
+                setattr(org, field, value)
+        org.updated_at = utcnow()
+        self.db.add(org)
+        await self.db.commit()
+        await self.db.refresh(org)
+        return org
+
+    async def delete_org(self, org_id: int) -> bool:
+        """Soft-delete an organization and clean up its live footprint.
+
+        Setting ``deleted_at`` hides the org from ``get_org_*`` and
+        ``list_orgs``. Memberships and pending invites are hard-deleted
+        because they're join/staging rows with no audit value once the
+        parent is gone. Use ``hard_delete_org`` for permanent removal.
+        """
+        org = await self.get_org_by_id(org_id)
+        if not org:
+            return False
+        await self.db.exec(
+            delete(OrganizationMember).where(
+                OrganizationMember.organization_id == org_id
+            )
+        )
+        await self.db.exec(
+            delete(OrgInvite).where(OrgInvite.organization_id == org_id)
+        )
+        org.deleted_at = utcnow()
+        self.db.add(org)
+        await self.db.commit()
+        return True
+
+    async def hard_delete_org(self, org_id: int) -> bool:
+        """Permanently delete an organization, its memberships, and invites.
+
+        Skips the ``deleted_at`` filter so already-soft-deleted orgs can
+        also be purged.
+        """
+        statement = select(Organization).where(Organization.id == org_id)
+        result = await self.db.exec(statement)
+        org = result.first()
+        if not org:
+            return False
+        await self.db.exec(
+            delete(OrganizationMember).where(
+                OrganizationMember.organization_id == org_id
+            )
+        )
+        await self.db.exec(
+            delete(OrgInvite).where(OrgInvite.organization_id == org_id)
+        )
+        await self.db.delete(org)
+        await self.db.commit()
+        return True
+
+    async def list_orgs(self) -> list[Organization]:
+        """List all organizations. Skips soft-deleted orgs."""
+        statement = (
+            select(Organization)
+            .where(Organization.deleted_at.is_(None))
+            .order_by(Organization.created_at.desc())
+        )
+        result = await self.db.exec(statement)
+        return list(result.all())
+
+    async def restore_org(self, org_id: int) -> Organization | None:
+        """Clear ``deleted_at`` on a previously soft-deleted organization.
+
+        Does not restore the org's old memberships — those were
+        hard-deleted on soft-delete. Returns ``None`` if the row doesn't
+        exist or is already live. Raises ``RestoreConflictError`` if another
+        live org has claimed the slug since the soft delete (partial
+        unique index ``ix_organization_slug`` would reject the commit
+        otherwise).
+        """
+        statement = select(Organization).where(Organization.id == org_id)
+        result = await self.db.exec(statement)
+        org = result.first()
+        if not org or org.deleted_at is None:
+            return None
+
+        conflict_stmt = select(Organization).where(
+            Organization.slug == org.slug,
+            Organization.deleted_at.is_(None),
+            Organization.id != org.id,
+        )
+        conflict = (await self.db.exec(conflict_stmt)).first()
+        if conflict is not None:
+            raise RestoreConflictError(
+                f"Slug '{org.slug}' is already in use by an active organization"
+            )
+
+        org.deleted_at = None
+        org.updated_at = utcnow()
+        self.db.add(org)
+        await self.db.commit()
+        await self.db.refresh(org)
+        return org
+{% else %}
+# Organization service not included (auth_level != org)
+{% endif %}

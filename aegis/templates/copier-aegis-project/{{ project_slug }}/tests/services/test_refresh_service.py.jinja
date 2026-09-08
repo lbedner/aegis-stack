@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.models.refresh_token import RefreshToken
-from app.services.auth.refresh_service import REUSE_GRACE_SECONDS, RefreshService
+from app.services.auth.refresh_tokens import REUSE_GRACE_SECONDS, RefreshService
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
@@ -359,7 +359,7 @@ class TestRefreshServiceLazySweep:
     async def test_rotate_sweeps_expired_rows(
         self, async_db_session: AsyncSession, user_factory
     ):
-        from app.services.auth.refresh_service import (
+        from app.services.auth.refresh_tokens import (
             REFRESH_TOKEN_RETENTION_DAYS,
             RefreshService,
         )

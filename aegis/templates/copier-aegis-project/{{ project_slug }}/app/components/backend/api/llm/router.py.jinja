@@ -31,7 +31,7 @@ from app.services.ai.domains.llm.llm_service import (
 )
 {%- if include_ai and include_auth %}
 {%- if include_auth_rbac %}
-from app.services.auth.auth_service import require_role
+from app.services.auth.service import require_role
 {%- else %}
 from app.services.auth.deps import get_current_active_user
 {%- endif %}

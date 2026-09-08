@@ -5,7 +5,7 @@ Tests for RedditCollector -- Reddit post tracking.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from app.services.insights.collectors.reddit import RedditCollector
+from app.services.insights.adapters.collectors.reddit import RedditCollector
 from app.services.insights.constants import MetricKeys, SourceKeys
 from app.services.insights.models import (
     InsightEvent,
@@ -97,7 +97,7 @@ class TestRedditCollectorAddPost:
         mock_client.get = mock_get
 
         with patch(
-            "app.services.insights.collectors.reddit.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.reddit.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
@@ -141,7 +141,7 @@ class TestRedditCollectorAddPost:
         mock_client.get = AsyncMock(side_effect=error)
 
         with patch(
-            "app.services.insights.collectors.reddit.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.reddit.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
@@ -171,7 +171,7 @@ class TestRedditCollectorAddPost:
         mock_client.get = mock_get
 
         with patch(
-            "app.services.insights.collectors.reddit.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.reddit.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
@@ -221,7 +221,7 @@ class TestRedditCollectorAddPost:
         mock_client.get = mock_get
 
         with patch(
-            "app.services.insights.collectors.reddit.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.reddit.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 

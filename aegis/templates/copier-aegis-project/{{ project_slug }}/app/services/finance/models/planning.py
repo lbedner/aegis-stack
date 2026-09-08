@@ -17,11 +17,11 @@ from sqlalchemy import (
 )
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
     _bigint,
-    _utcnow,
 )
 
 # ---------------------------------------------------------------------------
@@ -146,8 +146,8 @@ class FinanceRecurringStream(SQLModel, table=True):
     metadata_: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceBudget(SQLModel, table=True):
@@ -187,8 +187,8 @@ class FinanceBudget(SQLModel, table=True):
     rollover: bool = Field(default=False)
     is_active: bool = Field(default=True)
     deleted_at: datetime | None = Field(default=None)
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceBudgetCategory(SQLModel, table=True):
@@ -263,8 +263,8 @@ class FinanceBudgetCategory(SQLModel, table=True):
     currency: str = Field(
         default="usd", foreign_key=f"{_FK}finance_currency.code", max_length=16
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceSpendingBaseline(SQLModel, table=True):
@@ -306,7 +306,7 @@ class FinanceSpendingBaseline(SQLModel, table=True):
     currency: str = Field(
         default="usd", foreign_key=f"{_FK}finance_currency.code", max_length=16
     )
-    computed_at: datetime = Field(default_factory=_utcnow)
+    computed_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceInsight(SQLModel, table=True):
@@ -378,5 +378,5 @@ class FinanceInsight(SQLModel, table=True):
     metadata_: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

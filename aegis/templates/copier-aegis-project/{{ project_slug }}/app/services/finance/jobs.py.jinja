@@ -8,8 +8,6 @@ Each job opens its own session and commits (services never commit themselves).
 import logging
 from datetime import date
 
-from sqlmodel import select
-
 from app.core.db import get_async_session
 from app.services.finance.domains.detection import (
     detect_recurring,
@@ -17,7 +15,7 @@ from app.services.finance.domains.detection import (
     promote_curated_streams,
 )
 from app.services.finance.domains.ledger import networth
-from app.services.finance.models import FinanceAccount, FinanceConnection
+from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.service import FinanceService
 
 logger = logging.getLogger(__name__)
@@ -32,13 +30,7 @@ async def finance_recompute_snapshots_job() -> None:
     """
     try:
         async with get_async_session() as session:
-            owners = (
-                await session.exec(
-                    select(FinanceAccount.owner_user_id)
-                    .where(FinanceAccount.deleted_at.is_(None))
-                    .distinct()
-                )
-            ).all()
+            owners = await ledger_queries.account_owner_ids(session)
             days_written = 0
             for owner_user_id in owners:
                 await detect_recurring(session, owner_user_id=owner_user_id)
@@ -65,13 +57,7 @@ async def finance_goal_auto_contribute_job() -> None:
     try:
         async with get_async_session() as session:
             service = FinanceService(session)
-            owners = (
-                await session.exec(
-                    select(FinanceAccount.owner_user_id)
-                    .where(FinanceAccount.deleted_at.is_(None))
-                    .distinct()
-                )
-            ).all()
+            owners = await ledger_queries.account_owner_ids(session)
             booked = 0
             for owner_user_id in owners:
                 booked += await service.auto_contribute_goals(
@@ -91,13 +77,7 @@ async def finance_envelope_credit_job() -> None:
     try:
         async with get_async_session() as session:
             service = FinanceService(session)
-            owners = (
-                await session.exec(
-                    select(FinanceAccount.owner_user_id)
-                    .where(FinanceAccount.deleted_at.is_(None))
-                    .distinct()
-                )
-            ).all()
+            owners = await ledger_queries.account_owner_ids(session)
             booked = 0
             for owner_user_id in owners:
                 booked += await service.auto_credit_envelopes(
@@ -124,13 +104,7 @@ async def finance_analyst_note_job() -> None:
 
     try:
         async with get_async_session() as session:
-            owners = (
-                await session.exec(
-                    select(FinanceAccount.owner_user_id)
-                    .where(FinanceAccount.deleted_at.is_(None))
-                    .distinct()
-                )
-            ).all()
+            owners = await ledger_queries.account_owner_ids(session)
             written = 0
             for owner_user_id in owners:
                 note = await run_analyst_note(session, owner_user_id=owner_user_id)
@@ -156,19 +130,13 @@ async def finance_sync_connections_job() -> None:
     budget), so a more frequent schedule stays within it.
     """
     from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers import queries as provider_queries
 
     try:
         async with get_async_session() as session:
-            owners = (
-                await session.exec(
-                    select(FinanceConnection.owner_user_id)
-                    .where(
-                        FinanceConnection.provider.in_(("plaid", "snaptrade")),
-                        FinanceConnection.deleted_at.is_(None),
-                    )
-                    .distinct()
-                )
-            ).all()
+            owners = await provider_queries.connected_owner_ids(
+                session, ("plaid", "snaptrade")
+            )
             added = 0
             for owner_user_id in owners:
                 results = await connections.sync_owner_connections(

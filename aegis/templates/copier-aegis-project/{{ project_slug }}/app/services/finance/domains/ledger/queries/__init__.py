@@ -21,10 +21,12 @@ from app.services.finance.domains.ledger.queries import (
     merchants,
     networth,
     splits,
+    subjects,
     transactions,
 )
 from app.services.finance.domains.ledger.queries.accounts import (
     account_by_id,
+    account_owner_ids,
     accounts_page,
     currency_by_code,
     has_nonreconcile_register,
@@ -85,6 +87,10 @@ from app.services.finance.domains.ledger.queries.networth import (
 from app.services.finance.domains.ledger.queries.splits import (
     splits_for_parents,
 )
+from app.services.finance.domains.ledger.queries.subjects import (
+    subject_by_id,
+    subjects_for_owner,
+)
 from app.services.finance.domains.ledger.queries.transactions import (
     dated_amounts_in_window,
     dedup_match,
@@ -104,6 +110,7 @@ from app.services.finance.domains.ledger.queries.transactions import (
 
 __all__ = [
     "account_by_id",
+    "account_owner_ids",
     "account_rollup",
     "accounts",
     "accounts_page",
@@ -157,6 +164,9 @@ __all__ = [
     "split_aware_category_clause",
     "splits",
     "splits_for_parents",
+    "subject_by_id",
+    "subjects",
+    "subjects_for_owner",
     "tag_by_normalized_name",
     "tag_links",
     "tagged_transaction_ids",

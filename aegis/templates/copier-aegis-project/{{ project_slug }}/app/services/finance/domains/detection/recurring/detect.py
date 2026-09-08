@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 import statistics
+from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
@@ -48,6 +49,29 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransfer,
 )
+from app.services.shared.queries import owner_clause
+
+
+def candidate_filters(owner_user_id: int | None) -> list[Any]:
+    """The rows a recurring stream can be made of: the owner's live, posted,
+    non-duplicate rows, ordinary only. Transfer legs and excluded
+    bookkeeping recur with steady descriptors, exactly the shape this
+    hunts, and must not become "bills"; the one carve-out is the cash leg
+    of a card/loan payment (``_payment_leg``), a transfer the cash forecast
+    genuinely has to know about. Detection and declaration share this so a
+    declared stream and a detected one are made of the same kind of rows.
+    """
+    return [
+        owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
+        FinanceTransaction.deleted_at.is_(None),
+        FinanceTransaction.dedup_status != "duplicate",
+        or_(
+            (FinanceTransaction.is_transfer.is_(False))
+            & (FinanceTransaction.excluded_from_reports.is_(False)),
+            _payment_leg(),
+        ),
+        FinanceTransaction.status == "posted",
+    ]
 
 
 def _payment_leg():
@@ -130,7 +154,7 @@ async def detect_recurring(
         db,
         [
             FinanceAccount.deleted_at.is_(None),
-            queries.owner_clause(FinanceAccount.owner_user_id, owner_user_id),
+            owner_clause(FinanceAccount.owner_user_id, owner_user_id),
         ],
     )
     acct_ids = [a.id for a in accounts]
@@ -146,21 +170,7 @@ async def detect_recurring(
     txns = await queries.transaction_rows_where(
         db,
         [
-            queries.owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
-            FinanceTransaction.deleted_at.is_(None),
-            FinanceTransaction.dedup_status != "duplicate",
-            # Ordinary rows only - transfer legs and excluded
-            # bookkeeping recur with steady descriptors, exactly the
-            # shape this hunts, and must not become "bills". The one
-            # carve-out is the cash leg of a card/loan payment (see
-            # _payment_leg): a payment is a transfer that the cash
-            # forecast genuinely has to know about.
-            or_(
-                (FinanceTransaction.is_transfer.is_(False))
-                & (FinanceTransaction.excluded_from_reports.is_(False)),
-                _payment_leg(),
-            ),
-            FinanceTransaction.status == "posted",
+            *candidate_filters(owner_user_id),
             FinanceTransaction.account_id.in_(list(acct_ids)),
         ],
     )

@@ -19,13 +19,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from pydantic_ai.settings import ModelSettings
-from sqlalchemy.orm import selectinload
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.chat_kit import ContextProvider, ToolChatAgent
 from app.services.ai.domains.chat.module_context import MemoryModuleContextProvider
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
@@ -35,15 +34,14 @@ from app.services.ai.usage_recording import record_usage
 {% elif ai_backend != "memory" %}
 from dataclasses import dataclass
 
-from sqlalchemy.orm import selectinload
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.models.agents import Agent
+from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
+from app.services.ai.models.agents import Agent
 {% else %}
 from dataclasses import dataclass
 
@@ -117,14 +115,6 @@ def _to_config(row: Agent) -> AgentConfig:
     )
 
 
-async def _fetch_agent(session: AsyncSession, slug: str) -> Agent | None:
-    stmt = (
-        select(Agent).where(Agent.slug == slug).options(selectinload(Agent.tools))  # type: ignore[arg-type]
-    )
-    result = await session.exec(stmt)
-    return result.first()
-
-
 async def resolve_agent(
     slug: str = DEFAULT_AGENT_SLUG,
     *,
@@ -140,10 +130,10 @@ async def resolve_agent(
         return cached
 
     if session is not None:
-        row = await _fetch_agent(session, slug)
+        row = await queries.agent_by_slug(session, slug)
     else:
         async with get_async_session() as owned_session:
-            row = await _fetch_agent(owned_session, slug)
+            row = await queries.agent_by_slug(owned_session, slug)
 
     if row is None or not row.is_active:
         logger.warning(

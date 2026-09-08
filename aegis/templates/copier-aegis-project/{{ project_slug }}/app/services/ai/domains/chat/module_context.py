@@ -16,11 +16,11 @@ modules produces context byte-identical to a module-less runtime.
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.fetchers import FetchContext, run_fetcher
 from app.services.ai.models.agents import MemoryModule
 
@@ -47,10 +47,7 @@ def _estimate_tokens(module: MemoryModule, content: str) -> int:
 async def _load_modules(
     session: AsyncSession, slugs: Sequence[str]
 ) -> list[MemoryModule]:
-    result = await session.exec(
-        select(MemoryModule).where(MemoryModule.slug.in_(slugs))  # type: ignore[attr-defined]
-    )
-    modules = {module.slug: module for module in result.all()}
+    modules = await queries.memory_modules_by_slugs(session, slugs)
     missing = [slug for slug in slugs if slug not in modules]
     if missing:
         logger.warning(

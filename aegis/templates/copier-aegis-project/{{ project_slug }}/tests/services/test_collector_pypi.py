@@ -6,7 +6,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from app.services.insights.collectors.pypi import PyPICollector
+from app.services.insights.adapters.collectors.pypi import PyPICollector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
 
@@ -133,12 +133,12 @@ class TestPyPICollectorSuccess:
         mock_client.post = mock_post
 
         with patch(
-            "app.services.insights.collectors.pypi.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.pypi.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.pypi.settings"
+                "app.services.insights.adapters.collectors.pypi.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 
@@ -160,7 +160,7 @@ class TestPyPICollectorSuccess:
         await _seed_pypi(async_db_session)
         project = await seed_project_for_collector(async_db_session, pypi_package=None)
 
-        with patch("app.services.insights.collectors.pypi.settings") as mock_settings:
+        with patch("app.services.insights.adapters.collectors.pypi.settings") as mock_settings:
             mock_settings.INSIGHT_PYPI_PACKAGE = None
 
             collector = PyPICollector(async_db_session, **collector_kwargs(project))
@@ -179,12 +179,12 @@ class TestPyPICollectorSuccess:
         mock_client.post = AsyncMock(side_effect=Exception("Connection timeout"))
 
         with patch(
-            "app.services.insights.collectors.pypi.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.pypi.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.pypi.settings"
+                "app.services.insights.adapters.collectors.pypi.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 
@@ -245,12 +245,12 @@ class TestPyPICollectorSuccess:
         mock_client.post = mock_post
 
         with patch(
-            "app.services.insights.collectors.pypi.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.pypi.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.pypi.settings"
+                "app.services.insights.adapters.collectors.pypi.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 

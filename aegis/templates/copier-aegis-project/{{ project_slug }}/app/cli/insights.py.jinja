@@ -16,7 +16,7 @@ from app.cli import theme
 from app.i18n import lazy_t, t
 
 if TYPE_CHECKING:
-    from app.services.insights.collectors.base import CollectionResult
+    from app.services.insights.adapters.collectors.base import CollectionResult
 
 app = typer.Typer(help=lazy_t("insights.help"))
 console = theme.console()
@@ -33,7 +33,7 @@ def status() -> None:
 
 async def _status() -> None:
     from app.core.db import get_async_session
-    from app.services.insights.insight_service import InsightService
+    from app.services.insights.service import InsightService
 
     async with get_async_session() as session:
         service = InsightService(session)
@@ -105,7 +105,7 @@ def collect(
 
 async def _collect(source: str | None, lookback_days: int = 1) -> None:
     from app.core.db import get_async_session
-    from app.services.insights.collector_service import CollectorService
+    from app.services.insights.adapters.collectors.collection import CollectorService
 
     kwargs = {}
     if lookback_days > 1:
@@ -161,7 +161,7 @@ def stars(
 
 async def _stars(limit: int) -> None:
     from app.core.db import get_async_session
-    from app.services.insights.insight_service import InsightService
+    from app.services.insights.service import InsightService
 
     async with get_async_session() as session:
         service = InsightService(session)
@@ -198,7 +198,7 @@ def records() -> None:
 
 async def _records() -> None:
     from app.core.db import get_async_session
-    from app.services.insights.insight_service import InsightService
+    from app.services.insights.service import InsightService
 
     async with get_async_session() as session:
         service = InsightService(session)
@@ -236,7 +236,7 @@ def sources() -> None:
 
 async def _sources() -> None:
     from app.core.db import get_async_session
-    from app.services.insights.insight_service import InsightService
+    from app.services.insights.service import InsightService
 
     async with get_async_session() as session:
         service = InsightService(session)
@@ -271,7 +271,7 @@ def reddit_add(
 
 async def _reddit_add(url: str) -> None:
     from app.core.db import get_async_session
-    from app.services.insights.collectors.reddit import RedditCollector
+    from app.services.insights.adapters.collectors.reddit import RedditCollector
 
     async with get_async_session() as session:
         collector = RedditCollector(session)
@@ -305,7 +305,7 @@ async def _log_event(
 ) -> None:
     from datetime import date as date_type
     from app.core.db import get_async_session
-    from app.services.insights.insight_service import InsightService
+    from app.services.insights.service import InsightService
 
     event_date = None
     if date_str:

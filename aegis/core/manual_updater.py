@@ -205,10 +205,10 @@ REGENERATE_ON_AUTH_LEVEL_CHANGE = {
     "app/models/user.py",
     "app/models/org.py",
     "app/core/security.py",
-    "app/services/auth/auth_service.py",
-    "app/services/auth/org_service.py",
-    "app/services/auth/membership_service.py",
-    "app/services/auth/invite_service.py",
+    "app/services/auth/service.py",
+    "app/services/auth/orgs.py",
+    "app/services/auth/memberships.py",
+    "app/services/auth/invites.py",
     "app/components/backend/api/auth/router.py",
     "app/components/backend/api/orgs/router.py",
     "app/components/backend/api/orgs/__init__.py",
@@ -264,6 +264,37 @@ class UpdateResult(BaseModel):
     error_message: str | None = Field(
         default=None, description="Error message if operation failed"
     )
+
+
+# The module that registers a project's insight collectors, newest layout
+# first. The older path stays so a project generated before the insights
+# restructure still detects its sources when it updates.
+INSIGHTS_COLLECTION_PATHS = (
+    "app/services/insights/adapters/collectors/collection.py",
+    "app/services/insights/collector_service.py",
+)
+
+
+def detect_insights_sources(project_path: Path) -> dict[str, bool] | None:
+    """Which insight sources the project has wired up, by sub-flag key.
+
+    The collector files alone are no signal: older templates shipped
+    them all unconditionally. What counts is whether the collection
+    module registers the collector. None when the project has no
+    insights service.
+    """
+    for rel in INSIGHTS_COLLECTION_PATHS:
+        path = project_path / rel
+        if not path.is_file():
+            continue
+        src = path.read_text()
+        return {
+            AnswerKeys.INSIGHTS_GITHUB: "GitHubTrafficCollector" in src,
+            AnswerKeys.INSIGHTS_PYPI: "PyPICollector" in src,
+            AnswerKeys.INSIGHTS_PLAUSIBLE: "PlausibleCollector" in src,
+            AnswerKeys.INSIGHTS_REDDIT: "RedditCollector" in src,
+        }
+    return None
 
 
 class ManualUpdater:
@@ -1503,10 +1534,19 @@ class ManualUpdater:
                     continue
             return False
 
+        def auth_module(name: str, legacy: str) -> Path | None:
+            """The auth module at its current name, else at the name it had
+            before the auth restructure, so an older project still infers."""
+            for candidate in (name, legacy):
+                path = proj / "app" / "services" / "auth" / candidate
+                if path.is_file():
+                    return path
+            return None
+
         # Services
-        if has_file("app", "services", "auth", "auth_service.py"):
+        if auth_module("service.py", "auth_service.py") is not None:
             inferred[AnswerKeys.AUTH] = True
-        if has_file("app", "services", "ai", "ai_service.py"):
+        if has_nonstub_dir("app", "services", "ai"):
             inferred[AnswerKeys.AI] = True
         if has_nonstub_dir("app", "services", "insights"):
             inferred[AnswerKeys.INSIGHTS] = True
@@ -1534,18 +1574,18 @@ class ManualUpdater:
         # Auth level — only meaningful if auth itself is installed.
         # RBAC is gated by inline ``{% if include_auth_rbac %}`` blocks
         # in existing files rather than a dedicated module, so we sniff
-        # ``def require_role`` in the rendered auth_service.py — that
+        # ``def require_role`` in the rendered auth service module — that
         # symbol is only emitted when RBAC is on. Org is detected via
-        # the org_service.py module (whole-file gated).
+        # the orgs module (whole-file gated).
         if inferred.get(AnswerKeys.AUTH) or self.answers.get(AnswerKeys.AUTH):
-            auth_svc = proj / "app" / "services" / "auth" / "auth_service.py"
+            auth_svc = auth_module("service.py", "auth_service.py")
             has_require_role = False
-            if auth_svc.is_file():
+            if auth_svc is not None:
                 try:
                     has_require_role = "def require_role" in auth_svc.read_text()
                 except (OSError, UnicodeDecodeError):
                     has_require_role = False
-            if has_file("app", "services", "auth", "org_service.py"):
+            if auth_module("orgs.py", "org_service.py") is not None:
                 inferred[AnswerKeys.AUTH_LEVEL] = AuthLevels.ORG
                 inferred[AnswerKeys.AUTH_ORG] = True
                 inferred[AnswerKeys.AUTH_RBAC] = True
@@ -1565,16 +1605,9 @@ class ManualUpdater:
                 pass
 
         # Insights sub-flags
-        collectors_dir = proj / "app" / "services" / "insights" / "collectors"
-        if collectors_dir.is_dir():
-            for source, key in (
-                ("github", AnswerKeys.INSIGHTS_GITHUB),
-                ("pypi", AnswerKeys.INSIGHTS_PYPI),
-                ("plausible", AnswerKeys.INSIGHTS_PLAUSIBLE),
-                ("reddit", AnswerKeys.INSIGHTS_REDDIT),
-            ):
-                if (collectors_dir / f"{source}_collector.py").is_file():
-                    inferred[key] = True
+        for key, registered in (detect_insights_sources(proj) or {}).items():
+            if registered:
+                inferred[key] = True
 
         return inferred
 

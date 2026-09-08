@@ -105,10 +105,14 @@ async def category_names_by_id(
     return {row.id: row.name for row in rows}
 
 
-async def all_categories(db: AsyncSession) -> list[FinanceCategory]:
+async def all_categories(
+    db: AsyncSession, *, include_archived: bool = True
+) -> list[FinanceCategory]:
     """The full taxonomy, name-sorted, single-table."""
-    rows = (await db.exec(select(FinanceCategory).order_by(FinanceCategory.name))).all()
-    return list(rows)
+    query = select(FinanceCategory).order_by(FinanceCategory.name)
+    if not include_archived:
+        query = query.where(FinanceCategory.is_archived == False)  # noqa: E712
+    return list((await db.exec(query)).all())
 
 
 async def category_usage_rows(
@@ -169,8 +173,7 @@ async def category_usage_rows(
             )
             .join(
                 FinanceTransaction,
-                FinanceTransaction.id
-                == FinanceTransactionSplit.parent_transaction_id,
+                FinanceTransaction.id == FinanceTransactionSplit.parent_transaction_id,
             )
             .where(
                 *filters,
@@ -251,8 +254,7 @@ async def category_spend_totals(
             select(FinanceCategory.name, func.sum(FinanceTransactionSplit.amount))
             .join(
                 FinanceTransaction,
-                FinanceTransaction.id
-                == FinanceTransactionSplit.parent_transaction_id,
+                FinanceTransaction.id == FinanceTransactionSplit.parent_transaction_id,
             )
             .join(
                 FinanceCategory,

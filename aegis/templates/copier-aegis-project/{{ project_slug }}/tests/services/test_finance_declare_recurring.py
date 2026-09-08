@@ -13,6 +13,7 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.finance.domains.detection import (
     declare_recurring,
     detect_recurring,
@@ -20,7 +21,6 @@ from app.services.finance.domains.detection import (
 )
 from app.services.finance.models import FinanceRecurringStream, FinanceTransaction
 from app.services.finance.service import FinanceService
-from app.services.finance.utils import utcnow
 from tests.services._finance_factories import live_streams as _live_streams
 from tests.services._finance_factories import seed_account as _account
 from tests.services._finance_factories import seed_payee_txn as _txn

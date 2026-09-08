@@ -18,11 +18,11 @@ from sqlalchemy import (
 )
 from sqlmodel import Field, SQLModel
 
+from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
     _SCHEMA,
     _bigint,
-    _utcnow,
 )
 
 # ---------------------------------------------------------------------------
@@ -106,8 +106,8 @@ class FinanceSecurity(SQLModel, table=True):
     metadata_: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceSecurityPrice(SQLModel, table=True):
@@ -186,8 +186,8 @@ class FinanceHolding(SQLModel, table=True):
     metadata_: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class FinanceTrade(SQLModel, table=True):
@@ -297,5 +297,5 @@ class FinanceTrade(SQLModel, table=True):
     metadata_: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

@@ -22,7 +22,6 @@ from app.services.ai.domains.chat.agent_loader import AgentConfig, default_agent
 from app.services.ai.service import AIService
 import app.services.ai.service.chat as chat_module
 import app.services.ai.service.prompt as prompt_module
-import app.services.ai.service.streaming as streaming_module
 
 
 class _FakeUsage:
@@ -111,7 +110,6 @@ def harness(
         return None
 
     monkeypatch.setattr(chat_module, "build_user_memory_context", no_memory)
-    monkeypatch.setattr(streaming_module, "build_user_memory_context", no_memory)
 
     recorder = MagicMock()
     monkeypatch.setattr(service, "_record_usage", recorder)
@@ -139,7 +137,6 @@ def _stub_resolve(
         return config
 
     monkeypatch.setattr(chat_module, "resolve_agent", resolve)
-    monkeypatch.setattr(streaming_module, "resolve_agent", resolve)
 
 
 class TestTheTurnCarriesItsUser:
@@ -296,7 +293,8 @@ class TestAgentSlugSelection:
             seen.append(slug)
             return default_agent_config()
 
-        monkeypatch.setattr(streaming_module, "resolve_agent", resolve)
+        # Both entrypoints assemble the turn in the chat module.
+        monkeypatch.setattr(chat_module, "resolve_agent", resolve)
 
         async for _chunk in service.stream_chat("hello", agent_slug="support"):
             pass
@@ -451,7 +449,6 @@ class TestUserMemoryInjection:
             return "<user_memory>\n- [food] allergic to peanuts\n</user_memory>"
 
         monkeypatch.setattr(chat_module, "build_user_memory_context", fake_memory)
-        monkeypatch.setattr(streaming_module, "build_user_memory_context", fake_memory)
 
         await service.chat("hello", user_id="u9")
 

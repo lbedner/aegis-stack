@@ -6,13 +6,15 @@ rule the tool registry lives by.
 """
 
 from app.services.finance.domains.writes import executors as executors
+from app.services.finance.domains.writes.queries import (
+    batch_rows,
+    get_change,
+    list_changes,
+)
 from app.services.finance.domains.writes.queue import (
     approve,
     approve_batch,
-    batch_rows,
     describe_change,
-    get_change,
-    list_changes,
     outcome_of,
     propose,
     propose_many,

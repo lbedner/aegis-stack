@@ -33,6 +33,7 @@ from ..core.copier_updater import (
     src_path_to_git_url,
     validate_clean_git_tree,
 )
+from ..core.manual_updater import detect_insights_sources
 from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from ..core.template_cleanup import (
     cleanup_nested_project_directory,
@@ -70,8 +71,6 @@ def _detect_existing_features(target_path: Path) -> dict[str, bool]:
     from ..core.components import COMPONENTS
     from ..core.services import SERVICES
 
-    app = target_path / "app"
-
     # Marker presence → include_<name>, derived from each spec's
     # ``marker_path`` (single source of truth — a new component/service with
     # a marker is detectable on update automatically). Only ever sets True:
@@ -82,19 +81,10 @@ def _detect_existing_features(target_path: Path) -> dict[str, bool]:
         if spec.marker_path and (target_path / spec.marker_path).exists():
             detected[AnswerKeys.include_key(spec.name)] = True
 
-    # Insights sub-flags — the collector files alone aren't a reliable
-    # signal because older template versions shipped them all
-    # unconditionally. The actual signal of "this source is wired up" is
-    # whether ``collector_service.py`` registers it. Using that here means
-    # we won't resurrect collectors the user never opted into AND we won't
-    # tear down collectors they actively use.
-    collector_service = app / "services" / "insights" / "collector_service.py"
-    if collector_service.exists():
-        service_src = collector_service.read_text()
-        detected["insights_github"] = "GitHubTrafficCollector" in service_src
-        detected["insights_pypi"] = "PyPICollector" in service_src
-        detected["insights_plausible"] = "PlausibleCollector" in service_src
-        detected["insights_reddit"] = "RedditCollector" in service_src
+    # Insights sub-flags come from the collector registration, so we
+    # neither resurrect collectors the user never opted into nor tear
+    # down ones they use.
+    detected.update(detect_insights_sources(target_path) or {})
 
     return detected
 

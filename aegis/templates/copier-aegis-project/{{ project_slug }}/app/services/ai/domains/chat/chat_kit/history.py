@@ -18,14 +18,14 @@ fixtures isolated (a mid-fixture commit would fight their rollback).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import func
-from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.models.conversation import Conversation, ConversationMessage
+from app.services.ai.domains.chat import queries
 
 from .models import ChatMessage
 
@@ -51,14 +51,7 @@ class ConversationStore:
     ) -> list[ChatMessage]:
         """The most recent ``limit`` turns, oldest-first, ready for display."""
         cid = self._conversation_id(user_id, subject_id)
-        rows = (
-            await session.exec(
-                select(ConversationMessage)
-                .where(ConversationMessage.conversation_id == cid)
-                .order_by(col(ConversationMessage.timestamp).desc())
-                .limit(limit)
-            )
-        ).all()
+        rows = await queries.recent_messages(session, cid, limit)
         out: list[ChatMessage] = []
         for row in reversed(rows):  # desc + reverse = oldest-first
             if row.role in ("user", "assistant") and row.content:
@@ -93,7 +86,7 @@ class ConversationStore:
         DB (the template's conftest enables ``PRAGMA foreign_keys=ON``).
         """
         cid = self._conversation_id(user_id, subject_id)
-        now = datetime.now(UTC).replace(tzinfo=None)  # column is naive
+        now = utcnow()  # column is naive
 
         conv = await session.get(Conversation, cid)
         if conv is None:
@@ -112,13 +105,7 @@ class ConversationStore:
         conv.updated_at = now
         session.add(conv)
 
-        latest = (
-            await session.exec(
-                select(func.max(ConversationMessage.timestamp)).where(
-                    ConversationMessage.conversation_id == cid
-                )
-            )
-        ).one()
+        latest = await queries.latest_message_timestamp(session, cid)
         base = now if latest is None else max(now, latest + timedelta(milliseconds=1))
 
         session.add(

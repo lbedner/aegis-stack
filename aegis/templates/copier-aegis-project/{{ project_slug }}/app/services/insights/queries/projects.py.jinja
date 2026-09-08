@@ -1,0 +1,37 @@
+{%- if insights_per_user -%}
+"""Reads for the per-user ``project`` table. Rows come back attached and
+encrypted; the project service owns expunge-and-decrypt."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.insights.models import Project
+
+
+async def projects_for_owner(db: AsyncSession, owner_user_id: int) -> list[Project]:
+    stmt = (
+        select(Project)
+        .where(Project.owner_user_id == owner_user_id)
+        .order_by(Project.created_at.desc())  # type: ignore[union-attr]
+    )
+    return list((await db.exec(stmt)).all())
+
+
+async def projects_matching(db: AsyncSession, filters: list[Any]) -> list[Project]:
+    """Every project matching caller-built predicates, across all owners -
+    how the scheduler finds the projects with a source configured."""
+    return list((await db.exec(select(Project).where(*filters))).all())
+
+
+async def project_by_slug(
+    db: AsyncSession, slug: str, *, owner_user_id: int
+) -> Project | None:
+    stmt = select(Project).where(
+        Project.slug == slug, Project.owner_user_id == owner_user_id
+    )
+    return (await db.exec(stmt)).first()
+{%- endif %}

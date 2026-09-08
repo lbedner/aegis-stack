@@ -6,7 +6,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from app.services.insights.collectors.github_events import GitHubEventsCollector
+from app.services.insights.adapters.collectors.github_events import GitHubEventsCollector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
 
@@ -121,12 +121,12 @@ class TestGitHubEventsCollectorSuccess:
         mock_client.post = mock_post
 
         with patch(
-            "app.services.insights.collectors.github_events.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.github_events.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.github_events.settings"
+                "app.services.insights.adapters.collectors.github_events.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_GITHUB_TOKEN = ""
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -150,7 +150,7 @@ class TestGitHubEventsCollectorSuccess:
         project = await seed_project_for_collector(async_db_session, github_owner=None, github_repo=None)
 
         with patch(
-            "app.services.insights.collectors.github_events.settings"
+            "app.services.insights.adapters.collectors.github_events.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_GITHUB_OWNER = None
             mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
@@ -173,12 +173,12 @@ class TestGitHubEventsCollectorSuccess:
         )
 
         with patch(
-            "app.services.insights.collectors.github_events.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.github_events.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.github_events.settings"
+                "app.services.insights.adapters.collectors.github_events.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_GITHUB_TOKEN = ""
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
@@ -236,12 +236,12 @@ class TestGitHubEventsCollectorSuccess:
         mock_client.post = mock_post
 
         with patch(
-            "app.services.insights.collectors.github_events.httpx.AsyncClient"
+            "app.services.insights.adapters.collectors.github_events.httpx.AsyncClient"
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.collectors.github_events.settings"
+                "app.services.insights.adapters.collectors.github_events.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_GITHUB_TOKEN = ""
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"

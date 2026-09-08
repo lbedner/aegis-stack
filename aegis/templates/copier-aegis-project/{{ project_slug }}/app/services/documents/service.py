@@ -16,8 +16,9 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.storage import content_key, get_storage
+from app.core.time import utcnow
 from app.services.documents import queries
-from app.services.documents.models import DOCUMENT_KINDS, Document, DocumentTag, utcnow
+from app.services.documents.models import DOCUMENT_KINDS, Document, DocumentTag
 
 # The columns a client may change after the fact. Storage, hash, size and
 # provenance describe the bytes and are fixed by them.

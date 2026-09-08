@@ -5,7 +5,7 @@ Tests for insight collectors — BaseCollector helpers and GitHubTrafficCollecto
 from datetime import datetime
 
 import pytest
-from app.services.insights.collectors.base import CollectionResult
+from app.services.insights.adapters.collectors.base import CollectionResult
 
 from ._collector_fixtures import collector_kwargs, seed_project_for_collector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
@@ -119,7 +119,7 @@ class TestUpsertMetric:
         mt = metric_types[MetricKeys.CLONES]
 
         # Need a concrete collector to test base methods
-        from app.services.insights.collectors.github_traffic import (
+        from app.services.insights.adapters.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
@@ -141,7 +141,7 @@ class TestUpsertMetric:
         project = await seed_project_for_collector(async_db_session)
         mt = metric_types[MetricKeys.CLONES]
 
-        from app.services.insights.collectors.github_traffic import (
+        from app.services.insights.adapters.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
@@ -181,7 +181,7 @@ class TestUpsertMetric:
         project = await seed_project_for_collector(async_db_session)
         mt = metric_types[MetricKeys.CLONES]
 
-        from app.services.insights.collectors.github_traffic import (
+        from app.services.insights.adapters.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
@@ -228,7 +228,7 @@ class TestBaseCollectorHelpers:
         await _seed_github_traffic(async_db_session)
         project = await seed_project_for_collector(async_db_session)
 
-        from app.services.insights.collectors.github_traffic import (
+        from app.services.insights.adapters.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
@@ -243,7 +243,7 @@ class TestBaseCollectorHelpers:
     ) -> None:
         """get_source raises RuntimeError when source not seeded."""
         project = await seed_project_for_collector(async_db_session)
-        from app.services.insights.collectors.github_traffic import (
+        from app.services.insights.adapters.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
@@ -258,7 +258,7 @@ class TestBaseCollectorHelpers:
         await _seed_github_traffic(async_db_session)
         project = await seed_project_for_collector(async_db_session)
 
-        from app.services.insights.collectors.github_traffic import (
+        from app.services.insights.adapters.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
@@ -276,7 +276,7 @@ class TestBaseCollectorHelpers:
         await _seed_github_traffic(async_db_session)
         project = await seed_project_for_collector(async_db_session)
 
-        from app.services.insights.collectors.github_traffic import (
+        from app.services.insights.adapters.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 

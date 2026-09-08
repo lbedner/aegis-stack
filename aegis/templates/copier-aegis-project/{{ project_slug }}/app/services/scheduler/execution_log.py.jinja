@@ -17,16 +17,13 @@ from sqlmodel import col, delete, select
 
 from app.core.db import db_session
 from app.core.log import logger
+from app.core.time import utcnow
 
 from .models import JobExecution
 
 # Keep the most recent N runs per job; older rows are pruned opportunistically.
 DEFAULT_RETENTION_PER_JOB = 100
 
-
-def _utcnow() -> datetime:
-    """Naive-UTC now, matching the table's timezone-naive columns."""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _as_naive_utc(value: datetime | None) -> datetime | None:
@@ -49,7 +46,7 @@ def record_job_started(
                 job_id=job_id,
                 job_name=job_name or job_id,
                 scheduled_run_time=_as_naive_utc(scheduled_run_time),
-                started_at=_utcnow(),
+                started_at=utcnow(),
                 status="running",
             )
             session.add(row)
@@ -72,7 +69,7 @@ def record_job_finished(
     otherwise inserts a completed row (e.g. the scheduler restarted between
     submit and completion)."""
     try:
-        now = _utcnow()
+        now = utcnow()
         with db_session(autocommit=True) as session:
             row = (
                 session.get(JobExecution, execution_id)
@@ -99,7 +96,7 @@ def record_job_missed(
 ) -> None:
     """Record a missed run (the scheduler woke past its grace window)."""
     try:
-        now = _utcnow()
+        now = utcnow()
         with db_session(autocommit=True) as session:
             session.add(
                 JobExecution(
@@ -155,7 +152,7 @@ def cancel_stale_running_rows() -> int:
             stale = session.exec(
                 select(JobExecution).where(JobExecution.status == "running")
             ).all()
-            now = _utcnow()
+            now = utcnow()
             for row in stale:
                 row.status = "failed"
                 row.finished_at = now

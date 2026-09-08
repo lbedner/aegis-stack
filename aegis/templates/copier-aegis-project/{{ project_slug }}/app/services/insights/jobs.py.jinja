@@ -17,10 +17,10 @@ import logging
 
 from app.core.db import get_async_session
 
-from .collector_service import CollectorService
+from app.services.insights.adapters.collectors.collection import CollectorService
 from .constants import SourceKeys
 {% if insights_per_user -%}
-from .project_service import ProjectService
+from app.services.insights.domains.projects import ProjectService
 {%- endif %}
 
 logger = logging.getLogger(__name__)

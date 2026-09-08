@@ -10,7 +10,7 @@ Six tables:
 - Goal: User-defined targets for metrics (absolute / delta / rate)
 """
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -25,6 +25,7 @@ from typing import Any
 # time, not by Python code here.
 from app.models.user import User  # noqa: F401
 {% endif %}
+from app.core.time import utcnow
 from sqlalchemy import JSON, CheckConstraint, Column, Index, String, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -100,10 +101,10 @@ class Project(SQLModel, table=True):
     reddit_subreddits: str | None = Field(default=None, max_length=256)
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Cascade-delete: dropping a project drops every metric/event/goal
@@ -154,7 +155,7 @@ class InsightSource(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships
@@ -183,7 +184,7 @@ class InsightMetricType(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships
@@ -237,7 +238,7 @@ class InsightMetric(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships
@@ -270,10 +271,10 @@ class InsightRecord(SQLModel, table=True):
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Relationships
@@ -408,10 +409,10 @@ class Goal(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
     # Cascade-on-delete: dropping a project drops every goal under it.
@@ -543,7 +544,7 @@ class InsightEvent(SQLModel, table=True):
     )
 {% endif %}
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+        default_factory=lambda: utcnow()
     )
 
 {% if insights_per_user %}

@@ -9,13 +9,11 @@ rewriting ``.env``.
 for a fresh install and for stacks with no catalog database.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlmodel import Field, SQLModel
 
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+from app.core.time import utcnow
 
 
 class LLMActiveSelection(SQLModel, table=True):
@@ -35,4 +33,4 @@ class LLMActiveSelection(SQLModel, table=True):
     owner_user_id: int | None = Field(default=None, index=True)
     model_id: str = Field(index=True)
     provider: str | None = Field(default=None)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

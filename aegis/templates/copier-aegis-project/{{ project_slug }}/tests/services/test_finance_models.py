@@ -241,7 +241,7 @@ class TestFinanceConnection:
     async def test_partial_unique_provider_item_and_soft_delete(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.finance.models.base import _utcnow
+        from app.core.time import utcnow
 
         first = FinanceConnection(
             provider="plaid",
@@ -271,7 +271,7 @@ class TestFinanceConnection:
         )
         async_db_session.add(first)
         await async_db_session.flush()
-        first.deleted_at = _utcnow()
+        first.deleted_at = utcnow()
         await async_db_session.flush()
         async_db_session.add(
             FinanceConnection(
@@ -633,7 +633,7 @@ class TestFinanceTransaction:
         self, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.models import FinanceTransaction
-        from app.services.finance.models.base import _utcnow
+        from app.core.time import utcnow
 
         acct = await _seed_account(async_db_session)
         first = await _seed_transaction(
@@ -659,7 +659,7 @@ class TestFinanceTransaction:
         first = await _seed_transaction(
             async_db_session, external_id="reuse_ext", account=acct
         )
-        first.deleted_at = _utcnow()
+        first.deleted_at = utcnow()
         await async_db_session.flush()
         async_db_session.add(
             FinanceTransaction(
@@ -1113,7 +1113,7 @@ class TestFinanceMerchant:
         self, async_db_session: AsyncSession
     ) -> None:
         from app.services.finance.models import FinanceMerchant
-        from app.services.finance.models.base import _utcnow
+        from app.core.time import utcnow
 
         first = FinanceMerchant(
             owner_user_id=1, name="Netflix", normalized_name="netflix", source="user"
@@ -1134,7 +1134,7 @@ class TestFinanceMerchant:
         )
         async_db_session.add(first)
         await async_db_session.flush()
-        first.deleted_at = _utcnow()
+        first.deleted_at = utcnow()
         await async_db_session.flush()
         async_db_session.add(
             FinanceMerchant(
@@ -1175,7 +1175,7 @@ class TestFinanceTag:
     @pytest.mark.asyncio
     async def test_round_trip_and_unique(self, async_db_session: AsyncSession) -> None:
         from app.services.finance.models import FinanceTag
-        from app.services.finance.models.base import _utcnow
+        from app.core.time import utcnow
 
         async_db_session.add(
             FinanceTag(owner_user_id=1, name="Vacation", normalized_name="vacation")
@@ -1192,7 +1192,7 @@ class TestFinanceTag:
         tag = FinanceTag(owner_user_id=1, name="Work", normalized_name="work")
         async_db_session.add(tag)
         await async_db_session.flush()
-        tag.deleted_at = _utcnow()
+        tag.deleted_at = utcnow()
         await async_db_session.flush()
         async_db_session.add(
             FinanceTag(owner_user_id=1, name="Work", normalized_name="work")

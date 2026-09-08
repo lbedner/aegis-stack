@@ -1,0 +1,196 @@
+"""
+Event service — CRUD for user-created events.
+
+Separate from `InsightService` (which is read-focused and also serves
+collectors) so the user-CRUD surface stays narrow. Only ever touches rows
+where `origin = 'user'`; collector rows are invisible to this service.
+
+Gated on `insights_per_user` because every user-created event is
+scoped to a Project (FK ``project_id``) and that column only exists
+on InsightEvent when per-user mode ships.
+"""
+{% if insights_per_user %}
+import logging
+from datetime import date, datetime
+from typing import Any
+
+from app.services.insights import queries
+from app.services.insights.models import (
+    EventOrigin,
+    InsightEvent,
+    UserEventType,
+)
+from app.services.insights.utils import day_end, day_start
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+logger = logging.getLogger(__name__)
+
+
+class EventService:
+    """CRUD for user-created insight events.
+
+    When ``project_id`` is set, every read filters by it and every write
+    stamps it on new rows. Unset = global view (auth=off mode).
+    """
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        project_id: int | None = None,
+    ) -> None:
+        self.db = db
+        self.project_id = project_id
+
+    # -------------------------------------------------------------------
+    # Read
+    # -------------------------------------------------------------------
+
+    async def list_events(
+        self,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        origin: EventOrigin | None = None,
+        event_type: str | None = None,
+    ) -> list[InsightEvent]:
+        """List events across all origins, newest first.
+
+        This is the polymorphic lister used by the timeline view. Pass
+        `origin=EventOrigin.USER` for only-user rows, or leave it `None` to
+        get the combined timeline (collector + user events interleaved).
+        `event_type` is a free-form string to match against — use enum
+        values for user events, raw collector strings for collector events.
+        """
+        return await queries.events_where(
+            self.db,
+            event_types=[event_type] if event_type is not None else None,
+            origin=origin,
+            since=day_start(from_date),
+            until=day_end(to_date),
+            project_id=self.project_id,
+        )
+
+    async def list_user_events(
+        self,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        event_type: UserEventType | None = None,
+    ) -> list[InsightEvent]:
+        """Convenience shortcut — same as `list_events(origin=USER, ...)`."""
+        return await self.list_events(
+            from_date=from_date,
+            to_date=to_date,
+            origin=EventOrigin.USER,
+            event_type=event_type.value if event_type else None,
+        )
+
+    async def get_user_event(self, event_id: int) -> InsightEvent | None:
+        """Fetch one user-origin event. Returns None for collector rows so the
+        API/CLI can never accidentally mutate a collector-emitted event.
+
+        Also returns None if the event belongs to a different project (when
+        the service is project-scoped); prevents cross-project access via
+        an event_id guess.
+        """
+        event = await self.db.get(InsightEvent, event_id)
+        if event is None or event.origin != EventOrigin.USER:
+            return None
+        if self.project_id is not None and event.project_id != self.project_id:
+            return None
+        return event
+
+    # -------------------------------------------------------------------
+    # Write
+    # -------------------------------------------------------------------
+
+    async def create_user_event(
+        self,
+        *,
+        event_type: UserEventType,
+        description: str,
+        event_date: date | None = None,
+        metadata: dict[str, Any] | None = None,
+        created_by_user_id: int | None = None,
+    ) -> InsightEvent:
+        """Create a new user-origin event."""
+        _validate_event_shape(event_type, description)
+
+        event = InsightEvent(
+            date=datetime.combine(event_date or date.today(), datetime.min.time()),
+            event_type=event_type.value,
+            description=description,
+            metadata_=metadata or {},
+            origin=EventOrigin.USER,
+            project_id=self.project_id,  # type: ignore[arg-type]
+            created_by_user_id=created_by_user_id,
+        )
+        self.db.add(event)
+        await self.db.commit()
+        await self.db.refresh(event)
+        return event
+
+    async def update_user_event(
+        self,
+        event_id: int,
+        **updates: object,
+    ) -> InsightEvent | None:
+        """Partial update on a user-origin event. Returns None if the event
+        doesn't exist or is collector-origin."""
+        event = await self.get_user_event(event_id)
+        if event is None:
+            return None
+
+        # Allow-list keeps origin + created_by_user_id immutable.
+        allowed = {"event_type", "description", "date", "metadata_"}
+        new_type = updates.get("event_type")
+        new_description = updates.get("description")
+
+        # Coerce event_type updates to the enum's string value for storage.
+        if isinstance(new_type, UserEventType):
+            updates["event_type"] = new_type.value
+
+        # Coerce incoming date (py date) into datetime at midnight for storage.
+        new_date = updates.get("date")
+        if isinstance(new_date, date) and not isinstance(new_date, datetime):
+            updates["date"] = datetime.combine(new_date, datetime.min.time())
+
+        for field, value in updates.items():
+            if field in allowed:
+                setattr(event, field, value)
+
+        # Re-validate the final shape if type/description changed.
+        if new_type is not None or new_description is not None:
+            _validate_event_shape(UserEventType(event.event_type), event.description)
+
+        self.db.add(event)
+        await self.db.commit()
+        await self.db.refresh(event)
+        return event
+
+    async def delete_user_event(self, event_id: int) -> bool:
+        """Delete a user-origin event. Returns False if not found or if the
+        row is collector-origin."""
+        event = await self.get_user_event(event_id)
+        if event is None:
+            return False
+        await self.db.delete(event)
+        await self.db.commit()
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Validation (module-level; no DB access)
+# ---------------------------------------------------------------------------
+
+
+def _validate_event_shape(event_type: UserEventType, description: str) -> None:
+    """Enforce required-field shape. Raises ValueError on bad input.
+
+    The enum itself guards the type; this validates description length/empty.
+    """
+    if not description or not description.strip():
+        raise ValueError("description is required")
+    if len(description) > 1024:
+        raise ValueError("description must be <= 1024 characters")
+    # event_type is enum-typed at the signature boundary; nothing to add here.
+    _ = event_type
+{% endif %}

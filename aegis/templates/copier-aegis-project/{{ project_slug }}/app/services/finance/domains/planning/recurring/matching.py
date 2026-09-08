@@ -21,6 +21,7 @@ from app.services.finance.models import (
     FinanceRecurringStream,
     FinanceTransaction,
 )
+from app.services.shared.queries import owner_clause
 
 
 async def recurring_match_candidates(
@@ -65,7 +66,7 @@ async def recurring_match_candidates(
             ~live_claim.exists(),
         ),
         amount_clause,
-        queries.owner_clause_txn(FinanceTransaction.owner_user_id, owner_user_id),
+        owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
     ]
     expected = stream.expected_amount or stream.average_amount
     if expected:

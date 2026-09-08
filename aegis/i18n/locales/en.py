@@ -470,6 +470,10 @@ MESSAGES: dict[str, str] = {
     ),
     "add_service.no_selected": "No services selected",
     "add_service.already_enabled": "Already enabled: {services}",
+    "add_service.experimental_warning": (
+        "{service} is experimental: its schema, APIs and CLI surface may "
+        "change between releases."
+    ),
     "add_service.all_enabled": "All requested services are already enabled!",
     "add_service.validation_failed": "Service validation failed: {error}",
     "add_service.load_config_failed": ("Failed to load project configuration: {error}"),
@@ -894,6 +898,7 @@ MESSAGES: dict[str, str] = {
     "common.help_interactive_components": "Use interactive component selection",
     "common.help_interactive_services": "Use interactive service selection",
     "common.help_force": "Force through version mismatch warnings",
+    "common.experimental": "experimental",
     # ── init CLI help ──────────────────────────────────────────────────
     "init.help_arg_name": "Name of the new Aegis Stack project to create",
     "init.help_opt_components": (
@@ -1026,7 +1031,7 @@ MESSAGES: dict[str, str] = {
     "plugins.col_status": "Status",
     "plugins.no_external_installed": (
         "No external plugins installed. "
-        "Install one with: pip install aegis-plugin-<name>"
+        "Install one with: pip install aegis-stack-<name>"
     ),
     # `aegis plugins info`
     "plugins.help_info": "Show detailed information about a single plugin.",
@@ -1085,7 +1090,7 @@ MESSAGES: dict[str, str] = {
     ),
     "plugins.update_not_pip_installed": (
         "Plugin '{name}' is in the project's _plugins list but not currently "
-        "pip-installed; run `pip install aegis-plugin-{name}` first."
+        "pip-installed; run `pip install {dist}` first."
     ),
     "plugins.update_already_at": "{name} (already at {version})",
     "plugins.local_changes_replaced": (
@@ -1106,10 +1111,10 @@ MESSAGES: dict[str, str] = {
     "plugins.update_summary_skipped": "Skipped: {count}",
     "plugins.update_summary_failed": "Failed: {count}",
     # `aegis plugins create`
-    "plugins.help_create": "Scaffold a new aegis-plugin-<name> Python package.",
+    "plugins.help_create": "Scaffold a new aegis-stack-<name> Python package.",
     "plugins.help_arg_create_name": (
         "Plugin name (lowercase, no hyphens). Becomes the Python package "
-        "aegis_plugin_<name> and the install name aegis-plugin-<name>."
+        "aegis_stack_<name> and the install name aegis-stack-<name>."
     ),
     "plugins.help_opt_create_target": (
         "Parent directory the plugin scaffold lands inside."
@@ -1132,14 +1137,14 @@ MESSAGES: dict[str, str] = {
     "plugins.create_next_steps_header": "Next steps:",
     "plugins.create_next_steps_confirm_comment": ("confirm the plugin is discovered"),
     "plugins.create_next_steps_edit_comment": (
-        "Edit src/aegis_plugin_<name>/plugin.py to add wiring"
+        "Edit src/aegis_stack_<name>/plugin.py to add wiring"
     ),
     # `aegis plugins search`
     "plugins.help_search": "Search the official plugin registry.",
     "plugins.help_arg_search_keyword": "Optional keyword to search for",
     "plugins.search_not_available": "Plugin registry is not yet available.",
     "plugins.search_install_hint": (
-        "For now: pip install aegis-plugin-<name>, then aegis plugins list."
+        "For now: pip install aegis-stack-<name>, then aegis plugins list."
     ),
     "plugins.search_future_keyword": (
         "Once the registry is live, this command will search for '{keyword}'."

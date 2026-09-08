@@ -906,10 +906,9 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/finance",
         marker_path="app/services/finance",
         type=ServiceType.FINANCE,
-        description="Experimental: personal finance aggregation (accounts, transactions, net worth, import)",
+        description="Personal finance aggregation (accounts, transactions, net worth, import)",
+        experimental=True,
         long_description=(
-            "EXPERIMENTAL: schema, APIs, and CLI surface may change between "
-            "releases. "
             "Aggregates bank, credit-card, and brokerage accounts, imports "
             "Quicken/OFX/CSV files, tracks net worth over time, and surfaces "
             "recurring-spend insights. Connectivity ships behind provider "

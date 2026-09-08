@@ -256,7 +256,7 @@ class TestResolverIntegration:
     ) -> None:
         """A ``required_plugins`` entry whose package isn't pip-installed
         is unresolvable — the CLI should abort and tell the user to
-        ``pip install aegis-plugin-<name>``."""
+        ``pip install aegis-stack-<name>``."""
         spec = PluginSpec(
             name="needs_base",
             kind=PluginKind.SERVICE,
@@ -288,4 +288,4 @@ class TestResolverIntegration:
             )
 
         assert result.exit_code == 1
-        assert "pip install aegis-plugin-base" in result.output
+        assert "pip install aegis-stack-base" in result.output

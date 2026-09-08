@@ -65,4 +65,4 @@ class TestResolverEdgeCases:
 
     def test_raises_modulenotfound_for_missing_package(self) -> None:
         with pytest.raises(ModuleNotFoundError):
-            get_plugin_template_root("aegis_plugin_definitely_not_installed")
+            get_plugin_template_root("aegis_stack_definitely_not_installed")

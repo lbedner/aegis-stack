@@ -480,3 +480,32 @@ class TestServiceRegistryIntegrity:
                 assert not dep.startswith("=")
                 assert not dep.startswith("<")
                 assert not dep.startswith(">")
+
+
+class TestExperimentalFlag:
+    """``experimental`` is a field on the spec, not a word in its prose.
+
+    Code can act on a field (badge in listings and the wizard, a warning on
+    add-service); it cannot act on a sentence, and the next experimental
+    service would reinvent the phrasing."""
+
+    def test_finance_is_experimental(self) -> None:
+        from aegis.core.services import SERVICES
+
+        assert SERVICES["finance"].experimental is True
+
+    def test_experimental_defaults_false(self) -> None:
+        from aegis.core.services import SERVICES
+
+        assert SERVICES["auth"].experimental is False
+
+    def test_no_prose_experimental_prefix_anywhere(self) -> None:
+        from aegis.core.services import SERVICES
+
+        offenders = [
+            name
+            for name, spec in SERVICES.items()
+            if "experimental" in spec.description.lower()
+            or "experimental" in spec.long_description.lower()
+        ]
+        assert offenders == []

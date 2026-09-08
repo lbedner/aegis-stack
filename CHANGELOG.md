@@ -9,6 +9,22 @@
 
 ### Changed
 
+- **Plugin packages are named `aegis-stack-<name>`.** `aegis plugins create`
+  now scaffolds `aegis-stack-<name>` with the `aegis_stack_<name>` import
+  package, replacing `aegis-plugin-<name>`. `aegis-stack-` is the one
+  prefix this project owns on PyPI (rationale: docs, Plugins, Naming). The
+  install identifier is unchanged: `aegis add <name>`.
+- **Scaffolded plugins carry directory discovery metadata.** `pyproject.toml`
+  gains `keywords = ["aegis-stack", "aegis-stack-plugin"]` and an
+  `Aegis Plugin` project URL, the README explains how a published plugin
+  gets listed on aegis-stack.io, and the generated test pins the
+  `aegis.plugins` entry point value. A new Plugins page under Reference
+  documents create, discovery, publish and naming.
+- **Experimental is a field on the spec.** `PluginSpec.experimental` replaces
+  the "Experimental:" prose that prefixed finance's registry strings.
+  `aegis services` and the init wizard badge experimental services in the
+  warning colour, and `aegis add-service` prints one warning line for them
+  without prompting. Finance is the first to carry the flag.
 - **htmx web frontend: one route, two render paths.** `rendering.render()`
   serves a full page (`layouts/page.html`) or a bare fragment
   (`layouts/fragment.html`) from the same handler based on `HX-Request`,

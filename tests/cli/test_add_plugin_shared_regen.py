@@ -42,7 +42,7 @@ if str(TESTS_FIXTURES) not in sys.path:
 # the sibling #715 / #814 suites.
 pytestmark = pytest.mark.xdist_group("generated_stacks")
 
-MARKER_DEP = "aegis-plugin-marker-dep>=9.9.9"
+MARKER_DEP = "aegis-stack-marker-dep>=9.9.9"
 
 
 def _spec_with_dep() -> PluginSpec:

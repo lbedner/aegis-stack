@@ -50,7 +50,7 @@ class _FakeEntryPoint:
 
 class TestResolvePluginEntryPointShape:
     def test_factory_callable_entry_point_resolves_module(self) -> None:
-        """``scraper = "aegis_plugin_scraper:get_spec"`` — load returns a
+        """``scraper = "aegis_stack_scraper:get_spec"`` — load returns a
         callable, calling it returns the spec. Module name comes from
         the entry-point ``value`` (top-level package before the colon)."""
         spec = _fake_spec("scraper")
@@ -60,7 +60,7 @@ class TestResolvePluginEntryPointShape:
 
         ep = _FakeEntryPoint(
             "scraper",
-            "aegis_plugin_scraper.spec:get_spec",
+            "aegis_stack_scraper.spec:get_spec",
             load_returns=get_spec,
         )
         with (
@@ -79,21 +79,21 @@ class TestResolvePluginEntryPointShape:
         assert plugin.name == "scraper"
         # Module is the top-level package — derived from ep.value, not
         # plugin.name (which is the logical identifier).
-        assert module_name == "aegis_plugin_scraper"
+        assert module_name == "aegis_stack_scraper"
 
     def test_instance_shape_entry_point_resolves_module(self) -> None:
-        """``scraper = "aegis_plugin_scraper:SPEC"`` — load returns the
+        """``scraper = "aegis_stack_scraper:SPEC"`` — load returns the
         ``PluginSpec`` instance directly, NOT a callable. The previous
         implementation would call ``ep.load()()`` and crash inside the
         ``except``, falling through to ``plugin.name`` as the module
-        name (wrong: ``scraper`` instead of ``aegis_plugin_scraper``).
+        name (wrong: ``scraper`` instead of ``aegis_stack_scraper``).
         Discovery handles both shapes; ``_resolve_plugin`` now mirrors
         that pattern."""
         spec = _fake_spec("scraper")
 
         ep = _FakeEntryPoint(
             "scraper",
-            "aegis_plugin_scraper.spec:SPEC",
+            "aegis_stack_scraper.spec:SPEC",
             load_returns=spec,  # instance, NOT a callable
         )
         with (
@@ -107,4 +107,4 @@ class TestResolvePluginEntryPointShape:
         assert plugin.name == "scraper"
         # Critical assertion: module name from ep.value, not the
         # plugin.name fallback. Pre-fix this would be ``"scraper"``.
-        assert module_name == "aegis_plugin_scraper"
+        assert module_name == "aegis_stack_scraper"

@@ -21,7 +21,7 @@ Design:
   already installed is silently skipped.
 * External-plugin dependencies that aren't pip-installed surface
   as ``unresolved_plugins`` — the CLI tells the user to
-  ``pip install aegis-plugin-<name>`` and re-run. Auto-pip-install
+  ``pip install aegis-stack-<name>`` and re-run. Auto-pip-install
   is intentionally out of scope: a network-side-effect from a
   ``configure`` verb is the wrong default.
 """
@@ -37,6 +37,7 @@ from ..components import COMPONENTS, CORE_COMPONENTS
 from ..services import SERVICES
 from .compat import _installed_plugins, _is_present, _plugin_name_only
 from .discovery import discover_plugins
+from .naming import dist_name
 from .spec import PluginKind, PluginSpec
 
 
@@ -273,7 +274,7 @@ def format_plan(result: ResolutionResult, target_name: str) -> str:
     if result.unresolved_plugins:
         lines.append(
             "   Missing pip packages: "
-            + ", ".join(f"aegis-plugin-{n}" for n in result.unresolved_plugins)
+            + ", ".join(dist_name(n) for n in result.unresolved_plugins)
         )
 
     return "\n".join(lines)

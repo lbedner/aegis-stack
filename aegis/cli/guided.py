@@ -58,6 +58,7 @@ from ..constants import (
 from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.plugins.spec import PluginSpec, pairs_well_with, required_names
 from ..core.services import SERVICES
+from .brand import AEGIS_WARNING, experimental_label
 from .build_plan import BuildPlan, resolve_build_plan
 from .guided_blueprints import BlueprintScreens
 from .guided_chrome import (
@@ -1582,9 +1583,11 @@ class GuidedSelectionUI(BlueprintScreens):
             grid.add_row(Text())
 
         if context is not None:
-            grid.add_row(
-                Text(_display_name(context.name), style="bold", justify="center")
-            )
+            title = Text(justify="center")
+            title.append(_display_name(context.name), style="bold")
+            if context.experimental:
+                title.append(f"   {experimental_label()}", style=AEGIS_WARNING)
+            grid.add_row(title)
             grid.add_row(Text())
             grid.add_row(Text(_spec_blurb(context), style=BODY))
             requires = required_names(context, exclude=CORE_COMPONENTS)

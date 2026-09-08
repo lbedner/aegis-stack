@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import string
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import delete
 from sqlmodel import select

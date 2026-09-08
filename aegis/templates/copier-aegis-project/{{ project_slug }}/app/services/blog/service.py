@@ -1,6 +1,5 @@
 """Blog service business logic."""
 
-import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import func

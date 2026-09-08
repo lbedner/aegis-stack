@@ -89,7 +89,7 @@ class UserService:
 
 ```python
 from app.components.backend.api.deps import get_user_service
-from app.services.auth.user_service import UserService
+from app.services.auth.users import UserService
 from app.models.user import UserCreate
 
 @router.post("/register", response_model=UserResponse)
@@ -164,7 +164,7 @@ class OrgService:
 
 ```python
 from app.components.backend.api.deps import get_org_service
-from app.services.auth.org_service import OrgService
+from app.services.auth.orgs import OrgService
 from app.models.org import OrgCreate, OrgResponse
 
 @router.post("/orgs", response_model=OrgResponse)
@@ -209,7 +209,7 @@ class MembershipService:
 
 ```python
 from app.components.backend.api.deps import get_membership_service
-from app.services.auth.membership_service import MembershipService
+from app.services.auth.memberships import MembershipService
 
 @router.post("/orgs/{org_id}/members/bulk")
 async def bulk_add(
@@ -288,7 +288,7 @@ create_invite()
 
 ```python
 from app.components.backend.api.deps import get_invite_service
-from app.services.auth.invite_service import InviteService
+from app.services.auth.invites import InviteService
 
 @router.post("/orgs/{org_id}/invites", response_model=InviteResponse)
 async def invite_member(
@@ -405,10 +405,10 @@ async def create_org_with_owner(
 
 ### Role-based access control
 
-`require_role()` is a dependency factory from `app.services.auth.auth_service`. It validates the JWT, loads the user, and checks their system-level role.
+`require_role()` is a dependency factory from `app.services.auth.service`. It validates the JWT, loads the user, and checks their system-level role.
 
 ```python
-from app.services.auth.auth_service import require_role
+from app.services.auth.service import require_role
 
 # Single role
 @router.delete("/users/{user_id}")

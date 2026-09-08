@@ -38,6 +38,13 @@
   `make lint-frontend` fail.
 - **Generated `test_app_js_is_loaded` no longer fails once assets are
   built**: it accepts the fingerprinted path as well as the source path.
+- **`aegis add <plugin>` creates the plugin's tables.** A third-party
+  plugin's `migrations` were never written: `add_plugin` skipped the
+  migration tail in-tree services get, and the generator only resolved
+  names from the static registry. The plugin's revisions are now rendered
+  straight from its spec (`generate_plugin_migrations`), with alembic
+  bootstrapped when missing, schema dropped on SQLite, and re-adding the
+  plugin never stacking a duplicate revision.
 
 ## [0.11.0] - 2026-09-06
 

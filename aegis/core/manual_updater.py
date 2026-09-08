@@ -1441,6 +1441,13 @@ class ManualUpdater:
                     )
                 )
 
+            # Migration tail, the same one ``add_service`` gives in-tree
+            # services: a plugin that declares tables needs alembic
+            # bootstrapped, its revisions written, and applied. Without
+            # it the router mounts over tables nobody created.
+            if getattr(spec, "migrations", None):
+                self._run_plugin_migrations(spec)
+
             # Post-gen — uv sync picks up the plugin's pyproject deps,
             # make fix re-formats anything we touched. Skipped when the
             # caller (resolver flow) is batching installs and will run
@@ -1463,6 +1470,20 @@ class ManualUpdater:
                 success=False,
                 error_message=str(e),
             )
+
+    def _run_plugin_migrations(self, spec: Any) -> None:
+        """Bootstrap alembic if missing, write the plugin's migrations, run
+        them. ``run_migrations`` failure is non-fatal, as in ``add_service``:
+        the user can ``alembic upgrade head`` later."""
+        from .migration_generator import bootstrap_alembic, generate_plugin_migrations
+        from .post_gen_tasks import run_migrations
+
+        if not (self.project_path / "alembic").exists():
+            bootstrap_alembic(self.project_path, self.jinja_env, self.answers)
+        # Answers carry the database engine, which decides whether a
+        # spec's Postgres schema survives; SQLite has none.
+        generate_plugin_migrations(self.project_path, spec, self.answers)
+        run_migrations(self.project_path, include_migrations=True)
 
     def _save_answers(self, answers: dict[str, Any]) -> None:
         """

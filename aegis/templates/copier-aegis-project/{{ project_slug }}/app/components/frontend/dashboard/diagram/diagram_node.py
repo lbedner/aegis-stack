@@ -6,17 +6,16 @@ click-to-open-modal functionality and hover effects.
 """
 
 import flet as ft
-
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from app.services.system.ui import get_component_label, get_component_subtitle
+from app.services.system.ui import get_component_subtitle
 
 from ..cards.card_utils import _open_modal, get_ai_engine_display
 
 # Display names per component id. The id itself is what opens the modal:
 # cards, overview rows and diagram nodes all use the health-tree id, and
 # the modal registers under it, so there is no second name to keep in step.
-# Subtitles are generated dynamically via get_component_label()
+# Subtitles are generated dynamically via get_component_subtitle()
 COMPONENT_NAMES: dict[str, str] = {
     "backend": "Server",
     "database": "Database",
@@ -112,11 +111,10 @@ class DiagramNode(ft.Container):
             return get_ai_engine_display(metadata)
         elif component_name == "service_auth":
             return "JWT Authentication"
-        elif component_name in ("ingress", "worker", "service_insights"):
-            return get_component_subtitle(component_name, metadata)
-
-        # Fall back to static label
-        return get_component_label(component_name)
+        # Everything else, plugins included, takes its name from the
+        # health metadata when it declares one and the static label
+        # otherwise.
+        return get_component_subtitle(component_name, metadata)
 
     def _build(self) -> None:
         """Build the node visual content."""

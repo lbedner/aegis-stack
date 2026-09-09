@@ -160,8 +160,11 @@ def get_component_subtitle(
 ) -> str:
     """Get a versioned subtitle for a component (e.g. 'Dramatiq 1.17.0').
 
-    Uses the base label from ``get_component_label`` and appends the version
-    from health-check metadata when available.
+    The base label is whatever the health metadata declares as
+    ``subtitle`` (how a plugin names itself, being in no registry),
+    otherwise ``get_component_label``. The metadata ``version`` is
+    appended when known. Every dashboard surface routes through here, so
+    the stack view, the cards and the diagram cannot disagree.
     """
     if component_name == "database":
         return get_database_subtitle(metadata)
@@ -180,11 +183,14 @@ def get_component_subtitle(
         return "Adoption Analytics"
 {% endif %}
 
-    label = get_component_label(component_name)
-    if metadata:
-        version = metadata.get("version", "")
-        if version and version != "unknown":
-            return f"{label} {version}"
+    # A plugin is in no label registry, so it names itself in its health
+    # metadata; that name wins over the derived one.
+    metadata = metadata or {}
+    declared = metadata.get("subtitle")
+    label = str(declared) if declared else get_component_label(component_name)
+    version = metadata.get("version", "")
+    if version and version != "unknown":
+        return f"{label} {version}"
     return label
 
 

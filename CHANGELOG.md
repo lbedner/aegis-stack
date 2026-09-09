@@ -9,6 +9,12 @@
 
 ### Changed
 
+- **A plugin names itself once and every dashboard surface honours it.**
+  `get_component_subtitle` now prefers the `subtitle` a health check
+  declares in its metadata, and both the stack view and the architecture
+  diagram route their fallback through it. A plugin is in no label
+  registry, so the stack view showed a blank description and the diagram
+  showed the raw health id.
 - **Plugin dependencies can name a service variant.** A plugin declaring
   `required_services=["auth[org]"]` now gets auth at org level: installed
   fresh at that level, upgraded when the project has a lower level, left
@@ -56,6 +62,11 @@
 
 ### Fixed
 
+- **`aegis add <plugin>` restores the services card.** The shared
+  `cards/__init__.py` imports `ServicesCard` once any plugin is present,
+  but only the component install path ensured that module exists, so
+  adding a plugin to a project with no services left a dangling import
+  and the frontend died on boot with `ModuleNotFoundError`.
 - **htmx dev stack no longer breaks host tooling.** The tailwind container
   installs `node_modules` into a named volume instead of the bind mount, so
   a macOS or Windows host never inherits Linux binaries that make

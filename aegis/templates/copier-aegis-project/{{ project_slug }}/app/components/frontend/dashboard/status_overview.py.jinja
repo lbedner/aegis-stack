@@ -139,9 +139,11 @@ def get_component_display_info(
         return ("Frontend", "Flet")
 
     else:
-        # Generic fallback
+        # Generic fallback, which is the path every plugin takes: the name
+        # comes from the health metadata the plugin declares.
         display_name = component_name.replace("_", " ").replace("service ", "").title()
-        return (display_name, "")
+        subtitle = get_component_subtitle(component_name, metadata)
+        return (display_name, "" if subtitle == display_name else subtitle)
 
 
 def create_status_cell(

@@ -1,0 +1,12 @@
+"""Health check: proves ``health_checks`` wiring reached the health tree."""
+
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+
+async def conformance_health() -> ComponentStatus:
+    return ComponentStatus(
+        name="Conformance",
+        status=ComponentStatusType.HEALTHY,
+        message="OK",
+        metadata={"subtitle": "Conformance", "version": "0.0.1"},
+    )

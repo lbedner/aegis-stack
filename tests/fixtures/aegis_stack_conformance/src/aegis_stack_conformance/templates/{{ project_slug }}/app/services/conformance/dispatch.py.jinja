@@ -1,0 +1,13 @@
+"""Where work runs: the worker when the stack has one, else this process.
+
+Gated at render time, the way the documents service gates its extraction
+dispatch. A component added after this plugin was installed has to reach
+this file, or the plugin keeps the branch it was born with.
+"""
+{%- if include_worker %}
+
+DISPATCH = "worker"
+{%- else %}
+
+DISPATCH = "in-process"
+{%- endif %}

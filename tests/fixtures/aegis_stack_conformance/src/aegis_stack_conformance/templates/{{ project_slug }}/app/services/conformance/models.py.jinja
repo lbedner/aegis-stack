@@ -1,0 +1,18 @@
+"""One table, so the migration mechanism has something to create."""
+
+from datetime import datetime
+
+from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
+
+
+class ConformanceRow(SQLModel, table=True):
+    __tablename__ = "conformance_row"
+{%- if database_engine == "postgres" %}
+    __table_args__ = {"schema": "conformance"}
+{%- endif %}
+
+    id: int | None = Field(default=None, primary_key=True)
+    label: str = Field(max_length=64)
+    created_at: datetime = Field(default_factory=utcnow)

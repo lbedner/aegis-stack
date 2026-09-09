@@ -19,7 +19,11 @@ from pathlib import Path
 
 import pytest
 
-from aegis.core.manual_updater import ManualUpdater, _safe_path_segment
+from aegis.core.manual_updater import (
+    SERVICES_CARD_FILE,
+    ManualUpdater,
+    _safe_path_segment,
+)
 
 # Make sure the in-repo fake plugin is importable via importlib.resources.
 TESTS_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
@@ -463,3 +467,62 @@ class TestAddPluginRunsMigrationTail:
                 plugin_module_name="aegis_plugin_test",
             )
         bootstrap.assert_not_called()
+
+
+class TestAddPluginEnsuresServicesCard:
+    """A plugin counts as a service on the dashboard.
+
+    ``cards/__init__.py`` imports ``ServicesCard`` when the project has any
+    service OR any plugin, and init deletes ``services_card.py`` from a
+    project that has neither. Installing a plugin flips that condition back
+    on, so the module must be restored or the frontend import chain dies
+    with ``ModuleNotFoundError`` on boot. ``add_component`` has always done
+    this; the plugin path did not.
+    """
+
+    def test_first_plugin_restores_services_card(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aegis_plugin_test.spec import get_spec
+
+        monkeypatch.setattr(
+            ManualUpdater, "run_post_generation_tasks", lambda self: None
+        )
+        monkeypatch.setattr(
+            ManualUpdater,
+            "_regenerate_shared_files",
+            lambda self, ans: ([], [], []),
+        )
+        card = fake_project / SERVICES_CARD_FILE
+        assert not card.exists()
+
+        result = ManualUpdater(fake_project).add_plugin(
+            spec=get_spec(), plugin_module_name="aegis_plugin_test"
+        )
+
+        assert result.success
+        assert card.is_file()
+        assert str(SERVICES_CARD_FILE) in result.files_modified
+
+    def test_existing_services_card_is_left_alone(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aegis_plugin_test.spec import get_spec
+
+        monkeypatch.setattr(
+            ManualUpdater, "run_post_generation_tasks", lambda self: None
+        )
+        monkeypatch.setattr(
+            ManualUpdater,
+            "_regenerate_shared_files",
+            lambda self, ans: ([], [], []),
+        )
+        card = fake_project / SERVICES_CARD_FILE
+        card.parent.mkdir(parents=True, exist_ok=True)
+        card.write_text("# hand-edited\n")
+
+        ManualUpdater(fake_project).add_plugin(
+            spec=get_spec(), plugin_module_name="aegis_plugin_test"
+        )
+
+        assert card.read_text() == "# hand-edited\n"

@@ -1,0 +1,7 @@
+"""Settings mixin: proves ``settings_mixins`` wiring reached config.py."""
+
+from pydantic_settings import BaseSettings
+
+
+class ConformanceSettingsMixin(BaseSettings):
+    CONFORMANCE_MARKER: str = "wired"

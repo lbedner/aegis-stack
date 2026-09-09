@@ -1,0 +1,10 @@
+"""Router: proves ``routers`` wiring reached routing.py."""
+
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/marker")
+async def marker() -> dict[str, str]:
+    return {"marker": "wired"}

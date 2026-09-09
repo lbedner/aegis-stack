@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aegis-stack-conformance"
+version = "0.0.1"
+description = "Fake plugin that exercises every PluginSpec mechanism, for tests."
+requires-python = ">=3.10"
+
+[project.entry-points."aegis.plugins"]
+conformance = "aegis_stack_conformance.spec:get_spec"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aegis_stack_conformance"]

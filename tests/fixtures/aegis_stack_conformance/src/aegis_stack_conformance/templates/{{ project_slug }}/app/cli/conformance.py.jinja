@@ -1,0 +1,11 @@
+"""CLI group: proves ``cli_name`` reached the project's CLI."""
+
+import typer
+
+app = typer.Typer(help="Conformance plugin commands.")
+
+
+@app.command()
+def marker() -> None:
+    """Print the marker."""
+    typer.echo("wired")

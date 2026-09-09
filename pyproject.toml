@@ -84,6 +84,7 @@ dev = [
     "alembic>=1.13.0",    # For migrate-fix integration tests
     "opencc-python-reimplemented>=0.1.7",  # Simplified → Traditional Chinese conversion
     "aegis-plugin-test",  # In-repo fake plugin (tests/fixtures); see [tool.uv.sources]
+    "aegis-stack-conformance",  # In-repo plugin declaring every mechanism
 ]
 docs = [
     "mkdocs>=1.5.0",
@@ -125,6 +126,7 @@ aegis-stack = "aegis.__main__:app"
 # (entry point + src layout). Pinned via path so ``uv sync --all-extras``
 # installs it editable in CI.
 aegis-plugin-test = { path = "tests/fixtures/aegis_plugin_test", editable = true }
+aegis-stack-conformance = { path = "tests/fixtures/aegis_stack_conformance", editable = true }
 
 [build-system]
 requires = ["hatchling"]

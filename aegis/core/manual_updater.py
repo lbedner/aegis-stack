@@ -40,6 +40,7 @@ from .component_files import (
     get_template_path,
 )
 from .copier_manager import is_copier_project, load_copier_answers
+from .plugins.composer import PLUGINS_ANSWER_KEY
 from .plugins.template_resolver import get_plugin_template_root
 from .render_diff import FilePolicy, RenderDiffEngine, build_template_env
 from .template_cleanup import run_ruff_on_text
@@ -1068,16 +1069,21 @@ class ManualUpdater:
         """Create ``services_card.py`` when an add brings the first service.
 
         ``ServicesCard`` is rendered at init and removed by post-gen cleanup
-        when zero services are selected. On ``add-service`` the first service
-        flips that condition back on, and the shared ``cards/__init__.py``
-        regenerates to import ``ServicesCard`` — so the module must exist or the
-        frontend import chain breaks (``ModuleNotFoundError`` on boot). The
-        removal direction lives in ``post_gen_tasks.cleanup_components``; this is
-        its add-side mirror.
+        when zero services are selected. The first service — or the first
+        plugin, which the dashboard treats the same way — flips that
+        condition back on, and the shared ``cards/__init__.py`` regenerates
+        to import ``ServicesCard``, so the module must exist or the frontend
+        import chain breaks (``ModuleNotFoundError`` on boot). The removal
+        direction lives in ``post_gen_tasks.cleanup_components``; this is its
+        add-side mirror, called from both ``add_component`` and ``add_plugin``.
 
         Returns the project-relative path if it created the file, else None.
         """
-        if not any(answers.get(key) for key in _SERVICE_ANSWER_KEYS):
+        # Mirrors the condition in ``cards/__init__.py.jinja``: a plugin
+        # is a service on the dashboard, so it brings ServicesCard back
+        # just as an in-tree service does.
+        has_service = any(answers.get(key) for key in _SERVICE_ANSWER_KEYS)
+        if not has_service and not answers.get(PLUGINS_ANSWER_KEY):
             return None
         output_path = self.project_path / SERVICES_CARD_FILE
         if output_path.exists():
@@ -1273,7 +1279,6 @@ class ManualUpdater:
         clear error message if the plugin isn't currently installed.
         """
         from .file_manifest import apply_cleanup_path, iter_cleanup_paths
-        from .plugins.composer import PLUGINS_ANSWER_KEY
 
         files_deleted: list[str] = []
         try:
@@ -1374,7 +1379,7 @@ class ManualUpdater:
         once at the end (avoids the N+1 sync that nesting would
         otherwise produce).
         """
-        from .plugins.composer import PLUGINS_ANSWER_KEY, serialize_plugin_to_answer
+        from .plugins.composer import serialize_plugin_to_answer
 
         files_modified: list[str] = []
         try:
@@ -1452,6 +1457,12 @@ class ManualUpdater:
                         path=f"{PLUGIN_BACKUP_DIR / backup_label}",
                     )
                 )
+
+            # Cross-spec: the shared cards/__init__.py imports ServicesCard
+            # once any plugin is present, so make sure the module exists.
+            created_card = self._ensure_services_card(updated_answers)
+            if created_card:
+                files_modified.append(created_card)
 
             # Migration tail, the same one ``add_service`` gives in-tree
             # services: a plugin that declares tables needs alembic

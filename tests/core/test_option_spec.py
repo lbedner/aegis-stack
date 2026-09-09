@@ -324,8 +324,58 @@ class TestVariantDelta:
                     default="pydantic-ai",
                     answer_key="ai_framework",
                 ),
+                OptionSpec(
+                    name="providers",
+                    mode=OptionMode.MULTI,
+                    choices=["anthropic", "ollama", "openai"],
+                    default=["openai"],
+                    answer_key="ai_providers",
+                ),
+                OptionSpec(
+                    name="rag",
+                    mode=OptionMode.FLAG,
+                    choices=["rag"],
+                    default=False,
+                    answer_key="ai_rag",
+                ),
             ],
         )
+
+    def test_multi_and_flag_options_name_answers_too(self) -> None:
+        """``ai[openai,rag]`` names the providers list and the flag, not
+        only single-choice options; before this ``add-service`` could not
+        add a provider or a flag to an installed AI service at all (the
+        request read as already enabled)."""
+        assert variant_answers("ai[openai,rag]", self._ai()) == {
+            "ai_providers": ["openai"],
+            "ai_rag": True,
+        }
+
+    def test_provider_request_merges_with_what_the_project_has(self) -> None:
+        """Providers accumulate: ``ai[openai]`` on an ollama project keeps
+        ollama and adds openai, as the comma string copier stores."""
+        assert variant_delta("ai[openai]", self._ai(), {"ai_providers": "ollama"}) == {
+            "ai_providers": "ollama,openai"
+        }
+        assert variant_delta(
+            "ai[openai,anthropic]", self._ai(), {"ai_providers": "ollama,openai"}
+        ) == {"ai_providers": "ollama,openai,anthropic"}
+
+    def test_provider_already_held_is_satisfied(self) -> None:
+        assert (
+            variant_delta("ai[ollama]", self._ai(), {"ai_providers": "ollama,openai"})
+            == {}
+        )
+        assert (
+            variant_delta("ai[openai]", self._ai(), {"ai_providers": ["openai"]}) == {}
+        )
+
+    def test_flag_turns_on_once(self) -> None:
+        assert variant_delta("ai[rag]", self._ai(), {"ai_rag": False}) == {
+            "ai_rag": True
+        }
+        assert variant_delta("ai[rag]", self._ai(), {}) == {"ai_rag": True}
+        assert variant_delta("ai[rag]", self._ai(), {"ai_rag": True}) == {}
 
     def test_missing_service_returns_every_requested_option(self) -> None:
         assert variant_delta("auth[org]", self._auth(), {}) == {"auth_level": "org"}

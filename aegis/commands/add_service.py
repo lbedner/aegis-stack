@@ -419,6 +419,15 @@ def add_service_command(
                 if isinstance(framework, str):
                     service_data[AnswerKeys.AI_FRAMEWORK] = framework
 
+            # An upgrade of an installed service applies what the project
+            # still lacks: for a multi option that is the union with what it
+            # has (``ai[openai]`` on an ollama project keeps ollama), for a
+            # flag it is simply on.
+            if existing_answers.get(AnswerKeys.include_key(base_service)) is True:
+                service_data.update(
+                    variant_delta(service, SERVICES[base_service], existing_answers)
+                )
+
             # For insights service, pass source flags
             if base_service == AnswerKeys.SERVICE_INSIGHTS:
                 from ..core.insights_service_parser import (

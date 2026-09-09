@@ -240,10 +240,17 @@ def variant_answers(spec_str: str, plugin_spec: Any) -> dict[str, Any]:
     return {
         opt.answer_key: parsed[opt.name]
         for opt in options
-        if opt.name in explicit
-        and opt.answer_key is not None
-        and opt.mode is OptionMode.SINGLE
+        if opt.name in explicit and opt.answer_key is not None
     }
+
+
+def _multi_values(value: Any) -> list[str]:
+    """A multi option's answer as a list, whether copier holds it as the
+    comma-separated string the template renders (``ai_providers:
+    "ollama,openai"``) or a list."""
+    if isinstance(value, str):
+        return [v.strip() for v in value.split(",") if v.strip()]
+    return [str(v) for v in (value or [])]
 
 
 def variant_delta(
@@ -264,9 +271,13 @@ def answers_delta(
     An answer that is missing or not one of the option's choices is
     treated as unset. Ordered options are satisfied by any current value
     at or above the request; unordered ones raise
-    :class:`VariantConflictError` on a mismatch. Shared by the resolver,
-    ``add-service`` and ``ManualUpdater``, so a downgrade request is
-    "already satisfied" everywhere and never rewrites a level.
+    :class:`VariantConflictError` on a mismatch. A multi option (AI
+    providers) is satisfied when the project already holds every
+    requested value, else the delta is the union, current values first,
+    as the comma-separated string copier stores; a flag (rag, voice) is
+    satisfied when already on. Shared by the resolver, ``add-service``
+    and ``ManualUpdater``, so a downgrade request is "already satisfied"
+    everywhere and never rewrites a level.
     """
     by_key = {
         opt.answer_key: opt
@@ -279,6 +290,16 @@ def answers_delta(
         if opt is None:
             continue
         current = answers.get(key)
+        if opt.mode is OptionMode.MULTI:
+            have = [v for v in _multi_values(current) if v in opt.choices]
+            missing = [v for v in wanted if v not in have]
+            if missing:
+                delta[key] = ",".join(have + missing)
+            continue
+        if opt.mode is OptionMode.FLAG:
+            if current is not True:
+                delta[key] = True
+            continue
         if current not in opt.choices:
             delta[key] = wanted
         elif opt.ordered:

@@ -449,18 +449,21 @@ SERVICES: dict[str, ServiceSpec] = {
                 mode=OptionMode.MULTI,
                 choices=sorted(AIProviders.ALL),
                 default=list(AIProviders.DEFAULT),
+                answer_key=AnswerKeys.AI_PROVIDERS,
             ),
             OptionSpec(
                 name="rag",
                 mode=OptionMode.FLAG,
                 choices=["rag"],
                 default=False,
+                answer_key=AnswerKeys.AI_RAG,
             ),
             OptionSpec(
                 name="voice",
                 mode=OptionMode.FLAG,
                 choices=["voice"],
                 default=False,
+                answer_key=AnswerKeys.AI_VOICE,
             ),
         ],
         pyproject_deps=[

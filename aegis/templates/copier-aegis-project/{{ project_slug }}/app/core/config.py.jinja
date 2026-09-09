@@ -10,6 +10,11 @@ from typing import Any
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+{%- for p in _plugins | default([]) %}
+{%- for s in p.wiring.settings_mixins %}
+from {{ s.module }} import {{ s.symbol }}
+{%- endfor %}
+{%- endfor %}
 
 # Default placeholder bundled with the template — anyone reading the
 # template source knows this value, so leaving it unchanged in a non-dev
@@ -17,11 +22,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # so the startup guard below has a single source of truth and a renamed
 # placeholder doesn't accidentally bypass the check.
 _SECRET_KEY_PLACEHOLDER = "change-this-secret-key-in-production-use-env-variable"
-{%- for p in _plugins | default([]) %}
-{%- for s in p.wiring.settings_mixins %}
-from {{ s.module }} import {{ s.symbol }}
-{%- endfor %}
-{%- endfor %}
 
 
 class Settings(
@@ -68,6 +68,26 @@ class Settings(
 
     # Port for the web server
     PORT: int = 8000
+
+    # The host port compose actually published. ``make serve`` shifts it
+    # when 8000 is taken and writes the choice to ``.env.ports``; the
+    # container still listens on PORT. Anything running on the host
+    # (every CLI command that calls this app's API) needs this one, not
+    # PORT. None means nothing shifted it.
+    WEBSERVER_HOST_PORT: int | None = None
+
+    # Where this app's own CLI reaches its API. Left empty it follows the
+    # published port, so a project served anywhere needs no extra
+    # configuration; set it explicitly for a container or a tunnel.
+    API_BASE_URL: str = ""
+
+    @model_validator(mode="after")
+    def _default_api_base_url(self) -> "Settings":
+        """Point the CLI at wherever this app is actually reachable."""
+        if not self.API_BASE_URL:
+            port = self.WEBSERVER_HOST_PORT or self.PORT
+            self.API_BASE_URL = f"http://localhost:{port}"
+        return self
 
     # Development settings
     AUTO_RELOAD: bool = False

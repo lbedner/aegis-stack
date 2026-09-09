@@ -67,9 +67,11 @@ async def make_client() -> AsyncIterator[Callable[..., APIClient]]:
 
 class TestAPIClient:
     def test_default_base_url(self) -> None:
-        client = APIClient()
-        assert "localhost" in client.base_url
-        assert "8000" in client.base_url
+        """It follows the configured address, not a literal port: the
+        published port moves when ``make serve`` finds 8000 taken."""
+        from app.core.config import settings
+
+        assert APIClient().base_url == settings.API_BASE_URL
 
     def test_custom_base_url(self) -> None:
         client = APIClient(base_url="http://example.com")

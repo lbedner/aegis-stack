@@ -19,6 +19,7 @@ import socket
 import sys
 
 _PERSISTED_KEYS = {
+    "WEBSERVER_HOST_PORT",
     "POSTGRES_HOST_PORT",
     "REDIS_HOST_PORT",
     "OLLAMA_HOST_PORT",
@@ -101,12 +102,13 @@ def resolve_ports(
 ) -> dict[str, int]:
     """Resolve host ports for the requested services and persist them.
 
-    Only ``POSTGRES_HOST_PORT``, ``REDIS_HOST_PORT``, ``OLLAMA_HOST_PORT``
-    and ``INGRESS_DASHBOARD_PORT`` are written to ``.env.ports``:
-    ``app/core/config.py``'s ``Settings`` loads that file as a strict dotenv
-    (``extra="forbid"``) with no field for ``WEBSERVER_HOST_PORT`` /
-    ``INGRESS_HTTP_PORT`` -- those only need to reach ``docker compose``'s
-    environment, which the caller does directly with the returned dict.
+    Everything ``Settings`` has a field for is written to ``.env.ports``,
+    which it loads as a strict dotenv (``extra="forbid"``). That now
+    includes ``WEBSERVER_HOST_PORT``: host-side CLI commands call this
+    app's own API, so they need the port compose published, not the one
+    the container listens on. ``INGRESS_HTTP_PORT`` stays out -- it has
+    no field, and only ``docker compose``'s environment needs it, which
+    the caller supplies directly from the returned dict.
     """
     ports: dict[str, int] = {
         "WEBSERVER_HOST_PORT": _resolve_one(

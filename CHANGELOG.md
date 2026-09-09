@@ -9,6 +9,17 @@
 
 ### Changed
 
+- **A plugin's migration can declare how to prove it ran.**
+  `MigrationSpec` gains `stamp_signature`, the composer carries each
+  plugin's migrations into `_plugins`, and `migration_signatures.py`
+  appends plugin entries. Startup re-adoption now stamps a plugin's
+  migration on a database that already has its tables, instead of
+  replaying the DDL on every boot.
+- **`API_BASE_URL` follows the port the app is actually published on.**
+  `make serve` shifts `WEBSERVER_HOST_PORT` when 8000 is taken but never
+  persisted it, so every CLI that calls this app's own API fell back to
+  a hardcoded `localhost:8000`. The resolved port is now written to
+  `.env.ports` and read by `Settings`, and `APIClient` uses it.
 - **A plugin names itself once and every dashboard surface honours it.**
   `get_component_subtitle` now prefers the `subtitle` a health check
   declares in its metadata, and both the stack view and the architecture
@@ -62,6 +73,10 @@
 
 ### Fixed
 
+- **A plugin's settings mixin no longer fails `ruff check`.** The
+  injected import landed after a module constant in `app/core/config.py`,
+  so any generated project that installed a plugin declaring
+  `settings_mixins` reported E402.
 - **`aegis add <plugin>` restores the services card.** The shared
   `cards/__init__.py` imports `ServicesCard` once any plugin is present,
   but only the component install path ensured that module exists, so

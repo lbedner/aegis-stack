@@ -48,6 +48,8 @@ def get_spec() -> PluginSpec:
                 service_name="conformance",
                 description="Conformance table",
                 schema="conformance",
+                # Proof it ran, for the startup re-adoption hook.
+                stamp_signature=("table", "conformance.conformance_row"),
                 tables=[
                     TableSpec(
                         name="conformance_row",

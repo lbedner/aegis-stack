@@ -153,6 +153,13 @@ class ServiceMigrationSpec:
     # pre-schema migrations. Schemas are Postgres-only: SQLite ignores
     # this (it has no CREATE SCHEMA) and keeps every table in one DB.
     schema: str | None = None
+    # Proof this migration already ran, for the startup hook that
+    # re-adopts a persisted database by stamping instead of replaying
+    # DDL. ``("table", name)``, ``("column", table, col)`` or
+    # ``("foreign_key", table, col)``. A migration without one opts out
+    # of that recovery, so every shipped migration should carry it;
+    # in-tree services declare theirs in ``migration_signatures.py``.
+    stamp_signature: tuple[str, ...] | None = None
 
 
 # ============================================================================

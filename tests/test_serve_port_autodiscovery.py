@@ -87,17 +87,21 @@ def test_resolve_ports_writes_only_allowlisted_keys(tmp_path: Path) -> None:
         ports_file=ports_file,
     )
     content = ports_file.read_text()
-    # The four keys config.py declares as Settings fields may be persisted.
+    # Every key config.py declares as a Settings field may be persisted.
+    # WEBSERVER_HOST_PORT is one of them: host-side CLI commands call
+    # this app's own API, so they need the port compose published rather
+    # than the one the container listens on.
     for key in (
+        "WEBSERVER_HOST_PORT",
         "POSTGRES_HOST_PORT",
         "REDIS_HOST_PORT",
         "OLLAMA_HOST_PORT",
         "INGRESS_DASHBOARD_PORT",
     ):
         assert key in content
-    # These reach docker compose via the returned dict, never .env.ports —
-    # config.py's strict Settings would reject the unknown keys at boot.
-    assert "WEBSERVER_HOST_PORT" not in content
+    # This one reaches docker compose via the returned dict, never
+    # .env.ports — config.py has no field for it and its strict Settings
+    # would reject the unknown key at boot.
     assert "INGRESS_HTTP_PORT" not in content
     assert ports["WEBSERVER_HOST_PORT"]
     assert ports["INGRESS_HTTP_PORT"]

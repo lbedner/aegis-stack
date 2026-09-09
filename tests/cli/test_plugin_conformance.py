@@ -76,6 +76,16 @@ class TestMigrations:
         assert "conformance_row" in body
         assert "ix_conformance_row_label" in body
 
+    def test_the_stamp_signature_is_registered(self, project: Path) -> None:
+        """A migration with no signature opts out of the startup
+        re-adoption that stamps instead of replaying DDL, so a plugin
+        must be able to declare one."""
+        registry = _read(
+            project, "app/components/backend/startup/migration_signatures.py"
+        )
+        assert '"conformance"' in registry
+        assert "conformance_row" in registry
+
     def test_the_schema_is_dropped_on_sqlite(self, project: Path) -> None:
         """The spec declares a Postgres schema; SQLite has none."""
         migration = next((project / "alembic/versions").glob("*_conformance.py"))
@@ -115,6 +125,33 @@ class TestWiring:
     def test_the_settings_mixin_is_composed(self, project: Path) -> None:
         config = _read(project, "app/core/config.py")
         assert "ConformanceSettingsMixin" in config
+
+    def test_the_settings_import_sits_with_the_other_imports(
+        self, project: Path
+    ) -> None:
+        """Injected next to the class it feeds, the import lands after a
+        module constant and every generated project fails ``ruff check``
+        with E402 the moment it installs a plugin."""
+        module = ast.parse(_read(project, "app/core/config.py"))
+        first_statement = next(
+            (
+                node.lineno
+                for node in module.body
+                if not isinstance(node, ast.Import | ast.ImportFrom)
+                and not (
+                    isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+                )
+            ),
+            None,
+        )
+        assert first_statement is not None
+        late = [
+            node.lineno
+            for node in module.body
+            if isinstance(node, ast.Import | ast.ImportFrom)
+            and node.lineno > first_statement
+        ]
+        assert not late, f"imports after line {first_statement}: {late}"
 
     def test_the_health_check_is_registered(self, project: Path) -> None:
         startup = _read(project, "app/components/backend/startup/component_health.py")

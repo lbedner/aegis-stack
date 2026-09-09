@@ -55,7 +55,7 @@ class APIClient:
         timeout: float = 10.0,
         on_unauthorized: UnauthorizedHandler | None = None,
     ) -> None:
-        self.base_url = base_url or f"http://localhost:{settings.PORT}"
+        self.base_url = base_url or settings.API_BASE_URL
         self.timeout = timeout
         self.on_unauthorized = on_unauthorized
         # Human-readable reason for the most recent failed request, None

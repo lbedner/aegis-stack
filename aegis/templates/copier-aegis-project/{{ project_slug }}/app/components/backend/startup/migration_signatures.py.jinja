@@ -8,6 +8,10 @@ finance_icon incident: alembic_version lags, the upgrade replays, and the
 database logs "already exists" on every boot until someone stamps by
 hand. Guarded by ``tests/test_migration_signatures.py``.
 
+Plugins append their own entries: a ``MigrationSpec`` carrying a
+``stamp_signature`` lands here when the plugin is installed, so a
+plugin's migration gets the same recovery an in-tree service's does.
+
 Forms:
 - ``("table", name)`` - table exists (CREATE TABLE migrations). Names may
   be schema-qualified; matching tolerates the bare name on engines
@@ -50,4 +54,12 @@ SERVICE_MIGRATION_SIGNATURES: dict[str, tuple[str, ...]] = {
         "secured_by_account_id",
     ),
     "scheduler": ("table", "scheduler.job_execution"),
+{%- for p in _plugins | default([]) %}
+{%- for m in p.migrations | default([]) %}
+{%- if m.stamp_signature %}
+    # From the {{ p.name }} plugin.
+    "{{ m.service_name }}": ({% for part in m.stamp_signature %}"{{ part }}", {% endfor %}),
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
 }

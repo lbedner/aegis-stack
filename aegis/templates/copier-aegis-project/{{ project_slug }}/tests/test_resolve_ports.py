@@ -159,12 +159,14 @@ class TestResolvePorts:
         content = ports_file.read_text()
         assert "POSTGRES_HOST_PORT" in content
         assert "REDIS_HOST_PORT" in content
-        assert "WEBSERVER_HOST_PORT" not in content
+        # Host-side CLI commands call this app's own API, so the port
+        # compose published has to reach Settings like any other.
+        assert "WEBSERVER_HOST_PORT" in content
         assert ports["WEBSERVER_HOST_PORT"] == 41400
         assert ports["POSTGRES_HOST_PORT"] == 41401
         assert ports["REDIS_HOST_PORT"] == 41402
 
-    def test_never_persists_webserver_or_ingress_http(
+    def test_never_persists_the_ingress_http_port(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("WEBSERVER_PORT_BASE", "41410")
@@ -181,7 +183,8 @@ class TestResolvePorts:
         )
 
         content = ports_file.read_text()
-        assert "WEBSERVER_HOST_PORT" not in content
+        # ``Settings`` has no field for it and loads the file with
+        # ``extra="forbid"``; only compose's environment needs it.
         assert "INGRESS_HTTP_PORT" not in content
         assert "INGRESS_DASHBOARD_PORT" in content
         assert ports["INGRESS_HTTP_PORT"] == 41411

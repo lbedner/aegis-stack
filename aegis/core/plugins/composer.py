@@ -95,6 +95,17 @@ def serialize_plugin_to_answer(
         # the same way the in-tree auth/llm subcommands do. Always present
         # (``None`` when unset) so templates can test it directly.
         "cli_name": spec.cli_name,
+        # Migrations, flattened to what templates need: the name the
+        # revision file carries, and the object whose existence proves
+        # it ran. The DDL itself is generated from the spec at add time
+        # and never travels in the answers.
+        "migrations": [
+            {
+                "service_name": migration.service_name,
+                "stamp_signature": list(migration.stamp_signature or ()),
+            }
+            for migration in (spec.migrations or [])
+        ],
         "wiring": _serialize_wiring(spec.wiring, opts, spec.name),
     }
 

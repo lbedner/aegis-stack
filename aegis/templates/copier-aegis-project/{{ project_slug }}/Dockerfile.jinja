@@ -105,6 +105,11 @@ RUN chmod +x /code/scripts/entrypoint.sh
 # Set default port as an environment variable
 ARG PORT=8000
 ENV PORT=$PORT
+# The object store every process shares (the storage-data volume in
+# compose). Set here, not in a compose environment list: a service that
+# declares its own list replaces the anchor's wholesale, and this was
+# quietly dropping to the code directory in every container.
+ENV STORAGE_ROOT=/data/storage
 
 # Expose the port
 EXPOSE $PORT

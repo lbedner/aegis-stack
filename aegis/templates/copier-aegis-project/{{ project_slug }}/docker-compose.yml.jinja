@@ -9,10 +9,12 @@ x-app: &app
   env_file:
     - ${AEGIS_STACK_ENV_FILE:-.env}
   environment:
-    # Docker container marker for entrypoint script
+    # Docker container marker for entrypoint script. A service that sets
+    # its own environment list REPLACES this one (YAML merge keys do not
+    # join lists), so anything every container must see lives in the
+    # Dockerfile's ENV (PORT, STORAGE_ROOT), not here.
     - DOCKER_CONTAINER=1
     - PORT=${PORT:-8000}
-    - STORAGE_ROOT=/data/storage
   volumes:
     # Every process that runs the app shares one object store. Compose
     # merges volume lists across override files by target path, so the

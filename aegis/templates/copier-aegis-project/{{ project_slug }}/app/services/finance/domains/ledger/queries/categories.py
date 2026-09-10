@@ -10,10 +10,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import date, timedelta
 
-from sqlalchemy import and_, func
-from sqlmodel import or_, select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.domains.ledger.queries.filters import (
     live_account_ids,
     split_aware_category_clause,
@@ -25,6 +21,10 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransactionSplit,
 )
+from app.services.finance.utils import current_date
+from sqlalchemy import and_, func
+from sqlmodel import or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def category_alias_ids(
@@ -134,7 +134,9 @@ async def category_usage_rows(
     if owner_user_id is not None:
         filters.append(FinanceTransaction.owner_user_id == owner_user_id)
     if days is not None:
-        filters.append(FinanceTransaction.date_ >= date.today() - timedelta(days=days))
+        filters.append(
+            FinanceTransaction.date_ >= current_date() - timedelta(days=days)
+        )
     rows = (
         await db.exec(
             select(

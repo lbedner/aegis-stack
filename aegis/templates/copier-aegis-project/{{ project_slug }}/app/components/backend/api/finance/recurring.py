@@ -4,7 +4,6 @@ One sub-router of the finance API (see ``router.py``, the aggregator).
 """
 
 from datetime import (
-    date,
     timedelta,
 )
 
@@ -26,6 +25,7 @@ from app.services.finance.domains.detection.insights.commitments import (
     commitment_rollup,
     stream_staleness,
 )
+from app.services.finance.models import FinanceRecurringStream, FinanceTransaction
 from app.services.finance.schemas import (
     ProjectionResponse,
     RecurringAttach,
@@ -41,6 +41,7 @@ from app.services.finance.schemas import (
     TransactionResponse,
 )
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 
 router = APIRouter()
 
@@ -48,17 +49,37 @@ router = APIRouter()
 # -- Recurring & insights ----------------------------------------------------
 
 
-@router.get("/recurring", response_model=RecurringListResponse)
-async def list_recurring(
-    service: FinanceService = Depends(get_finance_service),
-    owner_user_id: int | None = Depends(get_owner_user_id),
-) -> RecurringListResponse:
-    """Detected recurring streams, soonest-due first, plus the monthly-cost
-    rollup (monthly-equivalent of all recurring outflows).
+async def visible_streams(
+    service: FinanceService, owner_user_id: int | None
+) -> tuple[list[FinanceRecurringStream], set[int]]:
+    """Streams worth listing, plus which of them are card/loan payments.
 
     Streams whose members are internal-transfer legs (a monthly card
     autopay) are excluded entirely - they are money moved, not bills, and
-    one of them can inflate the rollup by a five-figure fiction.
+    one of them can inflate the rollup by a five-figure fiction. Payment
+    streams are the carve-out: they stay VISIBLE (a payment has to be
+    confirmable here or it can never reach the cash forecast) but out of
+    the rollup, because the card's swipes already counted.
+    """
+    streams = await service.list_recurring(owner_user_id=owner_user_id)
+    transfer_ids = await service.transfer_stream_ids([s.id for s in streams])
+    payment_ids = await service.payment_stream_ids(list(transfer_ids))
+    streams = [s for s in streams if s.id not in transfer_ids or s.id in payment_ids]
+    return streams, payment_ids
+
+
+async def hydrate_streams(
+    service: FinanceService,
+    streams: list[FinanceRecurringStream],
+    owner_user_id: int | None,
+    payment_ids: set[int] | None = None,
+) -> list[RecurringStreamResponse]:
+    """Stream rows as full responses: display names, icon, health.
+
+    One query per lookup for the whole batch, shared by the list endpoint
+    and any single-row re-render (the web frontend answers a row action
+    with the row). ``payment_ids`` is what ``visible_streams`` computed;
+    a single-row caller lets it be looked up here.
     """
     from app.core.config import settings
     from app.services.finance.domains.ledger.merchant_icon import (
@@ -66,22 +87,9 @@ async def list_recurring(
         icons_for_names,
     )
 
-    streams = await service.list_recurring(owner_user_id=owner_user_id)
-    transfer_ids = await service.transfer_stream_ids([s.id for s in streams])
-    # Payment streams (card/loan autopay) are the carve-out from the
-    # transfer exclusion: they stay VISIBLE - a payment has to be
-    # confirmable here or it can never reach the cash forecast - but out
-    # of the rollup below, because the card's swipes already counted and
-    # the payment would double-count the whole statement.
-    payment_ids = await service.payment_stream_ids(list(transfer_ids))
-    streams = [s for s in streams if s.id not in transfer_ids or s.id in payment_ids]
-    # The rollup counts COMMITMENTS only (declared, confirmed, subscription,
-    # or fixed-amount at a bill cadence). Summing every detected merchant
-    # rhythm reads hundreds of shopping habits as "recurring bills" and
-    # produces a five-figure monthly fiction.
-    monthly = commitment_rollup([s for s in streams if s.id not in payment_ids])[
-        "monthly_total"
-    ]
+    if payment_ids is None:
+        transfer_ids = await service.transfer_stream_ids([s.id for s in streams])
+        payment_ids = await service.payment_stream_ids(list(transfer_ids))
     # Display names in one query each, so the Bills & Income table can show
     # where a stream draws from and what it is filed under.
     category_names = await service.stream_category_names({s.id for s in streams})
@@ -97,9 +105,6 @@ async def list_recurring(
         owner_user_id=owner_user_id, page_size=500
     )
     account_names = {a.id: a.name for a in accounts}
-    # Same lookback floor generate_insights computes for _missed_recurring -
-    # a stream reading "stale" here is exactly the set that rule already
-    # treats as a zombie rather than a live bill (see stream_staleness).
     websites = await service.merchant_websites(
         {s.merchant_id for s in streams if s.merchant_id is not None}
     )
@@ -112,24 +117,45 @@ async def list_recurring(
             if (domain := domain_from_website(url)) and mid in payee_names
         },
     )
-    today = date.today()
+    # Same lookback floor generate_insights computes for _missed_recurring -
+    # a stream reading "stale" here is exactly the set that rule already
+    # treats as a zombie rather than a live bill (see stream_staleness).
+    today = current_date()
     floor = (
         today - timedelta(days=settings.FINANCE_RULES_LOOKBACK_DAYS)
         if settings.FINANCE_RULES_LOOKBACK_DAYS
         else None
     )
+    return [
+        RecurringStreamResponse.from_row(
+            s,
+            account_name=account_names.get(s.account_id),
+            category_name=category_names.get(s.id),
+            icon_b64=icons.get(payee_names.get(s.merchant_id) or s.name),
+            staleness=stream_staleness(s, today, floor),
+            is_payment=s.id in payment_ids,
+        )
+        for s in streams
+    ]
+
+
+@router.get("/recurring", response_model=RecurringListResponse)
+async def list_recurring(
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> RecurringListResponse:
+    """Detected recurring streams, soonest-due first, plus the monthly-cost
+    rollup (monthly-equivalent of all recurring outflows)."""
+    streams, payment_ids = await visible_streams(service, owner_user_id)
+    # The rollup counts COMMITMENTS only (declared, confirmed, subscription,
+    # or fixed-amount at a bill cadence). Summing every detected merchant
+    # rhythm reads hundreds of shopping habits as "recurring bills" and
+    # produces a five-figure monthly fiction.
+    monthly = commitment_rollup([s for s in streams if s.id not in payment_ids])[
+        "monthly_total"
+    ]
     return RecurringListResponse(
-        items=[
-            RecurringStreamResponse.from_row(
-                s,
-                account_name=account_names.get(s.account_id),
-                category_name=category_names.get(s.id),
-                icon_b64=icons.get(payee_names.get(s.merchant_id) or s.name),
-                staleness=stream_staleness(s, today, floor),
-                is_payment=s.id in payment_ids,
-            )
-            for s in streams
-        ],
+        items=await hydrate_streams(service, streams, owner_user_id, payment_ids),
         total=len(streams),
         monthly_cost=int(monthly),
     )
@@ -301,12 +327,12 @@ async def recurring_match_candidates(
     rows = await service.recurring_match_candidates(
         stream_id, owner_user_id=owner_user_id
     )
-    items = await _candidate_items(service, rows)
+    items = await candidate_items(service, rows)
     return TransactionListResponse(items=items, total=len(items))
 
 
-async def _candidate_items(
-    service: FinanceService, rows: list
+async def candidate_items(
+    service: FinanceService, rows: list[FinanceTransaction]
 ) -> list[TransactionResponse]:
     """Match candidates as enriched responses - shared by the single-bill
     shortlist and the review queue."""
@@ -369,7 +395,7 @@ async def recurring_review_queue(
         entries.append(
             ReviewQueueEntry(
                 stream_id=stream_id,
-                candidates=await _candidate_items(service, rows),
+                candidates=await candidate_items(service, rows),
             )
         )
     return ReviewQueueResponse(items=entries)

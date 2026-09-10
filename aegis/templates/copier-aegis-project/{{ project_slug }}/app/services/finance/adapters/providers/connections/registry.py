@@ -12,13 +12,10 @@ down with it.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 import logging
+from collections.abc import Awaitable, Callable
 
-from cryptography.fernet import InvalidToken
 import httpx
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.encryption import decrypt_secret
 from app.core.time import utcnow
 from app.services.finance.adapters.providers import queries
@@ -42,6 +39,8 @@ from app.services.finance.adapters.providers.snaptrade import (
 )
 from app.services.finance.constants import Provider
 from app.services.finance.models import FinanceConnection
+from cryptography.fernet import InvalidToken
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = logging.getLogger(__name__)
 

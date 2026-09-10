@@ -16,12 +16,11 @@ unlabelled 71120000 cannot.
 from datetime import date
 from typing import Any
 
+from app.services.finance.domains.ledger import queries
+from app.services.finance.models import FinanceAccount, FinanceLiabilityDetail
 from pydantic import BaseModel, ConfigDict
 from sqlmodel import Field
 from sqlmodel.ext.asyncio.session import AsyncSession
-
-from app.services.finance.domains.ledger import queries
-from app.services.finance.models import FinanceAccount, FinanceLiabilityDetail
 
 PROPERTY_ACCOUNT_TYPE = "property"
 

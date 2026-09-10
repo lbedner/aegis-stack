@@ -37,6 +37,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
+from app.services.finance.utils import current_date
 from app.services.finance.adapters.importers import queries
 from app.services.finance.adapters.importers.base import (
     ImportResult,
@@ -228,7 +229,7 @@ async def plan_transactions(
     from app.services.finance.service import FinanceService
 
     service = FinanceService(db)
-    today = utcnow().date()
+    today = current_date()
 
     # Held out of EVERY pass below, not just the insert. Letting scheduled
     # rows into the hash grouping would shift the within-day ordinals of
@@ -913,7 +914,7 @@ async def ingest_transactions(
         # Posted rows only: a scheduled row's running balance is a
         # PROJECTED figure, and taking it as the account's real balance
         # would book money that has not moved.
-        today = utcnow().date()
+        today = current_date()
         balanced = [
             (txn.date, i, txn.running_balance)
             for i, txn in enumerate(parsed)

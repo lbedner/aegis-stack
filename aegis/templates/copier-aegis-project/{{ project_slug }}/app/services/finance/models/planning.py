@@ -9,6 +9,12 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from app.core.time import utcnow
+from app.services.finance.models.base import (
+    _FK,
+    _SCHEMA,
+    _bigint,
+)
 from sqlalchemy import (
     JSON,
     CheckConstraint,
@@ -16,13 +22,6 @@ from sqlalchemy import (
     Index,
 )
 from sqlmodel import Field, SQLModel
-
-from app.core.time import utcnow
-from app.services.finance.models.base import (
-    _FK,
-    _SCHEMA,
-    _bigint,
-)
 
 # ---------------------------------------------------------------------------
 # Group F (analytics / import) — recurring streams, budgets, baselines,

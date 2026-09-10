@@ -39,6 +39,7 @@ from app.services.finance.domains.detection.analyst.sections import (
     _NET_WORTH_WINDOW_DAYS,
     _PROJECTION_DAYS,
 )
+from app.services.finance.utils import current_date
 
 
 
@@ -52,7 +53,7 @@ async def load_report_context(
     db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
 ) -> ReportContext:
     """One pass over the batched reads; everything downstream is data."""
-    today = today or date.today()
+    today = today or current_date()
     service = FinanceService(db)
     live = await ledger_queries.live_accounts_for_owner(db, owner_user_id=owner_user_id)
     accounts = sorted(

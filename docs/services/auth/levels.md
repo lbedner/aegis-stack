@@ -240,7 +240,7 @@ class UserBase(SQLModel):
 The `require_role()` function is a FastAPI dependency that checks the authenticated user's role:
 
 ```python
-from app.services.auth.service import require_role
+from app.services.auth.auth_service import require_role
 from fastapi import Depends
 
 @router.get("/admin/dashboard")
@@ -341,8 +341,8 @@ Organization slugs are validated to be **lowercase alphanumeric with hyphens onl
 ### Membership Management
 
 ```python
-from app.services.auth.memberships import MembershipService
-from app.services.auth.orgs import OrgService
+from app.services.auth.membership_service import MembershipService
+from app.services.auth.org_service import OrgService
 
 # Create an organization
 org_service = OrgService(db)
@@ -535,7 +535,7 @@ aegis add-service auth[rbac]
 **What changes:**
 
 - `role` field added to the User model
-- `require_role()` dependency available in `service.py`
+- `require_role()` dependency available in `auth_service.py`
 - Role constants (`ROLE_ADMIN`, `ROLE_MODERATOR`, `ROLE_USER`) added to `security.py`
 - Admin-protected user management endpoints (list, activate, deactivate, delete)
 - Moderator can list users

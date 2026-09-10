@@ -1,3 +1,4 @@
+{% from "components/macros/layout.html" import theme_toggle %}
 {# Landing navbar.
 
    Links collapse behind a hamburger below md; the project name and the
@@ -7,7 +8,7 @@
 <div x-data="{ menuOpen: false }"
      class="border-b border-aegis-border">
   <div class="max-w-screen-xl mx-auto px-6 lg:px-16 py-4 flex items-center gap-4">
-    <a href="/" class="text-sm font-semibold text-white tracking-wide flex-none">
+    <a href="/" class="text-sm font-semibold text-aegis-text tracking-wide flex-none">
       {{ project_name }}
     </a>
 
@@ -15,17 +16,17 @@
 
     <div class="flex items-center gap-4 flex-none">
       <a href="/docs"
-         class="hidden md:inline text-xs text-aegis-muted hover:text-white transition-colors">API</a>
+         class="hidden md:inline text-xs text-aegis-muted hover:text-aegis-text transition-colors">API</a>
       <a href="/health"
-         class="hidden md:inline text-xs text-aegis-muted hover:text-white transition-colors">Health</a>
+         class="hidden md:inline text-xs text-aegis-muted hover:text-aegis-text transition-colors">Health</a>
       <a href="/dashboard"
-         class="text-xs text-white border border-aegis-teal bg-aegis-teal/10 rounded px-3 py-1.5 hover:bg-aegis-teal/20 transition-colors">
+         class="text-xs text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-3 py-1.5 hover:bg-aegis-teal/20 transition-colors">
         Dashboard
       </a>
 
       {# Hamburger — mobile only, toggles the dropdown below. #}
       <button @click="menuOpen = !menuOpen"
-              class="md:hidden flex items-center justify-center w-8 h-8 text-aegis-muted hover:text-white transition-colors"
+              class="md:hidden flex items-center justify-center w-8 h-8 text-aegis-muted hover:text-aegis-text transition-colors"
               :aria-expanded="menuOpen"
               aria-label="Toggle menu">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -46,8 +47,9 @@
        @keydown.escape.window="menuOpen = false"
        class="md:hidden border-t border-aegis-border px-6 py-3">
     <a href="/docs" @click="menuOpen = false"
-       class="block py-2 text-sm text-aegis-muted hover:text-white transition-colors">API</a>
+       class="block py-2 text-sm text-aegis-muted hover:text-aegis-text transition-colors">API</a>
     <a href="/health" @click="menuOpen = false"
-       class="block py-2 text-sm text-aegis-muted hover:text-white transition-colors">Health</a>
+       class="block py-2 text-sm text-aegis-muted hover:text-aegis-text transition-colors">Health</a>
+       {{ theme_toggle() }}
   </div>
 </div>

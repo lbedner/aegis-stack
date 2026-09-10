@@ -28,6 +28,7 @@ from app.services.finance.domains.detection.analyst.shared import (
 )
 from app.services.finance.domains.detection.insights import pace_day
 from app.services.finance.models import FinanceAnalystSnapshot, FinanceInsight
+from app.services.finance.utils import current_date
 
 
 class SectionCommentary(BaseModel):
@@ -315,7 +316,7 @@ async def snapshot_series(
     ranged read answers "has the runway slipped every week this month",
     which a one-step delta cannot.
     """
-    today = today or date.today()
+    today = today or current_date()
     store_owner = 0 if owner_user_id is None else owner_user_id
     rows = await queries.analyst_snapshots_between(
         db,

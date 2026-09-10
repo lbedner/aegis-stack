@@ -6,11 +6,12 @@ to honour the code.
 """
 
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
 
+from app.components.web_frontend.filters import cents_to_input, money_to_cents
 from app.components.web_frontend.rendering import templates
 
 
@@ -93,3 +94,45 @@ class TestPct:
 
     def test_blank_stays_blank(self, pct: Callable[..., Any]) -> None:
         assert pct(None) == ""
+
+
+class TestMoneyRoundTrip:
+    def test_money_to_cents_reads_what_people_type(self) -> None:
+        assert money_to_cents("$1,200.50") == 120_050
+        assert money_to_cents(" 12 ") == 1_200
+        assert money_to_cents("") == 0
+        assert money_to_cents("lots") is None
+
+    def test_cents_to_input_is_the_inverse_for_form_values(self) -> None:
+        assert cents_to_input(350_000_00) == "350,000.00"
+        assert cents_to_input(None) == ""
+        assert money_to_cents(cents_to_input(1_250_50)) == 1_250_50
+
+
+class TestWindows:
+    """The chip rows all speak one vocabulary (web_frontend/ranges.py)."""
+
+    def test_since_is_the_cutoff_a_window_means(self) -> None:
+        """UTC, the clock rows are stamped with, and no service import:
+        the web frontend ships without any of them."""
+        from app.components.web_frontend import ranges
+
+        assert ranges.since(7) == datetime.now(UTC).date() - timedelta(days=7)
+        assert ranges.since(ranges.ALL) is None
+        assert ranges.since(None) is None
+
+    def test_one_chip_row_serves_every_page(self) -> None:
+        from app.components.web_frontend import ranges
+
+        labels = [label for _days, label in ranges.WINDOWS]
+        assert labels == ["1d", "7d", "14d", "1m", "3m", "1y", "All"]
+        assert ranges.WINDOWS[-1][0] == ranges.ALL
+
+    def test_all_becomes_the_page_ceiling_where_a_count_is_needed(self) -> None:
+        """The ledger reads "everything" as no cutoff; the endpoints that
+        take a day count read it as their own cap."""
+        from app.components.web_frontend import ranges
+
+        assert ranges.horizon(ranges.ALL, 730) == 730
+        assert ranges.horizon(90, 730) == 90
+        assert ranges.horizon(3650, 730) == 730

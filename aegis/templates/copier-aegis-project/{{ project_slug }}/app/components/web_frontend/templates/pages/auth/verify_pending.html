@@ -5,10 +5,10 @@
 
 {% block auth_form %}
 <div x-data="verifyPending">
-  <h1 class="text-2xl font-semibold text-white mb-2">Verify your email</h1>
+  <h1 class="text-2xl font-semibold text-aegis-text mb-2">Verify your email</h1>
   <p class="text-sm text-aegis-muted mb-8">
     We sent a link to
-    {% if user %}<span class="text-white">{{ user.email }}</span>{% else %}your inbox{% endif %}.
+    {% if user %}<span class="text-aegis-text">{{ user.email }}</span>{% else %}your inbox{% endif %}.
     Open it to finish setting up your account.
   </p>
 
@@ -17,7 +17,7 @@
     {{ auth_banner("error") }}
 
     <button type="button" @click="resend()" :disabled="loading"
-      class="text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-5 py-2.5 hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+      class="text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-5 py-2.5 hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
       <span x-show="!loading">Resend the link</span>
       <span x-show="loading" x-cloak>Sending…</span>
     </button>
@@ -27,5 +27,5 @@
 {% endblock %}
 
 {% block auth_footer %}
-Wrong account? <a href="/logout" class="text-aegis-teal hover:text-white transition-colors">Sign out</a>.
+Wrong account? <a href="/logout" class="text-aegis-teal hover:text-aegis-text transition-colors">Sign out</a>.
 {% endblock %}

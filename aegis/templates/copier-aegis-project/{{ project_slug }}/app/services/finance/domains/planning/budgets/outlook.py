@@ -9,11 +9,9 @@ budget line would need.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from datetime import date, timedelta
-import re
-
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.constants import (
     CADENCES,
@@ -42,10 +40,12 @@ from app.services.finance.domains.planning.budgets.uncovered import (
 from app.services.finance.models import FinanceTransaction
 from app.services.finance.schemas import BudgetMonthOutlook, GoalParseResponse
 from app.services.finance.utils import (
+    current_date,
     current_period_month,
     display_cash_balance,
     transaction_payee_key,
 )
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def budget_month_outlook(
@@ -67,7 +67,7 @@ async def budget_month_outlook(
     goals, and envelopes ask their standing monthly amounts of every
     month (they are plans, not occurrences).
     """
-    today = today or date.today()
+    today = today or current_date()
     first = date(today.year, today.month, 1)
     horizon_end = add_months(first, months)
 
@@ -192,7 +192,7 @@ async def parse_budget_goal(
     percent_match = re.search(r"(\d+)\s*%", text)
     fraction = int(percent_match.group(1)) / 100 if percent_match else 0.5
 
-    cutoff = date.today() - timedelta(days=90)
+    cutoff = current_date() - timedelta(days=90)
     filters = planning_queries.spend_filters(owner_user_id, cutoff)
     txn_rows = await queries.outflow_tuples(
         db, owner_user_id=owner_user_id, start=cutoff

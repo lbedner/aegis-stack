@@ -25,13 +25,8 @@ Two properties make it safe to re-run:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
 import random
-
-from pydantic import BaseModel
-from sqlalchemy import func
-from sqlmodel import or_, select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from datetime import date, timedelta
 
 from app.services.finance.adapters.importers import imports
 from app.services.finance.domains.detection import (
@@ -80,6 +75,11 @@ from app.services.finance.seeds.demo_plan import (  # noqa: F401
     build_demo_ledger,
 )
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlmodel import or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # The household table moved modules; its address did not.
 __all__ = [
@@ -118,10 +118,6 @@ class DemoSeedResult(BaseModel):
     net_worth_days: int = 0
     skipped: bool = False
     reset: bool = False
-
-
-def _today() -> date:
-    return datetime.now(UTC).date()
 
 
 # --------------------------------------------------------------------- #
@@ -239,9 +235,7 @@ async def _delete_demo_rows(
     gone = set(txn_ids)
     proposal_ids = [
         p.id
-        for p in (
-            await db.exec(select(FinancePendingChange).where(owner_clause))
-        ).all()
+        for p in (await db.exec(select(FinancePendingChange).where(owner_clause))).all()
         if p.proposed_by_agent == "demo_seed"
         or (p.payload or {}).get("transaction_id") in gone
     ]
@@ -864,7 +858,7 @@ async def seed_demo(
         await _delete_demo_rows(db, owner_user_id)
 
     service = FinanceService(db)
-    anchor = _today()
+    anchor = current_date()
     window_start = _month_starts(anchor, months)[0]
     ledger = build_demo_ledger(anchor=anchor, months=months)
 

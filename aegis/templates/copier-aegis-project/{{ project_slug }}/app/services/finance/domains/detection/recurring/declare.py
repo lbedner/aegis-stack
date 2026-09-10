@@ -13,12 +13,8 @@ a detected one are the same kind of row.
 
 from __future__ import annotations
 
-from datetime import timedelta
 import statistics
-
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy.exc import IntegrityError
-from sqlmodel.ext.asyncio.session import AsyncSession
+from datetime import timedelta
 
 from app.core.log import logger
 from app.services.finance.domains.detection import queries
@@ -42,6 +38,9 @@ from app.services.finance.models import (
     FinanceTransaction,
 )
 from app.services.shared.queries import owner_clause
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy.exc import IntegrityError
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 class RecurringPlanGroup(BaseModel):

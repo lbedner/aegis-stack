@@ -12,12 +12,11 @@ Deliberately free of any provider client, so ``plaid_sync`` and
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.adapters.providers import queries
 from app.services.finance.constants import Provider
 from app.services.finance.models import FinanceAccount, FinanceConnection
+from pydantic import BaseModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # The named slot a connection's encrypted credential occupies. Each provider
 # stores a different secret (Plaid an access token, SnapTrade a user secret),

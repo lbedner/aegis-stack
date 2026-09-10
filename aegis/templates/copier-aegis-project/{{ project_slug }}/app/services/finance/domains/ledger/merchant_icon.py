@@ -32,12 +32,11 @@ import asyncio
 import base64
 from datetime import timedelta
 
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.domains.ledger import queries
 from app.services.finance.models import FinanceIcon
 from app.services.finance.utils import normalize_payee
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Below this a "domain" is more likely noise than a brand; above it, the
 # string is a bank descriptor rather than a name ("INTEREST CHARGED TO
@@ -166,9 +165,11 @@ async def icons_for_names(
         to_fetch: list[str] = []
         for domain in unknown:
             row = stored.get(domain)
-            if row is None:
-                to_fetch.append(domain)
-            elif row.icon_b64 is None and now - row.fetched_at > _NEGATIVE_RETRY:
+            if (
+                row is None
+                or row.icon_b64 is None
+                and now - row.fetched_at > _NEGATIVE_RETRY
+            ):
                 to_fetch.append(domain)
             else:
                 _remember(domain, row.icon_b64)

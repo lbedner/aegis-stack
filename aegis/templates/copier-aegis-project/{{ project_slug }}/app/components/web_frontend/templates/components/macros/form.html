@@ -1,86 +1,12 @@
-{# Reusable Jinja2 macros.
+{# Form macros. Native inputs with ``name`` attributes, so every form posts
+   or re-queries through htmx without client-side state.
 
-   Import what you need at the top of a template:
-
-       {% from "components/macros.html" import primary_button, or_divider %}
-
-   Macros that take a body are called with {% call %}:
-
-       {% call info_tooltip() %}<p>Explanation.</p>{% endcall %}
+       {% from "components/macros/form.html" import field, text_input, select, date_input, primary_button %}
 #}
 
 
-{# -- Overlays -------------------------------------------------------------- #}
-
-{# Full-bleed dismiss layer behind a modal. Pair it with the modal panel:
-
-     <div x-show="open" x-cloak
-          class="fixed inset-0 z-50 flex items-center justify-center px-4">
-       {{ modal_scrim("close()") }}
-       <div class="relative ...">...</div>
-     </div>
-#}
-{% macro modal_scrim(dismiss_handler="open = false") %}
-<div class="absolute inset-0 bg-black/40 backdrop-blur"
-     @click="{{ dismiss_handler }}"></div>
-{% endmacro %}
-
-
-{# THE tooltip panel — the one popover shell every hover/help hint uses.
-   Callers provide the open/show()/hide() Alpine state on a ``relative``
-   wrapper and pass the body via {% call %}. Change tooltip styling here,
-   nowhere else. #}
-{% macro popover_panel(align='left') %}
-<div x-show="open" x-cloak x-transition.opacity role="tooltip"
-     @mouseenter="show()" @mouseleave="hide()"
-     class="absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-50 w-64 bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-3 text-xxs normal-case tracking-normal text-aegis-muted space-y-2 text-left">
-  {{ caller() }}
-</div>
-{% endmacro %}
-
-
-{# Inline definition hint — wrap a term via {% call %}; hovering (or tapping)
-   opens the shared popover panel. Dotted underline signals the affordance
-   without a "?" button. ``align='right'`` for terms near the right edge. #}
-{% macro hover_hint(title, text, align='left') %}
-<span class="relative inline-flex"
-      x-data="{ open: false, _t: null,
-                show() { clearTimeout(this._t); this.open = true; },
-                hide() { this._t = setTimeout(() => this.open = false, 120); } }"
-      @mouseenter="show()" @mouseleave="hide()">
-  <span class="cursor-help underline decoration-dotted decoration-aegis-muted/50 underline-offset-4"
-        @click.stop="open = !open"
-        @keydown.escape.window="open = false"
-        @click.outside="open = false">{{ caller() }}</span>
-  {% call popover_panel(align) %}
-    <div class="text-white font-medium">{{ title }}</div>
-    <div>{{ text }}</div>
-  {% endcall %}
-</span>
-{% endmacro %}
-
-
-{# Small ? info icon with a click-triggered popover. Body can be arbitrary
-   HTML (caller passes it as the macro body via {% call %}). #}
-{% macro info_tooltip(width="w-64") %}
-<div class="relative" x-data="{ open: false }">
-  <button type="button" @click="open = !open" @click.outside="open = false"
-    class="w-3.5 h-3.5 rounded-full border border-aegis-border text-aegis-muted text-xxs flex items-center justify-center hover:text-white hover:border-aegis-muted transition-colors"
-    aria-label="More info">?</button>
-  <div x-show="open" x-cloak x-transition.opacity
-    class="absolute left-0 top-5 z-20 {{ width }} bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-3 text-xxs normal-case tracking-normal text-aegis-muted space-y-2">
-    {{ caller() }}
-  </div>
-</div>
-{% endmacro %}
-
-
-{# -- Buttons ---------------------------------------------------------------
-   Two flavors share the same look (teal border, translucent teal fill,
-   white text, hover deepens). The class string is computed once here so
-   future tweaks (radius, hover ramp, disabled shade) propagate to both. #}
 {%- set _primary_button_classes -%}
-text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5 hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
+text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5 hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
 {%- endset -%}
 
 
@@ -115,7 +41,77 @@ text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5
 {% endmacro %}
 
 
-{# -- Form fields ----------------------------------------------------------- #}
+{# Shared input styling; every control below uses it so the bar reads as one. #}
+{%- set _control_classes -%}
+bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-text placeholder:text-aegis-muted/50 focus:border-aegis-teal focus:outline-none transition-colors
+{%- endset -%}
+
+
+{# A native select. ``options`` are objects or dicts with ``id`` and
+   ``name``; ``blank`` is the "no filter" label (``None`` for no blank
+   choice); ``selected`` the current id. ``label`` wraps it inline for a
+   filter bar; ``block`` lays it out full-width inside a ``field()``. #}
+{% macro select(name, options, selected=None, blank="All", label=None, block=False) %}
+{% if label %}<label class="inline-flex items-center gap-2 text-xs text-aegis-muted"><span>{{ label }}</span>{% endif %}
+<select name="{{ name }}" class="{{ _control_classes }}{% if block %} block w-full mt-1{% endif %}">
+  {% if blank is not none %}<option value="">{{ blank }}</option>{% endif %}
+  {% for option in options %}
+  {% set oid = option["id"] if option is mapping else option.id %}
+  {% set oname = option["name"] if option is mapping else option.name %}
+  <option value="{{ oid }}" {% if selected is not none and oid == selected %}selected{% endif %}>{{ oname }}</option>
+  {% endfor %}
+</select>
+{% if label %}</label>{% endif %}
+{% endmacro %}
+
+{% macro date_input(name, value=None, label=None, block=False) %}
+{% if label %}<label class="inline-flex items-center gap-2 text-xs text-aegis-muted"><span>{{ label }}</span>{% endif %}
+<input type="date" name="{{ name }}" {% if value %}value="{{ value.isoformat() if value.isoformat is defined else value }}"{% endif %} class="{{ _control_classes }}{% if block %} block w-full mt-1{% endif %}">
+{% if label %}</label>{% endif %}
+{% endmacro %}
+
+{% macro checkbox(name, checked=False, label=None) %}
+<label class="inline-flex items-center gap-2 text-xs text-aegis-muted cursor-pointer">
+  <input type="checkbox" name="{{ name }}" {% if checked %}checked{% endif %} class="accent-aegis-teal">
+  {% if label %}<span>{{ label }}</span>{% endif %}
+</label>
+{% endmacro %}
+
+{% macro search_input(name, value=None, placeholder="Search") %}
+<input type="search" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
+       aria-label="{{ placeholder }}" class="{{ _control_classes }} min-w-[12rem]">
+{% endmacro %}
+
+{# A labelled field. The control comes via {% call %}; ``error`` renders
+   under it (pattern 1's 422 re-render passes field errors here). #}
+{% macro field(label, error=None) %}
+<div class="space-y-1">
+  <label class="block text-xxs text-aegis-muted uppercase tracking-wider">{{ label }}
+    {{ caller() }}
+  </label>
+  {% if error %}<p class="text-xs text-error">{{ error }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro text_input(name, value=None, placeholder="", required=False, autofocus=False) %}
+<input type="text" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
+       {% if required %}required{% endif %} {% if autofocus %}autofocus{% endif %}
+       class="{{ _control_classes }} w-full mt-1">
+{% endmacro %}
+
+{% macro money_input(name, value=None, placeholder="0.00") %}
+<div class="relative mt-1">
+  <span class="absolute inset-y-0 left-2.5 flex items-center text-sm text-aegis-muted" aria-hidden="true">$</span>
+  <input type="text" inputmode="decimal" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
+         class="{{ _control_classes }} w-full pl-6 tabular-nums">
+</div>
+{% endmacro %}
+
+{% macro textarea(name, value=None, rows=6, placeholder="") %}
+<textarea name="{{ name }}" rows="{{ rows }}" placeholder="{{ placeholder }}"
+          class="{{ _control_classes }} w-full mt-1 font-mono text-xs">{{ value or "" }}</textarea>
+{% endmacro %}
+
 
 {# Themed combobox — replaces native <select> so the dropdown panel matches
    the dark UI instead of falling back to the OS-themed picker. Alpine
@@ -138,7 +134,7 @@ text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5
      @click.outside="open = false"
      @keydown.escape.window="open = false">
   <button type="button" @click="open = !open"
-    class="w-full bg-aegis-bg border rounded {{ 'px-2 py-1 text-xxs' if small else 'px-3 py-2 text-sm' }} text-white text-left flex items-center justify-between gap-2 hover:border-aegis-muted focus:outline-none transition-colors"
+    class="w-full bg-aegis-bg border rounded {{ 'px-2 py-1 text-xxs' if small else 'px-3 py-2 text-sm' }} text-aegis-text text-left flex items-center justify-between gap-2 hover:border-aegis-muted focus:outline-none transition-colors"
     :class="open ? 'border-aegis-teal' : 'border-aegis-border'">
     {% if grouped %}
     <span class="truncate"
@@ -164,7 +160,7 @@ text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5
         <template x-for="_opt in _grp.items" :key="_opt.{{ value_attr }}">
           <button type="button"
             class="w-full text-left whitespace-nowrap {{ 'px-2 py-1 text-xxs' if small else 'px-3 py-1.5 text-sm' }} hover:bg-aegis-border/30 transition-colors"
-            :class="{{ model }} === _opt.{{ value_attr }} ? 'text-aegis-teal' : 'text-white'"
+            :class="{{ model }} === _opt.{{ value_attr }} ? 'text-aegis-teal' : 'text-aegis-text'"
             @click="{{ model }} = _opt.{{ value_attr }}; open = false; {{ on_change }}"
             x-text="_opt.{{ label_attr }}"></button>
         </template>
@@ -174,7 +170,7 @@ text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5
     <template x-for="_opt in {{ options }}" :key="_opt.{{ value_attr }}">
       <button type="button"
         class="w-full text-left {{ 'px-2 py-1 text-xxs' if small else 'px-3 py-1.5 text-sm' }} hover:bg-aegis-border/30 transition-colors"
-        :class="{{ model }} === _opt.{{ value_attr }} ? 'text-aegis-teal' : 'text-white'"
+        :class="{{ model }} === _opt.{{ value_attr }} ? 'text-aegis-teal' : 'text-aegis-text'"
         @click="{{ model }} = _opt.{{ value_attr }}; open = false; {{ on_change }}"
         x-text="_opt.{{ label_attr }}"></button>
     </template>
@@ -201,11 +197,11 @@ text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5
     {% if required %}required{% endif %}
     {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
     {% if minlength %}minlength="{{ minlength }}"{% endif %}
-    class="w-full {{ bg_class }} border border-aegis-border rounded pl-3 pr-10 py-2 text-sm text-white placeholder:text-aegis-muted/40 focus:border-aegis-teal focus:outline-none transition-colors"
+    class="w-full {{ bg_class }} border border-aegis-border rounded pl-3 pr-10 py-2 text-sm text-aegis-text placeholder:text-aegis-muted/40 focus:border-aegis-teal focus:outline-none transition-colors"
     placeholder="{{ placeholder }}">
   <button type="button" @click="shown = !shown"
     :aria-label="shown ? 'Hide password' : 'Show password'"
-    class="absolute inset-y-0 right-0 px-3 flex items-center text-aegis-muted hover:text-white transition-colors">
+    class="absolute inset-y-0 right-0 px-3 flex items-center text-aegis-muted hover:text-aegis-text transition-colors">
     {# Eye / eye-slash from heroicons. Both 24×24 outline. Alpine swaps
        which is visible. #}
     <svg x-show="!shown" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -228,4 +224,32 @@ text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5
   <span class="text-xxs text-aegis-muted/70 uppercase tracking-wider">or</span>
   <div class="flex-1 h-px bg-aegis-border/60"></div>
 </div>
+{% endmacro %}
+
+
+{# The time-window chips: a row of exclusive pills that submits as one
+   radio field, so a click re-requests the enclosing form. Same recipe as
+   ``layout.chip``, driven by ``peer-checked`` because a radio rather than
+   a link marks the choice. #}
+{% macro range_chips(ranges, days, field="days", aria="Time window") %}
+<fieldset class="flex flex-wrap items-center gap-1.5" aria-label="{{ aria }}">
+  {% for value, label in ranges %}
+  <label class="cursor-pointer">
+    <input type="radio" name="{{ field }}" value="{{ value }}" class="sr-only peer" {% if value == days %}checked{% endif %}>
+    <span class="inline-block text-xs px-2 py-0.5 rounded border border-aegis-border text-aegis-muted
+                 peer-checked:border-aegis-teal peer-checked:text-aegis-text peer-checked:bg-aegis-teal/10 peer-checked:font-semibold
+                 peer-focus-visible:ring-2 peer-focus-visible:ring-aegis-teal hover:border-aegis-muted hover:text-aegis-text transition-colors">{{ label }}</span>
+  </label>
+  {% endfor %}
+</fieldset>
+{% endmacro %}
+
+
+{# A small action button (row verbs, card verbs, toolbar). ``attrs`` is
+   the htmx verb; ``vals`` a dict for ``hx-vals``; ``tone`` is default
+   (quiet), primary (teal), danger or warn. The one recipe every compact
+   button uses. #}
+{% macro action(label, attrs, tone="default", vals=None) %}
+{% set tones = {"default": "border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted", "primary": "border-aegis-teal text-aegis-text hover:bg-aegis-teal/10", "danger": "border-aegis-error/40 text-error hover:border-aegis-error", "warn": "border-aegis-amber/40 text-aegis-text hover:border-aegis-amber"} %}
+<button type="button" {{ attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} class="px-2.5 py-1 text-xs rounded border whitespace-nowrap transition-colors {{ tones.get(tone, tones['default']) }}">{{ label }}</button>
 {% endmacro %}

@@ -22,9 +22,7 @@ from app.components.frontend.controls.snack_bar import (
     ErrorSnackBar,
     SuccessSnackBar,
 )
-from app.components.frontend.dashboard.modals.finance_modal import (
-    BILL_FREQUENCY_OPTIONS,
-)
+from app.services.finance.constants import BILL_FREQUENCY_OPTIONS
 from app.components.frontend.dashboard.modals.finance_modal.formatting import (
     _parse_dollars,
 )

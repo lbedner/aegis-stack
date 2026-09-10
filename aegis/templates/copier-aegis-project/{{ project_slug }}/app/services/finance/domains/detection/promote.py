@@ -14,11 +14,10 @@ export implied it" from "you clicked Confirm".
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.log import logger
 from app.services.finance.domains.detection import queries
+from pydantic import BaseModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Category-name prefixes (case-insensitive) that mark a member transaction
 # as bill-curated. Matched against the category NAME (the first two path

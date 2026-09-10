@@ -17,9 +17,6 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.constants import (
     add_months,
@@ -29,6 +26,8 @@ from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.models import (
     FinanceAccount,
 )
+from pydantic import BaseModel, ConfigDict, Field
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 GOAL_ACCOUNT_TYPE = "goal"
 GOAL_STATUSES = ("active", "paused", "reached")

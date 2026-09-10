@@ -7,6 +7,11 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from app.core.time import utcnow
+from app.services.finance.models.base import (
+    _FK,
+    _SCHEMA,
+)
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -14,12 +19,6 @@ from sqlalchemy import (
     Index,
 )
 from sqlmodel import Field, SQLModel
-
-from app.core.time import utcnow
-from app.services.finance.models.base import (
-    _FK,
-    _SCHEMA,
-)
 
 # ---------------------------------------------------------------------------
 # Group F — reference data

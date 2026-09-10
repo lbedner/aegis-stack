@@ -12,8 +12,6 @@ import calendar
 from datetime import date, timedelta
 from typing import Any
 
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.constants import (
     CASH_ACCOUNT_TYPES,
     add_months,
@@ -40,9 +38,11 @@ from app.services.finance.schemas import (
     ProjectionResponse,
 )
 from app.services.finance.utils import (
+    current_date,
     current_period_month,
     display_cash_balance,
 )
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Appended to the month that absorbs a prior overage. A budget line
 # smaller than its allocation, with nothing to explain it, reads as a bug
@@ -82,7 +82,7 @@ async def project_balances(
     in flight); older ones are the insight rules' missed-payment
     chase, not the forecast's.
     """
-    today = today or date.today()
+    today = today or current_date()
     horizon = today + timedelta(days=days)
 
     account_rows, _ = await accounts.list_accounts(

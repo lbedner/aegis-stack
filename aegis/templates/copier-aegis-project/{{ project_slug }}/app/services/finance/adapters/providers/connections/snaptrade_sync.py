@@ -14,11 +14,9 @@ Writes but does not commit - the caller owns the transaction.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 import logging
+from datetime import date, timedelta
 from typing import Any
-
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.encryption import decrypt_secret, encrypt_secret
 from app.core.time import utcnow
@@ -39,6 +37,7 @@ from app.services.finance.adapters.providers.snaptrade import (
 from app.services.finance.constants import Provider
 from app.services.finance.models import FinanceAccount, FinanceConnection
 from app.services.finance.service import FinanceService
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = logging.getLogger(__name__)
 

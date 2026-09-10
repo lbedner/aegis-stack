@@ -13,14 +13,9 @@ fills with guesses that were wrong in 2019.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 import statistics
+from datetime import date, timedelta
 from typing import Any
-
-from pydantic import BaseModel
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import or_, select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
 from app.services.finance.domains.detection import queries
@@ -49,7 +44,12 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransfer,
 )
+from app.services.finance.utils import current_date
 from app.services.shared.queries import owner_clause
+from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 def candidate_filters(owner_user_id: int | None) -> list[Any]:
@@ -148,7 +148,7 @@ async def detect_recurring(
     """
     result = RecurringDetectionResult()
     store_owner = 0 if owner_user_id is None else owner_user_id
-    today = today or date.today()
+    today = today or current_date()
 
     accounts = await queries.account_rows_where(
         db,

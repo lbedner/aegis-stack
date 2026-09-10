@@ -1,12 +1,12 @@
 {% extends "pages/auth/_layout.html" %}
-{% from "components/macros.html" import submit_button %}
+{% from "components/macros/form.html" import submit_button %}
 {% from "components/auth_macros.html" import auth_field, auth_banner %}
 
 {% block title %}Create an account - {{ project_name }}{% endblock %}
 
 {% block auth_form %}
 <div x-data="registerForm">
-  <h1 class="text-2xl font-semibold text-white mb-2">Create an account</h1>
+  <h1 class="text-2xl font-semibold text-aegis-text mb-2">Create an account</h1>
   <p class="text-sm text-aegis-muted mb-8">It takes a moment.</p>
 
   {# Native form POST for the same reason as /login: it is what makes the
@@ -28,5 +28,5 @@
 {% endblock %}
 
 {% block auth_footer %}
-Already have an account? <a href="/login" class="text-aegis-teal hover:text-white transition-colors">Sign in</a>.
+Already have an account? <a href="/login" class="text-aegis-teal hover:text-aegis-text transition-colors">Sign in</a>.
 {% endblock %}

@@ -96,7 +96,13 @@ services:
       - .:/code
 {%- if include_htmx %}
 
-  tailwind:
+  tailwind:{# A Jinja comment, not a YAML one: generated compose services
+    carry no inline comments, because component selection varies per project
+    and a comment written for one stack misleads in another. The note is for
+    whoever maintains this template. --poll: on a bind mount (Docker Desktop
+    on macOS) the watcher misses files created after it started, so classes
+    used only in a new template never compile. Polling rescans the content
+    globs on every rebuild, which is what CHOKIDAR_USEPOLLING below backs up. #}
     image: node:22-alpine
     working_dir: /code
     volumes:
@@ -108,7 +114,7 @@ services:
     entrypoint: sh
     command:
       - -c
-      - npm install --no-audit --no-fund --silent && exec npx tailwindcss -i /code/app/components/web_frontend/static/input.css -o /code/app/components/web_frontend/static/dist/app.css --watch=always
+      - npm install --no-audit --no-fund --silent && exec npx tailwindcss -i /code/app/components/web_frontend/static/input.css -o /code/app/components/web_frontend/static/dist/app.css --watch=always --poll
     profiles:
       - dev
 

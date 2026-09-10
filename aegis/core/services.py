@@ -1000,6 +1000,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/modals/finance_settings_tab.py",
                 "app/cli/finance.py",
                 "tests/services/test_finance_models.py",
+                "tests/services/test_finance_clock.py",
                 "tests/services/_finance_factories.py",
                 "tests/services/test_finance_service.py",
                 "tests/services/test_finance_analyst.py",

@@ -8,17 +8,17 @@
 <div x-data="verifyEmail" x-init="verify()">
   <template x-if="state === 'working'">
     <div>
-      <h1 class="text-2xl font-semibold text-white mb-2">Verifying your email</h1>
+      <h1 class="text-2xl font-semibold text-aegis-text mb-2">Verifying your email</h1>
       <p class="text-sm text-aegis-muted">One moment.</p>
     </div>
   </template>
 
   <template x-if="state === 'ok'">
     <div>
-      <h1 class="text-2xl font-semibold text-white mb-2">Email verified</h1>
+      <h1 class="text-2xl font-semibold text-aegis-text mb-2">Email verified</h1>
       <p class="text-sm text-aegis-muted mb-8">Your account is ready.</p>
       <a href="/login?verified=1"
-         class="text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-5 py-2.5 hover:bg-aegis-teal/20 transition-colors">
+         class="text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-5 py-2.5 hover:bg-aegis-teal/20 transition-colors">
         Sign in
       </a>
     </div>
@@ -26,10 +26,10 @@
 
   <template x-if="state === 'failed'">
     <div>
-      <h1 class="text-2xl font-semibold text-white mb-2">That link didn't work</h1>
+      <h1 class="text-2xl font-semibold text-aegis-text mb-2">That link didn't work</h1>
       <p class="text-sm text-aegis-muted mb-8" x-text="error"></p>
       <a href="/verify-pending"
-         class="text-sm text-white border border-aegis-teal bg-aegis-teal/10 rounded px-5 py-2.5 hover:bg-aegis-teal/20 transition-colors">
+         class="text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-5 py-2.5 hover:bg-aegis-teal/20 transition-colors">
         Send a new link
       </a>
     </div>

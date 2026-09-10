@@ -111,7 +111,7 @@ async def _new_goal_target(
     return resolved
 
 
-async def _goal_response(
+async def goal_response(
     service: FinanceService,
     account: Any,
     *,
@@ -229,7 +229,7 @@ async def list_goals(
     # One snapshot fetch covers every goal's observed rate - never one per row.
     rates = await service.goal_rates(accounts, today=today)
     items = [
-        await _goal_response(
+        await goal_response(
             service, a, allocations=allocations, rates=rates, figures=figures
         )
         for a in accounts
@@ -297,7 +297,7 @@ async def create_goal(
         account.metadata_ = set_auto_contribute(account.metadata_, True)
         service.db.add(account)
         await service.db.flush()
-    return await _goal_response(service, account)
+    return await goal_response(service, account)
 
 
 @router.patch("/goals/{account_id}", response_model=GoalResponse)
@@ -372,7 +372,7 @@ async def update_goal(
         account.metadata_ = set_auto_contribute(account.metadata_, body.auto_contribute)
     service.db.add(account)
     await service.db.flush()
-    return await _goal_response(service, account)
+    return await goal_response(service, account)
 
 
 @router.delete("/goals/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -419,4 +419,4 @@ async def contribute_to_goal(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
-    return await _goal_response(service, account)
+    return await goal_response(service, account)

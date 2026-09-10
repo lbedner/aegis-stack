@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.constants import (
     ANALYST_NOTE_INSIGHT_TYPE,
@@ -14,6 +12,7 @@ from app.services.finance.domains.planning import queries
 from app.services.finance.models import (
     FinanceInsight,
 )
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def list_insights(

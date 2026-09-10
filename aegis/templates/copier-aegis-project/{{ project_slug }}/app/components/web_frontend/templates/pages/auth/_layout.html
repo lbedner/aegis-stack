@@ -23,7 +23,7 @@
 
   {# -------- LEFT: form -------- #}
   <div class="flex flex-col px-6 sm:px-12 lg:px-16 py-8">
-    <a href="/" class="text-sm font-semibold text-white tracking-wide mb-auto">
+    <a href="/" class="text-sm font-semibold text-aegis-text tracking-wide mb-auto">
       {{ project_name }}
     </a>
 
@@ -43,7 +43,7 @@
     <svg class="absolute inset-0 w-full h-full opacity-[0.05]" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <pattern id="auth-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1"/>
         </pattern>
       </defs>
       <rect width="100%" height="100%" fill="url(#auth-grid)"/>
@@ -51,7 +51,7 @@
 
     <div class="absolute bottom-10 left-0 right-0 text-center px-12">
       <p class="text-sm text-aegis-muted">
-        <span class="text-white">{{ project_name }}</span>
+        <span class="text-aegis-text">{{ project_name }}</span>
         &nbsp;{{ project_description }}
       </p>
     </div>

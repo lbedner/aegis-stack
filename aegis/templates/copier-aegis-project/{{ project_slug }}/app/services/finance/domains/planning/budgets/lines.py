@@ -10,9 +10,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-from sqlalchemy.exc import IntegrityError
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.domains.ledger import accounts, categories
 from app.services.finance.domains.planning import queries as planning_queries
@@ -23,6 +20,8 @@ from app.services.finance.utils import (
     DEFAULT_CURRENCY,
     current_period_month,
 )
+from sqlalchemy.exc import IntegrityError
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 def budget_line_status(

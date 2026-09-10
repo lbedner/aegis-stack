@@ -161,6 +161,37 @@ PAUSE_INDEFINITE = date(9999, 12, 31)
 ONE_TIME_FREQUENCY = "once"
 ONE_TIME_LABEL = "One time"
 
+# Menu text for every cadence, derived from the one table so no picker
+# can offer something create/update would reject.
+FREQUENCY_LABELS: dict[str, str] = {
+    key: cadence.label for key, cadence in CADENCES.items()
+}
+
+# What the add/edit bill forms offer: the cadences plus "One time" - a
+# dated debt ("pay Bob back on the 15th") is a bill, not a rhythm, so it
+# is statable here but never appears in cadence-only surfaces (detection,
+# the declare-from-transactions picker).
+BILL_FREQUENCY_OPTIONS: dict[str, str] = {
+    **FREQUENCY_LABELS,
+    ONE_TIME_FREQUENCY: ONE_TIME_LABEL,
+}
+
+# Frequencies a stream can carry that detection never produces and nobody
+# would pick from a menu: "irregular" is a measured gap matching no
+# cadence, "unknown" a bill with one transaction and no gap to measure.
+DECLARED_FREQUENCY_LABELS: dict[str, str] = {
+    IRREGULAR_FREQUENCY: "Irregular",
+    UNKNOWN_FREQUENCY: "Not enough history yet",
+    ONE_TIME_FREQUENCY: ONE_TIME_LABEL,
+}
+
+
+def frequency_label(key: str | None) -> str:
+    """Display text for any stored frequency; an unknown key reads as itself."""
+    if not key:
+        return ""
+    return FREQUENCY_LABELS.get(key) or DECLARED_FREQUENCY_LABELS.get(key) or key
+
 
 def add_months(day: date, months: int) -> date:
     """Calendar-aware month step (Jan 31 + 1 month = Feb 28, not Mar 3)."""

@@ -21,6 +21,13 @@ from ..i18n import lazy_t, t
 
 _BACKUP_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 
+# Headroom the image build needs. Below this a deploy is refused up front
+# rather than dying inside the Dockerfile with "No space left on device".
+MIN_FREE_DISK_GB = 10
+# Build cache younger than this survives the post-deploy prune, so
+# incremental rebuilds stay fast.
+BUILD_CACHE_MAX_AGE = "168h"
+
 # Deploy config file name
 DEPLOY_CONFIG_FILE = ".aegis/deploy.yml"
 DEPLOY_CONFIG_EXAMPLE = """\
@@ -286,6 +293,66 @@ def _prune_backups(host: str, user: str, deploy_path: str, keep_count: int) -> N
         safe_old = shlex.quote(f"{deploy_path}/backups/{old_backup}")
         _run_remote_capture(host, user, f"rm -rf {safe_old}")
         typer.echo(t("deploy.backup_pruned", name=old_backup))
+
+
+def _free_disk_gb(host: str, user: str, deploy_path: str) -> int | None:
+    """Free space on the filesystem holding the deploy path, in whole GB.
+
+    ``None`` when it cannot be read - on a first deploy the path does not
+    exist yet, and the preflight is a guard rather than a gate, so an
+    unreadable df must never block a deploy.
+    """
+    safe_path = shlex.quote(deploy_path)
+    result = _run_remote_capture(
+        host, user, f"df -BG --output=avail {safe_path} 2>/dev/null | tail -1"
+    )
+    if result.returncode != 0:
+        return None
+    digits = "".join(c for c in result.stdout if c.isdigit())
+    return int(digits) if digits else None
+
+
+def _check_disk_space(host: str, user: str, deploy_path: str) -> None:
+    """Refuse to start a deploy the host has no room to finish.
+
+    Out of disk, the build dies deep inside the Dockerfile with a bare
+    "No space left on device" - after files are synced, and in the rolling
+    path with the queue about to be paused. Checking first turns that into
+    one actionable line, before anything has been touched.
+    """
+    free_gb = _free_disk_gb(host, user, deploy_path)
+    if free_gb is None or free_gb >= MIN_FREE_DISK_GB:
+        return
+    brand.error(
+        t("deploy.disk_low", free=free_gb, host=host, need=MIN_FREE_DISK_GB),
+        err=True,
+    )
+    raise typer.Exit(1)
+
+
+def _prune_docker(host: str, user: str) -> None:
+    """Reclaim Docker disk after a deploy has succeeded.
+
+    Every deploy builds a new image and leaves the previous one - now
+    untagged - plus its build cache behind. Nothing reclaimed them, so the
+    host filled up: on one project this reached 307 images and 851 cache
+    records, and the next deploy died at apt-get.
+
+    Dangling images only, so nothing still referenced is touched, and
+    rollback restores files and rebuilds rather than reusing the old image.
+    ``--filter until`` rather than ``--reserved-space``, which needs
+    Docker 28+. Best-effort: the new code is already serving, and
+    housekeeping must not turn a good deploy into a reported failure.
+    """
+    typer.echo(t("deploy.pruning"))
+    result = _run_remote_capture(
+        host,
+        user,
+        "docker image prune -f >/dev/null && "
+        f"docker builder prune -f --filter until={BUILD_CACHE_MAX_AGE} >/dev/null",
+    )
+    if result.returncode != 0:
+        brand.warn(t("deploy.prune_failed"))
 
 
 def _rollback_to_backup(
@@ -765,6 +832,8 @@ def _run_rolling_deploy(
             brand.warn(t("deploy.health_failed_hint"))
             raise typer.Exit(1)
 
+    _prune_docker(host, user)
+
     brand.success(f"\n{t('deploy.rolling_complete')}", bold=True)
     typer.echo(t("deploy.app_running", host=host))
 
@@ -1025,6 +1094,9 @@ def deploy_command(
 
     project_root = Path(project_path) if project_path else _get_project_root()
 
+    # Before either path touches the server: a build needs room to land.
+    _check_disk_space(host, user, deploy_path)
+
     if rolling:
         _run_rolling_deploy(
             host=host,
@@ -1173,6 +1245,8 @@ def deploy_command(
             else:
                 brand.warn(t("deploy.health_failed_hint"))
                 raise typer.Exit(1)
+
+    _prune_docker(host, user)
 
     brand.success(f"\n{t('deploy.complete')}", bold=True)
     typer.echo(t("deploy.app_running", host=host))

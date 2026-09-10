@@ -3,6 +3,12 @@ Database backup service for {{ project_name }}.
 
 Provides database backup functionality for scheduled backup jobs.
 Included when scheduler and database components are both present.
+{% if database_engine != "sqlite" %}
+Dumps use pg_dump's custom format (``-Fc``): compressed, and restorable
+selectively with pg_restore. Plain ``.sql``
+dumps written by older versions are still matched for cleanup and restore,
+so both formats coexist until the old ones age out.
+{% endif %}
 """
 {% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
 
@@ -15,24 +21,55 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+from app.core.config import settings
 {% if database_engine == "sqlite" %}
 from app.core.db import DATABASE_PATH
-{% else %}
-from app.core.config import settings
 {% endif %}
 from app.core.log import logger
 
 # Backup file naming pattern
+BACKUP_FILE_PREFIX = "database_backup_"
 {% if database_engine == "sqlite" %}
-BACKUP_FILE_PATTERN = "database_backup_*.db"
-BACKUP_FILE_PREFIX = "database_backup_"
+BACKUP_FILE_SUFFIX = ".db"
+BACKUP_FILE_PATTERNS = (f"{BACKUP_FILE_PREFIX}*{BACKUP_FILE_SUFFIX}",)
 {% else %}
-BACKUP_FILE_PATTERN = "database_backup_*.sql"
-BACKUP_FILE_PREFIX = "database_backup_"
+BACKUP_FILE_SUFFIX = ".dump"
+# Pre-custom-format dumps. Matched so cleanup and restore keep working on
+# backups taken before the switch to ``-Fc``.
+LEGACY_BACKUP_FILE_SUFFIX = ".sql"
+BACKUP_FILE_PATTERNS = (
+    f"{BACKUP_FILE_PREFIX}*{BACKUP_FILE_SUFFIX}",
+    f"{BACKUP_FILE_PREFIX}*{LEGACY_BACKUP_FILE_SUFFIX}",
+)
 {% endif %}
+# Kept for callers that imported the single-pattern name.
+BACKUP_FILE_PATTERN = BACKUP_FILE_PATTERNS[0]
 
+
+def backup_dir() -> Path:
+    """The directory dumps are written to and pruned from.
+
+    Configurable so deployments can point it at a mounted absolute path.
+    Left relative it resolves against the process cwd, which inside a
+    container is the writable layer: the dumps would then be destroyed by
+    the next container recreation, i.e. every deploy.
+    """
+    return Path(settings.DATABASE_BACKUP_DIR)
+
+
+def _list_backups(directory: Path) -> list[Path]:
+    """Every backup file in ``directory``, newest first, all formats."""
+    files = [
+        f
+        for pattern in BACKUP_FILE_PATTERNS
+        for f in directory.glob(pattern)
+        if f.is_file()
+    ]
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return files
 
 {% if database_engine != "sqlite" %}
+
 async def _run_blocking(cmd: list[str]) -> "subprocess.CompletedProcess[str]":
     """pg_dump/psql run for as long as the database is big; in a worker
     thread the event loop (and every other scheduled job) keeps breathing."""
@@ -40,8 +77,8 @@ async def _run_blocking(cmd: list[str]) -> "subprocess.CompletedProcess[str]":
         subprocess.run, cmd, capture_output=True, text=True
     )
 
-
 {% endif %}
+
 async def backup_database_job() -> None:
     """
     Scheduled database backup job.
@@ -49,35 +86,40 @@ async def backup_database_job() -> None:
 {% if database_engine == "sqlite" %}
     Creates a backup of the SQLite database file with timestamp.
 {% else %}
-    Creates a backup of the PostgreSQL database using pg_dump.
+    Creates a compressed backup of the PostgreSQL database using pg_dump.
 {% endif %}
-    Keeps the last 7 daily backups to prevent disk space issues.
+    Keeps the last ``DATABASE_BACKUP_KEEP`` backups to bound disk usage.
     """
-    # Ensure backup directory exists
-    backup_dir = Path("backups")
-    backup_dir.mkdir(exist_ok=True)
+    # Ensure backup directory exists. parents=True because a configured
+    # absolute path may be more than one level deep.
+    directory = backup_dir()
+    directory.mkdir(parents=True, exist_ok=True)
 
     # Create timestamped backup filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}{BACKUP_FILE_SUFFIX}"
+    backup_path = directory / backup_filename
 {% if database_engine == "sqlite" %}
-    backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}.db"
-    backup_path = backup_dir / backup_filename
 
     # Copy the database file. A missing source means nothing was backed up,
     # which is a failure the operator needs to see -- don't swallow it.
     if not Path(DATABASE_PATH).exists():
         raise RuntimeError(f"Database file not found for backup: {DATABASE_PATH}")
-    shutil.copy2(DATABASE_PATH, backup_path)
+    await asyncio.to_thread(shutil.copy2, DATABASE_PATH, backup_path)
     logger.info(f"Database backup created: {backup_path}")
 {% else %}
-    backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}.sql"
-    backup_path = backup_dir / backup_filename
 
     # Run pg_dump. Raise on failure so the run is recorded as failed instead
     # of a silent "success" that left no usable dump behind.
     try:
         result = await _run_blocking(
-            ["pg_dump", settings.database_url_effective, "-f", str(backup_path)]
+            [
+                "pg_dump",
+                settings.database_url_effective,
+                "-Fc",
+                "-f",
+                str(backup_path),
+            ]
         )
     except FileNotFoundError as e:
         raise RuntimeError(
@@ -98,26 +140,27 @@ async def backup_database_job() -> None:
     logger.info(f"Database backup created: {backup_path}")
 {% endif %}
 
-    # Prune old backups (keep last 7). Only reached on a successful backup, so
-    # a failed run never deletes known-good backups.
-    await _cleanup_old_backups(backup_dir)
+    # Prune old backups. Only reached on a successful backup, so a failed
+    # run never deletes known-good backups.
+    await _cleanup_old_backups(directory)
 
 
-async def _cleanup_old_backups(backup_dir: Path, keep_count: int = 7) -> None:
+async def _cleanup_old_backups(
+    directory: Path, keep_count: int | None = None
+) -> None:
     """
     Remove old backup files, keeping only the most recent ones.
 
     Args:
-        backup_dir: Directory containing backup files
-        keep_count: Number of recent backups to keep
+        directory: Directory containing backup files
+        keep_count: Number of recent backups to keep (defaults to settings)
     """
+    if keep_count is None:
+        keep_count = settings.DATABASE_BACKUP_KEEP
     try:
-        # Get all backup files sorted by modification time (newest first)
-        backup_files = [
-            f for f in backup_dir.glob(BACKUP_FILE_PATTERN)
-            if f.is_file()
-        ]
-        backup_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        # One retention window across every format -- keeping N of each
+        # would double the footprint the setting is meant to bound.
+        backup_files = _list_backups(directory)
 
         # Remove old backups beyond keep_count
         old_backups = backup_files[keep_count:]
@@ -134,6 +177,28 @@ async def _cleanup_old_backups(backup_dir: Path, keep_count: int = 7) -> None:
     except Exception as e:
         logger.error(f"Backup cleanup failed: {e}")
 
+{% if database_engine != "sqlite" %}
+
+def _restore_command(backup_path: Path) -> list[str]:
+    """The client invocation that restores ``backup_path``.
+
+    Custom-format dumps need pg_restore; the older plain dumps are SQL text
+    and still need psql. ``--clean --if-exists`` makes the restore
+    idempotent against a populated database instead of failing on every
+    object that already exists.
+    """
+    if backup_path.suffix == LEGACY_BACKUP_FILE_SUFFIX:
+        return ["psql", settings.database_url_effective, "-f", str(backup_path)]
+    return [
+        "pg_restore",
+        "-d",
+        settings.database_url_effective,
+        "--clean",
+        "--if-exists",
+        str(backup_path),
+    ]
+
+{% endif %}
 
 async def restore_database_from_backup(backup_filename: str) -> bool:
     """
@@ -146,8 +211,8 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
         True if restore was successful, False otherwise
     """
     try:
-        backup_dir = Path("backups")
-        backup_path = backup_dir / backup_filename
+        directory = backup_dir()
+        backup_path = directory / backup_filename
 
         if not backup_path.exists():
             logger.error(f"Backup file not found: {backup_path}")
@@ -158,33 +223,41 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
         current_db = Path(DATABASE_PATH)
         if current_db.exists():
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            current_backup = backup_dir / f"pre_restore_backup_{timestamp}.db"
-            shutil.copy2(current_db, current_backup)
+            current_backup = (
+                directory / f"pre_restore_backup_{timestamp}{BACKUP_FILE_SUFFIX}"
+            )
+            await asyncio.to_thread(shutil.copy2, current_db, current_backup)
             logger.info(f"Created pre-restore backup: {current_backup}")
 
         # Restore from backup
-        shutil.copy2(backup_path, DATABASE_PATH)
+        await asyncio.to_thread(shutil.copy2, backup_path, DATABASE_PATH)
         logger.info(f"Database restored from backup: {backup_filename}")
         return True
 {% else %}
         # Create backup before restore
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        pre_restore_path = backup_dir / f"pre_restore_backup_{timestamp}.sql"
+        pre_restore_path = (
+            directory / f"pre_restore_backup_{timestamp}{BACKUP_FILE_SUFFIX}"
+        )
         pre_result = await _run_blocking(
-            ["pg_dump", settings.database_url_effective, "-f", str(pre_restore_path)]
+            [
+                "pg_dump",
+                settings.database_url_effective,
+                "-Fc",
+                "-f",
+                str(pre_restore_path),
+            ]
         )
         if pre_result.returncode == 0:
             logger.info(f"Created pre-restore backup: {pre_restore_path}")
 
-        # Restore from backup using psql
-        result = await _run_blocking(
-            ["psql", settings.database_url_effective, "-f", str(backup_path)]
-        )
+        # Restore with the client that matches the dump's format
+        result = await _run_blocking(_restore_command(backup_path))
         if result.returncode == 0:
             logger.info(f"Database restored from backup: {backup_filename}")
             return True
         else:
-            logger.error(f"psql restore failed: {result.stderr}")
+            logger.error(f"restore failed: {result.stderr}")
             return False
 {% endif %}
 

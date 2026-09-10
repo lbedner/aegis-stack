@@ -7,9 +7,8 @@ one is a change made next to its reason.
 
 from app.components.frontend.controls import DataTableColumn
 from app.services.finance.constants import (
-    CADENCES,
-    ONE_TIME_FREQUENCY,
-    ONE_TIME_LABEL,
+    DECLARED_FREQUENCY_LABELS,
+    FREQUENCY_LABELS,
 )
 from app.services.system.models import ComponentStatusType
 
@@ -226,28 +225,10 @@ _NO_PAYEE_PAGE_SIZE = 500
 # The cadences a bill can BE SET TO. Doubles as the "Repeats" dropdown's
 # option list (finance_recurring_tab.py), which is why the two labels
 # below are deliberately not in it.
-# Menu text for every cadence, derived from the one table so the dropdown
-# can never offer something create/update would reject.
-_FREQUENCY_LABELS = {key: cadence.label for key, cadence in CADENCES.items()}
-
-# What the Add/edit BILL dialogs offer: the cadences plus "One time" -
-# a dated debt ("pay Bob back on the 15th") is a bill, not a rhythm, so
-# it is statable here but never appears in cadence-only surfaces
-# (detection, the declare-from-transactions dropdown).
-BILL_FREQUENCY_OPTIONS = {
-    **_FREQUENCY_LABELS,
-    ONE_TIME_FREQUENCY: ONE_TIME_LABEL,
-}
-
-# Frequencies a stream can carry that detection never produces and
-# nobody would pick from a menu: "irregular" is a real measured gap that
-# matches no canonical cadence, "unknown" is a bill with only one
-# transaction so far and therefore no gap to measure at all.
-_DECLARED_FREQUENCY_LABELS = {
-    "irregular": "Irregular",
-    "unknown": "Not enough history yet",
-    ONE_TIME_FREQUENCY: ONE_TIME_LABEL,
-}
+# The frequency vocabulary lives with the service (constants.py); these
+# names stay for the Flet callers that still import them here.
+_FREQUENCY_LABELS = FREQUENCY_LABELS
+_DECLARED_FREQUENCY_LABELS = DECLARED_FREQUENCY_LABELS
 
 # Vertical space the confirm dialog needs for everything that is NOT the
 # table. Getting this WRONG IS NOT COSMETIC: StyledAlertDialog's panel

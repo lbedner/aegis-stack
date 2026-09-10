@@ -13,8 +13,6 @@ remainder line inheriting the parent's own category.
 
 from __future__ import annotations
 
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.domains.ledger import queries
 from app.services.finance.models import (
@@ -22,6 +20,7 @@ from app.services.finance.models import (
     FinanceTransactionSplit,
 )
 from app.services.finance.schemas import SplitPart
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def _parent_or_raise(

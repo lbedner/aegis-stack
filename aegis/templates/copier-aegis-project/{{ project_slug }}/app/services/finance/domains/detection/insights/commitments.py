@@ -17,10 +17,10 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import TypedDict
 
-from sqlmodel import or_
-
 from app.services.finance.constants import CADENCES
 from app.services.finance.models import FinanceRecurringStream
+from app.services.finance.utils import current_date
+from sqlmodel import or_
 
 # Monthly-equivalent multiplier for the recurring-cost rollup, derived from
 # the cadence table so a bill cannot be weighed at one size here and
@@ -73,7 +73,7 @@ def is_paused(stream: FinanceRecurringStream, today: date | None = None) -> bool
     """
     if stream.paused_until is None:
         return False
-    return (today or date.today()) < stream.paused_until
+    return (today or current_date()) < stream.paused_until
 
 
 def not_paused_clause(today: date):

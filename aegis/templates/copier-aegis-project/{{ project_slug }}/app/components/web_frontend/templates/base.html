@@ -7,6 +7,7 @@
    ``render()`` in rendering.py and the two layouts under layouts/).
 #}
 {% from "components/macros/feedback.html" import toast_region %}
+{% from "components/macros/layout.html" import theme_toggle, dialog %}
 <!DOCTYPE html>
 <html lang="en" data-theme="aegis">
 <head>
@@ -23,6 +24,9 @@
   {# Tailwind + DaisyUI, precompiled — no runtime JIT, no CDN. Built into
      static/dist by the asset pipeline; static() returns the fingerprinted
      URL once a build exists and the raw source path before then. #}
+  {# Applies the stored theme to the document element before the
+     stylesheet paints; a sync script on purpose (see static/js/theme.js). #}
+  <script src="{{ static('js/theme.js') }}"></script>
   <link rel="stylesheet" href="{{ static('dist/app.css') }}">
 
   {# htmx. History snapshots are disabled deliberately: htmx's default
@@ -37,7 +41,7 @@
   {# responseHandling (first matching rule wins, RegExp.test semantics):
      a 422 carries a re-rendered form and must swap; other 4xx/5xx never
      swap and raise htmx:responseError, which app.js turns into a toast. #}
-  <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}, {"code": "...", "swap": true}]}'>
+  <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true, "attributesToSettle": [], "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}, {"code": "...", "swap": true}]}'>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   {# SSE extension (hx-ext="sse") for job progress streams; registers
      against the global htmx, so it must follow core. #}
@@ -58,7 +62,10 @@
   {% block navbar %}
   <div class="max-w-screen-xl mx-auto px-6 lg:px-16 py-3 flex items-center justify-between border-b border-aegis-border">
     <a href="/" class="text-sm font-semibold text-aegis-teal tracking-wide">{{ project_name }}</a>
-    <a href="/dashboard" class="text-xs text-aegis-muted border border-aegis-border rounded px-3 py-1 hover:text-white hover:border-aegis-muted">Dashboard</a>
+    <div class="flex items-center gap-2">
+      {{ theme_toggle() }}
+      <a href="/dashboard" class="text-xs text-aegis-muted border border-aegis-border rounded px-3 py-1 hover:text-aegis-text hover:border-aegis-muted">Dashboard</a>
+    </div>
   </div>
   {% endblock %}
 
@@ -71,8 +78,10 @@
   {% block footer %}{% endblock %}
 
   {{ toast_region() }}
+  {{ dialog() }}
 
   <script src="{{ static('js/app.js') }}"></script>
+  <script src="{{ static('js/charts.js') }}"></script>
   {% if auth_enabled %}<script src="{{ static('js/auth.js') }}"></script>{% endif %}
   {% block scripts %}{% endblock %}
 </body>

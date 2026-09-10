@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-09-10
+
 ### Changed
 
 - **A plugin's migration can declare how to prove it ran.**

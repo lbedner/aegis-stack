@@ -101,8 +101,14 @@ matrix, release targets).
 New `@app.command` handlers in `app/cli/` are `async def` with plain `await` -
 NEVER `asyncio.run` inside a command. The harness in `app/cli/main.py`
 (`standalone_mode=False` + `iscoroutine` + one `asyncio.run`) owns the loop.
-Legacy commands in the same files still wrap with `asyncio.run`; do not copy
-them. Exemplars: `cli/insights.py:collect`, `cli/security.py:rotate_encryption_key`.
+Exemplar: `cli/llm.py:reset`.
+
+Nearly every existing command still uses the legacy shape: a sync `def`
+that calls `asyncio.run(_impl(...))` on a private twin. That is the
+majority, not the standard - do not copy it, and do not treat its
+prevalence as a reason to keep writing it. The one converted module in
+the wild is the crawl4ai plugin's `app/cli/crawl.py`, if you want six
+commands' worth of before/after.
 
 ## Skills index
 

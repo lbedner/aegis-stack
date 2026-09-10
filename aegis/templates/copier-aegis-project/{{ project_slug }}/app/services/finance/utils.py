@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from functools import partial
-import re
 from typing import Any
-import unicodedata
 
+from app.core.time import utcnow
 from app.services.finance.constants import (
     CADENCE_KEYS,
     step_cadence,
@@ -19,7 +20,7 @@ DEFAULT_CURRENCY = "usd"
 
 
 def current_period_month(today: date | None = None) -> int:
-    today = today or date.today()
+    today = today or current_date()
     return today.year * 100 + today.month
 
 
@@ -69,6 +70,17 @@ FREQUENCY_STEPS: dict[str, Callable[[date], date]] = {
     key: partial(step_cadence, key) for key in CADENCE_KEYS
 }
 
+
+def current_date() -> date:
+    """The finance service's one calendar clock: today's date in UTC.
+
+    Models stamp naive-UTC timestamps and imports, the demo seed and the
+    scheduler run on the same clock, so every "today" in the service reads
+    this. The stdlib's local-date call gives the host's local date, which diverges from
+    UTC for part of every evening in the Americas and made the rules see
+    a bill as missed that the seed had dated as due today.
+    """
+    return utcnow().date()
 
 
 def transaction_payee_key(

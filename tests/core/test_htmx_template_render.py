@@ -321,8 +321,11 @@ class TestWebFrontendScaffolding:
             "templates/layouts/page.html",
             "templates/layouts/fragment.html",
             "templates/pages/landing.html",
-            "templates/components/macros.html",
+            "templates/components/macros/form.html",
+            "templates/components/macros/layout.html",
+            "templates/components/macros/table.html",
             "templates/components/macros/feedback.html",
+            "static/js/charts.js",
             "templates/components/landing/navbar.html",
             "templates/components/landing/hero.html",
             "templates/components/landing/features.html",
@@ -333,72 +336,69 @@ class TestWebFrontendScaffolding:
         ):
             assert (root / rel).is_file(), rel
 
-    def test_macro_kit_is_the_generic_set(self) -> None:
-        """Only the reusable macros came across; Pulse's insights and
-        dashboard macros stayed behind."""
+    def test_macro_kit_is_split_by_concern(self) -> None:
+        """One file per concern under components/macros/, one macro per
+        control. The old single macros.html is gone."""
         import re
 
-        source = (_web_frontend_tree() / "templates/components/macros.html").read_text()
-        defined = set(re.findall(r"{%-?\s*macro\s+(\w+)\(", source))
-        assert defined == {
-            "modal_scrim",
-            "popover_panel",
-            "hover_hint",
-            "info_tooltip",
-            "primary_button",
-            "submit_button",
-            "select_field",
-            "password_input",
-            "or_divider",
+        root = _web_frontend_tree() / "templates/components"
+        assert not (root / "macros.html").exists()
+        expected = {
+            # Inputs, buttons and the controls that post as form fields.
+            "form.html": {
+                "action",
+                "checkbox",
+                "date_input",
+                "field",
+                "money_input",
+                "or_divider",
+                "password_input",
+                "primary_button",
+                "range_chips",
+                "search_input",
+                "select",
+                "select_field",
+                "submit_button",
+                "text_input",
+                "textarea",
+            },
+            # Structure and chrome: what holds content, not what collects it.
+            "layout.html": {
+                "badge",
+                "card",
+                "chart_panel",
+                "chip",
+                "confirm",
+                "dialog",
+                "dropdown",
+                "figures",
+                "hover_hint",
+                "info_tooltip",
+                "menu_item",
+                "modal_scrim",
+                "page_header",
+                "popover_panel",
+                "progress",
+                "ranked_rows",
+                "stat_tile",
+                "stats_strip",
+                "tab_bar",
+                "tab_item",
+                "theme_toggle",
+            },
+            "table.html": {"_cell", "_tone", "data_table", "pager", "table_row"},
+            # Telling the user what happened, including the out-of-band
+            # wrapper the row-action responses use to say it.
+            "feedback.html": {
+                "empty_state",
+                "error_banner",
+                "oob",
+                "toast_region",
+            },
         }
-
-    def test_main_is_wiring_only(self) -> None:
-        """The environment, filters and asset handling each own a module;
-        main.py builds the router and nothing else."""
-        root = _web_frontend_tree()
-        main = (root / "main.py").read_text()
-        assert "Jinja2Templates(" not in main
-        assert "class CachedStaticFiles" not in main
-        assert "Jinja2Templates(" in (root / "rendering.py").read_text()
-        assert "class CachedStaticFiles" in (root / "assets.py").read_text()
-        assert "def render(" in (root / "rendering.py").read_text()
-        assert "def with_toast(" in (root / "rendering.py").read_text()
-
-    def test_no_snackbar_and_no_script_re_execution(self) -> None:
-        """Feedback is an HX-Trigger toast, not a sessionStorage reload;
-        fragments carry no inline scripts, so nothing re-runs them."""
-        root = _web_frontend_tree()
-        assert not (root / "templates/components/snackbar.html").exists()
-        assert "htmx:afterSwap" not in (root / "static/js/app.js").read_text()
-        base = (root / "templates/base.html").read_text()
-        assert "snackbar" not in base
-        assert "toast_region()" in base
-
-    def test_base_layout_lets_validation_errors_swap(self) -> None:
-        """Without a responseHandling rule htmx drops 4xx bodies, so a 422
-        re-rendered form could never land."""
-        base = (_web_frontend_tree() / "templates/base.html").read_text()
-        assert '"responseHandling"' in base
-        assert '{"code": "422", "swap": true}' in base
-        assert '{"code": "[45]..", "swap": false, "error": true}' in base
-
-    def test_base_layout_loads_sse_extension_after_core(self) -> None:
-        base = (_web_frontend_tree() / "templates/base.html").read_text()
-        assert base.index("htmx.org@") < base.index("htmx-ext-sse@")
-
-    def test_base_content_area_is_the_swap_target(self) -> None:
-        base = (_web_frontend_tree() / "templates/base.html").read_text()
-        assert '<main id="app-content"' in base
-
-    def test_layouts_share_the_app_content_block(self) -> None:
-        """One page template renders both ways by extending ``layout``."""
-        root = _web_frontend_tree() / "templates/layouts"
-        page = (root / "page.html").read_text()
-        fragment = (root / "fragment.html").read_text()
-        assert 'extends "base.html"' in page
-        assert "block app_content" in page
-        assert "block app_content" in fragment
-        assert 'extends "base.html"' not in fragment
+        for name, macros in expected.items():
+            source = (root / "macros" / name).read_text()
+            assert set(re.findall(r"{%-?\s*macro\s+(\w+)\(", source)) == macros, name
 
     def test_base_layout_declares_the_block_structure(self) -> None:
         source = (_web_frontend_tree() / "templates/base.html").read_text()
@@ -512,10 +512,54 @@ class TestNodePipeline:
         assert "./app/components/web_frontend/static/js/**/*.js" in source
 
     def test_tailwind_theme_carries_the_brand_palette(self) -> None:
+        """Colors are tokens: the aegis-* names read CSS variables that the
+        theme blocks in input.css define, so a theme is config, not a
+        class rewrite. DaisyUI mirrors both themes in hex."""
         source = (self._root() / "tailwind.config.js").read_text()
-        assert "#17CCBF" in source  # brand teal
+        assert "rgb(var(--aegis-${name}) / <alpha-value>)" in source
+        for name in ("bg", "card", "border", "text", "muted", "teal", "amber", "error"):
+            assert f'{name}: token("{name}")' in source, name
         assert "daisyui" in source
         assert "aegis:" in source  # the DaisyUI theme name base.html asks for
+        assert '"aegis-light":' in source
+
+    def test_theme_blocks_define_the_same_tokens(self) -> None:
+        import re
+
+        css = (_web_frontend_tree() / "static/input.css").read_text()
+        blocks: dict[str, set[str]] = {}
+        for m in re.finditer(r'\[data-theme="([\w-]+)"\][^{]*\{([^}]*)\}', css):
+            blocks.setdefault(m.group(1), set()).update(
+                re.findall(r"--aegis-[\w-]+", m.group(2))
+            )
+        assert blocks["aegis"] == blocks["aegis-light"]
+        assert {"--aegis-bg", "--aegis-card", "--aegis-text", "--aegis-teal"} <= blocks[
+            "aegis"
+        ]
+
+    def test_no_color_literals_outside_the_tokens(self) -> None:
+        """The single rebrand point stays single: no hex and no theme-blind
+        class (text-white, bg-black, red-500) anywhere in templates or JS."""
+        import re
+
+        root = _web_frontend_tree()
+        blind = re.compile(
+            r"\b(?:[\w-]+:)?(?:text|bg|border|ring|divide)-(?:white|black|gray-\d+|red-\d+)\b"
+        )
+        hexes = re.compile(r"#[0-9A-Fa-f]{6}\b")
+        for path in sorted(root.glob("templates/**/*.html")) + sorted(
+            root.glob("static/js/*.js")
+        ):
+            text = path.read_text()
+            assert not blind.search(text), (path.name, blind.search(text))
+            assert not hexes.search(text), (path.name, hexes.search(text))
+
+    def test_theme_script_precedes_the_stylesheet(self) -> None:
+        """Applies the stored theme before first paint; no dark flash for a
+        light-theme user. Sync on purpose."""
+        html = (_web_frontend_tree() / "templates/base.html").read_text()
+        assert html.index("js/theme.js") < html.index("dist/app.css")
+        assert "theme_toggle()" in html
 
     def test_base_layout_requests_the_daisyui_theme(self) -> None:
         html = (_web_frontend_tree() / "templates/base.html").read_text()

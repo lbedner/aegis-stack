@@ -22,12 +22,11 @@ it finds, so a wrong label here becomes a wrong claim later.
 from dataclasses import dataclass
 from datetime import date
 
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.domains.ledger.accounts import get_account
 from app.services.finance.domains.ledger.queries import accounts as queries
 from app.services.finance.models import FinanceAccount, FinanceValuation
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 @dataclass

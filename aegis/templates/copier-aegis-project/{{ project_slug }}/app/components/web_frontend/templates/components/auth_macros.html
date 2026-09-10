@@ -6,7 +6,7 @@
 
        {% from "components/auth_macros.html" import auth_field %}
 #}
-{% from "components/macros.html" import password_input %}
+{% from "components/macros/form.html" import password_input %}
 
 
 {# Labeled text/email/password input with the auth-form styling. Used by
@@ -37,7 +37,7 @@
     {% if required %}required{% endif %}
     {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
     {% if minlength %}minlength="{{ minlength }}"{% endif %}
-    class="w-full bg-aegis-card border border-aegis-border rounded px-3 py-2 text-sm text-white placeholder:text-aegis-muted/40 focus:border-aegis-teal focus:outline-none transition-colors"
+    class="w-full bg-aegis-card border border-aegis-border rounded px-3 py-2 text-sm text-aegis-text placeholder:text-aegis-muted/40 focus:border-aegis-teal focus:outline-none transition-colors"
     placeholder="{{ placeholder }}">
   {% endif %}
 </div>
@@ -51,7 +51,7 @@
   <div class="text-xs text-success bg-aegis-teal/5 border border-aegis-teal/40 rounded px-3 py-2"
        x-text="{{ expr }}"></div>
   {% else %}
-  <div class="text-xs text-error bg-red-500/5 border border-red-500/40 rounded px-3 py-2"
+  <div class="text-xs text-error bg-aegis-error/5 border border-aegis-error/40 rounded px-3 py-2"
        x-text="{{ expr }}"></div>
   {% endif %}
 </template>

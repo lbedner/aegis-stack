@@ -1,0 +1,299 @@
+{# Layout macros: the pieces that frame a page rather than fill it.
+
+   Import what you need:
+
+       {% from "components/macros/layout.html" import card, stat_tile, dialog, dropdown %}
+#}
+{% from "components/macros/feedback.html" import empty_state %}
+
+
+
+
+{# A titled surface. The body comes via {% call %}; the heading id ties the
+   section to its title for assistive tech. ``id`` lets a page target the
+   card with htmx; it defaults to a slug of the title. #}
+{% macro card(title=None, subtitle=None, id=None) %}
+{% set card_id = id or ("card-" ~ title|lower|replace(" ", "-")) %}
+<section id="{{ card_id }}" {% if title %}aria-labelledby="{{ card_id }}-title"{% endif %}
+         class="bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-4 min-w-0">
+  {# A card whose page title already names it (the forecast's chart) goes
+     without a header rather than repeating the words. #}
+  {% if title %}
+  <header class="flex items-baseline justify-between gap-3">
+    <h2 id="{{ card_id }}-title" class="text-sm font-semibold text-aegis-text">{{ title }}</h2>
+    {% if subtitle %}<p class="text-xxs text-aegis-muted uppercase tracking-wider">{{ subtitle }}</p>{% endif %}
+  </header>
+  {% endif %}
+  {{ caller() }}
+</section>
+{% endmacro %}
+
+
+{# One headline figure. Render a row of them inside a ``<dl class="grid">``.
+   Red once a figure goes negative and nothing otherwise: when every
+   healthy number is coloured, colour stops meaning anything. #}
+{% macro stat_tile(label, value, negative=False, caption=None, attrs="") %}
+<div {{ attrs|safe }} class="bg-aegis-card border border-aegis-border rounded-lg px-5 py-4{% if attrs %} cursor-pointer hover:border-aegis-muted transition-colors{% endif %}">
+  <dt class="text-xxs text-aegis-muted uppercase tracking-wider">{{ label }}</dt>
+  <dd class="mt-1 text-2xl font-semibold tabular-nums {{ 'text-error' if negative else 'text-aegis-text' }}">{{ value }}</dd>
+  {% if caption %}<dd class="mt-1 text-xxs text-aegis-muted">{{ caption }}</dd>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# A thin native progress bar; ``tone`` colours it (see badge). #}
+{% macro progress(ratio, tone="ok") %}
+{% set tones = {"ok": "accent-aegis-teal", "warn": "accent-aegis-amber", "error": "accent-aegis-error", "muted": "accent-aegis-muted"} %}
+<progress value="{{ [1, [0, ratio]|max]|min }}" max="1" class="w-full h-1 {{ tones.get(tone, 'accent-aegis-teal') }}"></progress>
+{% endmacro %}
+
+
+{# A chart card (JS island #1). The canvas declares its kind and points at
+   a JSON data block; static/js/charts.js mounts Chart.js over every
+   ``canvas[data-chart]`` on load and after each htmx settle. Data shape:
+   ``{"labels": [...], "series": [{"label": ..., "values": [...]}],
+   "slices": [{"categories": [...]}]}`` (``slices`` only for drilldowns).
+   ``drilldown`` is the URL a slice click loads into the dialog; the
+   slice's categories are appended as ``category=`` params. #}
+{% macro chart_panel(id, title, kind, data, drilldown=None, subtitle=None) %}
+{# ``title`` may be ``None``: the canvas keeps its aria-label either way. #}
+{% call card(title, subtitle, id="chart-" ~ id) %}
+<div class="relative h-64">
+  <canvas data-chart="{{ kind }}"
+          data-chart-data="chart-{{ id }}-data"
+          {% if drilldown %}data-drilldown="{{ drilldown }}"{% endif %}
+          role="img" aria-label="{{ title or id|replace("-", " ") }}"></canvas>
+</div>
+<script type="application/json" id="chart-{{ id }}-data">{{ data|tojson }}</script>
+{% endcall %}
+{% endmacro %}
+
+
+{# The one modal. Native <dialog>: focus trap, Escape and backdrop come
+   free. Content is loaded by htmx into ``#dialog-body`` (pattern 4);
+   app.js opens the dialog when a swap lands there, and closing clears it
+   so a stale body never flashes on the next open. Mounted once by the
+   app shell, outside ``#app-content``. #}
+{% macro dialog() %}
+<dialog id="dialog"
+        @close="$el.querySelector('#dialog-body').innerHTML = ''"
+        class="bg-aegis-card text-aegis-text border border-aegis-border rounded-lg shadow-2xl p-0 w-full max-w-2xl
+               backdrop:bg-aegis-scrim/60 backdrop:backdrop-blur-sm">
+  <div class="flex justify-end px-3 pt-3">
+    <button type="button" aria-label="Close" @click="$el.closest('dialog').close()"
+            class="text-aegis-muted/70 hover:text-aegis-text transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+  <div id="dialog-body" class="px-6 pb-6"></div>
+</dialog>
+{% endmacro %}
+
+
+{# Switches between the theme blocks in static/input.css (see
+   static/js/theme.js). Drop it into any navbar or sidebar. #}
+{% macro theme_toggle() %}
+<button type="button" data-theme-toggle aria-label="Switch theme" @click="toggleTheme()"
+        class="inline-flex items-center justify-center w-8 h-8 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+       stroke-width="1.5" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+  </svg>
+</button>
+{% endmacro %}
+
+
+{# Full-bleed dismiss layer behind a modal. Pair it with the modal panel:
+
+     <div x-show="open" x-cloak
+          class="fixed inset-0 z-50 flex items-center justify-center px-4">
+       {{ modal_scrim("close()") }}
+       <div class="relative ...">...</div>
+     </div>
+#}
+{% macro modal_scrim(dismiss_handler="open = false") %}
+<div class="absolute inset-0 bg-aegis-scrim/40 backdrop-blur"
+     @click="{{ dismiss_handler }}"></div>
+{% endmacro %}
+
+
+{# THE tooltip panel — the one popover shell every hover/help hint uses.
+   Callers provide the open/show()/hide() Alpine state on a ``relative``
+   wrapper and pass the body via {% call %}. Change tooltip styling here,
+   nowhere else. #}
+{% macro popover_panel(align='left') %}
+<div x-show="open" x-cloak x-transition.opacity role="tooltip"
+     @mouseenter="show()" @mouseleave="hide()"
+     class="absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-50 w-64 bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-3 text-xxs normal-case tracking-normal text-aegis-muted space-y-2 text-left">
+  {{ caller() }}
+</div>
+{% endmacro %}
+
+
+{# Inline definition hint — wrap a term via {% call %}; hovering (or tapping)
+   opens the shared popover panel. Dotted underline signals the affordance
+   without a "?" button. ``align='right'`` for terms near the right edge. #}
+{% macro hover_hint(title, text, align='left') %}
+<span class="relative inline-flex"
+      x-data="{ open: false, _t: null,
+                show() { clearTimeout(this._t); this.open = true; },
+                hide() { this._t = setTimeout(() => this.open = false, 120); } }"
+      @mouseenter="show()" @mouseleave="hide()">
+  <span class="cursor-help underline decoration-dotted decoration-aegis-muted/50 underline-offset-4"
+        @click.stop="open = !open"
+        @keydown.escape.window="open = false"
+        @click.outside="open = false">{{ caller() }}</span>
+  {% call popover_panel(align) %}
+    <div class="text-aegis-text font-medium">{{ title }}</div>
+    <div>{{ text }}</div>
+  {% endcall %}
+</span>
+{% endmacro %}
+
+
+{# Small ? info icon with a click-triggered popover. Body can be arbitrary
+   HTML (caller passes it as the macro body via {% call %}). #}
+{% macro info_tooltip(width="w-64") %}
+<div class="relative" x-data="{ open: false }">
+  <button type="button" @click="open = !open" @click.outside="open = false"
+    class="w-3.5 h-3.5 rounded-full border border-aegis-border text-aegis-muted text-xxs flex items-center justify-center hover:text-aegis-text hover:border-aegis-muted transition-colors"
+    aria-label="More info">?</button>
+  <div x-show="open" x-cloak x-transition.opacity
+    class="absolute left-0 top-5 z-20 {{ width }} bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-3 text-xxs normal-case tracking-normal text-aegis-muted space-y-2">
+    {{ caller() }}
+  </div>
+</div>
+{% endmacro %}
+
+
+{# A small status word with a dot: ``tone`` is ok, warn, error, muted or
+   accent; no tone renders the label plain. One shape for every "state"
+   cell and chip, so tests find them by role. #}
+{% macro badge(label, tone=None) %}
+{% set tones = {"ok": "text-aegis-teal", "warn": "text-aegis-amber", "error": "text-error", "muted": "text-aegis-muted", "accent": "text-aegis-accent"} %}
+<span data-tone="{{ tone or '' }}" class="inline-flex items-center gap-1.5 whitespace-nowrap {{ tones.get(tone, 'text-aegis-text') }}">
+  {% if tone %}<span class="w-1.5 h-1.5 rounded-full bg-current" aria-hidden="true"></span>{% endif %}{{ label }}
+</span>
+{% endmacro %}
+
+
+{# One entry in a dropdown() menu. ``attrs`` carries the htmx verb
+   (``hx-get``/``hx-post``/``hx-delete`` plus target and swap); the menu
+   closes itself on the click, so a dialog never opens over it. #}
+{% macro menu_item(label, attrs, danger=False) %}
+<li><button type="button" {{ attrs|safe }} @click="$el.closest('details').removeAttribute('open')"
+            class="w-full text-left px-3 py-1.5 text-sm {{ 'text-error' if danger else 'text-aegis-text' }} hover:bg-aegis-border/30 rounded transition-colors">{{ label }}</button></li>
+{% endmacro %}
+
+{% macro dropdown(label, align="right") %}
+<details class="relative" @click.outside="$el.removeAttribute('open')">
+  <summary class="list-none cursor-pointer select-none inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">
+    {{ label }}
+    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+    </svg>
+  </summary>
+  <ul role="menu" class="absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-30 min-w-[11rem] bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-1">
+    {{ caller() }}
+  </ul>
+</details>
+{% endmacro %}
+
+
+{# A confirmation as dialog body: what will happen, one destructive
+   action (``method`` is delete or post to ``url``), and a way out. The
+   action's response closes the dialog and navigates or swaps as it sees
+   fit; nothing swaps here (hx-swap="none"). #}
+{% macro confirm(title, body, url, label="Remove", method="delete") %}
+<h2 class="text-lg font-semibold text-aegis-text mb-2">{{ title }}</h2>
+<p class="text-sm text-aegis-muted mb-5">{{ body }}</p>
+<div class="flex items-center gap-3">
+  <button type="button" {% if method == "delete" %}hx-delete="{{ url }}"{% else %}hx-post="{{ url }}"{% endif %} hx-swap="none"
+          class="px-4 py-2 rounded text-sm border border-aegis-error/40 text-error hover:border-aegis-error transition-colors">{{ label }}</button>
+  <button type="button" @click="$el.closest('dialog').close()" class="text-xs text-aegis-muted hover:text-aegis-text">Cancel</button>
+</div>
+{% endmacro %}
+
+
+{# The page header, dashboard shape: title and subtitle on the left, and
+   whatever the caller puts on the right (headline ``figures``, chips,
+   actions) in the same row. Every section opens with one. #}
+{% macro page_header(title, subtitle=None) %}
+<header class="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 pb-4 mb-6 border-b border-aegis-border">
+  <div class="min-w-0">
+    <h1 class="text-2xl font-semibold text-aegis-text">{{ title }}</h1>
+    {% if subtitle %}<p class="mt-1 text-sm text-aegis-muted">{{ subtitle }}</p>{% endif %}
+  </div>
+  <div class="flex flex-wrap items-end gap-x-8 gap-y-3 min-w-0">{{ caller() if caller is defined }}</div>
+</header>
+{% endmacro %}
+
+{# Headline figures for a header: label over a large number, right-aligned.
+   ``items`` are ``{"label", "value", "negative"}``; ``negative`` colours
+   the number, nothing else does. #}
+{% macro figures(items) %}
+<dl class="flex flex-wrap items-end gap-x-8 gap-y-3">
+  {% for item in items %}
+  <div class="text-right">
+    <dt class="text-sm text-aegis-muted">{{ item.label }}</dt>
+    <dd class="text-2xl font-semibold tabular-nums {{ 'text-error' if item.negative else 'text-aegis-text' }}">{{ item.value }}</dd>
+  </div>
+  {% endfor %}
+</dl>
+{% endmacro %}
+
+{# One bordered strip of N cells (the Budget's month equation). Each cell
+   is ``{"label", "value", "caption", "tone", "attrs"}``; ``attrs`` makes
+   it a door (hx-get) and ``tone`` colours the value. #}
+{% macro stats_strip(cells, id=None, attrs="") %}
+<dl {% if id %}id="{{ id }}"{% endif %} {{ attrs|safe }} class="grid grid-cols-2 lg:grid-cols-{{ cells|length }} divide-x divide-aegis-border/60 bg-aegis-card border border-aegis-border rounded-lg">
+  {% for cell in cells %}
+  <div {{ cell.attrs|safe if cell.attrs else "" }} class="px-5 py-4 min-w-0{% if cell.attrs %} cursor-pointer hover:bg-aegis-border/20 transition-colors{% endif %}">
+    <dt class="text-xxs text-aegis-muted uppercase tracking-wider">{{ cell.label }}</dt>
+    <dd class="mt-1 text-2xl font-semibold tabular-nums {{ 'text-error' if cell.tone == 'error' else ('text-aegis-teal' if cell.tone == 'ok' else 'text-aegis-text') }}">{{ cell.value }}</dd>
+    {% if cell.caption %}<dd class="mt-1 text-xxs text-aegis-muted truncate">{{ cell.caption }}</dd>{% endif %}
+  </div>
+  {% endfor %}
+</dl>
+{% endmacro %}
+
+{# Ranked rows: name, a small count, the amount, and a thin bar scaled to
+   the largest row (the Overview's payees and bills). ``rows`` are
+   ``{"label", "count", "value", "ratio", "tone"}``. #}
+{% macro ranked_rows(rows) %}
+<ol class="ranked space-y-3">
+  {% for row in rows %}
+  <li>
+    <div class="flex items-baseline justify-between gap-3 text-sm">
+      <span class="text-aegis-text truncate">{{ row.label }}</span>
+      <span class="shrink-0 tabular-nums">{% if row.count %}<span class="text-aegis-muted mr-2">{{ row.count }}</span>{% endif %}<span class="text-aegis-text font-medium">{{ row.value }}</span></span>
+    </div>
+    <div class="mt-1 h-1 rounded bg-aegis-border/60"><div class="h-1 rounded {{ 'bg-aegis-accent' if row.tone == 'accent' else 'bg-aegis-teal' }}" style="width: {{ (row.ratio * 100)|round|int }}%"></div></div>
+  </li>
+  {% endfor %}
+</ol>
+{% endmacro %}
+
+{# Tabs: sibling views of one page, Pulse's underline recipe (the same
+   look Flet's tabs had). ``tab_bar`` is the row (``role="tablist"``); each
+   ``tab_item`` is a link: ``href`` for a cold load, ``hx`` the htmx
+   attributes (``hx_replace(...)`` or a plain string). #}
+{% macro tab_bar(label, id=None, attrs="") %}
+<nav role="tablist" aria-label="{{ label }}" {% if id %}id="{{ id }}"{% endif %} {{ attrs|safe }}
+     class="flex flex-wrap items-center gap-6 border-b border-aegis-border mb-6">{{ caller() }}</nav>
+{% endmacro %}
+
+{% macro tab_item(label, active=False, href="", hx="") %}
+<a href="{{ href }}" {{ hx|safe }} {% if active %}aria-current="page"{% endif %}
+   class="text-sm pb-2 -mb-px border-b-2 whitespace-nowrap transition-colors {{ 'text-aegis-text border-aegis-teal' if active else 'text-aegis-muted border-transparent hover:text-aegis-text' }}">{{ label }}</a>
+{% endmacro %}
+
+{# A chip: one of a row of exclusive choices (a time window, a month, a
+   view). Pulse's date-range recipe, which the Flet range chips copied:
+   small, outlined, a light teal fill when chosen. #}
+{% macro chip(label, active=False, href="", hx="", extra="") %}
+<a href="{{ href }}" {{ hx|safe }} {{ extra|safe }} {% if active %}aria-current="page"{% endif %}
+   class="text-xs px-2 py-0.5 rounded border whitespace-nowrap transition-colors {{ 'border-aegis-teal bg-aegis-teal/10 text-aegis-text font-semibold' if active else 'border-aegis-border text-aegis-muted hover:border-aegis-muted hover:text-aegis-text' }}">{{ label }}</a>
+{% endmacro %}

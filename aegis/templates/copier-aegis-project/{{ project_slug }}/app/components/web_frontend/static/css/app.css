@@ -13,10 +13,8 @@
 }
 
 :root {
-  /* Tell the browser to render native controls (scrollbars, date and
-     select pickers, form fields) dark, so they don't punch a white hole
-     through the dark UI. */
-  color-scheme: dark;
-  /* Native accent for checkboxes, radios and range inputs. */
-  accent-color: #17ccbf;
+  /* Native accent for checkboxes, radios and range inputs. The theme
+     blocks in input.css own color-scheme, so native controls follow the
+     active theme. */
+  accent-color: rgb(var(--aegis-teal));
 }

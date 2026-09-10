@@ -69,3 +69,11 @@ docs/_build/
 .cache/
 .mypy_cache/
 .ruff_cache/
+
+# Deploy rollback snapshots. `aegis deploy` writes these into the deploy
+# directory on the host, which IS the build context there. Without this
+# entry `COPY . /code` bakes every retained snapshot into the image, and
+# since the copied bytes change on each deploy the layer is rebuilt every
+# time. Left unignored on aegis-pulse this reached 2.5 GB of a 3.65 GB
+# image and helped fill a 77 GB droplet.
+backups/

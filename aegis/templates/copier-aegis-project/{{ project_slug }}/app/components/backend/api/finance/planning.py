@@ -36,7 +36,7 @@ router = APIRouter()
 # no target - the goals design minus the finish line.
 
 
-def _envelope_response(account: Any) -> EnvelopeResponse:
+def envelope_response(account: Any) -> EnvelopeResponse:
     from app.services.finance.domains.planning.envelopes import envelope_metadata
 
     meta = envelope_metadata(account.metadata_)
@@ -57,7 +57,7 @@ async def list_envelopes(
     owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> EnvelopeListResponse:
     accounts = await service.list_envelopes(owner_user_id=owner_user_id)
-    items = [_envelope_response(a) for a in accounts]
+    items = [envelope_response(a) for a in accounts]
     return EnvelopeListResponse(items=items, total=len(items))
 
 
@@ -76,7 +76,7 @@ async def create_envelope(
         cadence=body.cadence,
         starting_balance=body.starting_balance,
     )
-    return _envelope_response(account)
+    return envelope_response(account)
 
 
 @router.patch("/envelopes/{account_id}", response_model=EnvelopeResponse)
@@ -95,7 +95,7 @@ async def update_envelope(
     )
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
-    return _envelope_response(account)
+    return envelope_response(account)
 
 
 @router.delete("/envelopes/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -131,7 +131,7 @@ async def credit_envelope(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
         ) from exc
-    return _envelope_response(account)
+    return envelope_response(account)
 
 
 @router.post("/envelopes/{account_id}/spend", response_model=EnvelopeResponse)
@@ -153,4 +153,4 @@ async def spend_from_envelope(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
         ) from exc
-    return _envelope_response(account)
+    return envelope_response(account)

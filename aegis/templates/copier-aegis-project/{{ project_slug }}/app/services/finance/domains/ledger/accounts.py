@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.constants import (
     RECONCILE_MARKER,
@@ -23,6 +21,7 @@ from app.services.finance.schemas import ReconcileResponse
 from app.services.finance.utils import (
     DEFAULT_CURRENCY,
 )
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def get_or_create_currency(

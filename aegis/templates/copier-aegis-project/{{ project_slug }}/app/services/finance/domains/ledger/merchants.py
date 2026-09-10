@@ -6,8 +6,6 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.domains.ledger import categories, queries, transactions
 from app.services.finance.models import (
@@ -18,6 +16,7 @@ from app.services.finance.schemas import MerchantCategorySummary, PayeeGroup
 from app.services.finance.utils import (
     transaction_payee_key,
 )
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Sentinel for "caller did not mention this field", so that None can
 # keep its own meaning of "clear it". Without the distinction a patch

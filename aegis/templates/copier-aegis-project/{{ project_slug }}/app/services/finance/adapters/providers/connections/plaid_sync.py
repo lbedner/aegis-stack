@@ -12,15 +12,12 @@ Writes but does not commit - the caller owns the transaction.
 
 from __future__ import annotations
 
-from collections import defaultdict
-from datetime import UTC, date, datetime, timedelta
 import hashlib
 import json
 import logging
+from collections import defaultdict
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
-
-from sqlalchemy.exc import IntegrityError
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.encryption import decrypt_secret, encrypt_secret
 from app.core.time import utcnow
@@ -46,6 +43,8 @@ from app.services.finance.models import (
     FinanceWebhookEvent,
 )
 from app.services.finance.service import FinanceService
+from sqlalchemy.exc import IntegrityError
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = logging.getLogger(__name__)
 

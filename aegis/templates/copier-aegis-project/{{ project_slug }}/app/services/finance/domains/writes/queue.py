@@ -12,14 +12,13 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from pydantic import ValidationError
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.domains.writes.queries import batch_rows, get_change
 from app.services.finance.domains.writes.registry import executor_for
 from app.services.finance.models import FinancePendingChange
 from app.services.finance.schemas import ChangeDisplayRow
+from pydantic import ValidationError
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 def _freeze(display: list[ChangeDisplayRow]) -> list[dict[str, str]]:

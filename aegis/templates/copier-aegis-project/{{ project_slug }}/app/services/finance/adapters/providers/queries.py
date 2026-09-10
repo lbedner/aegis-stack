@@ -6,14 +6,13 @@ business logic, no writes.
 
 from __future__ import annotations
 
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.models import (
     FinanceAccount,
     FinanceConnection,
     FinanceTransaction,
 )
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def connection_by_provider_item(

@@ -133,6 +133,18 @@ class Settings(
     S3_PATH_STYLE: bool = True
 {%- endif %}
 
+{%- if scheduler_backend != "memory" or (include_scheduler and include_database) %}
+
+    # Where the scheduled backup job writes dumps. A relative path resolves
+    # against the process cwd, which inside a container is the writable
+    # layer - fine for local dev, but there the dumps are destroyed by the
+    # next `up --force-recreate`, i.e. every deploy. The compose files point
+    # the scheduler at a mounted absolute path so prod dumps outlive the
+    # container; restore from the scheduler, which is where they are visible.
+    DATABASE_BACKUP_DIR: str = "backups"
+    DATABASE_BACKUP_KEEP: int = 7
+{%- endif %}
+
     # Flet frontend settings
     FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)
 {%- if include_htmx %}
@@ -533,7 +545,7 @@ class Settings(
 {% endif %}
 
     # Editorial metadata for the Overview project hero — read by
-    # `views.overview.project_info()`. All optional; the project hero is
+    # `view_service._project_info()`. All optional; the project hero is
     # hidden when no GitHub repo and no project name are set. Lives
     # outside the source-specific blocks because it's project-level
     # metadata, not tied to any particular collector.

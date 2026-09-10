@@ -9,10 +9,6 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import func
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.constants import (
     RECONCILE_MARKER,
 )
@@ -24,6 +20,9 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceValuation,
 )
+from sqlalchemy import func
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def currency_by_code(db: AsyncSession, code: str) -> FinanceCurrency | None:

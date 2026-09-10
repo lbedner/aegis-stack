@@ -29,10 +29,10 @@
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0"
          class="bg-aegis-card border rounded-lg shadow-2xl px-4 py-3 flex items-center gap-3"
-         :class="item.tone === 'error' ? 'border-red-500/40' : 'border-aegis-border'">
-      <p class="flex-1 text-sm text-white" x-text="item.text"></p>
+         :class="item.tone === 'error' ? 'border-aegis-error/40' : 'border-aegis-border'">
+      <p class="flex-1 text-sm text-aegis-text" x-text="item.text"></p>
       <button type="button" @click="dismiss(item.id)" aria-label="Dismiss"
-              class="shrink-0 text-aegis-muted/70 hover:text-white transition-colors">
+              class="shrink-0 text-aegis-muted/70 hover:text-aegis-text transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
@@ -48,7 +48,7 @@
    otherwise render zero rows. #}
 {% macro empty_state(title, hint=None) %}
 <div class="rounded-lg border border-dashed border-aegis-border px-6 py-10 text-center">
-  <h2 class="text-sm font-medium text-white">{{ title }}</h2>
+  <h2 class="text-sm font-medium text-aegis-text">{{ title }}</h2>
   {% if hint %}<p class="mt-1 text-xs text-aegis-muted">{{ hint }}</p>{% endif %}
 </div>
 {% endmacro %}
@@ -58,10 +58,18 @@
    empty list, so a form template can call it unconditionally. #}
 {% macro error_banner(errors) %}
 {% if errors %}
-<div role="alert" class="text-xs text-error bg-red-500/5 border border-red-500/40 rounded px-3 py-2">
+<div role="alert" class="text-xs text-error bg-aegis-error/5 border border-aegis-error/40 rounded px-3 py-2">
   <ul class="{{ 'list-disc pl-4 space-y-0.5' if errors|length > 1 else '' }}">
     {% for error in errors %}<li>{{ error }}</li>{% endfor %}
   </ul>
 </div>
 {% endif %}
+{% endmacro %}
+
+
+{# An out-of-band sibling (pattern 2): rendered alongside a swapped row,
+   htmx puts it wherever ``id`` lives on the page. Every counter a row
+   action moves ships through this, so the shape is one. #}
+{% macro oob(id, tag="span", class="") %}
+<{{ tag }} id="{{ id }}" hx-swap-oob="true" {% if class %}class="{{ class }}"{% endif %}>{{ caller() }}</{{ tag }}>
 {% endmacro %}

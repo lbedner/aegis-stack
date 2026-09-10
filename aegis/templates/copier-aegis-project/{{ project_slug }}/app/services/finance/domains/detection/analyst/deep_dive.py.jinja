@@ -32,6 +32,7 @@ from app.services.finance.domains.detection.analyst.shared import (
 from app.services.finance.domains.detection.insights import format_usd
 from app.services.finance.models import FinanceInsight
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 
 
 class DeepDive(BaseModel):
@@ -125,7 +126,7 @@ async def build_deep_dive_context(
     computes. The model explains what a cut BUYS; it never invents one, so
     the arithmetic behind every recommendation stays code-owned.
     """
-    today = today or date.today()
+    today = today or current_date()
     # No flat anomaly list here - the digest below covers every finding,
     # and carrying both fed the model the same 75 findings twice.
     base = await build_finance_snapshot(
@@ -192,7 +193,7 @@ async def run_deep_dive(
     Total in the same way ``run_analyst_note`` is: a local model that is
     stopped or mid-pull costs a log line, not an exception in the caller.
     """
-    today = today or date.today()
+    today = today or current_date()
 
     from pydantic_ai import Agent as PydanticAgent
     from pydantic_ai.settings import ModelSettings

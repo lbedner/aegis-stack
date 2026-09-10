@@ -20,13 +20,8 @@ pair, fuzzy ones never silently vanish.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 import re
-
-from pydantic import BaseModel
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import or_
-from sqlmodel.ext.asyncio.session import AsyncSession
+from datetime import date, timedelta
 
 from app.core.log import logger
 from app.services.finance.domains.detection import queries
@@ -35,7 +30,12 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransfer,
 )
+from app.services.finance.utils import current_date
 from app.services.shared.queries import owner_clause
+from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import or_
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 WINDOW_DAYS = 5
 AMOUNT_EXACT_TOLERANCE_CENTS = 200  # $2 fee tolerance -> full amount score
@@ -113,7 +113,7 @@ async def detect_transfers(
     """
     from app.core.config import settings
 
-    today = today or date.today()
+    today = today or current_date()
     if lookback_days is None:
         lookback_days = settings.FINANCE_RULES_LOOKBACK_DAYS
     result = await _pair_transfers(

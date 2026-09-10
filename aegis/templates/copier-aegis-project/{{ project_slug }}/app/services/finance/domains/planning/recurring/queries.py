@@ -11,11 +11,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import func
-from sqlalchemy.orm import aliased
-from sqlmodel import or_, select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.models import (
     FinanceAccount,
     FinanceCategory,
@@ -23,6 +18,10 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransfer,
 )
+from sqlalchemy import func
+from sqlalchemy.orm import aliased
+from sqlmodel import or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def all_live_streams(db: AsyncSession) -> list[FinanceRecurringStream]:

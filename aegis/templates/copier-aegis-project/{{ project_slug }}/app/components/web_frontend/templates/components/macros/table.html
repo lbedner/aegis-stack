@@ -1,0 +1,100 @@
+{# The one table macro. A page declares columns and hands over rows; it
+   never writes a <table> by hand.
+
+       {% from "components/macros/table.html" import data_table %}
+       {{ data_table(columns, rows, empty="No transactions yet") }}
+
+   ``columns``: list of ``{"key", "label", "kind", "align", "signed"}``.
+   ``kind`` is ``text`` (default), ``money`` (minor units, honours the
+   row's ``currency`` when it has one; ``signed`` adds a leading ``+`` and
+   colours by sign, ``toned`` colours by sign without the plus), ``date``,
+   ``int`` or ``status`` (the value is
+   ``{"label", "tone"}``, rendered as a ``badge``); ``align`` is ``left``
+   (default) or ``right``. Rows are objects or dicts; a blank value
+   renders as a dash. Zero rows render ``empty_state`` instead.
+
+   ``row_id`` names each ``<tr>`` (``row_id ~ "-" ~ row.id``) so an action
+   can swap one row back; a ``{% call(row) data_table(...) %}`` block adds
+   an actions column rendered per row. #}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/layout.html" import badge %}
+
+{% macro _cell(row, col) -%}
+{%- set value = row[col.key] if row is mapping else row|attr(col.key) -%}
+{%- if value is none or value == "" -%}
+-
+{%- elif col.kind == "money" -%}
+{%- set currency = (row["currency"] if row is mapping and "currency" in row else row|attr("currency")) -%}
+{{ "+" if col.signed and value > 0 }}{{ value|money(currency if currency is string else "USD") }}
+{%- elif col.kind == "status" -%}
+{{ badge(value.label, value.tone) }}
+{%- elif col.kind == "date" -%}
+{{ value|short_date }}
+{%- elif col.kind == "int" -%}
+{{ "{:,}".format(value) }}
+{%- else -%}
+{{ value }}
+{%- endif -%}
+{%- endmacro %}
+
+{# The text colour of one cell: signed money reads by sign. #}
+{% macro _tone(row, col) -%}
+{%- set value = row[col.key] if row is mapping else row|attr(col.key) -%}
+{%- if col.kind == "money" and (col.signed or col.toned) and value is number and value != 0 -%}
+{{ "text-aegis-teal" if value > 0 else "text-error" }}
+{%- else -%}
+text-aegis-text
+{%- endif -%}
+{%- endmacro %}
+
+{# One row. ``id`` lets an action swap this row back by itself; ``oob``
+   marks it as an out-of-band answer (pattern 2); ``actions`` is a macro
+   (a call block's ``caller``) rendering the trailing actions cell. #}
+{% macro table_row(columns, row, id=None, oob=False, actions=None) %}
+<tr {% if id %}id="{{ id }}"{% endif %} {% if oob %}hx-swap-oob="outerHTML"{% endif %} class="hover:bg-aegis-border/20 transition-colors">
+  {% for col in columns %}
+  <td class="px-5 py-2 whitespace-nowrap {{ 'text-right tabular-nums' if col.align == 'right' else 'text-left' }} {{ _tone(row, col) }}">{{ _cell(row, col) }}</td>
+  {% endfor %}
+  {% if actions %}<td class="px-2 py-2 text-right">{{ actions(row) }}</td>{% endif %}
+</tr>
+{% endmacro %}
+
+{% macro data_table(columns, rows, empty="Nothing here yet", row_id=None) %}
+{% if rows %}
+<div class="overflow-x-auto -mx-5">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-xxs text-aegis-muted uppercase tracking-wider border-b border-aegis-border">
+        {% for col in columns %}
+        <th scope="col" class="px-5 py-2 font-medium {{ 'text-right' if col.align == 'right' else 'text-left' }}">{{ col.label }}</th>
+        {% endfor %}
+        {% if caller is defined %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-aegis-border/60">
+      {% for row in rows %}
+      {{ table_row(columns, row, id=(row_id ~ "-" ~ (row["id"] if row is mapping else row.id)) if row_id else None, actions=caller if caller is defined else None) }}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{{ empty_state(empty) }}
+{% endif %}
+{% endmacro %}
+
+
+{# Page navigation for a listed table. ``pager`` is the route's
+   ``{start, end, total, prev, next}`` (``None`` when one page); the links
+   re-request the same URL and swap ``target`` in place. #}
+{% macro pager(pager, target) %}
+{% if pager %}
+<nav aria-label="Pagination" class="flex items-center justify-between px-5 pt-3 text-xs text-aegis-muted">
+  <span>{{ pager.start }}-{{ pager.end }} of {{ pager.total }}</span>
+  <span class="flex items-center gap-2">
+    {% if pager.prev %}<a rel="prev" href="{{ pager.prev }}" {{ hx_replace(pager.prev, target) }} class="hover:text-aegis-text transition-colors">Previous</a>{% endif %}
+    {% if pager.next %}<a rel="next" href="{{ pager.next }}" {{ hx_replace(pager.next, target) }} class="hover:text-aegis-text transition-colors">Next</a>{% endif %}
+  </span>
+</nav>
+{% endif %}
+{% endmacro %}

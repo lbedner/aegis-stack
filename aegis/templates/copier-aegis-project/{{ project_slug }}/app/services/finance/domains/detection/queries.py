@@ -10,9 +10,6 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.models import (
     FinanceAccount,
     FinanceAnalystSnapshot,
@@ -24,6 +21,8 @@ from app.services.finance.models import (
     FinanceTransfer,
 )
 from app.services.shared.queries import owner_clause
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # -- generic executors --------------------------------------------------------
 

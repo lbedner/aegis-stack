@@ -26,32 +26,46 @@ rebuilds CSS on template changes.
 
 ## The single rebrand point
 
-Brand colors live in exactly one file: `tailwind.config.js`. The block is
-marked in the file itself:
+A theme is one block of CSS variables in `static/input.css`, keyed by
+`[data-theme]`:
 
-```js
-colors: {
-  aegis: {
-    bg: "#090B0D",     // Page background
-    card: "#111418",   // Card/surface background
-    border: "#272C36", // Borders, dividers
-    text: "#EEF1F4",   // Primary text
-    muted: "#7E8A9A",  // Secondary/muted text
-    teal: "#17CCBF",   // Brand accent
-    amber: "#F59E0B",  // Warning/highlight
-  },
-},
+```css
+[data-theme="aegis"] {
+  color-scheme: dark;
+  --aegis-bg: 9 11 13;        /* page background */
+  --aegis-card: 17 20 24;     /* card / surface */
+  --aegis-border: 39 44 54;
+  --aegis-text: 238 241 244;
+  --aegis-muted: 126 138 154;
+  --aegis-teal: 23 204 191;   /* brand accent */
+  --aegis-amber: 245 158 11;
+  --aegis-error: 239 68 68;
+  --aegis-scrim: 0 0 0;
+  --aegis-chart-1: 23 204 191; /* ... a ramp of eight */
+}
 ```
 
-These become utilities (`bg-aegis-bg`, `text-aegis-teal`,
-`border-aegis-border`) used throughout the shipped templates. The DaisyUI
-theme below the block mirrors the same values into DaisyUI's semantic slots
-(`primary`, `base-100`, `success`), so component classes like `btn` and `card`
-match the hand-written utilities. Change the block, rebuild, and the whole
-frontend follows. Nothing else hardcodes a hex value.
+`tailwind.config.js` maps the `aegis-*` color names onto those variables
+(`rgb(var(--aegis-bg) / <alpha-value>)`), so the utilities used throughout
+the templates (`bg-aegis-card`, `text-aegis-teal`, `border-aegis-border`)
+follow whatever theme is on `<html data-theme>`. Values are RGB triplets so
+opacity modifiers like `bg-aegis-teal/10` keep working.
 
-The theme is selected in `base.html` via `data-theme="aegis"` on the `<html>`
-element.
+Two themes ship, `aegis` (dark) and `aegis-light`. To add one, add a block
+with the same token set; a test holds the shipped blocks to parity. To
+rebrand, edit the values. The DaisyUI theme list in `tailwind.config.js`
+mirrors each theme in hex so DaisyUI's own component classes (`btn`,
+`card`, `alert`) match.
+
+`static/js/theme.js` runs synchronously in `<head>`, ahead of the
+stylesheet, so a stored choice is applied before first paint; it exposes
+`toggleTheme()`, and the `theme_toggle()` macro in
+`components/macros/layout.html` is the button. Default is `aegis`, set on
+`<html>` in `base.html`.
+
+Nothing else names a color. A test fails on any hex literal, and on any
+theme-blind class such as `text-white` or `bg-black`, in templates or
+static JS; use `text-aegis-text` and `bg-aegis-scrim` instead.
 
 ## The layers
 
@@ -74,10 +88,10 @@ Three places styling can live, in order of preference:
     a component class.
 
 3. **`static/css/app.css`.** Hand-authored CSS that is not Tailwind at all.
-   It ships with two rules worth knowing about: `[x-cloak]{display:none}`
-   (hides elements until Alpine initializes them, preventing a flash of
-   unstyled content on htmx swaps) and `color-scheme: dark` (tells the
-   browser to render native controls dark).
+   It ships with `[x-cloak]{display:none}` (hides elements until Alpine
+   initializes them, preventing a flash of unstyled content on htmx swaps)
+   and the native `accent-color`, read from the theme's token.
+   `color-scheme` lives with each theme block in `input.css`.
 
 ## Linting
 

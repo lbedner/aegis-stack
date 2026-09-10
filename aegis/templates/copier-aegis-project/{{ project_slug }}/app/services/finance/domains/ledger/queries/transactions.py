@@ -10,10 +10,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, timedelta
 
-from sqlalchemy import func
-from sqlmodel import or_, select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.domains.ledger.queries.filters import (
     live_account_ids,
     split_aware_category_clause,
@@ -27,6 +23,10 @@ from app.services.finance.models import (
     FinanceTransactionSplit,
     FinanceTransactionTag,
 )
+from app.services.finance.utils import current_date
+from sqlalchemy import func
+from sqlmodel import or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def dedup_match(
@@ -272,7 +272,7 @@ async def top_payees_over_window(
         FinanceTransaction.is_transfer.is_(False),
         FinanceTransaction.account_id.in_(live_account_ids()),
         FinanceTransaction.amount < 0,
-        FinanceTransaction.date_ >= date.today() - timedelta(days=days),
+        FinanceTransaction.date_ >= current_date() - timedelta(days=days),
         payee.is_not(None),
     ]
     if owner_user_id is not None:
@@ -467,9 +467,7 @@ async def outflow_by_account_in_window(
         filters.append(
             or_(
                 FinanceTransaction.recurring_stream_id.is_(None),
-                FinanceTransaction.recurring_stream_id.notin_(
-                    list(exclude_stream_ids)
-                ),
+                FinanceTransaction.recurring_stream_id.notin_(list(exclude_stream_ids)),
             )
         )
     rows = (

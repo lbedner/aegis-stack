@@ -142,7 +142,20 @@ services:
 {%- if include_redis %}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
 {%- endif %}
+{%- if include_database %}
+      # The scheduled backup job writes here. Without the volume below the
+      # dumps land in the container's writable layer and are destroyed by
+      # the next `up --force-recreate` - i.e. every deploy - so they are
+      # not restorable and only cost disk.
+      - DATABASE_BACKUP_DIR=/var/backups/app
+{%- endif %}
     restart: unless-stopped
+{%- if include_database %}
+    volumes:
+      # Named, so the dumps survive container recreation, stay out of the
+      # image build context, and are untouched by the deploy's file rsync.
+      - backup-data:/var/backups/app
+{%- endif %}
     deploy:
       resources:
         limits:
@@ -395,6 +408,9 @@ services:
 volumes:
   aegis-data:
   storage-data:
+{%- if include_scheduler and include_database %}
+  backup-data:
+{%- endif %}
 {%- if include_storage %}
   seaweedfs-data:
 {%- endif %}

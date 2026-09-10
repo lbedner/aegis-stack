@@ -1,6 +1,7 @@
 """Tests for AI service API endpoints."""
 
 import importlib
+import json
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -409,3 +410,32 @@ class TestUserMemoryEndpoints:
 
         assert response.status_code == 404
 {% endif %}
+
+
+class TestStreamToolFrame:
+    """The SSE ``tool`` frame carries its trail label, computed once on
+    the server; a browser client never re-derives it."""
+
+    def test_tool_frame_carries_the_label(self, client: TestClient) -> None:
+        from types import SimpleNamespace
+
+        from app.components.backend.api.ai import router
+
+        async def fake_stream(**_: Any) -> Any:
+            yield SimpleNamespace(
+                content="",
+                is_final=False,
+                metadata={
+                    "event": "tool",
+                    "tool": "ledger",
+                    "args": '{"months": 3}',
+                },
+            )
+
+        with patch.object(router.ai_service, "stream_chat", fake_stream):
+            body = client.post(
+                "/api/v1/ai/chat/stream", json={"message": "hi", "user_id": "u"}
+            ).text
+        frame = next(b for b in body.split("\n\n") if b.startswith("event: tool"))
+        data = json.loads(frame.split("data: ", 1)[1])
+        assert data["label"] == "ledger(months=3)"

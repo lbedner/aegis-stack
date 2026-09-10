@@ -17,9 +17,6 @@ value.
 from datetime import date
 from typing import Any, NamedTuple
 
-from sqlmodel import or_, select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.services.finance.constants import add_months
 from app.services.finance.domains.planning.budgets import queries
 from app.services.finance.domains.planning.budgets.lines import (
@@ -27,7 +24,9 @@ from app.services.finance.domains.planning.budgets.lines import (
     lines_in_force,
 )
 from app.services.finance.models import FinanceAccount, FinanceTransaction
-from app.services.finance.utils import current_period_month
+from app.services.finance.utils import current_date, current_period_month
+from sqlmodel import or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 UNCOVERED_WINDOW_MONTHS = 3
 
@@ -181,7 +180,7 @@ async def uncovered_spend_filters(
     cell's figure. Returns (filters, (window_start, window_end)) -
     ``lookback_months`` widens the date floor for the habit-evidence
     read without changing what counts as uncovered."""
-    today = today or date.today()
+    today = today or current_date()
     window_end = date(today.year, today.month, 1)
     window_start = add_months(window_end, -lookback_months)
 

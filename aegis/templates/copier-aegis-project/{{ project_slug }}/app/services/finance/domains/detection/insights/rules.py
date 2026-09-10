@@ -34,13 +34,9 @@ should have to import the rules to get them.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 import re
 import statistics
-
-from pydantic import BaseModel
-from sqlmodel import or_, select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from datetime import date, timedelta
 
 from app.services.finance.constants import CASH_ACCOUNT_TYPES
 from app.services.finance.domains.detection import queries
@@ -67,7 +63,11 @@ from app.services.finance.models import (
     FinanceRecurringStream,
     FinanceTransaction,
 )
+from app.services.finance.utils import current_date
 from app.services.shared.queries import owner_clause
+from pydantic import BaseModel
+from sqlmodel import or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 PRICE_HIKE_THRESHOLD = 1.10  # >10% over the stream's average
 OVERSPEND_MULTIPLE = 1.5  # > 1.5x the 3-month median
@@ -187,7 +187,7 @@ async def generate_insights(
     from app.core.config import settings
 
     result = InsightGenerationResult()
-    today = today or date.today()
+    today = today or current_date()
     if lookback_days is None:
         lookback_days = settings.FINANCE_RULES_LOOKBACK_DAYS
     floor = today - timedelta(days=lookback_days) if lookback_days else None

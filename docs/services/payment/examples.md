@@ -178,7 +178,7 @@ The standard play is to refund proactively before the chargeback lands. Fighting
 
 ```python
 from app.services.payment.constants import DisputeStatus
-from app.services.payment.service import PaymentService
+from app.services.payment.payment_service import PaymentService
 
 class FraudAwarePaymentService(PaymentService):
     async def _handle_early_fraud_warning(self, event) -> None:

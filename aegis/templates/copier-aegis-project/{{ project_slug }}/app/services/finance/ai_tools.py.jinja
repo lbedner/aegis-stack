@@ -20,6 +20,7 @@ granting these tools to shared agents.
 from datetime import date, timedelta
 from typing import Any
 
+from app.services.finance.utils import current_date
 from app.core.db import get_async_session
 from app.services.ai.domains.chat.tools import register_tool
 from app.services.finance.constants import UNCATEGORIZED_CATEGORY_NAMES
@@ -106,7 +107,7 @@ async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
         raise ValueError('detail must be "monthly" or "transactions"')
 
     span = max(1, min(int(months), 24))
-    from_date = _months_back_start(date.today(), span)
+    from_date = _months_back_start(current_date(), span)
     async with get_async_session() as session:
         rows, total = await transactions_window_with_payees(
             session,
@@ -212,7 +213,7 @@ async def accounts() -> dict[str, Any]:
         }
         streams = await recurring_queries.active_streams(session)
 
-    today = date.today()
+    today = current_date()
     horizon = today + timedelta(days=_UPCOMING_WINDOW_DAYS)
     upcoming_by_account: dict[int, list[dict[str, Any]]] = {}
     for stream in streams:

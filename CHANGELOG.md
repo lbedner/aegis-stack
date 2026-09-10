@@ -20,6 +20,24 @@
   persisted it, so every CLI that calls this app's own API fell back to
   a hardcoded `localhost:8000`. The resolved port is now written to
   `.env.ports` and read by `Settings`, and `APIClient` uses it.
+- **`aegis deploy` no longer fills the host it deploys to.** Rollback
+  snapshots live in the deploy directory, which is the build context on the
+  server, so `COPY . /code` baked every retained snapshot into the image;
+  `.dockerignore` now excludes `backups/`. Nothing reclaimed the images or
+  build cache a deploy left behind either, so both are pruned once the
+  health check passes (dangling images, and cache older than a week), and a
+  deploy refuses to start below 10 GB free instead of dying inside the
+  Dockerfile's `apt-get` with the files already synced. On the project that
+  hit this, six weeks reached 307 images and 851 cache records on a 77 GB
+  host; the image itself was 3.65 GB, of which 2.52 GB was snapshots.
+- **Scheduled database backups survive a deploy, and restore.** The job
+  wrote to a relative path, which inside the scheduler resolved to the
+  container's writable layer: 7.4 GB of dumps, discarded on every container
+  recreation. The directory is now `DATABASE_BACKUP_DIR`, mounted from a
+  named `backup-data` volume, and `pg_dump` writes the compressed custom
+  format restored with `pg_restore --clean --if-exists`. Plain `.sql` dumps
+  written before this still count toward retention and restore through
+  `psql`.
 - **A plugin names itself once and every dashboard surface honours it.**
   `get_component_subtitle` now prefers the `subtitle` a health check
   declares in its metadata, and both the stack view and the architecture
@@ -50,6 +68,53 @@
   `aegis services` and the init wizard badge experimental services in the
   warning colour, and `aegis add-service` prints one warning line for them
   without prompting. Finance is the first to carry the flag.
+- **`hx_replace()` template global and no htmx attribute settling**: one
+  helper emits the "re-request and replace this element" attribute set
+  (`hx-get`/`hx-target`/`hx-select`/`hx-swap="outerHTML"`/`hx-push-url`)
+  for filter forms, pagers, and list links, so a self-selecting request
+  can no longer nest a copy of its target. `attributesToSettle` is empty
+  because settling copied the old `style` back onto swapped elements and
+  undid Alpine's `x-show`.
+- **Row actions and dialogs in the macro kit**: `data_table` takes
+  `row_id` and a `{% call(row) %}` actions block, renders `status` cells
+  (`badge`) and signed or toned money, and exposes `table_row` for the
+  single-row answer to an action; `dropdown` + `menu_item`, `confirm`,
+  `badge`, and `oob` macros; native `select`, `date_input`, `checkbox`,
+  `search_input`, `field`, `text_input`, `money_input`, `textarea` form
+  controls. `rendering.trigger()`, `close_dialog()` (sent after settle so
+  the swap cannot re-open an empty dialog) and `navigate()` (HX-Location).
+  `navigate()` also closes the dialog on the plain trigger, since htmx
+  follows HX-Location rather than settling the response.
+  The dashboard shape as macros: `page_header`, `figures`, `stats_strip`,
+  `ranked_rows`, underline `tab_bar`/`tab_item`, `chip`, `range_chips` over
+  one window vocabulary (`web_frontend/ranges.py`), and `action`. The one
+  modal has one definition: `hx_dialog()`/`hx_dialog_post()` globals and
+  `dialog()`/`dialog_done()` on the server. `card` and `chart_panel` take
+  no title where the page already names them.
+  `stat_tile` takes a caption and attributes (a clickable cell), `progress`
+  macro, `cents_to_input` as a template filter. Chart marker series
+  (`{"points": true}`). Test kit gains `triggers()`,
+  `oob()`, `table_rows()`, `card()`, `stat()`, `chart_data()`.
+- **Finance**: `goal_response()` and `envelope_response()` are public in
+  the goals and envelopes API so a single-card re-render shares them;
+  `hydrate_streams()` / `visible_streams()` /
+  `candidate_items()` in the recurring API, shared by the list endpoint and
+  any single-row re-render; `FREQUENCY_LABELS`, `BILL_FREQUENCY_OPTIONS`
+  and `frequency_label()` in the service constants (the Flet frontend
+  imports them); the one-clock ratchet now covers the finance API and the
+  web frontend, with the remaining local-clock reads fixed.
+- **htmx macro kit split by concern**: `components/macros/{form,layout,
+  table,feedback}.html` replace the single `macros.html`, and the kit gains
+  `data_table` (the one table), `card`, `stat_tile`, `dialog` (native,
+  mounted once by the base layout, opened by any swap into `#dialog-body`)
+  and `chart_panel` with a lazy-loading, token-colored Chart.js island.
+- **htmx web frontend: themes are config.** Colors are `--aegis-*` tokens
+  defined per `[data-theme]` in `input.css`; `tailwind.config.js` maps the
+  `aegis-*` class names onto them, so a theme is a block of variables and
+  a rebrand is a value edit. Two ship (`aegis`, `aegis-light`); `theme.js`
+  applies the stored choice before first paint and the `theme_toggle()`
+  macro switches it. Templates use tokens only (no `text-white`, no hex),
+  and a test keeps it that way.
 - **htmx web frontend: one route, two render paths.** `rendering.render()`
   serves a full page (`layouts/page.html`) or a bare fragment
   (`layouts/fragment.html`) from the same handler based on `HX-Request`,
@@ -72,6 +137,10 @@
   tests.
 
 ### Fixed
+- **Tailwind dev watcher misses new templates**: on a Docker bind mount
+  (Docker Desktop on macOS) the watcher never saw files created after it
+  started, so a class used only in a new template never compiled. The dev
+  compose runs it with `--poll`.
 
 - **A plugin's settings mixin no longer fails `ruff check`.** The
   injected import landed after a module constant in `app/core/config.py`,
@@ -82,19 +151,28 @@
   but only the component install path ensured that module exists, so
   adding a plugin to a project with no services left a dangling import
   and the frontend died on boot with `ModuleNotFoundError`.
+- **Generated projects pin `ty`** (like ruff already was). A pre-release
+  type checker shipping new diagnostics weekly meant a fresh `make check`
+  could fail on a day with no template change; a bump is now a reviewed
+  commit that fixes new diagnostics alongside it.
+- **Finance service reads one calendar clock** (`utils.current_date`,
+  UTC). Rules, budgets, streams and the analyst defaulted to the host's
+  local date while models, imports and the demo seed were on UTC; each
+  evening in the Americas they differed by a day and the demo-dataset
+  insight test failed. A generated ratchet test keeps `date.today()` out.
+- **Finance models render the FK schema prefix per engine**, so SQLite
+  stacks no longer trip ty's redundant-condition diagnostic.
+- **Webserver dev reload no longer watches the host venv.** uvicorn's
+  reload watched the whole working directory, which in the dev container
+  is the bind mount with the host's `.venv` in it; a `uv sync` on the
+  host restarted the server in a storm. `reload_dirs` is now the app
+  package, matching the scheduler's and worker's watchers.
 - **htmx dev stack no longer breaks host tooling.** The tailwind container
   installs `node_modules` into a named volume instead of the bind mount, so
   a macOS or Windows host never inherits Linux binaries that make
   `make lint-frontend` fail.
 - **Generated `test_app_js_is_loaded` no longer fails once assets are
   built**: it accepts the fingerprinted path as well as the source path.
-- **`aegis add <plugin>` creates the plugin's tables.** A third-party
-  plugin's `migrations` were never written: `add_plugin` skipped the
-  migration tail in-tree services get, and the generator only resolved
-  names from the static registry. The plugin's revisions are now rendered
-  straight from its spec (`generate_plugin_migrations`), with alembic
-  bootstrapped when missing, schema dropped on SQLite, and re-adding the
-  plugin never stacking a duplicate revision.
 
 ## [0.11.0] - 2026-09-06
 

@@ -8,11 +8,10 @@ every existing ledger reads unchanged.
 
 from __future__ import annotations
 
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.time import utcnow
 from app.services.finance.domains.ledger import queries
 from app.services.finance.models import FinanceAccount, FinanceSubject
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # What a subject can be. The table constrains these too; validating here
 # turns a flush-time IntegrityError into an answer the caller can read.

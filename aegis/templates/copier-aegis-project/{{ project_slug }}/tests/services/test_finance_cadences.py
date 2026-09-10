@@ -17,7 +17,15 @@ Each of those was found by a different bug report. The point of the table
 is that the next cadence is added once.
 """
 
-from app.services.finance.constants import CADENCE_KEYS, CADENCES
+from app.services.finance.constants import (
+    BILL_FREQUENCY_OPTIONS,
+    CADENCE_KEYS,
+    CADENCES,
+    FREQUENCY_LABELS,
+    ONE_TIME_FREQUENCY,
+    ONE_TIME_LABEL,
+    frequency_label,
+)
 
 
 class TestTheTableIsComplete:
@@ -139,3 +147,15 @@ class TestTheStepIsRight:
 
         assert step_cadence("weekly", date(2026, 1, 1)) == date(2026, 1, 8)
         assert step_cadence("biweekly", date(2026, 1, 1)) == date(2026, 1, 15)
+
+
+def test_frequency_labels_come_from_the_cadence_table() -> None:
+    """One vocabulary for every picker: the labels are the table's, plus
+    "One time" for the bill forms; nothing a menu offers can be rejected."""
+    assert list(FREQUENCY_LABELS) == list(CADENCES)
+    assert list(BILL_FREQUENCY_OPTIONS) == [*CADENCES, ONE_TIME_FREQUENCY]
+    assert frequency_label("monthly") == "Monthly"
+    assert frequency_label("once") == ONE_TIME_LABEL
+    assert frequency_label("irregular") == "Irregular"
+    assert frequency_label("whatever") == "whatever"
+    assert frequency_label(None) == ""

@@ -46,8 +46,8 @@ from app.components.frontend.dashboard.modals.finance_modal.constants import (
     _FREQUENCY_LABELS,
     _GROUP_DIALOG_CHROME,
     _GROUP_TABLE_MIN_HEIGHT,
-    BILL_FREQUENCY_OPTIONS,
 )
+from app.services.finance.constants import BILL_FREQUENCY_OPTIONS
 from app.components.frontend.dashboard.modals.finance_modal.curation_shared import (
     CompactIconButton,
     _declare_body_height,

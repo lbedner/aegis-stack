@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 from starlette.responses import Response
 
 from app.components.web_frontend.assets import COMPONENT_DIR, static_url
@@ -29,6 +30,47 @@ templates.env.globals["project_description"] = settings.PROJECT_DESCRIPTION
 templates.env.globals["auth_enabled"] = settings.AUTH_ENABLED
 templates.env.globals["registration_enabled"] = settings.REGISTRATION_ENABLED
 templates.env.filters.update(FILTERS)
+
+
+def hx_dialog(url: str, extra: str = "") -> Markup:
+    """The attributes for "open this in the one modal" (pattern 4), so no
+    template has to remember which element the dialog swaps into.
+    ``extra`` rides along for the openers that carry more (an
+    ``hx-include`` of the checked rows, a role for a clickable cell)."""
+    return Markup(f'hx-get="{escape(url)}" hx-target="#dialog-body" {extra}')
+
+
+def hx_dialog_post(url: str) -> Markup:
+    """The attributes for a dialog's own form: post to ``url`` and swap
+    the answer back into the dialog, which is how a 422 re-renders the
+    form with its errors (pattern 1 inside pattern 4)."""
+    return Markup(f'hx-post="{escape(url)}" hx-target="#dialog-body"')
+
+
+def hx_replace(url: str, target: str, oob: str | None = None) -> Markup:
+    """The attributes for "re-request ``url`` and replace ``target`` with
+    the same element from the response": filter forms, pagers, list links.
+
+    Selecting the element you target needs an outerHTML swap, or every
+    request nests a copy inside the last one; keeping the recipe here
+    means no template has to remember that. ``oob`` names a second
+    element to re-take out of band (``hx-select-oob``).
+    """
+    attrs = {
+        "hx-get": url,
+        "hx-target": target,
+        "hx-select": target,
+        "hx-swap": "outerHTML",
+        "hx-push-url": "true",
+    }
+    if oob:
+        attrs["hx-select-oob"] = oob
+    return Markup(" ".join(f'{k}="{escape(v)}"' for k, v in attrs.items()))
+
+
+templates.env.globals["hx_replace"] = hx_replace
+templates.env.globals["hx_dialog"] = hx_dialog
+templates.env.globals["hx_dialog_post"] = hx_dialog_post
 
 
 PAGE_LAYOUT = "layouts/page.html"
@@ -75,20 +117,75 @@ def render(
     return response
 
 
-def with_toast(response: Response, text: str, tone: str = "ok") -> Response:
-    """Attach a toast to any response (pattern 6).
+def dialog(
+    request: Request, template: str, /, status_code: int = 200, **context: Any
+) -> Response:
+    """A dialog's body (pattern 4): a bare fragment, never a layout. The
+    partial is swapped into ``#dialog-body``, which opens the modal; a
+    422 re-renders the same partial with its errors.
 
-    Written into ``HX-Trigger`` so htmx raises a ``toast`` event that the
-    region in base.html shows. Merges with triggers already on the
-    response; a bare event-name header is kept as an event with no detail.
+    The first two arguments are positional so a form's own context can
+    carry any key it likes, ``name`` and ``template`` included.
     """
-    existing = response.headers.get("HX-Trigger")
+    return templates.TemplateResponse(
+        request=request, name=template, context=context, status_code=status_code
+    )
+
+
+def trigger(
+    response: Response, event: str, detail: Any = None, header: str = "HX-Trigger"
+) -> Response:
+    """Add an htmx client event to ``response`` via ``HX-Trigger`` (or the
+    after-swap/after-settle variants named by ``header``).
+
+    Merges with triggers already on the response; a bare event-name header
+    is kept as an event with no detail. The toast region, the dialog and
+    any page hook listen for these by name.
+    """
+    existing = response.headers.get(header)
     triggers: dict[str, Any] = {}
     if existing:
         try:
             triggers = json.loads(existing)
         except json.JSONDecodeError:
             triggers = {name.strip(): None for name in existing.split(",")}
-    triggers["toast"] = {"text": text, "tone": tone}
-    response.headers["HX-Trigger"] = json.dumps(triggers)
+    triggers[event] = detail
+    response.headers[header] = json.dumps(triggers)
     return response
+
+
+def with_toast(response: Response, text: str, tone: str = "ok") -> Response:
+    """Attach a toast to any response (pattern 6): a ``toast`` event the
+    region in base.html shows."""
+    return trigger(response, "toast", {"text": text, "tone": tone})
+
+
+def close_dialog(response: Response) -> Response:
+    """Close the one modal from a successful in-dialog action (pattern 4).
+
+    After settle, not before the swap: a plain ``HX-Trigger`` fires first,
+    and the swap into ``#dialog-body`` that follows (rows out of band leave
+    nothing in it) would re-open the dialog, empty.
+    """
+    return trigger(response, "dialog:close", header="HX-Trigger-After-Settle")
+
+
+def navigate(response: Response, path: str, target: str = "#app-content") -> Response:
+    """Send the browser to ``path`` the htmx way: a GET with HX-Request
+    swapped into ``target`` and pushed to the URL bar (``HX-Location``).
+    The usual close of a dialog form that made something new.
+
+    Closes the dialog with the plain trigger: htmx follows HX-Location
+    instead of swapping this response, so nothing after-settle would ever
+    fire, and nothing swaps into the dialog that could re-open it.
+    """
+    response.headers["HX-Location"] = json.dumps({"path": path, "target": target})
+    return trigger(response, "dialog:close")
+
+
+def dialog_done(path: str, toast: str) -> Response:
+    """The end of a dialog form that made something: close it, say what
+    happened, and send the content area where the result lives."""
+    response = Response(status_code=200)
+    navigate(response, path)
+    return close_dialog(with_toast(response, toast))

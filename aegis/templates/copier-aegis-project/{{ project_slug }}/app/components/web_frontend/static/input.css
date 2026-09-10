@@ -9,18 +9,66 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /* THEMES: the single rebrand point.
+   *
+   * A theme is one block of tokens. tailwind.config.js maps the aegis-*
+   * color names onto these variables, so `bg-aegis-card` follows whatever
+   * theme is on <html data-theme>. Values are RGB triplets so Tailwind's
+   * opacity modifiers (`bg-aegis-teal/10`) keep working. Add a theme by
+   * adding a block with the same token set (tests/web/test_theme.py
+   * holds the two shipped blocks to parity); switch with theme.js. */
+  :root,
+  [data-theme="aegis"] {
+    color-scheme: dark;
+    --aegis-bg: 9 11 13; /* page background */
+    --aegis-card: 17 20 24; /* card / surface */
+    --aegis-border: 39 44 54; /* borders, dividers */
+    --aegis-text: 238 241 244; /* primary text */
+    --aegis-muted: 126 138 154; /* secondary text */
+    --aegis-teal: 23 204 191; /* brand accent */
+    --aegis-amber: 245 158 11; /* warning / highlight */
+    --aegis-error: 239 68 68;
+    --aegis-scrim: 0 0 0; /* behind modals and drawers */
+    /* Chart ramp, in draw order; cycles past eight. */
+    --aegis-chart-1: 23 204 191;
+    --aegis-chart-2: 139 92 246;
+    --aegis-chart-3: 245 158 11;
+    --aegis-chart-4: 59 130 246;
+    --aegis-chart-5: 236 72 153;
+    --aegis-chart-6: 16 185 129;
+    --aegis-chart-7: 249 115 22;
+    --aegis-chart-8: 6 182 212;
+  }
+
+  [data-theme="aegis-light"] {
+    color-scheme: light;
+    --aegis-bg: 246 247 249;
+    --aegis-card: 255 255 255;
+    --aegis-border: 222 226 232;
+    --aegis-text: 17 20 24;
+    --aegis-muted: 90 100 115;
+    --aegis-teal: 13 148 136;
+    --aegis-amber: 217 119 6;
+    --aegis-error: 220 38 38;
+    --aegis-scrim: 0 0 0;
+    --aegis-chart-1: 13 148 136;
+    --aegis-chart-2: 124 58 237;
+    --aegis-chart-3: 217 119 6;
+    --aegis-chart-4: 37 99 235;
+    --aegis-chart-5: 219 39 119;
+    --aegis-chart-6: 5 150 105;
+    --aegis-chart-7: 234 88 12;
+    --aegis-chart-8: 8 145 178;
+  }
+}
+
 @layer components {
   /* Project-level classes live here.
    *
    * Reach for this layer when a pattern repeats across templates and a
-   * Jinja macro would be overkill — it keeps the class list in the markup
+   * Jinja macro would be overkill; it keeps the class list in the markup
    * short without inventing a component. Anything here can still be
    * overridden by a utility class at the call site, because utilities are
-   * emitted after this layer.
-   *
-   * Example:
-   *   .card-surface {
-   *     @apply bg-aegis-card border border-aegis-border rounded-lg;
-   *   }
-   */
+   * emitted after this layer. */
 }

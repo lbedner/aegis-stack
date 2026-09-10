@@ -28,6 +28,7 @@ from app.services.finance.domains.detection.analyst.shared import (
 )
 from app.services.finance.domains.detection.insights import create_insight_if_new
 from app.services.finance.models import FinanceInsight
+from app.services.finance.utils import current_date
 
 
 async def existing_note(
@@ -58,7 +59,7 @@ async def run_analyst_note(
     the rest of its work. The check for an existing note happens before the
     model is touched, so a re-run is free rather than merely idempotent.
     """
-    today = today or date.today()
+    today = today or current_date()
     already = await existing_note(db, owner_user_id=owner_user_id, today=today)
     if already is not None:
         logger.info(

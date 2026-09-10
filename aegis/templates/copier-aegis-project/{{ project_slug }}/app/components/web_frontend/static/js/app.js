@@ -37,3 +37,18 @@ document.body.addEventListener('htmx:responseError', (event) => {
 document.body.addEventListener('htmx:sendError', () => {
   toast('Network error. Check the connection and try again.', 'error');
 });
+
+// The one modal. Any swap into #dialog-body opens the native <dialog>;
+// closing it clears the body (see the dialog macro in macros/layout.html).
+document.body.addEventListener('htmx:afterSwap', (event) => {
+  if (event.detail.target.id === 'dialog-body') {
+    const dialog = document.getElementById('dialog');
+    if (dialog && !dialog.open) dialog.showModal();
+  }
+});
+// Sent as HX-Trigger-After-Settle (rendering.close_dialog), so it lands
+// after the response's own swap has finished with #dialog-body.
+document.body.addEventListener('dialog:close', () => {
+  const dialog = document.getElementById('dialog');
+  if (dialog && dialog.open) dialog.close();
+});

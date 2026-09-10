@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **A scaffolded plugin pins the aegis-stack that made it.** The scaffold
+  emitted an unpinned `aegis-stack` dependency, so `pip install
+  aegis-stack-<name>` could resolve an older aegis-stack whose `PluginSpec`
+  has no field the plugin sets, and the failure landed on the plugin's user
+  as a validation error nobody could place. The floor is now the scaffolding
+  version.
+- **A plugin does not have to be on PyPI.** `aegis` never installs plugins
+  itself, so a path or git-URL install is discovered through the
+  `aegis.plugins` entry point exactly like a published one. The Plugins page
+  documents the source-only path and the `aegis-stack-plugin` GitHub topic
+  the directory finds them by, and says what the two listing sections
+  differ on: a published plugin resolves by version and carries an install
+  command, a source-only one carries its repository link and pins nothing.
+
 ## [0.11.1] - 2026-09-10
 
 ### Changed
@@ -175,6 +191,13 @@
   `make lint-frontend` fail.
 - **Generated `test_app_js_is_loaded` no longer fails once assets are
   built**: it accepts the fingerprinted path as well as the source path.
+- **`aegis add <plugin>` creates the plugin's tables.** A third-party
+  plugin's `migrations` were never written: `add_plugin` skipped the
+  migration tail in-tree services get, and the generator only resolved
+  names from the static registry. The plugin's revisions are now rendered
+  straight from its spec (`generate_plugin_migrations`), with alembic
+  bootstrapped when missing, schema dropped on SQLite, and re-adding the
+  plugin never stacking a duplicate revision.
 
 ## [0.11.0] - 2026-09-06
 

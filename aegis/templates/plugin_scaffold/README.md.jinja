@@ -48,8 +48,12 @@ That will:
 
 Publish to PyPI and the plugin is listed at
 [aegis-stack.io/plugins](https://aegis-stack.io/plugins) after the nightly
-sweep; the markers it looks for are already set in `pyproject.toml`. How the
-listing works, and same-day submission:
+sweep; the markers it looks for are already set in `pyproject.toml`.
+
+Not publishing is fine too. A plugin installed from a path or a git URL works
+the same way, and gets listed in the directory's source-only section if the
+GitHub repository carries the `aegis-stack-plugin` topic. How both listings
+work, and same-day submission:
 [docs.aegis-stack.io/plugins](https://docs.aegis-stack.io/plugins/).
 
 ## Develop

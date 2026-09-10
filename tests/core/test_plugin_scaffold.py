@@ -109,6 +109,24 @@ class TestScaffoldContent:
         pyproject = (tmp_path / "aegis-stack-scraper" / "pyproject.toml").read_text()
         assert 'requires-python = ">=3.11"' in pyproject
 
+    def test_pyproject_pins_the_aegis_stack_that_scaffolded_it(
+        self, tmp_path: Path
+    ) -> None:
+        """A plugin is written against the spec surface of the aegis-stack
+        it was scaffolded from. Unpinned, ``pip install aegis-stack-X``
+        happily resolves an older aegis-stack whose ``PluginSpec`` has no
+        field the plugin sets, and the failure lands on the plugin's user
+        as an import or validation error nobody can place."""
+        import tomllib
+
+        from aegis import __version__
+
+        scaffold_plugin("scraper", tmp_path)
+        project = tomllib.loads(
+            (tmp_path / "aegis-stack-scraper" / "pyproject.toml").read_text()
+        )["project"]
+        assert f"aegis-stack>={__version__}" in project["dependencies"]
+
     def test_plugin_py_returns_valid_pluginspec(self, tmp_path: Path) -> None:
         scaffold_plugin("scraper", tmp_path, description="Web scraping")
         plugin_py = (

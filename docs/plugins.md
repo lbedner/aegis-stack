@@ -75,6 +75,33 @@ community with the same detail page: summary, latest release, supported
 `aegis-stack` versions, downloads, repository and PyPI links, and the install
 command.
 
+### Source-only plugins
+
+A plugin does not have to be on PyPI to work. `aegis` never installs anything
+itself: discovery is the `aegis.plugins` entry point on whatever is in the
+environment, so a plugin installed from a path or a git URL is found exactly
+like a published one.
+
+```bash
+uv pip install git+https://github.com/you/aegis-stack-scraper
+aegis add scraper
+```
+
+The directory lists these in their own section, separate from published
+plugins. It finds them by GitHub topic, which is the only marker GitHub
+indexes; the PyPI keyword is invisible there.
+
+```text
+topic:aegis-stack-plugin
+```
+
+The two sections are not cosmetic. A published plugin resolves by version, so
+its listing carries a version, the `aegis-stack` range it supports, and a
+copyable install command. A source-only plugin installs from a mutable branch
+and pins nothing, so its listing carries the repository link and says so, and
+offers no install one-liner. Publishing to PyPI later moves the entry to the
+published section; nothing about the plugin has to change.
+
 For a same-day listing, or for a package published without the markers,
 submit the PyPI name at
 [aegis-stack.io/plugins/submit](https://aegis-stack.io/plugins/submit). The

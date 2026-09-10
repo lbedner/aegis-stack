@@ -32,6 +32,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
+from ... import __version__
 from .naming import dist_name, package_name
 
 JINJA_EXTENSION = ".jinja"
@@ -112,6 +113,10 @@ def scaffold_plugin(
         "dist": dist_name(name),
         "pkg": package_name(name),
         "description": description,
+        # The plugin is written against this aegis-stack's spec surface,
+        # so the scaffold pins it as the floor rather than letting a
+        # resolver pick an older one that lacks a field the plugin sets.
+        "aegis_version": __version__,
     }
 
     # Single Jinja2 environment rooted at the scaffold templates.

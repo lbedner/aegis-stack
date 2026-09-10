@@ -24,3 +24,4 @@ def test_entry_point_is_what_aegis_and_the_directory_look_for() -> None:
     entry_points = project["entry-points"]["aegis.plugins"]
     assert entry_points["{{ name }}"] == "{{ pkg }}.plugin:get_spec"
     assert "aegis-stack-plugin" in project["keywords"]
+    assert project["urls"]["Aegis Plugin"].endswith("{{ dist }}")

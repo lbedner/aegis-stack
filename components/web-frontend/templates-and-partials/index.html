@@ -1704,6 +1704,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#the-one-modal-in-one-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The one modal, in one place
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#closing-the-dialog-moving-on" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Closing the dialog, moving on
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#empty-states-and-form-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1766,6 +1788,34 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="The macro kit">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-table-page" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A table page
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A dialog
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -5199,6 +5249,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#the-one-modal-in-one-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The one modal, in one place
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#closing-the-dialog-moving-on" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Closing the dialog, moving on
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#empty-states-and-form-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5261,6 +5333,34 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="The macro kit">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-table-page" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A table page
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A dialog
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -5438,6 +5538,22 @@ header merges with triggers already on the response.</p>
 configuration stops 4xx/5xx bodies from swapping, and <code>app.js</code> turns the
 resulting <code>htmx:responseError</code> and <code>htmx:sendError</code> events into an error
 toast.</p>
+<h3 id="the-one-modal-in-one-place">The one modal, in one place</h3>
+<p><code>hx_dialog(url, extra="")</code> is how anything opens the modal and
+<code>hx_dialog_post(url)</code> how the form inside it posts back, so no template
+names the target element. On the server, <code>dialog(request, template,
+status_code, **context)</code> renders a dialog's body (a bare fragment, and a
+422 re-renders the same partial with its errors) and <code>dialog_done(path,
+toast)</code> ends a dialog form that made something: close, say so, navigate.</p>
+<h3 id="closing-the-dialog-moving-on">Closing the dialog, moving on</h3>
+<p><code>close_dialog(response)</code> closes the one modal after a successful in-dialog
+action and <code>navigate(response, path)</code> sends the browser to <code>path</code> the htmx
+way (<code>HX-Location</code>, swapped into <code>#app-content</code>). Both build on
+<code>trigger(response, event, detail, header)</code>, which merges client events into
+the <code>HX-Trigger</code> headers. <code>close_dialog</code> deliberately uses
+<code>HX-Trigger-After-Settle</code>: a plain trigger fires before the swap, and a
+response whose only content is rows out of band would then re-open the
+dialog, empty.</p>
 <h3 id="empty-states-and-form-errors">Empty states and form errors</h3>
 <p><code>components/macros/feedback.html</code> also ships <code>empty_state(title, hint=None)</code>
 for a list with nothing in it and <code>error_banner(errors)</code> for a form's
@@ -5463,59 +5579,82 @@ once per back/forward press. With the cache disabled every restore is a miss,
 and a miss is a clean full-page load. Back and forward still work; they just
 re-render instead of restoring a snapshot.</p>
 <h2 id="the-macro-kit">The macro kit</h2>
-<p><code>templates/components/macros.html</code> ships reusable macros. Import what you
-need:</p>
-<div class="language-html highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>{% from &quot;components/macros.html&quot; import primary_button, or_divider %}
+<p>Macros live under <code>templates/components/macros/</code>, one file per concern, one
+macro per control. Import what you need:</p>
+<div class="language-html highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>{% from &quot;components/macros/form.html&quot; import primary_button, or_divider %}
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>{% from &quot;components/macros/table.html&quot; import data_table %}
 </span></code></pre></div>
 <table>
 <thead>
 <tr>
-<th>Macro</th>
-<th>What it is</th>
+<th>File</th>
+<th>Macros</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>modal_scrim</code></td>
-<td>Full-bleed dismiss layer behind a modal.</td>
+<td><code>form.html</code></td>
+<td><code>range_chips(ranges, days)</code> (the time-window row; see <code>web_frontend/ranges.py</code> for the windows), <code>action(label, attrs, tone, vals)</code> (the one compact button), and native controls that post or re-query through htmx: <code>field</code> (label + control via <code>{% call %}</code>, optional error), <code>text_input</code>, <code>money_input</code>, <code>textarea</code>, <code>select</code> (<code>blank=None</code> for no empty choice, <code>block=True</code> inside a field), <code>date_input</code>, <code>checkbox</code>, <code>search_input</code>; <code>primary_button</code>, <code>submit_button</code> (spinner; needs <code>loading</code> in Alpine scope); the Alpine <code>select_field</code>, <code>password_input</code>, <code>or_divider</code></td>
 </tr>
 <tr>
-<td><code>popover_panel</code></td>
-<td>The one tooltip panel every hover hint uses.</td>
+<td><code>layout.html</code></td>
+<td><code>page_header(title, subtitle)</code> (the title row, with the caller's figures, chips and actions on the right), <code>figures(items)</code> (headline numbers), <code>stats_strip(cells)</code> (one bordered strip of N cells, each optionally a door), <code>ranked_rows(rows)</code> (name, count, amount, bar), <code>tab_bar</code> + <code>tab_item</code> (underline tabs), <code>chip(label, active, href, hx)</code>, <code>card</code> (titled section, body via <code>{% call %}</code>; a <code>None</code> title drops the header), <code>stat_tile(label, value, negative, caption, attrs)</code> (a caption line; <code>attrs</code> makes it a clickable cell), <code>progress(ratio, tone)</code>, <code>chart_panel</code>, <code>dialog</code>, <code>badge(label, tone)</code> (ok / warn / error / muted / accent), <code>dropdown</code> + <code>menu_item(label, attrs, danger)</code> (a <code>&lt;details&gt;</code> menu whose items close it), <code>confirm(title, body, url, label, method)</code> (a dialog body with one destructive verb), <code>theme_toggle</code>, <code>modal_scrim</code>, <code>popover_panel</code>, <code>hover_hint</code>, <code>info_tooltip</code></td>
 </tr>
 <tr>
-<td><code>hover_hint</code></td>
-<td>Dotted-underline term with a hover definition.</td>
+<td><code>table.html</code></td>
+<td><code>data_table(columns, rows, empty=..., row_id=...)</code>: declare columns (<code>key</code>, <code>label</code>, <code>kind</code> of text/money/date/int/status, <code>align</code>, <code>signed</code> or <code>toned</code> for money), hand over objects or dicts, formatting goes through the filters. <code>row_id</code> names each row so an action can swap it back; a <code>{% call(row) %}</code> block adds an actions column. <code>table_row(columns, row, id, oob, actions)</code> renders one row on its own, the usual answer to a row action. <code>pager</code>. The only table in the app.</td>
 </tr>
 <tr>
-<td><code>info_tooltip</code></td>
-<td>Small <code>?</code> icon with a click-triggered popover.</td>
-</tr>
-<tr>
-<td><code>primary_button</code></td>
-<td>The teal action button.</td>
-</tr>
-<tr>
-<td><code>submit_button</code></td>
-<td>Primary button with a loading spinner; needs <code>loading</code> in Alpine scope.</td>
-</tr>
-<tr>
-<td><code>select_field</code></td>
-<td>Themed combobox replacing the native <code>&lt;select&gt;</code>.</td>
-</tr>
-<tr>
-<td><code>password_input</code></td>
-<td>Password field with a show/hide toggle.</td>
-</tr>
-<tr>
-<td><code>or_divider</code></td>
-<td>"or" hairline between alternative actions.</td>
+<td><code>feedback.html</code></td>
+<td><code>toast_region</code>, <code>empty_state</code>, <code>error_banner</code>, <code>oob(id, tag)</code> (an out-of-band sibling rendered next to a swapped row)</td>
 </tr>
 </tbody>
 </table>
-<p>Macros that take a body use <code>{% call %}</code>:</p>
-<div class="language-html highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>{% call info_tooltip() %}<span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Explanation here.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>{% endcall %}
+<p><code>chart_panel(id, title, kind, data)</code> renders a canvas plus a JSON block;
+<code>static/js/charts.js</code> mounts Chart.js over every <code>canvas[data-chart]</code> on
+load and after each htmx settle, loading Chart.js on first use and reading
+its palette from the theme tokens. <code>dialog()</code> is mounted once by the base
+layout; a swap into <code>#dialog-body</code> opens it (pattern for any modal: <code>hx-get</code>
+the body into that target).</p>
+<h3 id="a-table-page">A table page</h3>
+<p>Declare the columns, hand over the rows the service already returns, and
+let <code>kind</code> do the formatting. Nobody writes a <code>&lt;table&gt;</code> by hand.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">COLUMNS</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Date&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">},</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Name&quot;</span><span class="p">},</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;amount&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Amount&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;money&quot;</span><span class="p">,</span> <span class="s2">&quot;align&quot;</span><span class="p">:</span> <span class="s2">&quot;right&quot;</span><span class="p">},</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">]</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/transactions&quot;</span><span class="p">,</span> <span class="n">include_in_schema</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">transactions</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">list_transactions</span><span class="p">()</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s2">&quot;pages/transactions.html&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="n">rows</span><span class="p">,</span> <span class="s2">&quot;columns&quot;</span><span class="p">:</span> <span class="n">COLUMNS</span><span class="p">})</span>
 </span></code></pre></div>
+<div class="language-html highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>{% extends layout %}
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>{% from &quot;components/macros/layout.html&quot; import card %}
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>{% from &quot;components/macros/table.html&quot; import data_table %}
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>{% block app_content %}
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>{% call card(&quot;Transactions&quot;) %}
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>{{ data_table(columns, rows, empty=&quot;No transactions yet&quot;) }}
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>{% endcall %}
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>{% endblock %}
+</span></code></pre></div>
+<p>Rows may be objects or dicts. <code>money</code> reads the row's <code>currency</code> when it
+has one, a blank value renders as a dash, and zero rows render the
+<code>empty_state</code> instead of an empty table.</p>
+<h3 id="a-dialog">A dialog</h3>
+<p><code>dialog()</code> is mounted once by the base layout; it is a target, not a
+component you instantiate. Any swap into <code>#dialog-body</code> opens it, Escape
+or the close button closes it, and closing clears the body.</p>
+<div class="language-html highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">&lt;</span><span class="nt">button</span> <span class="na">type</span><span class="o">=</span><span class="s">&quot;button&quot;</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>        <span class="na">hx-get</span><span class="o">=</span><span class="s">&quot;/transactions/42/edit&quot;</span> <span class="na">hx-target</span><span class="o">=</span><span class="s">&quot;#dialog-body&quot;</span><span class="p">&gt;</span>Edit<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+</span></code></pre></div>
+<p>The handler returns a bare fragment (a fragment-only route; no layout).
+A form inside it posts back the same way, with <code>hx-target="#dialog-body"</code>
+so a 422 re-renders the form in place, and on success the handler swaps the
+row it changed and adds an <code>HX-Trigger</code> to close the dialog or show a
+toast.</p>
 <h2 id="filters">Filters</h2>
 <p><code>filters.py</code> registers the formatting filters templates use, so numbers and
 dates are never formatted by hand in markup:</p>
@@ -5539,6 +5678,10 @@ dates are never formatted by hand in markup:</p>
 <td><code>pct(ratio, digits=0)</code></td>
 <td>A 0-1 ratio to <code>15%</code>.</td>
 </tr>
+<tr>
+<td><code>cents_to_input(cents)</code></td>
+<td>Minor units to a form value, <code>1,250.00</code>; the inverse of <code>money_to_cents</code> for pre-filling amount fields.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="template-context">Template context</h2>
@@ -5547,6 +5690,18 @@ them: <code>project_name</code>, <code>project_description</code>, and <code>sta
 <a href="../asset-pipeline/">Asset pipeline</a>). Projects with the auth service also get
 <code>auth_enabled</code> and <code>registration_enabled</code>. <code>render()</code> adds <code>layout</code> and
 <code>current_path</code> to each page's context.</p>
+<p>A fourth global, <code>hx_replace(url, target, oob=None)</code>, emits the attribute set
+for "re-request this URL and replace <code>target</code> with the same element from the
+response": filter forms, pagers, and list links that keep their state in the
+URL. It always swaps <code>outerHTML</code>, because selecting the element you target
+with the default inner swap nests a copy on every request.</p>
+<div class="language-html highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">&lt;</span><span class="nt">form</span> <span class="err">{{</span> <span class="na">hx_replace</span><span class="err">(</span><span class="na">request</span><span class="err">.</span><span class="na">url</span><span class="err">.</span><span class="na">path</span><span class="err">,</span> <span class="err">&quot;#</span><span class="na">register</span><span class="err">&quot;)</span> <span class="err">}}</span> <span class="na">hx-trigger</span><span class="o">=</span><span class="s">&quot;change&quot;</span><span class="p">&gt;</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">&lt;</span><span class="nt">a</span> <span class="na">href</span><span class="o">=</span><span class="s">&quot;{{ pager.next }}&quot;</span> <span class="err">{{</span> <span class="na">hx_replace</span><span class="err">(</span><span class="na">pager</span><span class="err">.</span><span class="na">next</span><span class="err">,</span> <span class="err">&quot;#</span><span class="na">items</span><span class="err">&quot;)</span> <span class="err">}}</span><span class="p">&gt;</span>Next<span class="p">&lt;/</span><span class="nt">a</span><span class="p">&gt;</span>
+</span></code></pre></div>
+<p>The htmx config in <code>base.html</code> sets <code>attributesToSettle</code> to an empty list.
+htmx's settle step otherwise copies <code>class</code> and <code>style</code> from the old element
+onto a swapped element with the same id, which undoes what Alpine's <code>x-show</code>
+has just applied.</p>
 <h2 id="testing-pages">Testing pages</h2>
 <p>The generated project ships a web test kit under <code>tests/web/</code>:</p>
 <ul>
@@ -5557,12 +5712,12 @@ them: <code>project_name</code>, <code>project_description</code>, and <code>sta
 <li><code>dom.select</code>, <code>one</code>, <code>none</code> and <code>text</code>, so assertions target elements
   rather than substrings of the response.</li>
 </ul>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tests.web.dom</span><span class="w"> </span><span class="kn">import</span> <span class="n">none</span><span class="p">,</span> <span class="n">one</span><span class="p">,</span> <span class="n">text</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_accounts_fragment</span><span class="p">(</span><span class="n">hx</span><span class="p">):</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">fragment</span> <span class="o">=</span> <span class="n">hx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/accounts&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="k">assert</span> <span class="n">text</span><span class="p">(</span><span class="n">one</span><span class="p">(</span><span class="n">fragment</span><span class="p">,</span> <span class="s2">&quot;h1&quot;</span><span class="p">))</span> <span class="o">==</span> <span class="s2">&quot;Accounts&quot;</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">none</span><span class="p">(</span><span class="n">fragment</span><span class="p">,</span> <span class="s2">&quot;html&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tests.web.dom</span><span class="w"> </span><span class="kn">import</span> <span class="n">none</span><span class="p">,</span> <span class="n">one</span><span class="p">,</span> <span class="n">text</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_accounts_fragment</span><span class="p">(</span><span class="n">hx</span><span class="p">):</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">fragment</span> <span class="o">=</span> <span class="n">hx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/accounts&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="k">assert</span> <span class="n">text</span><span class="p">(</span><span class="n">one</span><span class="p">(</span><span class="n">fragment</span><span class="p">,</span> <span class="s2">&quot;h1&quot;</span><span class="p">))</span> <span class="o">==</span> <span class="s2">&quot;Accounts&quot;</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">none</span><span class="p">(</span><span class="n">fragment</span><span class="p">,</span> <span class="s2">&quot;html&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 
 

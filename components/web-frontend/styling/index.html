@@ -5106,28 +5106,40 @@ a new template directory) will not be in the compiled CSS. If you add a
 template location, add its glob to <code>content</code> in <code>tailwind.config.js</code>.</p>
 </div>
 <h2 id="the-single-rebrand-point">The single rebrand point</h2>
-<p>Brand colors live in exactly one file: <code>tailwind.config.js</code>. The block is
-marked in the file itself:</p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nx">colors</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nx">aegis</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nx">bg</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;#090B0D&quot;</span><span class="p">,</span><span class="w">     </span><span class="c1">// Page background</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nx">card</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;#111418&quot;</span><span class="p">,</span><span class="w">   </span><span class="c1">// Card/surface background</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="nx">border</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;#272C36&quot;</span><span class="p">,</span><span class="w"> </span><span class="c1">// Borders, dividers</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;#EEF1F4&quot;</span><span class="p">,</span><span class="w">   </span><span class="c1">// Primary text</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="nx">muted</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;#7E8A9A&quot;</span><span class="p">,</span><span class="w">  </span><span class="c1">// Secondary/muted text</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="nx">teal</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;#17CCBF&quot;</span><span class="p">,</span><span class="w">   </span><span class="c1">// Brand accent</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="nx">amber</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;#F59E0B&quot;</span><span class="p">,</span><span class="w">  </span><span class="c1">// Warning/highlight</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="p">},</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="p">},</span>
+<p>A theme is one block of CSS variables in <code>static/input.css</code>, keyed by
+<code>[data-theme]</code>:</p>
+<div class="language-css highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="o">[</span><span class="nt">data-theme</span><span class="o">=</span><span class="s2">&quot;aegis&quot;</span><span class="o">]</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="k">color-scheme</span><span class="p">:</span><span class="w"> </span><span class="n">dark</span><span class="p">;</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nv">--aegis-bg</span><span class="p">:</span><span class="w"> </span><span class="mi">9</span><span class="w"> </span><span class="mi">11</span><span class="w"> </span><span class="mi">13</span><span class="p">;</span><span class="w">        </span><span class="c">/* page background */</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nv">--aegis-card</span><span class="p">:</span><span class="w"> </span><span class="mi">17</span><span class="w"> </span><span class="mi">20</span><span class="w"> </span><span class="mi">24</span><span class="p">;</span><span class="w">     </span><span class="c">/* card / surface */</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nv">--aegis-border</span><span class="p">:</span><span class="w"> </span><span class="mi">39</span><span class="w"> </span><span class="mi">44</span><span class="w"> </span><span class="mi">54</span><span class="p">;</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nv">--aegis-text</span><span class="p">:</span><span class="w"> </span><span class="mi">238</span><span class="w"> </span><span class="mi">241</span><span class="w"> </span><span class="mi">244</span><span class="p">;</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nv">--aegis-muted</span><span class="p">:</span><span class="w"> </span><span class="mi">126</span><span class="w"> </span><span class="mi">138</span><span class="w"> </span><span class="mi">154</span><span class="p">;</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nv">--aegis-teal</span><span class="p">:</span><span class="w"> </span><span class="mi">23</span><span class="w"> </span><span class="mi">204</span><span class="w"> </span><span class="mi">191</span><span class="p">;</span><span class="w">   </span><span class="c">/* brand accent */</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nv">--aegis-amber</span><span class="p">:</span><span class="w"> </span><span class="mi">245</span><span class="w"> </span><span class="mi">158</span><span class="w"> </span><span class="mi">11</span><span class="p">;</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="nv">--aegis-error</span><span class="p">:</span><span class="w"> </span><span class="mi">239</span><span class="w"> </span><span class="mi">68</span><span class="w"> </span><span class="mi">68</span><span class="p">;</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="nv">--aegis-scrim</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="nv">--aegis-chart-1</span><span class="p">:</span><span class="w"> </span><span class="mi">23</span><span class="w"> </span><span class="mi">204</span><span class="w"> </span><span class="mi">191</span><span class="p">;</span><span class="w"> </span><span class="c">/* ... a ramp of eight */</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>These become utilities (<code>bg-aegis-bg</code>, <code>text-aegis-teal</code>,
-<code>border-aegis-border</code>) used throughout the shipped templates. The DaisyUI
-theme below the block mirrors the same values into DaisyUI's semantic slots
-(<code>primary</code>, <code>base-100</code>, <code>success</code>), so component classes like <code>btn</code> and <code>card</code>
-match the hand-written utilities. Change the block, rebuild, and the whole
-frontend follows. Nothing else hardcodes a hex value.</p>
-<p>The theme is selected in <code>base.html</code> via <code>data-theme="aegis"</code> on the <code>&lt;html&gt;</code>
-element.</p>
+<p><code>tailwind.config.js</code> maps the <code>aegis-*</code> color names onto those variables
+(<code>rgb(var(--aegis-bg) / &lt;alpha-value&gt;)</code>), so the utilities used throughout
+the templates (<code>bg-aegis-card</code>, <code>text-aegis-teal</code>, <code>border-aegis-border</code>)
+follow whatever theme is on <code>&lt;html data-theme&gt;</code>. Values are RGB triplets so
+opacity modifiers like <code>bg-aegis-teal/10</code> keep working.</p>
+<p>Two themes ship, <code>aegis</code> (dark) and <code>aegis-light</code>. To add one, add a block
+with the same token set; a test holds the shipped blocks to parity. To
+rebrand, edit the values. The DaisyUI theme list in <code>tailwind.config.js</code>
+mirrors each theme in hex so DaisyUI's own component classes (<code>btn</code>,
+<code>card</code>, <code>alert</code>) match.</p>
+<p><code>static/js/theme.js</code> runs synchronously in <code>&lt;head&gt;</code>, ahead of the
+stylesheet, so a stored choice is applied before first paint; it exposes
+<code>toggleTheme()</code>, and the <code>theme_toggle()</code> macro in
+<code>components/macros/layout.html</code> is the button. Default is <code>aegis</code>, set on
+<code>&lt;html&gt;</code> in <code>base.html</code>.</p>
+<p>Nothing else names a color. A test fails on any hex literal, and on any
+theme-blind class such as <code>text-white</code> or <code>bg-black</code>, in templates or
+static JS; use <code>text-aegis-text</code> and <code>bg-aegis-scrim</code> instead.</p>
 <h2 id="the-layers">The layers</h2>
 <p>Three places styling can live, in order of preference:</p>
 <ol>
@@ -5147,10 +5159,10 @@ a component class.</p>
 </li>
 <li>
 <p><strong><code>static/css/app.css</code>.</strong> Hand-authored CSS that is not Tailwind at all.
-   It ships with two rules worth knowing about: <code>[x-cloak]{display:none}</code>
-   (hides elements until Alpine initializes them, preventing a flash of
-   unstyled content on htmx swaps) and <code>color-scheme: dark</code> (tells the
-   browser to render native controls dark).</p>
+   It ships with <code>[x-cloak]{display:none}</code> (hides elements until Alpine
+   initializes them, preventing a flash of unstyled content on htmx swaps)
+   and the native <code>accent-color</code>, read from the theme's token.
+   <code>color-scheme</code> lives with each theme block in <code>input.css</code>.</p>
 </li>
 </ol>
 <h2 id="linting">Linting</h2>

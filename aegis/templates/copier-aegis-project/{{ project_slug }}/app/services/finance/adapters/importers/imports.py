@@ -712,6 +712,21 @@ async def ingest_transactions(
             category_cache[hint] = category_id
         return category_cache[hint]
 
+    # A payee already named on this ledger lands already named, keyed on
+    # the same four-token grouping the user confirmed when they named it.
+    # A key they have since taught a second payee stops resolving; see
+    # ``_remember_payee_keys``.
+    #
+    # Resolved for the WHOLE file in one query rather than memoized per
+    # descriptor the way categories are: an import repeats a handful of
+    # category strings across thousands of rows, but descriptors are
+    # nearly all distinct (the card tail and date vary per swipe), so a
+    # cache would miss on almost every row and make this an N+1.
+    merchant_by_descriptor = await service.resolve_merchant_aliases(
+        [r.txn.original_description or r.txn.name for r in plan.rows],
+        owner_user_id=owner_user_id,
+    )
+
     # Memoize tag rows the same way (Quicken tags repeat heavily).
     tag_cache: dict[str, int] = {}
 
@@ -879,6 +894,9 @@ async def ingest_transactions(
             check_number=txn.check_number,
             category_id=category_id,
             category_source="rule" if category_id is not None else "unset",
+            merchant_id=merchant_by_descriptor.get(
+                txn.original_description or txn.name or ""
+            ),
             is_split=bool(txn.splits),
         )
         created_id_by_row[row.row_number] = created.id
@@ -1011,11 +1029,14 @@ async def import_csv(
     if profile is None:
         header = csv_profiles.header_preview(file_bytes)
         batch_owner = 0 if owner_user_id is None else owner_user_id
+        # No file hash on a failed batch: the hash dedups files that were
+        # ingested (uq_finance_importbatch_file), and carrying it here made
+        # the second try of the same unknown bytes an IntegrityError.
         failed = FinanceImportBatch(
             owner_user_id=batch_owner,
             source_type="csv",
             file_name=file_name,
-            file_sha256=hashlib.sha256(file_bytes).hexdigest(),
+            file_sha256=None,
             status="failed",
             rows_total=0,
             error=f"Unknown CSV layout; header {header}",

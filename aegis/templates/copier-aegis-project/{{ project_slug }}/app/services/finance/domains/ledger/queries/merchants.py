@@ -16,6 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.finance.models import (
     FinanceIcon,
     FinanceMerchant,
+    FinanceMerchantAlias,
     FinanceRecurringStream,
     FinanceTransaction,
 )
@@ -191,3 +192,58 @@ async def payeeless_transactions(
     if owner_user_id is not None:
         query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
     return list((await db.exec(query)).all())
+
+
+async def merchant_aliases_by_normalized(
+    db: AsyncSession, normalized: Iterable[str], *, owner_user_id: int | None = None
+) -> dict[str, FinanceMerchantAlias]:
+    """The alias ROWS for these payee keys, one query.
+
+    Returns rows rather than ids because the writer needs them: a key
+    whose payee has been corrected is rewritten in place, and the unique
+    index on ``(owner_user_id, normalized_alias)`` means inserting beside
+    the old one would fail rather than win.
+    """
+    wanted = {text for text in normalized if text}
+    if not wanted:
+        return {}
+    query = select(FinanceMerchantAlias).where(
+        FinanceMerchantAlias.normalized_alias.in_(wanted)
+    )
+    query = (
+        query.where(FinanceMerchantAlias.owner_user_id == owner_user_id)
+        if owner_user_id is not None
+        else query.where(FinanceMerchantAlias.owner_user_id.is_(None))
+    )
+    return {row.normalized_alias: row for row in (await db.exec(query)).all()}
+
+
+async def named_transactions(
+    db: AsyncSession, *, owner_user_id: int | None = None
+) -> list[FinanceTransaction]:
+    """Every live transaction that HAS a payee - the mirror of
+    ``payeeless_transactions``, and the corpus the payee memory is
+    rebuilt from."""
+    query = select(FinanceTransaction).where(
+        FinanceTransaction.deleted_at.is_(None),
+        FinanceTransaction.merchant_id.isnot(None),
+    )
+    if owner_user_id is not None:
+        query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+    return list((await db.exec(query)).all())
+
+
+async def delete_merchant_aliases(
+    db: AsyncSession, *, owner_user_id: int | None = None
+) -> None:
+    """Clear this owner's payee memory, so a recompute answers to the
+    transactions rather than to what it wrote last time."""
+    query = select(FinanceMerchantAlias)
+    query = (
+        query.where(FinanceMerchantAlias.owner_user_id == owner_user_id)
+        if owner_user_id is not None
+        else query.where(FinanceMerchantAlias.owner_user_id.is_(None))
+    )
+    for row in (await db.exec(query)).all():
+        await db.delete(row)
+    await db.flush()

@@ -166,6 +166,10 @@ class FinanceTransaction(SQLModel, table=True):
     # Forward FK (finance_merchant, FIN-08) — plain column here.
     merchant_id: int | None = Field(default=None)
     merchant_name: str | None = Field(default=None)
+    # A brand logo the source attached to this transaction, provider-neutral:
+    # each adapter translates its own enrichment into this one URL, and the
+    # ledger hands it to the payee on attribution (merchants.py).
+    logo_url: str | None = Field(default=None)
     merchant_entity_id: str | None = Field(default=None)
     memo: str | None = Field(default=None)
     check_number: str | None = Field(default=None, max_length=32)

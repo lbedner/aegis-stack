@@ -187,6 +187,55 @@ class FinanceMerchant(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
+class FinanceMerchantAlias(SQLModel, table=True):
+    """Bank descriptor -> canonical payee, so naming a payee once survives
+    the next import.
+
+    The counterpart to ``FinanceCategoryAlias`` on the merchant axis.
+    Written wherever a payee is assigned (``assign_merchant`` is the one
+    chokepoint every naming path routes through) and read when an import
+    creates a transaction.
+
+    ``normalized_alias`` is the four-token ``transaction_payee_key``, not
+    the whole descriptor. Measured on a real ledger, the full descriptor
+    is nearly useless as a memory: one supermarket's 407 transactions
+    carried 211 distinct descriptors, because the card tail and date are
+    baked into each one, so half of the next import would arrive as text
+    nobody had ever seen. The same 407 collapse to 8 stable prefixes.
+
+    The prefix is a heuristic, so ``is_ambiguous`` carries its cost
+    honestly: on that ledger 5 of 240 named prefixes meant more than one
+    payee ("NON CHASE ATM WITHDRAW" covered four), and being taught a
+    second payee for a prefix sets the flag and stops it resolving
+    unattended. Naming by hand still works; the ledger just stops
+    guessing where it has been shown a genuine conflict.
+    """
+
+    __tablename__ = "finance_merchant_alias"
+    __table_args__ = (
+        Index("ix_finance_merchalias_owner", "owner_user_id"),
+        Index("ix_finance_merchalias_merchant", "merchant_id"),
+        Index("ix_finance_merchalias_normalized", "normalized_alias"),
+        Index(
+            "uq_finance_merchalias_owner_norm",
+            "owner_user_id",
+            "normalized_alias",
+            unique=True,
+        ),
+        {"schema": _SCHEMA},
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_user_id: int | None = Field(default=None)
+    merchant_id: int = Field(foreign_key=f"{_FK}finance_merchant.id")
+    alias_text: str
+    normalized_alias: str
+    is_ambiguous: bool = Field(default=False)
+    source: str | None = Field(default=None)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
 class FinanceTag(SQLModel, table=True):
     """First-class tags (Quicken ``/Class`` axis plus user tags), orthogonal to
     categories. Always user-owned (no global seeds)."""

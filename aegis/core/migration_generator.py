@@ -2331,6 +2331,9 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("original_description", "sa.Text()", nullable=True),
                 ColumnSpec("merchant_id", "sa.Integer()", nullable=True),
                 ColumnSpec("merchant_name", "sa.Text()", nullable=True),
+                # A brand logo the source attached, provider-neutral: each
+                # adapter translates its own enrichment into this one URL.
+                ColumnSpec("logo_url", "sa.Text()", nullable=True),
                 ColumnSpec("merchant_entity_id", "sa.Text()", nullable=True),
                 ColumnSpec("memo", "sa.Text()", nullable=True),
                 ColumnSpec("check_number", "sa.String(32)", nullable=True),
@@ -2769,6 +2772,39 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
                 CheckConstraintSpec(
                     "ck_finance_merchant_source",
                     "source IN ('plaid', 'user', 'system', 'rule', 'snaptrade')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_merchant_alias",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("merchant_id", "sa.Integer()", nullable=False),
+                ColumnSpec("alias_text", "sa.Text()", nullable=False),
+                ColumnSpec("normalized_alias", "sa.Text()", nullable=False),
+                # A payee key several payees share stops resolving rather
+                # than filing every later row under whoever was named last.
+                ColumnSpec("is_ambiguous", "sa.Boolean()", nullable=False),
+                ColumnSpec("source", "sa.Text()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_merchalias_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_merchalias_merchant", ["merchant_id"]),
+                IndexSpec("ix_finance_merchalias_normalized", ["normalized_alias"]),
+                # A payee key holds one answer: being taught a second payee
+                # rewrites the row rather than landing beside it.
+                IndexSpec(
+                    "uq_finance_merchalias_owner_norm",
+                    ["owner_user_id", "normalized_alias"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["merchant_id"], "finance_merchant", ["id"], ondelete="CASCADE"
                 ),
             ],
         ),
@@ -3911,6 +3947,7 @@ _FINANCE_OWNED_TABLES: tuple[str, ...] = (
     "finance_category",
     "finance_category_alias",
     "finance_merchant",
+    "finance_merchant_alias",
     "finance_tag",
     "finance_rule",
     "finance_holding",

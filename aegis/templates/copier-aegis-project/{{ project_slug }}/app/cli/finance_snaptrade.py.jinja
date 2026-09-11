@@ -1,0 +1,80 @@
+{%- if finance_snaptrade %}
+"""SnapTrade brokerage connections, as CLI commands.
+
+Its own module because ``cli/finance`` is the finance command surface and
+this is one provider's two-step portal flow - separately readable, and
+the finance CLI was over its line budget with it inlined.
+
+``snaptrade_app`` is registered onto the finance app by ``cli/finance``
+rather than reaching back for it, so the import runs one way.
+"""
+
+import asyncio
+
+import typer
+
+from app.cli import theme
+from app.cli.finance_options import OWNER_OPT
+
+console = theme.console()
+
+snaptrade_app = typer.Typer(help="SnapTrade brokerage connections.")
+
+
+@snaptrade_app.command("connect")
+def snaptrade_connect(owner_user_id: int | None = OWNER_OPT) -> None:
+    """Start a SnapTrade connect and print the portal URL (expires in ~5 min)."""
+    asyncio.run(_snaptrade_connect(owner_user_id))
+
+
+async def _snaptrade_connect(owner_user_id: int | None) -> None:
+    from app.core.db import get_async_session
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.snaptrade import SnapTradeError
+
+    async with get_async_session() as session:
+        try:
+            _connection, url = await connections.start_snaptrade_connect(
+                session, owner_user_id=owner_user_id
+            )
+            await session.commit()
+        except SnapTradeError as exc:
+            console.print(f"[red]Connect failed:[/] {exc}")
+            raise typer.Exit(code=1) from exc
+    console.print("Open the SnapTrade portal to link your brokerage:")
+    console.print(url, soft_wrap=True)
+    console.print("Then run: [bold]finance snaptrade complete[/]")
+
+
+@snaptrade_app.command("complete")
+def snaptrade_complete(owner_user_id: int | None = OWNER_OPT) -> None:
+    """Adopt authorizations finished in the portal and run the first sync."""
+    asyncio.run(_snaptrade_complete(owner_user_id))
+
+
+async def _snaptrade_complete(owner_user_id: int | None) -> None:
+    from app.core.db import get_async_session
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.snaptrade import SnapTradeError
+
+    async with get_async_session() as session:
+        try:
+            results = await connections.complete_snaptrade_connect(
+                session, owner_user_id=owner_user_id
+            )
+            await session.commit()
+        except SnapTradeError as exc:
+            console.print(f"[red]Connect failed:[/] {exc}")
+            raise typer.Exit(code=1) from exc
+    if not results:
+        console.print(
+            "No new authorization yet - finish the portal flow, then re-run."
+        )
+        raise typer.Exit(code=1)
+    for result in results:
+        console.print(
+            f"[green]Connected #{result.connection_id}:[/] "
+            f"{result.accounts} account(s), {result.holdings} holding(s), "
+            f"{result.trades} trade(s)"
+        )
+{%- endif %}

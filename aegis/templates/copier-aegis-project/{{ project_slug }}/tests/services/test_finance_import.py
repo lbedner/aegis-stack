@@ -708,6 +708,25 @@ class TestCsvProfiles:
         assert by_name["Mortgage Co"].running_balance == 500000  # 5,000.00
         assert by_name["City Water"].running_balance == 592535  # 5,925.35
 
+    def test_quicken_register_without_the_scheduled_column(self) -> None:
+        """A single-account register report omits Scheduled (and carries no
+        Account column). Optional columns must not gate detection: the
+        required ones are present, so it is the Register layout, and the
+        leading ``Balance:`` line has no date, so it is skipped."""
+        from app.services.finance.adapters.importers import csv_profiles
+
+        data = _csv("sample_quicken_register_single.csv")
+        profile, index = csv_profiles.detect_profile(data, _profiles())
+        assert profile is not None and profile.name == "Quicken Mac Register"
+        assert index == 6
+        parsed = csv_profiles.parse_csv(data, profile, header_index=index)
+        assert len(parsed) == 3
+        by_name = {p.name: p for p in parsed}
+        assert by_name["Employer Payroll"].amount == 300000
+        assert by_name["City Water"].check_number == "1102"
+        assert by_name["Card Payment"].running_balance == -1015890
+        assert all(p.account_key is None for p in parsed)
+
     def test_quicken_all_transactions_reads_account_column(self) -> None:
         """The 'All Transactions' report is a multi-account layout: each row
         carries its owning account in the Account column -> account_key."""
@@ -1039,6 +1058,29 @@ class TestCsvImport:
 
         accounts, _ = await svc.list_accounts(owner_user_id=1)
         assert sum(1 for a in accounts if a.name == "AMEX CARD") == 1
+
+    async def test_unknown_header_twice_is_the_same_error_both_times(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """A failed batch must not claim the file hash: the hash dedups
+        files that were ingested, and a second try of the same unknown
+        bytes hit the unique index as an IntegrityError (a 500) instead
+        of the layout message."""
+        from app.services.finance.adapters.importers.csv_profiles import (
+            UnknownCsvLayoutError,
+        )
+
+        account = await _account(async_db_session)
+        await _seed_csv_profiles(async_db_session)
+        for _ in range(2):
+            with pytest.raises(UnknownCsvLayoutError):
+                await imports.import_csv(
+                    async_db_session,
+                    owner_user_id=1,
+                    file_name="weird.csv",
+                    file_bytes=b"Foo,Bar,Baz\n1,2,3\n",
+                    account_id=account.id,
+                )
 
     @pytest.mark.asyncio
     async def test_unknown_header_marks_failed_batch(

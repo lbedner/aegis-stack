@@ -365,3 +365,59 @@ class TestSnapTradeConnect:
 {%- endif %}
 {%- endif %}
 {%- endif %}
+
+class TestRecomputePayeeAliases:
+    def test_reports_what_it_learned(self) -> None:
+        session, cm = _fake_session_cm()
+        rebuild = AsyncMock(
+            return_value={"transactions": 11189, "keys": 240, "ambiguous": 0}
+        )
+        with (
+            patch("app.core.db.get_async_session", new=cm),
+            patch(
+                "app.services.finance.service.FinanceService.recompute_payee_aliases",
+                new=rebuild,
+            ),
+        ):
+            result = runner.invoke(
+                app, ["recompute-payee-aliases", "--owner-user-id", "1"]
+            )
+        assert result.exit_code == 0
+        assert "240 payee key(s)" in result.output
+        assert "11189 named transaction(s)" in result.output
+        assert rebuild.await_args.kwargs["owner_user_id"] == 1
+        session.commit.assert_awaited_once()
+
+    def test_keys_covering_two_payees_are_called_out(self) -> None:
+        """The ledger declining to guess is the useful half of the
+        report, not an error to bury."""
+        _session, cm = _fake_session_cm()
+        rebuild = AsyncMock(
+            return_value={"transactions": 11189, "keys": 240, "ambiguous": 5}
+        )
+        with (
+            patch("app.core.db.get_async_session", new=cm),
+            patch(
+                "app.services.finance.service.FinanceService.recompute_payee_aliases",
+                new=rebuild,
+            ),
+        ):
+            result = runner.invoke(app, ["recompute-payee-aliases"])
+        assert result.exit_code == 0
+        assert "5 key(s) cover more than one payee" in result.output
+
+    def test_a_clean_rebuild_says_nothing_about_conflicts(self) -> None:
+        _session, cm = _fake_session_cm()
+        rebuild = AsyncMock(
+            return_value={"transactions": 12, "keys": 3, "ambiguous": 0}
+        )
+        with (
+            patch("app.core.db.get_async_session", new=cm),
+            patch(
+                "app.services.finance.service.FinanceService.recompute_payee_aliases",
+                new=rebuild,
+            ),
+        ):
+            result = runner.invoke(app, ["recompute-payee-aliases"])
+        assert result.exit_code == 0
+        assert "more than one payee" not in result.output

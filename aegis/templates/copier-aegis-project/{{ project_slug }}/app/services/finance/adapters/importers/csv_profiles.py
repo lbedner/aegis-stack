@@ -64,20 +64,36 @@ def _row_matches(row: list[str], profile: FinanceImportProfile) -> bool:
     return len(trimmed) == len(signature) and set(trimmed) == set(signature)
 
 
-def _row_contains(row: list[str], profile: FinanceImportProfile) -> bool:
-    """The row carries every signature column, plus extras.
+# Fields a layout may leave out without becoming a different layout: a
+# single-account Quicken register report drops ``Scheduled``, and parsing
+# already reads every one of these as absent-is-None.
+OPTIONAL_FIELDS = frozenset({"balance", "check_number", "scheduled"})
 
-    Vendors ADD columns: Quicken's "All Transactions" report grew a
-    ``Scheduled`` column, and an exact-length match rejected the whole
-    file. Parsing addresses columns by name, so extras are harmless -
-    only detection was brittle. Requiring the FULL signature to be
-    present is its own guard: a two-cell preamble row can never contain
-    eight header names.
+
+def _required(profile: FinanceImportProfile) -> set[str]:
+    """The signature columns a file must carry to be this layout."""
+    mapping = profile.column_mapping or {}
+    return {
+        cell.strip()
+        for cell in profile.header_signature
+        if cell.strip() and mapping.get(cell.strip()) not in OPTIONAL_FIELDS
+    }
+
+
+def _row_contains(row: list[str], profile: FinanceImportProfile) -> bool:
+    """The row carries every required signature column, plus extras.
+
+    Vendors ADD columns (Quicken's "All Transactions" report grew a
+    ``Scheduled`` column) and DROP optional ones (its single-account
+    register report has none). Parsing addresses columns by name, so
+    both are harmless - only detection was brittle. Requiring the full
+    required set is its own guard: a two-cell preamble row can never
+    contain six header names.
     """
-    signature = {cell.strip() for cell in profile.header_signature if cell.strip()}
-    if len(signature) < 3:
+    required = _required(profile)
+    if len(required) < 3:
         return False  # too weak a signature to match loosely
-    return signature <= {cell.strip() for cell in row}
+    return required <= {cell.strip() for cell in row}
 
 
 def detect_profile(
@@ -97,9 +113,13 @@ def detect_profile(
             if _row_matches(row, profile):
                 return profile, index
     for index, row in enumerate(rows):
-        for profile in profiles:
-            if _row_contains(row, profile):
-                return profile, index
+        cells = {cell.strip() for cell in row}
+        loose = [p for p in profiles if _row_contains(row, p)]
+        if loose:
+            # The most specific layout wins: the one with the most of its
+            # signature actually present, so a looser profile whose
+            # required columns happen to fit cannot claim the file.
+            return max(loose, key=lambda p: len(set(p.header_signature) & cells)), index
     return None, -1
 
 

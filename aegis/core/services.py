@@ -987,6 +987,8 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/components/frontend/dashboard/modals/finance_recurring_tab",
             "app/components/frontend/dashboard/modals/finance_settings_tab.py",
             "app/cli/finance.py",
+            "app/cli/finance_options.py",
+            "app/cli/finance_snaptrade.py",
         ],
         files=FileManifest(
             primary=[
@@ -1000,6 +1002,8 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/modals/finance_recurring_tab",
                 "app/components/frontend/dashboard/modals/finance_settings_tab.py",
                 "app/cli/finance.py",
+                "app/cli/finance_options.py",
+                "app/cli/finance_snaptrade.py",
                 "tests/services/test_finance_models.py",
                 "tests/services/test_finance_clock.py",
                 "tests/services/_finance_factories.py",
@@ -1052,6 +1056,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_finance_categorize.py",
                 "tests/services/test_finance_declare_recurring.py",
                 "tests/services/test_finance_detection_gates.py",
+                "tests/services/test_finance_payee_aliases.py",
                 "tests/services/test_finance_payee_groups.py",
                 "tests/services/test_finance_payee_naming.py",
                 "tests/services/test_finance_payees.py",

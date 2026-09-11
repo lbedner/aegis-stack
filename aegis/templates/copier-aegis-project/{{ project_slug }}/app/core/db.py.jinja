@@ -161,13 +161,36 @@ async_engine = create_async_engine(
 )
 
 
-# Enable foreign key constraints for SQLite
+# SQLite has one writer at a time, so every connection waits its turn
+# rather than failing at once: a chat run holds one connection while each
+# tool call commits on its own, and without a timeout the second writer
+# fails immediately with "database is locked".
+SQLITE_BUSY_TIMEOUT_MS = 30000
+
+
+def apply_sqlite_pragmas(dbapi_connection: Any) -> None:
+    """The pragmas every SQLite connection opens with, sync and async.
+
+    One function because the two hooks had drifted: the sync one turned
+    foreign keys on, the async one set the timeout, and each was missing
+    what the other had — so every async session ran the schema with its
+    foreign keys unenforced.
+
+    NOT journal_mode=WAL, though it is the usual answer to a writer
+    that starves readers. WAL coordinates its readers through shared
+    memory mapped from a -shm file, which is only coherent between
+    processes on one machine; a dev stack that bind-mounts this file from
+    the host into several containers, and a CLI that opens it from the
+    host as well, do not share that memory. It belongs with a database
+    the container boundary does not cross, or with Postgres.
+    """
+    dbapi_connection.execute("PRAGMA foreign_keys=ON")
+    dbapi_connection.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+
+
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
-    """Enable foreign key constraints in SQLite."""
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+    apply_sqlite_pragmas(dbapi_connection)
 
 
 # pysqlite's legacy transaction sniffing implicitly COMMITs the open
@@ -180,10 +203,7 @@ def _async_sqlite_take_over_transactions(
     dbapi_connection: Any, connection_record: Any
 ) -> None:
     dbapi_connection.isolation_level = None
-    # A chat run holds one connection while each tool call commits on its
-    # own; without a timeout the second writer fails at once with
-    # "database is locked" instead of waiting its turn.
-    dbapi_connection.execute("PRAGMA busy_timeout=30000")
+    apply_sqlite_pragmas(dbapi_connection)
 
 
 @event.listens_for(async_engine.sync_engine, "begin")

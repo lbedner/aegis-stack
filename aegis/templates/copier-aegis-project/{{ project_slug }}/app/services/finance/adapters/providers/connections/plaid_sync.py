@@ -22,6 +22,7 @@ from typing import Any
 from app.core.encryption import decrypt_secret, encrypt_secret
 from app.core.time import utcnow
 from app.services.finance.adapters.providers import queries
+from app.services.finance.adapters.providers.connections import plaid_mapping
 from app.services.finance.adapters.providers.connections.common import (
     _ACCESS_TOKEN_CONTEXT,
     SyncResult,
@@ -280,6 +281,7 @@ async def _apply_transactions(
             existing.name = name
             existing.date_ = txn_date
             existing.pending = pending
+            existing.logo_url = plaid_mapping.merchant_logo(txn)
             if existing.status != "removed":
                 existing.status = "pending" if pending else "posted"
             if pending_provider_id:
@@ -327,6 +329,8 @@ async def _apply_transactions(
             pending_provider_id=pending_provider_id,
             import_batch_id=import_batch_id,
         )
+        created.logo_url = plaid_mapping.merchant_logo(txn)
+        db.add(created)
         lane1[(account_id, external_id)] = created
         added += 1
         if not pending and pending_provider_id:

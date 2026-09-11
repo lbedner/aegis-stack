@@ -187,6 +187,11 @@ dev = [
     "lxml>=6.1.3",
     "cssselect>=1.5.0",
 {%- endif %}
+{%- if include_database %}
+    # N+1 and query-budget detection for the test suite (make check-queries).
+    # Built on SQLAlchemy 2.0's do_orm_execute, so it needs a database stack.
+    "queryspy>=0.4.1",
+{%- endif %}
 {%- if include_database and database_engine != 'sqlite' %}
     # Tests use in-memory SQLite for speed/isolation regardless of the
     # production backend, so aiosqlite is required as a test dep even when
@@ -500,7 +505,11 @@ cmd = "npx --yes @biomejs/biome@2.5.1 format --write app/components/web_frontend
 help = "Run type checking with ty"
 cmd = "uv run ty check"
 
-[tool.poe.tasks.check]
+{% if include_database %}[tool.poe.tasks.check-queries]
+help = "Detect N+1 queries in the test suite"
+cmd = "uv run pytest --queryspy-strict"
+
+{% endif %}[tool.poe.tasks.check]
 help = "Run all code quality checks"
 sequence = ["lint", "typecheck", "test", { cmd = 'echo "All checks completed successfully!"' }]
 

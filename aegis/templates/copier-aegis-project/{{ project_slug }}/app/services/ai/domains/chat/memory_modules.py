@@ -80,7 +80,6 @@ async def create_memory_module(
     )
     session.add(module)
     await session.commit()
-    await session.refresh(module)
     logger.info("Created memory module", module_slug=slug)
     return module
 
@@ -117,7 +116,6 @@ async def update_memory_module(
     module.updated_at = utcnow()
     session.add(module)
     await session.commit()
-    await session.refresh(module)
     logger.info("Updated memory module", module_slug=slug)
     return module
 

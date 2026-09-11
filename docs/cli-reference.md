@@ -943,6 +943,7 @@ cp .env.example .env       # Configure environment (edit API keys, etc.)
 make serve                 # Start development server
 make test                  # Run test suite
 make check                 # Run all quality checks (lint + typecheck + test)
+make check-queries         # Detect N+1 queries in the suite (database stacks)
 ```
 
 ### Evolving Your Project

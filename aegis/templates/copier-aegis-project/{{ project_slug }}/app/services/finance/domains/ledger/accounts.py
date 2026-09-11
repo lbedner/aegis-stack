@@ -33,14 +33,31 @@ async def get_or_create_currency(
     decimals: int = 2,
 ) -> FinanceCurrency:
     code = code.lower()
+    # Every row carrying a currency FK calls this - one per security, price,
+    # holding, trade, budget line, stream, and per row of a provider sync
+    # loop - against a table of a handful of immutable rows. ``Session.info``
+    # is SQLAlchemy's per-session scratch space, so the cache dies with the
+    # session and a rolled back currency is never handed to the next one.
+    cache: dict[str, FinanceCurrency] = db.info.setdefault(
+        "finance_currency_cache", {}
+    )
+    cached = cache.get(code)
+    # ``in db`` because a SAVEPOINT rollback (one per connection in a
+    # provider sync) expunges the instance: a cached row from a rolled back
+    # savepoint would be handed to the next connection and detach every row
+    # that referenced it.
+    if cached is not None and cached in db:
+        return cached
     existing = await queries.currency_by_code(db, code)
     if existing:
+        cache[code] = existing
         return existing
     currency = FinanceCurrency(
         code=code, name=name or code.upper(), symbol=symbol, decimals=decimals
     )
     db.add(currency)
     await db.flush()
+    cache[code] = currency
     return currency
 
 

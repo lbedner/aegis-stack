@@ -125,7 +125,6 @@ class EventService:
         )
         self.db.add(event)
         await self.db.commit()
-        await self.db.refresh(event)
         return event
 
     async def update_user_event(
@@ -163,7 +162,6 @@ class EventService:
 
         self.db.add(event)
         await self.db.commit()
-        await self.db.refresh(event)
         return event
 
     async def delete_user_event(self, event_id: int) -> bool:

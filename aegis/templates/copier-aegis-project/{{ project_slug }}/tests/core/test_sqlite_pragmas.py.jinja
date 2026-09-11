@@ -1,0 +1,28 @@
+{%- if include_database and database_engine == "sqlite" -%}
+"""Every SQLite connection opens with the pragmas the app relies on."""
+
+import sqlite3
+from pathlib import Path
+
+from app.core.db import SQLITE_BUSY_TIMEOUT_MS, apply_sqlite_pragmas
+
+
+def test_a_connection_gets_its_keys_and_its_wait(tmp_path: Path) -> None:
+    """Both engines open the same way. The two hooks had drifted — the
+    sync one turned foreign keys on, the async one set the timeout — so
+    every async session ran the schema with its keys unenforced.
+    """
+    connection = sqlite3.connect(tmp_path / "app.db")
+    try:
+        apply_sqlite_pragmas(connection)
+        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert (
+            connection.execute("PRAGMA busy_timeout").fetchone()[0]
+            == SQLITE_BUSY_TIMEOUT_MS
+        )
+        # Deliberately not WAL: this file is shared across the container
+        # boundary, where WAL's shared memory is not coherent.
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0] != "wal"
+    finally:
+        connection.close()
+{%- endif -%}

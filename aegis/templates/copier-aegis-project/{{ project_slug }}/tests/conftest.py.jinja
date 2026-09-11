@@ -15,6 +15,18 @@ from typing import Any, AsyncGenerator, Generator
 # LOGFIRE_TOKEN must never arm instrumentation (or ship test spans).
 os.environ["LOGFIRE_TOKEN"] = ""
 
+# Same window, same reason: ``app.core.db`` builds its engine at import
+# from ``DATABASE_URL``, and DDL goes through that engine rather than
+# through the session factories the fixtures redirect. Point it at a
+# throwaway file HERE so no window is left open - not import time, not a
+# fixture teardown after monkeypatch has reverted, not an atexit hook.
+# ``create_all`` only ever ADDS tables, so the damage was never data: it
+# was a table frozen at the models' shape in that moment, in a developer's
+# live database, that nothing would ever correct.
+os.environ["DATABASE_URL"] = (
+    f"sqlite:///{tempfile.mkdtemp(prefix='aegis-test-db-')}/app.db"
+)
+
 import pytest  # noqa: E402
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

@@ -51,12 +51,19 @@ text-aegis-text
    marks it as an out-of-band answer (pattern 2); ``actions`` is a macro
    (a call block's ``caller``) rendering the trailing actions cell. #}
 {% macro table_row(columns, row, id=None, oob=False, actions=None) %}
+{# A row swapped out of band travels wrapped: a bare <tr> at the top
+   of a response bound for anything but a table is thrown away by the
+   HTML parser, and its cells spill into whatever was being swapped — a
+   stray row loose in a dialog. htmx unwraps a template before it swaps,
+   so this is the way to send one anywhere. #}
+{% if oob %}<template{% if id %} id="{{ id }}-oob"{% endif %}>{% endif %}
 <tr {% if id %}id="{{ id }}"{% endif %} {% if oob %}hx-swap-oob="outerHTML"{% endif %} class="hover:bg-aegis-border/20 transition-colors">
   {% for col in columns %}
   <td class="px-5 py-2 whitespace-nowrap {{ 'text-right tabular-nums' if col.align == 'right' else 'text-left' }} {{ _tone(row, col) }}">{{ _cell(row, col) }}</td>
   {% endfor %}
   {% if actions %}<td class="px-2 py-2 text-right">{{ actions(row) }}</td>{% endif %}
 </tr>
+{% if oob %}</template>{% endif %}
 {% endmacro %}
 
 {% macro data_table(columns, rows, empty="Nothing here yet", row_id=None) %}

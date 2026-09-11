@@ -416,6 +416,8 @@ SERVICE_OWNERS = {
     "add_valuation": "accounts",
     "asset_liability_totals": "networth",
     "assign_merchant": "merchants",
+    "recompute_payee_aliases": "merchants",
+    "resolve_merchant_aliases": "merchants",
     "assign_payee_group": "merchants",
     "attach_transaction_to_stream": "recurring",
     "auto_contribute_goals": "goals",

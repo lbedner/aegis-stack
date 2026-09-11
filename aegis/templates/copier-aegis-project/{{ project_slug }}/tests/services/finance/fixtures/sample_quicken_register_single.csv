@@ -1,0 +1,11 @@
+TOTAL CHECKING (BANK) Report Created: 2026-09-05 12:41:27 -0400
+,
+Filter Criteria:,All Dates
+,Any Type
+,Any Status
+,
+,"Split","Date","Check #","Payee","Category","Tags","Amount","Balance"
+Balance:,,,,,,,,  -7651.41
+,,"9/4/2026",,"Employer Payroll","Personal Income","","3,000.00","-7,158.90"
+,,"9/4/2026",,"Card Payment","Transfer:Credit Card Payment","Marisa","-230.00","-10,158.90"
+,,"9/3/2026","1102","City Water","Utilities:Water","","-40.00","-9,928.90"

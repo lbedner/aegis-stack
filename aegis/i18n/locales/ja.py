@@ -938,6 +938,8 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_follow": "ログ出力を継続して表示",
     "deploy.help_opt_logs_service": "指定したサービスのログのみ表示",
     "deploy.help_opt_shell_service": "接続先のサービス",
+    "deploy.help_arg_exec_command": "コンテナ内で実行するコマンド（-- の後に記述）。",
+    "deploy.exec_no_command": "コマンドが指定されていません。-- の後に記述してください。例: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "GitHub リポジトリ（owner/name 形式。デフォルト：git remote origin から自動検出）",
     "deploy.help_opt_gh_tags": "v* タグへの push 時もデプロイワークフローを起動",
     "deploy.help_opt_gh_overwrite": "既存の GitHub Secrets と deploy.yml ワークフローを上書き",

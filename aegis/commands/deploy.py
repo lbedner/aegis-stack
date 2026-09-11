@@ -1566,6 +1566,57 @@ def deploy_shell_command(
     )
 
 
+def deploy_exec_command(
+    command: list[str] = typer.Argument(
+        ..., help=lazy_t("deploy.help_arg_exec_command"), metavar="-- COMMAND..."
+    ),
+    service: str = typer.Option(
+        "webserver", "--service", "-s", help=lazy_t("deploy.help_opt_shell_service")
+    ),
+    project_path: str | None = typer.Option(
+        None, "--project-path", help=lazy_t("common.help_project_path")
+    ),
+) -> None:
+    """
+    Run a one-off command in a deployed container, non-interactively.
+
+    The scriptable sibling of ``deploy-shell``: streams output live and
+    exits with the command's own status, so it composes with ``set -e``
+    and CI. Put ``--`` before the command so its flags are not parsed as
+    this CLI's.
+
+    Examples:\\n
+        - aegis deploy-exec -- alembic current\\n
+        - aegis deploy-exec --service worker-system -- myapp jobs list\\n
+    """
+    config = _load_deploy_config(project_path)
+    if not config:
+        brand.error(t("deploy.no_config"), err=True)
+        raise typer.Exit(1)
+
+    if not command:
+        brand.error(t("deploy.exec_no_command"), err=True)
+        raise typer.Exit(1)
+
+    host = config["server"]["host"]
+    user = config["server"]["user"]
+    deploy_path = config["server"]["path"]
+
+    # -T: no TTY. The point of this command is to be pipeable and
+    # scriptable, and a TTY would corrupt piped output. Each argument is
+    # quoted individually so a command containing spaces, quotes or globs
+    # reaches the container exactly as typed.
+    remote = (
+        f"{_compose_prefix(deploy_path)} exec -T {shlex.quote(service)} "
+        + " ".join(shlex.quote(part) for part in command)
+    )
+    # No capture: stdout/stderr stream straight through to the caller.
+    result = subprocess.run(["ssh", f"{user}@{host}", remote])
+    # Propagate rather than swallow, so `set -e` and CI see the failure.
+    if result.returncode != 0:
+        raise typer.Exit(result.returncode)
+
+
 # ─────────────────────────── deploy-cd-setup ───────────────────────────
 
 

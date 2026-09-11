@@ -20,6 +20,7 @@ from .commands.deploy import (
     deploy_backups_command,
     deploy_cd_setup_command,
     deploy_command,
+    deploy_exec_command,
     deploy_init_command,
     deploy_logs_command,
     deploy_restart_command,
@@ -152,6 +153,10 @@ app.command(name="deploy-status")(deploy_status_command)
 app.command(name="deploy-stop")(deploy_stop_command)
 app.command(name="deploy-restart")(deploy_restart_command)
 app.command(name="deploy-shell")(deploy_shell_command)
+app.command(
+    name="deploy-exec",
+    context_settings={"allow_interspersed_args": False},
+)(deploy_exec_command)
 
 
 # R5: mount plugin-provided sub-apps under `aegis <plugin> ...`.

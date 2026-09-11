@@ -957,6 +957,8 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_follow": "Seguir la salida de los logs en tiempo real",
     "deploy.help_opt_logs_service": "Mostrar los logs de un servicio en concreto",
     "deploy.help_opt_shell_service": "Servicio al que conectarse",
+    "deploy.help_arg_exec_command": "Comando a ejecutar dentro del contenedor (después de --).",
+    "deploy.exec_no_command": "No se indicó ningún comando. Escríbelo después de --, p. ej.: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "Repositorio de GitHub como owner/name (por defecto: detectar automáticamente desde git remote origin)",
     "deploy.help_opt_gh_tags": "Disparar también el workflow de despliegue al hacer push de tags v*",
     "deploy.help_opt_gh_overwrite": "Sobrescribir los secretos de GitHub y el workflow deploy.yml existentes",

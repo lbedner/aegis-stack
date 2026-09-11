@@ -903,6 +903,8 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_follow": "로그 출력을 계속 따라가며 표시",
     "deploy.help_opt_logs_service": "특정 서비스의 로그만 표시",
     "deploy.help_opt_shell_service": "접속할 서비스",
+    "deploy.help_arg_exec_command": "컨테이너 안에서 실행할 명령 (-- 뒤에 작성).",
+    "deploy.exec_no_command": "명령이 없습니다. -- 뒤에 작성하세요. 예: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "GitHub 저장소 (owner/name 형식, 기본값: git remote origin에서 자동 감지)",
     "deploy.help_opt_gh_tags": "v* 태그 푸시 시에도 배포 워크플로 실행",
     "deploy.help_opt_gh_overwrite": "기존 GitHub Secrets와 deploy.yml 워크플로 덮어쓰기",

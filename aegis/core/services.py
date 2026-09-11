@@ -309,6 +309,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/models/refresh_token.py",
                 "tests/components/test_frontend_auth_session.py",
                 "tests/services/test_refresh_service.py",
+                "tests/services/test_user_lookup_queries.py",
                 "tests/test_factories_demo.py",
             ],
             # Option-gated files live in extras, not primary: the add path
@@ -1005,6 +1006,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_finance_service.py",
                 "tests/services/test_finance_analyst.py",
                 "tests/services/test_finance_analyst_run.py",
+                "tests/services/test_finance_currency_cache.py",
                 "tests/services/test_finance_demo_seed.py",
                 "tests/services/test_finance_import.py",
                 "tests/services/test_finance_reconcile.py",

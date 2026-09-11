@@ -146,7 +146,6 @@ class BlogService:
         self.db.add(post)
         await self.db.flush()
         await self._set_post_tags(post.id, payload.tag_slugs)  # type: ignore[arg-type]
-        await self.db.refresh(post)
         return await self._post_response(post)
 
     async def update_post(
@@ -185,7 +184,6 @@ class BlogService:
         if payload.tag_slugs is not None:
             await self._set_post_tags(post_id, payload.tag_slugs)
         await self.db.flush()
-        await self.db.refresh(post)
         return await self._post_response(post)
 
     async def publish_post(self, post_id: int) -> BlogPostResponse | None:
@@ -199,7 +197,6 @@ class BlogService:
         post.updated_at = now
         self.db.add(post)
         await self.db.flush()
-        await self.db.refresh(post)
         return await self._post_response(post)
 
     async def archive_post(self, post_id: int) -> BlogPostResponse | None:
@@ -211,7 +208,6 @@ class BlogService:
         post.updated_at = utcnow()
         self.db.add(post)
         await self.db.flush()
-        await self.db.refresh(post)
         return await self._post_response(post)
 
     async def delete_post(self, post_id: int) -> bool:
@@ -236,7 +232,6 @@ class BlogService:
         tag = BlogTag(name=payload.name, slug=slug)
         self.db.add(tag)
         await self.db.flush()
-        await self.db.refresh(tag)
         return self._tag_response(tag)
 
     async def update_tag(
@@ -255,7 +250,6 @@ class BlogService:
         tag.slug = new_slug
         self.db.add(tag)
         await self.db.flush()
-        await self.db.refresh(tag)
         return self._tag_response(tag)
 
     async def delete_tag(self, tag_id: int) -> bool:
@@ -537,7 +531,6 @@ class BlogService:
         tag = BlogTag(name=name, slug=slug)
         self.db.add(tag)
         await self.db.flush()
-        await self.db.refresh(tag)
         return tag
 
     async def _set_post_tags(self, post_id: int, tag_slugs: list[str]) -> None:

@@ -179,7 +179,11 @@ typecheck: ## Run type checking with ty
 	@echo "Running type checking..."
 	@uv run ty check
 
-check: lint typecheck test ## Run all code quality checks
+{% if include_database %}check-queries: ## Detect N+1 queries in the test suite
+	@echo "Checking for N+1 queries..."
+	@uv run pytest --queryspy-strict
+
+{% endif %}check: lint typecheck test ## Run all code quality checks
 	@echo "All checks completed successfully!"
 
 #=============================================================================

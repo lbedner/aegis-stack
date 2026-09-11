@@ -57,7 +57,6 @@ class InviteService:
             )
             self.db.add(invite)
             await self.db.commit()
-            await self.db.refresh(invite)
             return invite
 
         # User doesn't exist — create pending invite
@@ -71,7 +70,6 @@ class InviteService:
         )
         self.db.add(invite)
         await self.db.commit()
-        await self.db.refresh(invite)
         return invite
 
     async def accept_pending_invites(self, email: str, user_id: int) -> int:
@@ -155,7 +153,6 @@ class InviteService:
         invite.status = "accepted"
         self.db.add(invite)
         await self.db.commit()
-        await self.db.refresh(invite)
         return invite
 
     async def list_pending_invites(self, org_id: int) -> list[OrgInvite]:

@@ -35,7 +35,6 @@ class MembershipService:
         )
         self.db.add(member)
         await self.db.commit()
-        await self.db.refresh(member)
         return member
 
     async def remove_member(self, org_id: int, user_id: int) -> bool:
@@ -70,7 +69,6 @@ class MembershipService:
         member.role = role
         self.db.add(member)
         await self.db.commit()
-        await self.db.refresh(member)
         return member
 
     async def transfer_ownership(

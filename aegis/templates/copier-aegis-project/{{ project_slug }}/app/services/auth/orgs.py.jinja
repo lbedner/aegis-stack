@@ -29,7 +29,6 @@ class OrgService:
         org = Organization.model_validate(org_data)
         self.db.add(org)
         await self.db.commit()
-        await self.db.refresh(org)
         return org
 
     async def get_org_by_id(self, org_id: int) -> Organization | None:
@@ -61,7 +60,6 @@ class OrgService:
         org.updated_at = utcnow()
         self.db.add(org)
         await self.db.commit()
-        await self.db.refresh(org)
         return org
 
     async def delete_org(self, org_id: int) -> bool:
@@ -152,7 +150,6 @@ class OrgService:
         org.updated_at = utcnow()
         self.db.add(org)
         await self.db.commit()
-        await self.db.refresh(org)
         return org
 {% else %}
 # Organization service not included (auth_level != org)

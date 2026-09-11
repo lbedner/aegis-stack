@@ -86,8 +86,9 @@ CLI wires routes, tests, health checks, and dependencies for you.
 
 Models are SQLModel classes; every schema change goes through an alembic
 migration. Never query inside a loop (N+1); batch with `WHERE id IN (...)` or
-eager-load with `selectinload()`/`joinedload()`. See the
-`add-model-and-migration` skill.
+eager-load with `selectinload()`/`joinedload()`. `make check-queries` runs
+the test suite under queryspy and names the call site of anything that
+slipped through. See the `add-model-and-migration` skill.
 
 {% endif %}{% if include_worker %}## Worker
 

@@ -96,7 +96,6 @@ class UserService:
         await self.db.flush()
         await run_post_user_created(self.db, user)
         await self.db.commit()
-        await self.db.refresh(user)
 
         return user
 
@@ -110,13 +109,13 @@ class UserService:
         return result.first()
 
     async def get_user_by_id(self, user_id: int) -> User | None:
-        """Get user by ID asynchronously. Skips soft-deleted users."""
-        statement = select(User).where(
-            User.id == user_id,
-            User.deleted_at.is_(None),
-        )
-        result = await self.db.exec(statement)
-        return result.first()
+        """Get user by ID, skipping soft-deleted rows.
+
+        ``Session.get`` not ``select()``: the identity map answers a repeat PK
+        lookup without SQL, and ``deleted_at`` is filtered here instead.
+        """
+        user = await self.db.get(User, user_id)
+        return None if user is None or user.deleted_at is not None else user
 
     async def update_user(self, user_id: int, **updates) -> User | None:
         """Update user data asynchronously."""
@@ -131,7 +130,6 @@ class UserService:
         user.updated_at = utcnow()
         self.db.add(user)
         await self.db.commit()
-        await self.db.refresh(user)
 
         return user
 
@@ -380,7 +378,6 @@ class UserService:
         user.updated_at = utcnow()
         self.db.add(user)
         await self.db.commit()
-        await self.db.refresh(user)
         return user
 
     async def find_existing_emails_with_prefix(
@@ -414,7 +411,6 @@ class UserService:
         reset_token = PasswordResetToken(user_id=user.id, token=token)
         self.db.add(reset_token)
         await self.db.commit()
-        await self.db.refresh(reset_token)
         return token
 
     async def reset_password(self, token: str, new_password: str) -> None:
@@ -529,7 +525,6 @@ class UserService:
         verification_token = EmailVerificationToken(user_id=user_id, token=token)
         self.db.add(verification_token)
         await self.db.commit()
-        await self.db.refresh(verification_token)
         return token
 
     async def _invalidate_prior_email_verification_tokens(self, user_id: int) -> None:
@@ -560,7 +555,6 @@ class UserService:
 
         self.db.add(user)
         await self.db.commit()
-        await self.db.refresh(user)
 
     async def reset_login_attempts(self, user_id: int) -> None:
         """Reset failed login attempts and unlock account."""
@@ -572,7 +566,6 @@ class UserService:
         user.locked_until = None
         self.db.add(user)
         await self.db.commit()
-        await self.db.refresh(user)
 
     async def is_account_locked(self, user: User) -> bool:
         """Check if an account is currently locked.
@@ -591,7 +584,6 @@ class UserService:
         user.locked_until = None
         self.db.add(user)
         await self.db.commit()
-        await self.db.refresh(user)
         return False
 
 {% if include_oauth %}
@@ -667,7 +659,6 @@ class UserService:
                         identity.updated_at = utcnow()
                         self.db.add(identity)
                         await self.db.commit()
-                        await self.db.refresh(raw_user)
                         return raw_user
                 await self.db.delete(identity)
                 await self.db.commit()
@@ -740,7 +731,6 @@ class UserService:
         # has one place to subscribe.
         await run_post_user_created(self.db, user)
         await self.db.commit()
-        await self.db.refresh(user)
         return user
 
 {% endif %}

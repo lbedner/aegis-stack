@@ -106,7 +106,6 @@ class GoalService:
         )
         self.db.add(goal)
         await self.db.commit()
-        await self.db.refresh(goal)
         return goal
 
     async def update(
@@ -143,7 +142,6 @@ class GoalService:
         goal.updated_at = utcnow()
         self.db.add(goal)
         await self.db.commit()
-        await self.db.refresh(goal)
         return goal
 
     async def delete(self, goal_id: int, user_id: int) -> bool:

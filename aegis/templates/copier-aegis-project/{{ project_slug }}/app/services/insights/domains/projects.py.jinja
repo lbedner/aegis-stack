@@ -81,7 +81,6 @@ class ProjectService:
         )
         self.db.add(project)
         await self.db.commit()
-        await self.db.refresh(project)
         # Detach so mutating plaintext fields can't flush ciphertext loss.
         self.db.expunge(project)
         # Caller passed plaintext; re-attach plaintext to the returned
@@ -198,7 +197,6 @@ class ProjectService:
         project.updated_at = utcnow()
 
         await self.db.commit()
-        await self.db.refresh(project)
         self.db.expunge(project)
         _decrypt_in_place(project)
         # Caller-supplied plaintext wins over decrypted (cheap consistency

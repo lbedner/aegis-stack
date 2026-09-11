@@ -293,6 +293,9 @@ test-stacks-runtime: ## Test all stacks runtime integration with Docker (future)
 	@echo "🐳 Runtime integration testing not yet implemented"
 	@echo "ℹ️  Will test Docker Compose startup and health checks for all combinations"
 
+queryspy-baseline: ## Regenerate the N+1 baseline for the stack matrix (STACKS=a,b to limit)
+	@STACKS="$(STACKS)" ./scripts/queryspy_baseline.sh
+
 test-stacks-full: ## Full stack matrix testing pipeline (comprehensive but slow)
 	@echo "🌟 Running complete stack matrix testing pipeline..."
 	@echo "📋 Phase 1: Stack Generation Testing"

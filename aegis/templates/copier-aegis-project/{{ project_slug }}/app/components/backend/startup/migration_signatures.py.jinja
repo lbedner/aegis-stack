@@ -32,6 +32,7 @@ SERVICE_MIGRATION_SIGNATURES: dict[str, tuple[str, ...]] = {
     "auth_rbac": ("column", "user", "role"),
     "auth_tokens": ("table", "refresh_token"),
     "blog": ("table", "blog_post"),
+    "documents": ("table", "document"),
     # insight_source, not project: the project table only exists in the
     # per-user shape, insight_source in both.
     "insights": ("table", "insight_source"),

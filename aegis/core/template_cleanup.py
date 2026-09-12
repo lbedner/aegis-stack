@@ -331,6 +331,19 @@ def cleanup_nested_project_directory(
                 )
                 continue
 
+            # Copier renders every template file into the nested dir,
+            # gated-off ones included - those are a lone newline. Init
+            # sweeps such stubs after generation; promoting them here
+            # would plant them in the project instead. Same rule as the
+            # sync backstop (``_is_meaningful_render``).
+            # ``relative`` from the collection loop above is stale here; the
+            # name check must see THIS file's path.
+            rel = dest.relative_to(project_path)
+            if not _is_meaningful_render(rel, source.read_bytes()):
+                source.unlink()
+                verbose_print(f"   Dropped gated-off stub: {rel}")
+                continue
+
             shutil.move(str(source), str(dest))
 
             relative_path = str(dest.relative_to(project_path))
@@ -488,6 +501,16 @@ def sync_template_changes(
                 if not project_file.exists():
                     if template_changed_files is None:
                         verbose_print(f"   Skipped new file: {relative}")
+                        continue
+                    # A whole-file gate that is OFF for this stack renders to
+                    # nothing. Init sweeps those stubs after generation
+                    # (``sweep_empty_stubs``); this backstop must not put
+                    # them back, or a project accumulates 1-byte files for
+                    # every component it never selected. The changed-set
+                    # cannot tell a real addition from a gated-off one: git
+                    # sees the template file change either way.
+                    if not _is_meaningful_render(relative, new_content):
+                        verbose_print(f"   Skipped gated-off new file: {relative}")
                         continue
                     project_file.parent.mkdir(parents=True, exist_ok=True)
                     project_file.write_bytes(new_content)
@@ -895,6 +918,20 @@ def _three_way_merge(
             )
     except OSError as e:
         verbose_print(f"   Warning: Could not sync {relative}: {e}")
+
+
+def _is_meaningful_render(relative: Path, content: bytes) -> bool:
+    """False when a rendered template is a whole-file-gated empty stub.
+
+    The same rule as ``render_diff._is_meaningful`` and
+    ``manual_updater._is_empty_stub``, restated here rather than imported:
+    both of those modules import from this one, so importing either back
+    would be a cycle. ``__init__.py`` is the one legitimately-empty file,
+    a package marker, and is always meaningful.
+    """
+    if relative.name == "__init__.py":
+        return True
+    return bool(content.strip())
 
 
 def _should_skip_sync(relative_path: str) -> bool:

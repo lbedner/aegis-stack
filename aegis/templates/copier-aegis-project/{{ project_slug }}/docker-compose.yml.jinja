@@ -127,6 +127,12 @@ services:
     <<: *app
     command:
       - scheduler
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/aegis-scheduler-heartbeat').st_mtime<60 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 {%- if include_redis or scheduler_backend == 'postgres' or database_engine == 'postgres' %}
     depends_on:
 {%- if include_redis %}
@@ -175,6 +181,8 @@ services:
     command:
       - worker
       - load_test
+    healthcheck:
+      disable: true
     depends_on:
       redis:
         condition: service_healthy
@@ -215,6 +223,8 @@ services:
     command:
       - worker
       - system
+    healthcheck:
+      disable: true
     depends_on:
       redis:
         condition: service_healthy

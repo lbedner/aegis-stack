@@ -63,6 +63,7 @@ from app.services.finance.jobs import finance_sync_connections_job
 from app.core.config import settings
 from app.core.log import logger
 from app.services.system import activity
+from .heartbeat import is_heartbeat_event, register_heartbeat_job
 
 {% if scheduler_backend != "memory" %}
 
@@ -218,14 +219,11 @@ def create_scheduler() -> AsyncIOScheduler:
     )
 {% endif %}
 
-    # ========================================================================
-    # JOB SCHEDULE CONFIGURATION
-    #
-    # Code is the source of truth. Every startup re-registers each job
-    # below via ``replace_existing=True``, so editing a trigger here and
-    # redeploying is all that's needed to change the schedule. Runtime
-    # edits to persisted jobs do not survive a restart by design.
-    # ========================================================================
+    # JOB SCHEDULE CONFIGURATION - code is the source of truth. Every startup
+    # re-registers each job below via ``replace_existing=True``, so editing a
+    # trigger here and redeploying changes the schedule; runtime edits to
+    # persisted jobs do not survive a restart by design.
+    register_heartbeat_job(scheduler)
 
 {% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
     scheduler.add_job(
@@ -463,6 +461,8 @@ async def run_scheduler() -> None:
 
     def _on_job_event(event: Any) -> None:
         """Emit activity events (and persist execution history) for jobs."""
+        if is_heartbeat_event(event):
+            return
 {%- if scheduler_backend != "memory" %}
         # JobSubmissionEvent uses `scheduled_run_times` (list); JobExecutionEvent
         # uses `scheduled_run_time` (singular). Normalise to a single value so

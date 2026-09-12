@@ -34,6 +34,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine.base import Engine
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 {% endif %}
@@ -133,6 +134,15 @@ from app.integrations.main import create_integrated_app
 # (uvicorn keeps one loop for the server's lifetime); only the
 # test suite needs this swap. Dict-mode keeps the same async API,
 # so call sites don't change.
+@pytest.fixture(autouse=True)
+def _fresh_system_status_cache():
+    """No test sees another test's cached system-status walk."""
+    from app.services.system.health import invalidate_status_cache
+
+    invalidate_status_cache()
+    yield
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _use_dict_backed_cache():
     import app.core.cache as cache_module
@@ -323,6 +333,39 @@ def _no_production_database(app_owned_engine, monkeypatch):
             app_owned_engine, class_=AsyncSession, expire_on_commit=False
         ),
     )
+    # The sync factory too: ``db_session()`` is what service code like
+    # ``get_conversation()`` opens for itself. A sync engine on the SAME
+    # file, with the same schema attachments, so both factories see one
+    # database - the one ``app_owned_engine`` already ran ``create_all`` on.
+    # Left uncovered, a Postgres project fails "no such table" on the first
+    # sync lookup: its startup migrations begin with CREATE SCHEMA, which
+    # SQLite rejects, so nothing else ever creates tables for that path.
+    owned_db = Path(app_owned_engine.url.database)
+    schema_names = {
+        table.schema for table in SQLModel.metadata.tables.values() if table.schema
+    }
+    sync_engine = create_engine(
+        f"sqlite:///{owned_db}", echo=False, connect_args={"check_same_thread": False}
+    )
+
+    @event.listens_for(sync_engine, "connect")
+    def attach_schemas_sync(dbapi_connection: Any, connection_record: Any) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        for schema_name in schema_names:
+            cursor.execute(
+                f"ATTACH DATABASE '{owned_db.parent / (schema_name + '.sqlite')}' "
+                f"AS {schema_name}"
+            )
+        cursor.close()
+
+    monkeypatch.setattr(
+        db_module,
+        "SessionLocal",
+        sessionmaker(bind=sync_engine, class_=Session, expire_on_commit=False),
+    )
+    yield
+    sync_engine.dispose()
 
 
 @pytest.fixture(scope="session")

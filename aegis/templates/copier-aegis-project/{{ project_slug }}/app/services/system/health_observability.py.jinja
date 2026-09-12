@@ -1,0 +1,315 @@
+{#- aegis: no-backup -#}
+"""
+Observability (Logfire) health check for {{ project_name }}.
+
+Extracted from the system health module; registered via the same
+register_health_check machinery.
+"""
+{% if include_observability %}
+import asyncio
+from datetime import UTC, datetime
+from typing import Any
+
+from app.core.config import settings
+from app.core.log import logger
+
+from .models import ComponentStatus, ComponentStatusType
+
+async def check_observability_health() -> ComponentStatus:
+    """
+    Check Logfire observability status and query trace analytics.
+
+    Reports whether Logfire is configured, whether cloud sending is active,
+    and the service name being used. When LOGFIRE_READ_TOKEN is set, queries
+    the Logfire Query API for trace statistics (spans, exceptions, latency).
+
+    Returns:
+        ComponentStatus indicating observability configuration status
+    """
+    try:
+        import logfire
+
+        send_to_logfire = bool(settings.LOGFIRE_TOKEN)
+        read_token = settings.LOGFIRE_READ_TOKEN
+        project_url = settings.LOGFIRE_PROJECT_URL
+
+        if send_to_logfire:
+            status = ComponentStatusType.HEALTHY
+            message = "Logfire active (sending to cloud)"
+        else:
+            status = ComponentStatusType.INFO
+            message = "Logfire instrumented (cloud disabled -- no token)"
+
+        metadata: dict[str, Any] = {
+            "configured": True,
+            "send_to_logfire": send_to_logfire,
+            "service_name": settings.PROJECT_NAME,
+            "query_api_available": bool(read_token),
+            "project_url": project_url,
+            "logfire_version": logfire.VERSION,
+        }
+
+        # Query Logfire API for trace analytics when read token is available
+        if read_token:
+            trace_data = await _query_logfire_trace_data(read_token)
+            metadata.update(trace_data)
+
+        return ComponentStatus(
+            name="observability",
+            status=status,
+            message=message,
+            response_time_ms=None,
+            metadata=metadata,
+        )
+
+    except Exception as e:
+        logger.error(f"Observability health check failed: {e}")
+        return ComponentStatus(
+            name="observability",
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Observability health check failed: {str(e)}",
+            response_time_ms=None,
+            metadata={"error": str(e)},
+        )
+
+
+# Cache for Logfire query results to avoid rate limiting
+# Free tier has per-minute AND per-hour limits
+_logfire_query_cache: dict[str, tuple[dict[str, Any], datetime]] = {}
+_logfire_last_attempt: datetime | None = None
+_LOGFIRE_CACHE_SECONDS = 120  # 2 minutes between successful queries (3 sub-queries per cycle)
+_LOGFIRE_RETRY_SECONDS = 300  # 5 minutes between retries on failure
+
+
+async def _query_logfire_trace_data(read_token: str) -> dict[str, Any]:
+    """
+    Query Logfire Query API for trace statistics over the last hour.
+
+    Results are cached for 5 minutes to avoid hitting rate limits.
+    On failure, backs off for 5 minutes and returns stale cached data.
+
+    Runs three lightweight queries concurrently:
+    1. Aggregate stats (span count, exceptions, avg/max duration, trace count)
+    2. Top 20 slowest span types
+    3. Recent exceptions
+
+    Args:
+        read_token: Logfire read token for API authentication
+
+    Returns:
+        Dict with trace analytics data for metadata
+    """
+    global _logfire_last_attempt
+
+    now = datetime.now(UTC)
+
+    # Check cache - return cached data if still fresh
+    if "logfire" in _logfire_query_cache:
+        cached_result, cached_time = _logfire_query_cache["logfire"]
+        age = (now - cached_time).total_seconds()
+        if age < _LOGFIRE_CACHE_SECONDS:
+            return cached_result
+
+    # Backoff - don't retry if we attempted recently (even if it failed)
+    if _logfire_last_attempt is not None:
+        since_last = (now - _logfire_last_attempt).total_seconds()
+        if since_last < _LOGFIRE_RETRY_SECONDS:
+            # Return stale cache if available
+            if "logfire" in _logfire_query_cache:
+                stale_result, _ = _logfire_query_cache["logfire"]
+                return stale_result
+            return {}
+
+    # Mark attempt time BEFORE querying to prevent concurrent retries
+    _logfire_last_attempt = now
+
+    try:
+        from logfire.experimental.query_client import AsyncLogfireQueryClient
+    except ImportError:
+        logger.warning("Logfire query client not available")
+        return {"query_error": "logfire query client not installed"}
+
+    result: dict[str, Any] = {}
+
+    try:
+        async with AsyncLogfireQueryClient(read_token=read_token) as client:
+            # Run all three queries concurrently
+            agg_task = asyncio.create_task(_query_aggregate_stats(client))
+            slow_task = asyncio.create_task(_query_slowest_spans(client))
+            exc_task = asyncio.create_task(_query_recent_exceptions(client))
+
+            agg_data = await agg_task
+            slow_data = await slow_task
+            exc_data = await exc_task
+
+        # Check for partial failures (None = sub-query failed)
+        all_succeeded = (
+            agg_data is not None
+            and slow_data is not None
+            and exc_data is not None
+        )
+
+        # Always assemble what we have (use defaults for failed sub-queries)
+        if agg_data is not None:
+            result.update(agg_data)
+        else:
+            result.update({
+                "total_spans": 0, "total_traces": 0, "exceptions": 0,
+                "avg_duration_ms": 0, "max_duration_ms": 0,
+            })
+        result["slowest_spans"] = slow_data if slow_data is not None else []
+        result["recent_exceptions"] = exc_data if exc_data is not None else []
+
+        if all_succeeded:
+            assert agg_data is not None and slow_data is not None  # for type narrowing
+            # All queries succeeded - cache the complete result
+            _logfire_query_cache["logfire"] = (result, now)
+            # Reset backoff on success so cache TTL controls refresh rate
+            _logfire_last_attempt = None
+            logger.info(
+                f"Logfire query refreshed: {agg_data.get('total_spans', 0)} spans, "
+                f"{agg_data.get('exceptions', 0)} exceptions, "
+                f"{len(slow_data)} slow spans"
+            )
+        else:
+            # Partial failure - log which queries failed, don't cache
+            failed = []
+            if agg_data is None:
+                failed.append("aggregate")
+            if slow_data is None:
+                failed.append("slowest_spans")
+            if exc_data is None:
+                failed.append("exceptions")
+            logger.warning(
+                f"Logfire partial query failure ({', '.join(failed)})"
+            )
+            # Prefer stale cache if it has richer data
+            if "logfire" in _logfire_query_cache:
+                stale_result, _ = _logfire_query_cache["logfire"]
+                return stale_result
+
+    except Exception as e:
+        logger.warning(f"Logfire query API error: {e}")
+        result["query_error"] = str(e)
+        # Return stale cache if available rather than empty data
+        if "logfire" in _logfire_query_cache:
+            stale_result, _ = _logfire_query_cache["logfire"]
+            return stale_result
+
+    return result
+
+
+async def _query_aggregate_stats(client: Any) -> dict[str, Any] | None:
+    """Query aggregate span stats for the last hour. Returns None on failure."""
+    try:
+        results = await client.query_json_rows(
+            sql="""
+                SELECT
+                    count(*) as total_spans,
+                    count(*) FILTER (WHERE is_exception) as exceptions,
+                    avg(duration) as avg_duration_sec,
+                    max(duration) as max_duration_sec,
+                    count(DISTINCT trace_id) as total_traces
+                FROM records
+                WHERE start_timestamp > now() - interval '1 hour'
+            """
+        )
+        rows = results.get("rows", [])
+        if rows:
+            row = rows[0]
+            avg_sec = row.get("avg_duration_sec") or 0
+            max_sec = row.get("max_duration_sec") or 0
+            return {
+                "total_spans": row.get("total_spans", 0),
+                "total_traces": row.get("total_traces", 0),
+                "exceptions": row.get("exceptions", 0),
+                "avg_duration_ms": round(float(avg_sec) * 1000, 1),
+                "max_duration_ms": round(float(max_sec) * 1000, 1),
+            }
+        logger.warning("Logfire aggregate stats query returned no rows")
+        return None
+    except Exception as e:
+        logger.warning(f"Logfire aggregate stats query failed: {e}")
+        return None
+
+
+async def _query_slowest_spans(client: Any) -> list[dict[str, Any]] | None:
+    """Query top 20 slowest span types for the last hour. Returns None on failure."""
+    try:
+        results = await client.query_json_rows(
+            sql="""
+                SELECT
+                    span_name,
+                    avg(duration) as avg_sec,
+                    max(duration) as max_sec,
+                    percentile_cont(0.95) WITHIN GROUP (ORDER BY duration) as p95_sec,
+                    count(*) as count,
+                    count(*) FILTER (WHERE is_exception) as errors,
+                    sum(duration) as total_sec
+                FROM records
+                WHERE start_timestamp > now() - interval '1 hour'
+                  AND duration IS NOT NULL
+                GROUP BY span_name
+                ORDER BY avg_sec DESC
+                LIMIT 20
+            """
+        )
+        rows = results.get("rows", [])
+        spans = []
+        for row in rows:
+            avg_sec = row.get("avg_sec") or 0
+            max_sec = row.get("max_sec") or 0
+            p95_sec = row.get("p95_sec") or 0
+            total_sec = row.get("total_sec") or 0
+            spans.append({
+                "name": row.get("span_name", "unknown"),
+                "avg_ms": round(float(avg_sec) * 1000, 1),
+                "max_ms": round(float(max_sec) * 1000, 1),
+                "p95_ms": round(float(p95_sec) * 1000, 1),
+                "count": row.get("count", 0),
+                "errors": row.get("errors", 0),
+                "total_ms": round(float(total_sec) * 1000, 1),
+            })
+        return spans
+    except Exception as e:
+        logger.warning(f"Logfire slowest spans query failed: {e}")
+        return None
+
+
+async def _query_recent_exceptions(client: Any) -> list[dict[str, Any]] | None:
+    """Query recent exceptions for the last 24 hours. Returns None on failure."""
+    try:
+        results = await client.query_json_rows(
+            sql="""
+                SELECT
+                    span_name,
+                    message,
+                    start_timestamp,
+                    exception_type,
+                    exception_message,
+                    exception_stacktrace,
+                    trace_id,
+                    service_name
+                FROM records
+                WHERE is_exception AND start_timestamp > now() - interval '24 hours'
+                ORDER BY start_timestamp DESC
+                LIMIT 200
+            """
+        )
+        exceptions = []
+        for row in results.get("rows", []):
+            exceptions.append({
+                "span_name": row.get("span_name", "unknown"),
+                "message": row.get("message", ""),
+                "timestamp": row.get("start_timestamp", ""),
+                "exception_type": row.get("exception_type", ""),
+                "exception_message": row.get("exception_message", ""),
+                "stacktrace": row.get("exception_stacktrace", ""),
+                "trace_id": row.get("trace_id", ""),
+                "service_name": row.get("service_name", ""),
+            })
+        return exceptions
+    except Exception as e:
+        logger.warning(f"Logfire recent exceptions query failed: {e}")
+        return None
+{% endif %}

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 
 from app.services.system import (
@@ -14,26 +15,18 @@ router = APIRouter()
 @router.get("/", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
     """
-    Quick health check endpoint.
+    Liveness probe: constant-time, no component walk.
 
-    Returns basic healthy/unhealthy status for load balancers and monitoring.
+    Returns 200 if the process is alive enough to answer, which is all
+    load balancers and container healthchecks need. Component status
+    lives at /health/detailed.
     """
-    try:
-        system_status = await get_system_status()
-        return HealthResponse(
-            healthy=system_status.overall_healthy,
-            status="healthy" if system_status.overall_healthy else "unhealthy",
-            components=system_status.components,
-            timestamp=system_status.timestamp.isoformat(),
-        )
-    except Exception:
-        # If health checks fail completely, consider unhealthy
-        return HealthResponse(
-            healthy=False,
-            status="unhealthy",
-            components={},
-            timestamp="",
-        )
+    return HealthResponse(
+        healthy=True,
+        status="healthy",
+        components={},
+        timestamp=datetime.now(UTC).isoformat(),
+    )
 
 
 @router.get("/detailed", response_model=DetailedHealthResponse)

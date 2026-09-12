@@ -294,11 +294,11 @@ class TestIngressHealthCheck:
     """Test ingress health check implementation in templates."""
 
     def test_health_py_has_ingress_check(self) -> None:
-        """Test that health.py.jinja has ingress health check function."""
+        """The ingress health check lives in its own gated module."""
         from pathlib import Path
 
         template_path = Path(
-            "aegis/templates/copier-aegis-project/{{ project_slug }}/app/services/system/health.py.jinja"
+            "aegis/templates/copier-aegis-project/{{ project_slug }}/app/services/system/health_ingress.py.jinja"
         )
         content = template_path.read_text()
 
@@ -310,7 +310,7 @@ class TestIngressHealthCheck:
         from pathlib import Path
 
         template_path = Path(
-            "aegis/templates/copier-aegis-project/{{ project_slug }}/app/services/system/health.py.jinja"
+            "aegis/templates/copier-aegis-project/{{ project_slug }}/app/services/system/health_ingress.py.jinja"
         )
         content = template_path.read_text()
 

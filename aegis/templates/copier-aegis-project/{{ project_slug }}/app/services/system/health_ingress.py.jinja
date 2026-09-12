@@ -1,0 +1,167 @@
+{#- aegis: no-backup -#}
+"""
+Ingress (Traefik) health check for {{ project_name }}.
+
+Extracted from the system health module; registered via the same
+register_health_check machinery.
+"""
+{% if include_ingress %}
+from app.core.config import settings
+from app.core.log import logger
+
+from .models import ComponentStatus, ComponentStatusType
+
+async def check_ingress_health() -> ComponentStatus:
+    """
+    Check Traefik reverse proxy health and configuration.
+
+    Returns:
+        ComponentStatus indicating Traefik infrastructure health with router info
+    """
+    try:
+        import httpx
+
+        # Traefik API endpoint (dashboard API)
+        traefik_api_url = settings.traefik_api_url_effective
+
+        async with httpx.AsyncClient(
+            timeout=settings.HEALTH_CHECK_TIMEOUT_SECONDS,
+        ) as client:
+            # Check Traefik health endpoint
+            try:
+                health_response = await client.get(f"{traefik_api_url}/ping")
+                traefik_available = health_response.status_code == 200
+            except Exception:
+                traefik_available = False
+
+            if not traefik_available:
+                return ComponentStatus(
+                    name="ingress",
+                    status=ComponentStatusType.UNHEALTHY,
+                    message="Traefik not reachable",
+                    response_time_ms=None,
+                    metadata={
+                        "available": False,
+                        "api_url": traefik_api_url,
+                        "error": "Connection failed",
+                    },
+                )
+
+            # Get Traefik version and overview
+            try:
+                version_response = await client.get(
+                    f"{traefik_api_url}/api/version"
+                )
+                if version_response.status_code == 200:
+                    version_data = version_response.json()
+                else:
+                    version_data = {}
+            except Exception:
+                version_data = {}
+
+            # Get HTTP routers
+            try:
+                routers_response = await client.get(
+                    f"{traefik_api_url}/api/http/routers"
+                )
+                if routers_response.status_code == 200:
+                    routers = routers_response.json()
+                else:
+                    routers = []
+            except Exception:
+                routers = []
+
+            # Get HTTP services
+            try:
+                services_response = await client.get(
+                    f"{traefik_api_url}/api/http/services"
+                )
+                if services_response.status_code == 200:
+                    services = services_response.json()
+                else:
+                    services = []
+            except Exception:
+                services = []
+
+            # Get entrypoints
+            try:
+                entrypoints_response = await client.get(
+                    f"{traefik_api_url}/api/entrypoints"
+                )
+                if entrypoints_response.status_code == 200:
+                    entrypoints = entrypoints_response.json()
+                else:
+                    entrypoints = []
+            except Exception:
+                entrypoints = []
+
+            # Count enabled routers and services
+            enabled_routers = [r for r in routers if r.get("status") == "enabled"]
+            enabled_services = [s for s in services if s.get("status") == "enabled"]
+
+            # Determine status based on configuration
+            if len(enabled_routers) == 0:
+                status = ComponentStatusType.WARNING
+                message = "Traefik running but no routers configured"
+            else:
+                status = ComponentStatusType.HEALTHY
+                message = (
+                    f"Traefik active: {len(enabled_routers)} routers, "
+                    f"{len(enabled_services)} services"
+                )
+
+            # Extract entrypoint info
+            entrypoint_info = []
+            for ep in entrypoints:
+                ep_name = ep.get("name", "unknown")
+                ep_addr = ep.get("address", "unknown")
+                entrypoint_info.append({"name": ep_name, "address": ep_addr})
+
+            # Extract router info (limited to first 10 for metadata)
+            router_info = []
+            for router in enabled_routers[:10]:
+                router_info.append({
+                    "name": router.get("name", "unknown"),
+                    "rule": router.get("rule", ""),
+                    "service": router.get("service", ""),
+                    "entryPoints": router.get("entryPoints", []),
+                    "tls": router.get("tls") is not None,
+                })
+
+            return ComponentStatus(
+                name="ingress",
+                status=status,
+                message=message,
+                response_time_ms=None,
+                metadata={
+                    "available": True,
+                    "api_url": traefik_api_url,
+                    "version": version_data.get("Version", "unknown"),
+                    "codename": version_data.get("Codename", ""),
+                    "total_routers": len(routers),
+                    "enabled_routers": len(enabled_routers),
+                    "total_services": len(services),
+                    "enabled_services": len(enabled_services),
+                    "entrypoints": entrypoint_info,
+                    "routers": router_info,
+                },
+            )
+
+    except ImportError:
+        return ComponentStatus(
+            name="ingress",
+            status=ComponentStatusType.UNHEALTHY,
+            message="HTTP client not available",
+            response_time_ms=None,
+            metadata={"error": "httpx not installed"},
+        )
+    except Exception as e:
+        logger.error(f"Ingress health check failed: {e}")
+        return ComponentStatus(
+            name="ingress",
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Ingress health check failed: {str(e)}",
+            response_time_ms=None,
+            metadata={"error": str(e)},
+        )
+{% endif %}

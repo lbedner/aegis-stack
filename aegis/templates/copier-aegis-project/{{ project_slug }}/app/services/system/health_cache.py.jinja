@@ -1,0 +1,253 @@
+{#- aegis: no-backup -#}
+"""
+Redis cache health check for {{ project_name }}.
+
+Extracted from the system health module; registered via the same
+register_health_check machinery.
+"""
+{% if include_redis %}
+from datetime import UTC, datetime
+from typing import Any, cast
+
+from app.core.config import settings
+from app.core.log import logger
+
+from .models import ComponentStatus, ComponentStatusType
+
+
+
+def _decode_slowlog_arg(arg: Any) -> str:
+    """Decode a single SLOWLOG command argument to a readable string."""
+    if isinstance(arg, bytes):
+        return arg.decode("utf-8", errors="replace")
+    if isinstance(arg, str):
+        return arg
+    if isinstance(arg, list | tuple):
+        # redis-py can return args as list of ints (ASCII byte values)
+        try:
+            return bytes(arg).decode("utf-8", errors="replace")
+        except (ValueError, TypeError):
+            return str(arg)
+    return str(arg)
+
+
+def _decode_slowlog_command(command: Any) -> str:
+    """Decode a SLOWLOG command entry to a human-readable string."""
+    if isinstance(command, list | tuple):
+        return " ".join(_decode_slowlog_arg(arg) for arg in command)
+    if isinstance(command, bytes):
+        return command.decode("utf-8", errors="replace")
+    return str(command)
+
+
+async def check_cache_health() -> ComponentStatus:
+    """
+    Check cache connectivity and basic functionality.
+
+    Returns:
+        ComponentStatus indicating cache health
+    """
+    try:
+        import redis
+        import redis.asyncio as aioredis
+
+        # Create Redis connection with timeout
+        redis_url = (
+            settings.redis_url_effective
+            if hasattr(settings, 'redis_url_effective')
+            else settings.REDIS_URL
+        )
+        redis_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
+            redis_url,
+            db=settings.REDIS_DB,
+            socket_timeout=settings.HEALTH_CHECK_TIMEOUT_SECONDS,
+            socket_connect_timeout=settings.HEALTH_CHECK_TIMEOUT_SECONDS,
+        )
+        redis_client: aioredis.Redis = cast(aioredis.Redis, redis_connection)
+
+        start_time = datetime.now(UTC)
+
+        # Test basic connectivity with ping
+        await redis_client.ping()
+
+        # Test basic set/get functionality
+        test_key = "health_check:test"
+        test_value = f"test_{start_time.timestamp()}"
+        await redis_client.set(test_key, test_value, ex=10)  # Expire in 10 seconds
+        retrieved_value = await redis_client.get(test_key)
+
+        # Cleanup test key
+        await redis_client.delete(test_key)
+
+        # Verify test worked
+        if retrieved_value.decode() != test_value:
+            raise Exception("Redis set/get test failed")
+
+        # Get comprehensive Redis info for detailed monitoring
+        # Reuse existing connection instead of creating a second one
+        redis_info_client = redis_client
+
+        # Get multiple INFO sections for comprehensive metrics
+        info = await redis_info_client.info()
+        stats_info = await redis_info_client.info('stats')
+        memory_info = await redis_info_client.info('memory')
+        clients_info = await redis_info_client.info('clients')
+        keyspace_info = await redis_info_client.info('keyspace')
+
+        # Get recent slow query log entries from Redis SLOWLOG
+        slowlog_entries: list[dict[str, Any]] = []
+        try:
+            slowlog = await redis_info_client.slowlog_get(10)
+            slowlog_entries = [
+                {
+                    "id": entry["id"],
+                    "timestamp": entry["start_time"],
+                    # Convert microseconds to ms
+                    "duration_ms": round(entry["duration"] / 1000, 2),
+                    "command": _decode_slowlog_command(entry["command"]),
+                }
+                for entry in slowlog
+            ]
+        except (redis.exceptions.RedisError, AttributeError, KeyError) as e:
+            logger.warning(f"Failed to get SLOWLOG: {e}")
+
+        # Get active client connections
+        active_clients: list[dict[str, str]] = []
+        try:
+            client_list = await redis_info_client.client_list()
+            active_clients = [
+                {
+                    "id": str(client.get("id", "")),
+                    "addr": str(client.get("addr", "")),
+                    "age": str(client.get("age", "0")),
+                    "idle": str(client.get("idle", "0")),
+                    "db": str(client.get("db", "0")),
+                    "cmd": str(client.get("cmd", "")),
+                }
+                for client in client_list
+            ]
+        except (redis.exceptions.RedisError, AttributeError, KeyError) as e:
+            logger.warning(f"Failed to get CLIENT LIST: {e}")
+
+        await redis_info_client.aclose()
+        
+        # Calculate derived metrics
+        keyspace_hits = stats_info.get('keyspace_hits', 0)
+        keyspace_misses = stats_info.get('keyspace_misses', 0)
+        total_keyspace_ops = keyspace_hits + keyspace_misses
+        hit_rate = (keyspace_hits / max(total_keyspace_ops, 1)) * 100
+        
+        # Extract total keys from all databases
+        total_keys = 0
+        keys_with_expiry = 0
+        for key, value in keyspace_info.items():
+            if key.startswith('db'):
+                # Redis info('keyspace') returns nested dict format
+                if isinstance(value, dict):
+                    total_keys += value.get('keys', 0)
+                    keys_with_expiry += value.get('expires', 0)
+        
+        # Memory usage calculations
+        used_memory = memory_info.get('used_memory', 0)
+        used_memory_peak = memory_info.get('used_memory_peak', 0)
+        mem_fragmentation_ratio = memory_info.get('mem_fragmentation_ratio', 1.0)
+        
+        return ComponentStatus(
+            name="cache",
+            status=ComponentStatusType.HEALTHY,
+            message="Redis cache connection and operations successful",
+            response_time_ms=None,  # Will be set by caller
+            metadata={
+                "implementation": "redis",
+                "version": info.get("redis_version", "unknown"),
+                "url": redis_url,
+                "db": settings.REDIS_DB,
+                
+                # Connection and client metrics
+                "connected_clients": clients_info.get("connected_clients", 0),
+                "blocked_clients": clients_info.get("blocked_clients", 0),
+                "client_longest_output_list": clients_info.get(
+                    "client_longest_output_list", 0
+                ),
+                
+                # Server uptime
+                "uptime_in_seconds": info.get("uptime_in_seconds", 0),
+                
+                # Memory metrics
+                "used_memory": used_memory,
+                "used_memory_human": memory_info.get("used_memory_human", "unknown"),
+                "used_memory_peak": used_memory_peak,
+                "used_memory_peak_human": memory_info.get(
+                    "used_memory_peak_human", "unknown"
+                ),
+                "mem_fragmentation_ratio": mem_fragmentation_ratio,
+                "maxmemory": memory_info.get("maxmemory", 0),
+                "maxmemory_human": memory_info.get("maxmemory_human", "0B"),
+                
+                # Performance and cache metrics
+                "instantaneous_ops_per_sec": stats_info.get(
+                    "instantaneous_ops_per_sec", 0
+                ),
+                "keyspace_hits": keyspace_hits,
+                "keyspace_misses": keyspace_misses,
+                "hit_rate_percent": hit_rate,
+                "evicted_keys": stats_info.get("evicted_keys", 0),
+                "expired_keys": stats_info.get("expired_keys", 0),
+                
+                # Keyspace statistics
+                "total_keys": total_keys,
+                "keys_with_expiry": keys_with_expiry,
+                
+                # Additional useful stats
+                "total_commands_processed": stats_info.get(
+                    "total_commands_processed", 0
+                ),
+                "total_connections_received": stats_info.get(
+                    "total_connections_received", 0
+                ),
+                "rejected_connections": stats_info.get("rejected_connections", 0),
+
+                # Slow queries and client connections
+                "slowlog_entries": slowlog_entries,
+                "active_clients": active_clients,
+            },
+        )
+
+    except ImportError:
+        return ComponentStatus(
+            name="cache",
+            status=ComponentStatusType.UNHEALTHY,
+            message="Cache library not installed",
+            response_time_ms=None,
+            metadata={
+                "implementation": "redis",
+                "error": "Redis library not available",
+            },
+        )
+    except Exception as e:
+        return ComponentStatus(
+            name="cache",
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Cache health check failed: {str(e)}",
+            response_time_ms=None,
+            metadata={
+                "implementation": "redis",
+                "url": (
+                    settings.redis_url_effective 
+                    if hasattr(settings, 'redis_url_effective') 
+                    else settings.REDIS_URL
+                ),
+                "db": settings.REDIS_DB,
+                "error": str(e),
+                # Provide fallback values for card display
+                "connected_clients": 0,
+                "used_memory_human": "unknown",
+                "uptime_in_seconds": 0,
+                "instantaneous_ops_per_sec": 0,
+                "hit_rate_percent": 0,
+                "total_keys": 0,
+                "evicted_keys": 0,
+                "expired_keys": 0,
+            },
+        )
+{% endif %}

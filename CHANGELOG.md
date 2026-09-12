@@ -20,6 +20,24 @@
   `transport` is the seam - tests pass `httpx.MockTransport` and never
   monkeypatch `httpx`. Endpoint-agnostic on purpose; an API-specific
   client subclasses it. REST callers are deliberately untouched.
+- **`/health/` is a liveness probe; component status moved to
+  `/health/detailed`.** The basic endpoint walked every component on each
+  call, and Docker, Traefik and the dashboard all polled it, so an idle
+  stack spent measurable CPU checking itself. `/health/` now answers in
+  constant time with an empty `components` field, and `/health/detailed`
+  reads a shared status cache: one full walk at most every ten seconds no
+  matter how many callers ask (`STATUS_CACHE_TTL_SECONDS`). Idle CPU on a
+  full stack dropped from 13.4% to 0.26%.
+- **The scheduler proves it is alive with a heartbeat file, not an HTTP
+  probe.** `heartbeat.py` touches `/tmp/aegis-scheduler-heartbeat` on a
+  schedule and the compose healthcheck checks its age; the two worker
+  services drop their redundant healthchecks. The Flet frontend keeps one
+  health session per page instead of one per view (`session_health.py`).
+- **`system/health.py` is split by component.** Redis, ingress,
+  observability and Ollama checks live in `health_cache.py`,
+  `health_ingress.py`, `health_observability.py` and `health_ollama.py`,
+  each gated on its component; the module drops from 1456 lines to 714.
+
 - **A scaffolded plugin pins the aegis-stack that made it.** The scaffold
   emitted an unpinned `aegis-stack` dependency, so `pip install
   aegis-stack-<name>` could resolve an older aegis-stack whose `PluginSpec`
@@ -33,6 +51,21 @@
   the directory finds them by, and says what the two listing sections
   differ on: a published plugin resolves by version and carries an install
   command, a source-only one carries its repository link and pins nothing.
+
+### Fixed
+
+- **A Postgres project's test suite runs.** Every project's tests run on
+  SQLite (``tests/conftest.py`` points ``DATABASE_URL`` at a throwaway
+  file), but three things only worked on a SQLite project: the async URL
+  converter in ``app/core/db.py`` did not know ``sqlite://`` (so
+  ``create_async_engine`` got a sync driver and nothing collected), the
+  test guard redirected only the async session factory (so a sync
+  ``db_session()`` lookup after a write hit a database with no tables:
+  Postgres migrations open with ``CREATE SCHEMA``, which SQLite rejects), and
+  the SQLite busy-timeout test skipped on dialect rather than on whether the
+  project wires the knob. The CI matrix generates no Postgres project, so
+  nothing caught it. A generated test now asserts the sync and async
+  app-owned sessions share one database.
 
 ## [0.11.1] - 2026-09-10
 

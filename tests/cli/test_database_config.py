@@ -141,10 +141,15 @@ class TestPostgreSQLConfiguration:
         db_file = project_path / "app" / "core" / "db.py"
         db_content = db_file.read_text()
 
-        # Should NOT have SQLite-specific code
+        # Should NOT have SQLite runtime specifics: pragmas, the file-path
+        # plumbing, the pooling workaround. The async URL converter is the
+        # one place a Postgres project may name the aiosqlite driver - every
+        # project's tests run on SQLite, and a converter that only knows
+        # postgresql:// hands create_async_engine a sync driver there.
         assert "PRAGMA foreign_keys" not in db_content
         assert "DATABASE_PATH" not in db_content
-        assert "aiosqlite" not in db_content
+        assert "apply_sqlite_pragmas" not in db_content
+        assert "NullPool" not in db_content
         # Should have PostgreSQL references
         assert "postgresql" in db_content.lower() or "asyncpg" in db_content.lower()
 

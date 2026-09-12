@@ -5,10 +5,12 @@
 
 ## Health Check Endpoints
 
-### Basic Health Check
+### Liveness Probe
 - **URL**: `GET /health/`
-- **Purpose**: Quick health status check
-- **Response Time**: < 100ms
+- **Purpose**: Constant-time liveness check for load balancers and container
+  healthchecks. Answers 200 when the process can serve a request; it walks no
+  components and its `components` field is always empty.
+- **Response Time**: < 10ms
 
 ### Detailed Health Check  
 - **URL**: `GET /health/detailed`

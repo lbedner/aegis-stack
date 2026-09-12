@@ -141,6 +141,36 @@ class TestCleanupNestedProjectDirectory:
         # Nested directory should be removed
         assert not nested_dir.exists()
 
+    def test_gated_off_nested_file_is_dropped_not_promoted(
+        self, tmp_path: Path
+    ) -> None:
+        """Copier renders every template file into the nested ``slug/`` dir,
+        including ones whose whole-file gate is OFF for this stack - those
+        arrive as a lone newline. Promoting them to the project root plants
+        1-byte stubs a fresh render would never contain (init sweeps them).
+
+        The other half of the same defect as the sync backstop: four
+        ``tests/**`` files new at HEAD came in this way on a v0.10.1 update.
+        ``__init__.py`` is the one legitimately-empty file and must still
+        be promoted.
+        """
+        project_slug = "my-project"
+        nested_dir = tmp_path / project_slug
+        (nested_dir / "tests" / "components").mkdir(parents=True)
+        (nested_dir / "app" / "pkg").mkdir(parents=True)
+
+        (nested_dir / "tests" / "components" / "test_worker.py").write_text("\n")
+        (nested_dir / "app" / "real.py").write_text("x = 1\n")
+        (nested_dir / "app" / "pkg" / "__init__.py").write_text("")
+
+        result = cleanup_nested_project_directory(tmp_path, project_slug)
+
+        assert not (tmp_path / "tests" / "components" / "test_worker.py").exists()
+        assert "tests/components/test_worker.py" not in result
+        assert (tmp_path / "app" / "real.py").read_text() == "x = 1\n"
+        assert (tmp_path / "app" / "pkg" / "__init__.py").exists()
+        assert not nested_dir.exists()
+
     def test_moves_files_in_subdirectories(self, tmp_path: Path) -> None:
         """Test that files in nested subdirectories are moved correctly."""
         project_slug = "my-project"
@@ -625,6 +655,56 @@ class TestSyncTemplateChanges:
         assert "app/main.py" not in result.synced
         assert config_file.read_text() == "# new config"
         assert main_file.read_text() == "# old main"
+
+    def test_gated_off_new_file_is_not_created_as_an_empty_stub(
+        self, tmp_path: Path
+    ) -> None:
+        """A whole-file-gated template that renders to nothing for this stack
+        must not be materialised by the new-file backstop.
+
+        Reproduced updating a database+ingress+auth project from v0.10.1 to
+        HEAD: seven ``tests/**`` and ``app/**`` files gated on
+        ``include_worker`` / ``include_finance`` / ``insights_per_user`` were
+        in the changed-set and got written as 1-byte stubs. A fresh render
+        of the same answers has none of them, because init sweeps empty
+        stubs; the update path never did. ``__init__.py`` is the one
+        legitimately-empty file and must still be created.
+        """
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            rendered = Path(dst_path) / project_slug
+            (rendered / "tests" / "components").mkdir(parents=True)
+            (rendered / "app" / "pkg").mkdir(parents=True)
+            if "/old" not in dst_path:
+                # Gate off for this stack: the template emits only a newline.
+                (rendered / "tests" / "components" / "test_worker.py").write_text("\n")
+                # A real new file alongside it, to prove the backstop still
+                # creates meaningful content.
+                (rendered / "app" / "real.py").write_text("x = 1\n")
+                # Legitimately empty package marker: must be created.
+                (rendered / "app" / "pkg" / "__init__.py").write_text("")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v1.0.0",
+                template_changed_files={
+                    "tests/components/test_worker.py",
+                    "app/real.py",
+                    "app/pkg/__init__.py",
+                },
+                old_commit="abc123",
+            )
+
+        assert not (tmp_path / "tests" / "components" / "test_worker.py").exists()
+        assert "tests/components/test_worker.py" not in result.synced
+        assert (tmp_path / "app" / "real.py").read_text() == "x = 1\n"
+        assert (tmp_path / "app" / "pkg" / "__init__.py").exists()
 
     def test_empty_template_changed_files_syncs_nothing(self, tmp_path: Path) -> None:
         """Test that empty set means no files changed — nothing synced."""

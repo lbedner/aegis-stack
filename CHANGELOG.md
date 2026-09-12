@@ -9,6 +9,17 @@
 
 ### Changed
 
+- **`app/core/graphql.py`: a small, injectable GraphQL client.** Nothing in
+  a generated project spoke GraphQL before, and the first consumer needs to
+  (GitHub's REST stargazer list cannot enumerate past 40k stars; the GraphQL
+  connection can). `GraphQLClient(endpoint, headers=, timeout=, transport=)`
+  owns one connection pool and a single `query()`, and turns the two things
+  every caller gets wrong into typed errors: a `200` that carries an
+  `errors` array raises `GraphQLError`, and any `httpx` failure raises
+  `GraphQLHTTPError` instead of leaking the transport's exception types.
+  `transport` is the seam - tests pass `httpx.MockTransport` and never
+  monkeypatch `httpx`. Endpoint-agnostic on purpose; an API-specific
+  client subclasses it. REST callers are deliberately untouched.
 - **A scaffolded plugin pins the aegis-stack that made it.** The scaffold
   emitted an unpinned `aegis-stack` dependency, so `pip install
   aegis-stack-<name>` could resolve an older aegis-stack whose `PluginSpec`

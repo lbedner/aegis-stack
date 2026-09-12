@@ -1,0 +1,61 @@
+name: Slow Suites
+
+# The PR run deselects ``-m slow``. This job runs everything it leaves
+# behind - the add, add-service, remove and update lifecycle suites, the
+# database runtime tests, plugin conformance - once a night and on demand,
+# so a lifecycle regression or a stale assertion is caught within a day
+# instead of at release time. The stack matrix owns
+# tests/cli/test_stack_validation.py; it is not repeated here.
+#
+# A Postgres service is provided so the postgres-marked runtime tests run
+# for real instead of skipping for want of localhost:5432.
+
+on:
+  schedule:
+    - cron: '30 7 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/slow-suites.yml'
+
+concurrency:
+  group: slow-suites-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  slow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_TEST_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run the slow suites
+        run: >
+          uv run pytest -m slow -n auto --dist=loadgroup -v --tb=short
+          --ignore=tests/cli/test_stack_validation.py

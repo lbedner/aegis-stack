@@ -10,6 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from .models import (
+    PROVIDERS,
     AIProvider,
     ProviderConfig,
     get_provider_capabilities,
@@ -63,13 +64,11 @@ def _resolve_effort(value: object) -> str | None:
 
 # The settings field / environment variable each keyed provider reads its
 # API key from. Providers absent here need no key from settings.
+# Where each provider's key lives, from the one place a provider is
+# described. It was a map of its own; a provider named here and nowhere
+# else would have gone unnoticed until somebody selected it.
 API_KEY_ENV: dict[AIProvider, str] = {
-    AIProvider.OPENAI: "OPENAI_API_KEY",
-    AIProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
-    AIProvider.GOOGLE: "GOOGLE_API_KEY",
-    AIProvider.GROQ: "GROQ_API_KEY",
-    AIProvider.MISTRAL: "MISTRAL_API_KEY",
-    AIProvider.COHERE: "COHERE_API_KEY",
+    p: spec.env_var for p, spec in PROVIDERS.items()
 }
 
 

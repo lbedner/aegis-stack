@@ -1,0 +1,180 @@
+"""One place a provider is described.
+
+A provider used to be stated six times: the enum, a capabilities dict, an
+API-key lookup in config, a model-class if/elif, and TWO byte-identical
+env-var maps - so adding one meant five edits across three files and
+forgetting any of them failed quietly at the point of use.
+
+The enum stays: this stack runs its AI on a memory backend with no
+database, so what a provider IS has to be knowable in code before any
+storage exists. What moved is the FACTS about it, into one registry
+beside the enum.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from app.services.ai.models import PROVIDERS, AIProvider
+
+
+class TestEveryProviderIsDescribedOnce:
+    def test_the_registry_covers_the_enum_exactly(self) -> None:
+        """Exhaustiveness is the reason to keep an enum at all; a member
+        with no entry is the bug this replaces."""
+        assert set(PROVIDERS) == set(AIProvider)
+
+    @pytest.mark.parametrize("provider", list(AIProvider))
+    def test_each_entry_says_where_its_key_lives(self, provider: AIProvider) -> None:
+        assert PROVIDERS[provider].env_var
+
+    @pytest.mark.parametrize("provider", list(AIProvider))
+    def test_each_entry_carries_its_capabilities(self, provider: AIProvider) -> None:
+        assert PROVIDERS[provider].capabilities.provider == provider
+
+
+class TestOpenRouter:
+    """It speaks the OpenAI API, so it is a base URL and a key - the same
+    shape Ollama already had, now shared rather than special-cased."""
+
+    def test_it_is_a_provider(self) -> None:
+        assert AIProvider.from_name("openrouter") is AIProvider.OPENROUTER
+
+    def test_its_key_is_its_own_variable(self) -> None:
+        """Not OPENAI_API_KEY: this stack has a real OpenAI key too, and
+        one must never overwrite the other."""
+        assert PROVIDERS[AIProvider.OPENROUTER].env_var == "OPEN_ROUTER_API_KEY"
+
+    def test_it_points_at_openrouter(self) -> None:
+        spec = PROVIDERS[AIProvider.OPENROUTER]
+        assert spec.base_url == "https://openrouter.ai/api/v1"
+
+    def test_it_speaks_tools_and_vision(self) -> None:
+        caps = PROVIDERS[AIProvider.OPENROUTER].capabilities
+        assert caps.supports_function_calling and caps.supports_streaming
+
+
+class TestTheOldLookupsReadTheRegistry:
+    """The maps are gone; the helpers that used them stay, because
+    callers all over the app and CLI use them."""
+
+    @pytest.mark.parametrize("provider", list(AIProvider))
+    def test_api_key_env_matches_the_registry(self, provider: AIProvider) -> None:
+        from app.services.ai.config import api_key_env
+
+        assert api_key_env(provider) == PROVIDERS[provider].env_var
+
+    def test_supported_providers_is_the_enum(self) -> None:
+        from app.services.ai.domains.llm.providers import get_supported_providers
+
+        assert set(get_supported_providers()) == set(AIProvider)
+
+
+{%- if ai_framework == "pydantic-ai" %}
+
+
+class TestOneClientForEveryOpenAICompatibleProvider:
+    """Mistral, Cohere, OpenRouter and Ollama differ by a URL and a key.
+
+    Pydantic-ai only: on the LangChain framework a model is built through
+    that project's own per-provider packages, which a stack installs only
+    for the providers it selected - and which have no OpenRouter at all.
+
+    They used to differ by more: two of them passed ``base_url`` to
+    ``OpenAIChatModel``, which takes no such argument, so selecting
+    Mistral or Cohere raised TypeError the moment anybody tried. Nothing
+    caught it because nothing constructed them.
+    """
+
+    def test_the_compatible_ones_are_marked_by_a_base_url(self) -> None:
+        compatible = {p for p, s in PROVIDERS.items() if s.base_url}
+        assert compatible == {
+            AIProvider.MISTRAL,
+            AIProvider.COHERE,
+            AIProvider.OPENROUTER,
+        }
+
+    @pytest.mark.parametrize(
+        "provider", [AIProvider.MISTRAL, AIProvider.COHERE, AIProvider.OPENROUTER]
+    )
+    def test_each_one_actually_builds(self, provider: AIProvider) -> None:
+        """The regression guard: construction, not just configuration."""
+        from app.core.config import settings
+        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.providers import model_for
+
+        config = get_ai_config(settings)
+        config.provider = provider
+        config.model = "a-model"
+        object.__setattr__(
+            settings, PROVIDERS[provider].env_var, "test-key-not-used"
+        )
+
+        model, name = model_for(config, settings)
+
+        assert name == "a-model"
+        assert type(model).__name__ == "OpenAIChatModel"
+
+    def test_the_key_rides_the_client_not_the_environment(self) -> None:
+        """A stack can hold a real OpenAI key AND an OpenRouter one;
+        stamping OPENAI_API_KEY would let the last one built answer for
+        both."""
+        import os
+
+        from app.core.config import settings
+        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.providers import model_for
+
+        os.environ["OPENAI_API_KEY"] = "the-real-openai-key"
+        config = get_ai_config(settings)
+        config.provider = AIProvider.OPENROUTER
+        config.model = "deepseek/deepseek-chat"
+        object.__setattr__(settings, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
+
+        model_for(config, settings)
+
+        assert os.environ["OPENAI_API_KEY"] == "the-real-openai-key"
+{%- else %}
+
+
+class TestOpenRouterOnLangChain:
+    """Parity. LangChain's OpenAI client takes a base URL too, so an
+    aggregator needs no package of its own - the same trick the Ollama
+    builder has always used, with a real key instead of a placeholder.
+
+    Checked after the keyed table, so Mistral and Cohere keep their
+    native clients rather than being quietly rerouted.
+    """
+
+    def test_it_builds_through_the_openai_client(self) -> None:
+        from app.core.config import settings
+        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.providers import get_llm
+
+        config = get_ai_config(settings)
+        config.provider = AIProvider.OPENROUTER
+        config.model = "deepseek/deepseek-chat"
+        object.__setattr__(settings, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
+
+        llm = get_llm(config, settings)
+
+        assert type(llm).__name__ == "ChatOpenAI"
+        assert str(llm.openai_api_base).startswith("https://openrouter.ai")
+
+    def test_the_key_rides_the_client_not_the_environment(self) -> None:
+        import os
+
+        from app.core.config import settings
+        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.providers import get_llm
+
+        os.environ["OPENAI_API_KEY"] = "the-real-openai-key"
+        config = get_ai_config(settings)
+        config.provider = AIProvider.OPENROUTER
+        config.model = "deepseek/deepseek-chat"
+        object.__setattr__(settings, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
+
+        get_llm(config, settings)
+
+        assert os.environ["OPENAI_API_KEY"] == "the-real-openai-key"
+{%- endif %}

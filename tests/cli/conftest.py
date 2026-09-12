@@ -2,10 +2,12 @@
 Pytest configuration for CLI integration tests.
 """
 
+import dataclasses
 import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Callable, Generator, Iterable
@@ -64,6 +66,11 @@ class ProjectTemplateSpec:
     components: tuple[str, ...] = ()
     scheduler_backend: str = "memory"
     services: tuple[str, ...] = ()
+    # None = the template default. The db runtime fixtures set the RUNNING
+    # interpreter so the cached project is rendered and formatted for the
+    # Python it will execute under: a 3.14 render is not importable on 3.11
+    # (post-gen ruff unquotes forward references under deferred annotations).
+    python_version: str | None = None
 
 
 NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
@@ -199,6 +206,11 @@ def project_template_cache(
                         selected_components=list(spec.components),
                         scheduler_backend=spec.scheduler_backend,
                         selected_services=list(spec.services),
+                        **(
+                            {"python_version": spec.python_version}
+                            if spec.python_version
+                            else {}
+                        ),
                     )
                     generate_with_copier(template_gen, staging_parent, dev_mode=True)
                     staged = staging_parent / project_name
@@ -413,34 +425,25 @@ def generated_db_project_postgres(
 
     # Get cached project and copy to session temp dir (exclude .venv - wrong Python version)
     print("Using cached PostgreSQL project template...")
-    spec = NAMED_PROJECT_SPECS["base_with_database_postgres"]
+    # Rendered for the interpreter these tests run under, not the default.
+    spec = dataclasses.replace(
+        NAMED_PROJECT_SPECS["base_with_database_postgres"],
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
+    )
     cached_project = project_template_cache(spec)
     project_path = session_temp_dir / "db-postgres-runtime"
+    # .git too: the runtime tests never read history, and copying the
+    # shared cache's loose objects races git's own gc (copytree fails with
+    # ENOENT on .git/objects/xx that vanished mid-copy).
     shutil.copytree(
-        cached_project, project_path, ignore=shutil.ignore_patterns(".venv")
+        cached_project, project_path, ignore=shutil.ignore_patterns(".venv", ".git")
     )
-
-    # Patch pyproject.toml to use current Python version (cached may have different version)
-    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-    pyproject_path = project_path / "pyproject.toml"
-    content = pyproject_path.read_text()
-    import re
-
-    content = re.sub(
-        r'requires-python\s*=\s*"[^"]+"',
-        f'requires-python = ">={python_version}"',
-        content,
-    )
-    pyproject_path.write_text(content)
-
-    # Update .python-version to match current Python (cached may have different version)
-    python_version_file = project_path / ".python-version"
-    python_version_file.write_text(f"{python_version}\n")
 
     # Install dependencies
     print("Installing dependencies in PostgreSQL project...")
+    assert spec.python_version is not None  # set just above, for this interpreter
     install_result = run_project_command(
-        ["uv", "sync", "--extra", "dev", "--python", python_version],
+        ["uv", "sync", "--extra", "dev", "--python", spec.python_version],
         project_path,
         step_name="Install Dependencies",
         env_overrides={"VIRTUAL_ENV": ""},
@@ -475,30 +478,16 @@ def generated_db_project(
 
     # Get cached project and copy to session temp dir (exclude .venv - wrong Python version)
     print("Using cached SQLite project template...")
-    spec = NAMED_PROJECT_SPECS["base_with_database"]
+    # Rendered for the interpreter these tests run under, not the default.
+    spec = dataclasses.replace(
+        NAMED_PROJECT_SPECS["base_with_database"],
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
+    )
     cached_project = project_template_cache(spec)
     project_path = session_temp_dir / "db-sqlite-runtime"
     shutil.copytree(
-        cached_project, project_path, ignore=shutil.ignore_patterns(".venv")
+        cached_project, project_path, ignore=shutil.ignore_patterns(".venv", ".git")
     )
-
-    # Patch pyproject.toml to use current Python version (cached may have different version)
-    import re
-    import sys
-
-    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-    pyproject_path = project_path / "pyproject.toml"
-    content = pyproject_path.read_text()
-    content = re.sub(
-        r'requires-python\s*=\s*"[^"]+"',
-        f'requires-python = ">={python_version}"',
-        content,
-    )
-    pyproject_path.write_text(content)
-
-    # Update .python-version to match current Python (cached may have different version)
-    python_version_file = project_path / ".python-version"
-    python_version_file.write_text(f"{python_version}\n")
 
     # Install dependencies
     print("Installing dependencies in SQLite project...")

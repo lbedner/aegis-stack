@@ -7,6 +7,7 @@ to avoid regenerating projects for each test.
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -123,6 +124,12 @@ def head_project_cache(
             "cached-head-project",
             "--to-version",
             head_commit_hash,
+            # The project is rendered and formatted for the interpreter that
+            # will run it: a 3.14 render is not importable on 3.11 (post-gen
+            # ruff unquotes forward references under deferred annotations),
+            # and the update path executes project code under this venv.
+            "--python-version",
+            f"{sys.version_info.major}.{sys.version_info.minor}",
             "--no-interactive",
             "--yes",
         ],

@@ -43,6 +43,10 @@ from app.components.frontend.controls.views.legacy_dashboard import (
     LegacyDashboardView,
 )
 from app.components.frontend.core import events as frontend_events
+from app.components.frontend.core.session_health import (
+    handle_corrupt_session,
+    is_tree_corruption,
+)
 from app.components.frontend.core.routes import DASHBOARD_ROUTE
 {% if insights_per_user -%}
 from app.components.frontend.controls.buttons import PulseButton
@@ -1074,11 +1078,11 @@ async def setup_dashboard(view: BaseView) -> None:
     async def refresh_dashboard() -> None:
         """Refresh the stunning marketing-grade dashboard."""
         try:
-            # Single /health/ endpoint for all health data. APIClient
-            # returns parsed JSON or ``None`` on any error (logged centrally).
-            data = await api_client.get("/health/")
+            # Health data comes from /health/detailed; /health/ is a bare
+            # liveness probe. APIClient returns parsed JSON or ``None``.
+            data = await api_client.get("/health/detailed")
             if data is None:
-                logger.debug("refresh_dashboard.skipping: /health/ returned None")
+                logger.debug("refresh_dashboard.skipping: no health data")
                 return
             assert isinstance(data, dict), f"unexpected /health/ shape: {type(data)}"
 
@@ -1159,13 +1163,12 @@ async def setup_dashboard(view: BaseView) -> None:
                     raise
 
         except PageDisconnectedException:
+            # Disconnected: no UI can render; propagate so auto_refresh stops.
             logger.debug("Page disconnected during dashboard refresh")
-            # Do NOT call show_error_status here: the page is already disconnected,
-            # so any attempt to update the UI (including showing an error) fails.
-            # Instead, propagate this exception so the auto_refresh loop can handle
-            # the disconnection gracefully and stop further updates.
             raise
         except Exception as e:
+            if is_tree_corruption(e):
+                raise  # unrecoverable session - auto_refresh terminates it
             logger.error(
                 f"Dashboard refresh failed: {e}",
                 exc_info=True,
@@ -1174,7 +1177,6 @@ async def setup_dashboard(view: BaseView) -> None:
                     "function": "refresh_dashboard"
                 }
             )
-            # Show error indicator using safe dashboard method
             await dashboard.show_error_status()
 
     # Register refresh function on page.data for access by any component
@@ -1182,9 +1184,7 @@ async def setup_dashboard(view: BaseView) -> None:
         page.data = {}
     page.data["refresh_dashboard"] = refresh_dashboard
 
-    # Consecutive disconnect checks before declaring page truly dead.
-    # Flet sessions reconnect within a few seconds — this grace period
-    # prevents background tasks from exiting during transient blips.
+    # Grace before declaring the page dead: Flet reconnects within seconds.
     _disconnect_grace_checks = 30  # ~30s at 1s per check
     _consecutive_disconnects = 0
 
@@ -1205,11 +1205,7 @@ async def setup_dashboard(view: BaseView) -> None:
         return True  # Still within grace period
 
     async def auto_refresh() -> None:
-        """Auto-refresh loop. Exits on page disconnect to allow clean shutdown.
-
-        On hot-reload, uvicorn kills the process and starts fresh —
-        flet_main runs again with a new http_client and new tasks.
-        """
+        """Auto-refresh loop. Exits on page disconnect or session corruption."""
         while _is_alive():
             try:
                 await refresh_dashboard()
@@ -1219,6 +1215,9 @@ async def setup_dashboard(view: BaseView) -> None:
                 logger.debug("Page disconnected during refresh, retrying")
                 await asyncio.sleep(5)
             except Exception as e:
+                if is_tree_corruption(e):
+                    await handle_corrupt_session(page)
+                    return
                 logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
                 await asyncio.sleep(30)
 

@@ -897,7 +897,9 @@ class TestWithdraw:
 
         from app.core import db as app_db
 
-        if app_db.async_engine.dialect.name != "sqlite":
+        # Every project's tests run on SQLite, so the dialect says nothing
+        # about the project; the knob is only wired on a SQLite project.
+        if getattr(app_db, "SQLITE_BUSY_TIMEOUT_MS", None) is None:
             pytest.skip("busy_timeout is a SQLite knob")
         async with app_db.async_engine.connect() as conn:
             timeout = (await conn.execute(text("PRAGMA busy_timeout"))).scalar()

@@ -41,3 +41,23 @@ async def test_system_service_can_be_scheduled() -> None:
     system_job = scheduler.get_job("system")
 
     assert system_job.func == check_system_status
+
+
+@pytest.mark.asyncio
+async def test_scheduler_heartbeat_job_registered() -> None:
+    """The heartbeat job exists and its beacon file gets touched."""
+    from app.components.scheduler.heartbeat import (
+        HEARTBEAT_FILE,
+        HEARTBEAT_JOB_ID,
+        touch_scheduler_heartbeat,
+    )
+    from app.components.scheduler.main import create_scheduler
+
+    scheduler = create_scheduler()
+    job = scheduler.get_job(HEARTBEAT_JOB_ID)
+    assert job is not None
+    assert job.trigger.interval.total_seconds() <= 30
+
+    HEARTBEAT_FILE.unlink(missing_ok=True)
+    await touch_scheduler_heartbeat()
+    assert HEARTBEAT_FILE.exists()

@@ -288,11 +288,11 @@ API endpoints, CLI commands, and worker tasks validate incoming data:
 
 ```python
 # Entry point - validate with Pydantic
-@router.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
+@router.get("/detailed", response_model=DetailedHealthResponse)
+async def detailed_health() -> DetailedHealthResponse:
     # Internal code - trust the data
     status = await get_system_status()
-    return HealthResponse(healthy=status.overall_healthy, ...)
+    return DetailedHealthResponse(healthy=status.overall_healthy, ...)
 ```
 
 ### Trust Internally

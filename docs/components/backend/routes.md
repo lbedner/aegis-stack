@@ -60,7 +60,12 @@ A few conventions to notice:
 
 - **`/health` is always present.** It carries no version prefix because
   the health surface is used by orchestrators (Docker, Kubernetes,
-  Overseer) that should not have to know about API versions.
+  Overseer) that should not have to know about API versions. `/health/`
+  is a constant-time liveness probe: it answers 200 without walking any
+  component, which is all a load balancer or container healthcheck needs.
+  Component status lives at `/health/detailed`, backed by a shared status
+  cache so the dashboard, the scheduler and the probe never trigger more
+  than one full walk every ten seconds between them.
 - **Versioned APIs live under `/api/v1`.** Every service-owned router
   mounts there. When the API contract changes incompatibly, the next
   router goes under `/api/v2` and lives alongside the old one until

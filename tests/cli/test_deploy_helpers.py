@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import typer
 import yaml
 
 from aegis.commands import deploy as deploy_mod
@@ -279,3 +280,81 @@ def test_rollback_skips_db_restore_for_neon(
     assert ok is True
     assert not any("psql" in c for c in calls), "neon rollback must not run psql"
     assert not any("db_backup.sql" in c for c in calls)
+
+
+class TestDeployExec:
+    """``deploy-exec`` is the scriptable sibling of ``deploy-shell``: its
+    whole value is that callers stop hand-assembling the compose-file
+    chain (omitting it silently drops the prod overrides) and that a
+    failing remote command fails the local one."""
+
+    @staticmethod
+    def _capture(monkeypatch: pytest.MonkeyPatch, returncode: int = 0) -> dict:
+        seen: dict = {}
+
+        def fake_run(argv, *args, **kwargs):
+            seen["argv"] = argv
+            seen["captured"] = bool(kwargs.get("capture_output"))
+            return subprocess.CompletedProcess(argv, returncode)
+
+        monkeypatch.setattr(deploy_mod.subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            deploy_mod,
+            "_load_deploy_config",
+            lambda _p: {
+                "server": {"host": "h", "user": "u", "path": "/opt/app"},
+            },
+        )
+        return seen
+
+    def test_sends_the_full_prod_compose_chain(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = self._capture(monkeypatch)
+        deploy_mod.deploy_exec_command(
+            command=["alembic", "current"], service="webserver"
+        )
+
+        remote = seen["argv"][-1]
+        assert "docker-compose.yml" in remote
+        assert "docker-compose.prod.yml" in remote
+        assert "--profile prod" in remote
+        # -T, not a TTY: output has to stay pipeable.
+        assert "exec -T webserver" in remote
+        assert remote.endswith("alembic current")
+
+    def test_quotes_each_argument(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An argument with spaces must arrive as one argument, not several."""
+        seen = self._capture(monkeypatch)
+        deploy_mod.deploy_exec_command(
+            command=["echo", "two words"], service="webserver"
+        )
+
+        assert "'two words'" in seen["argv"][-1]
+
+    def test_streams_rather_than_captures(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = self._capture(monkeypatch)
+        deploy_mod.deploy_exec_command(command=["ls"], service="webserver")
+
+        assert seen["captured"] is False
+
+    def test_propagates_the_remote_exit_code(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without this, a failed migration would look like a success to
+        ``set -e`` and to CI."""
+        self._capture(monkeypatch, returncode=3)
+        with pytest.raises(typer.Exit) as exc:
+            deploy_mod.deploy_exec_command(command=["false"], service="webserver")
+        assert exc.value.exit_code == 3
+
+    def test_success_does_not_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._capture(monkeypatch, returncode=0)
+        deploy_mod.deploy_exec_command(command=["true"], service="webserver")
+
+    def test_rejects_an_empty_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._capture(monkeypatch)
+        with pytest.raises(typer.Exit):
+            deploy_mod.deploy_exec_command(command=[], service="webserver")

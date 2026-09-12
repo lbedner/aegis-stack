@@ -998,6 +998,8 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_follow": "Follow log output",
     "deploy.help_opt_logs_service": "Show logs for specific service",
     "deploy.help_opt_shell_service": "Service to connect to",
+    "deploy.help_arg_exec_command": "Command to run inside the container (after --).",
+    "deploy.exec_no_command": "No command given. Put it after --, e.g. aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": (
         "GitHub repo as owner/name (default: auto-detect from git remote origin)"
     ),

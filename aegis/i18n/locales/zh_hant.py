@@ -790,6 +790,8 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_follow": "持續追蹤日誌輸出",
     "deploy.help_opt_logs_service": "僅顯示指定服務的日誌",
     "deploy.help_opt_shell_service": "要連線的服務",
+    "deploy.help_arg_exec_command": "在容器內執行的指令（放在 -- 之後）。",
+    "deploy.exec_no_command": "未提供指令。請寫在 -- 之後，例如：aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "GitHub 儲存庫,格式為 owner/name(預設值：從 git remote origin 自動偵測)",
     "deploy.help_opt_gh_tags": "推送 v* 標籤時也觸發部署工作流程",
     "deploy.help_opt_gh_overwrite": "覆寫既有的 GitHub Secrets 與 deploy.yml 工作流程",

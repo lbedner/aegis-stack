@@ -920,6 +920,8 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_follow": "Следить за выводом логов в реальном времени",
     "deploy.help_opt_logs_service": "Показать логи только для указанного сервиса",
     "deploy.help_opt_shell_service": "Сервис, к которому подключиться",
+    "deploy.help_arg_exec_command": "Команда для выполнения внутри контейнера (после --).",
+    "deploy.exec_no_command": "Команда не указана. Укажите её после --, например: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "Репозиторий GitHub в формате owner/name (по умолчанию: автоопределение из git remote origin)",
     "deploy.help_opt_gh_tags": "Запускать workflow деплоя также при push в теги v*",
     "deploy.help_opt_gh_overwrite": "Перезаписать существующие GitHub Secrets и workflow deploy.yml",

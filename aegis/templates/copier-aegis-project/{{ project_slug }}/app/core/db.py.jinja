@@ -130,13 +130,17 @@ engine = create_engine(
 
 # Create async engine for non-blocking operations
 def _get_async_database_url(database_url: str) -> str:
-    """Convert sync database URL to async version."""
-{% if database_engine == "sqlite" %}
+    """Convert sync database URL to async version.
+
+    SQLite is handled whatever engine this project runs on: the test suite
+    points ``DATABASE_URL`` at a throwaway SQLite file before this module
+    builds its engines, so a Postgres project's tests run on SQLite too.
+    """
     if database_url.startswith("sqlite:///"):
         return database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
     elif database_url.startswith("sqlite://"):
         return database_url.replace("sqlite://", "sqlite+aiosqlite://")
-{% else %}
+{% if database_engine != "sqlite" %}
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace(
             "postgresql://", "postgresql+asyncpg://"

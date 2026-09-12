@@ -23,6 +23,21 @@
   differ on: a published plugin resolves by version and carries an install
   command, a source-only one carries its repository link and pins nothing.
 
+### Fixed
+
+- **A Postgres project's test suite runs.** Every project's tests run on
+  SQLite (``tests/conftest.py`` points ``DATABASE_URL`` at a throwaway
+  file), but three things only worked on a SQLite project: the async URL
+  converter in ``app/core/db.py`` did not know ``sqlite://`` (so
+  ``create_async_engine`` got a sync driver and nothing collected), the
+  test guard redirected only the async session factory (so a sync
+  ``db_session()`` lookup after a write hit a database with no tables:
+  Postgres migrations open with ``CREATE SCHEMA``, which SQLite rejects), and
+  the SQLite busy-timeout test skipped on dialect rather than on whether the
+  project wires the knob. The CI matrix generates no Postgres project, so
+  nothing caught it. A generated test now asserts the sync and async
+  app-owned sessions share one database.
+
 ## [0.11.1] - 2026-09-10
 
 ### Changed

@@ -337,68 +337,52 @@ def generate_with_copier(
     is_blog_included: bool = include_blog is True
     is_documents_included: bool = include_documents is True
     ai_needs_migrations = is_ai_included and ai_backend_str != StorageBackends.MEMORY
-    needs_migration_files = (
-        is_auth_included
-        or ai_needs_migrations
-        or is_insights_included
-        or is_blog_included
-    )
     # Only run migrations automatically for SQLite (file-based, no server needed)
     # PostgreSQL requires a running server, so skip auto-migration
     is_sqlite = database_engine == StorageBackends.SQLITE
     is_payment_included: bool = copier_data.get(AnswerKeys.PAYMENT, False) is True
-    needs_migration_files = needs_migration_files or is_payment_included
     is_finance_included: bool = copier_data.get(AnswerKeys.FINANCE, False) is True
-    needs_migration_files = needs_migration_files or is_finance_included
-    # Scheduler component: job_execution history table. Postgres only — the
-    # table lives in a ``scheduler`` schema (CREATE SCHEMA), which SQLite
-    # can't run; SQLite scheduler stacks get the table via create_all.
     is_scheduler_included: bool = copier_data.get(AnswerKeys.SCHEDULER, False) is True
     scheduler_backend_str: str = str(
         copier_data.get(AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY)
         or StorageBackends.MEMORY
     )
-    scheduler_needs_migrations = (
-        is_scheduler_included and scheduler_backend_str == StorageBackends.POSTGRES
-    )
-    needs_migration_files = needs_migration_files or scheduler_needs_migrations
+    # Get ai_voice from copier_data (it's a boolean after conversion)
+    ai_voice_enabled: bool = copier_data.get(AnswerKeys.AI_VOICE, False) is True
+    context = {
+        AnswerKeys.AUTH: is_auth_included,
+        AnswerKeys.AUTH_ORG: copier_data.get(AnswerKeys.AUTH_ORG, False) is True,
+        AnswerKeys.AUTH_LEVEL: copier_data.get(AnswerKeys.AUTH_LEVEL, AuthLevels.BASIC),
+        AnswerKeys.AI: is_ai_included,
+        AnswerKeys.AI_BACKEND: ai_backend_str,
+        AnswerKeys.AI_VOICE: ai_voice_enabled,
+        AnswerKeys.INSIGHTS: is_insights_included,
+        AnswerKeys.INSIGHTS_PER_USER: copier_data.get(
+            AnswerKeys.INSIGHTS_PER_USER, False
+        )
+        is True,
+        AnswerKeys.BLOG: is_blog_included,
+        AnswerKeys.DOCUMENTS: is_documents_included,
+        AnswerKeys.PAYMENT: is_payment_included,
+        AnswerKeys.FINANCE: is_finance_included,
+        AnswerKeys.SCHEDULER: is_scheduler_included,
+        AnswerKeys.SCHEDULER_BACKEND: scheduler_backend_str,
+        # Finance tables live in a dedicated Postgres ``finance`` schema
+        # (dropped on SQLite); the migration variant is engine-resolved.
+        AnswerKeys.DATABASE_ENGINE: database_engine,
+    }
+    # One source of truth for "which services ship a migration": the same
+    # function that picks them. A hand-kept OR chain here drifted once and
+    # silently generated documents stacks with no migration at all.
+    services = get_services_needing_migrations(context)
+    needs_migration_files = bool(services)
     run_migrations = needs_migration_files and is_sqlite
 
     # Generate migrations for services that need them (always, regardless of engine)
-    if needs_migration_files:
-        # Get ai_voice from copier_data (it's a boolean after conversion)
-        ai_voice_enabled: bool = copier_data.get(AnswerKeys.AI_VOICE, False) is True
-        context = {
-            AnswerKeys.AUTH: is_auth_included,
-            AnswerKeys.AUTH_ORG: copier_data.get(AnswerKeys.AUTH_ORG, False) is True,
-            AnswerKeys.AUTH_LEVEL: copier_data.get(
-                AnswerKeys.AUTH_LEVEL, AuthLevels.BASIC
-            ),
-            AnswerKeys.AI: is_ai_included,
-            AnswerKeys.AI_BACKEND: ai_backend_str,
-            AnswerKeys.AI_VOICE: ai_voice_enabled,
-            AnswerKeys.INSIGHTS: is_insights_included,
-            AnswerKeys.INSIGHTS_PER_USER: copier_data.get(
-                AnswerKeys.INSIGHTS_PER_USER, False
-            )
-            is True,
-            AnswerKeys.BLOG: is_blog_included,
-            AnswerKeys.DOCUMENTS: is_documents_included,
-            AnswerKeys.PAYMENT: is_payment_included,
-            AnswerKeys.FINANCE: is_finance_included,
-            AnswerKeys.SCHEDULER: is_scheduler_included,
-            AnswerKeys.SCHEDULER_BACKEND: scheduler_backend_str,
-            # Finance tables live in a dedicated Postgres ``finance`` schema
-            # (dropped on SQLite); the migration variant is engine-resolved.
-            AnswerKeys.DATABASE_ENGINE: database_engine,
-        }
-        services = get_services_needing_migrations(context)
-        if services:
-            generated = generate_migrations_for_services(
-                project_path, services, context
-            )
-            for migration_path in generated:
-                print(f"Generated migration: {migration_path.name}")
+    if services:
+        generated = generate_migrations_for_services(project_path, services, context)
+        for migration_path in generated:
+            print(f"Generated migration: {migration_path.name}")
 
     # AI needs seeding when using persistence backend AND sqlite (postgres needs running server)
     ai_needs_seeding = ai_needs_migrations and is_sqlite

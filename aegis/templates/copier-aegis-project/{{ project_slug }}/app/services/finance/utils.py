@@ -61,7 +61,7 @@ def monthly_income(streams: list[Any]) -> tuple[int, int]:
         and is_commitment(s)
     ]
     rows = [(s, f) for s, f in rows if f > 0]
-    total = int(sum((s.expected_amount or s.average_amount or 0) * f for s, f in rows))
+    total = int(sum(s.amount * f for s, f in rows))
     return total, len(rows)
 
 

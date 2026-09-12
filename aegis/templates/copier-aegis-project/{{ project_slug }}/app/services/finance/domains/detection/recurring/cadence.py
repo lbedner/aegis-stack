@@ -16,7 +16,8 @@ bill).
 
 from __future__ import annotations
 
-from datetime import date
+from collections.abc import Sequence
+from datetime import date, timedelta
 import re
 import statistics
 
@@ -68,6 +69,21 @@ SILENCE_CADENCE_MULTIPLE = 2
 
 
 AMOUNT_TOLERANCE = 0.20  # within 20% of median => fixed amount
+
+
+# A bill's amount is read over the last year only, never its whole life.
+# Netflix has 87 payments here going back seven years: the all-history
+# median is $21.61 and the charge is $29.18. Every surface shows
+# ``stream.amount``, and 56 of 63 streams have no
+# ``expected_amount``, so that stale median WAS the bill everywhere -
+# in the forecast, the budget rollup and what Illiana reads.
+RECENT_WINDOW_DAYS = 365
+
+# ...unless a year does not hold enough of them. An annual bill gets one
+# charge per window and the median of one number is that number, so a
+# single odd renewal would become the bill. Below this the window gives
+# way to the last few occurrences, however long they took.
+MIN_RECENT_SAMPLES = 3
 
 # When a candidate group resembles a CONFIRMED bill (nested key tokens,
 # same cadence, same slot), this is how far its price may sit from the
@@ -286,3 +302,31 @@ def split_interleaved(
                 continue
         expanded.append((account_id, direction, payee, members))
     return expanded, released
+
+
+def amount_profile(
+    members: Sequence[FinanceTransaction], *, today: date
+) -> tuple[int, bool]:
+    """``(amount, is_variable)`` for a stream, read over recent members.
+
+    Both facts come off the same window on purpose. Reading the spread
+    over all of history marked a fixed subscription "variable" the first
+    time its price went up, and it stayed that way forever - which costs
+    the stream its subscription flag and loosens every amount check that
+    trusts it.
+    """
+    # A deleted row must not set the price. Filtered HERE rather than in
+    # each caller: detection pre-filters, the attach path and the
+    # recompute read a stream's members whole, and "which rows count"
+    # only has one answer.
+    live = [t for t in members if t.deleted_at is None]
+    if not live:
+        return 0, False
+    ordered = sorted(live, key=lambda t: t.date_)
+    floor = today - timedelta(days=RECENT_WINDOW_DAYS)
+    recent = [abs(t.amount) for t in ordered if t.date_ >= floor]
+    if len(recent) < MIN_RECENT_SAMPLES:
+        recent = [abs(t.amount) for t in ordered[-MIN_RECENT_SAMPLES:]]
+    median = int(statistics.median(recent))
+    variable = any(abs(a - median) > median * AMOUNT_TOLERANCE for a in recent)
+    return median, variable

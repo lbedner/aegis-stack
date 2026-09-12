@@ -227,3 +227,10 @@ class RecurringMixin(FinanceServiceBase):
             stream_id,
             owner_user_id=owner_user_id,
         )
+
+    async def recompute_stream_amounts(
+        self, *, owner_user_id: int | None = None
+    ) -> dict[str, int]:
+        return await recurring.recompute_stream_amounts(
+            self.db, owner_user_id=owner_user_id
+        )

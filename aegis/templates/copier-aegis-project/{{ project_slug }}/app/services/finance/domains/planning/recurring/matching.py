@@ -12,6 +12,7 @@ from datetime import timedelta
 
 from app.services.finance.constants import CADENCES
 from app.services.finance.domains.planning.recurring import queries
+from app.services.finance.domains.planning.recurring.membership import amount_band
 from app.services.finance.domains.planning.recurring.streams import get_recurring
 from app.services.finance.models import (
     FinanceRecurringStream,
@@ -35,11 +36,9 @@ async def recurring_match_candidates(
     unclaimed rows in the bill's direction whose amount lands in the
     neighborhood of what the bill costs, newest first.
 
-    The amount band is deliberately loose (half to double the
-    expected figure, or everything when the bill has no figure) -
-    this feeds a picker where the user decides, not an auto-match,
-    and a too-tight band hides exactly the changed-amount payment
-    that broke the automatic match in the first place.
+    The amount band is ``membership.amount_band`` - the same one the
+    attach backfill claims by, because "could this row be this bill's
+    payment" must not have two answers.
     """
     stream = await get_recurring(db, stream_id, owner_user_id)
     if stream is None:
@@ -68,13 +67,10 @@ async def recurring_match_candidates(
         amount_clause,
         owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
     ]
-    expected = stream.expected_amount or stream.average_amount
-    if expected:
-        filters.append(
-            func.abs(FinanceTransaction.amount).between(
-                int(expected * 0.5), int(expected * 2)
-            )
-        )
+    expected = stream.amount
+    band = amount_band(expected)
+    if band is not None:
+        filters.append(func.abs(FinanceTransaction.amount).between(*band))
     # This dialog answers "which payment was THIS due date" - last
     # year's identical charges are not answers to that question, and
     # six of them crowded out everything else (confirmed live). The

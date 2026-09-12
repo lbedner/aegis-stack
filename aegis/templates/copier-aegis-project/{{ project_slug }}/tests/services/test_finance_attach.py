@@ -7,6 +7,34 @@ about money that visibly left (12 overdue-but-paid bills, confirmed
 live). Attach is the reconciliation verb: consume the occurrence AND
 teach the payee key, so future months match on their own - the half
 Quicken's "mark as paid" never had.
+
+The backfill half - claiming the payee's other unclaimed rows - was cast
+over the WHOLE payee: every unclaimed row of that merchant in the bill's
+direction, with no amount test and no cadence test. One "mark as paid"
+on the CVS ExtraCare charge swept in all 273 CVS purchases ever made.
+Measured on the live ledger, members against what each stream's own
+cadence and span allow:
+
+    Wix          annually   36 members    7 expected   4.8x
+    Citi         monthly   109 members   33 expected   3.2x
+    Cvs          monthly   273 members   88 expected   3.1x
+    Foam & Wash  monthly   175 members   86 expected   2.0x
+    Apple        monthly   131 members   87 expected   1.5x
+    Spotify      monthly   130 members   88 expected   1.5x
+    YouTube      monthly   112 members   77 expected   1.4x
+
+Citi is the clearest shape: three "INTEREST CHARGED TO ..." lines per
+statement - $117.90, $29.24, $4.07 - all claimed by one monthly stream,
+so the bill's own median landed on the small ones and the figure shown
+was a third of the real charge.
+
+The picker beside this already knew both rules and earned them the hard
+way (``recurring_match_candidates``: half to double the expected figure,
+within a cadence-scaled window of the due date), which made two answers
+to "could this row be this bill's payment" in one codebase. The amount
+band is now shared. The cadence half differs in kind - the picker asks
+which payment was THIS due date, the backfill asks which past rows were
+this bill - so the backfill caps itself at one row per period instead.
 """
 
 from datetime import date
@@ -28,6 +56,15 @@ async def _bill(svc, account, **overrides):
     )
     defaults.update(overrides)
     return await seed_stream(svc, **defaults)
+
+
+async def _claimed_ids(db: AsyncSession, stream_id: int) -> set[int]:
+    """The stream's members, read in ONE query. Refreshing rows one by
+    one to check membership re-loads a column per object - an N+1, and
+    a test that models the very shape the gate exists to catch."""
+    from app.services.finance.domains.planning.recurring import queries
+
+    return {t.id for t in await queries.stream_members(db, stream_id)}
 
 
 async def _payment(
@@ -668,3 +705,88 @@ class TestNameTakesPrecedence:
         ids = [t.id for t in rows]
         assert current.id in ids
         assert ancient.id not in ids
+
+
+class TestTheBackfillClaimsPaymentsNotPurchases:
+    """The net used to be the whole payee. These read the membership
+    back in ONE query rather than refreshing row by row: a per-row
+    refresh re-loads a column per object, which is an N+1 and which the
+    queryspy gate is right to fail on."""
+
+    @pytest.mark.asyncio
+    async def test_a_shop_that_is_also_a_bill_keeps_its_purchases(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The CVS shape: a small monthly charge at a payee where the
+        same merchant also rings up shopping. Nothing stopped the
+        backfill claiming the shopping."""
+        account = await _account(svc)
+        bill = await _bill(svc, account)
+        payee = await svc.create_merchant("World Anvil", owner_user_id=1)
+        purchases = []
+        for month, cents in ((4, -4_312), (5, -8_900), (6, -6_750)):
+            row = await _payment(svc, account, day=date(2026, month, 14), cents=cents)
+            row.merchant_id = payee.id
+            async_db_session.add(row)
+            purchases.append(row)
+        payment = await _payment(svc, account, day=date(2026, 7, 2))
+        payment.merchant_id = payee.id
+        async_db_session.add(payment)
+        await async_db_session.flush()
+
+        await svc.attach_transaction_to_stream(payment.id, bill.id, owner_user_id=1)
+
+        claimed = await _claimed_ids(async_db_session, bill.id)
+        assert claimed.isdisjoint({row.id for row in purchases})
+        assert payment.id in claimed
+
+    @pytest.mark.asyncio
+    async def test_the_small_lines_on_a_statement_are_not_the_bill(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """The Citi shape: three interest lines post on the same day and
+        only the large one is the charge the bill tracks. Claiming all
+        three put three members in every month and dragged the bill's
+        own amount down to a third of the real charge."""
+        account = await _account(svc)
+        bill = await _bill(svc, account, expected_amount=11_790)
+        payee = await svc.create_merchant("World Anvil", owner_user_id=1)
+        smalls = []
+        for cents in (-2_924, -407):
+            row = await _payment(svc, account, day=date(2026, 8, 2), cents=cents)
+            row.merchant_id = payee.id
+            async_db_session.add(row)
+            smalls.append(row)
+        payment = await _payment(svc, account, day=date(2026, 8, 2), cents=-11_790)
+        payment.merchant_id = payee.id
+        async_db_session.add(payment)
+        await async_db_session.flush()
+
+        await svc.attach_transaction_to_stream(payment.id, bill.id, owner_user_id=1)
+
+        claimed = await _claimed_ids(async_db_session, bill.id)
+        assert claimed.isdisjoint({row.id for row in smalls})
+
+    @pytest.mark.asyncio
+    async def test_one_period_claims_one_row(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        """A monthly bill is paid once a month. Two lookalike rows in
+        one month are not two payments, however alike they look - and
+        the nearer of the two is the one that is."""
+        account = await _account(svc)
+        bill = await _bill(svc, account)
+        payee = await svc.create_merchant("World Anvil", owner_user_id=1)
+        far = await _payment(svc, account, day=date(2026, 6, 4), cents=-2_400)
+        near = await _payment(svc, account, day=date(2026, 6, 18), cents=-1_500)
+        payment = await _payment(svc, account, day=date(2026, 8, 2))
+        for row in (far, near, payment):
+            row.merchant_id = payee.id
+            async_db_session.add(row)
+        await async_db_session.flush()
+
+        await svc.attach_transaction_to_stream(payment.id, bill.id, owner_user_id=1)
+
+        claimed = await _claimed_ids(async_db_session, bill.id)
+        assert near.id in claimed
+        assert far.id not in claimed

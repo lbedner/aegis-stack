@@ -20,9 +20,9 @@ from app.core.log import logger
 from app.services.finance.domains.detection import queries
 from app.services.finance.domains.detection.recurring.cadence import (
     _SUBSCRIPTION_FREQUENCIES,
-    AMOUNT_TOLERANCE,
     _declared_cadence,
     _payee_key,
+    amount_profile,
 )
 from app.services.finance.domains.detection.recurring.detect import (
     _inherited_curation,
@@ -37,6 +37,7 @@ from app.services.finance.domains.detection.recurring.resolve import (
 from app.services.finance.models import (
     FinanceTransaction,
 )
+from app.services.finance.utils import current_date
 from app.services.shared.queries import owner_clause
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
@@ -176,11 +177,7 @@ async def plan_recurring(
     ):
         members.sort(key=lambda t: (t.date_, t.id or 0))
         frequency, median_interval = _declared_cadence(members)
-        amounts = [abs(t.amount) for t in members]
-        median_amount = int(statistics.median(amounts))
-        variable = any(
-            abs(a - median_amount) > median_amount * AMOUNT_TOLERANCE for a in amounts
-        )
+        median_amount, variable = amount_profile(members, today=current_date())
         picked_amounts = [abs(t.amount) for t in members if t.id in selected_ids]
         selected_amount = int(
             statistics.median(picked_amounts) if picked_amounts else median_amount

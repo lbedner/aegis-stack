@@ -300,6 +300,27 @@ async def stream_members(db: AsyncSession, stream_id: int) -> list[FinanceTransa
     )
 
 
+async def members_of_streams(
+    db: AsyncSession, stream_ids: Sequence[int]
+) -> dict[int, list[FinanceTransaction]]:
+    """Every stream's member rows in ONE query - the batched form of
+    ``stream_members``, for the recompute that walks all of them."""
+    grouped: dict[int, list[FinanceTransaction]] = {sid: [] for sid in stream_ids}
+    if not stream_ids:
+        return grouped
+    rows = (
+        await db.exec(
+            select(FinanceTransaction).where(
+                FinanceTransaction.recurring_stream_id.in_(list(stream_ids))
+            )
+        )
+    ).all()
+    for row in rows:
+        if row.recurring_stream_id in grouped:
+            grouped[row.recurring_stream_id].append(row)
+    return grouped
+
+
 async def card_payment_stream_ids(
     db: AsyncSession, stream_ids: Sequence[int]
 ) -> set[int]:

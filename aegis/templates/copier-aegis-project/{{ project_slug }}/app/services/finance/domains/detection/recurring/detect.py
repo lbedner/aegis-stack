@@ -21,7 +21,6 @@ from app.core.log import logger
 from app.services.finance.domains.detection import queries
 from app.services.finance.domains.detection.recurring.cadence import (
     _SUBSCRIPTION_FREQUENCIES,
-    AMOUNT_TOLERANCE,
     MIN_OCCURRENCES,
     MIN_RHYTHM_RATIO,
     MIN_STREAM_AMOUNT,
@@ -30,6 +29,7 @@ from app.services.finance.domains.detection.recurring.cadence import (
     _has_gone_quiet,
     _payee_key,
     _rhythm_ratio,
+    amount_profile,
     split_interleaved,
 )
 from app.services.finance.domains.detection.recurring.resolve import (
@@ -275,8 +275,7 @@ async def detect_recurring(
             _release(members)
             continue
 
-        amounts = [abs(t.amount) for t in members]
-        median_amount = int(statistics.median(amounts))
+        median_amount, variable = amount_profile(members, today=today)
         if median_amount < MIN_STREAM_AMOUNT:
             _release(members)
             continue
@@ -288,9 +287,6 @@ async def detect_recurring(
         ):
             _release(members)
             continue
-        variable = any(
-            abs(a - median_amount) > median_amount * AMOUNT_TOLERANCE for a in amounts
-        )
         last = members[-1]
         is_subscription = (
             direction == "outflow"

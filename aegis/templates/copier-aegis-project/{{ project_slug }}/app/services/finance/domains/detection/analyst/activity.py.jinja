@@ -342,7 +342,7 @@ def _upcoming_section(ctx: ReportContext) -> str | None:
     }
     lines = [f"EXPECTED IN THE NEXT {_UPCOMING_DAYS} DAYS"]
     for stream in upcoming:
-        amount = stream.expected_amount or stream.average_amount or 0
+        amount = stream.amount
         direction = 1 if stream.direction == "inflow" else -1
         where = account_names.get(stream.account_id)
         suffix = f" ({where})" if where else ""

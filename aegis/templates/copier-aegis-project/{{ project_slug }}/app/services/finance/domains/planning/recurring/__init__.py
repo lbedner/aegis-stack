@@ -23,6 +23,9 @@ from app.services.finance.domains.planning.recurring.forecast import (
 from app.services.finance.domains.planning.recurring.matching import (
     recurring_match_candidates,
 )
+from app.services.finance.domains.planning.recurring.amounts import (
+    recompute_stream_amounts,
+)
 from app.services.finance.domains.planning.recurring.schedule import (
     Occurrence,
     occurrences,
@@ -66,6 +69,7 @@ __all__ = [
     "mute_recurring",
     "occurrences",
     "pause_recurring",
+    "recompute_stream_amounts",
     "card_payment_stream_ids",
     "payment_stream_ids",
     "project_balances",

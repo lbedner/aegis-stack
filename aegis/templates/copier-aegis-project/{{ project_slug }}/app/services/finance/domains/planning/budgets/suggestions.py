@@ -165,7 +165,7 @@ async def suggest_budget_lines(
         # shopping streams that never touch the balance.
         if not is_commitment(stream):
             continue
-        amount = stream.expected_amount or stream.average_amount or 0
+        amount = stream.amount
         factor = MONTHLY_FACTOR.get(stream.frequency, 0)
         billed_per_month[category_id] = billed_per_month.get(category_id, 0) + int(
             amount * factor

@@ -11,45 +11,28 @@ from pathlib import Path
 import subprocess
 import sys
 
-from app.services.ai.models import AIProvider
+from app.services.ai.models import PROVIDERS, AIProvider
 
 # Provider to pydantic-ai-slim extras mapping
 # Note: mistral, cohere, ollama, public, and pollinations use the
 # OpenAI-compatible API
+# These three were maps of their own, keyed by provider name, and a test
+# had to police each for completeness because nothing else would notice a
+# gap. They are views over the one registry now: a provider describes
+# itself once, and adding one cannot leave them behind.
 PROVIDER_DEPENDENCIES: dict[str, str] = {
-    "openai": "pydantic-ai-slim[openai]",
-    "anthropic": "pydantic-ai-slim[anthropic]",
-    "google": "pydantic-ai-slim[google]",
-    "groq": "pydantic-ai-slim[groq]",
-    "mistral": "pydantic-ai-slim[openai]",
-    "cohere": "pydantic-ai-slim[openai]",
-    "ollama": "pydantic-ai-slim[openai]",
-    "public": "pydantic-ai-slim[openai]",
-    "pollinations": "pydantic-ai-slim[openai]",
+    p.value: spec.dependency for p, spec in PROVIDERS.items()
 }
 
-# Actual SDK packages to check for each provider
-# These are the real provider SDKs, not the pydantic-ai wrappers
+# The SDK module whose presence proves the dependency is installed.
 PROVIDER_MODULE_CHECKS: dict[str, str] = {
-    "openai": "openai",
-    "anthropic": "anthropic",
-    "google": "google.genai",  # google-genai package
-    "groq": "groq",
-    "mistral": "openai",  # Uses OpenAI-compatible API
-    "cohere": "openai",  # Uses OpenAI-compatible API
-    "ollama": "openai",  # Uses OpenAI-compatible API
-    "public": "openai",  # Uses OpenAI-compatible API
-    "pollinations": "openai",  # Uses OpenAI-compatible API
+    p.value: spec.module for p, spec in PROVIDERS.items()
 }
 
-# API key documentation URLs for user guidance
+# Where a person goes to get a key. Absent for the keyless endpoints and
+# for a local server, which is what "paid provider" means here.
 PROVIDER_API_KEY_URLS: dict[str, str] = {
-    "openai": "https://platform.openai.com/api-keys",
-    "anthropic": "https://console.anthropic.com/",
-    "google": "https://aistudio.google.com/app/apikey",
-    "groq": "https://console.groq.com/keys",
-    "mistral": "https://console.mistral.ai/api-keys/",
-    "cohere": "https://dashboard.cohere.com/api-keys",
+    p.value: spec.key_url for p, spec in PROVIDERS.items() if spec.key_url
 }
 
 

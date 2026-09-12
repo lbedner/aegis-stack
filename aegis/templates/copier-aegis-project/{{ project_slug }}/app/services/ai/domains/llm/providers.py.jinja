@@ -12,7 +12,7 @@ from typing import Any
 
 from app.core.log import logger
 from app.services.ai.config import AIServiceConfig, api_key_env
-from app.services.ai.models import AIProvider
+from app.services.ai.models import PROVIDERS, AIProvider
 {% if ai_framework == "pydantic-ai" %}
 {#- The ``openai`` package + pydantic-ai's OpenAI model ship only with the
     openai extra, which is installed only for OpenAI-compatible providers.
@@ -21,6 +21,7 @@ from app.services.ai.models import AIProvider
 {%- set _has_openai = "openai" in ai_providers or "public" in ai_providers or "pollinations" in ai_providers or "openrouter" in ai_providers or "ollama" in ai_providers or "mistral" in ai_providers or "cohere" in ai_providers %}
 
 import json
+import importlib
 import os
 from collections.abc import Sequence
 
@@ -50,17 +51,9 @@ class ProviderNotInstalledError(ProviderError):
         super().__init__(f"{provider} provider is not installed")
 
 
-SUPPORTED_PROVIDERS: tuple[AIProvider, ...] = (
-    AIProvider.OPENAI,
-    AIProvider.ANTHROPIC,
-    AIProvider.GOOGLE,
-    AIProvider.GROQ,
-    AIProvider.MISTRAL,
-    AIProvider.COHERE,
-    AIProvider.OLLAMA,
-    AIProvider.PUBLIC,
-    AIProvider.POLLINATIONS,
-)
+# Every provider the registry describes. A tuple of its own could fall
+# behind the enum; this cannot.
+SUPPORTED_PROVIDERS: tuple[AIProvider, ...] = tuple(PROVIDERS)
 
 # Where a free key comes from, for the providers that hand them out.
 _FREE_KEY_HINTS: dict[AIProvider, str] = {
@@ -117,49 +110,17 @@ OpenAIProvider: Any = None
 
 # Lazy loading of provider model classes to avoid import errors
 def _get_model_class(provider: AIProvider):
-    """Get model class for provider with lazy import to avoid dependency issues."""
-    if provider == AIProvider.OPENAI:
-        # The Responses API, not Chat Completions: OpenAI's reasoning
-        # models (gpt-5.x, o-series) reject function tools on
-        # /v1/chat/completions ("use /v1/responses"), and pydantic-ai's
-        # Responses model speaks tools + streaming for the whole lineup.
-        from pydantic_ai.models.openai import OpenAIResponsesModel
+    """The pydantic-ai model class for a provider, imported lazily.
 
-        return OpenAIResponsesModel
-    elif provider == AIProvider.ANTHROPIC:
-        from pydantic_ai.models.anthropic import AnthropicModel
-
-        return AnthropicModel
-    elif provider == AIProvider.GOOGLE:
-        from pydantic_ai.models.google import GoogleModel
-
-        return GoogleModel
-    elif provider == AIProvider.GROQ:
-        from pydantic_ai.models.groq import GroqModel
-
-        return GroqModel
-    elif provider == AIProvider.MISTRAL:
-        from pydantic_ai.models.openai import OpenAIChatModel
-
-        return OpenAIChatModel  # Mistral uses OpenAI-compatible API
-    elif provider == AIProvider.COHERE:
-        from pydantic_ai.models.openai import OpenAIChatModel
-
-        return OpenAIChatModel  # Cohere can use OpenAI-compatible interface
-    elif provider == AIProvider.OLLAMA:
-        from pydantic_ai.models.openai import OpenAIChatModel
-
-        return OpenAIChatModel  # Ollama uses OpenAI-compatible API
-    elif provider == AIProvider.PUBLIC:
-        from pydantic_ai.models.openai import OpenAIChatModel
-
-        return OpenAIChatModel  # Public endpoints use OpenAI-compatible API
-    elif provider == AIProvider.POLLINATIONS:
-        from pydantic_ai.models.openai import OpenAIChatModel
-
-        return OpenAIChatModel  # Pollinations uses OpenAI-compatible API
-    else:
+    Lazily because a provider nobody selected must not drag its SDK in;
+    from the registry because the class is a FACT about the provider and
+    belongs beside the rest of them.
+    """
+    spec = PROVIDERS.get(provider)
+    if spec is None or spec.model is None:
         raise ProviderError(f"Unsupported provider: {provider}")
+    module = importlib.import_module(spec.model[0])
+    return getattr(module, spec.model[1])
 
 
 def _supports_custom_temperature(model: str | None) -> bool:
@@ -243,12 +204,38 @@ def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
     # PydanticAI 1.0+ reads credentials from the environment, not kwargs.
     os.environ[api_key_env(config.provider)] = require_api_key(config, settings)
 
-    model_kwargs: dict[str, Any] = {"model_name": config.model}
-    if config.provider == AIProvider.MISTRAL:
-        model_kwargs["base_url"] = "https://api.mistral.ai/v1"
-    elif config.provider == AIProvider.COHERE:
-        model_kwargs["base_url"] = "https://api.cohere.ai/v1"
-    return _get_model_class(config.provider)(**model_kwargs), config.model
+    # An OpenAI-compatible provider is a base URL and a key, and the URL
+    # is the only thing distinguishing Mistral, Cohere and OpenRouter
+    # from OpenAI itself - so it rides the registry and they share a path.
+    #
+    # That path builds a client. ``OpenAIChatModel`` takes no
+    # ``base_url``: passing one raises TypeError, which is what these two
+    # branches did the moment anybody selected them.
+    spec = PROVIDERS.get(config.provider)
+    if spec is not None and spec.base_url:
+        key = config.get_provider_config(settings).api_key
+        return _openai_compatible(config.model, spec.base_url, key), config.model
+    return _get_model_class(config.provider)(model_name=config.model), config.model
+
+
+def _openai_compatible(
+    model_name: str, base_url: str, api_key: str | None, profile: Any = None
+) -> Any:
+    """A model on any server that speaks the OpenAI API.
+
+    One client, pointed elsewhere. The key goes to the CLIENT rather than
+    into ``OPENAI_API_KEY``, so a stack holding both a real OpenAI key
+    and an aggregator's keeps them apart - stamping the environment would
+    let whichever was built last answer for both.
+    """
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    client = AsyncOpenAI(api_key=api_key or "none", base_url=base_url)
+    kwargs: dict[str, Any] = {"provider": OpenAIProvider(openai_client=client)}
+    if profile is not None:
+        kwargs["profile"] = profile
+    return OpenAIChatModel(model_name, **kwargs)
 
 
 def _grant_kwargs(
@@ -698,6 +685,13 @@ def get_llm(config: AIServiceConfig, settings: Any):
             return _create_public_llm(config)
         if provider == AIProvider.POLLINATIONS:
             return _create_pollinations_llm(config)
+        # Anything the registry gives a base URL and that has no vendor
+        # package of its own: an OpenAI-compatible server, reached with
+        # LangChain's OpenAI client pointed elsewhere. Checked AFTER the
+        # keyed table, so Mistral and Cohere keep their native clients.
+        spec = PROVIDERS.get(provider)
+        if spec is not None and spec.base_url:
+            return _create_openai_compatible_llm(config, settings, spec.base_url)
         raise ProviderError(f"Unsupported provider: {provider}")
 
     except ImportError as e:
@@ -725,6 +719,29 @@ def _create_keyed_llm(config: AIServiceConfig, settings: Any):
         max_tokens=config.max_tokens,
         timeout=config.timeout_seconds,
         **{key_kwarg: require_api_key(config, settings)},
+    )
+
+
+def _create_openai_compatible_llm(
+    config: AIServiceConfig, settings: Any, base_url: str
+):
+    """A chat model on any server that speaks the OpenAI API.
+
+    The same trick ``_create_ollama_llm`` uses, with a real key: the
+    OpenAI client is not tied to api.openai.com, so an aggregator like
+    OpenRouter needs no package of its own. The key goes to the CLIENT,
+    never into ``OPENAI_API_KEY``, so a stack holding both keeps them
+    apart.
+    """
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=config.model,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        api_key=require_api_key(config, settings),
+        base_url=base_url,
+        timeout=config.timeout_seconds,
     )
 
 

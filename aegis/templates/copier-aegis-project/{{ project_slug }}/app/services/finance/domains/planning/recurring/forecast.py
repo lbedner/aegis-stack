@@ -144,7 +144,7 @@ async def project_balances(
         # pinned in the edit dialog.
         if not is_commitment(stream):
             continue
-        amount = stream.expected_amount or stream.average_amount or 0
+        amount = stream.amount
         if amount <= 0:
             continue
         for due in occurrences(stream, today=today, through=horizon):

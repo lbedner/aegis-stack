@@ -222,7 +222,7 @@ async def accounts() -> dict[str, Any]:
             continue
         if not today <= when <= horizon:
             continue
-        amount = stream.expected_amount or stream.average_amount or 0
+        amount = stream.amount
         sign = 1 if stream.direction == "inflow" else -1
         upcoming_by_account.setdefault(stream.account_id, []).append(
             {

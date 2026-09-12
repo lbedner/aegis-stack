@@ -886,10 +886,38 @@ async def test_bills_lists_the_recurring_surface(
     eleanor = rows["Eleanor Nursing Care"]
     assert eleanor["direction"] == "outflow"
     assert eleanor["frequency"] == "monthly"
-    assert eleanor["expected_amount"] == 100_000
+    assert eleanor["amount"] == 100_000
+    assert eleanor["amount_is_declared"] is True
     assert eleanor["next_expected_date"] == "2026-07-31"
     assert isinstance(eleanor["id"], int)
     assert rows["Paycheck"]["direction"] == "inflow"
+
+
+@pytest.mark.asyncio
+async def test_a_bill_the_user_never_priced_still_reports_an_amount(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """Only a hand-entered bill sets ``expected_amount``; a detected one
+    carries its measured ``average_amount`` instead. Sending the raw
+    field made the agent report 40 of one real ledger's bills as having
+    "no amount" - and refuse to project on that basis - while the
+    measured figure sat beside it unread."""
+    stream = await seed_stream(
+        svc,
+        name="Detected Bill",
+        expected_amount=0,
+        next_expected_date=date(2026, 8, 4),
+    )
+    stream.expected_amount = None
+    stream.average_amount = 2_918
+    session.add(stream)
+    await session.commit()
+
+    result = await ai_tools.bills()
+
+    row = {b["name"]: b for b in result["bills"]}["Detected Bill"]
+    assert row["amount"] == 2_918
+    assert row["amount_is_declared"] is False
 
 
 @pytest.mark.asyncio

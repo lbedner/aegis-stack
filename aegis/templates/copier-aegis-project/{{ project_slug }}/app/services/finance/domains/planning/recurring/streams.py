@@ -14,7 +14,11 @@ from app.core.time import utcnow
 from app.services.finance.constants import CADENCE_KEYS, ONE_TIME_FREQUENCY
 from app.services.finance.domains.ledger import accounts
 from app.services.finance.domains.ledger import queries as ledger_queries
+from app.services.finance.domains.detection.recurring.cadence import amount_profile
 from app.services.finance.domains.planning.recurring import queries
+from app.services.finance.domains.planning.recurring.membership import (
+    claimable_strays,
+)
 from app.services.finance.models import (
     FinanceRecurringStream,
     FinanceTransaction,
@@ -211,13 +215,21 @@ async def attach_transaction_to_stream(
     elif stream.merchant_id is not None and txn.merchant_id is None:
         txn.merchant_id = stream.merchant_id
 
+    # Read once, keyed by id: the backfill decides against these and the
+    # amount below is read off them, and two identical SELECTs in one
+    # request is a repeated statement the N+1 gate is right to flag.
+    members = {m.id: m for m in await queries.stream_members(db, stream.id)}
+    members[txn.id] = txn
+
     # Backfill: claim the payee's OTHER unclaimed rows too. Teaching
     # the key only helps future months - without this, last
     # quarter's payments still read as unplanned spending and the
     # "Everything else" figure double-counts the bill (confirmed
     # live: a nursing-home bill counted once in BILLS and again in
     # the observed run rate). Strays only: rows a live stream
-    # already claims are not re-litigated.
+    # already claims are not re-litigated - and which of THOSE is
+    # ``claimable_strays``, because the payee is not the test: a payee
+    # can be both a bill and a shop.
     if txn.merchant_id is not None:
         strays = await queries.stray_payee_rows(
             db,
@@ -226,12 +238,23 @@ async def attach_transaction_to_stream(
             inflow=stream.direction == "inflow",
             owner_clause=owner_clause(FinanceTransaction.owner_user_id, owner_user_id),
         )
-        for stray in strays:
+        for stray in claimable_strays(stream, strays, list(members.values())):
             stray.recurring_stream_id = stream.id
             db.add(stray)
+            members[stray.id] = stray
 
     stream.occurrence_count += 1
     stream.last_amount = abs(txn.amount)
+    # And what the bill COSTS, which is the number every surface shows
+    # (``stream.amount``, and most streams have no
+    # expected_amount). Nothing else will: the nightly detector owns
+    # ``average_amount`` but permanently skips user-confirmed streams,
+    # and this is the only thing that changes a confirmed bill's
+    # membership. Without the recompute the amount freezes on the day
+    # the bill was confirmed.
+    stream.average_amount, stream.amount_is_variable = amount_profile(
+        list(members.values()), today=current_date()
+    )
     if stream.last_date is None or txn.date_ > stream.last_date:
         stream.last_date = txn.date_
     if stream.frequency == ONE_TIME_FREQUENCY:

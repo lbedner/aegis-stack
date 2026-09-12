@@ -500,7 +500,7 @@ async def budget_stat_details(
         StatDetailRow(
             label=s.name,
             value=monthly_share_of(
-                s.expected_amount or s.average_amount or 0, s.frequency
+                s.amount, s.frequency
             ),
             frequency=shown_cadence(s.frequency),
         )

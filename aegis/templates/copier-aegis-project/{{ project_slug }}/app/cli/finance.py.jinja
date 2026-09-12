@@ -173,6 +173,34 @@ async def _recompute_snapshots(days: int) -> None:
     )
 
 
+@app.command("recompute-stream-amounts")
+async def recompute_stream_amounts(owner_user_id: int | None = OWNER_OPT) -> None:
+    """Re-read every bill's amount from the transactions that paid it.
+
+    ``average_amount`` is the figure Bills & Income, the forecast and
+    the budget rollup all show, and the nightly detector - its only
+    author - skips user-confirmed streams by design, so a confirmed
+    bill's amount froze the day it was confirmed. Membership is
+    repaired first, because the amount is read off it: a backfill that
+    claimed the whole payee leaves rows that were never payments.
+    Idempotent - reach for it after a restore or a bulk re-match.
+    Released rows are unclaimed, not deleted.
+    """
+    from app.core.db import get_async_session
+    from app.services.finance.service import FinanceService
+
+    async with get_async_session() as session:
+        counts = await FinanceService(session).recompute_stream_amounts(
+            owner_user_id=owner_user_id
+        )
+        await session.commit()
+    console.print(
+        f"[green]Re-read {counts['streams']} stream(s); "
+        f"released {counts['released']} member(s); "
+        f"{counts['changed']} amount(s) changed.[/]"
+    )
+
+
 @app.command("recompute-payee-aliases")
 def recompute_payee_aliases(owner_user_id: int | None = OWNER_OPT) -> None:
     """Rebuild the payee memory from the transactions already named.

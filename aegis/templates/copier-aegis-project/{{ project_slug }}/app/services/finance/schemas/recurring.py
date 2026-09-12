@@ -72,6 +72,13 @@ class RecurringStreamResponse(BaseModel):
     icon_b64: str | None = None
     staleness: str = "fresh"
 
+    @property
+    def amount(self) -> int:
+        """What this bill costs - the same rule as the model's own
+        ``amount``. Both carriers answer it identically so no caller has
+        to know which one it is holding."""
+        return self.expected_amount or self.average_amount or 0
+
     @classmethod
     def from_row(
         cls,

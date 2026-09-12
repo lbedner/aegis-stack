@@ -618,7 +618,7 @@ async def _missed_recurring(
             # a cancelled subscription, a closed account, not a live bill
             # that just went missing) - only "overdue" is worth an alert.
             continue
-        amount = stream.expected_amount or stream.average_amount or 0
+        amount = stream.amount
         title = (
             f"{stream.name} hasn't arrived"
             if inflow

@@ -90,9 +90,19 @@ async def categories() -> dict[str, Any]:
 
 async def bills() -> dict[str, Any]:
     """Every live bill and income stream: 'id', 'name', 'direction'
-    ('outflow' | 'inflow'), 'frequency', 'expected_amount' (cents),
-    'next_expected_date' and 'last_date' (ISO or null). The id is what
-    a recurring.match proposal's 'stream_id' takes."""
+    ('outflow' | 'inflow'), 'frequency', 'amount' (cents - ALWAYS a
+    number, never null: the figure the user declared, else the one
+    measured from the bill's own payments), 'amount_is_declared'
+    (whether a human typed it), 'next_expected_date' and 'last_date'
+    (ISO or null). The id is what a recurring.match proposal's
+    'stream_id' takes.
+
+    'amount' used to be the raw ``expected_amount``, which is null on
+    most streams because only a hand-entered bill sets it - so this tool
+    reported 40 of one real ledger's bills as having "no amount" while
+    the measured figure sat beside it unread, and refused to project on
+    that basis.
+    """
     from app.services.finance.domains.planning.recurring import queries
 
     async with get_async_session() as session:
@@ -104,8 +114,8 @@ async def bills() -> dict[str, Any]:
                 "name": s.name,
                 "direction": s.direction,
                 "frequency": s.frequency,
-                "expected_amount": s.expected_amount,
-                "average_amount": s.average_amount,
+                "amount": s.amount,
+                "amount_is_declared": s.expected_amount is not None,
                 "next_expected_date": (
                     s.next_expected_date.isoformat() if s.next_expected_date else None
                 ),

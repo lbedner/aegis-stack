@@ -85,7 +85,7 @@ async def budget_month_outlook(
             or stream.next_expected_date is None
         ):
             continue
-        amount = stream.expected_amount or stream.average_amount or 0
+        amount = stream.amount
         if amount <= 0:
             continue
         direction = "in" if stream.direction == "inflow" else "out"

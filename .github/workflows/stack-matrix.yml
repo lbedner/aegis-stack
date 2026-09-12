@@ -20,6 +20,7 @@ on:
       - 'aegis/core/**'
       - 'aegis/cli/**'
       - 'tests/cli/**'
+      - 'tests/fixtures/queryspy-baseline.json'
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/stack-matrix.yml'

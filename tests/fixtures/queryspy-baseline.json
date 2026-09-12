@@ -994,6 +994,30 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias",
+      "file": "tests/services/test_finance_payee_aliases.py",
+      "function": "_stored"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias WHERE finance_merchant_alias.normalized_alias IN (__[POSTCOMPILE_normalized_alias_1]) AND finance_merchant_alias.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/ledger/queries/merchants.py",
+      "function": "merchant_aliases_by_normalized"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias WHERE finance_merchant_alias.normalized_alias IN (__[POSTCOMPILE_normalized_alias_1]) AND finance_merchant_alias.owner_user_id IS NULL",
+      "file": "app/services/finance/domains/ledger/queries/merchants.py",
+      "function": "merchant_aliases_by_normalized"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias WHERE finance_merchant_alias.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/ledger/queries/merchants.py",
+      "function": "delete_merchant_aliases"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT finance_net_worth_snapshot.id, finance_net_worth_snapshot.owner_user_id, finance_net_worth_snapshot.organization_id, finance_net_worth_snapshot.as_of_date, finance_net_worth_snapshot.total_assets_amount, finance_net_worth_snapshot.total_liabilities_amount, finance_net_worth_snapshot.net_worth_amount, finance_net_worth_snapshot.cash_amount, finance_net_worth_snapshot.investments_amount, finance_net_worth_snapshot.other_assets_amount, finance_net_worth_snapshot.currency, finance_net_worth_snapshot.breakdown, finance_net_worth_snapshot.is_estimated FROM finance_net_worth_snapshot",
       "file": "tests/services/test_finance_demo_seed.py",
       "function": "test_clear_repairs_the_net_worth_history"
@@ -1507,6 +1531,12 @@
       "label": "SELECT finance_transaction.id, finance_transaction.owner_user_id, finance_transaction.organization_id, finance_transaction.account_id, finance_transaction.connection_id, finance_transaction.import_batch_id, finance_transaction.source, finance_transaction.external_id, finance_transaction.external_id_source, finance_transaction.import_hash, finance_transaction.within_day_ordinal, finance_transaction.dedup_status, finance_transaction.canonical_transaction_id, finance_transaction.source_precedence, finance_transaction.amount, finance_transaction.raw_amount, finance_transaction.raw_sign_convention, finance_transaction.currency, finance_transaction.unofficial_currency_code, finance_transaction.date, finance_transaction.authorized_date, finance_transaction.datetime, finance_transaction.name, finance_transaction.original_description, finance_transaction.merchant_id, finance_transaction.merchant_name, finance_transaction.logo_url, finance_transaction.merchant_entity_id, finance_transaction.memo, finance_transaction.check_number, finance_transaction.payment_channel, finance_transaction.pfc_primary, finance_transaction.pfc_detailed, finance_transaction.pfc_confidence_level, finance_transaction.category_id, finance_transaction.category_source, finance_transaction.is_user_categorized, finance_transaction.is_reviewed, finance_transaction.pending, finance_transaction.pending_provider_id, finance_transaction.pending_transaction_id, finance_transaction.status, finance_transaction.is_transfer, finance_transaction.transfer_group_id, finance_transaction.transfer_pair_transaction_id, finance_transaction.is_split, finance_transaction.excluded_from_reports, finance_transaction.is_reversal, finance_transaction.reverses_transaction_id, finance_transaction.recurring_stream_id, finance_transaction.reconciled_status, finance_transaction.location, finance_transaction.counterparties, finance_transaction.raw_payload, finance_transaction.is_removed, finance_transaction.removed_at, finance_transaction.deleted_at, finance_transaction.metadata, finance_transaction.created_at, finance_transaction.updated_at FROM finance_transaction WHERE finance_transaction.deleted_at IS NULL AND finance_transaction.is_transfer IS false AND finance_transaction.amount < :amount_1 AND finance_transaction.category_id IS NOT NULL AND finance_transaction.owner_user_id = :owner_user_id_1",
       "file": "app/services/finance/domains/planning/budgets/queries.py",
       "function": "categorized_outflow_history"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_transaction.id, finance_transaction.owner_user_id, finance_transaction.organization_id, finance_transaction.account_id, finance_transaction.connection_id, finance_transaction.import_batch_id, finance_transaction.source, finance_transaction.external_id, finance_transaction.external_id_source, finance_transaction.import_hash, finance_transaction.within_day_ordinal, finance_transaction.dedup_status, finance_transaction.canonical_transaction_id, finance_transaction.source_precedence, finance_transaction.amount, finance_transaction.raw_amount, finance_transaction.raw_sign_convention, finance_transaction.currency, finance_transaction.unofficial_currency_code, finance_transaction.date, finance_transaction.authorized_date, finance_transaction.datetime, finance_transaction.name, finance_transaction.original_description, finance_transaction.merchant_id, finance_transaction.merchant_name, finance_transaction.logo_url, finance_transaction.merchant_entity_id, finance_transaction.memo, finance_transaction.check_number, finance_transaction.payment_channel, finance_transaction.pfc_primary, finance_transaction.pfc_detailed, finance_transaction.pfc_confidence_level, finance_transaction.category_id, finance_transaction.category_source, finance_transaction.is_user_categorized, finance_transaction.is_reviewed, finance_transaction.pending, finance_transaction.pending_provider_id, finance_transaction.pending_transaction_id, finance_transaction.status, finance_transaction.is_transfer, finance_transaction.transfer_group_id, finance_transaction.transfer_pair_transaction_id, finance_transaction.is_split, finance_transaction.excluded_from_reports, finance_transaction.is_reversal, finance_transaction.reverses_transaction_id, finance_transaction.recurring_stream_id, finance_transaction.reconciled_status, finance_transaction.location, finance_transaction.counterparties, finance_transaction.raw_payload, finance_transaction.is_removed, finance_transaction.removed_at, finance_transaction.deleted_at, finance_transaction.metadata, finance_transaction.created_at, finance_transaction.updated_at FROM finance_transaction WHERE finance_transaction.deleted_at IS NULL AND finance_transaction.merchant_id IS NOT NULL AND finance_transaction.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/ledger/queries/merchants.py",
+      "function": "named_transactions"
     },
     {
       "kind": "repeated_statement",
@@ -2185,48 +2215,6 @@
       "label": "SELECT tool.name FROM tool",
       "file": "app/services/ai/fixtures/agent_fixtures.py",
       "function": "load_agent_fixtures"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias WHERE finance_merchant_alias.normalized_alias IN (__[POSTCOMPILE_normalized_alias_1]) AND finance_merchant_alias.owner_user_id = :owner_user_id_1",
-      "file": "app/services/finance/domains/ledger/queries/merchants.py",
-      "function": "merchant_aliases_by_normalized"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias WHERE finance_merchant_alias.normalized_alias IN (__[POSTCOMPILE_normalized_alias_1]) AND finance_merchant_alias.owner_user_id IS NULL",
-      "file": "app/services/finance/domains/ledger/queries/merchants.py",
-      "function": "merchant_aliases_by_normalized"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias",
-      "file": "tests/services/test_finance_payee_aliases.py",
-      "function": "_stored"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT finance_transaction.id, finance_transaction.owner_user_id, finance_transaction.organization_id, finance_transaction.account_id, finance_transaction.connection_id, finance_transaction.import_batch_id, finance_transaction.source, finance_transaction.external_id, finance_transaction.external_id_source, finance_transaction.import_hash, finance_transaction.within_day_ordinal, finance_transaction.dedup_status, finance_transaction.canonical_transaction_id, finance_transaction.source_precedence, finance_transaction.amount, finance_transaction.raw_amount, finance_transaction.raw_sign_convention, finance_transaction.currency, finance_transaction.unofficial_currency_code, finance_transaction.date, finance_transaction.authorized_date, finance_transaction.datetime, finance_transaction.name, finance_transaction.original_description, finance_transaction.merchant_id, finance_transaction.merchant_name, finance_transaction.logo_url, finance_transaction.merchant_entity_id, finance_transaction.memo, finance_transaction.check_number, finance_transaction.payment_channel, finance_transaction.pfc_primary, finance_transaction.pfc_detailed, finance_transaction.pfc_confidence_level, finance_transaction.category_id, finance_transaction.category_source, finance_transaction.is_user_categorized, finance_transaction.is_reviewed, finance_transaction.pending, finance_transaction.pending_provider_id, finance_transaction.pending_transaction_id, finance_transaction.status, finance_transaction.is_transfer, finance_transaction.transfer_group_id, finance_transaction.transfer_pair_transaction_id, finance_transaction.is_split, finance_transaction.excluded_from_reports, finance_transaction.is_reversal, finance_transaction.reverses_transaction_id, finance_transaction.recurring_stream_id, finance_transaction.reconciled_status, finance_transaction.location, finance_transaction.counterparties, finance_transaction.raw_payload, finance_transaction.is_removed, finance_transaction.removed_at, finance_transaction.deleted_at, finance_transaction.metadata, finance_transaction.created_at, finance_transaction.updated_at FROM finance_transaction WHERE finance_transaction.deleted_at IS NULL AND finance_transaction.merchant_id IS NOT NULL AND finance_transaction.owner_user_id = :owner_user_id_1",
-      "file": "app/services/finance/domains/ledger/queries/merchants.py",
-      "function": "named_transactions"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT finance_transaction.id, finance_transaction.owner_user_id, finance_transaction.organization_id, finance_transaction.account_id, finance_transaction.connection_id, finance_transaction.import_batch_id, finance_transaction.source, finance_transaction.external_id, finance_transaction.external_id_source, finance_transaction.import_hash, finance_transaction.within_day_ordinal, finance_transaction.dedup_status, finance_transaction.canonical_transaction_id, finance_transaction.source_precedence, finance_transaction.amount, finance_transaction.raw_amount, finance_transaction.raw_sign_convention, finance_transaction.currency, finance_transaction.unofficial_currency_code, finance_transaction.date, finance_transaction.authorized_date, finance_transaction.datetime, finance_transaction.name, finance_transaction.original_description, finance_transaction.merchant_id, finance_transaction.merchant_name, finance_transaction.logo_url, finance_transaction.merchant_entity_id, finance_transaction.memo, finance_transaction.check_number, finance_transaction.payment_channel, finance_transaction.pfc_primary, finance_transaction.pfc_detailed, finance_transaction.pfc_confidence_level, finance_transaction.category_id, finance_transaction.category_source, finance_transaction.is_user_categorized, finance_transaction.is_reviewed, finance_transaction.pending, finance_transaction.pending_provider_id, finance_transaction.pending_transaction_id, finance_transaction.status, finance_transaction.is_transfer, finance_transaction.transfer_group_id, finance_transaction.transfer_pair_transaction_id, finance_transaction.is_split, finance_transaction.excluded_from_reports, finance_transaction.is_reversal, finance_transaction.reverses_transaction_id, finance_transaction.recurring_stream_id, finance_transaction.reconciled_status, finance_transaction.location, finance_transaction.counterparties, finance_transaction.raw_payload, finance_transaction.is_removed, finance_transaction.removed_at, finance_transaction.deleted_at, finance_transaction.metadata, finance_transaction.created_at, finance_transaction.updated_at FROM finance_transaction WHERE finance_transaction.deleted_at IS NULL AND finance_transaction.merchant_id IS NOT NULL",
-      "file": "app/services/finance/domains/ledger/queries/merchants.py",
-      "function": "named_transactions"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias WHERE finance_merchant_alias.owner_user_id = :owner_user_id_1",
-      "file": "app/services/finance/domains/ledger/queries/merchants.py",
-      "function": "delete_merchant_aliases"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT finance_merchant_alias.id, finance_merchant_alias.owner_user_id, finance_merchant_alias.merchant_id, finance_merchant_alias.alias_text, finance_merchant_alias.normalized_alias, finance_merchant_alias.is_ambiguous, finance_merchant_alias.source, finance_merchant_alias.created_at, finance_merchant_alias.updated_at FROM finance_merchant_alias WHERE finance_merchant_alias.owner_user_id IS NULL",
-      "file": "app/services/finance/domains/ledger/queries/merchants.py",
-      "function": "delete_merchant_aliases"
     }
   ]
 }

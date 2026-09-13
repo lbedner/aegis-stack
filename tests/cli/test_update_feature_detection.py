@@ -179,3 +179,38 @@ class TestOllamaModeDetection:
         strip the Ollama surface from a project actively using it."""
         self._env(tmp_path, ".env", "OLLAMA_BASE_URL=http://10.0.0.4:11434\n")
         assert _detect_existing_features(tmp_path)["ollama_mode"] == "host"
+
+
+class TestFinanceProviderDetection:
+    """The provider flags are written into the project's own settings.
+
+    ``config.py`` renders ``FINANCE_PLAID: bool = True`` or ``False``, so the
+    project states the answer outright — reading it back beats defaulting it
+    on a project generated before the question existed (aegis-stack#1120).
+    """
+
+    def _config(self, root: Path, body: str) -> None:
+        path = root / "app" / "core" / "config.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body)
+
+    def test_reads_both_flags_off_the_settings_class(self, tmp_path: Path) -> None:
+        self._config(
+            tmp_path,
+            "class Settings:\n"
+            "    FINANCE_PLAID: bool = True\n"
+            "    FINANCE_SNAPTRADE: bool = False\n",
+        )
+        detected = _detect_existing_features(tmp_path)
+        assert detected["finance_plaid"] is True
+        assert detected["finance_snaptrade"] is False
+
+    def test_absent_field_is_left_out_not_guessed(self, tmp_path: Path) -> None:
+        """A project with no finance service has no field to read."""
+        self._config(tmp_path, "class Settings:\n    DEBUG: bool = False\n")
+        detected = _detect_existing_features(tmp_path)
+        assert "finance_plaid" not in detected
+        assert "finance_snaptrade" not in detected
+
+    def test_no_config_module_detects_nothing(self, tmp_path: Path) -> None:
+        assert "finance_plaid" not in _detect_existing_features(tmp_path)

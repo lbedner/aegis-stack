@@ -49,60 +49,6 @@ from ..core.template_cleanup import (
 from ..core.version_compatibility import get_cli_version, get_project_template_version
 from ..i18n import lazy_t, t
 
-# Which questions ``_detect_existing_features`` reads off the project. Named
-# here so the guard in ``tests/core/test_answer_derivation_declared.py`` can
-# tell a covered question from a forgotten one.
-DETECTED: frozenset[str] = frozenset(
-    {
-        AnswerKeys.OLLAMA_MODE,
-        AnswerKeys.INSIGHTS_GITHUB,
-        AnswerKeys.INSIGHTS_PYPI,
-        AnswerKeys.INSIGHTS_PLAUSIBLE,
-        AnswerKeys.INSIGHTS_REDDIT,
-    }
-)
-
-# Questions a project cannot answer from its own contents. Identity and
-# provenance: the values ARE the answer, there is nothing on disk to read
-# them back from, and every answers file has carried them since 0.1 — so no
-# project can be missing one and no default can be silently substituted.
-NOT_INFERABLE: dict[str, str] = {
-    "project_name": "identity; asked once, never re-derived",
-    "project_description": "identity; free text with no on-disk echo",
-    "author_name": "identity",
-    "author_email": "identity",
-    "github_username": "identity",
-    "version": "the project's own version, which it alone owns",
-    "aegis_version": "provenance, written by the update itself",
-    "python_version": "pyproject states a range, not the answered pin",
-}
-
-# Answerable from the project, but nobody has written the detector. A
-# ratchet: entries exist so nothing gets worse, and each one is meant to be
-# deleted the day its detector lands. The parenthetical names where the
-# evidence lives, so the next person does not have to go looking.
-INFERENCE_DEBT: dict[str, str] = {
-    "database_engine": "DATABASE_URL scheme in .env",
-    "postgres_provider": "DATABASE_URL host in .env",
-    "worker_backend": "the worker entrypoint the compose file runs",
-    "scheduler_backend": "SCHEDULER_* settings in .env",
-    "ai_framework": "the chat engine package under app/services/ai",
-    "ai_providers": "the *_API_KEY names present in .env",
-    "ai_backend": "presence of the AI persistence models",
-    "ai_rag": "app/services/rag",
-    "ai_voice": "app/services/ai/domains/voice",
-    "auth_level": "presence of the rbac / org models",
-    "include_oauth": "app/components/backend/api/auth/oauth.py",
-    "include_cache": "app/services/cache",
-    "ingress_tls": "the TLS block in the ingress config",
-    "ingress_domain": "the server name in the ingress config",
-    "payment_provider": "the provider client under app/services/payment",
-    "insights_per_user": "the per-user column on the insights models",
-    "finance_plaid": "app/services/finance providers",
-    "finance_snaptrade": "app/services/finance providers",
-    "finance_import": "app/services/finance import surface",
-}
-
 
 def _detect_existing_features(target_path: Path) -> dict[str, Any]:
     """Reconstruct ``include_*`` and sub-feature flags from project structure.
@@ -153,6 +99,32 @@ def _detect_existing_features(target_path: Path) -> dict[str, Any]:
     if ollama_mode is not None:
         detected[AnswerKeys.OLLAMA_MODE] = ollama_mode
 
+    detected.update(_detect_finance_providers(target_path))
+
+    return detected
+
+
+def _detect_finance_providers(target_path: Path) -> dict[str, bool]:
+    """The finance provider flags, read back off the project's own settings.
+
+    ``config.py`` carries these two answers verbatim — copier renders
+    ``FINANCE_PLAID: bool = True`` or ``False`` — so the project states them
+    outright and there is nothing to infer. A field that is absent (the
+    project has no finance service, or predates the field) is left out
+    rather than guessed.
+    """
+    config = target_path / "app" / "core" / "config.py"
+    if not config.is_file():
+        return {}
+    source = config.read_text()
+    detected: dict[str, bool] = {}
+    for field, answer_key in (
+        ("FINANCE_PLAID", AnswerKeys.FINANCE_PLAID),
+        ("FINANCE_SNAPTRADE", AnswerKeys.FINANCE_SNAPTRADE),
+    ):
+        match = re.search(rf"^\s+{field}: bool = (True|False)$", source, re.M)
+        if match:
+            detected[answer_key] = match.group(1) == "True"
     return detected
 
 

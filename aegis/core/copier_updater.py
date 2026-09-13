@@ -972,6 +972,23 @@ def analyze_conflict_files(project_path: Path) -> list[dict[str, str]]:
             }
         )
 
+    pyproject = project_path / "pyproject.toml"
+    if pyproject.exists():
+        import tomllib
+
+        try:
+            tomllib.loads(pyproject.read_text())
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+            conflicts.append(
+                {
+                    "kind": "toml",
+                    "path": "pyproject.toml",
+                    "original": "pyproject.toml",
+                    "size": f"{pyproject.stat().st_size} bytes",
+                    "summary": f"not valid TOML after merge: {e}",
+                }
+            )
+
     for marked in _inline_marker_files(project_path):
         relative = str(marked.relative_to(project_path))
         blocks = len(_MARKER_RE.findall(marked.read_text()))
@@ -1009,6 +1026,11 @@ def format_conflict_report(conflicts: list[dict[str, str]]) -> str:
         lines.append(f"  {conflict['original']}")
         if conflict.get("kind") == "markers":
             lines.append(f"     Inline conflict markers: {conflict['summary']}")
+        elif conflict.get("kind") == "toml":
+            lines.append(f"     Broken TOML: {conflict['summary']}")
+            lines.append(
+                "     (both sides adding the same table is the usual cause; keep one)"
+            )
         else:
             lines.append(f"     Rejected changes: {conflict['path']}")
             lines.append(f"     Details: {conflict['summary']}")

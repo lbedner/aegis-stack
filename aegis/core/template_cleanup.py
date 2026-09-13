@@ -467,11 +467,18 @@ def sync_template_changes(
                 )
                 # Fall back to overwrite behavior (no old render available)
 
-        # Compare and sync files
-        for template_file in new_rendered_dir.rglob("*"):
-            if template_file.is_dir():
-                continue
-
+        # Compare and sync files. Ruff normalizes every .py merge against
+        # the project's own config, so the files that carry that config
+        # merge LAST: a pyproject.toml merged first can come out of the
+        # 3-way merge with a duplicate table (template and project both
+        # added ``[tool.djlint]``), after which every ruff call fails and
+        # every .py falls back to a raw merge that reads formatting as
+        # edits (aegis-pulse 0.9 -> 0.11: 95 spurious conflicts).
+        ordered = sorted(
+            (f for f in new_rendered_dir.rglob("*") if not f.is_dir()),
+            key=lambda f: (f.name in _RUFF_CONFIG_FILES, f.as_posix()),
+        )
+        for template_file in ordered:
             relative = template_file.relative_to(new_rendered_dir)
             if _should_skip_sync(str(relative)):
                 continue
@@ -580,6 +587,7 @@ def sync_template_changes(
         # the new render, so a deleted file is invisible to it and survives
         # forever - a module renamed to a package of the same name leaves the
         # old file shadowed but present, which is valid code nobody runs.
+        _flag_unparsable_pyproject(project_path, result)
         _remove_dropped_files(project_path, old_rendered_dir, new_rendered_dir, result)
 
         # Backfill answer keys the target version added (the answers file
@@ -592,6 +600,33 @@ def sync_template_changes(
             verbose_print(f"   Backfilled new answer: {key}")
 
     return result
+
+
+_RUFF_CONFIG_FILES = frozenset({"pyproject.toml", "ruff.toml", ".ruff.toml"})
+
+
+def _flag_unparsable_pyproject(project_path: Path, result: SyncResult) -> None:
+    """A merged pyproject.toml that no longer parses is a conflict.
+
+    Textual merging cannot see TOML tables: when the template and the
+    project each added the same table in different places, git merge-file
+    keeps both and calls it clean. Nothing that reads the file (uv, ruff,
+    the app) works after that, so it is reported alongside the marker
+    conflicts, which also keeps post-gen from running against it.
+    """
+    import tomllib
+
+    pyproject = project_path / "pyproject.toml"
+    if not pyproject.exists():
+        return
+    try:
+        tomllib.loads(pyproject.read_text())
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        if "pyproject.toml" in result.synced:
+            result.synced.remove("pyproject.toml")
+        if "pyproject.toml" not in result.conflicts:
+            result.conflicts.append("pyproject.toml")
+        verbose_print(f"   Conflict: pyproject.toml is not valid TOML after merge: {e}")
 
 
 def _prune_render(rendered_dir: Path, answers: dict[str, Any]) -> None:

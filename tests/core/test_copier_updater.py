@@ -227,6 +227,17 @@ class TestAnalyzeConflictFiles:
         assert "<<<<<<<" in report  # tells the user what to look for
         assert "aegis update --finish" in report
 
+    def test_unparsable_pyproject_is_reported(self, tmp_path: Path) -> None:
+        """A merge can leave pyproject.toml syntactically broken (duplicate
+        tables) with no markers; the report and --finish must still see it."""
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.djlint]\nprofile = "a"\n[tool.djlint]\nprofile = "b"\n'
+        )
+        conflicts = analyze_conflict_files(tmp_path)
+        assert [c["original"] for c in conflicts] == ["pyproject.toml"]
+        assert conflicts[0]["kind"] == "toml"
+        assert "TOML" in format_conflict_report(conflicts)
+
     def test_handles_no_conflicts(self, tmp_path: Path) -> None:
         """Test that empty list is returned when no .rej files exist."""
         # Create some regular files

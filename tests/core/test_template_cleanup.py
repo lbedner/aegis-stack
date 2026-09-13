@@ -7,6 +7,7 @@ nested directory structures created during Copier template updates.
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -705,6 +706,88 @@ class TestSyncTemplateChanges:
         assert "tests/components/test_worker.py" not in result.synced
         assert (tmp_path / "app" / "real.py").read_text() == "x = 1\n"
         assert (tmp_path / "app" / "pkg" / "__init__.py").exists()
+
+    def _duplicate_table_scenario(self, tmp_path: Path) -> Callable[..., None]:
+        """Template adds ``[tool.djlint]``; the project already has its own.
+        A textual 3-way merge keeps both, which is not valid TOML."""
+        (tmp_path / "app").mkdir()
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.ruff]\nline-length = 88\n\n[tool.djlint]\nprofile = "mine"\n'
+        )
+        (tmp_path / "app" / "m.py").write_text("x = 1\ny = 3\n")
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            rendered = Path(dst_path) / "my-project"
+            (rendered / "app").mkdir(parents=True)
+            if "/old" in dst_path:
+                (rendered / "pyproject.toml").write_text(
+                    "[tool.ruff]\nline-length = 88\n"
+                )
+                (rendered / "app" / "m.py").write_text("x = 1\n")
+            else:
+                (rendered / "pyproject.toml").write_text(
+                    '[tool.ruff]\nline-length = 88\n[tool.djlint]\nprofile = "jinja"\n'
+                )
+                (rendered / "app" / "m.py").write_text("x = 2\n")
+
+        return mock_run_copy
+
+    def test_python_files_merge_before_the_ruff_config_changes(
+        self, tmp_path: Path
+    ) -> None:
+        """Updating aegis-pulse 0.9 -> 0.11: pyproject.toml merged first and
+        came out with two ``[tool.djlint]`` tables, so every ruff
+        normalization after it failed on the broken config and 95 Python
+        files fell back to raw merge with spurious conflicts. The config
+        ruff reads must still be the project's own while .py files merge."""
+        import tomllib
+
+        from aegis.core import template_cleanup
+
+        seen_valid: list[bool] = []
+        original = template_cleanup._sync_python_file
+
+        def spy(*args: Any, **kwargs: Any) -> bool:
+            try:
+                tomllib.loads((tmp_path / "pyproject.toml").read_text())
+                seen_valid.append(True)
+            except tomllib.TOMLDecodeError:
+                seen_valid.append(False)
+            return original(*args, **kwargs)
+
+        with (
+            patch(
+                "copier.run_copy", side_effect=self._duplicate_table_scenario(tmp_path)
+            ),
+            patch("aegis.core.template_cleanup._sync_python_file", side_effect=spy),
+        ):
+            sync_template_changes(
+                tmp_path,
+                {"project_slug": "my-project"},
+                "gh:test/repo",
+                "v1.0.0",
+                template_changed_files={"pyproject.toml", "app/m.py"},
+                old_commit="abc123",
+            )
+        assert seen_valid == [True]
+
+    def test_unparsable_merged_pyproject_is_a_conflict(self, tmp_path: Path) -> None:
+        """Two ``[tool.djlint]`` tables is a broken file, not a clean sync:
+        it must be reported so post-gen is skipped and --finish refuses."""
+        with patch(
+            "copier.run_copy", side_effect=self._duplicate_table_scenario(tmp_path)
+        ):
+            result = sync_template_changes(
+                tmp_path,
+                {"project_slug": "my-project"},
+                "gh:test/repo",
+                "v1.0.0",
+                template_changed_files={"pyproject.toml", "app/m.py"},
+                old_commit="abc123",
+            )
+        assert "pyproject.toml" in result.conflicts
+        assert "pyproject.toml" not in result.synced
 
     def test_empty_template_changed_files_syncs_nothing(self, tmp_path: Path) -> None:
         """Test that empty set means no files changed — nothing synced."""

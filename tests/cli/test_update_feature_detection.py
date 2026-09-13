@@ -126,3 +126,56 @@ class TestDetectionFromRegistry:
         points at a file redis actually owns."""
         _touch(tmp_path, "app/components/frontend/dashboard/cards/redis_card.py")
         assert _detect_existing_features(tmp_path).get("include_redis") is True
+
+
+class TestOllamaModeDetection:
+    """``ollama_mode`` is a string answer, and the project already states it.
+
+    A project generated before the question existed has no answer for it, so
+    an update rendered with the template default (``none``): the gated
+    modules came out empty while the files the project kept still imported
+    them, and the failure surfaced as an ImportError at boot. The URL the app
+    actually talks to says which mode it is (aegis-stack#1120).
+    """
+
+    def _env(self, root: Path, name: str, body: str) -> None:
+        (root / name).write_text(body)
+
+    def test_host_url_detects_host(self, tmp_path: Path) -> None:
+        self._env(
+            tmp_path, ".env", "OLLAMA_BASE_URL=http://host.docker.internal:11434\n"
+        )
+        assert _detect_existing_features(tmp_path)["ollama_mode"] == "host"
+
+    def test_container_url_detects_docker(self, tmp_path: Path) -> None:
+        self._env(tmp_path, ".env", "OLLAMA_BASE_URL=http://ollama:11434\n")
+        assert _detect_existing_features(tmp_path)["ollama_mode"] == "docker"
+
+    def test_no_ollama_url_leaves_the_answer_absent(self, tmp_path: Path) -> None:
+        """Nothing detected means nothing written — the default already is
+        ``none``, and an absent key must never clobber a stored answer."""
+        self._env(tmp_path, ".env", "DATABASE_URL=postgresql://localhost/app\n")
+        assert "ollama_mode" not in _detect_existing_features(tmp_path)
+
+    def test_commented_out_url_is_not_a_setting(self, tmp_path: Path) -> None:
+        self._env(tmp_path, ".env", "# OLLAMA_BASE_URL=http://ollama:11434\n")
+        assert "ollama_mode" not in _detect_existing_features(tmp_path)
+
+    def test_falls_back_to_the_example_when_env_is_absent(self, tmp_path: Path) -> None:
+        self._env(tmp_path, ".env.example", "OLLAMA_BASE_URL=http://ollama:11434\n")
+        assert _detect_existing_features(tmp_path)["ollama_mode"] == "docker"
+
+    def test_real_env_wins_over_the_example(self, tmp_path: Path) -> None:
+        """The example is a template artifact; ``.env`` is what the app reads."""
+        self._env(
+            tmp_path, ".env", "OLLAMA_BASE_URL=http://host.docker.internal:11434\n"
+        )
+        self._env(tmp_path, ".env.example", "OLLAMA_BASE_URL=http://ollama:11434\n")
+        assert _detect_existing_features(tmp_path)["ollama_mode"] == "host"
+
+    def test_unrecognized_url_is_a_host_ollama(self, tmp_path: Path) -> None:
+        """Anything that is not the compose service is reached over the
+        network, which is what ``host`` means — never ``none``, which would
+        strip the Ollama surface from a project actively using it."""
+        self._env(tmp_path, ".env", "OLLAMA_BASE_URL=http://10.0.0.4:11434\n")
+        assert _detect_existing_features(tmp_path)["ollama_mode"] == "host"

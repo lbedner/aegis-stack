@@ -1057,6 +1057,21 @@ def _settings_field_names(config_path: Path) -> set[str] | None:
     return None
 
 
+def env_value(env_path: Path, key: str) -> str | None:
+    """The value ``key`` is set to in an env file, or None if it is not set.
+
+    A commented-out line is not a setting; ``export KEY=`` is. Quotes are
+    stripped, so the caller compares against the bare value.
+    """
+    if not env_path.exists():
+        return None
+    for line in env_path.read_text().splitlines():
+        line = line.strip().removeprefix("export ").strip()
+        if line.startswith(f"{key}="):
+            return line.split("=", 1)[1].strip().strip("\"'")
+    return None
+
+
 def stale_env_defaults(
     project_path: Path, answers: dict[str, Any]
 ) -> list[RemovedEnvKey]:
@@ -1073,19 +1088,14 @@ def stale_env_defaults(
         return []
     slug = answers.get("project_slug") or project_path.name
     hits: list[RemovedEnvKey] = []
-    for line in env_path.read_text().splitlines():
-        line = line.strip().removeprefix("export ").strip()
-        if (
-            line.startswith("AEGIS_STACK_TAG=")
-            and line.split("=", 1)[1].strip().strip("\"'") == "aegis-stack:latest"
-        ):
-            hits.append(
-                RemovedEnvKey(
-                    "AEGIS_STACK_TAG",
-                    f"shared with every other Aegis project on this machine; "
-                    f"set AEGIS_STACK_TAG={slug}:latest",
-                )
+    if env_value(env_path, "AEGIS_STACK_TAG") == "aegis-stack:latest":
+        hits.append(
+            RemovedEnvKey(
+                "AEGIS_STACK_TAG",
+                f"shared with every other Aegis project on this machine; "
+                f"set AEGIS_STACK_TAG={slug}:latest",
             )
+        )
     return hits
 
 

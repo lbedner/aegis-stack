@@ -17,7 +17,7 @@ import typer
 from .. import __version__ as aegis_version
 from ..cli import brand
 from ..config.defaults import GITHUB_TEMPLATE_URL
-from ..constants import AnswerKeys, StorageBackends
+from ..constants import AnswerKeys, OllamaMode, StorageBackends
 from ..core.behavior_changes import behavior_changes_for
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
@@ -41,6 +41,7 @@ from ..core.migration_generator import generate_missing_migrations
 from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from ..core.template_cleanup import (
     cleanup_nested_project_directory,
+    env_value,
     removed_env_keys,
     stale_env_defaults,
     sync_template_changes,
@@ -48,8 +49,62 @@ from ..core.template_cleanup import (
 from ..core.version_compatibility import get_cli_version, get_project_template_version
 from ..i18n import lazy_t, t
 
+# Which questions ``_detect_existing_features`` reads off the project. Named
+# here so the guard in ``tests/core/test_answer_derivation_declared.py`` can
+# tell a covered question from a forgotten one.
+DETECTED: frozenset[str] = frozenset(
+    {
+        AnswerKeys.OLLAMA_MODE,
+        AnswerKeys.INSIGHTS_GITHUB,
+        AnswerKeys.INSIGHTS_PYPI,
+        AnswerKeys.INSIGHTS_PLAUSIBLE,
+        AnswerKeys.INSIGHTS_REDDIT,
+    }
+)
 
-def _detect_existing_features(target_path: Path) -> dict[str, bool]:
+# Questions a project cannot answer from its own contents. Identity and
+# provenance: the values ARE the answer, there is nothing on disk to read
+# them back from, and every answers file has carried them since 0.1 — so no
+# project can be missing one and no default can be silently substituted.
+NOT_INFERABLE: dict[str, str] = {
+    "project_name": "identity; asked once, never re-derived",
+    "project_description": "identity; free text with no on-disk echo",
+    "author_name": "identity",
+    "author_email": "identity",
+    "github_username": "identity",
+    "version": "the project's own version, which it alone owns",
+    "aegis_version": "provenance, written by the update itself",
+    "python_version": "pyproject states a range, not the answered pin",
+}
+
+# Answerable from the project, but nobody has written the detector. A
+# ratchet: entries exist so nothing gets worse, and each one is meant to be
+# deleted the day its detector lands. The parenthetical names where the
+# evidence lives, so the next person does not have to go looking.
+INFERENCE_DEBT: dict[str, str] = {
+    "database_engine": "DATABASE_URL scheme in .env",
+    "postgres_provider": "DATABASE_URL host in .env",
+    "worker_backend": "the worker entrypoint the compose file runs",
+    "scheduler_backend": "SCHEDULER_* settings in .env",
+    "ai_framework": "the chat engine package under app/services/ai",
+    "ai_providers": "the *_API_KEY names present in .env",
+    "ai_backend": "presence of the AI persistence models",
+    "ai_rag": "app/services/rag",
+    "ai_voice": "app/services/ai/domains/voice",
+    "auth_level": "presence of the rbac / org models",
+    "include_oauth": "app/components/backend/api/auth/oauth.py",
+    "include_cache": "app/services/cache",
+    "ingress_tls": "the TLS block in the ingress config",
+    "ingress_domain": "the server name in the ingress config",
+    "payment_provider": "the provider client under app/services/payment",
+    "insights_per_user": "the per-user column on the insights models",
+    "finance_plaid": "app/services/finance providers",
+    "finance_snaptrade": "app/services/finance providers",
+    "finance_import": "app/services/finance import surface",
+}
+
+
+def _detect_existing_features(target_path: Path) -> dict[str, Any]:
     """Reconstruct ``include_*`` and sub-feature flags from project structure.
 
     Older template versions didn't have today's full set of questions in
@@ -82,7 +137,7 @@ def _detect_existing_features(target_path: Path) -> dict[str, bool]:
     # a marker is detectable on update automatically). Only ever sets True:
     # an absent marker leaves the flag out so the caller's merge doesn't
     # clobber an existing answer.
-    detected: dict[str, bool] = {}
+    detected: dict[str, Any] = {}
     for spec in [*SERVICES.values(), *COMPONENTS.values()]:
         if spec.marker_path and (target_path / spec.marker_path).exists():
             detected[AnswerKeys.include_key(spec.name)] = True
@@ -92,7 +147,33 @@ def _detect_existing_features(target_path: Path) -> dict[str, bool]:
     # down ones they use.
     detected.update(detect_insights_sources(target_path) or {})
 
+    # Not every question is a flag. ``ollama_mode`` is a three-valued string
+    # whose answer the project states outright, in the URL it talks to.
+    ollama_mode = _detect_ollama_mode(target_path)
+    if ollama_mode is not None:
+        detected[AnswerKeys.OLLAMA_MODE] = ollama_mode
+
     return detected
+
+
+def _detect_ollama_mode(target_path: Path) -> str | None:
+    """Which Ollama the project talks to, from the URL it actually uses.
+
+    The template's own dichotomy: ``docker`` is the compose service, and any
+    other reachable URL is an Ollama the project talks to over the network,
+    which is ``host``. An unset variable means no Ollama, which is already
+    the default — return None so nothing is written and no stored answer is
+    clobbered.
+
+    ``.env`` is what the app reads; ``.env.example`` is the template artifact
+    it was seeded from, and only stands in when the real file is gone.
+    """
+    for name in (".env", ".env.example"):
+        url = env_value(target_path / name, "OLLAMA_BASE_URL")
+        if url is None:
+            continue
+        return OllamaMode.DOCKER if "//ollama:" in url else OllamaMode.HOST
+    return None
 
 
 def _get_template_changed_files(

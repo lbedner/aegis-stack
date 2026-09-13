@@ -155,6 +155,18 @@ class TestDialogHelpers:
         assert form.get("hx-post") == "/accounts/new"
         assert form.get("hx-target") == "#dialog-body"
 
+    def test_the_swap_is_stated_so_it_cannot_be_inherited(self) -> None:
+        """htmx inherits ``hx-swap`` from ancestors. An opener inside a
+        form that swaps ITSELF outerHTML borrowed that and replaced
+        #dialog-body with the dialog's content, so every later open
+        failed against an element that no longer existed - "I can't open
+        a new one until I refresh"."""
+        opener = one(f"<button {hx_dialog('/accounts/new')}></button>", "button")
+        assert opener.get("hx-swap") == "innerHTML"
+
+        form = one(f"<form {hx_dialog_post('/accounts/new')}></form>", "form")
+        assert form.get("hx-swap") == "innerHTML"
+
     def test_an_opener_can_carry_more(self) -> None:
         html = (
             f"""<button {hx_dialog("/x", 'hx-include="[name=k]:checked"')}></button>"""

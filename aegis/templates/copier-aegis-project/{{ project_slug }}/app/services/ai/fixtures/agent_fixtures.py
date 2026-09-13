@@ -22,6 +22,7 @@ from app.services.ai.domains.chat.agent_loader import (
 # processes that never build a chat agent (a CLI, a startup hook): without
 # this the sync writes no rows and every later grant silently no-ops.
 import app.services.ai.domains.chat.readings  # noqa: F401
+import app.services.ai.domains.chat.self_context  # noqa: F401
 from app.services.ai.domains.chat.tools import get_tool, registered_tool_names
 import app.services.ai.domains.chat.user_memory  # noqa: F401
 from app.services.ai.models.agents import Agent, Tool

@@ -342,9 +342,12 @@ class StreamingMixin(ChatMixin):
                 f"stream_chat:{agent_config.slug}", stream_usage, user_id
             )
 {%- endif %}
-            # Extractions recorded mid-run outlive the image: fold them
-            # into the conversation before finalize persists it.
-            merge_staged_readings(conversation.metadata, staged_readings)
+            # Extractions recorded mid-run outlive the image AND the
+            # thread: they belong to the user, so a new conversation
+            # opens still holding them.
+            await merge_staged_readings(
+                user_id, staged_readings, legacy=conversation.metadata.get("readings")
+            )
             # Finalize conversation (update metadata and save)
             self._finalize_conversation(
                 conversation, response_time_ms, is_streaming=True

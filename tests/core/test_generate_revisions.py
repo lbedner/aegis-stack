@@ -168,3 +168,46 @@ class TestDataStatements:
         ):
             assert generate_revisions(tmp_path, ["blog"]) == []
         assert list(versions.glob("*.py")) == []
+
+
+class TestScratchReplayFailure:
+    """A revision that needs data dies replaying onto the empty scratch database.
+
+    All the operator gets today is the traceback tail, which ends in the
+    migration's own message — nothing says which revision, that the database
+    was a scratch one, or that the fix is to tolerate an empty database.
+    """
+
+    TRACEBACK = (
+        "Traceback (most recent call last):\n"
+        '  File "/app/.venv/lib/python3.13/site-packages/alembic/runtime/migration.py"'
+        ", line 623, in run_migrations\n"
+        "    step.migration_fn(**kw)\n"
+        '  File "/app/alembic/versions/009_seed_projects.py", line 41, in upgrade\n'
+        "    owner = conn.execute(select(User)).one()\n"
+        "sqlalchemy.exc.NoResultFound: No row was found when one was required\n"
+    )
+
+    def _error(self, tmp_path: Path, stderr: str) -> str:
+        _versions(tmp_path)
+        with (
+            patch(
+                "aegis.core.migration_generator.subprocess.run",
+                return_value=Mock(returncode=1, stderr=stderr, stdout=""),
+            ),
+            pytest.raises(MigrationGenerationError) as caught,
+        ):
+            generate_revisions(tmp_path, ["insights"])
+        return str(caught.value)
+
+    def test_names_the_revision_and_the_scratch_database(self, tmp_path: Path) -> None:
+        message = self._error(tmp_path, self.TRACEBACK)
+        assert "009_seed_projects.py" in message
+        assert "scratch" in message
+        # Last word, so it survives a tail read and is not buried in traceback.
+        assert message.rstrip().endswith("empty database.")
+
+    def test_unrelated_failure_is_left_alone(self, tmp_path: Path) -> None:
+        message = self._error(tmp_path, "ImportError: no module named plaid")
+        assert "plaid" in message
+        assert "scratch" not in message

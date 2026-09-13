@@ -199,11 +199,27 @@ class SyncResult:
     """Files deleted because the target template no longer ships them and the
     project had not customized them."""
 
+    shadowed: list[str] = field(default_factory=list)
+    """Template modules NOT written because the project grew a package of the
+    same name beside them. Python imports the package, so writing the module
+    would put template changes where nothing runs."""
+
     stale: list[str] = field(default_factory=list)
     """Files the target template no longer ships that were customized, so they
     were KEPT. They are dead code the project still carries — and when the
     replacement is a package of the same name, the leftover module is shadowed,
     so those customizations have silently stopped running."""
+
+
+def _shadowed_by_package(project_file: Path) -> bool:
+    """Does an importable package of the same name sit beside this module?
+
+    Only ``.py`` files can be shadowed, and only by a real package: a bare
+    directory of the same name is not importable and shadows nothing.
+    """
+    if project_file.suffix != ".py" or project_file.name == "__init__.py":
+        return False
+    return (project_file.with_suffix("") / "__init__.py").exists()
 
 
 def _reconcile_new_answer_keys(project_path: Path, new_rendered_dir: Path) -> list[str]:
@@ -484,6 +500,19 @@ def sync_template_changes(
                 continue
 
             project_file = project_path / relative
+
+            # A project may grow a template module into a package of the same
+            # name (``api/insights.py`` -> ``api/insights/``). Python imports
+            # the package, so writing the module puts template changes in a
+            # file nothing runs — and the project is never told. Report it
+            # and leave both sides alone (aegis-stack#1119).
+            if _shadowed_by_package(project_file):
+                result.shadowed.append(str(relative))
+                verbose_print(
+                    f"   Shadowed: {relative} — the project's "
+                    f"{relative.with_suffix('')}/ package wins the import"
+                )
+                continue
 
             # Only sync files the template actually changed between versions
             if (

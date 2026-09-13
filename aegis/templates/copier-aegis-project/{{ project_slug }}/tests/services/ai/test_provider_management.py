@@ -215,6 +215,22 @@ class TestGetEnvVarName:
     def test_google(self) -> None:
         assert get_env_var_name("google") == "GOOGLE_API_KEY"
 
+    def test_every_provider_matches_the_registry(self) -> None:
+        """The registry names the variable; nothing may re-derive it.
+
+        OpenRouter's key is OPEN_ROUTER_API_KEY, not the upper-cased slug —
+        deriving it reports the key missing while the model works.
+        """
+        from app.services.ai.config import api_key_env
+        from app.services.ai.models import AIProvider
+
+        mismatched = {
+            provider.value: (get_env_var_name(provider.value), api_key_env(provider))
+            for provider in AIProvider
+            if get_env_var_name(provider.value) != api_key_env(provider)
+        }
+        assert not mismatched, f"resolved name disagrees with registry: {mismatched}"
+
 
 class TestProviderApiKeyUrls:
     """Tests for API key URL lookups."""

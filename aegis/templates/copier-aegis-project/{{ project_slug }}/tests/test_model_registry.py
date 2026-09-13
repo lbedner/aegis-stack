@@ -48,6 +48,6 @@ def test_generated_revisions_rebuild_the_models(tmp_path: Path) -> None:
     under ``alembic/versions`` are derived from the models, so replaying
     them must reproduce ``SQLModel.metadata`` with no drift either way.
     """
-    from app.cli.migrate_gen import drift
+    from app.cli.migrate_drift import drift
 
     assert drift(scratch_dir=tmp_path) == []

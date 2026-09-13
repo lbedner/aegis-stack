@@ -24,6 +24,7 @@ Usage:
 """
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -359,6 +360,27 @@ class MigrationGenerationError(RuntimeError):
 GENERATE_REVISIONS_TIMEOUT = 300
 
 
+_REVISION_FRAME = re.compile(r'File "[^"]*[/\\]versions[/\\]([^"/\\]+\.py)"')
+
+
+def _replay_hint(stderr: str) -> str:
+    """Name the revision a scratch replay died in, when one is in the traceback.
+
+    ``migrate_gen`` replays the project's whole chain onto an empty scratch
+    database, so a revision that needs rows raises there with only its own
+    message — true, and useless. The traceback names the file; say what it
+    means, last, where a tail read will find it.
+    """
+    frames = _REVISION_FRAME.findall(stderr)
+    if not frames:
+        return ""
+    return (
+        f"\n\n{frames[-1]} failed replaying the migration chain onto an empty "
+        "scratch database. That database has no rows by construction: make "
+        "the revision tolerate an empty database."
+    )
+
+
 def generate_revisions(
     project_path: Path,
     services: list[str],
@@ -400,7 +422,8 @@ def generate_revisions(
     )
     if result.returncode != 0:
         raise MigrationGenerationError(
-            f"migrate_gen failed for {', '.join(services)}:\n{result.stderr[-2000:]}"
+            f"migrate_gen failed for {', '.join(services)}:\n"
+            f"{result.stderr[-2000:]}{_replay_hint(result.stderr)}"
         )
     written = sorted(set(versions_dir.glob("*.py")) - before)
     written.extend(_place_data_statements(project_path, services, written))

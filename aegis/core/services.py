@@ -970,9 +970,9 @@ SERVICES: dict[str, ServiceSpec] = {
         migrations=[FINANCE_MIGRATION, FINANCE_AUTH_LINK_MIGRATION],
         # Alembic is installed via the shared migration gate in
         # pyproject.toml.jinja; provider deps (plaid/...) land with their
-        # tickets. ``ofxtools`` backs the OFX/QFX importer (gated on the
-        # finance_import sub-flag in pyproject.toml.jinja). ``aegis add-service
-        # finance`` bootstraps alembic itself, so no alembic pin is needed here.
+        # tickets. ``ofxtools`` backs the OFX/QFX importer, which every
+        # finance stack ships. ``aegis add-service finance`` bootstraps
+        # alembic itself, so no alembic pin is needed here.
         pyproject_deps=["ofxtools>=0.9.5"],
         template_files=[
             "app/services/finance/",

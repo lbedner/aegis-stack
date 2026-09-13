@@ -233,7 +233,6 @@ class AnswerKeys:
     # Finance source flags
     FINANCE_PLAID = "finance_plaid"
     FINANCE_SNAPTRADE = "finance_snaptrade"
-    FINANCE_IMPORT = "finance_import"
 
     # Payment configuration
     PAYMENT_PROVIDER = "payment_provider"

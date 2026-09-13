@@ -245,7 +245,38 @@ def _additive(op: ops.MigrateOperation, conn: Connection) -> bool:
     return False
 
 
-def _prune(conn: Connection) -> Callable[..., None]:
+def _qualified(table: str, schema: str | None) -> str:
+    return f"{schema}.{table}" if schema else table
+
+
+def _signature(kept: list[Any]) -> tuple[str, ...] | None:
+    """The object whose existence proves this revision ran.
+
+    The startup hook stamps instead of replaying DDL when it finds this,
+    which is how a database that outlived its ``alembic_version`` row is
+    re-adopted. Created table first, then an added column, then a new
+    foreign key - the three shapes a revision can take.
+    """
+    flat: list[Any] = []
+    for op in kept:
+        flat.extend(op.ops if isinstance(op, ops.ModifyTableOps) else [op])
+    for op in flat:
+        if isinstance(op, ops.CreateTableOp):
+            return ("table", _qualified(op.table_name, op.schema))
+    for op in flat:
+        if isinstance(op, ops.AddColumnOp):
+            return ("column", _qualified(op.table_name, op.schema), op.column.name)
+    for op in flat:
+        if isinstance(op, ops.CreateForeignKeyOp):
+            return (
+                "foreign_key",
+                _qualified(op.source_table, op.source_schema),
+                op.local_cols[0],
+            )
+    return None
+
+
+def _prune(conn: Connection, signature: dict[str, tuple[str, ...] | None]) -> Callable[..., None]:
     def process(_ctx: Any, _rev: Any, directives: list[Any]) -> None:
         script = directives[0]
         kept = [op for op in script.upgrade_ops.ops if _additive(op, conn)]
@@ -275,6 +306,7 @@ def _prune(conn: Connection) -> Callable[..., None]:
             for op in reversed(script.upgrade_ops.ops)
             if not isinstance(op, ops.ExecuteSQLOp)
         ]
+        signature["value"] = _signature(kept)
         if not kept:
             directives[:] = []
 
@@ -287,23 +319,41 @@ def generate(services: list[str], scratch_dir: Path | None = None) -> list[Path]
     with _connection(None, scratch_dir) as conn:
         for service in services:
             claimed = _claimed_by(service, services)
+            signature: dict[str, tuple[str, ...] | None] = {}
             cfg = _config(
                 conn,
                 include_object=lambda obj, name, type_, reflected, _cmp, claimed=claimed: (
                     not reflected
                     and (obj if type_ == "table" else obj.table).key in claimed
                 ),
-                process_revision_directives=_prune(conn),
+                process_revision_directives=_prune(conn, signature),
                 compare_type=False,
                 compare_server_default=False,
                 render_as_batch=True,
             )
             command.upgrade(cfg, "head")
             before = set(VERSIONS.glob("*.py"))
-            command.revision(cfg, message=service, autogenerate=True, rev_id=_next_rev_id())
-            written.extend(sorted(set(VERSIONS.glob("*.py")) - before))
+            command.revision(
+                cfg, message=service, autogenerate=True, rev_id=_next_rev_id()
+            )
+            new_files = sorted(set(VERSIONS.glob("*.py")) - before)
+            for path in new_files:
+                _stamp_signature(path, signature.get("value"))
+            written.extend(new_files)
         command.upgrade(_config(conn), "head")
     return written
+
+
+def _stamp_signature(path: Path, signature: tuple[str, ...] | None) -> None:
+    """Record the proof object in the revision itself, beside its id."""
+    if signature is None:
+        return
+    body = path.read_text()
+    anchor = "depends_on = None\n"
+    if anchor not in body:
+        return
+    head, _, tail = body.partition(anchor)
+    path.write_text(f"{head}{anchor}aegis_stamp_signature = {signature!r}\n{tail}")
 
 
 # ---------------------------------------------------------------------------

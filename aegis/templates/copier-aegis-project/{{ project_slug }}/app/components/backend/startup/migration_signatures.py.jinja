@@ -1,4 +1,9 @@
-"""The stamp signatures: proof-objects for every shipped migration.
+"""Stamp signatures for revisions that do not carry their own.
+
+A revision generated from the models declares ``aegis_stamp_signature``
+in the file itself, and the startup hook prefers that. This table covers
+revisions written before generation did so - a long-lived project still
+has them on disk - and is not where a new entry belongs.
 
 The startup hook re-adopts a persisted database by checking, per pending
 migration (``NNN_<service>.py``), whether its signature object already

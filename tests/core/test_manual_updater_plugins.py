@@ -363,29 +363,21 @@ class TestAddPluginRunsMigrationTail:
 
     @staticmethod
     def _spec_with_migrations() -> object:
+        """A plugin spec declaring one migration.
+
+        The spec names the revision; its body comes from the plugin's
+        models, so there are no tables to declare here.
+        """
         from dataclasses import replace
 
         from aegis_plugin_test.spec import get_spec
 
-        from aegis.core.migration_spec import (
-            ColumnSpec,
-            MigrationSpec,
-            TableSpec,
-        )
+        from aegis.core.migration_spec import MigrationSpec
 
         migration = MigrationSpec(
             service_name="test_plugin",
             description="Test plugin table",
-            tables=[
-                TableSpec(
-                    name="test_plugin_thing",
-                    columns=[
-                        ColumnSpec(
-                            "id", "sa.Integer()", nullable=False, primary_key=True
-                        )
-                    ],
-                )
-            ],
+            stamp_signature=("table", "test_plugin_thing"),
         )
         return replace(get_spec(), migrations=[migration])
 

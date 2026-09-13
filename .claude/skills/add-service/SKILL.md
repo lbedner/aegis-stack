@@ -45,14 +45,15 @@ Registry (`ServiceSpec` is a thin alias of `PluginSpec` pinned to
     `compute_file_mapping()` derives `post_gen_tasks.get_component_file_mapping()`
     from this, so there is no separate hand-maintained mapping to edit.
 - `aegis/core/migration_generator.py`: only if the service owns tables, add a
-  `ServiceMigrationSpec` naming the revision (`service_name`, `description`,
-  `schema`, `stamp_signature`) and reference it from the spec's
-  `migrations=[...]` list in `services.py`. Its `tables` list renders
-  nothing any more: revision files are derived from the SQLModel classes by
-  the generated project's `app/cli/migrate_gen.py` (run by init/add inside
-  the project venv), so the models are the only place a column is declared.
-  `MIGRATION_SPECS` is derived lazily from every spec's `.migrations` via
-  `collect_migrations()` - no dict entry to hand-maintain.
+  `ServiceMigrationSpec` and reference it from the spec's `migrations=[...]`
+  list in `services.py`. The spec has no tables in it: a revision's contents
+  are derived from the SQLModel classes by the generated project's
+  `app/cli/migrate_gen.py` (run by init/add inside the project venv), so a
+  column is declared in exactly one place, the model. The spec carries only
+  what models cannot express - `service_name`, `description`, the Postgres
+  `schema` its tables live in, and `data_sql` for a row a schema change makes
+  mandatory. `MIGRATION_SPECS` is derived lazily from every spec's
+  `.migrations` via `collect_migrations()` - no dict entry to hand-maintain.
 - `aegis/constants.py`: `AnswerKeys` - add `<NAME> = "include_<name>"` and
   `SERVICE_<NAME> = "<name>"`. Add any sub-flag keys the service needs (see
   `FINANCE_PLAID`, `FINANCE_SNAPTRADE`, `FINANCE_IMPORT`).
@@ -233,8 +234,8 @@ Cross-cutting:
    if the service exposes routes. Confirm they fail for the right reason.
 2. Add `AnswerKeys.<NAME>` / `AnswerKeys.SERVICE_<NAME>` in
    `aegis/constants.py`.
-3. If the service owns tables, add its `ServiceMigrationSpec` (name, schema,
-   stamp signature; no table bodies) to `aegis/core/migration_generator.py`.
+3. If the service owns tables, add its `ServiceMigrationSpec` (name, schema;
+   no table bodies) to `aegis/core/migration_generator.py`.
 4. Add the `ServiceSpec` entry in `aegis/core/services.py`: identity fields,
    `required_components`, `pyproject_deps`, `wiring=PluginWiring(...)`,
    `migrations=[...]`, and `files=FileManifest(primary=[...])`.

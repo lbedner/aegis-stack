@@ -1,19 +1,22 @@
 """
 Migration spec — plugin-author-facing facade for ``ServiceMigrationSpec``.
 
-R4-A of the plugin system refactor. ``PluginSpec.migrations`` is a list of
-``ServiceMigrationSpec`` objects. The canonical dataclass lives in
-``aegis/core/migration_generator.py`` (alongside the table-spec helpers it
-shares —  ``TableSpec``, ``ColumnSpec``, etc.); this module exposes them
-under a stable import path so plugin authors don't have to know the
-historical filename.
+``PluginSpec.migrations`` is a list of ``ServiceMigrationSpec`` objects. The
+canonical dataclass lives in ``aegis/core/migration_generator.py``; this
+module exposes it under a stable import path so plugin authors don't have to
+know the historical filename.
+
+A spec does not describe tables. What a revision contains is derived from the
+plugin's SQLModel classes, by the generated project's own
+``app/cli/migrate_gen.py``, at ``aegis add`` time - so a column exists in one
+place, the model. The spec names the revision and carries what models cannot
+express: the Postgres schema its tables live in, the object whose existence
+proves the migration ran, and any data statement (a row a new foreign key
+points at).
 
 Intended usage (in a third-party plugin's ``get_spec()``)::
 
-    from aegis.core.migration_spec import (
-        MigrationSpec,           # alias of ServiceMigrationSpec
-        TableSpec, ColumnSpec, IndexSpec, ForeignKeySpec,
-    )
+    from aegis.core.migration_spec import MigrationSpec
 
     PluginSpec(
         name="scraper",
@@ -22,30 +25,20 @@ Intended usage (in a third-party plugin's ``get_spec()``)::
             MigrationSpec(
                 service_name="scraper",
                 description="Scraper tables",
-                tables=[
-                    TableSpec(name="scrape_targets", columns=[...]),
-                    TableSpec(name="scrape_runs",    columns=[...]),
-                ],
+                schema="scraper",
+                stamp_signature=("table", "scraper.scrape_targets"),
             ),
         ],
     )
 
-A future refactor may rename ``ServiceMigrationSpec`` → ``MigrationSpec``
-in the generator itself; this alias makes that rename a no-op for callers
-that already use the new name.
+The plugin's models go under ``app/services/scraper/models`` in its template
+tree; the model registry imports that path, and the generator writes the
+revision from what it finds.
 """
 
 from collections.abc import Iterable
 
-from .migration_generator import (
-    AlterTableSpec,
-    CheckConstraintSpec,
-    ColumnSpec,
-    ForeignKeySpec,
-    IndexSpec,
-    ServiceMigrationSpec,
-    TableSpec,
-)
+from .migration_generator import ServiceMigrationSpec
 
 # Plugin-system-shape alias. Same class; preferred name in PluginSpec.migrations.
 MigrationSpec = ServiceMigrationSpec
@@ -80,13 +73,7 @@ def collect_migrations(
 
 
 __all__ = [
-    "AlterTableSpec",
-    "CheckConstraintSpec",
-    "ColumnSpec",
-    "ForeignKeySpec",
-    "IndexSpec",
     "MigrationSpec",
     "ServiceMigrationSpec",
-    "TableSpec",
     "collect_migrations",
 ]

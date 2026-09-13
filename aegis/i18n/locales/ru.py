@@ -974,7 +974,7 @@ MESSAGES: dict[str, str] = {
     "plugins.option_choices": "значения:",
     "plugins.option_default": "по умолчанию:",
     "plugins.option_auto_requires": "(c auto_requires)",
-    "plugins.info_files": "Файлы: {files}   Миграции: {migrations} ({tables} табл.)   CLI: {cli}",
+    "plugins.info_files": "Файлы: {files}   Миграции: {migrations}   CLI: {cli}",
     "plugins.cli_yes": "да",
     "plugins.cli_no": "нет",
     "plugins.section_compat": "Совместимость",

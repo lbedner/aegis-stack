@@ -992,7 +992,7 @@ MESSAGES: dict[str, str] = {
     "plugins.option_choices": "選択肢：",
     "plugins.option_default": "デフォルト：",
     "plugins.option_auto_requires": "（auto_requires あり）",
-    "plugins.info_files": "ファイル数：{files}   マイグレーション：{migrations}（{tables} テーブル）   CLI：{cli}",
+    "plugins.info_files": "ファイル数：{files}   マイグレーション：{migrations}   CLI：{cli}",
     "plugins.cli_yes": "あり",
     "plugins.cli_no": "なし",
     "plugins.section_compat": "互換性",

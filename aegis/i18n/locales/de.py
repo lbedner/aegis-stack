@@ -1007,7 +1007,7 @@ MESSAGES: dict[str, str] = {
     "plugins.option_choices": "Auswahl:",
     "plugins.option_default": "Standard:",
     "plugins.option_auto_requires": "(hat auto_requires)",
-    "plugins.info_files": "Dateien: {files}   Migrationen: {migrations} ({tables} Tabellen)   CLI: {cli}",
+    "plugins.info_files": "Dateien: {files}   Migrationen: {migrations}   CLI: {cli}",
     "plugins.cli_yes": "ja",
     "plugins.cli_no": "nein",
     "plugins.section_compat": "Kompatibilität",

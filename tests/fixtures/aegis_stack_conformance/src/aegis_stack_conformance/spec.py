@@ -10,7 +10,7 @@ is still never applied (#1079). Each was found by hand, one at a time.
 """
 
 from aegis.core.file_manifest import FileManifest
-from aegis.core.migration_spec import ColumnSpec, IndexSpec, MigrationSpec, TableSpec
+from aegis.core.migration_spec import MigrationSpec
 from aegis.core.option_spec import OptionMode, OptionSpec
 from aegis.core.plugins.spec import (
     HealthCheckWiring,
@@ -50,23 +50,6 @@ def get_spec() -> PluginSpec:
                 schema="conformance",
                 # Proof it ran, for the startup re-adoption hook.
                 stamp_signature=("table", "conformance.conformance_row"),
-                tables=[
-                    TableSpec(
-                        name="conformance_row",
-                        columns=[
-                            ColumnSpec(
-                                "id", "sa.Integer()", nullable=False, primary_key=True
-                            ),
-                            ColumnSpec("label", "sa.String(length=64)", nullable=False),
-                            ColumnSpec(
-                                "created_at",
-                                "sa.DateTime(timezone=True)",
-                                nullable=False,
-                            ),
-                        ],
-                        indexes=[IndexSpec("ix_conformance_row_label", ["label"])],
-                    ),
-                ],
             ),
         ],
         files=FileManifest(

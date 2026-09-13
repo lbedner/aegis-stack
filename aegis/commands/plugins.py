@@ -343,14 +343,12 @@ def plugins_info_command(
 
     file_count = len(spec.files.primary) if spec.files else 0
     migration_count = len(spec.migrations)
-    table_count = sum(len(m.tables) for m in spec.migrations)
     lines.append(
         "  "
         + t(
             "plugins.info_files",
             files=file_count,
             migrations=migration_count,
-            tables=table_count,
             cli=t("plugins.cli_yes") if has_cli else t("plugins.cli_no"),
         )
     )

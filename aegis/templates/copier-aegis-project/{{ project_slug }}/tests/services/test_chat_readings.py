@@ -2,9 +2,9 @@
 
 Image bytes ride one turn by design; the READING must not. The
 ``record_reading`` tool stages a validated extraction during the model
-call, the turn's finalize merges it into the conversation's metadata,
-and every later turn gets it re-injected as context - so "list the
-items again" works forever without re-attaching anything.
+call, the turn's finalize merges it into the USER's store, and every
+later turn gets it re-injected as context - so "list the items again"
+works forever without re-attaching anything, in any thread.
 """
 
 import pytest
@@ -64,26 +64,29 @@ class TestRecordReading:
 
 
 class TestMergeAndFormat:
-    def test_staged_readings_merge_into_conversation_metadata(self) -> None:
-        metadata: dict = {"user_id": "u1"}
+    @pytest.mark.asyncio
+    async def test_staged_readings_merge_into_the_user_store(self) -> None:
+        from app.services.ai.domains.chat.readings import user_readings
+
         reading = Reading(
             title="Target order", items=[ReadingItem(**i) for i in _ITEMS]
         ).model_dump()
 
-        merge_staged_readings(metadata, [reading])
-        merge_staged_readings(metadata, [])  # a readingless turn changes nothing
+        await merge_staged_readings("merge-u1", [reading])
+        await merge_staged_readings(
+            "merge-u1", []
+        )  # a readingless turn changes nothing
 
-        assert len(metadata["readings"]) == 1
-        assert metadata["readings"][0]["title"] == "Target order"
+        stored = await user_readings("merge-u1")
+        assert len(stored) == 1
+        assert stored[0]["title"] == "Target order"
 
     def test_format_renders_every_item_with_money_and_counts(self) -> None:
-        metadata: dict = {}
         reading = Reading(
             title="Target order", items=[ReadingItem(**i) for i in _ITEMS]
         ).model_dump()
-        merge_staged_readings(metadata, [reading])
 
-        block = format_readings(metadata)
+        block = format_readings([reading])
 
         assert block is not None
         assert "Target order" in block
@@ -97,7 +100,6 @@ class TestMergeAndFormat:
         """Source structure (a shipment, a sub-receipt, a page) must not
         flatten away - which group an item belongs to is exactly what
         maps it to the right charge later."""
-        metadata: dict = {}
         reading = Reading(
             title="Target order",
             items=[
@@ -109,14 +111,13 @@ class TestMergeAndFormat:
                 ),
             ],
         ).model_dump()
-        merge_staged_readings(metadata, [reading])
 
-        block = format_readings(metadata)
+        block = format_readings([reading])
 
         assert block is not None
         assert "Arriving Thu, Aug 27" in block
         assert "Arriving Fri, Aug 28" in block
 
     def test_no_readings_formats_to_none(self) -> None:
-        assert format_readings({}) is None
-        assert format_readings({"readings": []}) is None
+        assert format_readings(None) is None
+        assert format_readings([]) is None

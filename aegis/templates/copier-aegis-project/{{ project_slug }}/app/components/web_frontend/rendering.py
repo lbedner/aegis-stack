@@ -36,15 +36,30 @@ def hx_dialog(url: str, extra: str = "") -> Markup:
     """The attributes for "open this in the one modal" (pattern 4), so no
     template has to remember which element the dialog swaps into.
     ``extra`` rides along for the openers that carry more (an
-    ``hx-include`` of the checked rows, a role for a clickable cell)."""
-    return Markup(f'hx-get="{escape(url)}" hx-target="#dialog-body" {extra}')
+    ``hx-include`` of the checked rows, a role for a clickable cell).
+
+    The swap is stated, not left to default. htmx INHERITS ``hx-swap``
+    from ancestors, so an opener that sits inside a form swapping ITSELF
+    ``outerHTML`` borrows that and REPLACES ``#dialog-body`` with the
+    dialog's content - the element is gone, and every later open fails
+    with ``htmx:targetError`` until the page is reloaded. Found live on
+    a row-form's opener ("I can't open a new one until I refresh").
+    Saying ``innerHTML`` here costs nothing and cannot be borrowed
+    against, and it fixes every opener at once."""
+    return Markup(
+        f'hx-get="{escape(url)}" hx-target="#dialog-body" '
+        f'hx-swap="innerHTML" {extra}'
+    )
 
 
 def hx_dialog_post(url: str) -> Markup:
     """The attributes for a dialog's own form: post to ``url`` and swap
     the answer back into the dialog, which is how a 422 re-renders the
-    form with its errors (pattern 1 inside pattern 4)."""
-    return Markup(f'hx-post="{escape(url)}" hx-target="#dialog-body"')
+    form with its errors (pattern 1 inside pattern 4). States its swap
+    for the same reason ``hx_dialog`` does."""
+    return Markup(
+        f'hx-post="{escape(url)}" hx-target="#dialog-body" hx-swap="innerHTML"'
+    )
 
 
 def hx_replace(url: str, target: str, oob: str | None = None) -> Markup:

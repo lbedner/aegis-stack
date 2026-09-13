@@ -6,10 +6,19 @@ agent calls the moment it reads a receipt, order, or document out of an
 image: the payload validates against a Pydantic contract (bad rows
 bounce back as a correctable tool error, the same door-guarding the
 finance queue uses), stages inside the turn, and the turn's finalize
-merges it into the conversation's metadata. Every later turn re-injects
-the stored readings as context, so "list the items again" works long
-after the pixels are gone - and a model that forgets to narrate its
-reading no longer loses it.
+merges it into the USER's store. Every later turn re-injects the stored
+readings as context, so "list the items again" works long after the
+pixels are gone - and a model that forgets to narrate its reading no
+longer loses it.
+
+Keyed to the user, not the conversation, because "durable" has to mean
+durable. Stored per conversation, twelve pages of extracted order
+listings were invisible the moment a new thread was opened, and
+recovering them meant reading them back out of the database by hand -
+which is not a thing an app can ask anyone to do. The readings
+live beside the saved facts in ``agent_user_memory``: one row per user,
+already the home of everything an agent knows about them across
+conversations.
 
 Generic on purpose: any agent on any surface can record any kind of
 reading ("receipt", "statement", "document"); nothing here belongs to
@@ -25,11 +34,16 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
+from app.core.db import get_async_session
 from app.services.ai.domains.chat.tools import register_tool
+from app.services.ai.domains.chat.user_memory import (
+    load_user_readings,
+    store_user_readings,
+)
 
 # Bounded: readings are context re-injected EVERY turn, so an unbounded
-# list would slowly crowd out the conversation itself.
-_MAX_READINGS_PER_CONVERSATION = 8
+# list would slowly crowd out the conversation itself. Oldest go first.
+_MAX_READINGS_PER_USER = 8
 
 # The turn's staging area; None outside a chat turn.
 _staged: ContextVar[list[dict[str, Any]] | None] = ContextVar(
@@ -61,7 +75,7 @@ class Reading(BaseModel):
 @contextmanager
 def reading_stage() -> Iterator[list[dict[str, Any]]]:
     """The turn wrapper: opens a staging list ``record_reading`` writes
-    into; the caller merges it into the conversation after the run."""
+    into; the caller merges it into the user's store after the run."""
     staged: list[dict[str, Any]] = []
     token = _staged.set(staged)
     try:
@@ -95,23 +109,40 @@ async def record_reading(
     return {"recorded": len(reading.items), "title": reading.title}
 
 
-def merge_staged_readings(
-    metadata: dict[str, Any], staged: list[dict[str, Any]]
+async def merge_staged_readings(
+    user_id: str,
+    staged: list[dict[str, Any]],
+    legacy: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Fold the turn's staged readings into conversation metadata,
-    newest kept, bounded so context injection stays affordable."""
+    """Fold the turn's staged readings into the user's store, newest
+    kept, bounded so context injection stays affordable.
+
+    ``legacy`` carries readings a conversation recorded back when the
+    store was per-conversation: they are folded in on the first write
+    for a user who has none, so an in-flight thread keeps what it read
+    instead of paying for the cutover. Once anything is stored the
+    parameter is ignored and there is one home again.
+    """
     if not staged:
         return
-    readings = list(metadata.get("readings") or [])
-    readings.extend(staged)
-    metadata["readings"] = readings[-_MAX_READINGS_PER_CONVERSATION:]
+    async with get_async_session() as session:
+        readings = await load_user_readings(session, user_id)
+        if not readings and legacy:
+            readings = list(legacy)
+        readings.extend(staged)
+        await store_user_readings(session, user_id, readings[-_MAX_READINGS_PER_USER:])
 
 
-def format_readings(metadata: dict[str, Any]) -> str | None:
+async def user_readings(user_id: str) -> list[dict[str, Any]]:
+    """Everything this user has recorded, for the turn about to run."""
+    async with get_async_session() as session:
+        return await load_user_readings(session, user_id)
+
+
+def format_readings(readings: list[dict[str, Any]] | None) -> str | None:
     """The context block for stored readings, or None when there are
     none - rendered fresh into every turn so the extraction outlives
     the image it came from."""
-    readings = metadata.get("readings") or []
     if not readings:
         return None
     lines = [

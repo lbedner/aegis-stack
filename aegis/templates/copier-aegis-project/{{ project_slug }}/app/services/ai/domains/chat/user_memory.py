@@ -152,6 +152,34 @@ async def save_user_fact(
     return f"Saved ({category}): {fact.strip()}"
 
 
+async def load_user_readings(
+    session: AsyncSession, user_id: str
+) -> list[dict[str, Any]]:
+    """The readings this user has recorded, oldest first."""
+    row = await get_user_memory(session, user_id)
+    if row is None:
+        return []
+    return list(row.memory.get("readings", []))
+
+
+async def store_user_readings(
+    session: AsyncSession, user_id: str, readings: list[dict[str, Any]]
+) -> None:
+    """Replace the user's recorded readings.
+
+    Same document as the facts, a different key: one row per user means
+    one place a turn's writes can collide, and both writers rebuild the
+    document from the row they just read.
+    """
+    row = await get_user_memory(session, user_id)
+    if row is None:
+        row = AgentUserMemory(user_id=user_id)
+    row.memory = {**row.memory, "readings": readings}
+    row.updated_at = utcnow()
+    session.add(row)
+    await session.commit()
+
+
 async def replace_user_memory(
     user_id: str,
     memory_text: str,

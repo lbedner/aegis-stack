@@ -212,7 +212,29 @@ def _async_sqlite_take_over_transactions(
 
 @event.listens_for(async_engine.sync_engine, "begin")
 def _async_sqlite_emit_begin(conn: Any) -> None:
-    conn.exec_driver_sql("BEGIN")
+    """BEGIN IMMEDIATE, not a bare BEGIN.
+
+    A bare BEGIN is DEFERRED: SQLite takes no lock until the first write
+    and then has to UPGRADE. If another writer holds the lock at that
+    moment the upgrade fails with "database is locked" AT ONCE -
+    ``busy_timeout`` deliberately does not apply to it, because a
+    transaction that already holds a read lock and waits for a write
+    lock is how two of them deadlock.
+
+    So the busy timeout above was never reached by the case that needs
+    it. Any turn that opens a second session while the first still
+    holds one hits this; it cost a live turn in a downstream app, where
+    a chat answer streamed, a proposal landed, and the memory write
+    that followed died on "database is locked" with the fact already
+    spoken aloud.
+
+    IMMEDIATE takes the write lock up front, where waiting is safe and
+    the timeout DOES apply, so a second writer queues instead of
+    failing. The cost is that read-only transactions on this engine also
+    queue behind a writer, which for a single-file SQLite database is
+    the cheaper of the two.
+    """
+    conn.exec_driver_sql("BEGIN IMMEDIATE")
 {% else %}
 async_engine = create_async_engine(
     _get_async_database_url(settings.database_url_effective),

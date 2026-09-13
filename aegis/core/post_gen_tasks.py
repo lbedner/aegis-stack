@@ -16,6 +16,7 @@ import typer
 from aegis.constants import (
     AIFrameworks,
     AnswerKeys,
+    OllamaMode,
     StorageBackends,
     WorkerBackends,
 )
@@ -503,6 +504,27 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             project_path,
             "app/components/frontend/dashboard/modals/voice_settings_tab.py",
         )
+
+    # Remove the Ollama surface when no Ollama is configured. Every importer
+    # is jinja-gated, so these ship dead rather than breaking the boot — but
+    # ``ollama_modal.py`` imports ``ollama_activity``, which renders empty in
+    # this mode, so the module cannot even import (aegis-stack#1117).
+    if context.get(AnswerKeys.OLLAMA_MODE, OllamaMode.NONE) == OllamaMode.NONE:
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/ollama_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/ollama_modal.py"
+        )
+        remove_file(project_path, "app/services/system/health_ollama.py")
+        # Both render to a one-line comment in this mode, and every importer
+        # already guards the import (``llm_sync_service`` names this case).
+        remove_file(project_path, "app/services/ai/domains/llm/ollama.py")
+        remove_file(project_path, "app/services/ai/domains/llm/ollama_activity.py")
+        remove_file(
+            project_path, "tests/components/frontend/test_ollama_model_table.py"
+        )
+        remove_file(project_path, "tests/services/ai/test_ollama_activity.py")
 
     # (comms / payment / insights / auth-dashboard primary cleanups handled
     # by the Pattern A loop above.)

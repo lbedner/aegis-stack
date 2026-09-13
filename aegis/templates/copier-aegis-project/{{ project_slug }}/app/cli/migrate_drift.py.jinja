@@ -1,0 +1,140 @@
+"""Report drift between the revision chain and the models.
+
+``migrate_gen`` derives revisions from the models; this is the other
+direction — replay every revision onto an empty database and diff the result
+against ``SQLModel.metadata``. Anything left after ``real_drift`` filters the
+naming noise means a revision and its model have stopped agreeing.
+
+Split from ``migrate_gen`` so neither half has to be read to change the other.
+"""
+{% if include_database %}
+
+from pathlib import Path
+import re
+from typing import Any
+
+from sqlmodel import SQLModel
+
+from alembic import command
+from alembic.autogenerate import compare_metadata
+from alembic.runtime.migration import MigrationContext
+from app.cli.migrate_gen import _config, _connection
+
+
+def _describe(diff: Any) -> str:
+    d = diff[0] if isinstance(diff, list) else diff
+    kind = d[0]
+    if kind in ("add_table", "remove_table"):
+        return f"{kind} {d[1].name}"
+    if kind in ("add_column", "remove_column"):
+        return f"{kind} {d[2]}.{d[3].name}"
+    if kind == "modify_type":
+        return f"{kind} {d[2]}.{d[3]} db={d[5]!r} model={d[6]!r}"
+    if kind == "modify_nullable":
+        return f"{kind} {d[2]}.{d[3]} db={d[5]} model={d[6]}"
+    if kind.startswith("modify_"):
+        return f"{kind} {d[2]}.{d[3]}"
+    if kind in ("add_index", "remove_index"):
+        ix = d[1]
+        cols = ",".join(c.name for c in ix.columns)
+        return f"{kind} {ix.table.name}({cols}) unique={bool(ix.unique)} name={ix.name}"
+    if kind in ("add_fk", "remove_fk"):
+        fk = d[1]
+        cols = ",".join(c.name for c in fk.columns)
+        return (
+            f"{kind} {fk.table.name}({cols})->{fk.referred_table.name} name={fk.name}"
+        )
+    if kind in ("add_constraint", "remove_constraint"):
+        c = d[1]
+        cols = ",".join(c.columns.keys())
+        return f"{kind} {c.table.name}({cols}) name={c.name}"
+    return f"{kind} {d[1:]}"[:120]
+
+
+def _sig(pattern: str, entry: str) -> str:
+    match = re.search(pattern, entry)
+    assert match is not None, entry
+    return match.group(1)
+
+
+def real_drift(entries: list[str]) -> list[str]:
+    """Drop what reflection reports but the schema does not differ on.
+
+    An FK or index the database names differently from the model is the
+    same FK or index. A unique index and a ``UniqueConstraint`` over the
+    same columns are one thing. ``TEXT`` and SQLModel's ``AutoString``
+    are one type. Anything left is drift.
+    """
+    fk_sig = r"fk (\S+\(.*?\)->\S+)"
+    ix_sig = r"index (\S+\(.*?\))"
+    uq_sig = r"(?:index|constraint) (\S+\(.*?\))"
+    fk_both = {_sig(fk_sig, e) for e in entries if e.startswith("add_fk ")} & {
+        _sig(fk_sig, e) for e in entries if e.startswith("remove_fk ")
+    }
+    ix_both = {_sig(ix_sig, e) for e in entries if e.startswith("add_index ")} & {
+        _sig(ix_sig, e) for e in entries if e.startswith("remove_index ")
+    }
+    uniques = {
+        _sig(uq_sig, e)
+        for e in entries
+        if (e.startswith("remove_index ") and "unique=True" in e)
+        or e.startswith(("add_constraint ", "remove_constraint "))
+        or (e.startswith("add_index ") and "unique=True" in e)
+    }
+    out = []
+    for e in entries:
+        if e.startswith(("add_fk ", "remove_fk ")) and _sig(fk_sig, e) in fk_both:
+            continue
+        if e.startswith(("add_index ", "remove_index ")) and _sig(ix_sig, e) in ix_both:
+            continue
+        if (
+            e.startswith(("add_index ", "remove_index "))
+            and "unique=True" in e
+            and sum(1 for u in uniques if u == _sig(uq_sig, e)) >= 1
+            and any(
+                x.startswith(("add_constraint ", "remove_constraint "))
+                and _sig(uq_sig, x) == _sig(uq_sig, e)
+                for x in entries
+            )
+        ):
+            continue
+        if e.startswith(("add_constraint ", "remove_constraint ")) and any(
+            x.startswith(("add_index ", "remove_index "))
+            and "unique=True" in x
+            and _sig(uq_sig, x) == _sig(uq_sig, e)
+            for x in entries
+        ):
+            continue
+        if (
+            e.startswith("modify_type ")
+            and "db=TEXT()" in e
+            and "model=AutoString(" in e
+        ):
+            continue
+        out.append(e)
+    return sorted(out)
+
+
+def drift(url: str | None = None, scratch_dir: Path | None = None) -> list[str]:
+    """Replay every revision onto an empty database and diff it against the models."""
+    with _connection(url, scratch_dir) as conn:
+        command.upgrade(_config(conn), "head")
+        ctx = MigrationContext.configure(
+            conn, opts={"include_schemas": True, "compare_type": True}
+        )
+        diffs = compare_metadata(ctx, SQLModel.metadata)
+        if conn.dialect.name == "sqlite":
+            # An attached SQLite database cannot see the main one, so a
+            # cross-schema FK is unenforceable there and reflection never
+            # reports it. Postgres (the oracle) checks these for real.
+            diffs = [
+                d
+                for d in diffs
+                if not (
+                    d[0] == "add_fk" and d[1].table.schema != d[1].referred_table.schema
+                )
+            ]
+        return real_drift([_describe(d) for d in diffs])
+{% else %}
+# No database component: nothing to check drift against.
+{% endif %}

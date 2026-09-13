@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+from app.services.ai.config import api_key_env
 from app.services.ai.models import PROVIDERS, AIProvider
 
 # Provider to pydantic-ai-slim extras mapping
@@ -39,13 +40,22 @@ PROVIDER_API_KEY_URLS: dict[str, str] = {
 def get_env_var_name(provider: str) -> str:
     """Get the environment variable name for a provider's API key.
 
+    The provider registry names the variable, and ``api_key_env`` is the one
+    place that reads it. Re-deriving it from the slug gets OpenRouter wrong
+    (its key is ``OPEN_ROUTER_API_KEY``), so the settings surface reports the
+    key missing while the model works.
+
     Args:
         provider: Provider name (e.g., "openai", "google")
 
     Returns:
         Environment variable name (e.g., "OPENAI_API_KEY", "GOOGLE_API_KEY")
     """
-    return f"{provider.upper()}_API_KEY"
+    try:
+        return api_key_env(AIProvider(provider.lower()))
+    except ValueError:
+        # Not a registered provider — the slug convention is all there is.
+        return f"{provider.upper()}_API_KEY"
 
 
 def check_provider_dependency_installed(provider: str) -> bool:

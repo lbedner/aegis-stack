@@ -1824,3 +1824,49 @@ class TestStaleEnvDefaultsReport:
         from aegis.core.template_cleanup import stale_env_defaults
 
         assert stale_env_defaults(tmp_path, {"project_slug": "x"}) == []
+
+
+class TestModuleShadowedByPackage:
+    """A project that grew a template module into a package of the same name.
+
+    Python imports the package; the module beside it is dead. Writing the
+    template's version of it puts real template changes somewhere nothing
+    runs, and nobody is told — aegis-pulse carried a dead
+    ``api/insights.py`` beside its own ``api/insights/`` for two versions.
+    """
+
+    def _render(self, project_slug: str, body: str) -> Any:
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            rendered = Path(dst_path) / project_slug / "app"
+            rendered.mkdir(parents=True)
+            (rendered / "insights.py").write_text(body)
+
+        return mock_run_copy
+
+    def test_module_is_not_written_over_a_project_package(self, tmp_path: Path) -> None:
+        answers = {"project_slug": "my-project"}
+        package = tmp_path / "app" / "insights"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text("# the project's own package")
+
+        with patch(
+            "copier.run_copy", side_effect=self._render("my-project", "# template")
+        ):
+            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
+
+        assert not (tmp_path / "app" / "insights.py").exists()
+        assert "app/insights.py" in result.shadowed
+        assert "app/insights.py" not in result.synced
+
+    def test_plain_directory_is_not_a_package(self, tmp_path: Path) -> None:
+        """Only an importable package shadows; a bare directory does not."""
+        answers = {"project_slug": "my-project"}
+        (tmp_path / "app" / "insights").mkdir(parents=True)
+
+        with patch(
+            "copier.run_copy", side_effect=self._render("my-project", "# template")
+        ):
+            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
+
+        assert result.shadowed == []

@@ -780,6 +780,19 @@ def update_command(
             typer.echo(t("update.stale_files", count=len(sync_result.stale)))
             for stale_file in sync_result.stale:
                 typer.echo(f"      - {stale_file}")
+        if sync_result.shadowed:
+            typer.echo(t("update.shadowed_files", count=len(sync_result.shadowed)))
+            for shadowed_file in sync_result.shadowed:
+                typer.echo(f"      - {shadowed_file}")
+        if sync_result.answers_backfilled:
+            typer.echo(
+                t(
+                    "update.answers_backfilled",
+                    count=len(sync_result.answers_backfilled),
+                )
+            )
+            for key in sync_result.answers_backfilled:
+                typer.echo(f"      - {key}")
 
         # Run post-generation tasks — but skip when conflicts exist.
         # ``run_post_generation_tasks`` calls ``uv sync``, which will fail

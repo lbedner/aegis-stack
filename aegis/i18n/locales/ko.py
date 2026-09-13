@@ -603,6 +603,14 @@ MESSAGES: dict[str, str] = {
         "   {count} customized file(s) are no longer part of the template.\n"
         "   They were kept, but nothing loads them any more - review and delete:"
     ),
+    "update.shadowed_files": (
+        "   {count} template module(s) were NOT written - this project has a\n"
+        "   package of the same name beside them, and Python imports that:"
+    ),
+    "update.answers_backfilled": (
+        "   {count} question(s) this version added were answered with the\n"
+        "   template default. Edit .copier-answers.yml and update again to change:"
+    ),
     "update.running_postgen": "후처리 작업 실행 중...",
     "update.skipping_postgen_conflicts": (
         "Skipping post-generation tasks — merge conflicts present.\n"

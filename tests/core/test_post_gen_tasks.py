@@ -7,6 +7,7 @@ by both Cookiecutter hooks and Copier updaters.
 
 import subprocess
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -14,6 +15,7 @@ import pytest
 from aegis.core.post_gen_tasks import (
     DependencyInstallationError,
     _truncate_stderr,
+    cleanup_components,
     format_code,
     install_dependencies,
     run_migrations,
@@ -523,3 +525,48 @@ class TestRevisionsDerivedInsideTheProjectVenv:
         # the upgrade is skipped: a DB must not be stamped past revisions
         # that never landed
         assert mig.call_args.args[1] is False
+
+
+class TestOllamaModeCleanup:
+    """``ollama_mode: none`` must leave no Ollama file behind.
+
+    Their importers are all jinja-gated, so the files ship dead rather than
+    breaking the boot — but ``ollama_modal.py`` imports ``ollama_activity``,
+    which renders empty in that mode, so the module cannot even import.
+    """
+
+    OLLAMA_FILES = (
+        "app/components/frontend/dashboard/cards/ollama_card.py",
+        "app/components/frontend/dashboard/modals/ollama_modal.py",
+        "app/services/system/health_ollama.py",
+        "app/services/ai/domains/llm/ollama.py",
+        "app/services/ai/domains/llm/ollama_activity.py",
+    )
+
+    def _project(self, tmp_path: Path) -> Path:
+        for rel in self.OLLAMA_FILES:
+            path = tmp_path / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("")
+        return tmp_path
+
+    def _context(self, ollama_mode: str) -> dict[str, Any]:
+        return {
+            "include_ai": True,
+            "include_frontend": True,
+            "include_database": True,
+            "ai_backend": "postgres",
+            "ai_providers": "ollama",
+            "ollama_mode": ollama_mode,
+        }
+
+    def test_none_removes_every_ollama_file(self, tmp_path: Path) -> None:
+        project = self._project(tmp_path)
+        cleanup_components(project, self._context("none"))
+        left = [rel for rel in self.OLLAMA_FILES if (project / rel).exists()]
+        assert not left, f"ollama_mode=none still ships: {left}"
+
+    def test_host_keeps_them(self, tmp_path: Path) -> None:
+        project = self._project(tmp_path)
+        cleanup_components(project, self._context("host"))
+        assert all((project / rel).exists() for rel in self.OLLAMA_FILES)

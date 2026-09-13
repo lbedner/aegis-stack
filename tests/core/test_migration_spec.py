@@ -20,7 +20,6 @@ import pytest
 from aegis.core.migration_spec import (
     MigrationSpec,
     ServiceMigrationSpec,
-    TableSpec,
     collect_migrations,
 )
 from aegis.core.services import SERVICES
@@ -44,26 +43,6 @@ class TestFacade:
         """``MigrationSpec`` is the same class as ``ServiceMigrationSpec``."""
         assert MigrationSpec is ServiceMigrationSpec
 
-    def test_re_exports_table_helpers(self) -> None:
-        """Plugin authors can import the spec helpers from one module."""
-        from aegis.core.migration_spec import (
-            AlterTableSpec,
-            CheckConstraintSpec,
-            ColumnSpec,
-            ForeignKeySpec,
-            IndexSpec,
-        )
-
-        # All present and constructible.
-        assert AlterTableSpec(name="x") is not None
-        assert CheckConstraintSpec(name="c", sqltext="1=1") is not None
-        assert ColumnSpec(name="id", type="sa.Integer()") is not None
-        assert (
-            ForeignKeySpec(columns=["u"], ref_table="user", ref_columns=["id"])
-            is not None
-        )
-        assert IndexSpec(name="ix", columns=["a"]) is not None
-
 
 # ---------------------------------------------------------------------
 # collect_migrations reducer
@@ -78,20 +57,16 @@ class TestCollectMigrations:
         assert collect_migrations([_FakeSpec(name="x")]) == {}
 
     def test_single_migration(self) -> None:
-        m = ServiceMigrationSpec(
-            service_name="scraper",
-            description="Scraper",
-            tables=[],
-        )
+        m = ServiceMigrationSpec(service_name="scraper", description="Scraper")
         result = collect_migrations([_FakeSpec(name="scraper", migrations=[m])])
         assert result == {"scraper": m}
 
     def test_multiple_migrations_per_spec(self) -> None:
         """A single spec may contribute multiple migrations (e.g. auth has
         4: auth, auth_rbac, auth_org, auth_tokens)."""
-        m1 = ServiceMigrationSpec(service_name="auth", description="", tables=[])
-        m2 = ServiceMigrationSpec(service_name="auth_rbac", description="", tables=[])
-        m3 = ServiceMigrationSpec(service_name="auth_org", description="", tables=[])
+        m1 = ServiceMigrationSpec(service_name="auth", description="")
+        m2 = ServiceMigrationSpec(service_name="auth_rbac", description="")
+        m3 = ServiceMigrationSpec(service_name="auth_org", description="")
         result = collect_migrations([_FakeSpec(name="auth", migrations=[m1, m2, m3])])
         assert set(result.keys()) == {"auth", "auth_rbac", "auth_org"}
 
@@ -99,7 +74,7 @@ class TestCollectMigrations:
         """``MIGRATION_SPECS`` is keyed by ``ServiceMigrationSpec.service_name``,
         which can differ from the parent ``PluginSpec.name`` (auth_rbac is
         a sub-feature of the auth spec)."""
-        m = ServiceMigrationSpec(service_name="auth_rbac", description="", tables=[])
+        m = ServiceMigrationSpec(service_name="auth_rbac", description="")
         result = collect_migrations([_FakeSpec(name="auth", migrations=[m])])
         assert "auth_rbac" in result
         assert "auth" not in result
@@ -173,12 +148,3 @@ class TestInTreeRegistry:
                 f"key {name!r} should match service_name; "
                 f"got service_name={m.service_name!r}"
             )
-
-    def test_auth_migration_has_user_table(self) -> None:
-        """Smoke check that the table data round-trips through the new path."""
-        result = collect_migrations(SERVICES.values())
-        user_table = next((t for t in result["auth"].tables if t.name == "user"), None)
-        assert isinstance(user_table, TableSpec)
-        # Make sure key columns survived.
-        col_names = {c.name for c in user_table.columns}
-        assert {"id", "email", "hashed_password"}.issubset(col_names)

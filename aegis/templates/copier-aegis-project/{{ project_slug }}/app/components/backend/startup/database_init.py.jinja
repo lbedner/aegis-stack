@@ -82,18 +82,21 @@ def _check_and_stamp_existing_tables() -> None:
 
         service_signatures = SERVICE_MIGRATION_SIGNATURES
 
-        # Build signature mapping from migration filenames
+        # A generated revision declares its own signature; the table by
+        # service name covers revisions written before it did.
         signatures: dict[str, tuple[str, ...]] = {}
         for rev in script.walk_revisions():
-            if rev.down_revision is not None or rev.revision:
-                # ``rev.path`` is a str in alembic 1.16; wrap so ``.stem``
-                # works (Path() accepts both str and Path).
-                parts = Path(rev.path).stem.split("_", 1)
-                if len(parts) > 1:
-                    service_name = parts[1]
-                    sig = service_signatures.get(service_name)
-                    if sig:
-                        signatures[rev.revision] = sig
+            carried = getattr(rev.module, "aegis_stamp_signature", None)
+            if carried:
+                signatures[rev.revision] = tuple(carried)
+                continue
+            # ``rev.path`` is a str in alembic 1.16; wrap so ``.stem``
+            # works (Path() accepts both str and Path).
+            parts = Path(rev.path).stem.split("_", 1)
+            if len(parts) > 1:
+                sig = service_signatures.get(parts[1])
+                if sig:
+                    signatures[rev.revision] = sig
 
         # Get column info for alter-table checks. Qualified names resolve
         # against their schema; on engines without schemas (SQLite) the same
@@ -258,8 +261,8 @@ def _run_migrations() -> bool:
             # boot.
             logger.error(
                 "Migrations replayed DDL that already exists - alembic_version "
-                f"is behind the actual schema ({e}). Fix: add the migration's "
-                "signature to _SERVICE_MIGRATION_SIGNATURES, or run "
+                f"is behind the actual schema ({e}). Fix: give the revision an "
+                "`aegis_stamp_signature`, or run "
                 "`python -m alembic -c alembic/alembic.ini stamp <revision>`."
             )
         else:

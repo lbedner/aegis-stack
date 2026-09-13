@@ -45,7 +45,7 @@ class ServiceNames:
     """Migration-registry names for in-tree services.
 
     These key ``MIGRATION_SPECS`` and drive the spec-variant resolution in
-    ``aegis.core.migration_generator._resolve_spec`` (per-user insights,
+    ``aegis.core.migration_generator`` (per-user insights,
     schema-qualified finance). Distinct from ``ServiceType``, which
     classifies a service rather than naming its migration.
     """
@@ -67,7 +67,7 @@ class DatabaseSchemas:
     """Postgres schema names owned by in-tree services and components.
 
     Schemas are a Postgres feature: SQLite has no equivalent, so
-    ``_resolve_spec`` strips a spec's schema for any non-Postgres engine
+    a model's ``__table_args__`` carries the schema on Postgres only
     and the same declaration renders correctly on both.
     """
 

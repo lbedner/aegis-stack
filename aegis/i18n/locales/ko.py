@@ -957,7 +957,7 @@ MESSAGES: dict[str, str] = {
     "plugins.option_choices": "선택지:",
     "plugins.option_default": "기본값:",
     "plugins.option_auto_requires": "(auto_requires 포함)",
-    "plugins.info_files": "파일: {files}   마이그레이션: {migrations}개 ({tables}개 테이블)   CLI: {cli}",
+    "plugins.info_files": "파일: {files}   마이그레이션: {migrations}개   CLI: {cli}",
     "plugins.cli_yes": "예",
     "plugins.cli_no": "아니오",
     "plugins.section_compat": "호환성",

@@ -49,8 +49,8 @@ Registry (`ComponentSpec` is a thin alias of `PluginSpec` pinned to
   and dev-mode cleanup context), `docs_path` (see docs section below), and
   `migrations=[...]` only if the component owns tables (see `SCHEDULER_MIGRATION`
   in `aegis/core/migration_generator.py`: the spec names the revision and its
-  schema; the table bodies come from the SQLModel classes, generated for
-  every non-memory backend).
+  Postgres schema, nothing more - what the revision creates comes from the
+  component's SQLModel classes, for every non-memory backend).
 - `aegis/core/components.py`: `files=FileManifest(primary=[...], extras={...})`
   - every path the component owns. `primary` is the always-on add/init base;
   `aegis/core/post_gen_tasks.py`'s `get_component_file_mapping()` derives

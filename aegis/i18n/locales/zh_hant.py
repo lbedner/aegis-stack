@@ -844,7 +844,7 @@ MESSAGES: dict[str, str] = {
     "plugins.option_choices": "可選值：",
     "plugins.option_default": "預設值：",
     "plugins.option_auto_requires": "（包含 auto_requires）",
-    "plugins.info_files": "檔案數：{files}   移轉：{migrations}（共 {tables} 張資料表）   CLI:{cli}",
+    "plugins.info_files": "檔案數：{files}   移轉：{migrations}   CLI:{cli}",
     "plugins.cli_yes": "是",
     "plugins.cli_no": "否",
     "plugins.section_compat": "相容性",

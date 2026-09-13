@@ -1011,7 +1011,7 @@ MESSAGES: dict[str, str] = {
     "plugins.option_choices": "valores:",
     "plugins.option_default": "por defecto:",
     "plugins.option_auto_requires": "(con auto_requires)",
-    "plugins.info_files": "Archivos: {files}   Migraciones: {migrations} ({tables} tablas)   CLI: {cli}",
+    "plugins.info_files": "Archivos: {files}   Migraciones: {migrations}   CLI: {cli}",
     "plugins.cli_yes": "sí",
     "plugins.cli_no": "no",
     "plugins.section_compat": "Compatibilidad",

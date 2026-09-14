@@ -206,9 +206,32 @@
    action (``method`` is delete or post to ``url``), and a way out. The
    action's response closes the dialog and navigates or swaps as it sees
    fit; nothing swaps here (hx-swap="none"). #}
+{# A dialog's heading: what this is, and the one line under it.
+
+   ``subtitle`` is a sentence - what the dialog is for, or what it will
+   do. ``facts`` is a metadata line (kind, date, size) and is set in the
+   label voice instead. A ``{% call %}`` block supplies that line itself
+   when it carries markup.
+
+   The margin belongs here because it depends on whether anything
+   follows: a title with a line under it sits close to it, a title alone
+   stands off from the form below. Written out at each dialog it drifts -
+   downstream it had reached four different answers across thirty-five. #}
+{% macro dialog_title(title, subtitle=None, facts=None) %}
+{%- set under = subtitle or facts or caller is defined %}
+<h2 class="text-lg font-semibold text-aegis-text {{ "mb-1" if under else "mb-4" }}">{{ title }}</h2>
+{%- if facts %}
+<p class="text-aegis-muted text-xxs uppercase tracking-wider mb-4">{{ facts }}</p>
+{%- elif subtitle %}
+<p class="text-xs text-aegis-muted mb-4">{{ subtitle }}</p>
+{%- elif caller is defined %}
+{{ caller() }}
+{%- endif %}
+{% endmacro %}
+
+
 {% macro confirm(title, body, url, label="Remove", method="delete") %}
-<h2 class="text-lg font-semibold text-aegis-text mb-2">{{ title }}</h2>
-<p class="text-sm text-aegis-muted mb-5">{{ body }}</p>
+{{ dialog_title(title, body) }}
 <div class="flex items-center gap-3">
   <button type="button" {% if method == "delete" %}hx-delete="{{ url }}"{% else %}hx-post="{{ url }}"{% endif %} hx-swap="none"
           class="px-4 py-2 rounded text-sm border border-aegis-error/40 text-error hover:border-aegis-error transition-colors">{{ label }}</button>
@@ -248,10 +271,20 @@
    is ``{"label", "value", "caption", "tone", "attrs"}``; ``attrs`` makes
    it a door (hx-get) and ``tone`` colours the value. #}
 {% macro stats_strip(cells, id=None, attrs="") %}
-<dl {% if id %}id="{{ id }}"{% endif %} {{ attrs|safe }} class="grid grid-cols-2 lg:grid-cols-{{ cells|length }} divide-x divide-aegis-border/60 bg-aegis-card border border-aegis-border rounded-lg">
+{# ``lg:grid-cols-N`` is looked up, never interpolated: Tailwind emits
+   the classes it can SEE in the markup, and a class built at render time
+   is not one of them - ``lg:grid-cols-{{ cells|length }}`` compiled to
+   nothing and every strip stayed two columns at every width. #}
+<dl {% if id %}id="{{ id }}"{% endif %} {{ attrs|safe }} class="grid grid-cols-2 {{ {1: "lg:grid-cols-1", 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "lg:grid-cols-4"}.get(cells|length, "lg:grid-cols-4") }} divide-x divide-aegis-border/60 bg-aegis-card border border-aegis-border rounded-lg">
   {% for cell in cells %}
-  <div {{ cell.attrs|safe if cell.attrs else "" }} class="px-5 py-4 min-w-0{% if cell.attrs %} cursor-pointer hover:bg-aegis-border/20 transition-colors{% endif %}">
-    <dt class="text-xxs text-aegis-muted uppercase tracking-wider">{{ cell.label }}</dt>
+  <div {{ cell.attrs|safe if cell.attrs else "" }} class="group px-5 py-4 min-w-0{% if cell.attrs %} cursor-pointer hover:bg-aegis-border/20 transition-colors{% endif %}">
+    {# A figure that can explain itself has to LOOK like it does: the
+       hover fill is only found by the mouse already on it. The mark is
+       for ``explain`` alone, not for any clickable cell - a cell that
+       filters a list is not offering to define a word. #}
+    <dt class="text-xxs text-aegis-muted uppercase tracking-wider flex items-center gap-1.5"><span class="truncate">{{ cell.label }}</span>
+      {% if cell.explain %}<span aria-hidden="true" class="inline-flex shrink-0 w-3.5 h-3.5 rounded-full border border-current items-center justify-center text-xxs leading-none opacity-50 group-hover:opacity-100 transition-opacity">?</span>{% endif %}
+    </dt>
     <dd class="mt-1 text-2xl font-semibold tabular-nums {{ 'text-error' if cell.tone == 'error' else ('text-aegis-teal' if cell.tone == 'ok' else 'text-aegis-text') }}">{{ cell.value }}</dd>
     {% if cell.caption %}<dd class="mt-1 text-xxs text-aegis-muted truncate">{{ cell.caption }}</dd>{% endif %}
   </div>

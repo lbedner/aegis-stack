@@ -370,6 +370,7 @@ class TestWebFrontendScaffolding:
                 "chip",
                 "confirm",
                 "dialog",
+                "dialog_title",
                 "dropdown",
                 "figures",
                 "hover_hint",

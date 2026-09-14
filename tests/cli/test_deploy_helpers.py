@@ -358,3 +358,84 @@ class TestDeployExec:
         self._capture(monkeypatch)
         with pytest.raises(typer.Exit):
             deploy_mod.deploy_exec_command(command=[], service="webserver")
+
+
+class TestWorkingTreeRsync:
+    """The deploy sync must delete, and must not delete the irreplaceable.
+
+    ``aegis deploy`` rsynced without ``--delete``, so a file removed from the
+    project lived on the server forever and got baked into the image built
+    from that directory. It bit aegis-pulse in prod: a surviving
+    ``llm_vendor.py`` re-registered a model the migration had just dropped,
+    the startup hook recreated its table, mapper configuration then failed
+    for every mapper, and three seeds silently did not run - while the
+    health check passed and the deploy reported success (aegis-stack#1130).
+
+    These run the real rsync between two local directories: a wrong exclude
+    spelling would satisfy an assertion about argv and still destroy a
+    production Let's Encrypt store.
+    """
+
+    def _tree(self, tmp_path: Path) -> tuple[Path, Path]:
+        source = tmp_path / "project"
+        server = tmp_path / "server"
+        (source / "app").mkdir(parents=True)
+        (source / "traefik").mkdir()
+        (source / "app" / "kept.py").write_text("kept\n")
+        (source / "traefik" / "traefik.yml").write_text("entryPoints: [websecure]\n")
+
+        (server / "app").mkdir(parents=True)
+        (server / "traefik" / "acme").mkdir(parents=True)
+        (server / "app" / "kept.py").write_text("kept\n")
+        # Removed from the project three versions ago; still importable here.
+        (server / "app" / "llm_vendor.py").write_text("class LLMVendor: ...\n")
+        (server / "traefik" / "traefik.yml").write_text("stale\n")
+        (server / "traefik" / "acme" / "acme.json").write_text("CERTIFICATES\n")
+        (server / ".env").write_text("SECRET=production\n")
+        return source, server
+
+    def _sync(self, source: Path, server: Path) -> None:
+        command = deploy_mod._working_tree_rsync(source, f"{server}/")
+        result = subprocess.run(command, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+
+    def test_a_file_removed_from_the_project_is_removed_from_the_server(
+        self, tmp_path: Path
+    ) -> None:
+        source, server = self._tree(tmp_path)
+        self._sync(source, server)
+        assert not (server / "app" / "llm_vendor.py").exists()
+        assert (server / "app" / "kept.py").exists()
+
+    def test_the_letsencrypt_store_survives(self, tmp_path: Path) -> None:
+        """Deleting it forces re-issuance and can hit Let's Encrypt rate limits."""
+        source, server = self._tree(tmp_path)
+        self._sync(source, server)
+        assert (
+            server / "traefik" / "acme" / "acme.json"
+        ).read_text() == "CERTIFICATES\n"
+
+    def test_traefik_config_still_syncs(self, tmp_path: Path) -> None:
+        """Protecting the cert store must not freeze the config beside it."""
+        source, server = self._tree(tmp_path)
+        self._sync(source, server)
+        assert (
+            server / "traefik" / "traefik.yml"
+        ).read_text() == "entryPoints: [websecure]\n"
+
+    def test_the_server_env_survives(self, tmp_path: Path) -> None:
+        source, server = self._tree(tmp_path)
+        self._sync(source, server)
+        assert (server / ".env").read_text() == "SECRET=production\n"
+
+
+def test_both_deploy_paths_sync_the_same_way() -> None:
+    """Standard and rolling deploy built identical rsync argv by hand.
+
+    They drifted apart the moment one of them gained ``--delete`` and the
+    other did not, which is the whole reason this is one function.
+    """
+    source = Path("/tmp/project")
+    command = deploy_mod._working_tree_rsync(source, "user@host:/srv/app/")
+    assert "--delete" in command
+    assert command[-2:] == [f"{source}/", "user@host:/srv/app/"]

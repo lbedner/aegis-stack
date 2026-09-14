@@ -7,8 +7,27 @@
 
 ## [Unreleased]
 
-### Changed
+## [0.12.0] - 2026-09-13
 
+### Added
+
+- **`aegis deploy-exec`: one command against a deployment, scriptably.**
+  `deploy-shell` opens an interactive shell, so it cannot be piped, put in
+  a runbook or run from CI, and the alternative was hand-writing the ssh
+  plus the whole compose-file chain. Forget one `-f` and the command runs
+  against a container assembled from different files than the deployment
+  itself. `deploy-exec` resolves the same invocation the deploy uses and
+  streams the output back.
+- **An N+1 gate that runs on every database stack.** Generated database
+  projects get queryspy in the dev extra and a `make check-queries` target;
+  the plugin is inert on a plain pytest run. The framework's stack matrix
+  runs its existing pytest step with `--queryspy-strict` against one
+  baseline fixture covering all 14 database stacks, since entries key on
+  paths relative to the generated project: a new finding fails, the known
+  ones do not. `make queryspy-baseline` (`STACKS=a,b` to limit it)
+  regenerates the fixture from the working-tree templates, so a model
+  change that rewrites statement text is one command rather than a hand
+  edit of a 364-entry file.
 - **`app/core/graphql.py`: a small, injectable GraphQL client.** Nothing in
   a generated project spoke GraphQL before, and the first consumer needs to
   (GitHub's REST stargazer list cannot enumerate past 40k stars; the GraphQL
@@ -20,6 +39,70 @@
   `transport` is the seam - tests pass `httpx.MockTransport` and never
   monkeypatch `httpx`. Endpoint-agnostic on purpose; an API-specific
   client subclasses it. REST callers are deliberately untouched.
+
+### Changed
+
+- **The models are the schema, and migrations are generated from them.**
+  90 hand-written table declarations used to restate what SQLModel already
+  said, and the two drifted. `aegis init` and `aegis add` now run the
+  generated project's own migration generator in its venv: replay the
+  existing revisions onto a scratch database, autogenerate the difference
+  against the model metadata, prune to additive operations, write one
+  revision per service. Ownership comes from where a model lives, cyclic
+  foreign keys emit once both tables exist, and a generated revision
+  declares its own stamp signature so startup re-adoption reads it off the
+  revision rather than a parallel table. A Postgres oracle asserts the
+  diff against the models is empty, and every generated project carries
+  the same check on SQLite. `migration_generator.py` drops from 5,080
+  lines to 775, and a documents-only stack ships a migration at last: the
+  gate is now the same function that decides which services need one.
+- **`aegis update` derives the answers it used to invent.** A question
+  added after a project was generated has no answer in that project's
+  `.copier-answers.yml`, so copier rendered with the template default: a
+  guess about the project, made silently, before anything else ran. The
+  answers are now re-derived from the project itself and written before
+  copier runs, so every downstream step sees one picture. `ollama_mode`
+  comes from the URL the project actually talks to, the finance provider
+  flags from the settings it renders. What genuinely cannot be derived is
+  computed rather than listed: an answer can only be missing if its
+  question was added after the project was generated, which git records,
+  so the at-risk set is a diff of `copier.yml` against the oldest
+  supported release (7 questions, not the 53 a hand-kept list claimed).
+- **A conflicted update reports every conflict, and can be finished.** The
+  report only listed `.rej` files, but our 3-way merge leaves inline
+  `<<<<<<<` markers instead; on one project 60 such files went unmentioned
+  and `make check` died on the first of them. The written tree is now
+  scanned for markers as well, and both kinds print with their own
+  resolution step. Nothing ever completed the job either: the conflicted
+  run records its target in `.git/aegis-update-pending.json`, and `aegis
+  update --finish` refuses while any conflict remains, then runs the
+  missing migrations and post-generation tasks, advances the baseline,
+  clears the record and drops the backup tag.
+- **An update says what changed before you deploy.** Two facts are knowable
+  at update time and invisible afterwards, and both now print in one
+  "Before you deploy" block. Any active `.env` key the updated `Settings`
+  no longer declares is named, with its replacement where one is known,
+  because the alternative is a first-boot crash loop on a pydantic "extra
+  forbidden" error with nothing pointing back at the update. Behavior
+  changes come from a registry where whoever changes runtime behavior
+  declares it once: the version that introduced it, the stacks it applies
+  to, and the setting that restores the old behavior. Nothing is inferred
+  from a diff, and `.env` is reported on, never edited.
+- **An update re-locks, exports orphan scheduler jobs, and scopes the image
+  tag.** `uv sync --upgrade` runs on the update path and on `--finish`, so
+  a conflicted update re-locks once completed. The scheduler sweep writes
+  the rows it is about to delete to `DATABASE_BACKUP_DIR` first, logs the
+  path at WARNING, and deletes nothing if the export cannot be written.
+  `AEGIS_STACK_TAG` defaults to the project's own slug instead of a shared
+  `aegis-stack:latest`, and an update names a project still on the old
+  default.
+- **A provider is described once.** A provider used to be stated nine
+  times across four files: the enum, a capabilities table, an API-key map,
+  a model-class if/elif chain, a dependency map, a module map, a key-URL
+  map, a supported-providers tuple and the factory's base-URL branches.
+  Adding one meant editing all of them, and three tests existed only to
+  police the gaps. They are one registry now, beside the enum, and
+  OpenRouter is one of the entries.
 - **`/health/` is a liveness probe; component status moved to
   `/health/detailed`.** The basic endpoint walked every component on each
   call, and Docker, Traefik and the dashboard all polled it, so an idle
@@ -37,7 +120,6 @@
   observability and Ollama checks live in `health_cache.py`,
   `health_ingress.py`, `health_observability.py` and `health_ollama.py`,
   each gated on its component; the module drops from 1456 lines to 714.
-
 - **A scaffolded plugin pins the aegis-stack that made it.** The scaffold
   emitted an unpinned `aegis-stack` dependency, so `pip install
   aegis-stack-<name>` could resolve an older aegis-stack whose `PluginSpec`
@@ -52,8 +134,112 @@
   differ on: a published plugin resolves by version and carries an install
   command, a source-only one carries its repository link and pins nothing.
 
+### Removed
+
+- **The `finance_import` question.** It shipped with the finance service as
+  one of three sub-flags and, unlike the other two, was never wired to
+  anything: no template file referenced it, no `aegis` code read it, no
+  other question depended on it. Every finance project since has been asked
+  whether to include Quicken/OFX/CSV import and got the import surface
+  either way. The importers, models and CLI surface ship on the finance
+  service alone, which is what the code always did, so deleting the
+  question changes no output.
+
 ### Fixed
 
+- **The conflict report told users to delete their own code.** The printed
+  step read "keep the right side of each block", and the right side is the
+  template render. An inline marker block exists only where both sides
+  changed the same region, so that advice was wrong in exactly the cases it
+  printed for: on one project it would have dropped `.dockerignore` entries
+  for a 20 GB archive, three worker services, every task registration and a
+  static assets mount. The steps now say each block is a hand merge and that
+  both changes usually have to survive, and the markers are labelled
+  `your project` / `old template` / `new template` instead of `current` /
+  `other` and unreadable temp paths.
+- **`LOGFIRE_TOKEN` in `.env` passed the guard but never reached
+  `logfire.configure()`.** The guard reads it through pydantic-settings,
+  which loads `.env`; logfire resolves its own token from `os.environ`,
+  which `.env` never populates. The two views disagreed, the guard passed,
+  and `configure()` raised. Because the app factory installs auto-tracing at
+  import time, the application stopped importing at all outside a container,
+  where compose exports the token for real.
+- **`--to-version HEAD` left a project permanently unversioned.**
+  `_template_version: HEAD` is not a version, so every later compatibility
+  check parsed it to nothing, returned UNKNOWN and fell off the end of the
+  validator with no warning: that project was never told its CLI and
+  template had diverged again, across a major version included. A
+  non-version ref is now placed against the template's release tags, UNKNOWN
+  warns instead of passing silently, and a run that used `--template-path`
+  says outright that the project is pinned to a path only that machine has.
+- **A pending resume swallowed the flags you just typed.** The resume branch
+  was taken before any flag was read, so `--to-version`, `--template-path`
+  and `--dry-run` were discarded without a word, and the flags are corrected
+  precisely when the first run went somewhere unintended. `--dry-run` was
+  worse than silent: with pending state it ran post-generation tasks,
+  advanced the baseline and deleted the backup tag, which is the recovery
+  point the dry run exists to protect. A disagreeing flag is now refused by
+  name, and a dry run reports the pending target and touches nothing.
+- **Updates delivered migrations the project predates, and stopped
+  reporting a failed upgrade as success.** A project generated before a
+  revision existed never received it, because migration generation was
+  wired into `add-service` but not into `update`; it now runs before the
+  upgrade, so the database is never stamped past a revision that lands
+  afterwards. A failed `alembic upgrade` was discarded by the caller, and
+  the command printed "Update completed successfully" over a migration that
+  never applied. The app was what crashed, on its first request.
+- **An update planted an empty file for every gated-off template that
+  changed.** A whole-file Jinja gate that is off renders to a lone newline.
+  `init` sweeps those stubs; the two update paths that create new files had
+  no equivalent, so a project with no worker collected
+  `tests/components/test_worker_registry.py` and friends. Both paths now
+  apply the same rule: a rendered file with no non-whitespace content is
+  absent, not new. `__init__.py`, the one legitimately empty file, is kept.
+- **A merged `pyproject.toml` could silently break every Python merge that
+  followed.** The template and one project had each added a `[tool.djlint]`
+  table in different places; the textual merge kept both and called it
+  clean, after which every ruff normalization failed on the duplicate table
+  and formatting read as edits in every `.py` file. One update reported 139
+  conflicts, 95 of them from this. Files carrying ruff's config now merge
+  last, and a merged `pyproject.toml` that no longer parses is reported as
+  a conflict instead of being handed to the tools that cannot read it.
+- **Startup re-adoption stamped nothing, and a deploy lost what was
+  removed.** The stamp pass built an inspector inside a session block and
+  used it after the block closed, so every lookup raised on a dead
+  connection and every raise was swallowed by a bare `except`: the column
+  map was always empty, only table signatures could ever match, and a
+  version pointer below the last table-signed revision replayed that DDL on
+  every boot.
+- **A non-Ollama project shipped the whole Ollama surface as dead code.**
+  Only the importers were gated, not the files, so the card, the modal, the
+  health module and two stubs rode along, and one of them could not import
+  at all in that mode. The prune now covers them, on update as well as
+  init. In the same pass, the settings surface stopped re-deriving an API
+  key variable from the provider slug, which reported OpenRouter's key as
+  missing while the model worked.
+- **Every async session ran the schema with its foreign keys off.** The two
+  SQLite pragma hooks had drifted: the sync one enabled foreign keys, the
+  async one set the busy timeout, and each was missing the other's. So the
+  engine the application uses left its constraints unenforced, and the
+  engine the CLI uses failed instantly on a busy database instead of
+  waiting. One helper now applies both. Transactions also open with `BEGIN
+  IMMEDIATE`: a deferred begin takes no lock until the first write and then
+  has to upgrade from the read lock it holds, which is the one case
+  `busy_timeout` deliberately does not cover, so a second writer failed at
+  once instead of queueing.
+- **`STORAGE_ROOT` reached every container.** The compose anchor put it on
+  its environment list, but a service that declares its own list replaces
+  the anchor's wholesale, and four services do. Inside those containers the
+  variable was empty and object storage fell back to the code directory: in
+  dev the bind-mounted checkout, in prod a path that vanishes with the
+  container while the storage volume it was meant to use stayed empty. The
+  value moves to the Dockerfile's `ENV`, which every container sees.
+- **A bill's amount described rows that were never its payments.** Almost
+  every stream in a real ledger has no expected amount, so the number on
+  screen is the average of what was claimed. Attaching a payment backfills
+  the payee's other unclaimed rows, which is right, but the net was the
+  whole payee rather than the bill, so unrelated rows of that merchant were
+  averaged into the bill's amount.
 - **A Postgres project's test suite runs.** Every project's tests run on
   SQLite (``tests/conftest.py`` points ``DATABASE_URL`` at a throwaway
   file), but three things only worked on a SQLite project: the async URL

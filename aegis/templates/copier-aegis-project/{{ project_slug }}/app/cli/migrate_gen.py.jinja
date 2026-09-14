@@ -231,15 +231,50 @@ def _additive(op: ops.MigrateOperation, conn: Connection) -> bool:
     if isinstance(op, ops.AddColumnOp):
         return True
     if isinstance(op, ops.CreateIndexOp):
-        op.if_not_exists = True
+        # No ``if_not_exists`` here, unlike CreateTableOp. An index on a
+        # table that already exists renders inside ``batch_alter_table``
+        # under ``render_as_batch``, and alembic's batch implementation is
+        # ``ApplyBatchImpl.create_index(self, idx)`` - it takes no such
+        # argument, so the revision dies with a TypeError the moment it
+        # runs. The duplicate it was insuring against is already handled
+        # below: an index whose column set the database reflects is
+        # dropped rather than emitted.
         cols = frozenset(c if isinstance(c, str) else c.name for c in op.columns)
         return cols not in _reflected_column_sets(conn, op.table_name, op.schema)
     if isinstance(op, ops.AddConstraintOp):
         constraint = op.to_constraint()
         cols = frozenset(constraint.columns.keys())
         table = constraint.table
+        # SQLite cannot ALTER a constraint onto a table, so batch mode
+        # rebuilds the table around it - and it refuses to rebuild around a
+        # constraint it cannot name ("Constraint must have a name"). A
+        # column-level ``unique=True`` or ``foreign_key=`` declares one
+        # without a name, so name it here the way a naming convention
+        # would, rather than losing the constraint on every SQLite project.
+        if getattr(op, "constraint_name", None) is None:
+            op.constraint_name = _conventional_name(op, table.name, cols)
         return cols not in _reflected_column_sets(conn, table.name, table.schema)
     return False
+
+
+_CONSTRAINT_PREFIXES: list[tuple[type, str]] = [
+    (ops.CreateForeignKeyOp, "fk"),
+    (ops.CreateUniqueConstraintOp, "uq"),
+    (ops.CreateCheckConstraintOp, "ck"),
+    (ops.CreatePrimaryKeyOp, "pk"),
+]
+
+
+def _conventional_name(
+    op: ops.MigrateOperation, table: str, cols: frozenset[str]
+) -> str:
+    """``fk_largelanguagemodel_servedbyorgid``-style name for an unnamed
+    constraint, stable across runs so a re-generated revision names it the
+    same thing."""
+    prefix = next(
+        (p for op_type, p in _CONSTRAINT_PREFIXES if isinstance(op, op_type)), "cn"
+    )
+    return "_".join([prefix, table, *sorted(cols)])
 
 
 def _qualified(table: str, schema: str | None) -> str:

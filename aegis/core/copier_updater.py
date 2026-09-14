@@ -1037,9 +1037,17 @@ def format_conflict_report(conflicts: list[dict[str, str]]) -> str:
         lines.append("")
 
     lines.append("Resolution steps:")
+    # Never "keep one side": a marker block exists because BOTH sides
+    # changed the same region, so discarding either one throws away a
+    # change something still needs (#1134).
+    lines.append("   1. Files with <<<<<<< markers: merge each block by hand.")
     lines.append(
-        "   1. Files with <<<<<<< markers: keep the right side of each block, delete the markers"
+        "      '<<<<<<< your project' is your code, '>>>>>>> new template' is the"
     )
+    lines.append(
+        "      new template, and both are usually needed - keep both changes where"
+    )
+    lines.append("      they don't contradict, then delete the marker lines.")
     lines.append(
         "   2. .rej files: apply the rejected hunks to the original file, then delete the .rej"
     )

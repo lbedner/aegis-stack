@@ -68,7 +68,15 @@ def configure_logfire() -> bool:
         "OTEL_BSP_SCHEDULE_DELAY", str(settings.OTEL_BSP_SCHEDULE_DELAY)
     )
 
+    # Hand over the token the guard above just read. Logfire otherwise
+    # resolves it from ``os.environ``, which ``.env`` never populates --
+    # pydantic-settings loads that file, the process environment does
+    # not. The two views then disagree: the guard passes and
+    # ``configure()`` raises LogfireConfigError. Under compose the
+    # ``env_file`` exports the token for real so both agree, which is
+    # why this only shows up outside a container (aegis-stack#1135).
     logfire.configure(
+        token=settings.LOGFIRE_TOKEN,
         service_name=settings.PROJECT_NAME,
         environment=settings.APP_ENV,
         send_to_logfire=True,

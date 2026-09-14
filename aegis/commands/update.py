@@ -195,24 +195,70 @@ def _get_template_changed_files(
     return changed
 
 
-def _template_version_for_ref(target_ref: str) -> str:
+def _describe_as_version(target_ref: str, template_root: Path) -> str | None:
+    """PEP 440 version for a ref that isn't itself a version tag.
+
+    ``git describe`` places the commit against the release tags: exactly on
+    ``v0.11.1`` gives ``0.11.1``, three commits past it gives
+    ``0.11.1.post3+ga3d84e4``. Both parse, which is the whole point —
+    a stored ``HEAD`` parses to nothing, so every later compatibility check
+    degrades to UNKNOWN and the project is never told it has diverged
+    (#1136). Returns None when the template root is not a git checkout
+    (pip/uvx) or carries no release tag, leaving the ref verbatim.
+    """
+    from packaging.version import parse
+
+    # Without this, an installed (pip/uvx) template root that happens to sit
+    # inside the user's own repo — a .venv under the project — would describe
+    # against THEIR tags and stamp the project's version as the template's.
+    if not (template_root / ".git").exists():
+        return None
+    try:
+        described = subprocess.run(
+            ["git", "describe", "--tags", "--match", "v[0-9]*", target_ref],
+            cwd=template_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.fullmatch(r"v(.+?)(?:-(\d+)-g([0-9a-f]+))?", described)
+    if not match:
+        return None
+    version, distance, commit = match.groups()
+    if distance:
+        version = f"{version}.post{distance}+g{commit}"
+    try:
+        parse(version)
+    except Exception:
+        return None
+    return version
+
+
+def _template_version_for_ref(
+    target_ref: str, template_root: Path | None = None
+) -> str:
     """Map a git ref to the ``_template_version`` value stored in answers.
 
     A version tag (``v0.7.0-rc3``) is recorded without the leading ``v``
     (``0.7.0-rc3``), matching ``copier_manager``. Anything else — ``HEAD``,
     a commit hash, or a branch that merely starts with ``v`` like
-    ``v-next`` — is kept verbatim, so only genuine version tags get the
-    prefix stripped.
+    ``v-next`` — is placed against the template's release tags so what
+    lands in the answers file is still a version; only if that fails is
+    the ref stored verbatim.
     """
     from packaging.version import parse
 
     if target_ref.startswith("v"):
         try:
             parse(target_ref[1:])
+            return target_ref[1:]
         except Exception:
-            return target_ref
-        return target_ref[1:]
-    return target_ref
+            pass
+    if template_root is None:
+        return target_ref
+    return _describe_as_version(target_ref, template_root) or target_ref
 
 
 _PENDING_FILE = Path(".git") / "aegis-update-pending.json"
@@ -381,7 +427,9 @@ def _advance_copier_tracking(
     # stored as-is. Only strip the "v" when the remainder is a real
     # version, so a branch like "v-next" isn't mangled into "-next".
     if target_ref:
-        answers["_template_version"] = _template_version_for_ref(target_ref)
+        answers["_template_version"] = _template_version_for_ref(
+            target_ref, template_root
+        )
 
     answers_file.write_text(
         yaml.safe_dump(answers, default_flow_style=False, sort_keys=False)
@@ -949,7 +997,7 @@ def update_command(
         )
         changes = behavior_changes_for(
             from_version=current_version or "",
-            to_version=_template_version_for_ref(target_ref),
+            to_version=_template_version_for_ref(target_ref, template_root),
             answers=answers,
         )
         if stale_keys or changes:
@@ -976,6 +1024,19 @@ def update_command(
                 )
                 if change.restore:
                     typer.echo(t("update.notice_restore", restore=change.restore))
+
+        # The run rewrote _src_path to this machine's checkout so copier
+        # could read it, and that survives the run: committed as-is, the
+        # project can no longer update on anyone else's machine (#1136).
+        if effective_template_path:
+            typer.echo("")
+            brand.warn(
+                t(
+                    "update.local_template_pinned",
+                    path=f"git+file://{template_root}",
+                    url=GITHUB_TEMPLATE_URL,
+                )
+            )
 
         typer.echo("")
         typer.echo(t("update.next_steps"))

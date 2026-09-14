@@ -682,6 +682,7 @@ MESSAGES: dict[str, str] = {
         "Update completed with some post-generation task failures"
     ),
     "update.partial_detail": ("   Some setup tasks failed. See details above."),
+    "update.local_template_pinned": "This project's _src_path now points at {path}, which exists only on this machine. Set it back to {url} before committing, or updates fail everywhere else.",
     "update.next_steps": "Next Steps:",
     "update.next_review": "   1. Review changes: git diff",
     "update.next_conflicts": "   2. Check for conflicts (<<<<<<< markers or *.rej files)",

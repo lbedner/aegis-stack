@@ -548,3 +548,37 @@ class TestGetLatestVersion:
         latest = get_latest_version(git_repo)
 
         assert latest is None
+
+
+class TestConflictGuidance:
+    """#1134: the steps printed under a conflict must not delete user code.
+
+    Inline markers exist precisely where both sides changed the same
+    region, so "keep the right side" (the template render) discards the
+    project's own change in every case it is printed for.
+    """
+
+    def _report(self) -> str:
+        return format_conflict_report(
+            [
+                {
+                    "kind": "markers",
+                    "path": ".dockerignore",
+                    "original": ".dockerignore",
+                    "size": "200 bytes",
+                    "summary": "2 conflict blocks (<<<<<<< markers)",
+                }
+            ]
+        )
+
+    def test_never_tells_the_user_to_keep_one_side(self) -> None:
+        report = self._report().lower()
+
+        for discard in ("keep the right side", "keep the left side"):
+            assert discard not in report
+
+    def test_says_which_side_is_which_and_that_both_may_be_needed(self) -> None:
+        report = self._report().lower()
+
+        assert "your project" in report and "template" in report
+        assert "both" in report

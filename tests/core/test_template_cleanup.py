@@ -1870,3 +1870,35 @@ class TestModuleShadowedByPackage:
             result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
 
         assert result.shadowed == []
+
+
+class TestConflictMarkerLabels:
+    """#1134: a marker must say which side is the project and which the
+    template. ``git merge-file`` defaults to labelling with the file paths,
+    which for our merges are unreadable temp dirs
+    (``/var/folders/.../T/tmpsxqiord7/new/...``) that name neither side."""
+
+    def test_text_merge_labels_both_sides(self) -> None:
+        from aegis.core.template_cleanup import merge_three_way_text
+
+        _returncode, merged = merge_three_way_text("mine\n", "base\n", "theirs\n")
+
+        assert "<<<<<<< your project" in merged
+        assert ">>>>>>> new template" in merged
+
+    def test_file_merge_labels_both_sides(self, tmp_path: Path) -> None:
+        from aegis.core.template_cleanup import SyncResult, _three_way_merge
+
+        project = tmp_path / "f.txt"
+        project.write_text("mine\n")
+        old = tmp_path / "old.txt"
+        old.write_text("base\n")
+        new = tmp_path / "new.txt"
+        new.write_text("theirs\n")
+
+        _three_way_merge(project, old, new, Path("f.txt"), SyncResult())
+
+        content = project.read_text()
+        assert "<<<<<<< your project" in content
+        assert ">>>>>>> new template" in content
+        assert str(tmp_path) not in content, "marker labelled with a temp path"

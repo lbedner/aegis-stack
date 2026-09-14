@@ -244,6 +244,18 @@ def validate_version_compatibility(
     if compatibility == VersionCompatibility.COMPATIBLE:
         return
 
+    # The recorded version isn't a version at all (a project stamped with a
+    # bare ref like ``HEAD``). Nothing can be compared, so nothing is
+    # blocked — but say so, or this project is silently never gated again,
+    # across a major version included (#1136).
+    if compatibility == VersionCompatibility.UNKNOWN:
+        brand.warn(
+            f"\nWarning: project template version {project_version!r} is not a "
+            f"version, so it cannot be checked against the CLI ({cli_version}).\n"
+            f"Run 'aegis update --to-version {cli_version}' to restamp it.\n"
+        )
+        return
+
     # Major version mismatch - always block
     if compatibility == VersionCompatibility.MAJOR_MISMATCH:
         warning = format_version_warning(

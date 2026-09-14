@@ -655,6 +655,7 @@ MESSAGES: dict[str, str] = {
     "update.success": "更新完了！",
     "update.partial_success": ("更新完了（一部の生成後タスクが失敗）"),
     "update.partial_detail": "   一部のセットアップタスクが失敗しました。上記の詳細を確認してください。",
+    "update.local_template_pinned": "This project's _src_path now points at {path}, which exists only on this machine. Set it back to {url} before committing, or updates fail everywhere else.",
     "update.next_steps": "次のステップ：",
     "update.next_review": "   1. 変更を確認：git diff",
     "update.next_conflicts": "   2. コンフリクトを確認（*.rej ファイル）",

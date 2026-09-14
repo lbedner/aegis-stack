@@ -166,3 +166,25 @@ def test_docker_compose_rightsized_blocks_count_matches() -> None:
     )
     assert rendered.count("memory: 128M") == 2
     assert rendered.count("memory: 768M") == 1
+
+
+def test_logfire_configure_is_passed_the_settings_token() -> None:
+    """The guard reads ``settings.LOGFIRE_TOKEN`` (pydantic-settings, which
+    loads ``.env``); ``logfire.configure()`` resolves its own token from
+    ``os.environ``, which ``.env`` never populates. Unless the token is
+    handed over explicitly those two disagree, the guard passes, and
+    ``configure()`` raises ``LogfireConfigError`` (aegis-stack#1135).
+
+    That failure is not confined to observability: the app factory calls
+    ``install_auto_tracing()`` at import time, so the application stops
+    importing at all outside a container.
+    """
+    import re
+
+    rendered = _render(
+        "app/components/backend/middleware/logfire_tracing.py.jinja", _ctx()
+    )
+    configure_call = rendered[rendered.index("logfire.configure(") :]
+    configure_call = configure_call[: configure_call.index(")")]
+    normalized = re.sub(r"\s+", " ", configure_call)
+    assert "token=settings.LOGFIRE_TOKEN" in normalized

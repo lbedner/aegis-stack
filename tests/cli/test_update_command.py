@@ -5,6 +5,7 @@ Tests cover version detection, changelog generation, dry-run mode,
 and the full update workflow.
 """
 
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -1444,3 +1445,67 @@ class TestUpdateProjectAheadOfTarget:
         output = strip_ansi_codes(result.stdout + result.stderr).lower()
         assert result.returncode == 1, output
         assert "downgrade not supported" in output
+
+
+class TestUpdateCommandPendingResume:
+    """A pending resume must not swallow the flags the user just typed.
+
+    ``_load_pending_update`` runs before any flag is consulted, so
+    ``--to-version``, ``--template-path`` and ``--dry-run`` were all
+    discarded with no warning. The silent wrong target is the common case
+    (the flags get corrected precisely because the first run went somewhere
+    unintended), and ``--dry-run`` was worse than silent: once conflicts
+    were resolved it ran post-gen, advanced the baseline, and deleted the
+    backup tag that was the user's recovery point (aegis-stack#1132).
+    """
+
+    def _pending(self, project_path: Path, target_ref: str = "v0.11.1") -> Path:
+        path = project_path / ".git" / "aegis-update-pending.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "target_ref": target_ref,
+                    "template_root": str(project_path),
+                    "backup_tag": "aegis-backup-probe",
+                }
+            )
+        )
+        return path
+
+    def test_dry_run_reports_the_pending_update_and_changes_nothing(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        project_path = project_factory("base")
+        pending = self._pending(project_path)
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        # The proof of "changed nothing": finishing removes this file.
+        assert pending.exists(), "--dry-run completed the pending update"
+        output = strip_ansi_codes(result.stdout).lower()
+        assert "v0.11.1" in output, "did not say which update is pending"
+
+    def test_a_different_to_version_is_refused_not_ignored(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Silently preferring either value is worse than refusing."""
+        project_path = project_factory("base")
+        self._pending(project_path, target_ref="v0.11.1")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--to-version",
+            "HEAD",
+            "--yes",
+        )
+
+        assert not result.success, "resumed to v0.11.1 while asked for HEAD"
+        output = strip_ansi_codes(result.stdout + result.stderr)
+        assert "v0.11.1" in output and "HEAD" in output, (
+            "refusal must name both the pending target and the requested one"
+        )

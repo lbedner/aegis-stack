@@ -652,6 +652,7 @@ MESSAGES: dict[str, str] = {
     "update.notice_header": "Перед деплоем обратите внимание:",
     "update.notice_env_renamed": "   В .env задан {name}, который Settings больше не объявляет (запуск завершится ошибкой): {replacement}",
     "update.notice_env_removed": "   В .env задан {name}, который Settings больше не объявляет (запуск завершится ошибкой): удалите его",
+    "update.notice_env_stale_default": "   .env keeps the old default for {name}: {replacement}",
     "update.notice_behavior": "   Начиная с {since}: {message}",
     "update.notice_restore": "      Чтобы сохранить прежнее поведение: {restore}",
     "update.help_opt_finish": "Завершить предыдущее обновление, остановленное из-за конфликтов: выполнить пост-генерацию и продвинуть версию шаблона",

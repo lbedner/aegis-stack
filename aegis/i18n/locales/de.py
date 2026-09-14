@@ -678,6 +678,7 @@ MESSAGES: dict[str, str] = {
     "update.notice_header": "Vor dem Deploy beachten:",
     "update.notice_env_renamed": "   .env setzt {name}, das Settings nicht mehr deklariert (Start würde fehlschlagen): {replacement}",
     "update.notice_env_removed": "   .env setzt {name}, das Settings nicht mehr deklariert (Start würde fehlschlagen): entfernen",
+    "update.notice_env_stale_default": "   .env keeps the old default for {name}: {replacement}",
     "update.notice_behavior": "   Seit {since}: {message}",
     "update.notice_restore": "      Um das bisherige Verhalten beizubehalten: {restore}",
     "update.help_opt_finish": "Ein zuvor wegen Konflikten abgebrochenes Update abschließen: Post-Generation-Tasks ausführen und Template-Version fortschreiben",

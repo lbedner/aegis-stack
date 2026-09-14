@@ -664,6 +664,7 @@ MESSAGES: dict[str, str] = {
     "update.notice_header": "デプロイ前にご確認ください：",
     "update.notice_env_renamed": "   .env に {name} が設定されていますが、Settings では宣言されていません（起動に失敗します）：{replacement}",
     "update.notice_env_removed": "   .env に {name} が設定されていますが、Settings では宣言されていません（起動に失敗します）：削除してください",
+    "update.notice_env_stale_default": "   .env keeps the old default for {name}: {replacement}",
     "update.notice_behavior": "   {since} 以降：{message}",
     "update.notice_restore": "      以前の動作を維持するには：{restore}",
     "update.help_opt_finish": "競合で中断した前回の更新を完了する：生成後タスクを実行し、テンプレートバージョンを進めます",

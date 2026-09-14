@@ -992,18 +992,20 @@ def update_command(
         # ticket. Neither is derived from a diff - the keys are a set
         # difference against the updated Settings, the changes are declared
         # per version by whoever changed the behavior. Report only.
-        stale_keys = removed_env_keys(target_path) + stale_env_defaults(
-            target_path, answers
-        )
+        # Two different facts, and they must not borrow each other's words:
+        # a removed key crashes the next boot, a stale default is still
+        # declared and still boots, it just points somewhere shared.
+        removed_keys = removed_env_keys(target_path)
+        stale_defaults = stale_env_defaults(target_path, answers)
         changes = behavior_changes_for(
             from_version=current_version or "",
             to_version=_template_version_for_ref(target_ref, template_root),
             answers=answers,
         )
-        if stale_keys or changes:
+        if removed_keys or stale_defaults or changes:
             typer.echo("")
             brand.warn(t("update.notice_header"))
-            for entry in stale_keys:
+            for entry in removed_keys:
                 if entry.replacement:
                     typer.echo(
                         t(
@@ -1014,6 +1016,14 @@ def update_command(
                     )
                 else:
                     typer.echo(t("update.notice_env_removed", name=entry.key))
+            for entry in stale_defaults:
+                typer.echo(
+                    t(
+                        "update.notice_env_stale_default",
+                        name=entry.key,
+                        replacement=entry.replacement,
+                    )
+                )
             for change in changes:
                 typer.echo(
                     t(

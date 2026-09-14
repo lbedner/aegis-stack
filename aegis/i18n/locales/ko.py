@@ -643,6 +643,7 @@ MESSAGES: dict[str, str] = {
     "update.notice_header": "배포 전 확인 사항:",
     "update.notice_env_renamed": "   .env에 {name}가 설정되어 있지만 Settings에서 더 이상 선언하지 않습니다(부팅 실패): {replacement}",
     "update.notice_env_removed": "   .env에 {name}가 설정되어 있지만 Settings에서 더 이상 선언하지 않습니다(부팅 실패): 제거하세요",
+    "update.notice_env_stale_default": "   .env keeps the old default for {name}: {replacement}",
     "update.notice_behavior": "   {since} 이후: {message}",
     "update.notice_restore": "      이전 동작을 유지하려면: {restore}",
     "update.help_opt_finish": "충돌로 중단된 이전 업데이트 완료: 생성 후 작업을 실행하고 템플릿 버전을 진행합니다",

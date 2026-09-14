@@ -538,6 +538,7 @@ MESSAGES: dict[str, str] = {
     "update.notice_header": "部署前请注意：",
     "update.notice_env_renamed": "   .env 中设置了 {name}，但 Settings 已不再声明它（启动会失败）：{replacement}",
     "update.notice_env_removed": "   .env 中设置了 {name}，但 Settings 已不再声明它（启动会失败）：请删除",
+    "update.notice_env_stale_default": "   .env keeps the old default for {name}: {replacement}",
     "update.notice_behavior": "   自 {since} 起：{message}",
     "update.notice_restore": "      如需保留原有行为：{restore}",
     "update.help_opt_finish": "完成之前因冲突而中止的更新：运行生成后任务并推进模板版本",

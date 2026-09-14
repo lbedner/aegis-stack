@@ -6205,6 +6205,15 @@
 <li><strong>Always commit before updating</strong>: <code>git add . &amp;&amp; git commit -m "Pre-update checkpoint"</code></li>
 <li><strong>Test after updating</strong>: Run <code>make check</code> to verify everything works</li>
 <li>Use <code>--dry-run</code> first to preview changes</li>
+<li><strong>Conflicts need a real merge, not a side.</strong> A <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> block only appears
+  where you and the template changed the same region, so both changes usually
+  have to survive. <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; your project</code> is your code, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; new template</code>
+  is the incoming template; keep both where they don't contradict, then delete
+  the marker lines and run <code>aegis update --finish</code>.</li>
+<li><strong><code>--template-path</code> pins the project to that checkout.</strong> It rewrites
+  <code>_src_path</code> in <code>.copier-answers.yml</code> to a path on your machine, which no
+  teammate, container, or CI job has. Set it back to <code>gh:lbedner/aegis-stack</code>
+  before committing.</li>
 </ul>
 <hr />
 <h2 id="deployment-commands">Deployment Commands</h2>

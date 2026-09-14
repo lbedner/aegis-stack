@@ -660,6 +660,13 @@ class TestUpdateCommandRollback:
         assert "AUTH_ENABLED=false" in out
         # #1027 - the shared image tag is named, with the slug to use.
         assert "AEGIS_STACK_TAG=" in out and ":latest" in out
+        # A key holding a stale default is still declared and still boots;
+        # it must not be reported in the words used for a key Settings has
+        # dropped, which sends the operator hunting a crash that cannot
+        # happen.
+        tag_line = next(line for line in out.splitlines() if "AEGIS_STACK_TAG" in line)
+        assert "no longer declares" not in tag_line
+        assert "boot would fail" not in tag_line
         # Report only: .env is credentials and must be byte-identical.
         assert (project_path / ".env").read_text() == env_text
 

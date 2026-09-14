@@ -682,6 +682,7 @@ MESSAGES: dict[str, str] = {
     "update.notice_header": "Avant de déployer :",
     "update.notice_env_renamed": "   .env définit {name}, que Settings ne déclare plus (le démarrage échouerait) : {replacement}",
     "update.notice_env_removed": "   .env définit {name}, que Settings ne déclare plus (le démarrage échouerait) : supprimez-la",
+    "update.notice_env_stale_default": "   .env keeps the old default for {name}: {replacement}",
     "update.notice_behavior": "   Depuis {since} : {message}",
     "update.notice_restore": "      Pour conserver le comportement précédent : {restore}",
     "update.help_opt_finish": "Terminer une mise à jour précédente interrompue par des conflits : exécute les tâches post-génération et avance la version du template",

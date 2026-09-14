@@ -682,6 +682,7 @@ MESSAGES: dict[str, str] = {
     "update.notice_header": "Antes de desplegar:",
     "update.notice_env_renamed": "   .env define {name}, que Settings ya no declara (el arranque fallaría): {replacement}",
     "update.notice_env_removed": "   .env define {name}, que Settings ya no declara (el arranque fallaría): elimínala",
+    "update.notice_env_stale_default": "   .env keeps the old default for {name}: {replacement}",
     "update.notice_behavior": "   Desde {since}: {message}",
     "update.notice_restore": "      Para conservar el comportamiento anterior: {restore}",
     "update.help_opt_finish": "Finalizar una actualización previa detenida por conflictos: ejecuta las tareas post-generación y avanza la versión de plantilla",

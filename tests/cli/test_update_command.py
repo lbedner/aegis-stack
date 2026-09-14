@@ -1509,3 +1509,94 @@ class TestUpdateCommandPendingResume:
         assert "v0.11.1" in output and "HEAD" in output, (
             "refusal must name both the pending target and the requested one"
         )
+
+
+class TestLocalTemplateStamping:
+    """``--to-version HEAD -t <checkout>`` must leave a usable project.
+
+    Both values the run writes into ``.copier-answers.yml`` outlive it:
+    ``_template_version: HEAD`` is not a version, so every later
+    compatibility check degrades to UNKNOWN and passes silently, and
+    ``_src_path`` becomes one machine's absolute path (aegis-stack#1136).
+    """
+
+    def _repo(self, tmp_path: Path) -> Path:
+        import subprocess
+
+        repo = tmp_path / "template"
+        repo.mkdir()
+        run = lambda *args: subprocess.run(  # noqa: E731
+            args, cwd=repo, check=True, capture_output=True
+        )
+        run("git", "init", "-q")
+        run("git", "config", "user.email", "t@example.com")
+        run("git", "config", "user.name", "t")
+        (repo / "copier.yml").write_text("{}\n")
+        run("git", "add", "-A")
+        run("git", "commit", "-qm", "release")
+        run("git", "tag", "v0.11.1")
+        (repo / "copier.yml").write_text("{}\n# later\n")
+        run("git", "commit", "-qam", "after the tag")
+        return repo
+
+    def test_head_is_stamped_as_a_parseable_version(self, tmp_path: Path) -> None:
+        from aegis.commands.update import _template_version_for_ref
+        from aegis.core.version_compatibility import parse_version_safe
+
+        stamped = _template_version_for_ref("HEAD", self._repo(tmp_path))
+
+        version = parse_version_safe(stamped)
+        assert version is not None, f"{stamped!r} still disables the version gate"
+        assert (version.major, version.minor) == (0, 11), stamped
+
+    def test_exact_tag_keeps_the_tag(self, tmp_path: Path) -> None:
+        from aegis.commands.update import _template_version_for_ref
+
+        assert _template_version_for_ref("v0.11.1", self._repo(tmp_path)) == "0.11.1"
+
+    def test_non_git_template_root_keeps_the_ref(self, tmp_path: Path) -> None:
+        """Production (pip/uvx): nothing to describe, nothing to invent."""
+        from aegis.commands.update import _template_version_for_ref
+
+        assert _template_version_for_ref("HEAD", tmp_path) == "HEAD"
+
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("aegis.commands.update.run_post_generation_tasks")
+    @patch("aegis.commands.update.generate_missing_migrations")
+    @patch("copier.run_update")
+    @patch("aegis.commands.update.get_current_template_commit")
+    @patch("aegis.commands.update.create_backup_point")
+    def test_local_template_pin_is_reported(
+        self,
+        mock_create_backup: MagicMock,
+        mock_get_commit: MagicMock,
+        mock_copier_update: MagicMock,
+        mock_generate: MagicMock,
+        mock_post_gen: MagicMock,
+        mock_sync: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """The run rewrites ``_src_path`` to a path only this machine has."""
+        from aegis.core.copier_updater import get_template_root
+
+        mock_create_backup.return_value = None
+        mock_get_commit.return_value = "different-commit"
+        mock_post_gen.return_value = True
+        mock_generate.return_value = []
+        mock_sync.return_value = SyncResult()
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            str(get_template_root()),
+            "--to-version",
+            "HEAD",
+            "--yes",
+        )
+
+        output = strip_ansi_codes(result.stdout + result.stderr)
+        assert "_src_path" in output, "never told the project is pinned locally"
+        assert "gh:lbedner/aegis-stack" in output, "never said how to unpin it"

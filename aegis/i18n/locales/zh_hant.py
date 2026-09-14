@@ -529,6 +529,7 @@ MESSAGES: dict[str, str] = {
     "update.success": "更新完成",
     "update.partial_success": "更新完成，但部分生成後任務失敗",
     "update.partial_detail": "   部分任務失敗，詳情見上方。",
+    "update.local_template_pinned": "This project's _src_path now points at {path}, which exists only on this machine. Set it back to {url} before committing, or updates fail everywhere else.",
     "update.next_steps": "下一步：",
     "update.next_review": "   1. 查看變更：git diff",
     "update.next_conflicts": "   2. 檢查衝突（*.rej 檔案）",

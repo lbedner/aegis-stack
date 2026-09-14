@@ -873,6 +873,19 @@ def _sync_python_file(
     return False  # git merge-file unavailable/errored — raw fallback
 
 
+# What a conflict marker says about each side. The user reads these in
+# their own file, so they name the sides rather than the temp paths git
+# labels with by default (#1134).
+_MERGE_LABELS = (
+    "-L",
+    "your project",
+    "-L",
+    "old template",
+    "-L",
+    "new template",
+)
+
+
 def merge_three_way_text(current: str, base: str, other: str) -> tuple[int, str]:
     """Run a 3-way merge on three text blobs via ``git merge-file``.
 
@@ -898,12 +911,7 @@ def merge_three_way_text(current: str, base: str, other: str) -> tuple[int, str]
                     "git",
                     "merge-file",
                     "-p",
-                    "-L",
-                    "current",
-                    "-L",
-                    "base",
-                    "-L",
-                    "other",
+                    *_MERGE_LABELS,
                     str(cur),
                     str(bas),
                     str(oth),
@@ -952,6 +960,7 @@ def _three_way_merge(
             "git",
             "merge-file",
             "-p",
+            *_MERGE_LABELS,
             str(project_file),
             str(old_file),
             str(new_file),

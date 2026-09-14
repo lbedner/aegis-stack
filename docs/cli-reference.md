@@ -522,6 +522,15 @@ aegis update --force --yes
 - **Always commit before updating**: `git add . && git commit -m "Pre-update checkpoint"`
 - **Test after updating**: Run `make check` to verify everything works
 - Use `--dry-run` first to preview changes
+- **Conflicts need a real merge, not a side.** A `<<<<<<<` block only appears
+  where you and the template changed the same region, so both changes usually
+  have to survive. `<<<<<<< your project` is your code, `>>>>>>> new template`
+  is the incoming template; keep both where they don't contradict, then delete
+  the marker lines and run `aegis update --finish`.
+- **`--template-path` pins the project to that checkout.** It rewrites
+  `_src_path` in `.copier-answers.yml` to a path on your machine, which no
+  teammate, container, or CI job has. Set it back to `gh:lbedner/aegis-stack`
+  before committing.
 
 ---
 

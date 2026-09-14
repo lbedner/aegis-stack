@@ -669,6 +669,7 @@ MESSAGES: dict[str, str] = {
         "Update abgeschlossen, einige Nachgenerierungsaufgaben fehlgeschlagen"
     ),
     "update.partial_detail": "   Einige Einrichtungsaufgaben fehlgeschlagen. Siehe Details oben.",
+    "update.local_template_pinned": "This project's _src_path now points at {path}, which exists only on this machine. Set it back to {url} before committing, or updates fail everywhere else.",
     "update.next_steps": "Nächste Schritte:",
     "update.next_review": "   1. Änderungen prüfen: git diff",
     "update.next_conflicts": "   2. Auf Konflikte prüfen (*.rej Dateien)",

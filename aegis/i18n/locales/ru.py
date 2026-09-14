@@ -643,6 +643,7 @@ MESSAGES: dict[str, str] = {
         "Обновление завершено, но некоторые пост-генерационные задачи не выполнились"
     ),
     "update.partial_detail": "   Некоторые задачи не выполнились. См. детали выше.",
+    "update.local_template_pinned": "This project's _src_path now points at {path}, which exists only on this machine. Set it back to {url} before committing, or updates fail everywhere else.",
     "update.next_steps": "Следующие шаги:",
     "update.next_review": "   1. Просмотрите изменения: git diff",
     "update.next_conflicts": "   2. Проверьте конфликты (файлы *.rej)",

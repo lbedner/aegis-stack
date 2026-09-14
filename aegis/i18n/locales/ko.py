@@ -634,6 +634,7 @@ MESSAGES: dict[str, str] = {
     "update.success": "업데이트 완료!",
     "update.partial_success": ("업데이트 완료 (일부 후처리 작업 실패)"),
     "update.partial_detail": "   일부 설정 작업이 실패했습니다. 위 세부 사항을 확인하세요.",
+    "update.local_template_pinned": "This project's _src_path now points at {path}, which exists only on this machine. Set it back to {url} before committing, or updates fail everywhere else.",
     "update.next_steps": "다음 단계:",
     "update.next_review": "   1. 변경 사항 검토: git diff",
     "update.next_conflicts": "   2. 충돌 확인 (*.rej 파일)",

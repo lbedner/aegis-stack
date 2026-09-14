@@ -15,10 +15,9 @@ of it. A question in that set is accounted for when:
 * an ``OptionSpec`` names it in ``answer_key``;
 * its default is a Jinja expression over another answer, so the parent
   carries it;
-* ``_detect_existing_features`` reads it off the project; or
-* no template file references it, so no answer can change the render.
+* ``_detect_existing_features`` reads it off the project.
 
-All five are derived. Nothing here is a hand-kept copy of what the code
+All four are derived. Nothing here is a hand-kept copy of what the code
 already knows, which is the whole point: a list would drift, and the list
 this replaced already had.
 """
@@ -123,26 +122,6 @@ def _detector_derived(tmp_path: Path) -> set[str]:
     return set(_detect_existing_features(tmp_path))
 
 
-def _inert_questions(questions: set[str]) -> set[str]:
-    """Questions no template file reads, so no answer changes the render.
-
-    Whole-word matching, or a table named ``finance_import_profile`` reads as
-    a reference to ``finance_import``. The answers file is skipped: it
-    records every answer by definition and would call them all referenced.
-    """
-    names = {key: re.compile(rf"\b{re.escape(key)}\b") for key in questions}
-    referenced: set[str] = set()
-    for path in TEMPLATE.rglob("*"):
-        if not path.is_file() or path.name == ".copier-answers.yml.jinja":
-            continue
-        try:
-            text = path.read_text()
-        except (UnicodeDecodeError, OSError):
-            continue
-        referenced |= {key for key, rx in names.items() if rx.search(text)}
-    return questions - referenced
-
-
 def test_new_questions_are_recoverable_for_existing_projects(
     tmp_path: Path,
 ) -> None:
@@ -151,10 +130,7 @@ def test_new_questions_are_recoverable_for_existing_projects(
     questions = _parse_questions(COPIER_YML.read_text())
 
     uncovered = at_risk - (
-        _registry_derived()
-        | _default_derived(questions)
-        | _detector_derived(tmp_path)
-        | _inert_questions(at_risk)
+        _registry_derived() | _default_derived(questions) | _detector_derived(tmp_path)
     )
     assert not uncovered, (
         f"These questions were added since {anchor}, so a project generated "

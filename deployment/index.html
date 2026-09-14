@@ -5793,7 +5793,7 @@ This generates a fresh key, replaces the public key on the server, overwrites th
 <p><strong>What it does:</strong></p>
 <ol>
 <li><strong>Creates a backup</strong> of the current deployment (files + database)</li>
-<li><strong>Syncs files</strong> to the server via <code>rsync</code></li>
+<li><strong>Syncs files</strong> to the server via <code>rsync --delete</code>, so a file removed from the project is removed from the server too</li>
 <li><strong>Copies <code>.env</code></strong> file separately (excluded from rsync for safety)</li>
 <li><strong>Stops existing services</strong> with <code>docker compose down</code></li>
 <li><strong>Builds and starts services</strong> with production compose overrides</li>
@@ -5802,7 +5802,9 @@ This generates a fresh key, replaces the public key on the server, overwrites th
 <li><strong>Auto-rollback</strong> if health check fails, restores the backup from step 1</li>
 </ol>
 <p><strong>Excluded from sync:</strong></p>
-<p>Files and directories excluded from the rsync transfer:</p>
+<p>Files and directories excluded from the rsync transfer. The sync deletes, and
+rsync never deletes an excluded path, so this list also protects server-side
+state from removal:</p>
 <ul>
 <li><code>.git</code>, Git history</li>
 <li><code>__pycache__</code>, Python cache</li>
@@ -5811,9 +5813,12 @@ This generates a fresh key, replaces the public key on the server, overwrites th
 <li><code>.pytest_cache</code>, Test cache</li>
 <li><code>.ruff_cache</code>, Linter cache</li>
 <li><code>data/</code>, Local database files</li>
-<li><code>.env</code>, Environment file (copied separately)</li>
+<li><code>.env</code> and <code>.env.deploy</code>, Environment files (copied separately)</li>
 <li><code>.aegis/</code>, Deploy configuration</li>
 <li><code>backups/</code>, Server-side backups</li>
+<li><code>node_modules/</code>, Node dependencies</li>
+<li><code>traefik/acme/</code>, Let's Encrypt certificate store (deleting it forces
+  re-issuance and can hit rate limits)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Full deploy with build (backup + health check enabled by default)</span>

@@ -10,11 +10,13 @@ when the backend starts up (only when database component is included).
 {% if database_engine == "sqlite" %}
 from pathlib import Path
 {% endif %}
-from typing import Any
 
 from app.components.backend.startup.schema_recovery import (
     _create_missing_tables,
     _existing_tables_by_schema,
+    _reflect_schema,
+    _revisions_oldest_first,
+    _signature_satisfied,
 )
 from app.core.log import logger
 
@@ -25,25 +27,6 @@ import_all_models()
 
 {% set needs_migrations = include_auth or include_blog or include_documents or include_insights or include_payment or include_finance or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") %}
 {% if database_engine == "postgres" and needs_migrations %}
-def _row_exists(conn: Any, table: str, where: str) -> bool:
-    """Whether ``SELECT 1 FROM table WHERE where`` finds a row.
-
-    The ``("row", table, where)`` signature form: proof for a data-only
-    revision (``finance_auth_link`` inserts user 0). A table, column or FK
-    cannot prove such a revision ran - the FK it used to add is inline in
-    the ``finance`` revision now - and stamping it on a persisted volume
-    would skip the only INSERT that satisfies that FK (aegis-stack#1110).
-    """
-    from sqlmodel import text
-
-    schema, _, bare = table.rpartition(".")
-    qualified = f'"{schema}"."{bare}"' if schema else f'"{bare}"'
-    try:
-        return conn.execute(text(f"SELECT 1 FROM {qualified} WHERE {where} LIMIT 1")).first() is not None
-    except Exception:
-        return False
-
-
 def _check_and_stamp_existing_tables() -> None:
     """
     Detect when tables for a pending migration already exist.
@@ -62,7 +45,6 @@ def _check_and_stamp_existing_tables() -> None:
         from alembic.config import Config
         from alembic.runtime.migration import MigrationContext
         from alembic.script import ScriptDirectory
-        from sqlalchemy import inspect
 
         from app.components.backend.startup.migration_signatures import (
             SERVICE_MIGRATION_SIGNATURES,
@@ -71,14 +53,6 @@ def _check_and_stamp_existing_tables() -> None:
 
         alembic_cfg = Config("alembic/alembic.ini")
         script = ScriptDirectory.from_config(alembic_cfg)
-
-        # Existing tables (schema-qualified) and the current revision.
-        with db_session(autocommit=False) as session:
-            inspector = inspect(session.connection())
-            existing_tables = _existing_tables_by_schema(inspector)
-
-            context = MigrationContext.configure(session.connection())
-            current_rev = context.get_current_revision()
 
         service_signatures = SERVICE_MIGRATION_SIGNATURES
 
@@ -98,73 +72,33 @@ def _check_and_stamp_existing_tables() -> None:
                 if sig:
                     signatures[rev.revision] = sig
 
-        # Get column info for alter-table checks. Qualified names resolve
-        # against their schema; on engines without schemas (SQLite) the same
-        # table exists bare, so both spellings land in the map.
-        db_columns: dict[str, set[str]] = {}
-        for table_name in existing_tables:
-            schema, _, bare = table_name.rpartition(".")
-            try:
-                cols = inspector.get_columns(bare, schema=schema or None)
-                names = {c["name"] for c in cols}
-                db_columns[table_name] = names
-                db_columns[bare] = names
-            except Exception:
-                pass
+        # One session for the whole pass. Reflection and the ``row`` form
+        # both need a live connection, and the inspector must not outlive it.
+        with db_session(autocommit=False) as session:
+            connection = session.connection()
+            facts = _reflect_schema(connection)
+            current_rev = MigrationContext.configure(connection).get_current_revision()
 
-        # Walk revisions and stamp any already applied
-        for rev in script.walk_revisions():
-            # Skip if already applied
-            if current_rev and rev.revision <= current_rev:
-                continue
+            # Oldest-first: stamping moves the version pointer, so the
+            # newest match has to land last.
+            for rev in _revisions_oldest_first(script):
+                if current_rev and rev.revision <= current_rev:
+                    continue
 
-            sig = signatures.get(rev.revision)
-            if not sig:
-                continue
+                sig = signatures.get(rev.revision)
+                if not sig:
+                    continue
 
-            already_applied = False
-            if sig[0] == "table":
-                # Signatures use the schema-qualified spelling; SQLite has no
-                # schemas, so the same table exists under its bare name there.
-                already_applied = (
-                    sig[1] in existing_tables
-                    or sig[1].split(".")[-1] in existing_tables
-                )
-            elif sig[0] == "column":
-                table_name, col_name = sig[1], sig[2]
-                already_applied = col_name in db_columns.get(
-                    table_name, db_columns.get(table_name.split(".")[-1], set())
-                )
-            elif sig[0] == "foreign_key":
-                table_name, col_name = sig[1], sig[2]
-                schema, _, bare = table_name.rpartition(".")
-                fks = []
-                for candidate_schema in dict.fromkeys((schema or None, None)):
-                    try:
-                        fks = inspector.get_foreign_keys(
-                            bare, schema=candidate_schema
-                        )
-                    except Exception:
-                        continue
-                    if fks:
-                        break
-                already_applied = any(
-                    col_name in fk.get("constrained_columns", ()) for fk in fks
-                )
-            elif sig[0] == "row":
-                with db_session(autocommit=False) as session:
-                    already_applied = _row_exists(session.connection(), sig[1], sig[2])
-
-            if already_applied:
-                logger.warning(
-                    f"Migration {rev.revision} tables already exist. "
-                    "Stamping as complete (Docker volume likely persisted)..."
-                )
-                command.stamp(alembic_cfg, rev.revision)
-                logger.info(f"Stamped migration {rev.revision}")
+                if _signature_satisfied(sig, facts, connection):
+                    logger.warning(
+                        f"Migration {rev.revision} is already in the schema. "
+                        "Stamping as complete (Docker volume likely persisted)..."
+                    )
+                    command.stamp(alembic_cfg, rev.revision)
+                    logger.info(f"Stamped migration {rev.revision}")
 
     except Exception as e:
-        logger.debug(f"Existing tables check skipped: {e}")
+        logger.warning(f"Existing tables check skipped: {e}")
 
 
 def _check_and_fix_stale_revision() -> None:
@@ -183,6 +117,7 @@ def _check_and_fix_stale_revision() -> None:
         from alembic import command
         from alembic.config import Config
         from alembic.script import ScriptDirectory
+        from sqlalchemy.exc import SQLAlchemyError
         from sqlmodel import text
 
         from app.core.db import db_session
@@ -200,8 +135,12 @@ def _check_and_fix_stale_revision() -> None:
                     text("SELECT version_num FROM alembic_version")
                 )
                 db_revisions = [row[0] for row in result.fetchall()]
-            except Exception:
-                # Table doesn't exist or other error - let migrations handle it
+            except SQLAlchemyError as exc:
+                # A fresh database has no alembic_version yet and migrations
+                # create it, so this is usually nothing. Say it anyway: the
+                # same return also fires when the database could not answer,
+                # and then the stale-revision recovery below never runs.
+                logger.info(f"No usable alembic_version ({exc}); leaving it to migrations")
                 return
 
         # Check if any DB revision is stale (not in migration files)
@@ -221,7 +160,7 @@ def _check_and_fix_stale_revision() -> None:
             logger.info("Recovery complete: stamped database to head revision")
 
     except Exception as e:
-        logger.debug(f"Stale revision check skipped: {e}")
+        logger.warning(f"Stale revision check skipped: {e}")
         # Don't fail - let normal migration flow handle errors
 
 
@@ -326,7 +265,7 @@ def _check_schema_mismatch() -> None:
             logger.error("=" * 60)
 
     except Exception as e:
-        logger.debug(f"Schema mismatch check skipped: {e}")
+        logger.warning(f"Schema mismatch check skipped: {e}")
 
 
 async def startup_database_init() -> None:

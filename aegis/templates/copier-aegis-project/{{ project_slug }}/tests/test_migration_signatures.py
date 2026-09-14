@@ -135,13 +135,7 @@ def test_signatures_name_real_model_objects() -> None:
 def test_row_signature_checks_the_live_database() -> None:
     """``("row", table, where)``: the hook must replay a data-only revision
     whose row is missing and stamp it when the row is there."""
-    database_init = pytest.importorskip(
-        "app.components.backend.startup.database_init",
-        reason="no database component in this stack",
-    )
-    row_exists = getattr(database_init, "_row_exists", None)
-    if row_exists is None:
-        pytest.skip("re-adoption hook is Postgres-only in this stack")
+    row_exists = _recovery()._row_exists
     import sqlalchemy as sa
 
     engine = sa.create_engine("sqlite://")
@@ -196,3 +190,126 @@ def test_the_startup_hook_can_read_a_carried_signature() -> None:
         "revisions declare aegis_stamp_signature on disk, but alembic exposes "
         f"none of them to the startup hook: {sorted(on_disk)}"
     )
+
+
+def _recovery():  # type: ignore[no-untyped-def]
+    """The recovery helpers, or a skip.
+
+    ``schema_recovery`` is a plain module that ships in every stack and
+    imports cleanly with no database, so its presence proves nothing -
+    ``sqlmodel`` is the marker for a stack that actually has one.
+    """
+    pytest.importorskip("sqlmodel", reason="no database component in this stack")
+    return pytest.importorskip(
+        "app.components.backend.startup.schema_recovery",
+        reason="no database component in this stack",
+    )
+
+
+def _require_models() -> None:
+    """``_existing_tables_by_schema`` looks only in schemas the models use.
+
+    A stack with no models declares no schemas, so it sees no tables at all -
+    and it never runs the stamp pass either. Nothing to exercise there.
+    """
+    sqlmodel = pytest.importorskip(
+        "sqlmodel", reason="no database component in this stack"
+    )
+    if not sqlmodel.SQLModel.metadata.tables:
+        pytest.skip("this stack declares no models")
+
+
+class TestSchemaReflection:
+    """The hook must read columns and keys while its session is open.
+
+    It used to build an ``inspect()`` inside a ``with db_session(...)`` block
+    and call ``get_columns`` / ``get_foreign_keys`` after the block closed.
+    Every call raised on the dead connection and every raise was swallowed,
+    so the column map was always empty: only ``("table", ...)`` signatures
+    could ever match, and ``column`` / ``foreign_key`` ones silently never
+    stamped. A pointer left below the last table-signed revision replayed
+    DDL on every boot.
+    """
+
+    def _connection(self):  # type: ignore[no-untyped-def]
+        _require_models()
+        import sqlalchemy as sa
+
+        engine = sa.create_engine("sqlite://")
+        conn = engine.connect()
+        conn.execute(sa.text('CREATE TABLE "user" (id INTEGER PRIMARY KEY)'))
+        conn.execute(
+            sa.text(
+                'CREATE TABLE account (id INTEGER PRIMARY KEY, '
+                'owner_user_id INTEGER REFERENCES "user"(id), nickname TEXT)'
+            )
+        )
+        return conn
+
+    def test_columns_come_back_for_an_existing_table(self) -> None:
+        facts = _recovery()._reflect_schema(self._connection())
+        assert "nickname" in facts.columns["account"]
+
+    def test_foreign_keys_come_back_for_an_existing_table(self) -> None:
+        facts = _recovery()._reflect_schema(self._connection())
+        assert "owner_user_id" in facts.foreign_keys["account"]
+
+    def test_tables_come_back(self) -> None:
+        facts = _recovery()._reflect_schema(self._connection())
+        assert {"user", "account"} <= facts.tables
+
+
+class TestSignatureMatching:
+    """Every signature form must be decidable from reflected facts."""
+
+    def _facts(self):  # type: ignore[no-untyped-def]
+        _require_models()
+        import sqlalchemy as sa
+
+        engine = sa.create_engine("sqlite://")
+        conn = engine.connect()
+        conn.execute(
+            sa.text(
+                'CREATE TABLE "user" (id INTEGER PRIMARY KEY, '
+                "org_id INTEGER REFERENCES org(id), locale TEXT)"
+            )
+        )
+        return _recovery()._reflect_schema(conn), conn
+
+    def test_table_form(self) -> None:
+        facts, conn = self._facts()
+        satisfied = _recovery()._signature_satisfied
+        assert satisfied(("table", "public.user"), facts, conn) is True
+        assert satisfied(("table", "public.absent"), facts, conn) is False
+
+    def test_column_form(self) -> None:
+        facts, conn = self._facts()
+        satisfied = _recovery()._signature_satisfied
+        assert satisfied(("column", "public.user", "locale"), facts, conn) is True
+        assert satisfied(("column", "public.user", "nope"), facts, conn) is False
+
+    def test_foreign_key_form(self) -> None:
+        facts, conn = self._facts()
+        satisfied = _recovery()._signature_satisfied
+        assert satisfied(("foreign_key", "user", "org_id"), facts, conn) is True
+        assert satisfied(("foreign_key", "user", "locale"), facts, conn) is False
+
+
+class TestRevisionOrder:
+    """Stamping walks oldest-first, or each stamp moves the pointer back.
+
+    ``script.walk_revisions()`` yields newest-first, so stamping in that
+    order left the version pointer at the OLDEST matched revision.
+    """
+
+    def test_oldest_revision_comes_first(self) -> None:
+        class FakeRevision:
+            def __init__(self, revision: str) -> None:
+                self.revision = revision
+
+        class FakeScript:
+            def walk_revisions(self) -> list[FakeRevision]:
+                return [FakeRevision("003"), FakeRevision("002"), FakeRevision("001")]
+
+        order = _recovery()._revisions_oldest_first(FakeScript())
+        assert [rev.revision for rev in order] == ["001", "002", "003"]

@@ -23,18 +23,40 @@ def _utc_today() -> date:
     return datetime.now(UTC).date()
 
 
-def money(cents: int | None, currency: str = "USD") -> str:
+def money(cents: int | None, currency: str = "USD", whole: bool = False) -> str:
     """Minor units -> ``-$1,234.56`` (the Flet register's ``_usd`` rule,
-    widened to honour the currency code)."""
+    widened to honour the currency code).
+
+    ``whole`` rounds the cents away for somewhere they are noise rather
+    than precision - a projected month chip reading ``Nov $4,208``. It is
+    the only reason to format money any other way, which is why it lives
+    here instead of in the f-string that wanted it: hand-rolled
+    ``f"${cents / 100:,.2f}"`` ignores the currency and will print a GBP
+    figure with a dollar sign.
+    """
     code = (currency or "USD").upper()
     if code in _ZERO_DECIMAL_CURRENCIES:
         value, number = cents or 0, f"{abs(cents or 0):,}"
+    elif whole:
+        value = (cents or 0) / 100
+        number = f"{abs(round(value)):,}"
     else:
         value = (cents or 0) / 100
         number = f"{abs(value):,.2f}"
     sign = "-" if value < 0 else ""
     symbol = _CURRENCY_SYMBOLS.get(code)
     return f"{sign}{symbol}{number}" if symbol else f"{sign}{code} {number}"
+
+
+def dollars(cents: int | None) -> float:
+    """Minor units as dollars, for a chart's SCALE.
+
+    Charts are drawn in dollars. Cents on the axis draw a $711,200 house
+    at seventy million, and the mistake is invisible until a chart has a
+    figure somebody knows by heart - so the conversion has one home
+    rather than a ``/ 100`` in every series that gets written.
+    """
+    return (cents or 0) / 100
 
 
 def short_date(value: date | datetime | str | None, today: date | None = None) -> str:

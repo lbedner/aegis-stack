@@ -506,6 +506,20 @@ MESSAGES: dict[str, str] = {
         "   {count} question(s) this version added were answered with the\n"
         "   template default. Edit .copier-answers.yml and update again to change:"
     ),
+    "update.finish_pending": (
+        "   An update to {ref} is pending, stopped on conflicts.\n"
+        "   Nothing was changed. Resolve any file below, then run: aegis update --finish"
+    ),
+    "update.finish_target_conflict": (
+        "An update to {pending} is already pending; you asked for {requested}.\n"
+        "   Finish it (aegis update --finish), or abandon it by deleting\n"
+        "   .git/aegis-update-pending.json, then re-run for {requested}."
+    ),
+    "update.finish_template_conflict": (
+        "The pending update reads its template from {pending}; you asked for\n"
+        "   {requested}. Finish it (aegis update --finish), or abandon it by\n"
+        "   deleting .git/aegis-update-pending.json, then re-run."
+    ),
     "update.running_postgen": "正在執行生成後任務……",
     "update.skipping_postgen_conflicts": (
         "Skipping post-generation tasks — merge conflicts present.\n"

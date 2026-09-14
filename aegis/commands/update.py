@@ -474,6 +474,44 @@ def update_command(
         if not pending:
             brand.error(t("update.finish_nothing"))
             raise typer.Exit(1)
+
+        # The flags below this branch are never read on a resume, so a run
+        # that disagrees with the pending state has to be refused rather
+        # than quietly resumed somewhere else (aegis-stack#1132). The user
+        # corrects these flags precisely because the first run went
+        # somewhere unintended.
+        if to_version and to_version != pending["target_ref"]:
+            brand.error(
+                t(
+                    "update.finish_target_conflict",
+                    pending=pending["target_ref"],
+                    requested=to_version,
+                )
+            )
+            raise typer.Exit(1)
+        if (
+            template_path
+            and str(Path(template_path).resolve()) != pending["template_root"]
+        ):
+            brand.error(
+                t(
+                    "update.finish_template_conflict",
+                    pending=pending["template_root"],
+                    requested=template_path,
+                )
+            )
+            raise typer.Exit(1)
+
+        # A dry run must reach nothing that mutates. ``_finish_update``
+        # runs post-gen, advances the copier baseline and deletes the
+        # backup tag, so "what would this do" was destroying the recovery
+        # point it existed to preserve.
+        if dry_run:
+            typer.echo(t("update.finish_pending", ref=pending["target_ref"]))
+            for conflict in analyze_conflict_files(target_path):
+                typer.echo(f"      - {conflict['original']}")
+            return
+
         typer.echo(t("update.finish_resuming", ref=pending["target_ref"]))
         _finish_update(target_path, pending)
         return

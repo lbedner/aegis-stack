@@ -218,7 +218,7 @@ aegis deploy [OPTIONS]
 **What it does:**
 
 1. **Creates a backup** of the current deployment (files + database)
-2. **Syncs files** to the server via `rsync`
+2. **Syncs files** to the server via `rsync --delete`, so a file removed from the project is removed from the server too
 3. **Copies `.env`** file separately (excluded from rsync for safety)
 4. **Stops existing services** with `docker compose down`
 5. **Builds and starts services** with production compose overrides
@@ -228,7 +228,9 @@ aegis deploy [OPTIONS]
 
 **Excluded from sync:**
 
-Files and directories excluded from the rsync transfer:
+Files and directories excluded from the rsync transfer. The sync deletes, and
+rsync never deletes an excluded path, so this list also protects server-side
+state from removal:
 
 - `.git`, Git history
 - `__pycache__`, Python cache
@@ -237,9 +239,12 @@ Files and directories excluded from the rsync transfer:
 - `.pytest_cache`, Test cache
 - `.ruff_cache`, Linter cache
 - `data/`, Local database files
-- `.env`, Environment file (copied separately)
+- `.env` and `.env.deploy`, Environment files (copied separately)
 - `.aegis/`, Deploy configuration
 - `backups/`, Server-side backups
+- `node_modules/`, Node dependencies
+- `traefik/acme/`, Let's Encrypt certificate store (deleting it forces
+  re-issuance and can hit rate limits)
 
 **Examples:**
 ```bash

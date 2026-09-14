@@ -711,36 +711,7 @@ def _run_rolling_deploy(
     # Step 1: rsync working tree
     typer.echo(t("deploy.syncing"))
     rsync_result = subprocess.run(
-        [
-            "rsync",
-            "-avz",
-            "--exclude",
-            ".git",
-            "--exclude",
-            "__pycache__",
-            "--exclude",
-            ".venv",
-            "--exclude",
-            "*.pyc",
-            "--exclude",
-            ".pytest_cache",
-            "--exclude",
-            ".ruff_cache",
-            "--exclude",
-            "data/",
-            "--exclude",
-            ".env",
-            "--exclude",
-            ".env.deploy",
-            "--exclude",
-            ".aegis/",
-            "--exclude",
-            "backups/",
-            "--exclude",
-            "node_modules/",
-            f"{project_root}/",
-            f"{user}@{host}:{deploy_path}/",
-        ]
+        _working_tree_rsync(project_root, f"{user}@{host}:{deploy_path}/")
     )
     if rsync_result.returncode != 0:
         brand.error(t("deploy.sync_failed"), err=True)
@@ -1143,36 +1114,7 @@ def deploy_command(
         raise typer.Exit(1)
 
     rsync_result = subprocess.run(
-        [
-            "rsync",
-            "-avz",
-            "--exclude",
-            ".git",
-            "--exclude",
-            "__pycache__",
-            "--exclude",
-            ".venv",
-            "--exclude",
-            "*.pyc",
-            "--exclude",
-            ".pytest_cache",
-            "--exclude",
-            ".ruff_cache",
-            "--exclude",
-            "data/",
-            "--exclude",
-            ".env",
-            "--exclude",
-            ".env.deploy",
-            "--exclude",
-            ".aegis/",
-            "--exclude",
-            "backups/",
-            "--exclude",
-            "node_modules/",
-            f"{project_root}/",
-            f"{user}@{host}:{deploy_path}/",
-        ]
+        _working_tree_rsync(project_root, f"{user}@{host}:{deploy_path}/")
     )
     if rsync_result.returncode != 0:
         brand.error(t("deploy.sync_failed"), err=True)
@@ -1623,6 +1565,53 @@ def deploy_exec_command(
 _GH_DEPLOY_KEY_SECRET = "DEPLOY_SSH_KEY"
 _GH_DEPLOY_HOST_SECRET = "DEPLOY_HOST"
 _GH_DEPLOY_USER_SECRET = "DEPLOY_USER"
+
+
+# Server-only state, and everything that has no business on a server. With
+# ``--delete`` this list does double duty: rsync never deletes an excluded
+# path, so naming something here both keeps it from being pushed and keeps
+# it from being wiped.
+#
+# ``traefik/acme/`` is the Let's Encrypt store. Deleting it forces every
+# certificate to be re-issued and can hit LE rate limits, locking the site
+# out of HTTPS. ``.env`` / ``.env.deploy`` hold production secrets the
+# server owns. Both are protected by exclusion rather than a ``--filter``
+# rule: macOS ships openrsync, and excludes behave identically on both.
+_RSYNC_EXCLUDES = (
+    ".git",
+    "__pycache__",
+    ".venv",
+    "*.pyc",
+    ".pytest_cache",
+    ".ruff_cache",
+    "data/",
+    ".env",
+    ".env.deploy",
+    ".aegis/",
+    "backups/",
+    "node_modules/",
+    "traefik/acme/",
+)
+
+
+def _working_tree_rsync(project_root: Path, destination: str) -> list[str]:
+    """The argv that puts the working tree on the server, and only that.
+
+    ``--delete`` is the point. Without it a file removed from the project
+    lived on the server forever, and since the image is built from that
+    directory, the stale module was baked into what runs: a deleted
+    ``llm_vendor.py`` re-registered a model whose table the migration had
+    just dropped, which failed mapper configuration for every model and took
+    three startup seeds down with it - silently (aegis-stack#1130).
+
+    Both the standard and rolling deploys call this. They used to build the
+    same argv by hand, twice.
+    """
+    command = ["rsync", "-avz", "--delete"]
+    for pattern in _RSYNC_EXCLUDES:
+        command.extend(["--exclude", pattern])
+    command.extend([f"{project_root}/", destination])
+    return command
 
 
 def _detect_github_repo(project_root: Path) -> str | None:

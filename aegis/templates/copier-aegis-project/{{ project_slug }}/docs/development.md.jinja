@@ -21,8 +21,12 @@ uv sync
 cp .env.example .env
 
 # Start development server
-make run
+make run                 # or: uv run poe run
 ```
+
+Every `make <target>` below also runs as `uv run poe <target>`. Same tasks,
+no `make` needed - which is how Windows gets through the rest of this page.
+`uv run poe -h` lists them.
 
 ## Development Commands
 
@@ -52,13 +56,6 @@ make fix            # Auto-fix code issues
 make docs-serve     # Serve documentation locally (http://localhost:8001)
 make docs-build     # Build static documentation
 ```
-
-### Windows
-
-`make` isn't a native Windows binary. After installing the dev dependencies
-once (`uv sync`), every command on this page also works as
-`uv run poe <target>` (for example `uv run poe test`, `uv run poe check`);
-run `uv run poe -h` for the full list.
 
 ## Project Structure
 

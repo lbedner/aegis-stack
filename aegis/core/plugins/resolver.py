@@ -34,7 +34,8 @@ from typing import Any
 
 from ..component_utils import extract_base_component_name
 from ..components import COMPONENTS, CORE_COMPONENTS
-from ..option_spec import variant_answers, variant_delta
+from ..option_spec import compute_auto_requires, variant_answers, variant_delta
+from ..service_resolver import _normalise_bracket_variants
 from ..services import SERVICES
 from .compat import _installed_plugins, _is_present, _plugin_name_only
 from .discovery import discover_plugins
@@ -124,6 +125,7 @@ def resolve_dependencies(
     target: PluginSpec,
     answers: dict[str, Any],
     registry: dict[str, PluginSpec] | None = None,
+    parsed_options: dict[str, Any] | None = None,
 ) -> ResolutionResult:
     """Compute the install plan for ``target`` against the project.
 
@@ -133,6 +135,12 @@ def resolve_dependencies(
             decide whether each dep is already installed.
         registry: Override the spec lookup for tests. Defaults to the
             union of ``SERVICES`` + ``COMPONENTS`` + ``discover_plugins()``.
+        parsed_options: The target's bracket options as typed, if any.
+            An option's ``auto_requires`` names the components its value
+            needs (``ai[sqlite]`` requires ``database[sqlite]``), and
+            those join the target's ``required_components`` for this
+            resolution. Applied here rather than in the caller so the
+            rule lives with the walk that acts on it.
 
     Returns:
         :class:`ResolutionResult` with deps in topological order
@@ -168,7 +176,16 @@ def resolve_dependencies(
         # external — if not yet pip-installed they go to
         # ``unresolved_plugins`` and the resolver continues with the
         # rest (the CLI summarises everything at once).
-        for dep_constraint in spec.required_components:
+        required_components = set(spec.required_components)
+        if spec.name == target.name and parsed_options:
+            # What the chosen option values require, merged with what the
+            # spec declares outright. ``_normalise_bracket_variants``
+            # drops plain ``database`` when ``database[postgres]`` is
+            # present, rather than installing the base and then upgrading.
+            required_components = _normalise_bracket_variants(
+                required_components | set(compute_auto_requires(spec, parsed_options))
+            )
+        for dep_constraint in sorted(required_components):
             _resolve_one(
                 dep_constraint,
                 "component",

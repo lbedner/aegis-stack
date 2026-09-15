@@ -446,6 +446,65 @@ def _advance_copier_tracking(
     )
 
 
+def _preview_file_changes(
+    project_path: Path,
+    answers: dict[str, Any],
+    target_ref: str,
+    current_commit: str | None,
+) -> None:
+    """Say which files the update would touch, and how.
+
+    The changelog answers "what went into the template"; the question a
+    dry run is actually run for is "what will this do to MY files", and
+    on one real update that was 165 of them, none of it visible (#774).
+
+    The classification already exists - ``sync_template_changes`` renders
+    both versions and decides per file - so the preview runs exactly that,
+    against a throwaway copy of the project. Running the real thing on a
+    copy rather than threading a "don't write" flag through every write
+    site means the preview cannot drift from the behaviour it describes,
+    and cannot touch the project by accident.
+    """
+    import shutil
+    import tempfile
+
+    # A project's heavy directories are not template output and copying
+    # them would dominate the runtime.
+    skip = shutil.ignore_patterns(
+        ".venv", "node_modules", ".git", "__pycache__", "*.pyc", "data"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / project_path.name
+        try:
+            shutil.copytree(project_path, copy, ignore=skip, symlinks=True)
+            preview = sync_template_changes(
+                copy,
+                answers,
+                answers.get("_src_path") or GITHUB_TEMPLATE_URL,
+                target_ref,
+                old_commit=current_commit,
+            )
+        except Exception as e:  # noqa: BLE001 - a preview must never block
+            brand.warn(t("update.preview_unavailable", error=e))
+            return
+
+    typer.echo(t("update.preview_header"))
+    for count, key in (
+        (len(preview.synced), "update.preview_synced"),
+        (len(preview.conflicts), "update.preview_conflicts"),
+        (len(preview.removed), "update.preview_removed"),
+    ):
+        if count:
+            typer.echo(t(key, count=count))
+    for path in preview.conflicts[:20]:
+        typer.echo(f"      - {path}")
+    if len(preview.conflicts) > 20:
+        typer.echo(t("update.preview_more", count=len(preview.conflicts) - 20))
+    if not (preview.synced or preview.conflicts or preview.removed):
+        typer.echo(t("update.preview_nothing"))
+    typer.echo("")
+
+
 def update_command(
     to_version: str | None = typer.Option(
         None,
@@ -696,6 +755,12 @@ def update_command(
     # Dry run mode
     if dry_run:
         typer.echo("")
+        _preview_file_changes(
+            target_path,
+            load_copier_answers(target_path) or {},
+            target_ref,
+            current_commit,
+        )
         brand.accent(t("update.dry_run"))
         typer.echo("")
         typer.echo(t("update.dry_run_hint"))

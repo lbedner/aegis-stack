@@ -113,9 +113,6 @@ def update_with_copier_native(
         # Add scheduler backend configuration if adding scheduler
         if ComponentNames.SCHEDULER in components_to_add:
             update_data[AnswerKeys.SCHEDULER_BACKEND] = scheduler_backend
-            update_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = (
-                scheduler_backend == StorageBackends.SQLITE
-            )
 
         # CRITICAL: Manually update .copier-answers.yml BEFORE running copier update
         # The `data` parameter in run_update() doesn't actually update existing answers

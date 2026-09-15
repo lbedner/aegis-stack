@@ -172,11 +172,13 @@ class TestInstallPluginTemplateTree:
         updater = ManualUpdater(fake_project)
         written = updater.install_plugin_template_tree("aegis_plugin_test")
 
-        # Two .jinja files in the fake plugin: __init__.py.jinja +
-        # service.py.jinja, both under app/services/test_plugin/.
+        # Everything the fake plugin ships: two templates, plus the two
+        # plain files a plugin is equally entitled to vendor.
         assert sorted(written) == sorted(
             [
                 "app/services/test_plugin/__init__.py",
+                "app/services/test_plugin/py.typed",
+                "app/services/test_plugin/seeds/starter.json",
                 "app/services/test_plugin/service.py",
             ]
         )
@@ -518,3 +520,57 @@ class TestAddPluginEnsuresServicesCard:
         )
 
         assert card.read_text() == "# hand-edited\n"
+
+
+class TestPluginShipsMoreThanTemplates:
+    """A plugin's template tree is a tree, not a set of ``.jinja`` files.
+
+    ``render_plugin_tree`` walked ``rglob("*.jinja")``, so anything a
+    plugin vendored without template expressions - a seed fixture, a
+    ``py.typed`` marker, an image, a ``.sql`` - was skipped in silence:
+    not written, not reported, no warning. crawl4ai shipped
+    ``app/services/crawler/__init__.py`` as a plain file and it never once
+    landed in a project; Python treated the directory as a namespace
+    package, so nothing failed until a test read ``__file__``.
+    """
+
+    def test_a_plain_file_lands_in_the_project(self, fake_project: Path) -> None:
+        updater = ManualUpdater(fake_project)
+
+        updater.render_plugin_tree("aegis_plugin_test")
+
+        seed = fake_project / "app/services/test_plugin/seeds/starter.json"
+        assert seed.exists(), "a vendored fixture was dropped"
+        assert "vendored fixture" in seed.read_text()
+
+    def test_an_empty_marker_file_lands_too(self, fake_project: Path) -> None:
+        """``py.typed`` is empty by definition and still has to exist."""
+        updater = ManualUpdater(fake_project)
+
+        updater.render_plugin_tree("aegis_plugin_test")
+
+        assert (fake_project / "app/services/test_plugin/py.typed").exists()
+
+    def test_plain_files_are_reported_as_written(self, fake_project: Path) -> None:
+        """Silence is what made this invisible for three releases."""
+        updater = ManualUpdater(fake_project)
+
+        result = updater.render_plugin_tree("aegis_plugin_test")
+
+        assert "app/services/test_plugin/seeds/starter.json" in result.written
+
+    def test_a_plain_file_is_copied_not_rendered(self, fake_project: Path) -> None:
+        """Jinja syntax in a vendored asset is data, not a template."""
+        tree = (
+            Path(__file__).resolve().parent.parent
+            / "fixtures/aegis_plugin_test/src/aegis_plugin_test/templates"
+            / "{{ project_slug }}/app/services/test_plugin/seeds"
+        )
+        braces = tree / "braces.json"
+        braces.write_text('{"kept": "{{ project_slug }}"}\n')
+        try:
+            ManualUpdater(fake_project).render_plugin_tree("aegis_plugin_test")
+            written = fake_project / "app/services/test_plugin/seeds/braces.json"
+            assert "{{ project_slug }}" in written.read_text()
+        finally:
+            braces.unlink()

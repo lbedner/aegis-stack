@@ -292,7 +292,7 @@ class PluginSpec:
 
     # Answer keys to revert when this plugin is removed (RD-06). Keys that
     # only mean something while the plugin is installed — scheduler's
-    # ``scheduler_backend`` / ``scheduler_with_persistence`` are the
+    # ``scheduler_backend`` is the
     # in-tree case — would otherwise linger at their old values and leak
     # into later renders. Applied by
     # ``ManualUpdater._apply_removal_answer_resets``; empty for the

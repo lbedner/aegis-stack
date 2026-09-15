@@ -350,7 +350,6 @@ class TestAddCommand:
         updated_answers = load_copier_answers(project_path)
         assert updated_answers.get("include_scheduler") is True
         assert updated_answers.get("scheduler_backend") == "sqlite"
-        assert updated_answers.get("scheduler_with_persistence") is True
 
         # Verify sqlite-specific files exist
         assert (project_path / "app" / "services" / "scheduler").exists()
@@ -401,7 +400,6 @@ class TestAddCommand:
         updated_answers = load_copier_answers(project_path)
         assert updated_answers.get("include_scheduler") is True
         assert updated_answers.get("scheduler_backend") == "sqlite"
-        assert updated_answers.get("scheduler_with_persistence") is True
 
         # Verify database component auto-added
         assert updated_answers.get("include_database") is True
@@ -432,7 +430,6 @@ class TestAddCommand:
         updated_answers = load_copier_answers(project_path)
         assert updated_answers.get("include_scheduler") is True
         assert updated_answers.get("scheduler_backend") == "memory"
-        assert updated_answers.get("scheduler_with_persistence") is False
 
         # Verify database NOT auto-added
         assert updated_answers.get("include_database") is False

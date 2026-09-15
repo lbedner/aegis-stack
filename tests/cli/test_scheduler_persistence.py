@@ -296,7 +296,7 @@ class TestBackupJobInclusionLogic:
         context = template_gen.get_template_context()
 
         # Both conditions should be true for backup job
-        assert context["scheduler_with_persistence"] == "yes"
+        assert context["scheduler_backend"] != "memory"
         assert context["include_scheduler"] == "yes"
         assert context["include_database"] == "yes"
 
@@ -310,7 +310,7 @@ class TestBackupJobInclusionLogic:
         context = template_gen.get_template_context()
 
         # Independent selection: scheduler_backend="memory" but both present
-        assert context["scheduler_with_persistence"] == "no"
+        assert context["scheduler_backend"] == "memory"
         assert context["include_scheduler"] == "yes"
         assert context["include_database"] == "yes"
         # This combination should now include backup job with our changes
@@ -324,7 +324,7 @@ class TestBackupJobInclusionLogic:
 
         context = template_gen.get_template_context()
 
-        assert context["scheduler_with_persistence"] == "no"
+        assert context["scheduler_backend"] == "memory"
         assert context["include_scheduler"] == "yes"
         assert context["include_database"] == "no"
         # This combination should NOT include backup job
@@ -338,7 +338,7 @@ class TestBackupJobInclusionLogic:
 
         context = template_gen.get_template_context()
 
-        assert context["scheduler_with_persistence"] == "no"
+        assert context["scheduler_backend"] == "memory"
         assert context["include_scheduler"] == "no"
         assert context["include_database"] == "yes"
         # This combination should NOT include backup job
@@ -358,7 +358,7 @@ class TestTemplateGeneratorPersistenceContext:
 
         assert context["include_scheduler"] == "yes"
         assert context["include_database"] == "yes"
-        assert context["scheduler_with_persistence"] == "yes"
+        assert context["scheduler_backend"] != "memory"
         assert context["database_engine"] == "sqlite"
 
     def test_template_context_without_scheduler_persistence(self) -> None:
@@ -372,7 +372,7 @@ class TestTemplateGeneratorPersistenceContext:
 
         assert context["include_scheduler"] == "yes"
         assert context["include_database"] == "no"
-        assert context["scheduler_with_persistence"] == "no"
+        assert context["scheduler_backend"] == "memory"
 
     def test_template_context_database_without_scheduler_persistence(self) -> None:
         """Test template context with database but no scheduler persistence."""
@@ -385,7 +385,7 @@ class TestTemplateGeneratorPersistenceContext:
 
         assert context["include_scheduler"] == "yes"
         assert context["include_database"] == "yes"
-        assert context["scheduler_with_persistence"] == "no"  # Key difference
+        assert context["scheduler_backend"] == "memory"
         assert context["database_engine"] == "sqlite"
 
     def test_template_context_default_persistence_false(self) -> None:
@@ -395,7 +395,7 @@ class TestTemplateGeneratorPersistenceContext:
 
         context = template_gen.get_template_context()
 
-        assert context["scheduler_with_persistence"] == "no"
+        assert context["scheduler_backend"] == "memory"
 
     def test_template_context_independent_database_selection(self) -> None:
         """Test template context when database selected independently of scheduler."""
@@ -408,7 +408,7 @@ class TestTemplateGeneratorPersistenceContext:
 
         assert context["include_scheduler"] == "no"
         assert context["include_database"] == "yes"
-        assert context["scheduler_with_persistence"] == "no"
+        assert context["scheduler_backend"] == "memory"
         assert context["database_engine"] == "sqlite"
 
 

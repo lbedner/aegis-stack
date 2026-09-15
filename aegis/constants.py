@@ -239,7 +239,6 @@ class AnswerKeys:
 
     # Configuration values
     SCHEDULER_BACKEND = "scheduler_backend"
-    SCHEDULER_WITH_PERSISTENCE = "scheduler_with_persistence"
     WORKER_BACKEND = "worker_backend"
     DATABASE_ENGINE = "database_engine"
     POSTGRES_PROVIDER = "postgres_provider"

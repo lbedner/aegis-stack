@@ -1205,26 +1205,47 @@ class ManualUpdater:
         )
 
         result = PluginRenderResult()
-        for source_file in sorted(project_slug_dir.rglob(f"*{JINJA_EXTENSION}")):
-            # Path relative to the project slug dir → relative path
-            # inside the target project. Strip the ``.jinja`` suffix
-            # since the rendered file shouldn't keep it.
+        # Everything the plugin ships, not only its templates. A plugin
+        # vendors a tree: a seed fixture, a ``py.typed`` marker, an icon,
+        # a ``.sql``. Walking ``*.jinja`` alone dropped those silently -
+        # not written, not reported, no warning - and a plain
+        # ``__init__.py`` that never landed left a namespace package that
+        # imported fine and had no ``__file__``.
+        for source_file in sorted(project_slug_dir.rglob("*")):
+            if not source_file.is_file():
+                continue
             rel_inside_slug = source_file.relative_to(project_slug_dir)
-            out_rel = rel_inside_slug.with_suffix("")
+            is_template = source_file.suffix == JINJA_EXTENSION
+            # A rendered file drops the ``.jinja``; a vendored one is
+            # already named what it should be called.
+            out_rel = (
+                rel_inside_slug.with_suffix("") if is_template else rel_inside_slug
+            )
             out_path = self.project_path / out_rel
 
-            # Jinja2 needs the template name relative to the loader's
-            # root (template_root, not project_slug_dir) so it can
-            # resolve includes against sibling files.
-            template_name = str(source_file.relative_to(template_root))
-            template = plugin_env.get_template(template_name)
-            content = template.render(self.answers)
+            if is_template:
+                # Jinja2 needs the template name relative to the loader's
+                # root (template_root, not project_slug_dir) so it can
+                # resolve includes against sibling files.
+                template_name = str(source_file.relative_to(template_root))
+                content = plugin_env.get_template(template_name).render(self.answers)
+            else:
+                # Read as bytes: a vendored asset can be an image, and its
+                # contents are data rather than a template - ``{{ ... }}``
+                # in a JSON fixture stays exactly as the plugin wrote it.
+                raw = source_file.read_bytes()
+                content = None
 
-            if self._snapshot_if_replaced(out_path, content, backup_root):
-                result.replaced.append(str(out_rel))
-
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            self._write_rendered(out_path, content)
+            if content is not None:
+                if self._snapshot_if_replaced(out_path, content, backup_root):
+                    result.replaced.append(str(out_rel))
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                self._write_rendered(out_path, content)
+            else:
+                if self._snapshot_if_replaced_bytes(out_path, raw, backup_root):
+                    result.replaced.append(str(out_rel))
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_bytes(raw)
             result.written.append(str(out_rel))
 
         return result
@@ -1251,6 +1272,27 @@ class ManualUpdater:
                 return False
         except (OSError, UnicodeDecodeError):
             pass  # unreadable as text — snapshot it rather than risk loss
+
+        backup_path = backup_root / out_path.relative_to(self.project_path)
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(out_path, backup_path)
+        return True
+
+    def _snapshot_if_replaced_bytes(
+        self, out_path: Path, incoming: bytes, backup_root: Path
+    ) -> bool:
+        """``_snapshot_if_replaced`` for a vendored asset.
+
+        Same rule, compared as bytes: a plugin's fixtures and images are
+        not text, and an identical re-copy is still worth no backup.
+        """
+        if not out_path.exists():
+            return False
+        try:
+            if out_path.read_bytes() == incoming:
+                return False
+        except OSError:
+            pass  # unreadable — snapshot it rather than risk loss
 
         backup_path = backup_root / out_path.relative_to(self.project_path)
         backup_path.parent.mkdir(parents=True, exist_ok=True)

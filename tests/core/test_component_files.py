@@ -65,3 +65,41 @@ class TestGetComponentFilesSkipsStrayArtefacts:
         assert not any(f.endswith(".pyc") for f in files)
         # Sanity: the real worker sources are still discovered.
         assert any(f.endswith("heartbeat.py") for f in files)
+
+
+class TestAnotherSpecsGatedFilesAreNotYours:
+    """Adding htmx to a project without auth must not write auth pages.
+
+    The htmx component owns the whole ``web_frontend`` tree, and the auth
+    service owns the login pages inside it - declared in auth's
+    ``include_htmx`` extras bucket precisely so an htmx-without-auth
+    project does not carry them. ``aegis init`` honours that; ``aegis add
+    htmx`` copied the tree wholesale, leaving nine dead files nothing
+    routes to.
+    """
+
+    AUTH_PAGES = "app/components/web_frontend/templates/pages/auth"
+    AUTH_MACROS = "app/components/web_frontend/templates/components/auth_macros.html"
+
+    def test_adding_htmx_without_auth_skips_the_auth_pages(self) -> None:
+        files = get_component_files(
+            "htmx", answers={"include_htmx": True, "include_auth": False}
+        )
+
+        assert not [f for f in files if f.startswith(self.AUTH_PAGES)]
+        assert self.AUTH_MACROS not in files
+
+    def test_adding_htmx_with_auth_keeps_them(self) -> None:
+        files = get_component_files(
+            "htmx", answers={"include_htmx": True, "include_auth": True}
+        )
+
+        assert [f for f in files if f.startswith(self.AUTH_PAGES)]
+
+    def test_the_rest_of_the_frontend_comes_either_way(self) -> None:
+        """Only the auth-owned subset is conditional."""
+        without = get_component_files(
+            "htmx", answers={"include_htmx": True, "include_auth": False}
+        )
+
+        assert [f for f in without if "web_frontend" in f]

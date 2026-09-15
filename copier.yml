@@ -170,12 +170,6 @@ scheduler_backend:
     - "postgres"
   when: "{{ include_scheduler }}"
 
-scheduler_with_persistence:
-  type: bool
-  help: "Enable scheduler persistence?"
-  default: "{{ scheduler_backend == 'sqlite' }}"
-  when: "{{ include_scheduler }}"
-
 # Service selection
 include_auth:
   type: bool

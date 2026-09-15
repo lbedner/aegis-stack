@@ -69,6 +69,12 @@ class ServiceMigrationSpec:
     # must be idempotent: ``aegis update`` can deliver a migration to a
     # database that already holds the row. Not reversed in ``downgrade``.
     data_sql: list[str] = field(default_factory=list)
+    # Tables emptied BEFORE this service's DDL runs. Declared rather than
+    # written as SQL because two places need it: the revision gets a DELETE
+    # at the top of ``upgrade()``, and the generator is told the table will
+    # be empty so a required column with nothing to backfill is still safe
+    # to add to it. Only for derived rows something else can rewrite.
+    cleared_tables: list[str] = field(default_factory=list)
 
 
 # ============================================================================
@@ -116,6 +122,13 @@ ORG_MIGRATION = ServiceMigrationSpec(
 AI_MIGRATION = ServiceMigrationSpec(
     service_name="ai",
     description="AI service tables (LLM catalog, usage tracking, conversations)",
+    # ``llm_deployment`` and ``llm_price`` are catalog rows, written by the
+    # LLM sync and derived from it entirely. When a revision adds a required
+    # column they cannot supply (``org_id``, from the vendor-to-org change),
+    # the rows that predate it have no value to take, and there is nothing
+    # in them worth a mapping migration: clear them and let ``llm sync``
+    # write them again. ``llm_usage`` is history and is never touched.
+    cleared_tables=["llm_deployment", "llm_price"],
 )
 
 AGENTS_MIGRATION = ServiceMigrationSpec(
@@ -381,6 +394,11 @@ def _replay_hint(stderr: str) -> str:
     )
 
 
+def _cleared_tables_for(service: str) -> list[str]:
+    spec = _get_migration_specs().get(service)
+    return list(spec.cleared_tables) if spec else []
+
+
 def generate_revisions(
     project_path: Path,
     services: list[str],
@@ -411,6 +429,12 @@ def generate_revisions(
     cmd = ["uv", "run", "--project", str(project_path)]
     if python_version:
         cmd.extend(["--python", python_version])
+    # By environment, not by flag: ``--to-version <older tag>`` hands the
+    # project a migrate_gen that predates this knob, and an unknown argument
+    # is fatal to argparse while an unread variable costs nothing.
+    cleared = sorted({t for name in services for t in _cleared_tables_for(name)})
+    if cleared:
+        env["AEGIS_CLEARED_TABLES"] = ",".join(cleared)
     cmd.extend(["python", "-m", "app.cli.migrate_gen", *services])
     result = subprocess.run(
         cmd,
@@ -459,6 +483,31 @@ def _data_lines(statements: list[str]) -> str:
     return "\n".join(f'    op.execute("""{stmt}""")' for stmt in statements)
 
 
+_CLEAR_TABLE = """    if sa.inspect(op.get_bind()).has_table("{table}"):
+        op.execute("DELETE FROM {table}")"""
+
+
+def _prepend_to_upgrade(name: str, src: str, tables: list[str]) -> str:
+    """Empty ``tables`` at the top of ``upgrade()``, before any DDL.
+
+    A row that a new NOT NULL column cannot be filled for has to be gone
+    before the column lands, not after, so this cannot ride at the end the
+    way ``data_sql`` does.
+
+    Guarded on the table existing, because the same revision is what
+    CREATES it on a fresh project: there the clear runs against nothing and
+    must not be an error.
+    """
+    marker = "def upgrade() -> None:\n"
+    if marker not in src:
+        raise MigrationGenerationError(
+            f"{name}: no upgrade() to anchor data statements"
+        )
+    head, _, tail = src.partition(marker)
+    clears = "\n".join(_CLEAR_TABLE.format(table=t) for t in tables)
+    return f"{head}{marker}{clears}\n{tail}"
+
+
 def _place_data_statements(
     project_path: Path, services: list[str], written: list[Path]
 ) -> list[Path]:
@@ -478,18 +527,22 @@ def _place_data_statements(
     created: list[Path] = []
     for service in services:
         spec = specs.get(service)
-        if spec is None or not spec.data_sql:
+        if spec is None or not (spec.data_sql or spec.cleared_tables):
             continue
         own = [p for p in written if p.name.endswith(f"_{service}.py")]
         if own:
             src = own[0].read_text()
-            head, sep, tail = src.rpartition("\n\n\ndef downgrade")
-            if not sep:
-                raise MigrationGenerationError(
-                    f"{own[0].name}: no downgrade() to anchor data statements"
-                )
-            own[0].write_text(f"{head}\n{_data_lines(spec.data_sql)}{sep}{tail}")
-        elif not service_has_migration(project_path, service):
+            if spec.cleared_tables:
+                src = _prepend_to_upgrade(own[0].name, src, spec.cleared_tables)
+            if spec.data_sql:
+                head, sep, tail = src.rpartition("\n\n\ndef downgrade")
+                if not sep:
+                    raise MigrationGenerationError(
+                        f"{own[0].name}: no downgrade() to anchor data statements"
+                    )
+                src = f"{head}\n{_data_lines(spec.data_sql)}{sep}{tail}"
+            own[0].write_text(src)
+        elif spec.data_sql and not service_has_migration(project_path, service):
             revision = get_next_revision_id(project_path)
             path = get_versions_dir(project_path) / f"{revision}_{service}.py"
             path.write_text(

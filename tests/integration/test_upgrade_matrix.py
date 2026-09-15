@@ -52,7 +52,15 @@ def _release_versions(template_root: Path, count: int) -> list[str]:
     )
     if result.returncode != 0:
         return []
-    tags = [tag for tag in result.stdout.split() if "rc" not in tag]
+    from aegis import __version__ as current
+
+    # A release equal to what this checkout IS has nothing to update to:
+    # its project is already at HEAD's version, so the stamp cannot move.
+    tags = [
+        tag
+        for tag in result.stdout.split()
+        if "rc" not in tag and tag.lstrip("v") != current
+    ]
     return [tag.lstrip("v") for tag in tags[:count]]
 
 
@@ -78,6 +86,29 @@ def _marker_files(project: Path) -> list[Path]:
         if any(line.startswith("<<<<<<<") for line in text.splitlines()):
             found.append(path.relative_to(project))
     return found
+
+
+def _database_migrated(project: Path) -> bool:
+    """False only when a revision on disk never reached the database.
+
+    A stack with no services carries no revisions and no database file,
+    which is nothing to migrate rather than a failure to migrate; a stack
+    that has revisions must be stamped with the last of them.
+    """
+    import sqlite3
+
+    versions = project / "alembic" / "versions"
+    revisions = sorted(p.stem.split("_")[0] for p in versions.glob("*.py"))
+    if not revisions:
+        return True
+    db = project / "data" / "app.db"
+    if not db.exists():
+        return False
+    with sqlite3.connect(db) as conn:
+        stamped = {
+            row[0] for row in conn.execute("SELECT version_num FROM alembic_version")
+        }
+    return revisions[-1] in stamped
 
 
 def _init_at_version(parent: Path, name: str, version: str, args: list[str]) -> Path:
@@ -124,6 +155,10 @@ def test_update_from_release_leaves_nothing_to_resolve(
     )
     assert find_rej_files(project) == []
     assert _marker_files(project) == []
+    assert _database_migrated(project), (
+        f"{stack} from {from_version} merged but did not migrate:\n"
+        f"{result.stdout[-3000:]}"
+    )
 
 
 @pytest.mark.skipif(not FROM_VERSIONS, reason="no release tags (shallow clone)")
@@ -200,3 +235,11 @@ def test_update_from_a_published_release_leaves_nothing_to_resolve(
     )
     assert find_rej_files(project) == []
     assert _marker_files(project) == []
+    # A clean merge is only half an update. The revision it generates still
+    # has to apply to a database that HAS ROWS, which the generator's own
+    # scratch database never does, and an update whose migration failed
+    # still exits 0 - so nothing above this line notices.
+    assert _database_migrated(project), (
+        f"the database did not reach the revision the update wrote:\n"
+        f"{result.stdout[-4000:]}"
+    )

@@ -1771,7 +1771,7 @@ jobs:
         cache-dependency-glob: "uv.lock"
 {py_step}
     - name: Install dependencies
-      run: uv sync --all-extras
+      run: uv sync
 
     - name: Deploy
       run: uv run aegis deploy --yes

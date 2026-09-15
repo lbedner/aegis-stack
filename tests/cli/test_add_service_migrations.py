@@ -402,7 +402,7 @@ class TestAddAuthOntoFinance:
         # UV_PYTHON pins the interpreter for the aegis tool in CI (3.11);
         # the project resolves its own requires-python.
         sync = run_project_command(
-            ["uv", "sync", "--extra", "dev"],
+            ["uv", "sync"],
             project_path,
             timeout=600,
             env_overrides={"VIRTUAL_ENV": "", "UV_PYTHON": ""},

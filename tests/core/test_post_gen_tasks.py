@@ -86,7 +86,7 @@ class TestInstallDependencies:
             assert result is True
             mock_run.assert_called_once()
             args = mock_run.call_args
-            assert args[0][0] == ["uv", "sync", "--all-extras"]
+            assert args[0][0] == ["uv", "sync"]
             assert args[1]["cwd"] == tmp_path
             assert "VIRTUAL_ENV" not in args[1]["env"]
 
@@ -102,7 +102,6 @@ class TestInstallDependencies:
             assert mock_run.call_args[0][0] == [
                 "uv",
                 "sync",
-                "--all-extras",
                 "--upgrade",
             ]
 

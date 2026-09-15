@@ -1,4 +1,6 @@
-import subprocess
+import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,18 +17,25 @@ import sqlalchemy.dialects.sqlite  # noqa: E402, F401
 
 
 def pytest_configure(config: Any) -> None:
-    """Configure git for CI environments.
+    """Give git an identity for this run without touching the machine's.
 
-    This ensures git user.name and user.email are set globally,
-    which is required for project generation tests that run git commit.
+    Project generation and several update tests run ``git commit``, which
+    needs a name and an email. This used to write them to ``--global``
+    config on every invocation, so anyone running ``make test`` had
+    ``~/.gitconfig`` rewritten to "Aegis Test" and started authoring their
+    own commits under it (#1065).
+
+    The environment carries the same information to every subprocess and
+    is gone when the run ends. ``GIT_CONFIG_GLOBAL`` pointing at a file
+    that does not exist also means the developer's real global config
+    cannot influence a test, which is the other half of the isolation.
     """
-    subprocess.run(
-        ["git", "config", "--global", "user.name", "Aegis Test"],
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "--global", "user.email", "test@aegis-stack.dev"],
-        capture_output=True,
+    os.environ.setdefault("GIT_AUTHOR_NAME", "Aegis Test")
+    os.environ.setdefault("GIT_AUTHOR_EMAIL", "test@aegis-stack.dev")
+    os.environ.setdefault("GIT_COMMITTER_NAME", "Aegis Test")
+    os.environ.setdefault("GIT_COMMITTER_EMAIL", "test@aegis-stack.dev")
+    os.environ.setdefault(
+        "GIT_CONFIG_GLOBAL", str(Path(tempfile.gettempdir()) / "aegis-tests-gitconfig")
     )
 
 

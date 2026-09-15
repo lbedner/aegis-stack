@@ -63,9 +63,7 @@ def test_generated_revisions_rebuild_the_models_schema(
     # The cache copy carries a venv whose interpreter links are only valid
     # at the cache's own path; sync a fresh one here (as the db fixtures do).
     shutil.rmtree(project / ".venv", ignore_errors=True)
-    sync = run_project_command(
-        ["uv", "sync", "--extra", "dev"], project, timeout=600, step_name="sync"
-    )
+    sync = run_project_command(["uv", "sync"], project, timeout=600, step_name="sync")
     assert sync.success, sync.stderr[-800:]
 
     password = os.environ.get("POSTGRES_TEST_PASSWORD", "postgres")

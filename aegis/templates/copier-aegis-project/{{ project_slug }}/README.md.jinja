@@ -59,7 +59,7 @@ This Aegis Stack project includes the following components:
 1. **Install dependencies:**
    ```bash
    uv sync                    # Core dependencies only
-   # Or for development: uv sync --all-extras  (includes testing, linting, docs)
+   # Or for development: uv sync  (includes testing, linting, docs)
    ```
 
 2. **Activate virtual environment:**
@@ -103,7 +103,7 @@ already taken, `make serve` picks the next free port and prints the URL it
 chose, so two stacks can run side by side without editing any config.
 
 No `make` on Windows? After installing the dev dependencies once
-(`uv sync --all-extras`), every command in this README also works as
+(`uv sync`), every command in this README also works as
 `uv run poe <target>` (for example `uv run poe serve`); run `uv run poe -h`
 for the full list.
 

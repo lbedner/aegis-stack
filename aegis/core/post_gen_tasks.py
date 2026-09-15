@@ -727,10 +727,13 @@ def install_dependencies(
         env.pop("VIRTUAL_ENV", None)
 
         # Build command with optional --python flag to enforce version constraint.
-        # ``--all-extras`` matches ``make install`` so the dev tools (ruff, ty,
-        # pytest) are present — the post-gen ``make fix`` formatting step needs
-        # ruff, and without it generated projects shipped unformatted.
-        cmd = ["uv", "sync", "--all-extras"]
+        # A plain sync matches ``make install`` and installs the ``dev``
+        # dependency group, which uv enables by default — the post-gen
+        # ``make fix`` step needs ruff from there, and without it generated
+        # projects shipped unformatted. Dev tools used to live in an extra
+        # (``--all-extras``); one home means ``uv add --dev`` cannot break
+        # the venv (#1066).
+        cmd = ["uv", "sync"]
         # A plain sync honours whatever uv.lock already pins. After a
         # template update that is a stale resolve of the OLD pyproject
         # (#1019: year-old httpx/pydantic, ~80 phantom type errors in

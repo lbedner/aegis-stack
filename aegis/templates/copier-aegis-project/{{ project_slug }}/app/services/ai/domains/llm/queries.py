@@ -15,7 +15,7 @@ from typing import Any
 
 from sqlalchemy import Integer, func
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, or_, select
+from sqlmodel import Session, col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.models.llm import (
@@ -45,13 +45,25 @@ async def llm_with_vendor(
     session: AsyncSession, model_id: str
 ) -> LargeLanguageModel | None:
     """The catalog row with its SERVING org loaded."""
-    stmt = (
+    base = (
         select(LargeLanguageModel)
         .join(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
         .options(selectinload(LargeLanguageModel.served_by))
-        .where(LargeLanguageModel.model_id == model_id)
     )
-    return (await session.exec(stmt)).first()
+    exact = (
+        await session.exec(base.where(LargeLanguageModel.model_id == model_id))
+    ).first()
+    if exact is not None:
+        return exact
+    # ``llm list`` prints the id without its redundant ``{vendor}/`` prefix
+    # so the form a user copies from the table has to resolve too.
+    # Only when it is unambiguous: two vendors can serve the same name.
+    suffix_matches = (
+        await session.exec(
+            base.where(col(LargeLanguageModel.model_id).endswith(f"/{model_id}"))
+        )
+    ).all()
+    return suffix_matches[0] if len(suffix_matches) == 1 else None
 
 
 async def latest_price_for(session: AsyncSession, llm_id: int) -> LLMPrice | None:

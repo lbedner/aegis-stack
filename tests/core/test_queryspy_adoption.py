@@ -42,14 +42,14 @@ class TestQuerySpyRidesTheDatabase:
         assert "queryspy" not in off
 
     def test_dep_is_not_a_runtime_dependency(self) -> None:
-        """It must sit in the dev extra, never in ``[project] dependencies``."""
+        """It must sit with the dev tools, never in ``[project] dependencies``."""
         import tomllib
 
-        project = tomllib.loads(
+        data = tomllib.loads(
             _render("pyproject.toml.jinja", _ctx(include_database=True))
-        )["project"]
-        runtime = " ".join(project["dependencies"])
-        dev = " ".join(project["optional-dependencies"]["dev"])
+        )
+        runtime = " ".join(data["project"]["dependencies"])
+        dev = " ".join(data["dependency-groups"]["dev"])
         assert "queryspy" not in runtime
         assert "queryspy" in dev
 

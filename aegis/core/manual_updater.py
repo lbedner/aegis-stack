@@ -1701,7 +1701,7 @@ class ManualUpdater:
         # Run uv sync to update dependencies
         try:
             subprocess.run(
-                ["uv", "sync", "--all-extras"],
+                ["uv", "sync"],
                 cwd=self.project_path,
                 check=True,
                 capture_output=True,

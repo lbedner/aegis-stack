@@ -80,7 +80,7 @@ WORKDIR /code
 COPY pyproject.toml uv.lock README.md /code/
 
 # Install dependencies
-RUN uv sync --all-extras && \
+RUN uv sync && \
     rm -rf /tmp/uv-cache
 
 # Copy application code

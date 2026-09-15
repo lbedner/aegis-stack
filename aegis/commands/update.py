@@ -431,6 +431,16 @@ def _advance_copier_tracking(
             target_ref, template_root
         )
 
+    # ``aegis_version`` is a QUESTION, so it is what later renders read.
+    # ``run_update`` is handed the current version as data and the files it
+    # writes are right, but this function rewrites the answers file
+    # afterwards, so without this the stored answer keeps naming the
+    # version that generated the project and ``aegis add`` renders from it.
+    # Only corrected when the project already carries it: a project from a
+    # template that never asked should not gain the answer here.
+    if "aegis_version" in answers:
+        answers["aegis_version"] = aegis_version
+
     answers_file.write_text(
         yaml.safe_dump(answers, default_flow_style=False, sort_keys=False)
     )

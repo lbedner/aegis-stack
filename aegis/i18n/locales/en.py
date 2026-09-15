@@ -431,6 +431,7 @@ MESSAGES: dict[str, str] = {
         "Static fixture data is available but may be outdated"
     ),
     "postgen.ready": "Project ready to run!",
+    "postgen.ready_with_failures": "Project created, but some steps did not finish:",
     "postgen.next_steps": "Next steps:",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
@@ -642,7 +643,7 @@ MESSAGES: dict[str, str] = {
     "update.moved_files": ("   Moved {count} new files from nested directory"),
     "update.synced_files": "   Synced {count} template changes",
     "update.merge_conflicts": (
-        "   {count} file(s) have merge conflicts (search for <<<<<<< to resolve):"
+        "   {count} file(s) need manual resolution (each one is named below):"
     ),
     "update.removed_files": "   Removed {count} file(s) the template no longer ships",
     "update.stale_files": (

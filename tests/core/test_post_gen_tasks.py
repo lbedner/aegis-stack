@@ -570,3 +570,73 @@ class TestOllamaModeCleanup:
         project = self._project(tmp_path)
         cleanup_components(project, self._context("host"))
         assert all((project / rel).exists() for rel in self.OLLAMA_FILES)
+
+
+class TestTheFinalBannerTellsTheTruth:
+    """A step that failed must not be followed by an unqualified success.
+
+    Non-critical failures are meant to continue (see
+    ``test_non_critical_failures_continue``), and they print their own
+    warning as they happen. The run then ended with "Project ready to
+    run!" regardless, which is the line the user acts on - and at ``init``
+    nothing else reads the result at all, so a project with no revisions
+    and an empty database was announced as ready.
+    """
+
+    def test_a_clean_run_still_says_ready(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from unittest.mock import patch
+
+        import aegis.core.post_gen_tasks as pgt
+
+        with (
+            patch.object(pgt, "install_dependencies", return_value=True),
+            patch.object(pgt, "setup_env_file", return_value=True),
+            patch.object(pgt, "run_migrations", return_value=True),
+            patch.object(pgt, "format_code", return_value=True),
+            patch.object(pgt, "render_project_map", lambda *a, **k: None),
+        ):
+            run_post_generation_tasks(tmp_path, include_migrations=True)
+
+        assert "ready to run" in capsys.readouterr().out.lower()
+
+    def test_a_failed_step_replaces_the_success_line(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from unittest.mock import patch
+
+        import aegis.core.post_gen_tasks as pgt
+
+        with (
+            patch.object(pgt, "install_dependencies", return_value=True),
+            patch.object(pgt, "setup_env_file", return_value=True),
+            patch.object(pgt, "run_migrations", return_value=False),
+            patch.object(pgt, "format_code", return_value=True),
+            patch.object(pgt, "render_project_map", lambda *a, **k: None),
+        ):
+            run_post_generation_tasks(tmp_path, include_migrations=True)
+
+        out = capsys.readouterr().out.lower()
+        assert "ready to run" not in out
+        assert "did not finish" in out
+
+    def test_the_report_carries_every_step(self, tmp_path: Path) -> None:
+        """The caller reads the detail here, not from the return value."""
+        from unittest.mock import patch
+
+        import aegis.core.post_gen_tasks as pgt
+
+        report: dict[str, bool] = {}
+        with (
+            patch.object(pgt, "install_dependencies", return_value=True),
+            patch.object(pgt, "setup_env_file", return_value=False),
+            patch.object(pgt, "run_migrations", return_value=True),
+            patch.object(pgt, "format_code", return_value=False),
+            patch.object(pgt, "render_project_map", lambda *a, **k: None),
+        ):
+            run_post_generation_tasks(tmp_path, include_migrations=True, report=report)
+
+        assert report["env_ok"] is False
+        assert report["format_ok"] is False
+        assert report["migrations_ok"] is True

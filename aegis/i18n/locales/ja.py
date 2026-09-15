@@ -411,6 +411,7 @@ MESSAGES: dict[str, str] = {
         "静的フィクスチャデータは利用可能ですが、古い可能性があります"
     ),
     "postgen.ready": "プロジェクトの準備完了！",
+    "postgen.ready_with_failures": "Project created, but some steps did not finish:",
     "postgen.next_steps": "次のステップ：",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
@@ -617,7 +618,7 @@ MESSAGES: dict[str, str] = {
     "update.moved_files": "   ネストされたディレクトリから {count} ファイルを移動",
     "update.synced_files": "   {count} テンプレート変更を同期",
     "update.merge_conflicts": (
-        "   {count} ファイルにマージコンフリクトがあります（<<<<<<< を検索して解決）："
+        "   {count} file(s) need manual resolution (each one is named below):"
     ),
     "update.removed_files": "   Removed {count} file(s) the template no longer ships",
     "update.stale_files": (

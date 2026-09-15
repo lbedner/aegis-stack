@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from aegis.core.template_cleanup import (
+    TemplateRenderUnavailableError,
     _reconcile_new_answer_keys,
     _should_skip_sync,
     cleanup_nested_project_directory,
@@ -856,17 +857,19 @@ class TestSyncTemplateChanges:
         assert main_file.read_text() == "# new main"
 
     def test_handles_render_failure(self, tmp_path: Path) -> None:
-        """Test that render failure returns empty SyncResult."""
+        """A render failure is an error, not an empty result.
+
+        Returning nothing read to the caller as "no changes, no conflicts",
+        which advances the baseline and prints success over an update that
+        applied nothing (#1149).
+        """
         answers = {"project_slug": "my-project"}
 
-        with patch(
-            "copier.run_copy",
-            side_effect=Exception("Render failed"),
+        with (
+            patch("copier.run_copy", side_effect=Exception("Render failed")),
+            pytest.raises(TemplateRenderUnavailableError),
         ):
-            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
-
-        assert result.synced == []
-        assert result.conflicts == []
+            sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
 
     def test_new_template_file_is_created_not_skipped(self, tmp_path: Path) -> None:
         """A file the new template adds must be created, not silently skipped.
@@ -1170,14 +1173,17 @@ class TestThreeWayMerge:
         assert "app/config.py" in result.conflicts
         assert project_file.read_text() == user
 
-    def test_old_render_failure_preserves_files_as_conflicts(
+    def test_old_render_failure_stops_before_writing_anything(
         self, tmp_path: Path
     ) -> None:
-        """A failed old-template render must not overwrite every changed file.
+        """A failed old-template render must not touch the project.
 
-        Before issue #773 a single rendering error degraded into a project-wide
-        silent overwrite. Now each changed file is preserved and reported as a
-        conflict with a ``.rej`` sidecar instead.
+        Before #773 a single rendering error degraded into a project-wide
+        silent overwrite, which it fixed by preserving each file and writing
+        a ``.rej`` beside it. That is still the wrong answer at this scale:
+        the render failing is one event, and turning it into a conflict for
+        every changed file buries the cause (#1149). Nothing is written and
+        the user retries.
         """
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
@@ -1194,21 +1200,16 @@ class TestThreeWayMerge:
             rendered_dir.mkdir(parents=True)
             (rendered_dir / "config.py").write_text("# new template content")
 
-        with patch("copier.run_copy", side_effect=mock_run_copy):
-            result = sync_template_changes(
-                tmp_path,
-                answers,
-                "gh:test/repo",
-                "v2.0.0",
-                old_commit="abc123",
+        with (
+            patch("copier.run_copy", side_effect=mock_run_copy),
+            pytest.raises(TemplateRenderUnavailableError),
+        ):
+            sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v2.0.0", old_commit="abc123"
             )
 
-        # User content preserved; new render surfaced as a .rej conflict.
         assert project_file.read_text() == "# user content"
-        assert "app/config.py" in result.conflicts
-        assert "app/config.py" not in result.synced
-        rej = tmp_path / "app" / "config.py.rej"
-        assert rej.read_text() == "# new template content"
+        assert not (tmp_path / "app" / "config.py.rej").exists()
 
     def test_file_missing_from_old_render_is_preserved_as_conflict(
         self, tmp_path: Path
@@ -1902,3 +1903,204 @@ class TestConflictMarkerLabels:
         assert "<<<<<<< your project" in content
         assert ">>>>>>> new template" in content
         assert str(tmp_path) not in content, "marker labelled with a temp path"
+
+
+class TestMissingMergeBase:
+    """#1149: a failed old-version render must not read as a conflicted project.
+
+    Without the old version there is no way to tell a user customization
+    from a template change, so every differing file takes the no-base
+    branch: preserve, write the template beside it as ``.rej``, count a
+    conflict. On a real project that is the whole project reported as
+    conflicted, from one transient clone failure, with the cause visible
+    only at verbose level.
+    """
+
+    def _project(self, tmp_path: Path) -> dict[str, Any]:
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text("# the user's own file\n")
+        (tmp_path / ".copier-answers.yml").write_text("project_slug: my-project\n")
+        return {"project_slug": "my-project"}
+
+    def _render_only_new(self, project_slug: str) -> Callable[..., None]:
+        """Renders the new version; the old one fails, as a reset clone does."""
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            if "/old" in dst_path:
+                raise RuntimeError("RPC failed; Recv failure: Connection reset by peer")
+            rendered = Path(dst_path) / project_slug / "app"
+            rendered.mkdir(parents=True)
+            (rendered / "config.py").write_text("# the new template\n")
+
+        return mock_run_copy
+
+    def test_a_failed_old_render_stops_the_sync(self, tmp_path: Path) -> None:
+        answers = self._project(tmp_path)
+
+        with (
+            patch("copier.run_copy", side_effect=self._render_only_new("my-project")),
+            pytest.raises(TemplateRenderUnavailableError) as caught,
+        ):
+            sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v2.0.0", old_commit="abc123"
+            )
+
+        # Naming the version is what tells the user this is not their project
+        # being in conflict, and that retrying is the fix.
+        assert "abc123" in str(caught.value)
+
+    def test_nothing_is_written_when_the_base_is_missing(self, tmp_path: Path) -> None:
+        """The project is left for a retry, not buried in .rej files."""
+        answers = self._project(tmp_path)
+
+        with (
+            patch("copier.run_copy", side_effect=self._render_only_new("my-project")),
+            pytest.raises(TemplateRenderUnavailableError),
+        ):
+            sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v2.0.0", old_commit="abc123"
+            )
+
+        assert list(tmp_path.rglob("*.rej")) == []
+        assert (tmp_path / "app" / "config.py").read_text() == "# the user's own file\n"
+
+    def test_an_empty_old_render_counts_as_missing(self, tmp_path: Path) -> None:
+        """Copier can return without raising and still leave nothing behind."""
+        answers = self._project(tmp_path)
+
+        def renders_nothing_old(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            if "/old" in dst_path:
+                return
+            rendered = Path(dst_path) / "my-project" / "app"
+            rendered.mkdir(parents=True)
+            (rendered / "config.py").write_text("# the new template\n")
+
+        with (
+            patch("copier.run_copy", side_effect=renders_nothing_old),
+            pytest.raises(TemplateRenderUnavailableError),
+        ):
+            sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v2.0.0", old_commit="abc123"
+            )
+
+    def test_no_old_commit_still_syncs(self, tmp_path: Path) -> None:
+        """Nothing to compare against was never promised: not an error."""
+        answers = self._project(tmp_path)
+
+        def new_only(**kwargs: object) -> None:
+            rendered = Path(str(kwargs["dst_path"])) / "my-project" / "app"
+            rendered.mkdir(parents=True)
+            (rendered / "config.py").write_text("# the new template\n")
+
+        with patch("copier.run_copy", side_effect=new_only):
+            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v2.0.0")
+
+        assert result.conflicts == ["app/config.py"]
+
+
+class TestMissingNewRender:
+    """#1149's twin: the NEW render failing claimed a successful update.
+
+    ``sync_template_changes`` returned an empty ``SyncResult`` when the new
+    version could not be rendered, which the caller reads as "no changes,
+    no conflicts": post-generation runs, ``_commit`` and
+    ``_template_version`` advance, the success banner prints, and the
+    backup tag is deleted. The project is then stamped as updated with
+    nothing applied, and the next update diffs from the new baseline, so
+    the skipped changes are never delivered.
+    """
+
+    def _project(self, tmp_path: Path) -> dict[str, Any]:
+        (tmp_path / "app").mkdir()
+        (tmp_path / "app" / "config.py").write_text("# the user's own file\n")
+        return {"project_slug": "my-project"}
+
+    def test_a_failed_new_render_is_an_error_not_an_empty_result(
+        self, tmp_path: Path
+    ) -> None:
+        answers = self._project(tmp_path)
+
+        def boom(**kwargs: object) -> None:
+            raise RuntimeError("RPC failed; Recv failure: Connection reset by peer")
+
+        with (
+            patch("copier.run_copy", side_effect=boom),
+            pytest.raises(TemplateRenderUnavailableError) as caught,
+        ):
+            sync_template_changes(tmp_path, answers, "gh:test/repo", "v2.0.0")
+
+        assert "v2.0.0" in str(caught.value)
+
+    def test_an_empty_new_render_is_an_error_too(self, tmp_path: Path) -> None:
+        """Copier returning without writing the project dir is the same state."""
+        answers = self._project(tmp_path)
+
+        with (
+            patch("copier.run_copy", side_effect=lambda **kwargs: None),
+            pytest.raises(TemplateRenderUnavailableError),
+        ):
+            sync_template_changes(tmp_path, answers, "gh:test/repo", "v2.0.0")
+
+
+class TestNothingIsSkippedInSilence:
+    """A file the sync could not write must appear in the report.
+
+    The per-file handlers logged at verbose level and moved on, so a
+    half-updated project came back as a clean update with no indication of
+    which file missed out.
+    """
+
+    def test_a_file_that_cannot_be_written_is_reported(self, tmp_path: Path) -> None:
+        answers = {"project_slug": "my-project"}
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text("# user content")
+
+        def render(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            rendered = Path(dst_path) / "my-project" / "app"
+            rendered.mkdir(parents=True)
+            body = "# old" if "/old" in dst_path else "# new"
+            (rendered / "config.py").write_text(body)
+
+        real_write = Path.write_bytes
+
+        def refuse_project_writes(self: Path, data: bytes) -> int:
+            if str(self).startswith(str(tmp_path / "app")):
+                raise OSError("Read-only file system")
+            return real_write(self, data)
+
+        with (
+            patch("copier.run_copy", side_effect=render),
+            patch.object(Path, "write_bytes", refuse_project_writes),
+        ):
+            result = sync_template_changes(
+                tmp_path, answers, "gh:test/repo", "v2.0.0", old_commit="abc123"
+            )
+
+        assert "app/config.py" in result.conflicts
+        assert "app/config.py" not in result.synced
+
+    def test_unwritable_answers_stop_the_update(self, tmp_path: Path) -> None:
+        """Backfill that cannot be saved means copier renders with the
+        template's own defaults for the new questions, which is the guess
+        this backfill exists to prevent."""
+        project = tmp_path / "proj"
+        new_render = tmp_path / "new"
+        for path, data in (
+            (project, {"project_slug": "x"}),
+            (new_render, {"project_slug": "x", "include_storage": True}),
+        ):
+            path.mkdir(parents=True)
+            (path / ".copier-answers.yml").write_text(yaml.safe_dump(data))
+
+        with (
+            patch.object(
+                Path, "write_text", side_effect=OSError("Read-only file system")
+            ),
+            pytest.raises(TemplateRenderUnavailableError),
+        ):
+            _reconcile_new_answer_keys(project, new_render)

@@ -55,6 +55,23 @@ _DISCOVERED_PLUGINS: list[PluginSpec] | None = None
 _DISCOVERED_CLI_APPS: dict[str, Any] | None = None
 
 
+def module_name_for(plugin_name: str) -> str | None:
+    """The importable package that registered ``plugin_name``.
+
+    A spec's ``name`` is a logical identifier and its module is not
+    derivable from it (``name="scraper"`` can live in
+    ``aegis_stack_scraper``), so the entry points are the only mapping.
+    Needed wherever an INSTALLED plugin has to be acted on by name - the
+    project's answers record the name, and the template resolver needs the
+    module.
+    """
+    for ep in _entry_points_for(PLUGIN_ENTRY_POINT_GROUP):
+        spec = _load_plugin_spec(ep)
+        if spec is not None and spec.name == plugin_name:
+            return ep.value.split(":")[0].split(".")[0]
+    return None
+
+
 def clear_cache() -> None:
     """Reset both discovery caches.
 

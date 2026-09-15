@@ -699,6 +699,23 @@ def add_command(
                 brand.warn(
                     f"   {t('add.skipped_files', count=len(result.files_skipped))}"
                 )
+            # A component's answer only reaches a file when that file is
+            # rendered. Plugin trees were re-rendered just now; in-tree
+            # specs keep their branch until an update, and silence there
+            # is what left projects contradicting their own answers.
+            if result.plugins_rerendered:
+                brand.success(
+                    f"   {t('add.plugins_rerendered', names=', '.join(result.plugins_rerendered))}"
+                )
+            if result.specs_needing_update:
+                typer.echo("")
+                brand.warn(
+                    t(
+                        "add.specs_need_update",
+                        names=", ".join(result.specs_needing_update),
+                    )
+                )
+                typer.echo(f"   {t('add.specs_need_update_hint')}")
 
         # Generate migrations for newly-added components that own tables.
         # Today that's scheduler[postgres] -> scheduler.job_execution; the

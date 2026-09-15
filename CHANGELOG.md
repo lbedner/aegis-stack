@@ -7,6 +7,33 @@
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-14
+
+### Fixed
+
+- **A column added to a table that already has rows gets a value for them.**
+  Revisions are derived by diffing the models against a scratch database
+  that is empty by construction, and every database the revision then runs
+  on is not. A 0.10.1 project with the ai service updated its files and
+  then failed to migrate: `org_id` arrived NOT NULL with nothing to fill
+  the rows that predate it. This is not an ai problem - SQLModel renders
+  `Field(default=True)` as a Python-side default the database never sees,
+  so any service adding any required field to an existing model shipped the
+  same failure, and only `X | None` fields were safe. A NOT NULL column
+  added to an existing table now carries a server default taken from the
+  model's own default, so fresh and upgraded databases stay identical. A
+  required column with no default at all stops generation and names itself,
+  rather than dying inside alembic on someone's data. For the one case this
+  release has to cross, `ServiceMigrationSpec.cleared_tables` empties the
+  derived LLM catalog before the DDL and the next `llm sync` writes it
+  again; `llm_usage` is history and is never touched.
+- **The upgrade matrix checks that the database moved, not just that the
+  merge was clean.** An update whose migration failed still exits 0, so
+  every pair passed while a real 0.10.1 ai project could not migrate at
+  all. Each pair now asserts the database reached the revision the update
+  wrote, and the generator's backfill has fast unit tests that run on every
+  pull request rather than only in the nightly suite.
+
 ## [0.12.0] - 2026-09-14
 
 ### Added

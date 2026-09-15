@@ -421,6 +421,7 @@ MESSAGES: dict[str, str] = {
         "Statische Fixture-Daten verfügbar, aber möglicherweise veraltet"
     ),
     "postgen.ready": "Projekt bereit!",
+    "postgen.ready_with_failures": "Project created, but some steps did not finish:",
     "postgen.next_steps": "Nächste Schritte:",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
@@ -629,7 +630,7 @@ MESSAGES: dict[str, str] = {
     "update.moved_files": "   {count} neue Dateien aus verschachteltem Verzeichnis verschoben",
     "update.synced_files": "   {count} Template-Änderungen synchronisiert",
     "update.merge_conflicts": (
-        "   {count} Datei(en) haben Merge-Konflikte (nach <<<<<<< suchen):"
+        "   {count} file(s) need manual resolution (each one is named below):"
     ),
     "update.removed_files": "   Removed {count} file(s) the template no longer ships",
     "update.stale_files": (

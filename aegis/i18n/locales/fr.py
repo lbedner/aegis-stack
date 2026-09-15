@@ -423,6 +423,7 @@ MESSAGES: dict[str, str] = {
         "Les données de fixtures statiques sont disponibles mais potentiellement obsolètes"
     ),
     "postgen.ready": "Projet prêt à être lancé !",
+    "postgen.ready_with_failures": "Project created, but some steps did not finish:",
     "postgen.next_steps": "Prochaines étapes :",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
@@ -633,7 +634,7 @@ MESSAGES: dict[str, str] = {
     "update.moved_files": "   {count} nouveaux fichiers déplacés depuis le répertoire imbriqué",
     "update.synced_files": "   {count} modifications de modèle synchronisées",
     "update.merge_conflicts": (
-        "   {count} fichier(s) avec des conflits de fusion (cherchez <<<<<<< pour résoudre) :"
+        "   {count} file(s) need manual resolution (each one is named below):"
     ),
     "update.removed_files": "   Removed {count} file(s) the template no longer ships",
     "update.stale_files": (

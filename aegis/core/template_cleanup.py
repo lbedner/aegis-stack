@@ -181,6 +181,16 @@ def run_ruff_on_text(
         return None
 
 
+class TemplateRenderUnavailableError(RuntimeError):
+    """A version this sync needs could not be rendered, so it did not run.
+
+    Without it no file can be told apart from a user customization, and the
+    sync would report every differing file as a conflict - a whole project
+    of ``.rej`` files produced by one failed clone. The caller rolls back
+    and the user retries instead (#1149).
+    """
+
+
 @dataclass
 class SyncResult:
     """Result of sync_template_changes() with details about what happened."""
@@ -279,8 +289,14 @@ def _reconcile_new_answer_keys(project_path: Path, new_rendered_dir: Path) -> li
                 )
             )
         except OSError as e:
-            verbose_print(f"   Warning: Could not write backfilled answers: {e}")
-            return []
+            # Returning [] says "no keys needed backfilling", and the update
+            # then runs copier against answers that are missing them - which
+            # is the template-default guess this function exists to prevent.
+            raise TemplateRenderUnavailableError(
+                f"could not write backfilled answers to {project_answers_file}: "
+                f"{e}. The update would render with the template's own defaults "
+                f"for the questions this version added, so it was stopped."
+            ) from e
     return added
 
 
@@ -451,12 +467,22 @@ def sync_template_changes(
                 quiet=True,
             )
         except Exception as e:
-            verbose_print(f"   Warning: Could not render new template for sync: {e}")
-            return SyncResult()
+            # An empty SyncResult here reads to the caller as "no changes and
+            # no conflicts": post-gen runs, the baseline advances, the success
+            # banner prints and the backup tag is deleted. The project is then
+            # stamped as updated with nothing applied, and the next update
+            # diffs from the new baseline, so what was skipped never arrives.
+            raise TemplateRenderUnavailableError(
+                f"could not render template version {vcs_ref}: {e}. Nothing was "
+                f"written - run the update again."
+            ) from e
 
         new_rendered_dir = new_render / project_slug
         if not new_rendered_dir.exists():
-            return SyncResult()
+            raise TemplateRenderUnavailableError(
+                f"rendering template version {vcs_ref} produced no project "
+                f"directory. Nothing was written - run the update again."
+            )
         _prune_render(new_rendered_dir, answers)
 
         # Render the OLD template version (for 3-way merge base)
@@ -478,10 +504,22 @@ def sync_template_changes(
                     _prune_render(candidate, answers)
                     old_rendered_dir = candidate
             except Exception as e:
-                verbose_print(
-                    f"   Warning: Could not render old template for merge base: {e}"
+                raise TemplateRenderUnavailableError(
+                    f"could not render template version {old_commit} to compare "
+                    f"against: {e}. Without it every changed file reads as a "
+                    f"conflict, so nothing was written. Run the update again if "
+                    f"that was a network failure; if the recorded baseline no "
+                    f"longer exists in the template repository, point _commit in "
+                    f".copier-answers.yml at one that does."
+                ) from e
+            if old_rendered_dir is None:
+                # Copier can return without raising and still leave nothing
+                # behind (a partial clone), which is the same problem.
+                raise TemplateRenderUnavailableError(
+                    f"rendering template version {old_commit} produced no files "
+                    f"to compare against, so nothing was written - run the "
+                    f"update again."
                 )
-                # Fall back to overwrite behavior (no old render available)
 
         # Compare and sync files. Ruff normalizes every .py merge against
         # the project's own config, so the files that carry that config
@@ -610,6 +648,9 @@ def sync_template_changes(
                     )
 
             except OSError as e:
+                # Skipping in silence leaves the project half-updated with
+                # nothing in the report to say which file missed out.
+                result.conflicts.append(str(relative))
                 verbose_print(f"   Warning: Could not sync {relative}: {e}")
 
         # Second pass: files the target template DROPPED. The loop above walks
@@ -991,6 +1032,8 @@ def _three_way_merge(
                 f"   Merge error (kept user's version, needs manual review): {relative}"
             )
     except OSError as e:
+        # Same rule as the sync loop: a file that did not land is reported.
+        result.conflicts.append(str(relative))
         verbose_print(f"   Warning: Could not sync {relative}: {e}")
 
 

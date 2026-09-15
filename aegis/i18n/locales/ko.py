@@ -398,6 +398,7 @@ MESSAGES: dict[str, str] = {
         "정적 픽스처 데이터 사용 가능하지만 오래된 데이터일 수 있습니다"
     ),
     "postgen.ready": "프로젝트 실행 준비 완료!",
+    "postgen.ready_with_failures": "Project created, but some steps did not finish:",
     "postgen.next_steps": "다음 단계:",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
@@ -596,7 +597,7 @@ MESSAGES: dict[str, str] = {
     "update.moved_files": "   중첩 디렉토리에서 {count}개 새 파일 이동 완료",
     "update.synced_files": "   {count}개 템플릿 변경 사항 동기화 완료",
     "update.merge_conflicts": (
-        "   {count}개 파일에 병합 충돌 있음 (<<<<<<< 검색으로 해결):"
+        "   {count} file(s) need manual resolution (each one is named below):"
     ),
     "update.removed_files": "   Removed {count} file(s) the template no longer ships",
     "update.stale_files": (

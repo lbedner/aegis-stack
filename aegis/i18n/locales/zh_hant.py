@@ -327,6 +327,7 @@ MESSAGES: dict[str, str] = {
     "postgen.llm_sync_hint": "之後可運行 {slug} llm sync 獲取最新模型數據",
     "postgen.llm_fixtures_fallback": "靜態數據可用，但可能不是最新版本",
     "postgen.ready": "專案已就緒！",
+    "postgen.ready_with_failures": "Project created, but some steps did not finish:",
     "postgen.next_steps": "接下來：",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
@@ -492,7 +493,7 @@ MESSAGES: dict[str, str] = {
     "update.updating_to": "正在更新至模板版本 {version}",
     "update.moved_files": "   已從嵌套目錄移動 {count} 個新檔案",
     "update.synced_files": "   已同步 {count} 處模板變更",
-    "update.merge_conflicts": ("   {count} 個檔案存在合並衝突（搜索 <<<<<<< 解決）："),
+    "update.merge_conflicts": ("   {count} 個檔案需要手動處理（下面逐一列出）："),
     "update.removed_files": "   Removed {count} file(s) the template no longer ships",
     "update.stale_files": (
         "   {count} customized file(s) are no longer part of the template.\n"

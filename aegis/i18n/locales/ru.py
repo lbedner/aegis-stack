@@ -401,6 +401,7 @@ MESSAGES: dict[str, str] = {
         "Статические фикстуры доступны, но могут быть устаревшими"
     ),
     "postgen.ready": "Проект готов к запуску!",
+    "postgen.ready_with_failures": "Project created, but some steps did not finish:",
     "postgen.next_steps": "Следующие шаги:",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
@@ -603,7 +604,7 @@ MESSAGES: dict[str, str] = {
     "update.moved_files": "   Перемещено {count} новых файлов из вложенного каталога",
     "update.synced_files": "   Синхронизировано {count} изменений шаблона",
     "update.merge_conflicts": (
-        "   {count} файл(ов) с конфликтами слияния (ищите <<<<<<< для разрешения):"
+        "   {count} file(s) need manual resolution (each one is named below):"
     ),
     "update.removed_files": "   Removed {count} file(s) the template no longer ships",
     "update.stale_files": (

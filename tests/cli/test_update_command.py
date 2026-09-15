@@ -804,6 +804,7 @@ class TestUpdateCommandPostGenTasks:
         # This will likely hit early exit, but tests the plumbing exists
         assert result.stdout or result.stderr
 
+    @patch("aegis.commands.update.sync_template_changes")
     @patch("aegis.commands.update.run_post_generation_tasks")
     @patch("aegis.commands.update.get_current_template_commit")
     @patch("copier.run_update")
@@ -812,12 +813,17 @@ class TestUpdateCommandPostGenTasks:
         mock_copier_update: MagicMock,
         mock_get_commit: MagicMock,
         mock_post_gen: MagicMock,
+        mock_sync: MagicMock,
         project_factory: "ProjectFactory",
     ) -> None:
         """Test that update properly shows post-gen task failures."""
         # Setup mocks to bypass early exit and simulate post-gen failure
         mock_get_commit.return_value = "abc123"  # Different from target
         mock_post_gen.return_value = False
+        # The sync is not what this test is about, and a baseline that cannot
+        # be rendered is now an error in its own right (#1149) - which would
+        # end the run before post-gen ever gets a chance to fail.
+        mock_sync.return_value = SyncResult()
 
         project_path = project_factory("base")
 
@@ -1607,3 +1613,57 @@ class TestLocalTemplateStamping:
         output = strip_ansi_codes(result.stdout + result.stderr)
         assert "_src_path" in output, "never told the project is pinned locally"
         assert "gh:lbedner/aegis-stack" in output, "never said how to unpin it"
+
+
+class TestAnswersRecordTheVersionThatRanTheUpdate:
+    """``aegis_version`` is an answer, and answers are what the next render reads.
+
+    ``run_update`` is handed the current version as data, so the files it
+    renders are right, and a later block patches ``__aegis_version__`` in
+    ``app/__init__.py`` by hand because copier does not re-render unchanged
+    files. Neither of those reaches ``.copier-answers.yml``, which this
+    command rewrites itself - so the stored answer still names the version
+    that GENERATED the project, releases ago, and every later render
+    (``aegis add``) reads it.
+    """
+
+    def test_the_stored_answer_advances_with_the_update(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import yaml
+
+        import aegis.commands.update as upd
+
+        answers = tmp_path / ".copier-answers.yml"
+        answers.write_text(
+            "_commit: oldsha\n"
+            "_template_version: 0.11.1\n"
+            "aegis_version: 0.11.1\n"
+            "project_slug: demo\n"
+        )
+        monkeypatch.setattr(upd, "resolve_ref_to_commit", lambda ref, root: "newsha")
+
+        upd._advance_copier_tracking(tmp_path, "v0.12.1", tmp_path)
+
+        data = yaml.safe_load(answers.read_text())
+        assert data["aegis_version"] == upd.aegis_version
+        # The keys that were already right stay right.
+        assert data["_template_version"] == "0.12.1"
+        assert data["project_slug"] == "demo"
+
+    def test_a_project_without_the_answer_does_not_gain_one(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Only correct what the project already tracks: a template that
+        never asked this question should not start carrying the answer."""
+        import yaml
+
+        import aegis.commands.update as upd
+
+        answers = tmp_path / ".copier-answers.yml"
+        answers.write_text("_commit: oldsha\n_template_version: 0.11.1\n")
+        monkeypatch.setattr(upd, "resolve_ref_to_commit", lambda ref, root: "newsha")
+
+        upd._advance_copier_tracking(tmp_path, "v0.12.1", tmp_path)
+
+        assert "aegis_version" not in yaml.safe_load(answers.read_text())

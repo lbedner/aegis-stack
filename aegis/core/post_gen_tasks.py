@@ -1149,7 +1149,9 @@ def run_post_generation_tasks(
     # Task 2: Setup .env file (non-critical)
     if reporter is not None:
         reporter.step("env", t("build.step.env"))
-    setup_env_file(project_path)
+    env_ok = setup_env_file(project_path)
+    if report is not None:
+        report["env_ok"] = env_ok
     if reporter is not None:
         reporter.done("env")
 
@@ -1216,13 +1218,35 @@ def run_post_generation_tasks(
     # Task 5: Format code (non-critical)
     if reporter is not None:
         reporter.step("format", t("build.step.format"), "ruff")
-    format_code(project_path)
+    format_ok = format_code(project_path)
+    if report is not None:
+        report["format_ok"] = format_ok
     if reporter is not None:
         reporter.done("format")
 
-    # Print final status (only reached if deps succeeded)
+    # Print final status (only reached if deps succeeded). Non-critical
+    # failures continue by design and each prints its own warning as it
+    # happens - but the line the user acts on is this one, and an
+    # unqualified "ready to run" over a project with no revisions and an
+    # empty database is the wrong thing to act on. ``init`` reads neither
+    # the return value nor the report, so this banner is all it has.
+    failed = [
+        label
+        for ok, label in (
+            (env_ok, t("build.step.env")),
+            (revisions_ok, t("build.step.revisions")),
+            (migrations_ok, t("build.step.migrate")),
+            (format_ok, t("build.step.format")),
+        )
+        if not ok
+    ]
     typer.echo()
-    brand.success(t("postgen.ready"), bold=True)
+    if failed:
+        brand.warn(t("postgen.ready_with_failures"), bold=True)
+        for label in failed:
+            typer.echo(f"   - {label}")
+    else:
+        brand.success(t("postgen.ready"), bold=True)
 
     # Show project structure map
     typer.echo()

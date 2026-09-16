@@ -34,6 +34,7 @@ from app.components.frontend.auth.login_view import LoginView
 from app.components.frontend.auth.register_view import RegisterView
 from app.components.frontend.auth.session import (
     is_authenticated,
+    persist_refresh_token,
     sign_out,
 )
 from app.components.frontend.core.routes import LOGIN_ROUTE, REGISTER_ROUTE
@@ -1367,7 +1368,15 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         async def _on_unauthorized() -> None:
             await sign_out(page)
 
-        api_client = APIClient(on_unauthorized=_on_unauthorized)
+        async def _on_session_rotated(token: str) -> None:
+            # The jar dies with the process; this is the one value that
+            # outlives it, and only ever the newest one.
+            await persist_refresh_token(page, token)
+
+        api_client = APIClient(
+            on_unauthorized=_on_unauthorized,
+            on_session_rotated=_on_session_rotated,
+        )
         {%- else -%}
         api_client = APIClient()
         {%- endif %}

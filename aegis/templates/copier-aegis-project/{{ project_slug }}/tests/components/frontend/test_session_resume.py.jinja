@@ -1,0 +1,149 @@
+{% if include_auth -%}
+"""A session that outlives the webserver process.
+
+The auth cookies live in the per-session ``APIClient``'s httpx jar, which
+is process memory: a deploy - or far more often a dev hot-reload - emptied
+it and there was no way back, so the user logged in again. One value now
+outlives the process, the rotating refresh token, and only ever the
+newest one: replaying a superseded token trips the backend's reuse
+detection.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+from app.components.frontend.auth.session import (
+    RESUME_TOKEN_KEY,
+    forget_refresh_token,
+    persist_refresh_token,
+    try_resume_session,
+)
+from app.core.client import REFRESH_COOKIE
+
+
+class FakeStorage:
+    def __init__(self, stored: dict[str, Any] | None = None) -> None:
+        self.stored = dict(stored or {})
+        self.removed: list[str] = []
+
+    async def get_async(self, key: str) -> Any:
+        return self.stored.get(key)
+
+    async def set_async(self, key: str, value: Any) -> None:
+        self.stored[key] = value
+
+    async def remove_async(self, key: str) -> None:
+        self.removed.append(key)
+        self.stored.pop(key, None)
+
+
+class FakeClient:
+    """Enough of ``APIClient`` for the resume decision."""
+
+    def __init__(self, *, cold: bool = True, refresh_ok: bool = True) -> None:
+        self._cold = cold
+        self._refresh_ok = refresh_ok
+        self.seeded: list[tuple[str, str]] = []
+        self.cleared = False
+        self.refreshed = False
+
+    def has_session_cookies(self) -> bool:
+        return not self._cold
+
+    def set_cookie(self, name: str, value: str, path: str = "/") -> None:
+        self.seeded.append((name, value))
+
+    async def refresh_session(self) -> bool:
+        self.refreshed = True
+        return self._refresh_ok
+
+    def clear_cookies(self) -> None:
+        self.cleared = True
+
+
+class FakePage:
+    def __init__(self, client: FakeClient, storage: FakeStorage) -> None:
+        self.client_storage = storage
+        self.session_id = "test-session"
+        self._client = client
+
+
+@pytest.fixture(autouse=True)
+def _session_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``try_resume_session`` reads the client off SessionState."""
+    import app.components.frontend.auth.session as module
+
+    monkeypatch.setattr(
+        module,
+        "get_session_state",
+        lambda page: type("S", (), {"api_client": page._client})(),
+    )
+
+
+class TestResumingAColdJar:
+    async def test_a_persisted_token_is_exchanged_for_a_session(self) -> None:
+        client = FakeClient(cold=True, refresh_ok=True)
+        page = FakePage(client, FakeStorage({RESUME_TOKEN_KEY: "stored-token"}))
+
+        assert await try_resume_session(page) is True
+        assert client.seeded == [(REFRESH_COOKIE, "stored-token")]
+        assert client.refreshed is True
+
+    async def test_a_live_jar_is_never_disturbed(self) -> None:
+        """A working session must not be touched by the resume path."""
+        client = FakeClient(cold=False)
+        page = FakePage(client, FakeStorage({RESUME_TOKEN_KEY: "stored-token"}))
+
+        assert await try_resume_session(page) is False
+        assert client.seeded == []
+        assert client.refreshed is False
+
+    async def test_nothing_stored_is_not_an_error(self) -> None:
+        client = FakeClient(cold=True)
+        page = FakePage(client, FakeStorage())
+
+        assert await try_resume_session(page) is False
+        assert client.refreshed is False
+
+    async def test_a_rejected_token_is_forgotten_not_retried(self) -> None:
+        """Expired or already superseded - replaying it reads as reuse."""
+        client = FakeClient(cold=True, refresh_ok=False)
+        storage = FakeStorage({RESUME_TOKEN_KEY: "stale-token"})
+        page = FakePage(client, storage)
+
+        assert await try_resume_session(page) is False
+        assert client.cleared is True
+        assert RESUME_TOKEN_KEY in storage.removed
+
+    async def test_storage_that_cannot_be_read_degrades(self) -> None:
+        class Broken:
+            async def get_async(self, key: str) -> Any:
+                raise RuntimeError("client storage unavailable")
+
+        page = FakePage(FakeClient(cold=True), FakeStorage())
+        page.client_storage = Broken()
+
+        assert await try_resume_session(page) is False
+
+
+class TestWhatIsStored:
+    async def test_the_current_token_replaces_the_previous_one(self) -> None:
+        """Rotation means the stored value is only ever the newest."""
+        storage = FakeStorage()
+        page = FakePage(FakeClient(), storage)
+
+        await persist_refresh_token(page, "first")
+        await persist_refresh_token(page, "second")
+
+        assert storage.stored[RESUME_TOKEN_KEY] == "second"
+
+    async def test_signing_out_forgets_it(self) -> None:
+        storage = FakeStorage({RESUME_TOKEN_KEY: "token"})
+        page = FakePage(FakeClient(), storage)
+
+        await forget_refresh_token(page)
+
+        assert RESUME_TOKEN_KEY not in storage.stored
+{%- endif %}

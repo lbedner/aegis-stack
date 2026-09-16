@@ -89,6 +89,11 @@ dependencies = [
 {#- PDFium: the text layer and page rendering behind document extraction.
     Binary wheels, no system packages; the PNG encoder is the stdlib. #}
     "pypdfium2>=5.0,<6",
+{#- Tesseract's wrapper and the image decoder it reads through; the
+    binary is a system package (see the Dockerfile). A page OCR can read
+    never reaches a model. #}
+    "pytesseract>=0.3.13",
+    "pillow>=11",
 {%- endif %}
 {%- if include_ai %}
 {%- if ai_framework == "pydantic-ai" %}

@@ -212,3 +212,136 @@ class TestOtherMedia:
         assert (result.read, result.unread) == (0, 1)
         (page,) = await pages_for(svc.db, doc.id)
         assert "unsupported" in (page.detail or "").lower()
+
+
+class TestEachPageLandsOnItsOwn:
+    """One transaction across a whole scan held the write lock for every
+    model call of every page - minutes - and two readings of one file
+    deadlocked. A page commits as soon as it is read."""
+
+    async def test_a_page_is_committed_before_the_next_is_read(self, svc) -> None:
+        from tests._pdf import pdf_bytes
+
+        doc = await svc.ingest(
+            pdf_bytes(["", "", ""]),
+            title="scan.pdf",
+            media_type="application/pdf",
+            owner_user_id=1,
+        )
+        commits_at_call: list[int] = []
+        commits = 0
+        real_commit = svc.db.commit
+
+        async def counting_commit() -> None:
+            nonlocal commits
+            commits += 1
+            await real_commit()
+
+        async def vision(image: bytes, media_type: str) -> tuple[str, str]:
+            commits_at_call.append(commits)
+            return "read", "fake-model"
+
+        svc.db.commit = counting_commit  # type: ignore[method-assign]
+        await extract_document(svc.db, doc.id, owner_user_id=1, vision=vision)
+
+        # The reads are committed before the first model call, and each
+        # call after that sees one more page landed than the last.
+        assert commits_at_call == [1, 2, 3]
+
+
+class TestOcrComesBeforeTheModel:
+    """A scan is typed more often than not. Tesseract reads those pages
+    locally; the model sees only what OCR could not make sense of."""
+
+    async def _scan(self, svc):  # noqa: ANN001, ANN202
+        from tests._pdf import pdf_bytes
+
+        return await svc.ingest(
+            pdf_bytes(["", ""]),
+            title="scan.pdf",
+            media_type="application/pdf",
+            owner_user_id=1,
+        )
+
+    async def test_a_typed_page_never_reaches_the_model(
+        self, svc, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services.documents.domains.extraction import ocr
+
+        monkeypatch.setattr(
+            ocr,
+            "read_png",
+            lambda image: ("REQUEST FOR INFORMATION\nDue 9/8/2026 $1,500.00", 91.0),
+        )
+        vision = FakeVision()
+        doc = await self._scan(svc)
+
+        result = await extract_document(svc.db, doc.id, owner_user_id=1, vision=vision)
+
+        assert (result.read, vision.calls) == (2, 0)
+        pages = await pages_for(svc.db, doc.id)
+        assert all(p.method == "ocr" and p.model is None for p in pages)
+        assert "Due 9/8/2026" in (pages[0].text or "")
+
+    async def test_a_page_ocr_cannot_read_goes_to_the_model(
+        self, svc, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A landscape table read sideways is all letters and no words;
+        Tesseract's own confidence is what says so."""
+        from app.services.documents.domains.extraction import ocr
+
+        monkeypatch.setattr(
+            ocr,
+            "read_png",
+            lambda image: ("{SHINOW 08 WODNI HS 9 ANY OB8YRISNVEL", 34.0),
+        )
+        vision = FakeVision()
+        doc = await self._scan(svc)
+
+        await extract_document(svc.db, doc.id, owner_user_id=1, vision=vision)
+
+        assert vision.calls == 2
+        assert all(p.method == "vision" for p in await pages_for(svc.db, doc.id))
+
+    async def test_no_tesseract_reads_as_before(
+        self, svc, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services.documents.domains.extraction import ocr
+
+        monkeypatch.setattr(ocr, "read_png", lambda image: None)
+        vision = FakeVision()
+        doc = await self._scan(svc)
+
+        await extract_document(svc.db, doc.id, owner_user_id=1, vision=vision)
+
+        assert vision.calls == 2
+
+
+class TestWhatCountsAsARead:
+    def test_confident_text_does(self) -> None:
+        from app.services.documents.domains.extraction.ocr import looks_like_text
+
+        assert looks_like_text(
+            "Provide proof of your gross income as of 7/1/2026.", 88.0, 10
+        )
+
+    def test_a_low_confidence_page_or_an_empty_one_does_not(self) -> None:
+        from app.services.documents.domains.extraction.ocr import looks_like_text
+
+        assert not looks_like_text("", 95.0, 10)
+        assert not looks_like_text("{SHINOW 08 WODNI HS 9 ANY", 34.0, 10)
+        assert not looks_like_text("ok", 95.0, 10)
+
+    def test_lines_come_back_out_of_the_word_table(self) -> None:
+        from app.services.documents.domains.extraction.ocr import _assemble
+
+        data = {
+            "text": ["REQUEST", "FOR", "", "Due", "9/8/2026"],
+            "conf": [96.0, 95.0, -1.0, 90.0, 80.0],
+            "block_num": [1, 1, 1, 1, 1],
+            "par_num": [1, 1, 1, 1, 1],
+            "line_num": [1, 1, 1, 2, 2],
+        }
+        text, confidence = _assemble(data)
+        assert text == "REQUEST FOR\nDue 9/8/2026"
+        assert confidence == 90.25

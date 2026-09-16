@@ -14,14 +14,16 @@ reason, never a silent blank.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
-from app.core.storage import get_storage
 from app.core.time import utcnow
+from app.core.storage import get_storage
+from app.services.documents.domains.extraction import ocr
 from app.services.documents.domains.extraction.pdf import PNG_MEDIA_TYPE, PdfPages
 from app.services.documents.models import Document, DocumentPage
 from app.services.documents.queries import document_by_id, pages_for
@@ -81,6 +83,13 @@ async def extract_document(
         )
 
     existing = {p.page_number: p for p in await pages_for(db, document_id)}
+    # End the read here. SQLite fails a read-then-write UPGRADE at once
+    # under another writer - busy_timeout never applies to it - so the
+    # first write below must open its own transaction, where waiting
+    # its turn works. The chat writing its usage row at the wrong
+    # moment cost a whole document: "database is locked" on the very
+    # first UPDATE, before a single page was read.
+    await db.commit()
     result = ExtractionResult()
     media_type = (document.media_type or "").lower()
     if media_type == "application/pdf":
@@ -118,16 +127,27 @@ async def _extract_pdf(
                 result.skipped += 1
                 continue
             page = page or DocumentPage(document_id=document_id, page_number=number)
+            png: bytes | None = None
             if not page.image_key:
+                png = pdf.render_png(number)
                 page.image_key = await get_storage().put(
-                    pdf.render_png(number), content_type=PNG_MEDIA_TYPE
+                    png, content_type=PNG_MEDIA_TYPE
                 )
             text = pdf.text(number)
             if len(text) >= MIN_TEXT_CHARS:
                 _mark_read(page, text, method="text_layer", model=None)
-            else:
+            elif not await _read_with_ocr(
+                page, png or await get_storage().get(page.image_key)
+            ):
                 await _read_with_vision(page, page.image_key, PNG_MEDIA_TYPE, vision)
             _finish(db, page, result)
+            # Each page lands on its own. A read is minutes of model calls
+            # on a scan, and one transaction across all of them holds
+            # SQLite's single write lock for the whole document: every
+            # other writer - the ledger row the model call itself
+            # records, a second page of this same document, the chat -
+            # waits on this one, and two readings of one file deadlock.
+            await db.commit()
             if progress is not None:
                 progress(number, total)
     finally:
@@ -154,8 +174,10 @@ async def _extract_image(
     if document.page_count != 1:
         document.page_count = 1
         db.add(document)
-    await _read_with_vision(page, page.image_key, document.media_type or "", vision)
+    if not await _read_with_ocr(page, await get_storage().get(page.image_key)):
+        await _read_with_vision(page, page.image_key, document.media_type or "", vision)
     _finish(db, page, result)
+    await db.commit()
 
 
 async def _unsupported(
@@ -177,6 +199,22 @@ async def _unsupported(
         "images are read.",
     )
     _finish(db, page, result)
+
+
+async def _read_with_ocr(page: DocumentPage, image: bytes | None) -> bool:
+    """Tier two: Tesseract on the render, in a thread because it is a
+    subprocess. True when it produced a reading; False hands the page
+    to the model - including on a machine with no Tesseract at all."""
+    if image is None:
+        return False
+    read = await asyncio.to_thread(ocr.read_png, image)
+    if read is None:
+        return False
+    text, confidence = read
+    if not ocr.looks_like_text(text, confidence, MIN_TEXT_CHARS):
+        return False
+    _mark_read(page, text.strip(), method="ocr", model=None)
+    return True
 
 
 async def _read_with_vision(

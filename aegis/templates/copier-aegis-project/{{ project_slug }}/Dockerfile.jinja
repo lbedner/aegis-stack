@@ -38,6 +38,10 @@ RUN apt-get update -y && \
 {%- if database_engine == "postgres" %}
       postgresql-client \
 {%- endif %}
+{%- if include_documents %}
+      tesseract-ocr \
+      tesseract-ocr-eng \
+{%- endif %}
     && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

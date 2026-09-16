@@ -113,10 +113,34 @@ def _use_dict_backed_cache():
     cache_module.cache = original
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def app() -> FastAPI:
-    """Create a configured FastAPI app instance for testing."""
+    """The configured FastAPI app, built once for the whole session.
+
+    ``create_integrated_app()`` wires every router, middleware and startup
+    hook; per test that is the single most expensive thing a suite does.
+    Nothing is read from mutable settings at build time, and ``TestClient``
+    still runs the lifespan per context manager, so one instance is safe
+    to share.
+
+    Sharing it does mean ``app.dependency_overrides`` outlives a test;
+    ``_clear_dependency_overrides`` below is what keeps that from leaking.
+    """
     return create_integrated_app()
+
+
+@pytest.fixture(autouse=True)
+def _clear_dependency_overrides(app: FastAPI) -> Generator[None, None, None]:
+    """Hand every test a clean override table.
+
+    With a session-scoped app, an override a test forgets to pop (or one
+    left behind by a failing test) is inherited by everything that runs
+    after it, which shows up as order-dependent failures far from the
+    cause. Clearing on both sides makes that impossible.
+    """
+    app.dependency_overrides.clear()
+    yield
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

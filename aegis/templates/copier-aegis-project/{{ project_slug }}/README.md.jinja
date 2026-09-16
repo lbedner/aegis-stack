@@ -64,10 +64,15 @@ This Aegis Stack project includes the following components:
 
 2. **Activate virtual environment:**
    ```bash
-   source .venv/bin/activate
+   source .venv/bin/activate        # Windows: .venv\Scripts\activate
    ```
 
-3. **Set up environment:**
+3. **No `make`?** Every `make <target>` in this README also runs as
+   `uv run poe <target>` — same tasks, no make needed, which is how
+   Windows gets through the rest of this page. `uv run poe -h` lists
+   them.
+
+4. **Set up environment:**
    ```bash
    cp .env.example .env
    # Edit .env with your configuration
@@ -75,7 +80,7 @@ This Aegis Stack project includes the following components:
 
 {%- if include_database %}
 
-4. **Set up database:**
+5. **Set up database:**
    ```bash
 {%- if database_engine == "postgres" %}
    # The postgres service starts with `make serve` (docker compose).
@@ -89,10 +94,10 @@ This Aegis Stack project includes the following components:
 {%- endif %}
    ```
 
-5. **Run the application:**
+6. **Run the application:**
 {%- else %}
 
-4. **Run the application:**
+5. **Run the application:**
 {%- endif %}
    ```bash
    make serve
@@ -102,10 +107,9 @@ The application will be available at `http://127.0.0.1:8000`. If port 8000 is
 already taken, `make serve` picks the next free port and prints the URL it
 chose, so two stacks can run side by side without editing any config.
 
-No `make` on Windows? After installing the dev dependencies once
-(`uv sync`), every command in this README also works as
-`uv run poe <target>` (for example `uv run poe serve`); run `uv run poe -h`
-for the full list.
+Every command in this README also works as `uv run poe <target>` (for
+example `uv run poe serve`), once the dev dependencies are installed
+(`uv sync`); run `uv run poe -h` for the full list.
 
 ## Development
 

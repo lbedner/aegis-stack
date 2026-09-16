@@ -561,11 +561,16 @@ class TestPluginShipsMoreThanTemplates:
 
     def test_a_plain_file_is_copied_not_rendered(self, fake_project: Path) -> None:
         """Jinja syntax in a vendored asset is data, not a template."""
-        tree = (
-            Path(__file__).resolve().parent.parent
-            / "fixtures/aegis_plugin_test/src/aegis_plugin_test/templates"
-            / "{{ project_slug }}/app/services/test_plugin/seeds"
-        )
+        from aegis.core.plugins.template_resolver import get_plugin_template_root
+
+        # Ask the resolver where the plugin's templates ACTUALLY are rather
+        # than assuming the copy next to this test. The fake plugin is an
+        # installed package, so in a git worktree the import can resolve to
+        # a different checkout's fixtures - and a file written to the wrong
+        # copy is never rendered.
+        root = get_plugin_template_root("aegis_plugin_test")
+        assert root is not None
+        tree = root / "{{ project_slug }}/app/services/test_plugin/seeds"
         braces = tree / "braces.json"
         braces.write_text('{"kept": "{{ project_slug }}"}\n')
         try:

@@ -5,7 +5,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
@@ -100,8 +100,14 @@ def harness(
         return (None, None)
 
     monkeypatch.setattr(AIService, "_build_health_context", no_health)
-    monkeypatch.setattr(AIService, "_build_usage_context", lambda self: None)
-    monkeypatch.setattr(AIService, "_build_catalog_context", lambda self: None)
+    async def no_usage(self: AIService) -> None:
+        return None
+
+    monkeypatch.setattr(AIService, "_build_usage_context", no_usage)
+    async def no_catalog(self: AIService) -> None:
+        return None
+
+    monkeypatch.setattr(AIService, "_build_catalog_context", no_catalog)
 
     # The user-memory block opens the app's REAL async engine. Left unstubbed
     # it binds that engine's pool to whichever test loop touches it first,
@@ -111,7 +117,7 @@ def harness(
 
     monkeypatch.setattr(chat_module, "build_user_memory_context", no_memory)
 
-    recorder = MagicMock()
+    recorder = AsyncMock()
     monkeypatch.setattr(service, "_record_usage", recorder)
 
     captured: dict[str, Any] = {}
@@ -302,6 +308,14 @@ class TestAgentSlugSelection:
         assert seen == ["support"]
 
 
+async def _catalog_block(self: AIService) -> str:
+    return "CATALOG-BLOCK"
+
+
+async def _fake_usage(self: AIService) -> "_FakeUsageContext":
+    return _FakeUsageContext()
+
+
 class _FakeUsageContext:
     def format_for_prompt(self, compact: bool = False) -> str:
         return "USAGE-BLOCK"
@@ -317,10 +331,10 @@ class TestOpsContextScoping:
     ) -> None:
         service, _recorder, captured, monkeypatch = harness
         monkeypatch.setattr(
-            AIService, "_build_catalog_context", lambda self: "CATALOG-BLOCK"
+            AIService, "_build_catalog_context", _catalog_block
         )
         monkeypatch.setattr(
-            AIService, "_build_usage_context", lambda self: _FakeUsageContext()
+            AIService, "_build_usage_context", _fake_usage
         )
         _stub_resolve(monkeypatch, _custom_config())
 
@@ -334,10 +348,10 @@ class TestOpsContextScoping:
     ) -> None:
         service, _recorder, captured, monkeypatch = harness
         monkeypatch.setattr(
-            AIService, "_build_catalog_context", lambda self: "CATALOG-BLOCK"
+            AIService, "_build_catalog_context", _catalog_block
         )
         monkeypatch.setattr(
-            AIService, "_build_usage_context", lambda self: _FakeUsageContext()
+            AIService, "_build_usage_context", _fake_usage
         )
         _stub_resolve(monkeypatch, default_agent_config())
 

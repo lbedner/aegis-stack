@@ -19,8 +19,8 @@ context in the system block is what feeds one.
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+import inspect
 from typing import Any, Generic, TypeVar
 
 from pydantic_ai import Agent
@@ -89,7 +89,7 @@ class ToolChatAgent(Generic[DepsT]):
         model_settings: ModelSettings | None = None,
         tool_calls_limit: int = 4,
         action: str = "chat:generic",
-        recorder: Callable[..., float] = record_usage,
+        recorder: Callable[..., float | Awaitable[float]] = record_usage,
         capabilities: Sequence[Any] = (),
         name: str | None = None,
     ) -> None:
@@ -199,16 +199,16 @@ class ToolChatAgent(Generic[DepsT]):
             return
 
         answer = "".join(answer_parts)
-        # The default recorder opens a SYNC db session (usage_recording):
-        # milliseconds of blocking, but on the streaming loop - a worker
-        # thread keeps the turn's tail latency off every other session.
-        cost = await asyncio.to_thread(
-            self._recorder,
+        # The ledger write is async (usage_recording); a test's recorder
+        # may be a plain function returning the cost.
+        cost = self._recorder(
             action=self._action,
             model_name=self._model_name,
             usage=usage,
             user_id=scope.user_id,
         )
+        if inspect.isawaitable(cost):
+            cost = await cost
         yield DoneFrame(
             answer=answer, usage=usage, cost_usd=cost, tool_calls=tool_calls
         )

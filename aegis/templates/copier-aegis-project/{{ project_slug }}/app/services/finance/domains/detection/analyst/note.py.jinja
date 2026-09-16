@@ -140,7 +140,7 @@ async def run_analyst_note(
         )
         result = await agent.run(snapshot)
         commentary = result.output
-        record_usage(
+        await record_usage(
             action=f"chat:{ANALYST_SURFACE}",
             model_name=model_name,
             usage=extract_usage(result),

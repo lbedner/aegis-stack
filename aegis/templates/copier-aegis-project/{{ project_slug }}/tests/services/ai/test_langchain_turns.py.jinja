@@ -10,7 +10,7 @@ bookkeeping assumed the pydantic-ai event stream had run.
 
 from collections.abc import AsyncIterator
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -60,15 +60,21 @@ def harness(
         return (None, None)
 
     monkeypatch.setattr(AIService, "_build_health_context", no_health)
-    monkeypatch.setattr(AIService, "_build_usage_context", lambda self: None)
-    monkeypatch.setattr(AIService, "_build_catalog_context", lambda self: None)
+    async def no_usage(self: AIService) -> None:
+        return None
+
+    monkeypatch.setattr(AIService, "_build_usage_context", no_usage)
+    async def no_catalog(self: AIService) -> None:
+        return None
+
+    monkeypatch.setattr(AIService, "_build_catalog_context", no_catalog)
 
     async def resolve(slug: str = DEFAULT_AGENT_SLUG, **kwargs: object) -> AgentConfig:
         return _default_config()
 
     monkeypatch.setattr(chat_module, "resolve_agent", resolve)
 
-    recorder = MagicMock()
+    recorder = AsyncMock()
 {%- if ai_backend != "memory" %}
 
     async def no_memory(user_id: str, **kwargs: object) -> None:
@@ -139,7 +145,9 @@ class TestLangChainStreaming:
 
         final = [chunk async for chunk in service.stream_chat("hello")][-1]
 
-        saved = service.conversation_manager.get_conversation(final.conversation_id)
+        saved = await service.conversation_manager.get_conversation(
+            final.conversation_id
+        )
         assert saved is not None
         assert saved.messages[-1].content == "Hello there"
 {%- endif %}

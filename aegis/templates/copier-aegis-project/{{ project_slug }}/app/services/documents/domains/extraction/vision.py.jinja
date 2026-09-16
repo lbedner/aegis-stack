@@ -34,7 +34,7 @@ async def read_page(image: bytes, media_type: str) -> tuple[str, str]:
     result = await agent.run(
         ["Transcribe this page.", BinaryContent(data=image, media_type=media_type)]
     )
-    record_usage(
+    await record_usage(
         action=SURFACE, model_name=model_name, usage=extract_usage(result), user_id=None
     )
     return str(result.output), model_name

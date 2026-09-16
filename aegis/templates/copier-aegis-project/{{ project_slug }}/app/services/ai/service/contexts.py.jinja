@@ -12,9 +12,8 @@ from collections.abc import Sequence
 {% endif %}
 
 {% if ai_backend != "memory" %}
-from sqlmodel import Session
 
-from app.core.db import engine
+from app.core.db import get_async_session
 from app.services.ai.domains.chat.llm_catalog_context import get_llm_catalog_context
 {% endif %}
 from app.core.log import logger
@@ -294,7 +293,7 @@ class ContextsMixin(UsageMixin):
             timestamp=datetime.now(),
         )
 
-    def _build_usage_context(self) -> UsageContext | None:
+    async def _build_usage_context(self) -> UsageContext | None:
         """
         Build usage context from AI service statistics.
 
@@ -306,7 +305,7 @@ class ContextsMixin(UsageMixin):
         """
 {% if ai_backend != "memory" %}
         try:
-            stats = self.get_usage_stats(recent_limit=5)
+            stats = await self.get_usage_stats(recent_limit=5)
 
             # Find top model by request count
             top_model = None
@@ -334,7 +333,7 @@ class ContextsMixin(UsageMixin):
         return None
 {% endif %}
 
-    def _build_catalog_context(self) -> str | None:
+    async def _build_catalog_context(self) -> str | None:
         """
         Build LLM catalog context from database.
 
@@ -346,8 +345,8 @@ class ContextsMixin(UsageMixin):
         """
 {% if ai_backend != "memory" %}
         try:
-            with Session(engine) as session:
-                return get_llm_catalog_context(session)
+            async with get_async_session() as session:
+                return await get_llm_catalog_context(session)
         except Exception as e:
             logger.debug(f"Failed to build catalog context: {e}")
             return None

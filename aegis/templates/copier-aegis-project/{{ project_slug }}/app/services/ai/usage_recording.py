@@ -11,7 +11,7 @@ lookup lives in exactly one place.
 from datetime import UTC, datetime
 from typing import Any
 
-from app.core.db import db_session
+from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.llm import queries as llm_queries
 
@@ -65,7 +65,9 @@ def extract_usage(result: Any) -> dict[str, int]:
     }
 
 
-def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> float:
+async def calculate_cost(
+    model_name: str, input_tokens: int, output_tokens: int
+) -> float:
     """Full-rate cost estimate in USD, 0.0 when model/price is uncataloged.
 
     This charges every input token at the base rate; it takes aggregate counts
@@ -76,8 +78,8 @@ def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> fl
     """
     bare = _bare_model_name(model_name)
     try:
-        with db_session() as session:
-            price = llm_queries.latest_price_for_model(session, bare)
+        async with get_async_session() as session:
+            price = await llm_queries.latest_price_for_model(session, bare)
             if not price:
                 return 0.0
             return (
@@ -115,7 +117,7 @@ def _priced_input_cost(usage: dict[str, int], input_price: float) -> float:
     )
 
 
-def record_usage(
+async def record_usage(
     action: str,
     model_name: str,
     usage: dict[str, int],
@@ -134,8 +136,8 @@ def record_usage(
     bare = _bare_model_name(model_name)
     total_cost = 0.0
     try:
-        with db_session() as session:
-            price = llm_queries.latest_price_for_model(session, bare)
+        async with get_async_session() as session:
+            price = await llm_queries.latest_price_for_model(session, bare)
             if price:
                 total_cost = (
                     _priced_input_cost(usage, price.input_cost_per_token)

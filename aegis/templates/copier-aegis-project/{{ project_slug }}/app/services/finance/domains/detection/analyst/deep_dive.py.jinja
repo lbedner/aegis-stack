@@ -245,7 +245,7 @@ async def run_deep_dive(
         )
         result = await agent.run(context)
         dive = result.output
-        record_usage(
+        await record_usage(
             action=f"chat:{DEEP_DIVE_SURFACE}",
             model_name=model_name,
             usage=extract_usage(result),

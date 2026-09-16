@@ -36,7 +36,7 @@ def mock_ai_service():
         model="gpt-4",
     )
 
-    service.conversation_manager = MagicMock()
+    service.conversation_manager = AsyncMock()
     service.conversation_manager.create_conversation.return_value = conversation
     service.conversation_manager.get_conversation.return_value = conversation
 

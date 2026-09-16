@@ -72,9 +72,9 @@ def conversation_manager():
 
 
 @pytest.fixture
-def sample_conversation(conversation_manager):
+async def sample_conversation(conversation_manager):
     """Create a sample conversation with message history."""
-    conversation = conversation_manager.create_conversation(
+    conversation = await conversation_manager.create_conversation(
         provider=AIProvider.OPENAI, model="gpt-4", user_id="test-user"
     )
 
@@ -83,7 +83,7 @@ def sample_conversation(conversation_manager):
     conversation.add_message(MessageRole.ASSISTANT, "Python is a programming language.")
     conversation.add_message(MessageRole.USER, "Tell me more about its features.")
 
-    conversation_manager.save_conversation(conversation)
+    await conversation_manager.save_conversation(conversation)
     return conversation
 
 
@@ -121,9 +121,9 @@ def _fake_runtime(reply: str) -> Iterator[None]:
 class TestConversationManager:
     """Test ConversationManager for memory persistence."""
 
-    def test_create_and_retrieve_conversation(self, conversation_manager):
+    async def test_create_and_retrieve_conversation(self, conversation_manager):
         """Test creating and retrieving conversations."""
-        conversation = conversation_manager.create_conversation(
+        conversation = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI,
             model="gpt-4",
             user_id="test-user",
@@ -136,14 +136,14 @@ class TestConversationManager:
         assert conversation.metadata["user_id"] == "test-user"
 
         # Retrieve the conversation
-        retrieved = conversation_manager.get_conversation("specific-id-123")
+        retrieved = await conversation_manager.get_conversation("specific-id-123")
         assert retrieved is not None
         assert retrieved.id == conversation.id
         assert retrieved.provider == conversation.provider
 
-    def test_conversation_auto_id_generation(self, conversation_manager):
+    async def test_conversation_auto_id_generation(self, conversation_manager):
         """Test that conversations get auto-generated IDs when not specified."""
-        conversation = conversation_manager.create_conversation(
+        conversation = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id="test-user"
         )
 
@@ -152,9 +152,9 @@ class TestConversationManager:
         # Should be a valid UUID format
         uuid.UUID(conversation.id)  # Will raise ValueError if invalid
 
-    def test_save_and_update_conversation(self, conversation_manager):
+    async def test_save_and_update_conversation(self, conversation_manager):
         """Test saving and updating conversations."""
-        conversation = conversation_manager.create_conversation(
+        conversation = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id="test-user"
         )
 
@@ -165,10 +165,10 @@ class TestConversationManager:
 
         # Add a message and save
         conversation.add_message(MessageRole.USER, "Test message")
-        conversation_manager.save_conversation(conversation)
+        await conversation_manager.save_conversation(conversation)
 
         # Verify the conversation was updated
-        retrieved = conversation_manager.get_conversation(conversation.id)
+        retrieved = await conversation_manager.get_conversation(conversation.id)
         assert retrieved.get_message_count() == 1
 
         # Normalize retrieved timestamp for comparison
@@ -178,7 +178,7 @@ class TestConversationManager:
 
         assert retrieved_updated_at >= original_updated_at
 
-    def test_list_conversations_by_user(self, conversation_manager):
+    async def test_list_conversations_by_user(self, conversation_manager):
         """Test listing conversations filtered by user."""
         # Use unique user IDs for this test run to avoid conflicts with persisted data
         unique_suffix = str(uuid.uuid4())[:8]
@@ -186,18 +186,18 @@ class TestConversationManager:
         user2_id = f"user-2-{unique_suffix}"
 
         # Create conversations for different users
-        conv1 = conversation_manager.create_conversation(
+        conv1 = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id=user1_id
         )
-        conv2 = conversation_manager.create_conversation(
+        conv2 = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id=user2_id
         )
-        conv3 = conversation_manager.create_conversation(
+        conv3 = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id=user1_id
         )
 
         # List conversations for user-1
-        user1_conversations = conversation_manager.list_conversations(user1_id)
+        user1_conversations = await conversation_manager.list_conversations(user1_id)
         user1_ids = [conv.id for conv in user1_conversations]
 
         assert len(user1_conversations) == 2
@@ -272,7 +272,7 @@ class TestAIServiceConversationMemory:
 
             # Verify conversation was created
             conv_id = response.metadata["conversation_id"]
-            conversation = ai_service.get_conversation(conv_id)
+            conversation = await ai_service.get_conversation(conv_id)
             assert conversation is not None
             assert conversation.get_message_count() == 2  # User + AI messages
 
@@ -301,10 +301,10 @@ class TestAIServiceConversationMemory:
             assert second_conv_id == first_conv_id
 
             # Verify conversation has both messages
-            conversation = ai_service.get_conversation(first_conv_id)
+            conversation = await ai_service.get_conversation(first_conv_id)
             assert conversation.get_message_count() == 4  # 2 user + 2 AI messages
 
-    def test_conversation_memory_across_service_instances(self, mock_settings):
+    async def test_conversation_memory_across_service_instances(self, mock_settings):
         """Test conversation memory behavior across service instances.
 
         In-memory mode: Each instance has isolated storage (retrieved is None)
@@ -316,21 +316,21 @@ class TestAIServiceConversationMemory:
 
             # Create first service instance and conversation
             service1 = AIService(mock_settings)
-            conversation = service1.conversation_manager.create_conversation(
+            conversation = await service1.conversation_manager.create_conversation(
                 provider=AIProvider.OPENAI, model="gpt-4", user_id="test-user"
             )
             conversation.add_message(MessageRole.USER, "Test message")
-            service1.conversation_manager.save_conversation(conversation)
+            await service1.conversation_manager.save_conversation(conversation)
 
             # Create second service instance
             service2 = AIService(mock_settings)
 
             # Try to retrieve from second instance
-            retrieved = service2.conversation_manager.get_conversation(conversation.id)
+            retrieved = await service2.conversation_manager.get_conversation(conversation.id)
 
-            # Check if using database persistence (has db_session import)
+            # Check if using database persistence (has the async store)
             try:
-                from app.core.db import db_session  # noqa: F401
+                from app.core.db import get_async_session  # noqa: F401
 
                 uses_database = True
             except ImportError:
@@ -348,14 +348,14 @@ class TestAIServiceConversationMemory:
 class TestConversationMemoryEdgeCases:
     """Test edge cases for conversation memory."""
 
-    def test_conversation_manager_nonexistent_conversation(self, conversation_manager):
+    async def test_conversation_manager_nonexistent_conversation(self, conversation_manager):
         """Test retrieving non-existent conversation returns None."""
-        result = conversation_manager.get_conversation("nonexistent-id")
+        result = await conversation_manager.get_conversation("nonexistent-id")
         assert result is None
 
-    def test_conversation_manager_empty_message_list(self, conversation_manager):
+    async def test_conversation_manager_empty_message_list(self, conversation_manager):
         """Test conversation with no messages."""
-        conversation = conversation_manager.create_conversation(
+        conversation = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id="test-user"
         )
 
@@ -363,9 +363,9 @@ class TestConversationMemoryEdgeCases:
         assert conversation.messages == []
         assert conversation.get_last_message() is None
 
-    def test_conversation_metadata_updates(self, conversation_manager):
+    async def test_conversation_metadata_updates(self, conversation_manager):
         """Test that conversation metadata gets updated properly."""
-        conversation = conversation_manager.create_conversation(
+        conversation = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id="test-user"
         )
 
@@ -379,15 +379,15 @@ class TestConversationMemoryEdgeCases:
             }
         )
 
-        conversation_manager.save_conversation(conversation)
+        await conversation_manager.save_conversation(conversation)
 
         # Retrieve and verify metadata
-        retrieved = conversation_manager.get_conversation(conversation.id)
+        retrieved = await conversation_manager.get_conversation(conversation.id)
         assert retrieved.metadata["last_response_time_ms"] == 1500.0
         assert retrieved.metadata["total_messages"] == 2
         assert retrieved.metadata["streaming"] is True
 
-    def test_conversation_cleanup_old_conversations(self, conversation_manager):
+    async def test_conversation_cleanup_old_conversations(self, conversation_manager):
         """Test cleanup of old conversations.
 
         Note: In SQLite mode, we need to update the database timestamp directly.
@@ -404,17 +404,17 @@ class TestConversationMemoryEdgeCases:
         unique_user = f"cleanup-test-{uuid.uuid4()}"
 
         # Create some conversations
-        old_conversation = conversation_manager.create_conversation(
+        old_conversation = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id=unique_user
         )
 
-        recent_conversation = conversation_manager.create_conversation(
+        recent_conversation = await conversation_manager.create_conversation(
             provider=AIProvider.OPENAI, model="gpt-4", user_id=unique_user
         )
 
         # Save both conversations
-        conversation_manager.save_conversation(old_conversation)
-        conversation_manager.save_conversation(recent_conversation)
+        await conversation_manager.save_conversation(old_conversation)
+        await conversation_manager.save_conversation(recent_conversation)
 
         # Set old timestamp - use 48 hours to account for timezone differences
         # SQLite returns naive datetimes, which timestamp() interprets as local time
@@ -439,11 +439,11 @@ class TestConversationMemoryEdgeCases:
             old_conversation.updated_at = old_time
 
         # Cleanup conversations older than 24 hours
-        cleaned_count = conversation_manager.cleanup_old_conversations(max_age_hours=24)
+        cleaned_count = await conversation_manager.cleanup_old_conversations(max_age_hours=24)
 
         assert cleaned_count >= 1  # At least our old conversation should be cleaned
-        assert conversation_manager.get_conversation(old_conversation.id) is None
-        assert conversation_manager.get_conversation(recent_conversation.id) is not None
+        assert await conversation_manager.get_conversation(old_conversation.id) is None
+        assert await conversation_manager.get_conversation(recent_conversation.id) is not None
 
 
 class TestSurfaceScopingAndTitles:
@@ -470,7 +470,7 @@ class TestSurfaceScopingAndTitles:
                 ai_service, "What is my burn rate this month?", "finance", user
             )
 
-            conversation = ai_service.get_conversation(conv_id)
+            conversation = await ai_service.get_conversation(conv_id)
             assert conversation.metadata.get("surface") == "finance"
             assert conversation.title == "What is my burn rate this month?"
 
@@ -482,7 +482,7 @@ class TestSurfaceScopingAndTitles:
             user = f"scoped-{uuid.uuid4().hex[:8]}"
             conv_id = await self._chat(ai_service, "x" * 100, None, user)
 
-            conversation = ai_service.get_conversation(conv_id)
+            conversation = await ai_service.get_conversation(conv_id)
             assert len(conversation.title) == 60
             assert conversation.title.endswith("...")
 
@@ -497,8 +497,8 @@ class TestSurfaceScopingAndTitles:
             )
             await self._chat(ai_service, "general question", None, user)
 
-            scoped = ai_service.list_conversations(user, surface="finance")
+            scoped = await ai_service.list_conversations(user, surface="finance")
             assert [c.id for c in scoped] == [finance_id]
 
-            all_convos = ai_service.list_conversations(user)
+            all_convos = await ai_service.list_conversations(user)
             assert len(all_convos) == 2

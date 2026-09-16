@@ -77,18 +77,18 @@ async def latest_price_for(session: AsyncSession, llm_id: int) -> LLMPrice | Non
     ).first()
 
 
-def latest_price_for_model(session: Session, model_name: str) -> LLMPrice | None:
+async def latest_price_for_model(
+    session: AsyncSession, model_name: str
+) -> LLMPrice | None:
     """Current price row for a bare model name, or None if uncataloged."""
-    llm = session.exec(
-        select(LargeLanguageModel).where(LargeLanguageModel.model_id == model_name)
+    llm = (
+        await session.exec(
+            select(LargeLanguageModel).where(LargeLanguageModel.model_id == model_name)
+        )
     ).first()
     if llm is None:
         return None
-    return session.exec(
-        select(LLMPrice)
-        .where(LLMPrice.llm_id == llm.id)
-        .order_by(LLMPrice.effective_date.desc())
-    ).first()
+    return await latest_price_for(session, llm.id)
 
 
 async def modalities_for(session: AsyncSession, llm_id: int) -> list[str]:
@@ -196,22 +196,26 @@ def modality_model_counts(session: Session) -> Sequence[tuple[str, int]]:
     ).all()
 
 
-def orgs_named(session: Session, names: Iterable[str]) -> Sequence[LLMOrg]:
-    return session.exec(select(LLMOrg).where(LLMOrg.name.in_(list(names)))).all()
+async def orgs_named(session: AsyncSession, names: Iterable[str]) -> Sequence[LLMOrg]:
+    return (
+        await session.exec(select(LLMOrg).where(LLMOrg.name.in_(list(names))))
+    ).all()
 
 
-def models_served_by(
-    session: Session, org_ids: Iterable[int]
+async def models_served_by(
+    session: AsyncSession, org_ids: Iterable[int]
 ) -> Sequence[LargeLanguageModel]:
     """Every model the given orgs serve, with prices, deployments and
     modalities loaded - the catalog context's one fetch."""
-    return session.exec(
-        select(LargeLanguageModel)
-        .where(LargeLanguageModel.served_by_org_id.in_(list(org_ids)))
-        .options(
-            selectinload(LargeLanguageModel.llm_prices),
-            selectinload(LargeLanguageModel.deployments),
-            selectinload(LargeLanguageModel.modalities),
+    return (
+        await session.exec(
+            select(LargeLanguageModel)
+            .where(LargeLanguageModel.served_by_org_id.in_(list(org_ids)))
+            .options(
+                selectinload(LargeLanguageModel.llm_prices),
+                selectinload(LargeLanguageModel.deployments),
+                selectinload(LargeLanguageModel.modalities),
+            )
         )
     ).all()
 
@@ -254,8 +258,8 @@ def _usage_window(
     return stmt
 
 
-def usage_totals(
-    session: Session,
+async def usage_totals(
+    session: AsyncSession,
     *,
     user_id: str | None,
     start_time: datetime | None,
@@ -270,13 +274,17 @@ def usage_totals(
         func.count(LLMUsage.id).label("total_requests"),
         func.sum(func.cast(LLMUsage.success, Integer)).label("success_count"),
     )
-    return session.exec(
-        _usage_window(stmt, user_id=user_id, start_time=start_time, end_time=end_time)
+    return (
+        await session.exec(
+            _usage_window(
+                stmt, user_id=user_id, start_time=start_time, end_time=end_time
+            )
+        )
     ).first()
 
 
-def usage_by_model(
-    session: Session,
+async def usage_by_model(
+    session: AsyncSession,
     *,
     user_id: str | None,
     start_time: datetime | None,
@@ -307,13 +315,17 @@ def usage_by_model(
         )
         .order_by(func.count(LLMUsage.id).desc())
     )
-    return session.exec(
-        _usage_window(stmt, user_id=user_id, start_time=start_time, end_time=end_time)
+    return (
+        await session.exec(
+            _usage_window(
+                stmt, user_id=user_id, start_time=start_time, end_time=end_time
+            )
+        )
     ).all()
 
 
-def recent_usage(
-    session: Session,
+async def recent_usage(
+    session: AsyncSession,
     *,
     user_id: str | None,
     start_time: datetime | None,
@@ -335,8 +347,12 @@ def recent_usage(
         .order_by(LLMUsage.timestamp.desc())
         .limit(limit)
     )
-    return session.exec(
-        _usage_window(stmt, user_id=user_id, start_time=start_time, end_time=end_time)
+    return (
+        await session.exec(
+            _usage_window(
+                stmt, user_id=user_id, start_time=start_time, end_time=end_time
+            )
+        )
     ).all()
 
 

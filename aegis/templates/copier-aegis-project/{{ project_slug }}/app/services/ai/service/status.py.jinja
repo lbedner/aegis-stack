@@ -9,20 +9,21 @@ from app.services.ai.service.base import AIServiceBase
 class StatusMixin(AIServiceBase):
     """Read-only surface: conversations, status, configuration checks."""
 
-    def get_conversation(self, conversation_id: str) -> Conversation | None:
+    async def get_conversation(self, conversation_id: str) -> Conversation | None:
         """Get a conversation by ID."""
-        return self.conversation_manager.get_conversation(conversation_id)
+        return await self.conversation_manager.get_conversation(conversation_id)
 
-    def list_conversations(
+    async def list_conversations(
         self, user_id: str = "default", surface: str | None = None
     ) -> list[Conversation]:
         """List conversations for a user, optionally scoped to one surface."""
-        return self.conversation_manager.list_conversations(user_id, surface=surface)
+        return await self.conversation_manager.list_conversations(
+            user_id, surface=surface
+        )
 
-    def get_service_status(self) -> dict[str, Any]:
+    async def get_service_status(self) -> dict[str, Any]:
         """Get current service status and metrics."""
-        # Use get_stats() which works for both memory and SQLite backends
-        stats = self.conversation_manager.get_stats()
+        stats = await self.conversation_manager.get_stats()
         total_conversations = stats["total_conversations"]
 
         return {

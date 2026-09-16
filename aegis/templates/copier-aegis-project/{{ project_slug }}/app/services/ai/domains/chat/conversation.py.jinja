@@ -7,6 +7,10 @@ This provides conversation persistence during application runtime.
 {% else %}
 SQLite-based conversation storage and management for AI chat sessions.
 Provides persistent conversation history across application restarts.
+
+Async, like every other store in the app: a chat turn saves its
+conversation on the event loop, and a sync engine there waits its
+SQLite turn with the whole server frozen behind it.
 {% endif %}
 """
 
@@ -19,7 +23,7 @@ from app.core.log import logger
 {% if ai_backend != "memory" %}
 from sqlalchemy import delete
 
-from app.core.db import db_session, init_database
+from app.core.db import get_async_session, init_database
 from app.models.conversation import Conversation as ConversationModel
 from app.models.conversation import ConversationMessage as MessageModel
 from app.services.ai.domains.chat import queries
@@ -28,6 +32,32 @@ from app.services.ai.domains.chat import queries
 from app.services.ai.models import AIProvider, Conversation, ConversationMessage, MessageRole
 
 
+{% if ai_backend != "memory" %}
+def _to_conversation(conv_db: ConversationModel, messages_db: Any) -> Conversation:
+    """The stored row and its messages as the service's model."""
+    meta_data = conv_db.meta_data or {}
+    return Conversation(
+        id=conv_db.id,
+        title=conv_db.title,
+        provider=AIProvider(meta_data.get("provider", "openai")),
+        model=meta_data.get("model", "unknown"),
+        created_at=conv_db.created_at,
+        updated_at=conv_db.updated_at,
+        messages=[
+            ConversationMessage(
+                id=msg.id,
+                role=MessageRole(msg.role),
+                content=msg.content,
+                timestamp=msg.timestamp,
+                metadata=msg.meta_data or {},
+            )
+            for msg in sorted(messages_db, key=lambda m: m.timestamp)
+        ],
+        metadata=meta_data,
+    )
+
+
+{% endif %}
 class ConversationManager:
     """
 {% if ai_backend == "memory" %}
@@ -53,7 +83,7 @@ class ConversationManager:
         init_database()
 {% endif %}
 
-    def create_conversation(
+    async def create_conversation(
         self,
         provider: AIProvider,
         model: str,
@@ -91,13 +121,12 @@ class ConversationManager:
 {% if ai_backend == "memory" %}
         self.conversations[conversation_id] = conversation
 {% else %}
-        # Save to database
-        self._save_to_db(conversation)
+        await self._save_to_db(conversation)
 {% endif %}
 
         return conversation
 
-    def get_conversation(self, conversation_id: str) -> Conversation | None:
+    async def get_conversation(self, conversation_id: str) -> Conversation | None:
         """
         Get a conversation by ID.
 
@@ -110,41 +139,18 @@ class ConversationManager:
 {% if ai_backend == "memory" %}
         return self.conversations.get(conversation_id)
 {% else %}
-        with db_session() as session:
-            conv_db = session.get(ConversationModel, conversation_id)
+        async with get_async_session() as session:
+            conv_db = await session.get(ConversationModel, conversation_id)
             if not conv_db:
                 return None
 
-            messages_db = queries.messages_for_conversation(session, conversation_id)
-
-            # Convert to Pydantic models
-            messages = [
-                ConversationMessage(
-                    id=msg.id,
-                    role=MessageRole(msg.role),
-                    content=msg.content,
-                    timestamp=msg.timestamp,
-                    metadata=msg.meta_data or {},
-                )
-                for msg in messages_db
-            ]
-
-            # Get provider/model from meta_data
-            meta_data = conv_db.meta_data or {}
-
-            return Conversation(
-                id=conv_db.id,
-                title=conv_db.title,
-                provider=AIProvider(meta_data.get("provider", "openai")),
-                model=meta_data.get("model", "unknown"),
-                created_at=conv_db.created_at,
-                updated_at=conv_db.updated_at,
-                messages=messages,
-                metadata=meta_data,
+            messages_db = await queries.messages_for_conversation(
+                session, conversation_id
             )
+            return _to_conversation(conv_db, messages_db)
 {% endif %}
 
-    def save_conversation(self, conversation: Conversation) -> None:
+    async def save_conversation(self, conversation: Conversation) -> None:
         """
         Save a conversation (update in storage).
 
@@ -155,10 +161,10 @@ class ConversationManager:
 {% if ai_backend == "memory" %}
         self.conversations[conversation.id] = conversation
 {% else %}
-        self._save_to_db(conversation)
+        await self._save_to_db(conversation)
 {% endif %}
 
-    def list_conversations(
+    async def list_conversations(
         self, user_id: str | None = None, surface: str | None = None
     ) -> list[Conversation]:
         """
@@ -191,8 +197,8 @@ class ConversationManager:
         conversations.sort(key=lambda c: c.updated_at, reverse=True)
         return conversations
 {% else %}
-        with db_session() as session:
-            all_convs = queries.conversations_with_messages(session)
+        async with get_async_session() as session:
+            all_convs = await queries.conversations_with_messages(session)
 
             conversations = []
             for conv_db in all_convs:
@@ -205,32 +211,12 @@ class ConversationManager:
                     continue
 
                 # Messages already loaded via selectinload
-                messages = [
-                    ConversationMessage(
-                        id=msg.id,
-                        role=MessageRole(msg.role),
-                        content=msg.content,
-                        timestamp=msg.timestamp,
-                        metadata=msg.meta_data or {},
-                    )
-                    for msg in sorted(conv_db.messages, key=lambda m: m.timestamp)
-                ]
-
-                conversations.append(Conversation(
-                    id=conv_db.id,
-                    title=conv_db.title,
-                    provider=AIProvider(meta_data.get("provider", "openai")),
-                    model=meta_data.get("model", "unknown"),
-                    created_at=conv_db.created_at,
-                    updated_at=conv_db.updated_at,
-                    messages=messages,
-                    metadata=meta_data,
-                ))
+                conversations.append(_to_conversation(conv_db, conv_db.messages))
 
             return conversations
 {% endif %}
 
-    def delete_conversation(self, conversation_id: str) -> bool:
+    async def delete_conversation(self, conversation_id: str) -> bool:
         """
         Delete a conversation.
 
@@ -246,23 +232,22 @@ class ConversationManager:
             return True
         return False
 {% else %}
-        with db_session() as session:
-            conv_db = session.get(ConversationModel, conversation_id)
+        async with get_async_session() as session:
+            conv_db = await session.get(ConversationModel, conversation_id)
             if not conv_db:
                 return False
 
             # Delete messages first
-            for msg in queries.messages_for_conversation(session, conversation_id):
-                session.delete(msg)
+            for msg in await queries.messages_for_conversation(session, conversation_id):
+                await session.delete(msg)
 
-            # Delete conversation
-            session.delete(conv_db)
-            session.commit()
+            await session.delete(conv_db)
+            await session.commit()
 
             return True
 {% endif %}
 
-    def get_conversation_count(self, user_id: str | None = None) -> int:
+    async def get_conversation_count(self, user_id: str | None = None) -> int:
         """
         Get count of conversations.
 
@@ -285,13 +270,13 @@ class ConversationManager:
 {% else %}
         if user_id:
             # Must filter by JSON metadata field
-            return len(self.list_conversations(user_id))
+            return len(await self.list_conversations(user_id))
 
-        with db_session() as session:
-            return queries.conversation_count(session)
+        async with get_async_session() as session:
+            return await queries.conversation_count(session)
 {% endif %}
 
-    def get_recent_conversations(
+    async def get_recent_conversations(
         self, limit: int = 10, user_id: str | None = None
     ) -> list[Conversation]:
         """
@@ -304,10 +289,10 @@ class ConversationManager:
         Returns:
             list[Conversation]: Recent conversations
         """
-        conversations = self.list_conversations(user_id)
+        conversations = await self.list_conversations(user_id)
         return conversations[:limit]
 
-    def cleanup_old_conversations(self, max_age_hours: int = 24) -> int:
+    async def cleanup_old_conversations(self, max_age_hours: int = 24) -> int:
         """
         Clean up old conversations.
 
@@ -337,24 +322,24 @@ class ConversationManager:
 
         cutoff = datetime.now(UTC) - timedelta(hours=max_age_hours)
 
-        with db_session() as session:
-            old_conv_ids = queries.conversation_ids_before(session, cutoff)
+        async with get_async_session() as session:
+            old_conv_ids = await queries.conversation_ids_before(session, cutoff)
 
             if not old_conv_ids:
                 return 0
 
             # Bulk delete messages first (FK constraint), then conversations
-            session.execute(
+            await session.execute(
                 delete(MessageModel).where(
                     MessageModel.conversation_id.in_(old_conv_ids)  # type: ignore[union-attr]
                 )
             )
-            session.execute(
+            await session.execute(
                 delete(ConversationModel).where(
                     ConversationModel.id.in_(old_conv_ids)  # type: ignore[union-attr]
                 )
             )
-            session.commit()
+            await session.commit()
 
             deleted_count = len(old_conv_ids)
 
@@ -364,7 +349,7 @@ class ConversationManager:
         return deleted_count
 {% endif %}
 
-    def get_stats(self) -> dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """
         Get conversation manager statistics.
 
@@ -393,10 +378,10 @@ class ConversationManager:
             ),
         }
 {% else %}
-        with db_session() as session:
-            total_conversations = queries.conversation_count(session)
-            total_messages = queries.message_count(session)
-            unique_users = queries.distinct_user_count(session)
+        async with get_async_session() as session:
+            total_conversations = await queries.conversation_count(session)
+            total_messages = await queries.message_count(session)
+            unique_users = await queries.distinct_user_count(session)
 
             return {
                 "total_conversations": total_conversations,
@@ -409,9 +394,9 @@ class ConversationManager:
 {% endif %}
 
 {% if ai_backend != "memory" %}
-    def _save_to_db(self, conversation: Conversation) -> None:
+    async def _save_to_db(self, conversation: Conversation) -> None:
         """Save conversation and its messages to database."""
-        with db_session() as session:
+        async with get_async_session() as session:
             # Build meta_data with provider/model included
             meta_data = {
                 **conversation.metadata,
@@ -419,15 +404,12 @@ class ConversationManager:
                 "model": conversation.model,
             }
 
-            # Check if conversation exists
-            conv_db = session.get(ConversationModel, conversation.id)
+            conv_db = await session.get(ConversationModel, conversation.id)
             if conv_db:
-                # Update existing
                 conv_db.title = conversation.title
                 conv_db.updated_at = conversation.updated_at
                 conv_db.meta_data = meta_data
             else:
-                # Create new
                 conv_db = ConversationModel(
                     id=conversation.id,
                     title=conversation.title,
@@ -438,19 +420,19 @@ class ConversationManager:
                 )
                 session.add(conv_db)
 
-            # Save messages
             for message in conversation.messages:
-                msg_db = session.get(MessageModel, message.id)
+                msg_db = await session.get(MessageModel, message.id)
                 if not msg_db:
-                    msg_db = MessageModel(
-                        id=message.id,
-                        conversation_id=conversation.id,
-                        role=message.role.value,
-                        content=message.content,
-                        timestamp=message.timestamp,
-                        meta_data=message.metadata,
+                    session.add(
+                        MessageModel(
+                            id=message.id,
+                            conversation_id=conversation.id,
+                            role=message.role.value,
+                            content=message.content,
+                            timestamp=message.timestamp,
+                            meta_data=message.metadata,
+                        )
                     )
-                    session.add(msg_db)
 
-            session.commit()
+            await session.commit()
 {% endif %}

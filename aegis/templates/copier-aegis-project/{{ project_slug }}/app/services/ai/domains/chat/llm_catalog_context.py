@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import re
 
-from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.llm import queries as llm_queries
 from app.services.ai.models.llm import (
@@ -122,7 +122,7 @@ class LLMCatalogContext:
         self.flagships = flagships
 
     @classmethod
-    def build(cls, session: Session) -> "LLMCatalogContext":
+    async def build(cls, session: AsyncSession) -> "LLMCatalogContext":
         """
         Build catalog context from database using efficient batch queries.
 
@@ -138,7 +138,7 @@ class LLMCatalogContext:
             LLMCatalogContext with top models from each vendor.
         """
         # Query 1: Get all featured vendors in one query
-        vendors = llm_queries.orgs_named(session, FEATURED_VENDORS)
+        vendors = await llm_queries.orgs_named(session, FEATURED_VENDORS)
 
         if not vendors:
             return cls([])
@@ -149,7 +149,7 @@ class LLMCatalogContext:
 
         # Query 2: Get all models for featured vendors with eager loading
         # This fetches models + prices + deployments + modalities in ~3 queries
-        all_models = llm_queries.models_served_by(session, vendor_ids)
+        all_models = await llm_queries.models_served_by(session, vendor_ids)
 
         # Group models by vendor, filtering out aliases (-latest, etc.)
         vendor_models: dict[int, list[LargeLanguageModel]] = defaultdict(list)
@@ -280,7 +280,7 @@ class LLMCatalogContext:
         return "\n".join(lines)
 
 
-def get_llm_catalog_context(session: Session) -> str:
+async def get_llm_catalog_context(session: AsyncSession) -> str:
     """
     Get formatted LLM catalog context for prompt injection.
 
@@ -292,7 +292,7 @@ def get_llm_catalog_context(session: Session) -> str:
     Returns:
         Formatted string for prompt injection, or empty string if no data.
     """
-    context = LLMCatalogContext.build(session)
+    context = await LLMCatalogContext.build(session)
     return context.format_for_prompt()
 
 

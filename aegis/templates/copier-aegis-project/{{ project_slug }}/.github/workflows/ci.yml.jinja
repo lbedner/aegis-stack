@@ -22,7 +22,7 @@ jobs:
       run: uv python install {{ python_version }}
 
     - name: Install dependencies
-      run: uv sync --all-extras
+      run: uv sync
 
     - name: Run linting
       run: uv run ruff check .
@@ -42,7 +42,7 @@ jobs:
       run: uv python install {{ python_version }}
 
     - name: Install dependencies
-      run: uv sync --all-extras
+      run: uv sync
 
     - name: Run type checking
       run: uv run ty check
@@ -62,7 +62,7 @@ jobs:
       run: uv python install {{ python_version }}
 
     - name: Install dependencies
-      run: uv sync --all-extras
+      run: uv sync
 
     - name: Run tests
       run: uv run pytest

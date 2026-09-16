@@ -38,6 +38,21 @@ class LLMListResult(BaseModel):
     lab: str | None = None
     lab_icon_b64: str | None = None
 
+    @property
+    def display_id(self) -> str:
+        """The id as a table shows it, beside a vendor column that repeats it.
+
+        The catalog stores what the provider calls the model, which for
+        several of them repeats the vendor: ``gemini/gemini-3``,
+        ``openai/gpt-4o``. Next to a Vendor column that already says
+        "gemini", the prefix is noise. Lookups accept either form, so what
+        is printed is still what ``llm use`` takes.
+        """
+        prefix = f"{self.vendor.lower()}/"
+        if self.vendor and self.model_id.lower().startswith(prefix):
+            return self.model_id[len(prefix) :]
+        return self.model_id
+
 
 async def list_models(
     pattern: str | None = None,

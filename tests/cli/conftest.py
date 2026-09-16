@@ -451,7 +451,7 @@ def generated_db_project_postgres(
     print("Installing dependencies in PostgreSQL project...")
     assert spec.python_version is not None  # set just above, for this interpreter
     install_result = run_project_command(
-        ["uv", "sync", "--extra", "dev", "--python", spec.python_version],
+        ["uv", "sync", "--python", spec.python_version],
         project_path,
         step_name="Install Dependencies",
         env_overrides={"VIRTUAL_ENV": ""},
@@ -500,7 +500,7 @@ def generated_db_project(
     # Install dependencies
     print("Installing dependencies in SQLite project...")
     install_result = run_project_command(
-        ["uv", "sync", "--extra", "dev"],
+        ["uv", "sync"],
         project_path,
         step_name="Install Dependencies",
         env_overrides={"VIRTUAL_ENV": ""},

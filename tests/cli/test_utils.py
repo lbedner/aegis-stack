@@ -247,7 +247,7 @@ def run_quality_checks(project_path: Path, timeout: int = 120) -> list[CLITestRe
     # Install dependencies
     results.append(
         run_project_command(
-            ["uv", "sync", "--extra", "dev"],
+            ["uv", "sync"],
             project_path,
             timeout=QUALITY_CHECK_TIMEOUTS["dependency_install"],
             step_name="Dependency Installation",

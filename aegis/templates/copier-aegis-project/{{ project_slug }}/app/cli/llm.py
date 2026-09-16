@@ -275,7 +275,7 @@ def list_cmd(
 
     for model in results:
         table.add_row(
-            model.model_id,
+            model.display_id,
             model.vendor,
             f"{model.context_window:,}",
             f"${model.input_price:.2f}" if model.input_price else "-",

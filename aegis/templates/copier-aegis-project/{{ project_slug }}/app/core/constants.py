@@ -51,12 +51,42 @@ def dashboard_upload_dir() -> Path:
 
 
 def country_flag(code: str) -> str:
-    """Convert 2-letter ISO country code to flag emoji."""
+    """Flag emoji for a 2-letter ISO country code, or "" for anything else.
+
+    The flag is arithmetic on the code itself, so it exists for all ~249
+    codes rather than only the ones named below. A missing NAME is never a
+    reason to render a missing FLAG.
+    """
+    if len(code) != 2 or not code.isascii() or not code.isalpha():
+        return ""
     return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in code.upper())
 
 
+def country_parts(code: str) -> tuple[str, str]:
+    """``(flag, name)`` for a country code. Name falls back to the code.
+
+    COUNTRY_NAMES is a short list of familiar spellings ("South Korea", not
+    "Korea, Republic of"), not an ISO table: the other ~194 codes resolve
+    to themselves rather than to nothing.
+    """
+    upper = code.upper()
+    return country_flag(upper), COUNTRY_NAMES.get(upper, upper)
+
+
+def country_label(code: str) -> str:
+    """What a country renders as: flag and name, either alone, or "".
+
+    ``"US"`` -> ``"\U0001f1fa\U0001f1f8 United States"``, ``"KG"`` ->
+    ``"\U0001f1f0\U0001f1ec KG"`` (flagged, unnamed), ``""`` -> ``""``.
+    """
+    if not code:
+        return ""
+    flag, name = country_parts(code)
+    return f"{flag} {name}".strip()
+
+
 def _cn(code: str, name: str) -> tuple[str, str]:
-    return code, f"{country_flag(code)} {name}"
+    return code, name
 
 
 COUNTRY_NAMES: dict[str, str] = dict(

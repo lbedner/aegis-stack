@@ -170,51 +170,6 @@ dependencies = [
 [project.scripts]
 {{ project_slug }} = "app.cli.main:main"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=9.0.3",
-    "pytest-asyncio>=1.1.0",
-    "ruff==0.12.7",
-    "ty==0.0.79",
-    "types-psutil==7.0.0.20250801",
-    "pre-commit==4.2.0",
-    "pip-audit==2.9.0",
-    # Cross-platform task runner; `uv run poe <target>` mirrors `make <target>`
-    # for Windows, where `make` isn't a native binary.
-    "poethepoet==0.48.0",
-{%- if include_htmx %}
-    # DOM assertions for the web test kit (tests/web/dom.py)
-    "lxml>=6.1.3",
-    "cssselect>=1.5.0",
-{%- endif %}
-{%- if include_database %}
-    # N+1 and query-budget detection for the test suite (make check-queries).
-    # Built on SQLAlchemy 2.0's do_orm_execute, so it needs a database stack.
-    "queryspy>=0.4.1",
-{%- endif %}
-{%- if include_database and database_engine != 'sqlite' %}
-    # Tests use in-memory SQLite for speed/isolation regardless of the
-    # production backend, so aiosqlite is required as a test dep even when
-    # the app itself runs on Postgres.
-    "aiosqlite>=0.19.0",
-{%- endif %}
-{%- if include_worker or include_htmx %}
-    # Auto-reload for workers; asset rebuilds for the web frontend watcher
-    "watchdog==4.0.2",
-{%- endif %}
-{%- if include_storage %}
-    # A bucket in the test process, so the S3 backend's tests need no server.
-    "moto[s3]>=5.0",
-{%- endif %}
-]
-docs = [
-    "mkdocs==1.6.1",
-    "mkdocs-material==9.6.16",
-    "mkdocstrings[python]==0.30.0",
-    "mkdocs-gen-files==0.5.0",
-    "pymdown-extensions==10.16.1",
-]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -515,7 +470,7 @@ sequence = ["lint", "typecheck", "test", { cmd = 'echo "All checks completed suc
 
 [tool.poe.tasks.install]
 help = "Install/sync dependencies with uv"
-cmd = "uv sync --all-extras"
+cmd = "uv sync"
 
 [tool.poe.tasks.deps-update]
 help = "Update dependencies"
@@ -579,9 +534,54 @@ cmd = "uv run python -m arq app.components.worker.queues.system.WorkerSettings -
 help = "Show current system status"
 script = "scripts.dev_tasks:status"
 
+# Dev dependencies live here, not in an extra: ``uv sync`` installs this
+# group by default and ``uv add --dev`` writes to it, so the default path
+# is the correct one. Splitting them across both is how adding a single
+# test dependency used to uninstall pytest.
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.1.0",
+    "ruff==0.12.7",
+    "ty==0.0.79",
+    "types-psutil==7.0.0.20250801",
+    "pre-commit==4.2.0",
+    "pip-audit==2.9.0",
+    # Cross-platform task runner; `uv run poe <target>` mirrors `make <target>`
+    # for Windows, where `make` isn't a native binary.
+    "poethepoet==0.48.0",
+{%- if include_htmx %}
+    # DOM assertions for the web test kit (tests/web/dom.py)
+    "lxml>=6.1.3",
+    "cssselect>=1.5.0",
+{%- endif %}
+{%- if include_database %}
+    # N+1 and query-budget detection for the test suite (make check-queries).
+    # Built on SQLAlchemy 2.0's do_orm_execute, so it needs a database stack.
+    "queryspy>=0.4.1",
+{%- endif %}
+{%- if include_database and database_engine != 'sqlite' %}
+    # Tests use in-memory SQLite for speed/isolation regardless of the
+    # production backend, so aiosqlite is required as a test dep even when
+    # the app itself runs on Postgres.
+    "aiosqlite>=0.19.0",
+{%- endif %}
+{%- if include_worker or include_htmx %}
+    # Auto-reload for workers; asset rebuilds for the web frontend watcher
+    "watchdog==4.0.2",
+{%- endif %}
+{%- if include_storage %}
+    # A bucket in the test process, so the S3 backend's tests need no server.
+    "moto[s3]>=5.0",
+{%- endif %}
+]
+docs = [
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.6.16",
+    "mkdocstrings[python]==0.30.0",
+    "mkdocs-gen-files==0.5.0",
+    "pymdown-extensions==10.16.1",
 ]
 {%- if ai_rag %}
 

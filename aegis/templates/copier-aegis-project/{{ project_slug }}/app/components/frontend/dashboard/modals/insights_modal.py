@@ -26,7 +26,7 @@ from app.components.frontend.controls.data_table import (
 )
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.constants import COUNTRY_NAMES
+from app.core.constants import country_label
 from app.services.insights.models import EVENT_TYPE_LABELS
 from app.services.insights.schemas import BulkInsightsResponse
 from app.services.insights.schemas.views import OverviewHero
@@ -2999,9 +2999,7 @@ class DocsTab(InsightsTab):
                         [
                             SecondaryText("Top Country"),
                             ft.Text(
-                                COUNTRY_NAMES.get(
-                                    top_country["country"], top_country["country"]
-                                ),
+                                country_label(top_country["country"]),
                                 size=24,
                                 weight=ft.FontWeight.W_600,
                             ),
@@ -3032,7 +3030,7 @@ class DocsTab(InsightsTab):
                                     f"#{i}", size=Theme.Typography.BODY_SMALL
                                 ),
                                 BodyText(
-                                    COUNTRY_NAMES.get(c["country"], c["country"]),
+                                    country_label(c["country"]),
                                     size=Theme.Typography.BODY_SMALL,
                                 ),
                                 ft.Container(expand=True),
@@ -3254,7 +3252,7 @@ class DocsTab(InsightsTab):
                 ],
                 rows=[
                     [
-                        COUNTRY_NAMES.get(c["country"], c["country"]),
+                        country_label(c["country"]),
                         f"{c['visitors']:,}",
                     ]
                     for c in countries[:7]

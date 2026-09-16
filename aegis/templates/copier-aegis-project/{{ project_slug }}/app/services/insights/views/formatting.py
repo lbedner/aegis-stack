@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 import re
 
-from app.core.constants import COUNTRY_NAMES
+from app.core.constants import country_label as _country_label
 
 # Event type -> display color
 EVENT_COLORS: dict[str, str] = {
@@ -80,8 +80,8 @@ def day_str(dt: datetime | str) -> str:
 
 
 def country_label(code: str) -> str:
-    """'US' -> the flagged country name; the raw code when unknown."""
-    return COUNTRY_NAMES.get(code.upper(), code) if code else code
+    """'US' -> the flagged country name; flag plus code when unnamed."""
+    return _country_label(code)
 
 
 def page_title(url: str) -> str:

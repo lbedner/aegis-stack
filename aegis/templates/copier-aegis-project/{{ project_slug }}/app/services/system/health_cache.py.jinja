@@ -8,6 +8,7 @@ register_health_check machinery.
 {% if include_redis %}
 from datetime import UTC, datetime
 from typing import Any, cast
+from uuid import uuid4
 
 from app.core.config import settings
 from app.core.log import logger
@@ -70,8 +71,13 @@ async def check_cache_health() -> ComponentStatus:
         # Test basic connectivity with ping
         await redis_client.ping()
 
-        # Test basic set/get functionality
-        test_key = "health_check:test"
+        # Test basic set/get functionality. The key carries a random suffix
+        # because this check does not run alone: the webserver (per replica),
+        # the scheduler, the workers and the dashboard poll it against one
+        # shared database. On a fixed key they overwrite and delete each
+        # other's probe, so a healthy Redis reports "set/get test failed" or
+        # returns None for a key another process just cleaned up.
+        test_key = f"health_check:{uuid4().hex}"
         test_value = f"test_{start_time.timestamp()}"
         await redis_client.set(test_key, test_value, ex=10)  # Expire in 10 seconds
         retrieved_value = await redis_client.get(test_key)
@@ -79,9 +85,15 @@ async def check_cache_health() -> ComponentStatus:
         # Cleanup test key
         await redis_client.delete(test_key)
 
-        # Verify test worked
-        if retrieved_value.decode() != test_value:
-            raise Exception("Redis set/get test failed")
+        # Verify test worked. A client configured with decode_responses
+        # returns str, otherwise bytes; neither is a reason to fail.
+        if isinstance(retrieved_value, bytes):
+            retrieved_value = retrieved_value.decode()
+        if retrieved_value != test_value:
+            raise Exception(
+                f"Redis set/get test failed (wrote {test_value!r}, "
+                f"read back {retrieved_value!r})"
+            )
 
         # Get comprehensive Redis info for detailed monitoring
         # Reuse existing connection instead of creating a second one

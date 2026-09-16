@@ -7,10 +7,20 @@ Auth model
 The backend issues an HttpOnly ``aegis_session`` cookie on
 ``/auth/token``, ``/auth/register``, and the OAuth callback. That
 cookie lives in the per-session ``APIClient``'s underlying httpx
-cookie jar — never in ``page.client_storage`` and never on the
-``page`` object directly. The Flet Python server holds the jar; the
-browser never sees the cookie in Flet mode (it would in an htmx
-front-end, but the backend behavior is identical).
+cookie jar. The Flet Python server holds the jar; the browser never
+sees the cookie in Flet mode (it would in an htmx front-end, but the
+backend behavior is identical).
+
+The jar is process memory, so a webserver restart - a deploy, and far
+more often a dev hot-reload - emptied it and forced a fresh login with
+no way back: ``/auth/me`` 401s, the silent refresh posts to
+``/auth/refresh`` with no cookie to send, and the user lands on /login.
+
+So one value outlives the process: the ROTATING REFRESH TOKEN, in
+``page.client_storage``. Never the access token, and never a token that
+has been superseded - the backend's reuse detection treats a replayed
+one as an attack, which is why ``APIClient`` reports every rotation and
+this module stores the successor each time.
 
 This module exposes two operations:
 
@@ -18,8 +28,11 @@ This module exposes two operations:
   the cookie is currently honored. Cheap (single GET), authoritative
   (server is the source of truth), and naturally surfaces token
   expiry / blacklist hits as "not signed in".
+- ``try_resume_session(page)`` — seed a persisted refresh token into a
+  cold jar and exchange it for a live session.
 - ``sign_out(page)`` — call ``/auth/logout`` to revoke server-side, drop
-  the cookie jar locally, clear ``SessionState``, and route to /login.
+  the cookie jar locally, forget the persisted token, clear
+  ``SessionState``, and route to /login.
 
 Everything here is async-only.
 """
@@ -30,7 +43,60 @@ import flet as ft
 
 from app.components.frontend.core.routes import LOGIN_ROUTE
 from app.components.frontend.state.session_state import get_session_state
+from app.core.client_session import REFRESH_COOKIE
 from app.core.log import logger
+from app.core.security import REFRESH_COOKIE_PATH
+
+# Where the surviving refresh token lives between processes.
+RESUME_TOKEN_KEY = "aegis.refresh_token"
+
+
+async def persist_refresh_token(page: ft.Page, token: str) -> None:
+    """Remember the CURRENT refresh token. Wired to APIClient rotation."""
+    try:
+        await page.client_storage.set_async(RESUME_TOKEN_KEY, token)
+    except Exception as exc:
+        logger.debug(f"auth.resume.persist_failed error={exc}")
+
+
+async def forget_refresh_token(page: ft.Page) -> None:
+    """Drop the persisted token so a signed-out session cannot resume."""
+    try:
+        await page.client_storage.remove_async(RESUME_TOKEN_KEY)
+    except Exception as exc:
+        logger.debug(f"auth.resume.forget_failed error={exc}")
+
+
+async def try_resume_session(page: ft.Page) -> bool:
+    """Rebuild a live session in a cold jar from the persisted token.
+
+    Only runs when the jar has nothing of its own, so a working session
+    is never disturbed. A token the backend rejects is forgotten rather
+    than retried: it is either expired or already superseded, and
+    replaying it again trips reuse detection.
+    """
+    state = get_session_state(page)
+    api = state.api_client
+    if api.has_session_cookies():
+        return False
+    try:
+        token = await page.client_storage.get_async(RESUME_TOKEN_KEY)
+    except Exception as exc:
+        logger.debug(f"auth.resume.unavailable error={exc}")
+        return False
+    if not token:
+        return False
+
+    api.set_cookie(REFRESH_COOKIE, token, path=REFRESH_COOKIE_PATH)
+    if await api.refresh_session():
+        # The rotation callback has already stored the successor.
+        logger.info("auth.resume.ok", session_id=page.session_id)
+        return True
+
+    logger.info("auth.resume.rejected", session_id=page.session_id)
+    api.clear_cookies()
+    await forget_refresh_token(page)
+    return False
 
 
 async def is_authenticated(page: ft.Page) -> bool:
@@ -43,6 +109,13 @@ async def is_authenticated(page: ft.Page) -> bool:
     on every protected route change.
     """
     state = get_session_state(page)
+    # Resume BEFORE asking. A cold jar cannot be authenticated, and the
+    # asking is destructive: the 401 fires ``on_unauthorized``, which
+    # signs out - and sign-out forgets the persisted token, which is the
+    # one thing the resume needs. Probe first and the restart case can
+    # never work, however good the resume is.
+    if not state.api_client.has_session_cookies():
+        await try_resume_session(page)
     payload = await state.api_client.get("/api/v1/auth/me")
     if isinstance(payload, dict) and payload:
         # Cache the user on the session so views don't re-fetch.
@@ -51,10 +124,18 @@ async def is_authenticated(page: ft.Page) -> bool:
     return False
 
 
-async def sign_out(page: ft.Page) -> None:
+async def sign_out(page: ft.Page, *, forget_token: bool = True) -> None:
     """
     Sign the user out: revoke server-side, drop local cookies, clear
     the user payload, and route to /login.
+
+    ``forget_token`` separates the two callers. A person clicking Sign
+    Out means it, so the persisted refresh token goes with the session.
+    The 401 handler does NOT: a stale access token is the ordinary state
+    after a restart, and it fires on whatever call happens to be in
+    flight - which lands before ``is_authenticated`` can resume. Deleting
+    the token there makes the restart unrecoverable, which is the bug the
+    token exists to fix.
 
     Keeps ``SessionState`` and ``APIClient`` alive — the Flet session
     itself is still connected, only the auth state is reset. Tolerant
@@ -78,6 +159,8 @@ async def sign_out(page: ft.Page) -> None:
     # the server-side delete-cookie response was honored, this is
     # belt-and-braces against a partial-failure replay.
     api.clear_cookies()
+    if forget_token:
+        await forget_refresh_token(page)
     state.current_user = None
 
     logger.info("auth.sign_out.complete", session_id=page.session_id)

@@ -34,6 +34,7 @@ from app.components.frontend.auth.login_view import LoginView
 from app.components.frontend.auth.register_view import RegisterView
 from app.components.frontend.auth.session import (
     is_authenticated,
+    persist_refresh_token,
     sign_out,
 )
 from app.components.frontend.core.routes import LOGIN_ROUTE, REGISTER_ROUTE
@@ -1365,9 +1366,16 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         # A 401 from any call routes the user back to /login.
         {% if include_auth -%}
         async def _on_unauthorized() -> None:
-            await sign_out(page)
+            # A 401 is a stale session, not a logout: keep the persisted
+            # token so the next check can resume with it.
+            await sign_out(page, forget_token=False)
 
-        api_client = APIClient(on_unauthorized=_on_unauthorized)
+        api_client = APIClient(
+            on_unauthorized=_on_unauthorized,
+            # The jar dies with the process; the newest refresh token is
+            # the one value that outlives it.
+            on_session_rotated=lambda token: persist_refresh_token(page, token),
+        )
         {%- else -%}
         api_client = APIClient()
         {%- endif %}

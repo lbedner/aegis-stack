@@ -34,13 +34,15 @@ from typing import Any
 
 import httpx
 
+from app.core.client_session import SessionCookieMixin
 from app.core.config import settings
 from app.core.log import logger
 
 UnauthorizedHandler = Callable[[], None] | Callable[[], Awaitable[None]]
+SessionRotatedHandler = Callable[[str], None] | Callable[[str], Awaitable[None]]
 
 
-class APIClient:
+class APIClient(SessionCookieMixin):
     """HTTP client for internal API calls.
 
     Cookie jar-backed session: the underlying ``httpx.AsyncClient`` is
@@ -54,10 +56,18 @@ class APIClient:
         base_url: str | None = None,
         timeout: float = 10.0,
         on_unauthorized: UnauthorizedHandler | None = None,
+        on_session_rotated: SessionRotatedHandler | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = base_url or settings.API_BASE_URL
         self.timeout = timeout
         self.on_unauthorized = on_unauthorized
+        # Fired with the CURRENT refresh token whenever the backend mints
+        # or rotates one. The caller persists it; replaying a superseded
+        # token trips the backend's reuse detection, so "the latest one"
+        # is the only value worth storing.
+        self.on_session_rotated = on_session_rotated
+        self._last_refresh_cookie: str | None = None
         # Human-readable reason for the most recent failed request, None
         # after a success. The request methods return None on ANY error
         # (details go to the log), which leaves UI callers unable to say
@@ -78,9 +88,15 @@ class APIClient:
         # ``follow_redirects`` lets the OAuth callback chain (303 → /)
         # work end-to-end if a server-side caller ever uses it. Cookie
         # jar is built into ``httpx.AsyncClient``.
+        # ``transport`` is the seam, matching GraphQLClient: a test hands
+        # in ``httpx.MockTransport`` and never monkeypatches httpx. The
+        # auth lifecycle - login, restart, resume - is only testable with
+        # a server that can answer, and mocking the client's own methods
+        # tests the mock instead of the cookie jar.
         self._client = httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=True,
+            **({"transport": transport} if transport is not None else {}),
         )
         # Opt-in GET cache (see ``get``'s ``cache_ttl``). Key is
         # endpoint+params; value is (monotonic deadline, parsed body).
@@ -93,10 +109,6 @@ class APIClient:
     async def aclose(self) -> None:
         """Release the underlying connection pool. Call on session teardown."""
         await self._client.aclose()
-
-    def clear_cookies(self) -> None:
-        """Drop every cookie in the jar. Used on logout to defang any stale session."""
-        self._client.cookies.clear()
 
     async def get(
         self,
@@ -319,29 +331,6 @@ class APIClient:
                 await self._emit_unauthorized()
             yield response
 
-    async def _try_refresh(self) -> bool:
-        """Attempt to mint a new access token via ``POST /auth/refresh``.
-
-        Returns True if the server returned 200 (cookies are refreshed
-        in the jar). Returns False on any other status or transport
-        error. The ``_in_refresh`` flag prevents recursion if the
-        refresh endpoint itself 401s. ``_in_unauthorized`` short-circuits
-        when we're already inside the unauthorized-handler cleanup path
-        (e.g. ``sign_out`` calling ``/auth/logout``) — no point trying
-        to refresh into a session we're explicitly tearing down.
-        """
-        if self._in_refresh or self._in_unauthorized:
-            return False
-        self._in_refresh = True
-        try:
-            url = f"{self.base_url}/api/v1/auth/refresh"
-            resp = await self._client.request("POST", url)
-            return resp.status_code == 200
-        except Exception:
-            return False
-        finally:
-            self._in_refresh = False
-
     async def _emit_unauthorized(self) -> None:
         if self.on_unauthorized is None or self._in_unauthorized:
             return
@@ -426,6 +415,7 @@ class APIClient:
                 headers=headers,
                 **extra,
             )
+            await self._note_session_rotation()
             response.raise_for_status()
             self.last_error = None
             if response.status_code == 204:

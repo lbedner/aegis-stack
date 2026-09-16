@@ -1,0 +1,293 @@
+{% if include_auth -%}
+"""The restart survives, end to end, through a real cookie jar.
+
+The sibling ``test_session_resume`` drives ``try_resume_session`` directly
+with a fake client. That passed through three consecutive live failures,
+because every bug was somewhere the fake stood in for: the order the
+router calls things in, which caller deletes the persisted token, and a
+guard inside ``APIClient`` that made a refresh that never left the
+process look like a refusal by the server.
+
+So this one fakes only the server. A real ``APIClient`` with a real httpx
+jar runs the real sequence a webserver restart produces: sign in, lose
+the process, ask whether the session is authenticated, come back signed
+in. ``transport`` is the seam - the same one ``GraphQLClient`` uses - so
+nothing here monkeypatches httpx.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+import pytest
+from app.components.frontend.auth.session import (
+    RESUME_TOKEN_KEY,
+    is_authenticated,
+    sign_out,
+)
+from app.core.client import APIClient
+from app.core.client_session import REFRESH_COOKIE, SESSION_COOKIE
+from app.core.security import REFRESH_COOKIE_PATH
+
+BASE_URL = "http://backend:8000"
+
+
+class FakeBackend:
+    """The auth endpoints, with the cookie semantics that actually bite.
+
+    The refresh cookie is path-scoped to ``/api/v1/auth`` exactly as the
+    backend mints it, and rotates on every use: a resume that replays a
+    superseded token has to look like reuse here too, or the test cannot
+    tell a working resume from a lucky one.
+    """
+
+    def __init__(self) -> None:
+        self.session = "session-1"
+        self.refresh = "refresh-1"
+        self.seen: list[str] = []
+        self.refresh_cookies_received: list[str | None] = []
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        self.seen.append(f"{request.method} {request.url.path}")
+        jar = {
+            c.split("=", 1)[0].strip(): c.split("=", 1)[1]
+            for c in request.headers.get("cookie", "").split(";")
+            if "=" in c
+        }
+
+        if request.url.path == "/api/v1/auth/me":
+            if jar.get(SESSION_COOKIE) == self.session:
+                return httpx.Response(200, json={"email": "user@example.com"})
+            return httpx.Response(401, json={"detail": "Not authenticated"})
+
+        if request.url.path == "/api/v1/auth/refresh":
+            sent = jar.get(REFRESH_COOKIE)
+            self.refresh_cookies_received.append(sent)
+            if sent != self.refresh:
+                return httpx.Response(401, json={"detail": "Invalid refresh"})
+            self.session = f"{self.session}-rotated"
+            self.refresh = f"{self.refresh}-rotated"
+            return httpx.Response(
+                200,
+                json={"ok": True},
+                headers=[
+                    ("set-cookie", f"{SESSION_COOKIE}={self.session}; Path=/"),
+                    (
+                        "set-cookie",
+                        f"{REFRESH_COOKIE}={self.refresh}; "
+                        f"Path={REFRESH_COOKIE_PATH}",
+                    ),
+                ],
+            )
+
+        if request.url.path == "/api/v1/auth/logout":
+            return httpx.Response(200, json={"ok": True})
+
+        return httpx.Response(404, json={})
+
+
+class FakeStorage:
+    """``page.client_storage`` - the browser's localStorage."""
+
+    def __init__(self, stored: dict[str, Any] | None = None) -> None:
+        self.stored = dict(stored or {})
+
+    async def get_async(self, key: str) -> Any:
+        return self.stored.get(key)
+
+    async def set_async(self, key: str, value: Any) -> None:
+        self.stored[key] = value
+
+    async def remove_async(self, key: str) -> None:
+        self.stored.pop(key, None)
+
+
+class FakePage:
+    def __init__(self, storage: FakeStorage) -> None:
+        self.client_storage = storage
+        self.session_id = "flet-session"
+        self.routes: list[str] = []
+
+    def go(self, route: str) -> None:
+        self.routes.append(route)
+
+
+def build_client(backend: FakeBackend, page: FakePage) -> APIClient:
+    """Wire the client the way ``main.py`` wires it for a real session."""
+
+    async def on_session_rotated(token: str) -> None:
+        from app.components.frontend.auth.session import persist_refresh_token
+
+        await persist_refresh_token(page, token)
+
+    async def on_unauthorized() -> None:
+        # main.py passes forget_token=False here on purpose: a stale
+        # access token is the ordinary state after a restart.
+        await sign_out(page, forget_token=False)
+
+    return APIClient(
+        base_url=BASE_URL,
+        on_unauthorized=on_unauthorized,
+        on_session_rotated=on_session_rotated,
+        transport=httpx.MockTransport(backend.handler),
+    )
+
+
+@pytest.fixture
+def wire(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Bind a page + client pair to ``get_session_state``."""
+
+    def _wire(page: FakePage, client: APIClient) -> Any:
+        state = type(
+            "S", (), {"api_client": client, "current_user": None}
+        )()
+        import app.components.frontend.auth.session as module
+
+        monkeypatch.setattr(module, "get_session_state", lambda _page: state)
+        return state
+
+    return _wire
+
+
+class TestSurvivingAWebserverRestart:
+    async def test_a_cold_jar_comes_back_signed_in(self, wire: Any) -> None:
+        """The whole point: restart, and the user is still signed in.
+
+        The process is gone, so the jar is empty. Only the token in
+        client storage survived, and that has to be enough.
+        """
+        backend = FakeBackend()
+        storage = FakeStorage({RESUME_TOKEN_KEY: backend.refresh})
+        page = FakePage(storage)
+        client = build_client(backend, page)
+        state = wire(page, client)
+
+        assert await is_authenticated(page) is True
+        assert state.current_user == {"email": "user@example.com"}
+        assert page.routes == [], "a resumable session must not be routed to /login"
+
+    async def test_the_resume_runs_before_the_probe(self, wire: Any) -> None:
+        """Probe first and the restart case can never work.
+
+        ``/auth/me`` on a cold jar 401s, which fires the unauthorized
+        handler, which signs out - and the resume needs what sign-out
+        clears. Order is the fix, so order is the assertion.
+        """
+        backend = FakeBackend()
+        page = FakePage(FakeStorage({RESUME_TOKEN_KEY: backend.refresh}))
+        client = build_client(backend, page)
+        wire(page, client)
+
+        await is_authenticated(page)
+
+        assert backend.seen[0] == "POST /api/v1/auth/refresh"
+
+    async def test_the_refresh_cookie_actually_reaches_the_server(
+        self, wire: Any
+    ) -> None:
+        """The seeded cookie is path-scoped; a jar that drops it is silent.
+
+        Seeding a cookie the jar then declines to send fails exactly like
+        a token the server rejected, which is how it stayed hidden.
+        """
+        backend = FakeBackend()
+        page = FakePage(FakeStorage({RESUME_TOKEN_KEY: backend.refresh}))
+        client = build_client(backend, page)
+        wire(page, client)
+
+        await is_authenticated(page)
+
+        assert backend.refresh_cookies_received == ["refresh-1"]
+
+    async def test_the_rotated_token_is_what_gets_persisted(
+        self, wire: Any
+    ) -> None:
+        """Storing the spent one would trip reuse detection next restart."""
+        backend = FakeBackend()
+        storage = FakeStorage({RESUME_TOKEN_KEY: backend.refresh})
+        page = FakePage(storage)
+        client = build_client(backend, page)
+        wire(page, client)
+
+        await is_authenticated(page)
+
+        assert storage.stored[RESUME_TOKEN_KEY] == "refresh-1-rotated"
+
+    async def test_two_restarts_in_a_row_both_resume(self, wire: Any) -> None:
+        """Rotation has to hold across more than one hop."""
+        backend = FakeBackend()
+        storage = FakeStorage({RESUME_TOKEN_KEY: backend.refresh})
+
+        for _ in range(2):
+            page = FakePage(storage)
+            client = build_client(backend, page)
+            wire(page, client)
+            assert await is_authenticated(page) is True
+
+    async def test_a_401_does_not_delete_the_persisted_token(
+        self, wire: Any
+    ) -> None:
+        """The handler fires on whatever call is in flight.
+
+        It landed before ``is_authenticated`` could resume, and deleting
+        the token there made the restart unrecoverable - the exact thing
+        the token exists to prevent.
+        """
+        backend = FakeBackend()
+        storage = FakeStorage({RESUME_TOKEN_KEY: "some-token"})
+        page = FakePage(storage)
+        client = build_client(backend, page)
+        wire(page, client)
+
+        await client.get("/api/v1/auth/me")
+
+        assert storage.stored[RESUME_TOKEN_KEY] == "some-token"
+
+    async def test_a_resume_inside_the_unauthorized_handler_still_refreshes(
+        self, wire: Any
+    ) -> None:
+        """A refresh that never left the process read as a server refusal.
+
+        The 401 routes to /login, which asks whether the session is
+        authenticated, which is where the resume lives - so the resume
+        genuinely runs inside the handler's scope, and the guard there
+        must not suppress it.
+        """
+        backend = FakeBackend()
+        page = FakePage(FakeStorage({RESUME_TOKEN_KEY: backend.refresh}))
+        client = build_client(backend, page)
+        wire(page, client)
+        client.set_cookie(REFRESH_COOKIE, backend.refresh, path=REFRESH_COOKIE_PATH)
+        client._in_unauthorized = True
+
+        assert await client.refresh_session() is True
+
+
+class TestSigningOutIsStillFinal:
+    async def test_signing_out_forgets_the_token(self, wire: Any) -> None:
+        """Surviving a restart must not survive a deliberate sign-out."""
+        backend = FakeBackend()
+        storage = FakeStorage({RESUME_TOKEN_KEY: backend.refresh})
+        page = FakePage(storage)
+        client = build_client(backend, page)
+        wire(page, client)
+
+        await sign_out(page)
+
+        assert RESUME_TOKEN_KEY not in storage.stored
+        assert await is_authenticated(page) is False
+
+    async def test_a_stale_token_is_forgotten_not_replayed(
+        self, wire: Any
+    ) -> None:
+        """Replaying a superseded token is what reuse detection punishes."""
+        backend = FakeBackend()
+        storage = FakeStorage({RESUME_TOKEN_KEY: "superseded-token"})
+        page = FakePage(storage)
+        client = build_client(backend, page)
+        wire(page, client)
+
+        assert await is_authenticated(page) is False
+        assert RESUME_TOKEN_KEY not in storage.stored
+{%- endif %}

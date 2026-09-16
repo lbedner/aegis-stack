@@ -81,12 +81,21 @@ class Settings(
     # configuration; set it explicitly for a container or a tunnel.
     API_BASE_URL: str = ""
 
+    @property
+    def is_docker(self) -> bool:
+        """Detect if running inside Docker container."""
+        import os
+
+        return os.path.exists("/.dockerenv") or bool(os.getenv("DOCKER_CONTAINER"))
+
     @model_validator(mode="after")
     def _default_api_base_url(self) -> "Settings":
         """Point the CLI at wherever this app is actually reachable."""
         if not self.API_BASE_URL:
-            port = self.WEBSERVER_HOST_PORT or self.PORT
-            self.API_BASE_URL = f"http://localhost:{port}"
+            # The published host port is the host's business: .env.ports
+            # carries it into the container, naming a port nothing serves.
+            host_port = None if self.is_docker else self.WEBSERVER_HOST_PORT
+            self.API_BASE_URL = f"http://localhost:{host_port or self.PORT}"
         return self
 
     # Development settings
@@ -613,15 +622,6 @@ class Settings(
 {% endif %}
 
 {% if include_redis or database_engine == "postgres" or ollama_mode != "none" or include_ingress %}
-    @property
-    def is_docker(self) -> bool:
-        """Detect if running inside Docker container."""
-        import os
-        return (
-            os.path.exists("/.dockerenv") or
-            bool(os.getenv("DOCKER_CONTAINER"))
-        )
-
     @staticmethod
     def _localhost_url(
         url: str, docker_hostnames: set[str], host_port: int | None = None

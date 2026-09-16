@@ -57,6 +57,7 @@ class APIClient(SessionCookieMixin):
         timeout: float = 10.0,
         on_unauthorized: UnauthorizedHandler | None = None,
         on_session_rotated: SessionRotatedHandler | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = base_url or settings.API_BASE_URL
         self.timeout = timeout
@@ -87,9 +88,15 @@ class APIClient(SessionCookieMixin):
         # ``follow_redirects`` lets the OAuth callback chain (303 → /)
         # work end-to-end if a server-side caller ever uses it. Cookie
         # jar is built into ``httpx.AsyncClient``.
+        # ``transport`` is the seam, matching GraphQLClient: a test hands
+        # in ``httpx.MockTransport`` and never monkeypatches httpx. The
+        # auth lifecycle - login, restart, resume - is only testable with
+        # a server that can answer, and mocking the client's own methods
+        # tests the mock instead of the cookie jar.
         self._client = httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=True,
+            **({"transport": transport} if transport is not None else {}),
         )
         # Opt-in GET cache (see ``get``'s ``cache_ttl``). Key is
         # endpoint+params; value is (monotonic deadline, parsed body).

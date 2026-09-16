@@ -109,11 +109,14 @@ async def is_authenticated(page: ft.Page) -> bool:
     on every protected route change.
     """
     state = get_session_state(page)
+    # Resume BEFORE asking. A cold jar cannot be authenticated, and the
+    # asking is destructive: the 401 fires ``on_unauthorized``, which
+    # signs out - and sign-out forgets the persisted token, which is the
+    # one thing the resume needs. Probe first and the restart case can
+    # never work, however good the resume is.
+    if not state.api_client.has_session_cookies():
+        await try_resume_session(page)
     payload = await state.api_client.get("/api/v1/auth/me")
-    if not (isinstance(payload, dict) and payload) and await try_resume_session(page):
-        # A cold jar after a restart: the token outlived the process, so
-        # ask once more rather than sending a signed-in user to /login.
-        payload = await state.api_client.get("/api/v1/auth/me")
     if isinstance(payload, dict) and payload:
         # Cache the user on the session so views don't re-fetch.
         state.current_user = payload
@@ -121,10 +124,18 @@ async def is_authenticated(page: ft.Page) -> bool:
     return False
 
 
-async def sign_out(page: ft.Page) -> None:
+async def sign_out(page: ft.Page, *, forget_token: bool = True) -> None:
     """
     Sign the user out: revoke server-side, drop local cookies, clear
     the user payload, and route to /login.
+
+    ``forget_token`` separates the two callers. A person clicking Sign
+    Out means it, so the persisted refresh token goes with the session.
+    The 401 handler does NOT: a stale access token is the ordinary state
+    after a restart, and it fires on whatever call happens to be in
+    flight - which lands before ``is_authenticated`` can resume. Deleting
+    the token there makes the restart unrecoverable, which is the bug the
+    token exists to fix.
 
     Keeps ``SessionState`` and ``APIClient`` alive — the Flet session
     itself is still connected, only the auth state is reset. Tolerant
@@ -148,7 +159,8 @@ async def sign_out(page: ft.Page) -> None:
     # the server-side delete-cookie response was honored, this is
     # belt-and-braces against a partial-failure replay.
     api.clear_cookies()
-    await forget_refresh_token(page)
+    if forget_token:
+        await forget_refresh_token(page)
     state.current_user = None
 
     logger.info("auth.sign_out.complete", session_id=page.session_id)

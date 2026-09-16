@@ -1366,16 +1366,15 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         # A 401 from any call routes the user back to /login.
         {% if include_auth -%}
         async def _on_unauthorized() -> None:
-            await sign_out(page)
-
-        async def _on_session_rotated(token: str) -> None:
-            # The jar dies with the process; this is the one value that
-            # outlives it, and only ever the newest one.
-            await persist_refresh_token(page, token)
+            # A 401 is a stale session, not a logout: keep the persisted
+            # token so the next check can resume with it.
+            await sign_out(page, forget_token=False)
 
         api_client = APIClient(
             on_unauthorized=_on_unauthorized,
-            on_session_rotated=_on_session_rotated,
+            # The jar dies with the process; the newest refresh token is
+            # the one value that outlives it.
+            on_session_rotated=lambda token: persist_refresh_token(page, token),
         )
         {%- else -%}
         api_client = APIClient()

@@ -12,6 +12,8 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
+from httpx import CookieConflict
+
 from app.core.log import logger
 
 # The cookies the backend mints. Named here rather than imported from
@@ -37,8 +39,19 @@ class SessionCookieMixin:
         self._last_refresh_cookie = None
 
     def get_cookie(self, name: str) -> str | None:
-        """Read one cookie out of the jar."""
-        return self._client.cookies.get(name)
+        """Read one cookie out of the jar, newest wins.
+
+        A plain ``cookies.get`` RAISES when the jar holds two entries of
+        the same name, which it does whenever a seeded cookie (no domain)
+        meets the server's reply to it (host domain). Every caller here
+        wants "the current one", and a raising accessor turned a working
+        refresh into a silent sign-out.
+        """
+        try:
+            return self._client.cookies.get(name)
+        except CookieConflict:
+            matches = [c.value for c in self._client.cookies.jar if c.name == name]
+            return matches[-1] if matches else None
 
     def set_cookie(self, name: str, value: str, path: str = "/") -> None:
         """Seed a cookie into the jar - used to resume a persisted session."""
@@ -54,10 +67,30 @@ class SessionCookieMixin:
     async def refresh_session(self) -> bool:
         """Mint a new access token from the refresh cookie in the jar.
 
-        Public wrapper over the retry layer's own refresh, for callers
-        resuming a session rather than reacting to a 401.
+        Deliberately NOT gated on ``_in_unauthorized``, unlike the
+        reactive path. A resume frequently runs inside that handler's
+        scope - the 401 routes to /login, which asks whether the session
+        is authenticated, which is where the resume lives - and the guard
+        would report a refresh that never left the process as a refusal
+        by the server. The recursion guard still applies.
         """
-        return await self._try_refresh()
+        if self._in_refresh:
+            return False
+        return await self._do_refresh()
+
+    def _keep_only(self, name: str, value: str) -> None:
+        """Evict every other cookie of this name from the jar.
+
+        A seeded cookie and the server's rotation of it are two distinct
+        jar entries - different domains - so the spent one lingers and
+        both get sent on the next request. The backend reads a replayed
+        token as reuse, so the loser has to go.
+        """
+        for cookie in list(self._client.cookies.jar):
+            if cookie.name == name and cookie.value != value:
+                self._client.cookies.jar.clear(
+                    cookie.domain, cookie.path, cookie.name
+                )
 
     async def _note_session_rotation(self) -> None:
         """Tell the caller when the refresh cookie changes value.
@@ -94,17 +127,37 @@ class SessionCookieMixin:
         """
         if self._in_refresh or self._in_unauthorized:
             return False
+        return await self._do_refresh()
+
+    async def _do_refresh(self) -> bool:
+        """POST /auth/refresh and report whether the server accepted it."""
         self._in_refresh = True
         try:
             url = f"{self.base_url}/api/v1/auth/refresh"
             resp = await self._client.request("POST", url)
+            if resp.status_code != 200:
+                # Saying only "rejected" made a client-side refusal
+                # indistinguishable from the server's, which cost a long
+                # debugging session.
+                logger.info(
+                    "auth.refresh.refused",
+                    status=resp.status_code,
+                    sent_cookie=self._client.cookies.get(REFRESH_COOKIE) is not None,
+                    body=resp.text[:200],
+                )
             if resp.status_code == 200:
+                rotated = resp.cookies.get(REFRESH_COOKIE)
+                if rotated is not None:
+                    self._keep_only(REFRESH_COOKIE, rotated)
                 # A refresh rotates the token by design, and this call
                 # bypasses ``_perform_request``, so it reports for itself.
                 await self._note_session_rotation()
                 return True
             return False
-        except Exception:
+        except Exception as exc:
+            # Never silent: swallowing this is what made a 200 refresh
+            # indistinguishable from a rejected one.
+            logger.warning("auth.refresh.failed", error=str(exc))
             return False
         finally:
             self._in_refresh = False

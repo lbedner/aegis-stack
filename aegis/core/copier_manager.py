@@ -131,10 +131,6 @@ def generate_with_copier(
         # from the plugin registries (yes/no strings -> Copier booleans).
         **derive_include_flags(template_context),
         AnswerKeys.SCHEDULER_BACKEND: template_context[AnswerKeys.SCHEDULER_BACKEND],
-        AnswerKeys.SCHEDULER_WITH_PERSISTENCE: template_context[
-            AnswerKeys.SCHEDULER_WITH_PERSISTENCE
-        ]
-        == "yes",
         AnswerKeys.WORKER_BACKEND: template_context.get(
             AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ
         ),

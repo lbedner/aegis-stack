@@ -245,10 +245,6 @@ class TemplateGenerator:
             AnswerKeys.SCHEDULER_BACKEND: self.scheduler_backend,
             # Worker backend selection
             AnswerKeys.WORKER_BACKEND: self.worker_backend,
-            # Legacy scheduler persistence flag for backwards compatibility
-            AnswerKeys.SCHEDULER_WITH_PERSISTENCE: (
-                "yes" if self.scheduler_backend != StorageBackends.MEMORY else "no"
-            ),
             # Derived flags for template logic
             "has_background_infrastructure": any(
                 c.startswith(ComponentNames.WORKER)

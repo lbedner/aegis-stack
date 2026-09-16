@@ -1667,3 +1667,76 @@ class TestAnswersRecordTheVersionThatRanTheUpdate:
         upd._advance_copier_tracking(tmp_path, "v0.12.1", tmp_path)
 
         assert "aegis_version" not in yaml.safe_load(answers.read_text())
+
+
+class TestDryRunPreviewsFiles:
+    """The question a dry run is run for is "what will this do to my files".
+
+    It printed version info and the commit changelog, then exited. On one
+    real update that was 165 modified files the user could not see
+    beforehand (#774).
+    """
+
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("aegis.commands.update.get_current_template_commit")
+    def test_the_preview_names_what_would_change(
+        self,
+        mock_get_commit: MagicMock,
+        mock_sync: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        mock_get_commit.return_value = "different-commit"
+        mock_sync.return_value = SyncResult(
+            synced=["app/core/config.py", "Makefile"],
+            conflicts=["pyproject.toml"],
+        )
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        out = strip_ansi_codes(result.stdout)
+        assert "2 file(s) would be updated" in out
+        assert "pyproject.toml" in out
+
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("aegis.commands.update.get_current_template_commit")
+    def test_the_preview_never_touches_the_project(
+        self,
+        mock_get_commit: MagicMock,
+        mock_sync: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """It runs the real sync, so it runs it somewhere else."""
+        mock_get_commit.return_value = "different-commit"
+        mock_sync.return_value = SyncResult(synced=["Makefile"])
+        project_path = project_factory("base")
+        before = (project_path / "Makefile").read_text()
+
+        run_aegis_command("update", "--project-path", str(project_path), "--dry-run")
+
+        assert (project_path / "Makefile").read_text() == before
+        # The sync it ran was pointed at a copy, not at the project.
+        synced_path = mock_sync.call_args[0][0]
+        assert synced_path != project_path
+
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("aegis.commands.update.get_current_template_commit")
+    def test_a_preview_that_fails_does_not_fail_the_dry_run(
+        self,
+        mock_get_commit: MagicMock,
+        mock_sync: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """A preview is information, not a gate."""
+        mock_get_commit.return_value = "different-commit"
+        mock_sync.side_effect = RuntimeError("render exploded")
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        assert result.success
+        assert "could not preview" in strip_ansi_codes(result.stdout).lower()

@@ -369,3 +369,69 @@ class TestAuthLevelDerivedFlags:
         answers = _make_updater(project).answers
         assert answers[AnswerKeys.AUTH_RBAC] is True
         assert answers[AnswerKeys.AUTH_ORG] is True
+
+
+class TestSpecsGatedOnALateComponent:
+    """The half of #1080 where re-rendering is not safe.
+
+    A plugin's files are vendored and replaced on upgrade by definition,
+    so adding a component can bring them up to date in place. An in-tree
+    service's files are the user's to edit, so the same move would
+    overwrite their work - what the render-diff engine exists to prevent.
+    Those are named instead, and ``aegis update`` is the repair.
+    """
+
+    def _project(self, tmp_path: Path, **answers: object) -> Path:
+        import yaml
+
+        project = tmp_path / "demo-project"
+        project.mkdir()
+        (project / ".copier-answers.yml").write_text(
+            yaml.safe_dump(
+                {
+                    "project_name": "Demo",
+                    "project_slug": "demo-project",
+                    "_commit": "None",
+                    "_src_path": "aegis/templates/copier-aegis-project",
+                    **answers,
+                }
+            )
+        )
+        return project
+
+    def test_a_service_whose_files_branch_on_the_component_is_named(
+        self, tmp_path: Path
+    ) -> None:
+        """``documents`` renders its dispatch one way with a worker and
+        another without, and adding the worker later does not re-render
+        it."""
+        from aegis.core.manual_updater import ManualUpdater
+
+        project = self._project(
+            tmp_path, include_database=True, include_documents=True, include_worker=True
+        )
+
+        stale = ManualUpdater(project)._specs_gated_on(
+            "worker", ManualUpdater(project).answers
+        )
+
+        assert "documents" in stale
+
+    def test_a_project_with_nothing_gating_on_it_names_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        from aegis.core.manual_updater import ManualUpdater
+
+        project = self._project(tmp_path, include_redis=True)
+        updater = ManualUpdater(project)
+
+        assert updater._specs_gated_on("redis", updater.answers) == []
+
+    def test_the_component_being_added_is_never_named(self, tmp_path: Path) -> None:
+        """Its own files were just written from the current answers."""
+        from aegis.core.manual_updater import ManualUpdater
+
+        project = self._project(tmp_path, include_worker=True)
+        updater = ManualUpdater(project)
+
+        assert "worker" not in updater._specs_gated_on("worker", updater.answers)

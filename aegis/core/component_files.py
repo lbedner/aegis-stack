@@ -229,6 +229,34 @@ def _spec_extras(component: str) -> dict[str, list[str]]:
     return spec.files.extras if spec is not None else {}
 
 
+def _foreign_gated_files(component: str, answers: dict[str, Any]) -> set[str]:
+    """Files another spec owns conditionally, whose condition is off.
+
+    A spec can own files that live inside another spec's tree: auth's htmx
+    login pages sit under ``app/components/web_frontend``, which the htmx
+    component owns wholesale. Auth declares them in an ``include_htmx``
+    extras bucket so an htmx-without-auth project does not carry them, and
+    ``init`` honours that. Adding the OWNER of the tree has to honour it
+    too, or the pages arrive with nothing routing to them.
+
+    A bucket applies when its owning spec is installed and its own gate is
+    truthy; anything else it lists is not the adding component's to write.
+    """
+    from .components import COMPONENTS
+    from .services import SERVICES
+
+    excluded: set[str] = set()
+    for name, spec in {**SERVICES, **COMPONENTS}.items():
+        if name == component:
+            continue
+        owner_installed = answers.get(AnswerKeys.include_key(name), False)
+        for group, files in (spec.files.extras or {}).items():
+            if owner_installed and answers.get(group):
+                continue
+            excluded |= set(_expand_directories_to_files(files))
+    return excluded
+
+
 def get_component_files(
     component: str,
     backend_variant: str | None = None,
@@ -311,7 +339,10 @@ def get_component_files(
         return sorted(base_files - persistence_files)
 
     # Expand directories to include all nested files
-    return sorted(set(_expand_directories_to_files(base)))
+    files = set(_expand_directories_to_files(base))
+    if answers:
+        files -= _foreign_gated_files(component, answers)
+    return sorted(files)
 
 
 def get_component_cleanup_paths(component: str) -> list[str]:

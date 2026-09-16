@@ -134,7 +134,6 @@ class TestSpecDeclaresAnswerResets:
     def test_scheduler_declares_its_resets(self) -> None:
         assert COMPONENTS["scheduler"].reset_answers_on_remove == {
             "scheduler_backend": "memory",
-            "scheduler_with_persistence": False,
         }
 
     def test_most_specs_declare_none(self) -> None:
@@ -153,7 +152,6 @@ class TestSpecDeclaresAnswerResets:
             "project_slug: demo-project\n"
             "include_scheduler: true\n"
             "scheduler_backend: postgres\n"
-            "scheduler_with_persistence: true\n"
             "_commit: None\n"
             "_src_path: aegis/templates/copier-aegis-project\n"
         )
@@ -163,7 +161,6 @@ class TestSpecDeclaresAnswerResets:
         )
 
         assert answers["scheduler_backend"] == "memory"
-        assert answers["scheduler_with_persistence"] is False
 
     def test_reset_is_a_no_op_for_specs_without_one(self, tmp_path: Path) -> None:
         from aegis.core.manual_updater import ManualUpdater

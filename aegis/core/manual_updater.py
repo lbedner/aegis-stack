@@ -268,6 +268,15 @@ class UpdateResult(BaseModel):
     shared_files_need_manual_merge: list[str] = Field(
         default_factory=list, description="Shared files that need manual merging"
     )
+    plugins_rerendered: list[str] = Field(
+        default_factory=list,
+        description="Installed plugins whose trees were re-rendered",
+    )
+    specs_needing_update: list[str] = Field(
+        default_factory=list,
+        description="Installed specs whose files gate on this component and "
+        "cannot be re-rendered here; the user runs aegis update",
+    )
     success: bool = Field(description="Whether the operation succeeded")
     error_message: str | None = Field(
         default=None, description="Error message if operation failed"
@@ -573,6 +582,15 @@ class ManualUpdater:
             # issue #686 — Failure A.
             files_deleted = sweep_empty_stubs(self.project_path)
 
+            # Jinja decided every ``{% if include_<component> %}`` when a
+            # file was written, so a component added later does not reach
+            # the files of OTHER specs that gate on it (#1080). Plugin
+            # trees are vendored and re-rendered wholesale by definition,
+            # so they can be brought up to date here; an in-tree spec's
+            # files may carry user edits, so those are reported instead.
+            plugins_rerendered = self._rerender_installed_plugins(updated_answers)
+            specs_needing_update = self._specs_gated_on(component, updated_answers)
+
             if run_post_gen:
                 self.run_post_generation_tasks()
 
@@ -584,6 +602,8 @@ class ManualUpdater:
                 shared_files_updated=shared_files_updated,
                 shared_files_backed_up=shared_files_backed_up,
                 shared_files_need_manual_merge=shared_files_need_manual_merge,
+                plugins_rerendered=plugins_rerendered,
+                specs_needing_update=specs_needing_update,
                 success=True,
             )
 
@@ -1205,26 +1225,42 @@ class ManualUpdater:
         )
 
         result = PluginRenderResult()
-        for source_file in sorted(project_slug_dir.rglob(f"*{JINJA_EXTENSION}")):
-            # Path relative to the project slug dir → relative path
-            # inside the target project. Strip the ``.jinja`` suffix
-            # since the rendered file shouldn't keep it.
+        # Everything the plugin ships, not only its templates. A plugin
+        # vendors a tree: a seed fixture, a ``py.typed`` marker, an icon,
+        # a ``.sql``. Walking ``*.jinja`` alone dropped those silently -
+        # not written, not reported, no warning - and a plain
+        # ``__init__.py`` that never landed left a namespace package that
+        # imported fine and had no ``__file__``.
+        for source_file in sorted(project_slug_dir.rglob("*")):
+            if not source_file.is_file():
+                continue
             rel_inside_slug = source_file.relative_to(project_slug_dir)
-            out_rel = rel_inside_slug.with_suffix("")
+            is_template = source_file.suffix == JINJA_EXTENSION
+            # A rendered file drops the ``.jinja``; a vendored one is
+            # already named what it should be called.
+            out_rel = (
+                rel_inside_slug.with_suffix("") if is_template else rel_inside_slug
+            )
             out_path = self.project_path / out_rel
 
-            # Jinja2 needs the template name relative to the loader's
-            # root (template_root, not project_slug_dir) so it can
-            # resolve includes against sibling files.
-            template_name = str(source_file.relative_to(template_root))
-            template = plugin_env.get_template(template_name)
-            content = template.render(self.answers)
-
-            if self._snapshot_if_replaced(out_path, content, backup_root):
-                result.replaced.append(str(out_rel))
-
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            self._write_rendered(out_path, content)
+            if is_template:
+                # Jinja2 needs the template name relative to the loader's
+                # root (template_root, not project_slug_dir) so it can
+                # resolve includes against sibling files.
+                template_name = str(source_file.relative_to(template_root))
+                content = plugin_env.get_template(template_name).render(self.answers)
+                if self._snapshot_if_replaced(out_path, content, backup_root):
+                    result.replaced.append(str(out_rel))
+                self._write_rendered(out_path, content)
+            else:
+                # Read as bytes: a vendored asset can be an image, and its
+                # contents are data rather than a template - ``{{ ... }}``
+                # in a JSON fixture stays exactly as the plugin wrote it.
+                raw = source_file.read_bytes()
+                if self._snapshot_if_replaced_bytes(out_path, raw, backup_root):
+                    result.replaced.append(str(out_rel))
+                out_path.write_bytes(raw)
             result.written.append(str(out_rel))
 
         return result
@@ -1251,6 +1287,104 @@ class ManualUpdater:
                 return False
         except (OSError, UnicodeDecodeError):
             pass  # unreadable as text — snapshot it rather than risk loss
+
+        backup_path = backup_root / out_path.relative_to(self.project_path)
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(out_path, backup_path)
+        return True
+
+    def _rerender_installed_plugins(self, answers: dict[str, Any]) -> list[str]:
+        """Re-render every installed plugin's tree against current answers.
+
+        A plugin's files are vendored artifacts it owns and an upgrade
+        replaces them wholesale, so re-rendering is the defined behaviour
+        rather than a risk - and it is the only way a component added
+        after the plugin reaches the plugin's render-time gates. Local
+        edits are snapshotted first, exactly as on an upgrade.
+        """
+        from .plugins.composer import PLUGINS_ANSWER_KEY
+        from .plugins.discovery import module_name_for
+
+        rerendered: list[str] = []
+        previous_answers = self.answers
+        self.answers = answers
+        try:
+            for entry in answers.get(PLUGINS_ANSWER_KEY) or []:
+                name = entry.get("name") if isinstance(entry, dict) else None
+                if not name:
+                    continue
+                module = module_name_for(name)
+                if module is None:
+                    # Recorded in answers but not importable here: the
+                    # package is gone or this is another machine. Nothing
+                    # to render, and not this command's problem to report.
+                    continue
+                if self.render_plugin_tree(module, backup_label=name).written:
+                    rerendered.append(name)
+        finally:
+            self.answers = previous_answers
+        return rerendered
+
+    def _specs_gated_on(self, component: str, answers: dict[str, Any]) -> list[str]:
+        """Installed specs whose own files branch on ``component``.
+
+        Their templates decided the branch when they were written, and
+        re-rendering them here would overwrite files the user may have
+        edited - which is what the render-diff engine exists to avoid. So
+        they are named, and ``aegis update`` is the repair.
+        """
+        from .components import COMPONENTS
+        from .services import SERVICES
+
+        answer_key = AnswerKeys.include_key(component)
+        template_root = get_template_path() / PROJECT_SLUG_PLACEHOLDER
+        stale: list[str] = []
+        for name, spec in {**SERVICES, **COMPONENTS}.items():
+            if name == component or not answers.get(AnswerKeys.include_key(name)):
+                continue
+            if self._spec_templates_mention(spec, answer_key, template_root):
+                stale.append(name)
+        return sorted(stale)
+
+    @staticmethod
+    def _spec_templates_mention(
+        spec: Any, answer_key: str, template_root: Path
+    ) -> bool:
+        """True when any of the spec's own template files reads ``answer_key``."""
+        for rel in list(getattr(spec.files, "primary", []) or []):
+            source = template_root / rel
+            candidates = (
+                sorted(source.rglob("*"))
+                if source.is_dir()
+                else [source, Path(f"{source}{JINJA_EXTENSION}")]
+            )
+            for candidate in candidates:
+                if not candidate.is_file():
+                    continue
+                try:
+                    if re.search(
+                        rf"\b{re.escape(answer_key)}\b", candidate.read_text()
+                    ):
+                        return True
+                except (OSError, UnicodeDecodeError):
+                    continue
+        return False
+
+    def _snapshot_if_replaced_bytes(
+        self, out_path: Path, incoming: bytes, backup_root: Path
+    ) -> bool:
+        """``_snapshot_if_replaced`` for a vendored asset.
+
+        Same rule, compared as bytes: a plugin's fixtures and images are
+        not text, and an identical re-copy is still worth no backup.
+        """
+        if not out_path.exists():
+            return False
+        try:
+            if out_path.read_bytes() == incoming:
+                return False
+        except OSError:
+            pass  # unreadable — snapshot it rather than risk loss
 
         backup_path = backup_root / out_path.relative_to(self.project_path)
         backup_path.parent.mkdir(parents=True, exist_ok=True)

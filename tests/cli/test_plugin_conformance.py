@@ -167,10 +167,6 @@ class TestAutoRequires:
     """#1079: an option declaring ``auto_requires`` must install what it
     asks for, the way ``ai[sqlite]`` pulls in a database."""
 
-    @pytest.mark.xfail(
-        reason="#1079: compute_auto_requires is never called on the plugin path",
-        strict=True,
-    )
     def test_an_option_pulls_in_the_component_it_requires(
         self, tmp_path_factory: pytest.TempPathFactory
     ) -> None:
@@ -199,10 +195,6 @@ class TestLateComponent:
     ``aegis add worker``.
     """
 
-    @pytest.mark.xfail(
-        reason="#1080: adding a component never re-renders installed plugin trees",
-        strict=True,
-    )
     def test_adding_a_component_rerenders_the_plugin(
         self, tmp_path_factory: pytest.TempPathFactory
     ) -> None:

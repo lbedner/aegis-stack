@@ -348,9 +348,6 @@ def add_service_command(
             if component == ComponentNames.SCHEDULER:
                 scheduler_backend = detect_scheduler_backend([component])
                 component_data[AnswerKeys.SCHEDULER_BACKEND] = scheduler_backend
-                component_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = (
-                    scheduler_backend == StorageBackends.SQLITE
-                )
             elif component == ComponentNames.DATABASE:
                 component_data[AnswerKeys.DATABASE_ENGINE] = StorageBackends.SQLITE
 

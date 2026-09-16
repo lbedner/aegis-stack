@@ -200,7 +200,6 @@ COMPONENTS: dict[str, ComponentSpec] = {
         # inheriting a stale postgres/sqlite selection (aegis-stack#921).
         reset_answers_on_remove={
             AnswerKeys.SCHEDULER_BACKEND: StorageBackends.MEMORY,
-            AnswerKeys.SCHEDULER_WITH_PERSISTENCE: False,
         },
         files=FileManifest(
             primary=[

@@ -187,7 +187,12 @@ def _install_plugin(
         raise typer.Exit(1) from e
 
     try:
-        plan = resolve_dependencies(plugin_spec, existing_answers)
+        # ``parsed_options`` goes in so the options' ``auto_requires`` is
+        # part of the plan: an option that names a component it needs has
+        # to install it, not merely render as though it were there.
+        plan = resolve_dependencies(
+            plugin_spec, existing_answers, parsed_options=parsed_options
+        )
     except CircularDependencyError as e:
         brand.error(f"Circular plugin dependency: {e}", err=True)
         raise typer.Exit(1) from e
@@ -607,9 +612,6 @@ def add_command(
     # Add scheduler backend configuration if adding scheduler
     if ComponentNames.SCHEDULER in components_to_add:
         update_data[AnswerKeys.SCHEDULER_BACKEND] = scheduler_backend
-        update_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = (
-            scheduler_backend == StorageBackends.SQLITE
-        )
 
     # Add database engine configuration if adding database. Match the
     # scheduler backend when adding the DB for a persistent scheduler;
@@ -651,9 +653,6 @@ def add_command(
                 component_data[AnswerKeys.SCHEDULER_BACKEND] = update_data[
                     AnswerKeys.SCHEDULER_BACKEND
                 ]
-                component_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = update_data.get(
-                    AnswerKeys.SCHEDULER_WITH_PERSISTENCE, False
-                )
                 # The scheduler's own models gate their Postgres schema on the
                 # engine, and the database component is added after this one,
                 # so without this they render unqualified on a project that
@@ -700,6 +699,23 @@ def add_command(
                 brand.warn(
                     f"   {t('add.skipped_files', count=len(result.files_skipped))}"
                 )
+            # A component's answer only reaches a file when that file is
+            # rendered. Plugin trees were re-rendered just now; in-tree
+            # specs keep their branch until an update, and silence there
+            # is what left projects contradicting their own answers.
+            if result.plugins_rerendered:
+                brand.success(
+                    f"   {t('add.plugins_rerendered', names=', '.join(result.plugins_rerendered))}"
+                )
+            if result.specs_needing_update:
+                typer.echo("")
+                brand.warn(
+                    t(
+                        "add.specs_need_update",
+                        names=", ".join(result.specs_needing_update),
+                    )
+                )
+                typer.echo(f"   {t('add.specs_need_update_hint')}")
 
         # Generate migrations for newly-added components that own tables.
         # Today that's scheduler[postgres] -> scheduler.job_execution; the

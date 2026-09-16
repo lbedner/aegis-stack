@@ -324,3 +324,92 @@ class TestUnknownDependency:
         result = resolve_dependencies(target, answers={}, registry=registry)
         assert result.unresolved_plugins == ["not_pip_installed"]
         assert not result.to_install
+
+
+class TestAutoRequiresOnThePluginPath:
+    """``auto_requires`` has to install what the option asked for.
+
+    ``OptionSpec.auto_requires`` lets a bracket option pull in the
+    components its value needs - ``ai[sqlite]`` uses it to add
+    ``database[sqlite]``. ``compute_auto_requires`` had exactly one
+    caller, the in-tree init path, so a plugin declaring it parsed the
+    option, recorded it, rendered with it, and never installed what it
+    required.
+    """
+
+    def _plugin_with_storage_option(self) -> PluginSpec:
+        from aegis.core.option_spec import OptionMode, OptionSpec
+
+        return _spec(
+            "scraper",
+            kind=PluginKind.SERVICE,
+            options=[
+                OptionSpec(
+                    name="bodies",
+                    mode=OptionMode.SINGLE,
+                    choices=["column", "objects"],
+                    default="column",
+                    auto_requires=lambda v: ["storage"] if v == "objects" else [],
+                )
+            ],
+        )
+
+    def test_the_option_pulls_in_what_it_requires(self) -> None:
+        result = resolve_dependencies(
+            self._plugin_with_storage_option(),
+            answers={},
+            registry={"storage": _spec("storage", kind=PluginKind.COMPONENT)},
+            parsed_options={"bodies": "objects"},
+        )
+
+        assert "storage" in [d.name for d in result.to_install]
+
+    def test_the_default_value_requires_nothing(self) -> None:
+        result = resolve_dependencies(
+            self._plugin_with_storage_option(),
+            answers={},
+            registry={"storage": _spec("storage", kind=PluginKind.COMPONENT)},
+            parsed_options={"bodies": "column"},
+        )
+
+        assert result.is_empty
+
+    def test_an_already_installed_requirement_is_not_queued(self) -> None:
+        result = resolve_dependencies(
+            self._plugin_with_storage_option(),
+            answers={"include_storage": True},
+            registry={"storage": _spec("storage", kind=PluginKind.COMPONENT)},
+            parsed_options={"bodies": "objects"},
+        )
+
+        assert result.is_empty
+
+    def test_a_bracket_variant_wins_over_the_plain_component(self) -> None:
+        """``{database, database[postgres]}`` installs the variant only,
+        the rule ``_normalise_bracket_variants`` already encodes."""
+        from aegis.core.option_spec import OptionMode, OptionSpec
+
+        target = _spec(
+            "records",
+            options=[
+                OptionSpec(
+                    name="backend",
+                    mode=OptionMode.SINGLE,
+                    choices=["memory", "postgres"],
+                    default="memory",
+                    auto_requires=lambda v: (
+                        ["database", f"database[{v}]"] if v != "memory" else []
+                    ),
+                )
+            ],
+        )
+
+        result = resolve_dependencies(
+            target,
+            answers={},
+            registry={"database": _spec("database", kind=PluginKind.COMPONENT)},
+            parsed_options={"backend": "postgres"},
+        )
+
+        queued = [(d.name, d.variant) for d in result.to_install]
+        assert queued == [("database", "database[postgres]")]

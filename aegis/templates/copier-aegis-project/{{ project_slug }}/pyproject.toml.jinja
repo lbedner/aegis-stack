@@ -466,8 +466,12 @@ help = "Run type checking with ty"
 cmd = "uv run ty check"
 
 {% if include_database %}[tool.poe.tasks.check-queries]
-help = "Detect N+1 queries in the test suite"
-cmd = "uv run pytest --queryspy-strict"
+help = "Fail on N+1 queries not already in .queryspy-baseline.json"
+cmd = "uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json"
+
+[tool.poe.tasks.check-queries-baseline]
+help = "Rewrite .queryspy-baseline.json from the current suite"
+cmd = "uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json --queryspy-baseline-update"
 
 {% endif %}[tool.poe.tasks.check]
 help = "Run all code quality checks"

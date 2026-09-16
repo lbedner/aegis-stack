@@ -58,5 +58,9 @@ for f in sorted(glob.glob(f"{src}/*.json")):
 doc = {"tool": "queryspy", "version": "0.4.1",
        "entries": sorted(merged.values(), key=lambda e: (e["kind"], e["label"], e["file"] or "", e["function"] or ""))}
 dst.write_text(json.dumps(doc, indent=2) + "\n")
+# Generated projects ship the same file so their CI gate starts from the
+# template's known debt instead of failing on it.
+shipped = dst.parents[1] / "aegis/templates/copier-aegis-project/{{ project_slug }}/.queryspy-baseline.json"
+shipped.write_text(dst.read_text())
 print(f"wrote {dst}: {len(doc['entries'])} entries")
 PY

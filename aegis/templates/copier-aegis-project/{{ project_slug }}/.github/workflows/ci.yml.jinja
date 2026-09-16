@@ -64,5 +64,6 @@ jobs:
     - name: Install dependencies
       run: uv sync
 
-    - name: Run tests
-      run: uv run pytest
+    - name: Run tests{% if include_database %} (fails on new N+1 query sites too)
+      run: uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json{% else %}
+      run: uv run pytest{% endif %}

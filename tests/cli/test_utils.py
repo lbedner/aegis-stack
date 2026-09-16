@@ -226,11 +226,6 @@ def run_project_command(
     )
 
 
-QUERYSPY_BASELINE = (
-    Path(__file__).resolve().parent.parent / "fixtures" / "queryspy-baseline.json"
-)
-
-
 def run_quality_checks(project_path: Path, timeout: int = 120) -> list[CLITestResult]:
     """
     Run standard quality checks on a generated project.
@@ -293,12 +288,14 @@ def run_quality_checks(project_path: Path, timeout: int = 120) -> list[CLITestRe
     # The baseline records what the templates already do; only a *new*
     # finding fails. Entries key on paths relative to the generated project,
     # identical across stacks, so one file serves the whole matrix and a
-    # stack that lacks a file just reports the entry as stale.
+    # stack that lacks a file just reports the entry as stale. Run against
+    # the copy the project itself ships, which is what its own CI gates on;
+    # ``make queryspy-baseline`` writes it and the repo fixture together.
     pytest_command = ["uv", "run", "pytest", "-v"]
     if "queryspy" in (project_path / "pyproject.toml").read_text():
         pytest_command += [
             "--queryspy-strict",
-            f"--queryspy-baseline={QUERYSPY_BASELINE}",
+            "--queryspy-baseline=.queryspy-baseline.json",
         ]
     results.append(
         run_project_command(

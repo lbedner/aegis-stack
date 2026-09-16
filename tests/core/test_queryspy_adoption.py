@@ -74,6 +74,25 @@ class TestTheGateIsUp:
         assert "--queryspy-strict" in source
         assert "--queryspy-baseline=" in source
 
+    def test_a_generated_project_gates_its_own_ci_the_same_way(self) -> None:
+        on = _render(".github/workflows/ci.yml.jinja", _ctx(include_database=True))
+        off = _render(".github/workflows/ci.yml.jinja", _ctx(include_database=False))
+        assert "--queryspy-strict --queryspy-baseline .queryspy-baseline.json" in on
+        assert "queryspy" not in off
+
+    def test_the_baseline_rides_the_database_component(self) -> None:
+        """A stack with no database gets no baseline file to explain."""
+        from aegis.core.components import COMPONENTS
+
+        assert ".queryspy-baseline.json" in COMPONENTS["database"].files.primary
+
+    def test_the_shipped_baseline_is_the_fixture(self) -> None:
+        """One file, two homes; the regenerate script writes both."""
+        shipped = (
+            get_template_path() / PROJECT_SLUG_PLACEHOLDER / ".queryspy-baseline.json"
+        )
+        assert shipped.read_text() == self.BASELINE.read_text()
+
     def test_the_baseline_is_the_tools_own_format(self) -> None:
         import json
 

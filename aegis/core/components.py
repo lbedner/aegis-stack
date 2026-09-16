@@ -263,6 +263,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/core/db.py",
                 "app/components/frontend/dashboard/cards/database_card.py",
                 "app/components/frontend/dashboard/modals/database_modal.py",
+                # queryspy only means anything with a database, and the
+                # test job runs the gate against this file.
+                ".queryspy-baseline.json",
             ],
         ),
     ),

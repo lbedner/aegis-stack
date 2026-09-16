@@ -44,7 +44,7 @@ from app.components.frontend.controls.views.legacy_dashboard import (
 )
 from app.components.frontend.core import events as frontend_events
 from app.components.frontend.core.session_health import (
-    handle_corrupt_session,
+    SessionLoops,
     is_tree_corruption,
 )
 from app.components.frontend.core.routes import DASHBOARD_ROUTE
@@ -1184,25 +1184,14 @@ async def setup_dashboard(view: BaseView) -> None:
         page.data = {}
     page.data["refresh_dashboard"] = refresh_dashboard
 
-    # Grace before declaring the page dead: Flet reconnects within seconds.
-    _disconnect_grace_checks = 30  # ~30s at 1s per check
-    _consecutive_disconnects = 0
+    # One object owns the rules every loop below shares: how long a
+    # disconnect is tolerated, which exceptions are fatal, and the fact
+    # that a fatal one ends ALL of this page's loops rather than the one
+    # that happened to notice.
+    _loops = SessionLoops(page, dashboard._is_page_connected)
 
     def _is_alive() -> bool:
-        """Check if the page is still alive.
-
-        Tolerates transient WebSocket disconnects (Flet session reconnects)
-        by requiring multiple consecutive failures before returning False.
-        """
-        nonlocal _consecutive_disconnects
-        if dashboard._is_page_connected():
-            _consecutive_disconnects = 0
-            return True
-        _consecutive_disconnects += 1
-        if _consecutive_disconnects >= _disconnect_grace_checks:
-            logger.debug("Page permanently disconnected after grace period")
-            return False
-        return True  # Still within grace period
+        return _loops.alive()
 
     async def auto_refresh() -> None:
         """Auto-refresh loop. Exits on page disconnect or session corruption."""
@@ -1215,8 +1204,7 @@ async def setup_dashboard(view: BaseView) -> None:
                 logger.debug("Page disconnected during refresh, retrying")
                 await asyncio.sleep(5)
             except Exception as e:
-                if is_tree_corruption(e):
-                    await handle_corrupt_session(page)
+                if await _loops.fatal(e):
                     return
                 logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
                 await asyncio.sleep(30)
@@ -1245,6 +1233,8 @@ async def setup_dashboard(view: BaseView) -> None:
                     # Transient disconnect — skip this flush, loop will retry
                     pass
                 except Exception as e:
+                    if await _loops.fatal(e):
+                        return
                     logger.debug(f"Worker modal flush failed: {e}")
 
     async def listen_for_worker_events() -> None:
@@ -1325,6 +1315,8 @@ async def setup_dashboard(view: BaseView) -> None:
                 logger.debug("SSE: page disconnected, retrying in 5s")
                 await asyncio.sleep(5)
             except Exception as e:
+                if await _loops.fatal(e):
+                    return
                 logger.info(f"SSE: connection error: {e}, reconnecting in 5s")
                 await asyncio.sleep(5)
         logger.info("SSE: listener exiting (page permanently disconnected)")

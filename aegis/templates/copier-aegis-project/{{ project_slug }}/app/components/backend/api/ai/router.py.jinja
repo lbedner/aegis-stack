@@ -150,7 +150,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # Get updated conversation for metadata
         conversation_id = response_message.metadata.get("conversation_id")
         conversation = (
-            ai_service.get_conversation(conversation_id) if conversation_id else None
+            await ai_service.get_conversation(conversation_id)
+            if conversation_id
+            else None
         )
         response_time = None
         if conversation and "last_response_time_ms" in conversation.metadata:
@@ -290,7 +292,9 @@ async def list_conversations(
         List of conversation summaries
     """
     try:
-        conversations = ai_service.list_conversations(user_id, surface=surface)[:limit]
+        conversations = (
+            await ai_service.list_conversations(user_id, surface=surface)
+        )[:limit]
 
         return [
             ConversationSummary(
@@ -328,7 +332,7 @@ async def get_conversation(
         HTTPException: If conversation not found or access denied
     """
     try:
-        conversation = ai_service.get_conversation(conversation_id)
+        conversation = await ai_service.get_conversation(conversation_id)
 
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -373,7 +377,7 @@ async def ai_health() -> dict[str, Any]:
     conversation count, and service availability.
     """
     try:
-        status = ai_service.get_service_status()
+        status = await ai_service.get_service_status()
         validation_errors = ai_service.validate_service()
 
         return {
@@ -446,7 +450,7 @@ async def get_usage_stats(
         Usage statistics including totals, model breakdown, and recent activity
     """
     try:
-        stats = ai_service.get_usage_stats(
+        stats = await ai_service.get_usage_stats(
             user_id=user_id,
             start_time=start_time,
             end_time=end_time,

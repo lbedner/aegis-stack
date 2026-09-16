@@ -303,10 +303,11 @@ def _no_production_database(app_owned_engine, monkeypatch):
             app_owned_engine, class_=AsyncSession, expire_on_commit=False
         ),
     )
-    # The sync factory too: ``db_session()`` is what service code like
-    # ``get_conversation()`` opens for itself. A sync engine on the SAME
-    # file, with the same schema attachments, so both factories see one
-    # database - the one ``app_owned_engine`` already ran ``create_all`` on.
+    # The sync factory too: ``db_session()`` is what startup hooks and the
+    # scheduler still open for themselves (the chat store is async). A sync
+    # engine on the SAME file, with the same schema attachments, so both
+    # factories see one database - the one ``app_owned_engine`` already
+    # ran ``create_all`` on.
     # Left uncovered, a Postgres project fails "no such table" on the first
     # sync lookup: its startup migrations begin with CREATE SCHEMA, which
     # SQLite rejects, so nothing else ever creates tables for that path.

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import Engine
-from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.llm_catalog_context import (
     FEATURED_VENDORS,
@@ -130,14 +130,13 @@ def catalog_db_engine(engine: Engine) -> Engine:
 
 
 @pytest.fixture
-def catalog_session(db_session: Session) -> Session:
-    """The root conftest's transactional session (rolled back per test),
-    riding the same connection as ``catalog_db_engine``."""
-    return db_session
+def catalog_session(async_db_session: AsyncSession) -> AsyncSession:
+    """The root conftest's transactional async session, rolled back per test."""
+    return async_db_session
 
 
 @pytest.fixture
-def anthropic_vendor(catalog_session: Session) -> LLMOrg:
+async def anthropic_vendor(catalog_session: AsyncSession) -> LLMOrg:
     """Create Anthropic vendor."""
     vendor = LLMOrg(
         slug="anthropic",
@@ -148,13 +147,13 @@ def anthropic_vendor(catalog_session: Session) -> LLMOrg:
         auth_method="api-key",
     )
     catalog_session.add(vendor)
-    catalog_session.commit()
-    catalog_session.refresh(vendor)
+    await catalog_session.commit()
+    await catalog_session.refresh(vendor)
     return vendor
 
 
 @pytest.fixture
-def openai_vendor(catalog_session: Session) -> LLMOrg:
+async def openai_vendor(catalog_session: AsyncSession) -> LLMOrg:
     """Create OpenAI vendor."""
     vendor = LLMOrg(
         slug="openai",
@@ -165,14 +164,14 @@ def openai_vendor(catalog_session: Session) -> LLMOrg:
         auth_method="api-key",
     )
     catalog_session.add(vendor)
-    catalog_session.commit()
-    catalog_session.refresh(vendor)
+    await catalog_session.commit()
+    await catalog_session.refresh(vendor)
     return vendor
 
 
 @pytest.fixture
-def anthropic_models(
-    catalog_session: Session, anthropic_vendor: LLMOrg
+async def anthropic_models(
+    catalog_session: AsyncSession, anthropic_vendor: LLMOrg
 ) -> list[LargeLanguageModel]:
     """Create multiple Anthropic models with varying dates."""
     models = [
@@ -209,15 +208,15 @@ def anthropic_models(
     ]
     for model in models:
         catalog_session.add(model)
-    catalog_session.commit()
+    await catalog_session.commit()
     for model in models:
-        catalog_session.refresh(model)
+        await catalog_session.refresh(model)
     return models
 
 
 @pytest.fixture
-def openai_models_with_released_on(
-    catalog_session: Session, openai_vendor: LLMOrg
+async def openai_models_with_released_on(
+    catalog_session: AsyncSession, openai_vendor: LLMOrg
 ) -> list[LargeLanguageModel]:
     """Create OpenAI models with released_on dates set."""
     models = [
@@ -245,37 +244,37 @@ def openai_models_with_released_on(
     ]
     for model in models:
         catalog_session.add(model)
-    catalog_session.commit()
+    await catalog_session.commit()
     for model in models:
-        catalog_session.refresh(model)
+        await catalog_session.refresh(model)
     return models
 
 
 class TestLLMCatalogContextBuild:
-    """Tests for LLMCatalogContext.build() method."""
+    """Tests for await LLMCatalogContext.build() method."""
 
-    def test_returns_empty_context_with_no_vendors(
-        self, catalog_session: Session
+    async def test_returns_empty_context_with_no_vendors(
+        self, catalog_session: AsyncSession
     ) -> None:
         """Should return empty context when no vendors exist."""
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
         assert context.flagships == []
 
-    def test_returns_empty_context_with_no_models(
-        self, catalog_session: Session, anthropic_vendor: LLMOrg
+    async def test_returns_empty_context_with_no_models(
+        self, catalog_session: AsyncSession, anthropic_vendor: LLMOrg
     ) -> None:
         """Should return empty context when vendor has no models."""
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
         assert context.flagships == []
 
-    def test_sorts_by_date_extracted_from_model_id(
+    async def test_sorts_by_date_extracted_from_model_id(
         self,
-        catalog_session: Session,
+        catalog_session: AsyncSession,
         anthropic_vendor: LLMOrg,
         anthropic_models: list[LargeLanguageModel],
     ) -> None:
         """Should sort models by date extracted from model_id."""
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
 
         # Should have TOP_MODELS_PER_VENDOR models (excluding -latest alias)
         anthropic_flagships = [f for f in context.flagships if f.vendor == "anthropic"]
@@ -291,27 +290,27 @@ class TestLLMCatalogContextBuild:
         # Third should be claude-3-5-sonnet-20241022
         assert anthropic_flagships[2].model_id == "claude-3-5-sonnet-20241022"
 
-    def test_filters_out_latest_aliases(
+    async def test_filters_out_latest_aliases(
         self,
-        catalog_session: Session,
+        catalog_session: AsyncSession,
         anthropic_vendor: LLMOrg,
         anthropic_models: list[LargeLanguageModel],
     ) -> None:
         """Should filter out models ending in -latest."""
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
 
         # Should not include claude-3-5-sonnet-latest
         model_ids = [f.model_id for f in context.flagships]
         assert "claude-3-5-sonnet-latest" not in model_ids
 
-    def test_prefers_released_on_over_extracted_date(
+    async def test_prefers_released_on_over_extracted_date(
         self,
-        catalog_session: Session,
+        catalog_session: AsyncSession,
         openai_vendor: LLMOrg,
         openai_models_with_released_on: list[LargeLanguageModel],
     ) -> None:
         """Should use released_on date when available."""
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
 
         openai_flagships = [f for f in context.flagships if f.vendor == "openai"]
         assert len(openai_flagships) == 3
@@ -321,8 +320,8 @@ class TestLLMCatalogContextBuild:
         assert openai_flagships[1].model_id == "gpt-4-turbo"
         assert openai_flagships[2].model_id == "gpt-3.5-turbo"
 
-    def test_limits_to_top_n_per_vendor(
-        self, catalog_session: Session, anthropic_vendor: LLMOrg
+    async def test_limits_to_top_n_per_vendor(
+        self, catalog_session: AsyncSession, anthropic_vendor: LLMOrg
     ) -> None:
         """Should only return TOP_MODELS_PER_VENDOR models per vendor."""
         # Create more models than the limit
@@ -334,9 +333,9 @@ class TestLLMCatalogContextBuild:
                 served_by_org_id=anthropic_vendor.id,
             )
             catalog_session.add(model)
-        catalog_session.commit()
+        await catalog_session.commit()
 
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
         anthropic_flagships = [f for f in context.flagships if f.vendor == "anthropic"]
 
         assert len(anthropic_flagships) == TOP_MODELS_PER_VENDOR
@@ -345,9 +344,9 @@ class TestLLMCatalogContextBuild:
 class TestLLMCatalogContextWithRelatedData:
     """Tests for LLMCatalogContext with prices, deployments, and modalities."""
 
-    def test_includes_pricing_data(
+    async def test_includes_pricing_data(
         self,
-        catalog_session: Session,
+        catalog_session: AsyncSession,
         openai_vendor: LLMOrg,
     ) -> None:
         """Should include pricing information in flagship models."""
@@ -359,8 +358,8 @@ class TestLLMCatalogContextWithRelatedData:
             served_by_org_id=openai_vendor.id,
         )
         catalog_session.add(model)
-        catalog_session.commit()
-        catalog_session.refresh(model)
+        await catalog_session.commit()
+        await catalog_session.refresh(model)
 
         # Create price
         price = LLMPrice(
@@ -371,17 +370,17 @@ class TestLLMCatalogContextWithRelatedData:
             effective_date=datetime.now(),
         )
         catalog_session.add(price)
-        catalog_session.commit()
+        await catalog_session.commit()
 
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
         flagship = context.flagships[0]
 
         assert flagship.input_cost_per_m == 5.0
         assert flagship.output_cost_per_m == 15.0
 
-    def test_includes_deployment_capabilities(
+    async def test_includes_deployment_capabilities(
         self,
-        catalog_session: Session,
+        catalog_session: AsyncSession,
         openai_vendor: LLMOrg,
     ) -> None:
         """Should include deployment capabilities in flagship models."""
@@ -393,8 +392,8 @@ class TestLLMCatalogContextWithRelatedData:
             served_by_org_id=openai_vendor.id,
         )
         catalog_session.add(model)
-        catalog_session.commit()
-        catalog_session.refresh(model)
+        await catalog_session.commit()
+        await catalog_session.refresh(model)
 
         # Create deployment
         deployment = LLMDeployment(
@@ -404,17 +403,17 @@ class TestLLMCatalogContextWithRelatedData:
             structured_output=True,
         )
         catalog_session.add(deployment)
-        catalog_session.commit()
+        await catalog_session.commit()
 
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
         flagship = context.flagships[0]
 
         assert flagship.function_calling is True
         assert flagship.structured_output is True
 
-    def test_includes_vision_capability(
+    async def test_includes_vision_capability(
         self,
-        catalog_session: Session,
+        catalog_session: AsyncSession,
         openai_vendor: LLMOrg,
     ) -> None:
         """Should detect vision capability from modalities."""
@@ -426,8 +425,8 @@ class TestLLMCatalogContextWithRelatedData:
             served_by_org_id=openai_vendor.id,
         )
         catalog_session.add(model)
-        catalog_session.commit()
-        catalog_session.refresh(model)
+        await catalog_session.commit()
+        await catalog_session.refresh(model)
 
         # Create image input modality
         modality = LLMModality(
@@ -436,9 +435,9 @@ class TestLLMCatalogContextWithRelatedData:
             direction=Direction.INPUT,
         )
         catalog_session.add(modality)
-        catalog_session.commit()
+        await catalog_session.commit()
 
-        context = LLMCatalogContext.build(catalog_session)
+        context = await LLMCatalogContext.build(catalog_session)
         flagship = context.flagships[0]
 
         assert flagship.vision is True
@@ -566,22 +565,22 @@ class TestFormatForPrompt:
 class TestGetLLMCatalogContext:
     """Tests for get_llm_catalog_context convenience function."""
 
-    def test_returns_formatted_string(
+    async def test_returns_formatted_string(
         self,
-        catalog_session: Session,
+        catalog_session: AsyncSession,
         openai_vendor: LLMOrg,
         openai_models_with_released_on: list[LargeLanguageModel],
     ) -> None:
         """Should return formatted string from convenience function."""
-        result = get_llm_catalog_context(catalog_session)
+        result = await get_llm_catalog_context(catalog_session)
 
         assert isinstance(result, str)
         assert "LLM Catalog" in result
         assert "Openai:" in result
 
-    def test_returns_empty_for_no_data(self, catalog_session: Session) -> None:
+    async def test_returns_empty_for_no_data(self, catalog_session: AsyncSession) -> None:
         """Should return empty string when no data."""
-        result = get_llm_catalog_context(catalog_session)
+        result = await get_llm_catalog_context(catalog_session)
         assert result == ""
 
 

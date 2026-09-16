@@ -29,10 +29,10 @@ class TestAIServiceInitialization:
 class TestAIServiceStatus:
     """Test AI service status reporting."""
 
-    def test_get_service_status_structure(self) -> None:
+    async def test_get_service_status_structure(self) -> None:
         """Test that service status has expected structure."""
         service = AIService(settings)
-        status = service.get_service_status()
+        status = await service.get_service_status()
 
         assert isinstance(status, dict)
         assert "enabled" in status
@@ -42,10 +42,10 @@ class TestAIServiceStatus:
         assert "total_conversations" in status
         assert "configuration_valid" in status
 
-    def test_get_service_status_provider_type(self) -> None:
+    async def test_get_service_status_provider_type(self) -> None:
         """Test that provider in status is returned as string for serialization."""
         service = AIService(settings)
-        status = service.get_service_status()
+        status = await service.get_service_status()
 
         provider = status["provider"]
 
@@ -54,32 +54,32 @@ class TestAIServiceStatus:
         # Should be a valid provider value
         assert provider in [p.value for p in AIProvider]
 
-    def test_get_service_status_enabled_bool(self) -> None:
+    async def test_get_service_status_enabled_bool(self) -> None:
         """Test that enabled is a boolean."""
         service = AIService(settings)
-        status = service.get_service_status()
+        status = await service.get_service_status()
 
         assert isinstance(status["enabled"], bool)
 
-    def test_get_service_status_agent_initialized(self) -> None:
+    async def test_get_service_status_agent_initialized(self) -> None:
         """Test that agent_initialized is always True."""
         service = AIService(settings)
-        status = service.get_service_status()
+        status = await service.get_service_status()
 
         # Agents created per request, always available
         assert status["agent_initialized"] is True
 
-    def test_get_service_status_configuration_valid(self) -> None:
+    async def test_get_service_status_configuration_valid(self) -> None:
         """Test that configuration_valid reflects validation state."""
         service = AIService(settings)
-        status = service.get_service_status()
+        status = await service.get_service_status()
 
         assert isinstance(status["configuration_valid"], bool)
 
-    def test_get_service_status_conversation_count(self) -> None:
+    async def test_get_service_status_conversation_count(self) -> None:
         """Test that total_conversations is a non-negative integer."""
         service = AIService(settings)
-        status = service.get_service_status()
+        status = await service.get_service_status()
 
         # In SQLite mode, database may contain data from previous runs
         # Just verify it's a valid non-negative count
@@ -111,14 +111,14 @@ class TestAIServiceValidation:
 class TestAIServiceConversationManagement:
     """Test conversation management methods."""
 
-    def test_get_conversation_not_found(self) -> None:
+    async def test_get_conversation_not_found(self) -> None:
         """Test getting non-existent conversation."""
         service = AIService(settings)
-        conversation = service.get_conversation("nonexistent-id")
+        conversation = await service.get_conversation("nonexistent-id")
 
         assert conversation is None
 
-    def test_list_conversations_returns_list(self) -> None:
+    async def test_list_conversations_returns_list(self) -> None:
         """Test that list_conversations returns a list.
 
         In SQLite mode, database may contain data from previous test runs,
@@ -128,20 +128,20 @@ class TestAIServiceConversationManagement:
 
         service = AIService(settings)
         unique_user = f"test-user-{uuid.uuid4()}"
-        conversations = service.list_conversations(unique_user)
+        conversations = await service.list_conversations(unique_user)
 
         assert isinstance(conversations, list)
         # New unique user should have no conversations
         assert len(conversations) == 0
 
-    def test_conversation_manager_integration(self) -> None:
+    async def test_conversation_manager_integration(self) -> None:
         """Test that conversation manager is properly integrated."""
         service = AIService(settings)
 
         # ConversationManager should be accessible
         assert hasattr(service, "conversation_manager")
         # Manager should have get_stats method
-        stats = service.conversation_manager.get_stats()
+        stats = await service.conversation_manager.get_stats()
         assert isinstance(stats, dict)
         assert "total_conversations" in stats
 

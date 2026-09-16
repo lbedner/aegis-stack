@@ -4,7 +4,7 @@
 ``app.core.db`` so startup hooks, background tasks and service code that open
 their own session never touch the database in ``DATABASE_URL``. The sync
 factory must be covered as well as the async one: ``db_session()`` is what
-``get_conversation()`` and friends use, and on a Postgres project nothing
+startup hooks and the scheduler still use, and on a Postgres project nothing
 else creates tables for it (startup migrations begin with ``CREATE SCHEMA``,
 which SQLite rejects), so an uncovered sync path fails with "no such table"
 on the first lookup a route makes after a write.

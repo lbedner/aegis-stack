@@ -32,7 +32,7 @@ async def check_ai_service_health() -> ComponentStatus:
 
         # Get conversation statistics once (get_service_status() also calls
         # get_stats() internally, so we skip it and use conversation_stats directly)
-        conversation_stats = ai_service.conversation_manager.get_stats()
+        conversation_stats = await ai_service.conversation_manager.get_stats()
         validation_errors = current_config.validate_configuration(settings)
 
         # Determine overall health using fresh config
@@ -50,7 +50,7 @@ async def check_ai_service_health() -> ComponentStatus:
 
 {% if ai_backend != "memory" %}
         # Get usage statistics (includes total cost) - only with database backend
-        usage_stats = ai_service.get_usage_stats()
+        usage_stats = await ai_service.get_usage_stats()
 {% endif %}
 
         # Collect comprehensive metadata using FRESH config for provider/model

@@ -211,7 +211,7 @@ class ChatMixin(PromptMixin):
 {%- if ai_backend != "memory" %}
             # Record usage tracking, attributed to the resolved agent
             usage = self._extract_usage(result)
-            self._record_usage(f"chat:{agent_config.slug}", usage, user_id)
+            await self._record_usage(f"chat:{agent_config.slug}", usage, user_id)
 
             # Add TPS (tokens per second) to metadata for performance monitoring
             output_tokens = usage.get("output_tokens", 0)
@@ -223,7 +223,7 @@ class ChatMixin(PromptMixin):
             ai_message.metadata["output_tokens"] = output_tokens
 {% endif %}
             # Finalize conversation (update metadata and save)
-            self._finalize_conversation(conversation, response_time_ms)
+            await self._finalize_conversation(conversation, response_time_ms)
 
             return ai_message
 {% if ai_framework == "pydantic-ai" %}
@@ -276,7 +276,7 @@ class ChatMixin(PromptMixin):
         # call and the message remembers where the image was stored,
         # so reopening the conversation still shows it.
         stored_text, stored_metadata = await prepare_turn(message, attachments)
-        conversation = self._setup_conversation(
+        conversation = await self._setup_conversation(
             stored_text,
             conversation_id,
             user_id,
@@ -306,9 +306,11 @@ class ChatMixin(PromptMixin):
         is_default_agent = (
             agent_config is None or agent_config.slug == DEFAULT_AGENT_SLUG
         )
-        usage_context = self._build_usage_context() if is_default_agent else None
+        usage_context = (
+            await self._build_usage_context() if is_default_agent else None
+        )
         catalog_context = (
-            self._build_catalog_context() if is_default_agent else None
+            await self._build_catalog_context() if is_default_agent else None
         )
 
 {% if ai_backend != "memory" %}            # Guarded per-user memory block (saved via the save_memory tool)
@@ -386,7 +388,7 @@ class ChatMixin(PromptMixin):
         )
 {%- endif %}
 
-    def _setup_conversation(
+    async def _setup_conversation(
         self,
         message: str,
         conversation_id: str | None,
@@ -417,11 +419,13 @@ class ChatMixin(PromptMixin):
 
         # Get or create conversation
         if conversation_id:
-            conversation = self.conversation_manager.get_conversation(conversation_id)
+            conversation = await self.conversation_manager.get_conversation(
+                conversation_id
+            )
             if not conversation:
                 raise ConversationError(f"Conversation {conversation_id} not found")
         else:
-            conversation = self.conversation_manager.create_conversation(
+            conversation = await self.conversation_manager.create_conversation(
                 provider=cfg.provider,
                 model=cfg.model,
                 user_id=user_id,
@@ -436,7 +440,7 @@ class ChatMixin(PromptMixin):
 
         return conversation
 
-    def _finalize_conversation(
+    async def _finalize_conversation(
         self,
         conversation: Conversation,
         response_time_ms: float,
@@ -463,4 +467,4 @@ class ChatMixin(PromptMixin):
         conversation.metadata.update(metadata_update)
 
         # Save conversation
-        self.conversation_manager.save_conversation(conversation)
+        await self.conversation_manager.save_conversation(conversation)

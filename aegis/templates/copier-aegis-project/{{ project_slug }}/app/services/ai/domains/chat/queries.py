@@ -1,8 +1,8 @@
 """Reads for the chat domain: conversations and their messages, agent
 rows, memory modules, per-user memory, and sentiment verdicts.
 
-``ConversationManager`` runs on a plain ``Session``; everything else on
-an ``AsyncSession``. The annotation on each function says which.
+Everything runs on an ``AsyncSession``: the conversation store is
+async like every other store, so nothing here waits on the event loop.
 Statement builders only - no business logic, no writes.
 """
 
@@ -13,56 +13,70 @@ from datetime import datetime
 
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.conversation import Conversation, ConversationMessage
 from app.services.ai.models.agents import Agent, AgentUserMemory, MemoryModule
 from app.services.ai.models.sentiment import SentimentAnalysis
 
-# --- Conversations (sync: ConversationManager) --------------------------
+# --- Conversations (ConversationManager) --------------------------------
 
 
-def messages_for_conversation(
-    session: Session, conversation_id: str
+async def messages_for_conversation(
+    session: AsyncSession, conversation_id: str
 ) -> Sequence[ConversationMessage]:
-    return session.exec(
-        select(ConversationMessage)
-        .where(ConversationMessage.conversation_id == conversation_id)
-        .order_by(ConversationMessage.timestamp)
+    return (
+        await session.exec(
+            select(ConversationMessage)
+            .where(ConversationMessage.conversation_id == conversation_id)
+            .order_by(ConversationMessage.timestamp)
+        )
     ).all()
 
 
-def conversations_with_messages(session: Session) -> Sequence[Conversation]:
+async def conversations_with_messages(
+    session: AsyncSession,
+) -> Sequence[Conversation]:
     """Every conversation, newest activity first, messages loaded in two
     queries instead of one per row."""
-    return session.exec(
-        select(Conversation)
-        .options(selectinload(Conversation.messages))  # type: ignore[arg-type]
-        .order_by(Conversation.updated_at.desc())
+    return (
+        await session.exec(
+            select(Conversation)
+            .options(selectinload(Conversation.messages))  # type: ignore[arg-type]
+            .order_by(Conversation.updated_at.desc())
+        )
     ).all()
 
 
-def conversation_count(session: Session) -> int:
-    return session.exec(select(func.count()).select_from(Conversation)).one()
+async def conversation_count(session: AsyncSession) -> int:
+    return (await session.exec(select(func.count()).select_from(Conversation))).one()
 
 
-def message_count(session: Session) -> int:
-    return session.exec(select(func.count()).select_from(ConversationMessage)).one()
-
-
-def distinct_user_count(session: Session) -> int:
-    """Distinct ``meta_data.user_id`` values, extracted in SQL on either
-    engine (``->>`` on Postgres, ``json_extract`` on SQLite)."""
-    user_id = Conversation.meta_data["user_id"].as_string()  # type: ignore[index]
-    return session.exec(
-        select(func.count(func.distinct(user_id))).where(user_id.is_not(None))
+async def message_count(session: AsyncSession) -> int:
+    return (
+        await session.exec(select(func.count()).select_from(ConversationMessage))
     ).one()
 
 
-def conversation_ids_before(session: Session, cutoff: datetime) -> Sequence[str]:
-    return session.exec(
-        select(Conversation.id).where(Conversation.updated_at < cutoff)
+async def distinct_user_count(session: AsyncSession) -> int:
+    """Distinct ``meta_data.user_id`` values, extracted in SQL on either
+    engine (``->>`` on Postgres, ``json_extract`` on SQLite)."""
+    user_id = Conversation.meta_data["user_id"].as_string()  # type: ignore[index]
+    return (
+        await session.exec(
+            select(func.count(func.distinct(user_id))).where(user_id.is_not(None))
+        )
+    ).one()
+
+
+async def conversation_ids_before(
+    session: AsyncSession, cutoff: datetime
+) -> Sequence[str]:
+    return (
+        await session.exec(
+            select(Conversation.id).where(Conversation.updated_at < cutoff)
+        )
     ).all()
 
 

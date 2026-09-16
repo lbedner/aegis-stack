@@ -34,11 +34,7 @@ from typing import Any
 
 import httpx
 
-from app.core.client_session import (
-    REFRESH_COOKIE,
-    SESSION_COOKIE,
-    SessionCookieMixin,
-)
+from app.core.client_session import SessionCookieMixin
 from app.core.config import settings
 from app.core.log import logger
 

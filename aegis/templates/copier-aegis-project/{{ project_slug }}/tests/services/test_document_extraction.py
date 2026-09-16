@@ -271,7 +271,7 @@ class TestOcrComesBeforeTheModel:
         monkeypatch.setattr(
             ocr,
             "read_png",
-            lambda image: "REQUEST FOR INFORMATION\nDue 9/8/2026 $1,500.00",
+            lambda image: ("REQUEST FOR INFORMATION\nDue 9/8/2026 $1,500.00", 91.0),
         )
         vision = FakeVision()
         doc = await self._scan(svc)
@@ -286,9 +286,15 @@ class TestOcrComesBeforeTheModel:
     async def test_a_page_ocr_cannot_read_goes_to_the_model(
         self, svc, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """A landscape table read sideways is all letters and no words;
+        Tesseract's own confidence is what says so."""
         from app.services.documents.domains.extraction import ocr
 
-        monkeypatch.setattr(ocr, "read_png", lambda image: "|  ~~ ,,  ^^ ||| ~ ' ` ` ,")
+        monkeypatch.setattr(
+            ocr,
+            "read_png",
+            lambda image: ("{SHINOW 08 WODNI HS 9 ANY OB8YRISNVEL", 34.0),
+        )
         vision = FakeVision()
         doc = await self._scan(svc)
 
@@ -312,15 +318,30 @@ class TestOcrComesBeforeTheModel:
 
 
 class TestWhatCountsAsARead:
-    def test_words_and_figures_do(self) -> None:
+    def test_confident_text_does(self) -> None:
         from app.services.documents.domains.extraction.ocr import looks_like_text
 
-        assert looks_like_text("Provide proof of your gross income as of 7/1/2026.", 10)
-        assert looks_like_text("Total: $1,234.56 (monthly)", 10)
+        assert looks_like_text(
+            "Provide proof of your gross income as of 7/1/2026.", 88.0, 10
+        )
 
-    def test_noise_does_not(self) -> None:
+    def test_a_low_confidence_page_or_an_empty_one_does_not(self) -> None:
         from app.services.documents.domains.extraction.ocr import looks_like_text
 
-        assert not looks_like_text("", 10)
-        assert not looks_like_text("|  ~~ ,,  ^^ ||| ~ ' ` `", 10)
-        assert not looks_like_text("ok", 10)
+        assert not looks_like_text("", 95.0, 10)
+        assert not looks_like_text("{SHINOW 08 WODNI HS 9 ANY", 34.0, 10)
+        assert not looks_like_text("ok", 95.0, 10)
+
+    def test_lines_come_back_out_of_the_word_table(self) -> None:
+        from app.services.documents.domains.extraction.ocr import _assemble
+
+        data = {
+            "text": ["REQUEST", "FOR", "", "Due", "9/8/2026"],
+            "conf": [96.0, 95.0, -1.0, 90.0, 80.0],
+            "block_num": [1, 1, 1, 1, 1],
+            "par_num": [1, 1, 1, 1, 1],
+            "line_num": [1, 1, 1, 2, 2],
+        }
+        text, confidence = _assemble(data)
+        assert text == "REQUEST FOR\nDue 9/8/2026"
+        assert confidence == 90.25

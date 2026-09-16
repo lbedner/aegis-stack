@@ -207,8 +207,11 @@ async def _read_with_ocr(page: DocumentPage, image: bytes | None) -> bool:
     to the model - including on a machine with no Tesseract at all."""
     if image is None:
         return False
-    text = await asyncio.to_thread(ocr.read_png, image)
-    if not text or not ocr.looks_like_text(text, MIN_TEXT_CHARS):
+    read = await asyncio.to_thread(ocr.read_png, image)
+    if read is None:
+        return False
+    text, confidence = read
+    if not ocr.looks_like_text(text, confidence, MIN_TEXT_CHARS):
         return False
     _mark_read(page, text.strip(), method="ocr", model=None)
     return True

@@ -22,6 +22,18 @@ from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
 
+# Static facts about the Flet frontend, not health readings. These were
+# read out of ComponentStatus.metadata with these same strings as
+# defaults, but no health check has ever published them - so the default
+# was always what rendered, and a reader had no way to know the field was
+# not live. Named here instead.
+INTEGRATION = "FastAPI"
+UI_TYPE = "Reactive Web"
+THEME_SUPPORT = "Light / Dark"
+# Mirrors the auto_refresh loop in main.py.
+REFRESH_SECONDS = 30
+
+
 class OverviewSection(ft.Container):
     """Overview section showing key frontend metrics."""
 
@@ -36,8 +48,8 @@ class OverviewSection(ft.Container):
 
         framework = metadata.get("framework", "Flet")
         version = metadata.get("version", "Unknown")
-        integration = metadata.get("integration", "FastAPI")
-        theme_support = metadata.get("theme_support", "Light / Dark")
+        integration = INTEGRATION
+        theme_support = THEME_SUPPORT
 
         self.content = ft.Row(
             [
@@ -76,12 +88,12 @@ class ConfigurationSection(ft.Container):
 
         framework = metadata.get("framework", "Flet")
         version = metadata.get("version", "Unknown")
-        integration = metadata.get("integration", "FastAPI")
-        ui_type = metadata.get("ui_type", "Reactive Web")
+        integration = INTEGRATION
+        ui_type = UI_TYPE
         platform = metadata.get("platform", "Cross-platform")
         components = metadata.get("components", "Material 3")
-        theme_support = metadata.get("theme_support", "Light / Dark")
-        auto_refresh = metadata.get("auto_refresh", 30)
+        theme_support = THEME_SUPPORT
+        auto_refresh = REFRESH_SECONDS
 
         # Build configuration rows
         config_rows = []
@@ -233,7 +245,7 @@ class CapabilitiesSection(ft.Container):
         capability_rows.append(BodyText("• Theme Switching (Light/Dark)"))
 
         # Auto Refresh
-        auto_refresh = metadata.get("auto_refresh", 30)
+        auto_refresh = REFRESH_SECONDS
         capability_rows.append(BodyText(f"• Auto Refresh ({auto_refresh}s)"))
 
         # Reactive UI Updates
@@ -243,7 +255,7 @@ class CapabilitiesSection(ft.Container):
         capability_rows.append(BodyText("• Cross-platform Rendering"))
 
         # FastAPI Integration
-        integration = metadata.get("integration", "FastAPI")
+        integration = INTEGRATION
         capability_rows.append(BodyText(f"• {integration} Integration"))
 
         self.content = ft.Column(

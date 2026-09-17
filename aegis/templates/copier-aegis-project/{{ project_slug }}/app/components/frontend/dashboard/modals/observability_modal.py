@@ -18,11 +18,8 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableDataTable,
     ExpandableRow,
 )
+from app.components.frontend.controls.markdown import copyable_markdown
 from app.components.frontend.controls.tabs import PulseTabs
-from app.components.frontend.controls.markdown import (
-    code_highlight_theme,
-    markdown_style_sheet,
-)
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_relative_time
 from app.services.system.models import ComponentStatus
@@ -317,12 +314,10 @@ def _build_exception_expanded_content(exc: dict, is_dark_mode: bool) -> ft.Contr
             SecondaryText("Stacktrace:", weight=Theme.Typography.WEIGHT_SEMIBOLD)
         )
         content.append(
-            ft.Markdown(
+            copyable_markdown(
                 f"```python\n{stacktrace}\n```",
-                selectable=True,
-                extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED,
-                code_theme=code_highlight_theme(is_dark_mode),
-                md_style_sheet=markdown_style_sheet(),
+                copy_text=stacktrace,
+                dark=is_dark_mode,
             )
         )
 

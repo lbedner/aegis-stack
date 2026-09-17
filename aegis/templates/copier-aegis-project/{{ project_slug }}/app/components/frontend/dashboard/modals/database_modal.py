@@ -20,11 +20,8 @@ from app.components.frontend.controls import (
     TableCellText,
     TableNameText,
 )
+from app.components.frontend.controls.markdown import copyable_markdown
 from app.components.frontend.controls.tabs import PulseTabs
-from app.components.frontend.controls.markdown import (
-    code_highlight_theme,
-    markdown_style_sheet,
-)
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title, get_database_subtitle
@@ -238,12 +235,11 @@ def _build_table_expanded_content(table_schema: dict, is_dark_mode: bool) -> ft.
 
     schema_text = "\n".join(lines)
 
-    return ft.Markdown(
+    # The fences are for display; the clipboard gets the statement.
+    return copyable_markdown(
         f"```sql\n{schema_text}\n```",
-        selectable=True,
-        extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED,
-        code_theme=code_highlight_theme(is_dark_mode),
-        md_style_sheet=markdown_style_sheet(),
+        copy_text=schema_text,
+        dark=is_dark_mode,
     )
 
 
@@ -322,12 +318,10 @@ def _build_migration_expanded_content(
                 file_path, size=11, color=ft.Colors.ON_SURFACE_VARIANT, italic=True
             ),
             ft.Container(height=4),
-            ft.Markdown(
+            copyable_markdown(
                 f"```python\n{content}\n```",
-                selectable=True,
-                extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED,
-                code_theme=code_highlight_theme(is_dark_mode),
-                md_style_sheet=markdown_style_sheet(),
+                copy_text=content,
+                dark=is_dark_mode,
             ),
         ],
         spacing=0,

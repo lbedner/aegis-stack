@@ -91,3 +91,31 @@ class Units:
 
 # Component name for health check registration
 INSIGHT_COMPONENT_NAME = "insights"
+
+
+def all_insights_key() -> str:
+    """Cache key for the bulk ``/insights/all`` payload.
+
+    Namespaced by ``BUILD_ID`` because a cached payload is only valid for
+    the code that built it: change the shape of a response, or a threshold
+    behind a computed field, and yesterday's entry is wrong even though
+    the rows behind it never moved. A deploy moves the namespace, so new
+    code starts clean and the orphans age out on their own TTL.
+
+    Read at call time rather than bound at import so tests (and anything
+    that reloads settings) see the current value.
+    """
+    from app.core.config import settings
+
+    return f"insights:{settings.BUILD_ID}:all"
+
+
+def project_insights_key(project_id: int) -> str:
+    """Cache key for one project's bulk payload.
+
+    Shared by the endpoint that writes it and the collector that clears
+    it after a run, so the two cannot drift apart on the shape.
+    """
+    from app.core.config import settings
+
+    return f"insights:{settings.BUILD_ID}:project:{project_id}:all"

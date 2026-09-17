@@ -15,6 +15,10 @@ view + goals + events routes live in their own modules and use
 
 from fastapi import APIRouter, Depends
 
+from app.services.insights.constants import (
+    all_insights_key,
+    project_insights_key,
+)
 from app.services.insights.deps import get_query_service
 from app.core.cache import CacheService, get_cache
 from app.services.insights.domains.metrics import InsightQueryService
@@ -42,7 +46,6 @@ from app.services.insights.domains.projects import ProjectService
 
 router = APIRouter(prefix="/insights", tags=["insights"])
 
-CACHE_KEY = "insights:all"
 
 
 @router.get("/all", response_model=BulkInsightsResponse)
@@ -54,11 +57,12 @@ async def get_all_insights(
 {%- endif %}
 ) -> BulkInsightsResponse:
     """Bulk-load all insight data for the dashboard."""
-    cached = await cache.get(CACHE_KEY)
+    cache_key = all_insights_key()
+    cached = await cache.get(cache_key)
     if cached is not None:
         return cached
     result = await qs.load_all()
-    await cache.set(CACHE_KEY, result)
+    await cache.set(cache_key, result)
     return result
 
 {%- if insights_per_user %}
@@ -79,7 +83,7 @@ async def get_project_insights(
     qs: InsightQueryService = Depends(get_query_service),
 ) -> BulkInsightsResponse:
     """Bulk-load insights data for a single owned project."""
-    cache_key = f"insights:project:{project.id}:all"
+    cache_key = project_insights_key(project.id)
     cached = await cache.get(cache_key)
     if cached is not None:
         return cached

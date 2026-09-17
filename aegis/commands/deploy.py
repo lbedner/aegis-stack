@@ -142,6 +142,68 @@ def _run_remote(host: str, user: str, command: str) -> subprocess.CompletedProce
     return subprocess.run(["ssh", f"{user}@{host}", command])
 
 
+def _build_id(project_root: Path) -> str:
+    """Identity of the code being deployed: the short commit SHA.
+
+    The generated app namespaces its cached payloads by this value, so a
+    deploy starts a clean namespace and never serves a payload the old
+    code built. Orphaned entries age out on their own TTL, which means no
+    flush and no coordination between webserver and workers.
+
+    A tree with uncommitted changes ships code no commit describes, so it
+    gets its own namespace rather than reusing the clean commit's.
+    """
+    try:
+        rev = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return "unknown"
+    if rev.returncode != 0:
+        return "unknown"
+    build = (rev.stdout or "").strip() or "unknown"
+    dirty = subprocess.run(
+        ["git", "-C", str(project_root), "diff", "--quiet", "HEAD"],
+        capture_output=True,
+    )
+    if dirty.returncode == 1:
+        build = f"{build}-dirty-{int(time.time())}"
+    return build
+
+
+def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> None:
+    """Copy the deploy env file to the server and stamp BUILD_ID into it.
+
+    ``.env.deploy`` wins over ``.env``; neither existing is not an error
+    (the server may already hold one). Both deploy paths call this so the
+    stamp cannot be added to one and forgotten in the other.
+    """
+    env_file: Path | None = None
+    for candidate in (project_root / ".env.deploy", project_root / ".env"):
+        if candidate.exists():
+            env_file = candidate
+            break
+
+    remote_env = shlex.quote(f"{deploy_path}/.env")
+    if env_file is not None:
+        typer.echo(t("deploy.copying_env", file=env_file.name))
+        result = subprocess.run(["scp", str(env_file), f"{user}@{host}:{remote_env}"])
+        if result.returncode != 0:
+            brand.error(t("deploy.env_copy_failed"), err=True)
+            raise typer.Exit(1)
+
+    build = _build_id(project_root)
+    typer.echo(f"Stamping BUILD_ID={build}")
+    _run_remote(
+        host,
+        user,
+        f"touch {remote_env} && sed -i '/^BUILD_ID=/d' {remote_env} "
+        f"&& echo 'BUILD_ID={build}' >> {remote_env}",
+    )
+
+
 def _run_remote_capture(
     host: str, user: str, command: str
 ) -> subprocess.CompletedProcess:
@@ -717,24 +779,8 @@ def _run_rolling_deploy(
         brand.error(t("deploy.sync_failed"), err=True)
         raise typer.Exit(1)
 
-    # Step 2: scp .env (prefer .env.deploy)
-    deploy_env_file = project_root / ".env.deploy"
-    dev_env_file = project_root / ".env"
-    env_file: Path | None = None
-    if deploy_env_file.exists():
-        env_file = deploy_env_file
-    elif dev_env_file.exists():
-        env_file = dev_env_file
-
-    if env_file is not None:
-        typer.echo(t("deploy.copying_env", file=env_file.name))
-        safe_path = shlex.quote(f"{deploy_path}/.env")
-        env_result = subprocess.run(
-            ["scp", str(env_file), f"{user}@{host}:{safe_path}"]
-        )
-        if env_result.returncode != 0:
-            brand.error(t("deploy.env_copy_failed"), err=True)
-            raise typer.Exit(1)
+    # Step 2: scp .env (prefer .env.deploy) + stamp BUILD_ID
+    _upload_env(project_root, host, user, deploy_path)
 
     prefix = _rolling_compose_prefix(deploy_path)
     running = _rolling_running_services(host, user, deploy_path)
@@ -1121,24 +1167,7 @@ def deploy_command(
         raise typer.Exit(1)
 
     # Step 3: Copy .env file (prefer .env.deploy for production values)
-    deploy_env_file = project_root / ".env.deploy"
-    dev_env_file = project_root / ".env"
-    if deploy_env_file.exists():
-        env_file = deploy_env_file
-    elif dev_env_file.exists():
-        env_file = dev_env_file
-    else:
-        env_file = None
-
-    if env_file is not None:
-        typer.echo(t("deploy.copying_env", file=env_file.name))
-        safe_path = shlex.quote(f"{deploy_path}/.env")
-        env_result = subprocess.run(
-            ["scp", str(env_file), f"{user}@{host}:{safe_path}"]
-        )
-        if env_result.returncode != 0:
-            brand.error(t("deploy.env_copy_failed"), err=True)
-            raise typer.Exit(1)
+    _upload_env(project_root, host, user, deploy_path)
 
     # Step 4: Stop existing services
     typer.echo(t("deploy.stopping"))

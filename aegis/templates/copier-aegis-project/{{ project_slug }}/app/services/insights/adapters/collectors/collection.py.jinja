@@ -37,7 +37,12 @@ from app.services.insights.adapters.collectors.pypi import PyPICollector
 {% if insights_reddit %}
 from app.services.insights.adapters.collectors.reddit import RedditCollector
 {% endif %}
-from app.services.insights.constants import MetricKeys, SourceKeys
+from app.services.insights.constants import (
+    MetricKeys,
+    SourceKeys,
+    all_insights_key,
+    project_insights_key,
+)
 from app.services.insights.utils import today
 
 logger = logging.getLogger(__name__)
@@ -167,10 +172,10 @@ class CollectorService:
                 # fresh data without waiting for the TTL to expire. Mirrors
                 # the keys used by app/components/backend/api/insights.py.
                 from app.core.cache import cache
-                await cache.invalidate("insights:all")
+                await cache.invalidate(all_insights_key())
                 {% if insights_per_user -%}
                 if self.project_id is not None:
-                    await cache.invalidate(f"insights:project:{self.project_id}:all")
+                    await cache.invalidate(project_insights_key(self.project_id))
                 {%- endif %}
 
                 # Check for new records

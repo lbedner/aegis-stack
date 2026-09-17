@@ -13,7 +13,7 @@ from typing import Any
 from ..constants import AnswerKeys, StorageBackends, WorkerBackends
 from .file_manifest import FileManifest
 from .migration_generator import SCHEDULER_MIGRATION
-from .plugins.spec import PluginKind, PluginSpec
+from .plugins.spec import PluginKind, PluginSpec, ReadmeWiring
 
 
 def _worker_backend_post_render(project_path: Path, answers: dict[str, Any]) -> None:
@@ -82,6 +82,10 @@ class ComponentSpec(PluginSpec):
 # Component registry - single source of truth
 COMPONENTS: dict[str, ComponentSpec] = {
     "backend": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="FastAPI on PORT (default 8000); OpenAPI docs at /docs",
+            env_groups=["APPLICATION SETTINGS"],
+        ),
         name="backend",
         docs_path="components/backend",
         type=ComponentType.CORE,
@@ -96,6 +100,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
         # backend is a CORE component; never cleaned up.
     ),
     "frontend": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="Flet dashboard at /dashboard",
+            env_groups=["APPLICATION SETTINGS"],
+        ),
         name="frontend",
         docs_path="components/frontend",
         type=ComponentType.CORE,
@@ -110,6 +118,11 @@ COMPONENTS: dict[str, ComponentSpec] = {
         # frontend is a CORE component; never cleaned up.
     ),
     "worker": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="`make logs-worker`; tasks under app/worker, CLI group `tasks`",
+            cli_groups=["tasks"],
+            env_groups=["WORKER SETTINGS"],
+        ),
         name="worker",
         docs_path="components/worker",
         type=ComponentType.INFRASTRUCTURE,
@@ -177,6 +190,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
         post_render=_worker_backend_post_render,
     ),
     "scheduler": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="Runs in-process; jobs listed on the dashboard",
+            env_groups=["COMPONENT SETTINGS"],
+        ),
         name="scheduler",
         docs_path="components/scheduler",
         type=ComponentType.INFRASTRUCTURE,
@@ -244,6 +261,11 @@ COMPONENTS: dict[str, ComponentSpec] = {
         ),
     ),
     "database": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="`make migrate` runs Alembic; models under app/models",
+            env_groups=["COMPONENT SETTINGS"],
+            setup_notes=["The schema is created by `make migrate`, not on first run"],
+        ),
         name="database",
         docs_path="components/database",
         type=ComponentType.INFRASTRUCTURE,
@@ -270,6 +292,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
         ),
     ),
     "redis": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="redis:6379 in the compose network; REDIS_URL from the host",
+            env_groups=["COMPONENT SETTINGS"],
+        ),
         name="redis",
         type=ComponentType.INFRASTRUCTURE,
         description="Redis cache and message broker",
@@ -291,6 +317,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
         ),
     ),
     "storage": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="app/core/storage.py; local disk or S3 by backend",
+            env_groups=["COMPONENT SETTINGS"],
+        ),
         name="storage",
         docs_path="components/storage",
         type=ComponentType.INFRASTRUCTURE,
@@ -315,6 +345,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
         ),
     ),
     "ingress": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="Traefik in front of the app; routes from docker-compose labels",
+            env_groups=["COMPONENT SETTINGS"],
+        ),
         name="ingress",
         docs_path="components/ingress",
         type=ComponentType.INFRASTRUCTURE,
@@ -336,6 +370,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
         ),
     ),
     "observability": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="Logfire tracing; `make logs` for the raw stream",
+            env_groups=["COMPONENT SETTINGS"],
+        ),
         name="observability",
         docs_path="components/observability",
         type=ComponentType.INFRASTRUCTURE,
@@ -358,6 +396,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
         ),
     ),
     "htmx": ComponentSpec(
+        readme=ReadmeWiring(
+            reach="Server-rendered pages at /",
+        ),
         name="htmx",
         docs_path="components/web-frontend",
         type=ComponentType.FRONTEND,

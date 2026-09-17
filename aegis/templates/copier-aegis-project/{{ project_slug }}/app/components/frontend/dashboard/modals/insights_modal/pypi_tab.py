@@ -5,6 +5,10 @@ from __future__ import annotations  # noqa: I001
 
 import flet as ft
 
+from app.components.frontend.dashboard.modals.insights_modal.constants import (
+    RANGE_OPTIONS,
+)
+
 from app.components.frontend.controls import (
     H3Text,
     SecondaryText,
@@ -32,57 +36,60 @@ from app.components.frontend.dashboard.modals.insights_modal.charts import (
 
 
 # Event type → chip border/highlight color
-EVENT_TYPE_COLORS: dict[str, str] = {
-    "release": "#22C55E",
-    "fork": "#A855F7",
-    "star": "#F59E0B",
-    "reddit_post": "#FF5722",
-    "localization": "#3B82F6",
-    "feature": "#06B6D4",
-    "milestone_github": "#EC4899",
-    "milestone_pypi": "#EC4899",
-    "anomaly_github": "#EF4444",
-    "external": "#9CA3AF",
-}
 
 # Shared date range options for all tabs
-RANGE_OPTIONS = [
-    ("7d", 7),
-    ("14d", 14),
-    ("1m", 30),
-    ("3m", 90),
-    ("6m", 180),
-    ("1y", 365),
-    ("All", 9999),
-]
 
 # Milestone category config (for Overview trophy cards)
-CATEGORY_CONFIG: dict[str, dict[str, str]] = {
-    "daily_clones": {"label": "GitHub 1-Day Clones", "color": "#2563eb"},
-    "daily_unique": {"label": "GitHub 1-Day Unique", "color": "#A855F7"},
-    "daily_views": {"label": "GitHub 1-Day Views", "color": "#22C55E"},
-    "daily_visitors": {"label": "GitHub 1-Day Visitors", "color": "#F59E0B"},
-    "14d_clones": {"label": "GitHub 14-Day Clones", "color": "#06B6D4"},
-    "14d_unique": {"label": "GitHub 14-Day Unique", "color": "#EC4899"},
-    "14d_visitors": {"label": "GitHub 14-Day Visitors", "color": "#F97316"},
-    "pypi_daily": {"label": "PyPI Best Single Day", "color": "#EF4444"},
-    "plausible_daily_visitors": {"label": "Docs 1-Day Visitors", "color": "#6366F1"},
-    "plausible_daily_pageviews": {"label": "Docs 1-Day Pageviews", "color": "#22C55E"},
-    "star_daily": {"label": "Stars Best Day", "color": "#FFD700"},
-    "star_monthly": {"label": "Stars Best Month", "color": "#FFD700"},
-}
 
 # Event type to status mapping (for activity feed dot colors)
-EVENT_STATUS_MAP: dict[str, str] = {
-    "release": "success",
-    "star": "warning",
-    "reddit_post": "info",
-    "milestone_github": "warning",
-    "milestone_pypi": "warning",
-    "feature": "info",
-    "anomaly_github": "error",
-    "external": "info",
-}
+
+
+# The human/bot split reads green against red wherever it appears in
+# this tab. These are not the theme's SUCCESS and ERROR - those are
+# #17CCBF and #D32F2F - so they are named here rather than swapped,
+# which would change what the tab looks like.
+HUMAN_COLOR = "#22C55E"
+BOT_COLOR = "#EF4444"
+
+# Above this share of bot traffic the percentage itself turns red.
+BOT_SHARE_ALARM = 0.8
+
+
+def version_sort_key(version: str) -> tuple[int, ...]:
+    """Order versions roughly by release, for the downloads chart.
+
+    Pre-release markers become separators, so 1.2.0rc1 reads as
+    (1, 2, 0, 1). That puts it AFTER 1.2.0 rather than before it, which
+    is backwards for a release candidate - the shorter tuple always
+    wins. Behaviour preserved from when this was a nested function;
+    worth fixing, but it reorders bars in a chart, so not quietly.
+
+    Anything that is not a number sorts as zero rather than raising: a
+    version string is whatever the index was given.
+    """
+    parts = version.replace("rc", ".").replace("a", ".").replace("b", ".").split(".")
+    return tuple(int(p) if p.isdigit() else 0 for p in parts)
+
+
+def split_downloads(info: dict | int) -> tuple[int, int, int]:
+    """Total, human and bot counts for one version.
+
+    Older rows carry a bare total rather than a breakdown, so an int
+    means "all total, no attribution known" rather than zero humans.
+    """
+    if isinstance(info, dict):
+        total, human = info.get("total", 0), info.get("human", 0)
+    else:
+        total, human = info, 0
+    return total, human, total - human
+
+
+def bot_share_label(total: int, bot: int) -> str:
+    """Bot share as a percentage, or an em-dash when there is nothing
+    to take a share of."""
+    if total <= 0:
+        return "\u2014"
+    return f"{bot / total * 100:.0f}%"
 
 
 class PyPITab(InsightsTab):
@@ -306,32 +313,17 @@ class PyPITab(InsightsTab):
         # Bar chart: downloads by version
         versions = data["versions"]
         if versions:
-            # Sort by version number (semantic sort)
-            def _version_sort_key(ver: str) -> tuple:
-                parts = (
-                    ver.replace("rc", ".")
-                    .replace("a", ".")
-                    .replace("b", ".")
-                    .split(".")
-                )
-                return tuple(int(p) if p.isdigit() else 0 for p in parts)
-
-            all_sorted = sorted(versions.keys(), key=_version_sort_key)
-
-            # Filter out versions with 0 downloads
-            sorted_versions = []
-            for ver in all_sorted:
-                info = versions[ver]
-                val = info.get("total", 0) if isinstance(info, dict) else info
-                if val > 0:
-                    sorted_versions.append(ver)
+            # Only versions anyone actually downloaded, in release order.
+            sorted_versions = [
+                ver
+                for ver in sorted(versions, key=version_sort_key)
+                if split_downloads(versions[ver])[0] > 0
+            ]
 
             bar_groups = []
             bar_max = 0
             for i, ver in enumerate(sorted_versions):
-                info = versions[ver]
-                val = info.get("total", 0) if isinstance(info, dict) else info
-
+                val, _, _ = split_downloads(versions[ver])
                 bar_max = max(bar_max, val)
 
                 bar_groups.append(
@@ -484,19 +476,17 @@ class PyPITab(InsightsTab):
 
             version_rows_data = []
             for ver, info in list(versions.items())[:10]:
-                if isinstance(info, dict):
-                    t, h = info.get("total", 0), info.get("human", 0)
-                else:
-                    t, h = info, 0
-                b = t - h
-                pct = f"{(b / t * 100):.0f}%" if t > 0 else "\u2014"
-                pct_color = "#EF4444" if t > 0 and b / t > 0.8 else "#22C55E"
+                t, h, b = split_downloads(info)
+                pct = bot_share_label(t, b)
+                pct_color = (
+                    BOT_COLOR if t > 0 and b / t > BOT_SHARE_ALARM else HUMAN_COLOR
+                )
                 version_rows_data.append(
                     [
                         ver,
                         f"{t:,}",
-                        ft.Text(f"{h:,}", color="#22C55E", size=12),
-                        ft.Text(f"{b:,}", color="#EF4444", size=12),
+                        ft.Text(f"{h:,}", color=HUMAN_COLOR, size=12),
+                        ft.Text(f"{b:,}", color=BOT_COLOR, size=12),
                         ft.Text(
                             pct, color=pct_color, size=12, weight=ft.FontWeight.W_600
                         ),
@@ -504,16 +494,11 @@ class PyPITab(InsightsTab):
                 )
 
             # Totals row
-            total_t = sum(
-                info.get("total", 0) if isinstance(info, dict) else info
-                for info in versions.values()
-            )
-            total_h = sum(
-                info.get("human", 0) if isinstance(info, dict) else 0
-                for info in versions.values()
-            )
+            splits = [split_downloads(info) for info in versions.values()]
+            total_t = sum(s[0] for s in splits)
+            total_h = sum(s[1] for s in splits)
             total_b = total_t - total_h
-            total_pct = f"{(total_b / total_t * 100):.0f}%" if total_t > 0 else "\u2014"
+            total_pct = bot_share_label(total_t, total_b)
 
             version_rows_data.append(
                 [
@@ -523,21 +508,21 @@ class PyPITab(InsightsTab):
                         f"{total_h:,}",
                         size=12,
                         weight=ft.FontWeight.W_700,
-                        color="#22C55E",
+                        color=HUMAN_COLOR,
                     ),
                     ft.Text(
                         f"{total_b:,}",
                         size=12,
                         weight=ft.FontWeight.W_700,
-                        color="#EF4444",
+                        color=BOT_COLOR,
                     ),
                     ft.Text(
                         total_pct,
                         size=12,
                         weight=ft.FontWeight.W_700,
-                        color="#EF4444"
+                        color=BOT_COLOR
                         if total_t > 0 and total_b / total_t > 0.8
-                        else "#22C55E",
+                        else HUMAN_COLOR,
                     ),
                 ]
             )
@@ -563,8 +548,8 @@ class PyPITab(InsightsTab):
                     [
                         d["date"][-5:],
                         f"{d['total']:,}",
-                        ft.Text(f"{d['human']:,}", color="#22C55E", size=12),
-                        ft.Text(f"{bot:,}", color="#EF4444", size=12),
+                        ft.Text(f"{d['human']:,}", color=HUMAN_COLOR, size=12),
+                        ft.Text(f"{bot:,}", color=BOT_COLOR, size=12),
                     ]
                 )
 
@@ -675,25 +660,19 @@ class PyPITab(InsightsTab):
             day = str(r.date)[:10]
             meta = r.metadata_ or {}
             day_versions = meta.get("versions", {})
-            version_daily[day] = {}
-            for ver, info in day_versions.items():
-                if isinstance(info, dict):
-                    version_daily[day][ver] = info.get("total", 0)
-                else:
-                    version_daily[day][ver] = info
+            version_daily[day] = {
+                ver: split_downloads(info)[0] for ver, info in day_versions.items()
+            }
 
         # Version breakdown with real human/bot
         versions: dict[str, dict[str, int]] = {}
         for r in version_daily_rows:
             meta = r.metadata_ or {}
             for ver, info in meta.get("versions", {}).items():
-                if ver not in versions:
-                    versions[ver] = {"total": 0, "human": 0}
-                if isinstance(info, dict):
-                    versions[ver]["total"] += info.get("total", 0)
-                    versions[ver]["human"] += info.get("human", 0)
-                else:
-                    versions[ver]["total"] += info
+                total, human, _ = split_downloads(info)
+                running = versions.setdefault(ver, {"total": 0, "human": 0})
+                running["total"] += total
+                running["human"] += human
         versions = dict(sorted(versions.items(), key=lambda x: -x[1]["total"]))
 
         # Distribution type breakdown

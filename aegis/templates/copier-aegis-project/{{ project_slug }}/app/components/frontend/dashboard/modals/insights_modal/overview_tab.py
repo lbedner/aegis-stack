@@ -4,7 +4,17 @@ from __future__ import annotations  # noqa: I001
 
 from typing import Any
 
+from datetime import datetime, timedelta
+
 import flet as ft
+
+from app.components.frontend.dashboard.modals.insights_modal.charts import (
+    trim_leading_zeros,
+)
+
+from app.components.frontend.dashboard.modals.insights_modal.constants import (
+    EVENT_STATUS_MAP,
+)
 
 from app.components.frontend.controls import (
     BodyText,
@@ -33,57 +43,12 @@ from ..modal_sections import (
 
 
 # Event type → chip border/highlight color
-EVENT_TYPE_COLORS: dict[str, str] = {
-    "release": "#22C55E",
-    "fork": "#A855F7",
-    "star": "#F59E0B",
-    "reddit_post": "#FF5722",
-    "localization": "#3B82F6",
-    "feature": "#06B6D4",
-    "milestone_github": "#EC4899",
-    "milestone_pypi": "#EC4899",
-    "anomaly_github": "#EF4444",
-    "external": "#9CA3AF",
-}
 
 # Shared date range options for all tabs
-RANGE_OPTIONS = [
-    ("7d", 7),
-    ("14d", 14),
-    ("1m", 30),
-    ("3m", 90),
-    ("6m", 180),
-    ("1y", 365),
-    ("All", 9999),
-]
 
 # Milestone category config (for Overview trophy cards)
-CATEGORY_CONFIG: dict[str, dict[str, str]] = {
-    "daily_clones": {"label": "GitHub 1-Day Clones", "color": "#2563eb"},
-    "daily_unique": {"label": "GitHub 1-Day Unique", "color": "#A855F7"},
-    "daily_views": {"label": "GitHub 1-Day Views", "color": "#22C55E"},
-    "daily_visitors": {"label": "GitHub 1-Day Visitors", "color": "#F59E0B"},
-    "14d_clones": {"label": "GitHub 14-Day Clones", "color": "#06B6D4"},
-    "14d_unique": {"label": "GitHub 14-Day Unique", "color": "#EC4899"},
-    "14d_visitors": {"label": "GitHub 14-Day Visitors", "color": "#F97316"},
-    "pypi_daily": {"label": "PyPI Best Single Day", "color": "#EF4444"},
-    "plausible_daily_visitors": {"label": "Docs 1-Day Visitors", "color": "#6366F1"},
-    "plausible_daily_pageviews": {"label": "Docs 1-Day Pageviews", "color": "#22C55E"},
-    "star_daily": {"label": "Stars Best Day", "color": "#FFD700"},
-    "star_monthly": {"label": "Stars Best Month", "color": "#FFD700"},
-}
 
 # Event type to status mapping (for activity feed dot colors)
-EVENT_STATUS_MAP: dict[str, str] = {
-    "release": "success",
-    "star": "warning",
-    "reddit_post": "info",
-    "milestone_github": "warning",
-    "milestone_pypi": "warning",
-    "feature": "info",
-    "anomaly_github": "error",
-    "external": "info",
-}
 
 
 def _format_hero_number(n: float) -> str:
@@ -310,6 +275,20 @@ def _build_overview_goals(bulk: BulkInsightsResponse | None) -> ft.Column:
     return ft.Column([header, divider, card], spacing=6)
 
 
+def sum_in_range(bulk: Any, key: str, start: datetime, end: datetime) -> int:
+    """Total one bulk metric over a half-open window.
+
+    ``start`` is included and ``end` is not, so two adjacent windows can
+    be compared without double-counting the day they meet - which is the
+    whole point when the answer is a period-over-period arrow.
+
+    A missing metric totals zero rather than raising: a project with no
+    PyPI history still has an overview.
+    """
+    rows = bulk.daily.get(key, []) if bulk else []
+    return sum(int(r.value) for r in rows if start <= r.date < end)
+
+
 class OverviewTab(ft.Container):
     """Overview: key metrics, milestones, recent events, source status."""
 
@@ -329,24 +308,18 @@ class OverviewTab(ft.Container):
         total_views = sum(d["views"] for d in daily)
 
         # Compute previous 14d for change arrows using bulk data (no DB)
-        from datetime import datetime, timedelta
-
         stars_total = db["stars_total"]
 
         now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         d14 = now - timedelta(days=14)
         d28 = now - timedelta(days=28)
 
-        def _sum_bulk_range(key: str, start: datetime, end: datetime) -> int:
-            rows = bulk.daily.get(key, []) if bulk else []
-            return sum(int(r.value) for r in rows if start <= r.date < end)
+        prev_clones = sum_in_range(bulk, "clones", d28, d14)
+        prev_unique = sum_in_range(bulk, "unique_cloners", d28, d14)
+        prev_views = sum_in_range(bulk, "views", d28, d14)
 
-        prev_clones = _sum_bulk_range("clones", d28, d14)
-        prev_unique = _sum_bulk_range("unique_cloners", d28, d14)
-        prev_views = _sum_bulk_range("views", d28, d14)
-
-        pypi_14d = _sum_bulk_range("downloads_daily", d14, now + timedelta(days=1))
-        pypi_prev14d = _sum_bulk_range("downloads_daily", d28, d14)
+        pypi_14d = sum_in_range(bulk, "downloads_daily", d14, now + timedelta(days=1))
+        pypi_prev14d = sum_in_range(bulk, "downloads_daily", d28, d14)
 
         # Stars in range from bulk events
         star_events = bulk.events.get("new_star", []) if bulk else []
@@ -632,11 +605,9 @@ class OverviewTab(ft.Container):
         # tab so the visual language stays consistent.
         clones_chart: LineChartCard | None = None
         if overview_view and overview_view.daily:
-            trimmed = overview_view.daily
-            for i, d in enumerate(overview_view.daily):
-                if d.clones or d.unique_cloners:
-                    trimmed = overview_view.daily[i:]
-                    break
+            trimmed = trim_leading_zeros(
+                overview_view.daily, "clones", "unique_cloners"
+            )
             if trimmed:
                 clones_chart = LineChartCard(
                     title="Daily Cloners",

@@ -1,6 +1,14 @@
-"""Tests for the agent tool registry (name -> callable resolution)."""
+"""Tests for the agent tool registry (name -> callable resolution).
 
-from collections.abc import Generator
+``resolve_tools`` hands back instrumented callables, not the registered
+objects themselves: every call is wrapped for the tool-call ledger on the
+way out. So resolution is asserted on what the wrapper wraps, which is also
+what the model sees as the tool.
+"""
+
+from collections.abc import Callable, Generator
+import inspect
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,6 +19,11 @@ from app.services.ai.domains.chat.tools import (
     resolve_tools,
     unregister_tool,
 )
+
+
+def unwrapped(tools: list[Callable[..., Any]]) -> list[Callable[..., Any]]:
+    """The callables under the ledger wrapper."""
+    return [inspect.unwrap(tool) for tool in tools]
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +45,7 @@ class TestRegistration:
         register_tool("echo", _echo, description="Echo a string")
 
         assert "echo" in registered_tool_names()
-        assert resolve_tools(["echo"]) == [_echo]
+        assert unwrapped(resolve_tools(["echo"])) == [_echo]
 
     def test_duplicate_registration_is_an_error(self) -> None:
         register_tool("echo", _echo)
@@ -48,7 +61,7 @@ class TestRegistration:
             return text.upper()
 
         register_tool("echo", other, replace=True)
-        assert resolve_tools(["echo"]) == [other]
+        assert unwrapped(resolve_tools(["echo"])) == [other]
 
     def test_unregister_unknown_is_an_error(self) -> None:
         with pytest.raises(KeyError):
@@ -68,7 +81,7 @@ class TestResolution:
 
         resolved = resolve_tools(["echo", "missing-tool"])
 
-        assert resolved == [_echo]
+        assert unwrapped(resolved) == [_echo]
         # The skip must be surfaced: a silently ignored tool row would be
         # undebuggable.
         warned.assert_called_once()
@@ -86,4 +99,4 @@ class TestResolution:
         register_tool("second", second)
         register_tool("first", first)
 
-        assert resolve_tools(["first", "second"]) == [first, second]
+        assert unwrapped(resolve_tools(["first", "second"])) == [first, second]

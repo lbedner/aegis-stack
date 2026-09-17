@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.log import logger
+from app.services.ai.domains.chat.tool_telemetry import instrument
 
 ToolFunc = Callable[..., Any]
 
@@ -101,6 +102,10 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
     Unknown names are skipped with a warning: a ``tool`` row whose
     callable was renamed or removed degrades that one tool, not the
     whole agent.
+
+    Every callable is wrapped for the per-call ledger on the way out. This
+    is the one seam an agent's tools all pass through, so a new tool is
+    measured by existing rather than by remembering a decorator.
     """
     resolved: list[ToolFunc] = []
     for name in names:
@@ -108,5 +113,5 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
         if entry is None:
             logger.warning("Tool has no registered callable; skipping", tool_name=name)
             continue
-        resolved.append(entry.func)
+        resolved.append(instrument(entry.name, entry.func))
     return resolved

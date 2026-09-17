@@ -1,0 +1,200 @@
+"""The per-tool-call ledger: every call lands, turns are distinguishable."""
+{% if ai_backend != "memory" %}
+
+import asyncio
+import inspect
+from typing import Any
+
+import pytest
+
+from app.services.ai.domains.chat import tool_telemetry
+from app.services.ai.domains.chat.tool_telemetry import instrument, tool_turn
+
+
+@pytest.fixture
+def written(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Capture rows instead of inserting them: the insert is one
+    ``session.add``; the wrapper around it is what can go wrong."""
+    rows: list[dict[str, Any]] = []
+
+    async def fake_write(**kwargs: Any) -> None:
+        rows.append(kwargs)
+
+    monkeypatch.setattr(tool_telemetry, "_write", fake_write)
+    return rows
+
+
+class TestEveryCallLands:
+    @pytest.mark.asyncio
+    async def test_a_successful_call_is_recorded(
+        self, written: list[dict[str, Any]]
+    ) -> None:
+        async def metric_series(_ctx: Any) -> str:
+            return '{"points": []}'
+
+        with tool_turn(user_id="u1", agent_slug="assistant"):
+            result = await instrument("metric_series", metric_series)(None)
+
+        assert result == '{"points": []}'
+        assert len(written) == 1
+        row = written[0]
+        assert row["tool_name"] == "metric_series"
+        assert row["ok"] is True
+        # Result size is the other half of "is this tool worth its slot".
+        assert row["result_bytes"] == len('{"points": []}')
+        assert row["turn"].user_id == "u1"
+
+    @pytest.mark.asyncio
+    async def test_a_failing_call_is_recorded_and_still_raises(
+        self, written: list[dict[str, Any]]
+    ) -> None:
+        """A tool that blows up is the most interesting row in the ledger,
+        and swallowing it would change what the model sees."""
+
+        async def boom(_ctx: Any) -> str:
+            raise ValueError("no such metric")
+
+        with pytest.raises(ValueError, match="no such metric"):
+            with tool_turn():
+                await instrument("boom", boom)(None)
+
+        assert written[0]["ok"] is False
+        assert "no such metric" in written[0]["error"]
+
+    @pytest.mark.asyncio
+    async def test_a_call_outside_a_turn_still_records(
+        self, written: list[dict[str, Any]]
+    ) -> None:
+        """Losing the grouping beats losing the call."""
+
+        async def a(_ctx: Any) -> str:
+            return "a"
+
+        await instrument("a", a)(None)
+
+        assert len(written) == 1
+        assert written[0]["turn"].turn_id
+
+
+class TestTurnsAreDistinguishable:
+    @pytest.mark.asyncio
+    async def test_calls_in_one_turn_share_an_id_and_count_up(
+        self, written: list[dict[str, Any]]
+    ) -> None:
+        """"These two are always called together" is why the turn id exists,
+        and the index is what makes a ceiling hit derivable without the
+        ledger knowing the agent's limit."""
+
+        async def a(_ctx: Any) -> str:
+            return "a"
+
+        async def b(_ctx: Any) -> str:
+            return "b"
+
+        with tool_turn():
+            await instrument("a", a)(None)
+            await instrument("b", b)(None)
+
+        assert [row["call_index"] for row in written] == [0, 1]
+        assert written[0]["turn"].turn_id == written[1]["turn"].turn_id
+
+    @pytest.mark.asyncio
+    async def test_separate_turns_do_not_share_an_id(
+        self, written: list[dict[str, Any]]
+    ) -> None:
+        async def a(_ctx: Any) -> str:
+            return "a"
+
+        wrapped = instrument("a", a)
+        with tool_turn():
+            await wrapped(None)
+        with tool_turn():
+            await wrapped(None)
+
+        assert written[0]["turn"].turn_id != written[1]["turn"].turn_id
+        assert [row["call_index"] for row in written] == [0, 0]
+
+    @pytest.mark.asyncio
+    async def test_concurrent_turns_do_not_bleed(
+        self, written: list[dict[str, Any]]
+    ) -> None:
+        """Turn identity rides a context variable, so two turns in flight on
+        one worker must not share a counter."""
+
+        async def slow(_ctx: Any) -> str:
+            await asyncio.sleep(0)
+            return "s"
+
+        wrapped = instrument("slow", slow)
+
+        async def one_turn(user: str) -> None:
+            with tool_turn(user_id=user):
+                await wrapped(None)
+                await wrapped(None)
+
+        await asyncio.gather(one_turn("a"), one_turn("b"))
+
+        by_user: dict[str, list[int]] = {}
+        for row in written:
+            by_user.setdefault(row["turn"].user_id, []).append(row["call_index"])
+        assert by_user == {"a": [0, 1], "b": [0, 1]}
+
+
+class TestTheWrapperIsTransparent:
+    def test_name_signature_and_docstring_survive(self) -> None:
+        """The agent framework builds the tool schema the model sees from
+        exactly these, so a lossy wrapper would silently change the tool."""
+
+        async def stored_reports(_ctx: Any, period: str | None = None) -> str:
+            """Return the text of a stored report."""
+            return ""
+
+        wrapped = instrument("stored_reports", stored_reports)
+
+        assert wrapped.__name__ == "stored_reports"
+        assert wrapped.__doc__ == "Return the text of a stored report."
+        assert inspect.signature(wrapped) == inspect.signature(stored_reports)
+
+    @pytest.mark.asyncio
+    async def test_a_broken_ledger_does_not_break_the_turn(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Telemetry that can take down the feature it measures is worse
+        than no telemetry."""
+
+        async def a(_ctx: Any) -> str:
+            return "ok"
+
+        def explode(*_args: Any, **_kwargs: Any) -> Any:
+            raise RuntimeError("no database")
+
+        monkeypatch.setattr("app.core.db.AsyncSessionLocal", explode, raising=False)
+
+        with tool_turn():
+            assert await instrument("a", a)(None) == "ok"
+
+
+class TestTheRegistryWrapsWhatItResolves:
+    def test_resolved_tools_are_instrumented(
+        self, written: list[dict[str, Any]]
+    ) -> None:
+        """Wrapping happens at the registry, so a tool added later is
+        measured by existing."""
+        from app.services.ai.domains.chat.tools import (
+            register_tool,
+            resolve_tools,
+            unregister_tool,
+        )
+
+        async def probe(_ctx: Any) -> str:
+            return "probe"
+
+        register_tool("ledger_probe", probe, replace=True)
+        try:
+            resolved = resolve_tools(["ledger_probe"])
+            assert len(resolved) == 1
+            assert resolved[0].__name__ == "probe"
+            assert resolved[0] is not probe
+        finally:
+            unregister_tool("ledger_probe")
+{% endif %}

@@ -42,6 +42,7 @@ from .plugins.spec import (
     PluginKind,
     PluginSpec,
     PluginWiring,
+    ReadmeWiring,
     RouterWiring,
     SymbolWiring,
 )
@@ -97,6 +98,11 @@ class ServiceSpec(PluginSpec):
 # Service registry - single source of truth for all available services
 SERVICES: dict[str, ServiceSpec] = {
     "auth": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/auth, sign-in page at /login, CLI group `auth`",
+            cli_groups=["auth"],
+            first_steps=["Register the first user: `make cli auth create-user`"],
+        ),
         name="auth",
         docs_path="services/auth",
         marker_path="app/services/auth",
@@ -343,6 +349,15 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
     ),
     "ai": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/ai, chat on the dashboard, CLI groups `ai`, `llm`, `agents`",
+            cli_groups=["ai", "llm", "agents", "memory-modules"],
+            env_groups=["AI SERVICE CONFIGURATION", "RAG SERVICE CONFIGURATION"],
+            first_steps=[
+                "Pick a provider and model: `make cli ai config`",
+                "Ask it something from the dashboard chat panel",
+            ],
+        ),
         name="ai",
         docs_path="services/ai",
         marker_path="app/services/ai",
@@ -564,6 +579,13 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
     ),
     "comms": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/comms, CLI group `comms`",
+            cli_groups=["comms"],
+            env_groups=["COMMUNICATIONS SERVICE CONFIGURATION"],
+            setup_notes=["RESEND_API_KEY and TWILIO_* are optional until you send"],
+            first_steps=["Send a test email: `make cli comms send-email`"],
+        ),
         name="comms",
         docs_path="services/comms",
         marker_path="app/services/comms",
@@ -625,6 +647,12 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
     ),
     "insights": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/insights, Insights tab on the dashboard, CLI group `insights`",
+            cli_groups=["insights"],
+            env_groups=["INSIGHTS SERVICE CONFIGURATION"],
+            first_steps=["Collect once: `make cli insights collect`"],
+        ),
         name="insights",
         docs_path="services/insights",
         marker_path="app/services/insights",
@@ -752,6 +780,13 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
     ),
     "payment": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/payment, checkout pages under /payment, CLI group `payment`",
+            cli_groups=["payment"],
+            env_groups=["PAYMENT SERVICE CONFIGURATION"],
+            setup_notes=["Stripe keys are required before any charge succeeds"],
+            first_steps=["Run a sandbox checkout from /payment"],
+        ),
         name="payment",
         docs_path="services/payment",
         marker_path="app/services/payment",
@@ -839,6 +874,11 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
     ),
     "blog": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/blog, posts at /blog, CLI group `blog`",
+            cli_groups=["blog"],
+            first_steps=["Write the first post: `make cli blog create`"],
+        ),
         name="blog",
         docs_path="services/blog",
         marker_path="app/services/blog",
@@ -911,6 +951,18 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
     ),
     "finance": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/finance, Finance tab on the dashboard, CLI group `finance`",
+            cli_groups=["finance"],
+            env_groups=["FINANCE SERVICE CONFIGURATION"],
+            setup_notes=[
+                "Plaid and SnapTrade keys are optional; file import works without them"
+            ],
+            first_steps=[
+                "Import a CSV or OFX file: `make cli finance import`",
+                "Open the Finance tab to see net worth and recurring spend",
+            ],
+        ),
         name="finance",
         docs_path="services/finance",
         marker_path="app/services/finance",
@@ -1102,6 +1154,10 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
     ),
     "documents": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/documents, Documents tab on the dashboard",
+            first_steps=["Upload a PDF and watch it get OCR'd and paged"],
+        ),
         name="documents",
         docs_path="services/documents",
         marker_path="app/services/documents",

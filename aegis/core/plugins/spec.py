@@ -150,6 +150,43 @@ class HealthCheckWiring:
 
 
 @dataclass
+class ReadmeWiring:
+    """What a plugin contributes to the generated project's README.
+
+    The README used to carry one hand-written conditional per feature,
+    which is how redis ended up guarded on ``include_cache`` (the answer
+    key is ``include_redis``) and never rendered at all, and how finance,
+    payment, documents and worker got no branch. Ownership moves here so
+    a plugin's own lines arrive with the plugin.
+
+    The narrative comes from the spec's ``description`` /
+    ``long_description``; this carries only what those do not say.
+    """
+
+    reach: str = ""
+    """Where the reader finds it: a port, a route, or a CLI group.
+    Printed as the second column of the "What is running" table."""
+
+    cli_groups: list[str] = field(default_factory=list)
+    """Typer groups this plugin registers (``finance``, ``llm``)."""
+
+    env_groups: list[str] = field(default_factory=list)
+    """``.env.example`` group headings the Configuration section prints."""
+
+    required_env: list[str] = field(default_factory=list)
+    """Variables that gate startup, called out from the rest."""
+
+    setup_notes: list[str] = field(default_factory=list)
+    """Anything true before the first run: "Ollama is expected on the
+    host". Rendered as comments under the ``cp .env.example .env`` line."""
+
+    first_steps: list[str] = field(default_factory=list)
+    """One or two things a new user actually does, for the "first ten
+    minutes" section. Services only: a component is not something a
+    reader opens."""
+
+
+@dataclass
 class PluginWiring:
     """Optional injection-point hooks attached to a ``PluginSpec``.
 
@@ -265,6 +302,9 @@ class PluginSpec:
     # Injection-point hooks (round 7) — see PluginWiring above for the
     # declarative shapes consumed by template rendering and the composer.
     wiring: PluginWiring = field(default_factory=PluginWiring)
+
+    readme: ReadmeWiring = field(default_factory=ReadmeWiring)
+    """The plugin's own lines in the generated README."""
 
     # Post-render transform (RD-06, aegis-stack#921). Called with
     # ``(project_path, answers)`` once this plugin's files are on disk —

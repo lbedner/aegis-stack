@@ -33,6 +33,7 @@ from app.components.frontend.dashboard.modals.insights_modal.base import (
     InsightsTab,
 )
 from app.components.frontend.dashboard.modals.insights_modal.charts import (
+    trim_leading_zeros,
     axis_tick_labels,
     bounds_with_padding,
     emphasis_color,
@@ -93,6 +94,23 @@ EVENT_STATUS_MAP: dict[str, str] = {
     "anomaly_github": "error",
     "external": "info",
 }
+
+
+def events_by_selected_date(
+    events: list[tuple[str, str, str]], selected_types: set[str] | frozenset[str]
+) -> dict[str, list[str]]:
+    """Event labels grouped by date, narrowed to the selected types.
+
+    An EMPTY selection means "All", not "none" - the Events dropdown
+    shows every event until the reader picks some - so the filter only
+    applies when something is actually selected.
+    """
+    grouped: dict[str, list[str]] = {}
+    for ev_date, ev_label, ev_type in events:
+        if selected_types and ev_type not in selected_types:
+            continue
+        grouped.setdefault(ev_date, []).append(ev_label)
+    return grouped
 
 
 class GitHubTrafficTab(InsightsTab):
@@ -275,31 +293,13 @@ class GitHubTrafficTab(InsightsTab):
 
         highlighted = self._highlighted_dates
 
-        # Trim leading zero days separately for each chart
-        clone_daily = daily
-        for i, d in enumerate(daily):
-            if d["clones"] or d["unique_cloners"]:
-                clone_daily = daily[i:]
-                break
+        # Each chart starts where its own data does.
+        clone_daily = trim_leading_zeros(daily, "clones", "unique_cloners")
+        view_daily = trim_leading_zeros(daily, "views", "unique_visitors")
 
-        view_daily = daily
-        for i, d in enumerate(daily):
-            if d["views"] or d["unique_visitors"]:
-                view_daily = daily[i:]
-                break
-
-        # Build a date→event-labels map. The Events dropdown's selected
-        # types narrow the set when non-empty (== filtered); an empty
-        # set means "All", showing every event in the chart's tooltip
-        # overlay.
-        events_by_date: dict[str, list[str]] = {}
-        for ev_date, ev_label, ev_etype in data.get("all_events", []):
-            if (
-                self._selected_event_types
-                and ev_etype not in self._selected_event_types
-            ):
-                continue
-            events_by_date.setdefault(ev_date, []).append(ev_label)
+        events_by_date = events_by_selected_date(
+            data.get("all_events", []), self._selected_event_types
+        )
 
         # -- Clones + Unique chart --------------------------------------------
         # Indices on the chart that correspond to the currently selected

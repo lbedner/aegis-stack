@@ -216,3 +216,16 @@ def axis_tick_labels(low: int, high: int, step: int) -> list[ft.ChartAxisLabel]:
         )
         tick += step
     return labels
+
+
+def trim_leading_zeros(daily: list[dict], *keys: str) -> list[dict]:
+    """Drop the run of days before a series has anything to show.
+
+    A repository with no clones for its first month should not open on a
+    month of flat zero; the line starts where the data does. Days are
+    kept from the first one where any of ``keys`` is non-zero.
+    """
+    for index, day in enumerate(daily):
+        if any(day.get(key) for key in keys):
+            return daily[index:]
+    return daily

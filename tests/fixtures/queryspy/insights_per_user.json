@@ -1,0 +1,240 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "column_load",
+      "label": "User",
+      "file": "tests/api/test_auth_endpoints.py",
+      "function": "_admin_and_target"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
+      "file": "app/services/auth/users.py",
+      "function": "get_user_by_email"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
+      "file": "app/services/auth/users.py",
+      "function": "hard_delete_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
+      "file": "app/services/auth/users.py",
+      "function": "restore_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM \"user\"",
+      "file": "app/services/auth/users.py",
+      "function": "create_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM insight_metric",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metric_count"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM job_execution WHERE job_execution.job_id = :job_id_1",
+      "file": "app/services/scheduler/scheduled_task_manager.py",
+      "function": "list_executions"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM organization",
+      "file": "app/services/auth/health.py",
+      "function": "check_auth_service_health"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS total, sum(CASE WHEN (\"user\".is_verified = true) THEN :param_1 ELSE :param_2 END) AS verified FROM \"user\"",
+      "file": "app/services/auth/health.py",
+      "function": "check_auth_service_health"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT email_verification_token.id, email_verification_token.user_id, email_verification_token.token, email_verification_token.created_at, email_verification_token.used FROM email_verification_token WHERE email_verification_token.token = :token_1",
+      "file": "tests/services/test_auth_integration.py",
+      "function": "test_resend_marks_prior_token_used"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT email_verification_token.id, email_verification_token.user_id, email_verification_token.token, email_verification_token.created_at, email_verification_token.used FROM email_verification_token WHERE email_verification_token.user_id = :user_id_1 AND email_verification_token.used = false",
+      "file": "app/services/auth/users.py",
+      "function": "_invalidate_prior_email_verification_tokens"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_event.id, insight_event.date, insight_event.event_type, insight_event.description, insight_event.metadata, insight_event.origin, insight_event.project_id, insight_event.created_by_user_id, insight_event.created_at FROM insight_event WHERE insight_event.event_type IN (__[POSTCOMPILE_event_type_1]) AND insight_event.project_id = :project_id_1",
+      "file": "app/services/insights/queries/events.py",
+      "function": "events_where"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric.id, insight_metric.date, insight_metric.metric_type_id, insight_metric.project_id, insight_metric.value, insight_metric.period, insight_metric.metadata, insight_metric.created_at FROM insight_metric JOIN insight_metric_type ON insight_metric.metric_type_id = insight_metric_type.id JOIN insight_source ON insight_metric_type.source_id = insight_source.id WHERE insight_source.key = :key_1 AND insight_metric_type.key = :key_2 AND insight_metric.date >= :date_1",
+      "file": "tests/services/test_goal_service.py",
+      "function": "spy_exec"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric.id, insight_metric.date, insight_metric.metric_type_id, insight_metric.project_id, insight_metric.value, insight_metric.period, insight_metric.metadata, insight_metric.created_at FROM insight_metric WHERE insight_metric.metric_type_id = :metric_type_id_1 AND insight_metric.date = :date_1 AND insight_metric.period = :period_1 AND insight_metric.project_id = :project_id_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metric_on"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric.id, insight_metric.date, insight_metric.metric_type_id, insight_metric.project_id, insight_metric.value, insight_metric.period, insight_metric.metadata, insight_metric.created_at FROM insight_metric WHERE insight_metric.metric_type_id IN (__[POSTCOMPILE_metric_type_id_1]) AND insight_metric.period = :period_1 AND insight_metric.project_id = :project_id_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metrics_where"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric_type.id, insight_metric_type.source_id, insight_metric_type.key, insight_metric_type.display_name, insight_metric_type.unit, insight_metric_type.metadata, insight_metric_type.created_at FROM insight_metric_type WHERE insight_metric_type.key = :key_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metric_type_by_key"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric_type.id, insight_metric_type.source_id, insight_metric_type.key, insight_metric_type.display_name, insight_metric_type.unit, insight_metric_type.metadata, insight_metric_type.created_at FROM insight_metric_type WHERE insight_metric_type.key = :key_1 AND insight_metric_type.source_id = :source_id_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metric_type_by_key"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_record.id, insight_record.metric_type_id, insight_record.value, insight_record.date_achieved, insight_record.previous_value, insight_record.previous_date, insight_record.context, insight_record.metadata, insight_record.updated_at, insight_record.created_at FROM insight_record WHERE insight_record.metric_type_id = :metric_type_id_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "record_for_type"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_source.id, insight_source.key, insight_source.display_name, insight_source.collection_interval_hours, insight_source.requires_auth, insight_source.enabled, insight_source.last_collected_at, insight_source.metadata, insight_source.created_at FROM insight_source WHERE insight_source.enabled = true ORDER BY insight_source.id",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "sources"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_source.id, insight_source.key, insight_source.display_name, insight_source.collection_interval_hours, insight_source.requires_auth, insight_source.enabled, insight_source.last_collected_at, insight_source.metadata, insight_source.created_at FROM insight_source WHERE insight_source.key = :key_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "source_by_key"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT job_execution.id, job_execution.job_id, job_execution.job_name, job_execution.scheduled_run_time, job_execution.started_at, job_execution.finished_at, job_execution.duration_ms, job_execution.status, job_execution.error_message, job_execution.traceback FROM job_execution WHERE job_execution.job_id = :job_id_1 ORDER BY job_execution.started_at DESC LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/scheduler/scheduled_task_manager.py",
+      "function": "list_executions"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT org_invite.id, org_invite.organization_id, org_invite.email, org_invite.role, org_invite.invited_by, org_invite.status, org_invite.token, org_invite.created_at, org_invite.expires_at FROM org_invite WHERE org_invite.organization_id = :organization_id_1 AND org_invite.email = :email_1 AND org_invite.status = :status_1",
+      "file": "app/services/auth/invites.py",
+      "function": "_get_pending_invite"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.id = :id_1",
+      "file": "app/services/auth/orgs.py",
+      "function": "hard_delete_org"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.id = :id_1",
+      "file": "app/services/auth/orgs.py",
+      "function": "restore_org"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.id = :id_1",
+      "file": "tests/services/test_org_integration.py",
+      "function": "_org_deleted_at"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.id = :id_1 AND organization.deleted_at IS NULL",
+      "file": "app/services/auth/orgs.py",
+      "function": "get_org_by_id"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.slug = :slug_1",
+      "file": "tests/_test_org.py",
+      "function": "ensure_org_for_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.id, organization_member.organization_id, organization_member.user_id, organization_member.role, organization_member.joined_at FROM organization_member WHERE organization_member.organization_id = :organization_id_1",
+      "file": "app/services/auth/memberships.py",
+      "function": "list_org_members"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.id, organization_member.organization_id, organization_member.user_id, organization_member.role, organization_member.joined_at FROM organization_member WHERE organization_member.organization_id = :organization_id_1 AND organization_member.user_id = :user_id_1",
+      "file": "app/components/backend/api/insights.py",
+      "function": "create_project"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.id, organization_member.organization_id, organization_member.user_id, organization_member.role, organization_member.joined_at FROM organization_member WHERE organization_member.organization_id = :organization_id_1 AND organization_member.user_id = :user_id_1",
+      "file": "app/services/auth/memberships.py",
+      "function": "get_member"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.organization_id FROM organization_member JOIN organization ON organization.id = organization_member.organization_id WHERE organization_member.user_id = :user_id_1 AND organization_member.role = :role_1 AND organization.deleted_at IS NULL",
+      "file": "app/services/auth/users.py",
+      "function": "orphaned_sole_owner_org_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.organization_id, count(*) AS count_1 FROM organization_member WHERE organization_member.organization_id IN (__[POSTCOMPILE_organization_id_1]) GROUP BY organization_member.organization_id",
+      "file": "app/services/auth/users.py",
+      "function": "orphaned_sole_owner_org_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT project.id, project.slug, project.name, project.owner_user_id, project.organization_id, project.github_owner, project.github_repo, project.github_token, project.pypi_package, project.plausible_site, project.plausible_api_key, project.reddit_subreddits, project.created_at, project.updated_at FROM project LIMIT :param_1",
+      "file": "tests/services/test_insight_service.py",
+      "function": "_ensure_project"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT project.id, project.slug, project.name, project.owner_user_id, project.organization_id, project.github_owner, project.github_repo, project.github_token, project.pypi_package, project.plausible_site, project.plausible_api_key, project.reddit_subreddits, project.created_at, project.updated_at FROM project LIMIT :param_1",
+      "file": "tests/services/test_query_service.py",
+      "function": "_ensure_project"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT project.id, project.slug, project.name, project.owner_user_id, project.organization_id, project.github_owner, project.github_repo, project.github_token, project.pypi_package, project.plausible_site, project.plausible_api_key, project.reddit_subreddits, project.created_at, project.updated_at FROM project WHERE project.slug = :slug_1 AND project.owner_user_id = :owner_user_id_1",
+      "file": "app/services/insights/queries/projects.py",
+      "function": "project_by_slug"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/components/backend/api/auth/router.py",
+      "function": "_current_session_family"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "revoke"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "rotate"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token, refresh_token.user_id, refresh_token.family_id, refresh_token.expires_at, refresh_token.revoked_at, refresh_token.created_at, refresh_token.source, refresh_token.user_agent, refresh_token.ip, refresh_token.last_used_at FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "list_active_for_user"
+    }
+  ]
+}

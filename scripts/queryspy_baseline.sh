@@ -8,13 +8,17 @@
 # changes every entry for that table: after a schema change on a service,
 # run this or the matrix fails on entries that are only stale.
 #
+# Each stack's findings land in tests/fixtures/queryspy/<stack>.json and
+# the shipped baseline is their union, so sweeping one stack can never
+# touch another's rows.
+#
 #   make queryspy-baseline               # all database stacks (~40 min)
 #   make queryspy-baseline STACKS=finance,finance_auth,everything
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${QUERYSPY_SWEEP_DIR:-$(mktemp -d /tmp/queryspy-sweep.XXXXXX)}"
 ONLY="${STACKS:-}"
-mkdir -p "$OUT/baselines"
+mkdir -p "$OUT/baselines" "$REPO/tests/fixtures/queryspy"
 cd "$REPO" || exit 1
 
 uv run python - > "$OUT/stacks.txt" <<'PY'
@@ -37,21 +41,23 @@ while IFS='|' read -r name comps svcs; do
   echo "$name: $(grep -oE '[0-9]+ (passed|failed)' "$OUT/$name.qs.log" | tr '\n' ' ')"
 done < "$OUT/stacks.txt"
 
-# Merge. With STACKS set, entries for stacks not regenerated are kept from
-# the current fixture so a partial run never drops another service's rows.
-uv run python - "$OUT/baselines" "$REPO/tests/fixtures/queryspy-baseline.json" "$ONLY" <<'PY'
+# Each stack owns its own file under tests/fixtures/queryspy/, so a
+# partial sweep rewrites only the stacks it ran. The shipped baseline is
+# the union of all of them. Merging into one file used to lose that
+# ownership: the union kept old rows only when their FILE appeared in no
+# fresh baseline, so sweeping a broad stack like ``everything`` replaced
+# the rows of every service it covers and silently narrowed the narrow
+# stacks that also touch those files.
+for f in "$OUT"/baselines/*.json; do
+  [ -e "$f" ] || continue
+  cp "$f" "$REPO/tests/fixtures/queryspy/$(basename "$f")"
+done
+
+uv run python - "$REPO/tests/fixtures/queryspy" "$REPO/tests/fixtures/queryspy-baseline.json" <<'PY'
 import json, sys, glob, pathlib
-src, dst, only = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+src, dst = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 key = lambda e: (e["kind"], e["label"], e["file"], e["function"])
 merged = {}
-if only and dst.exists():
-    # Keep entries that cannot have come from a regenerated stack: every
-    # regenerated stack renders the same file paths, so drop the old rows
-    # whose file appears in any fresh baseline and keep the rest.
-    fresh_files = {e["file"] for f in glob.glob(f"{src}/*.json") for e in json.load(open(f))["entries"]}
-    for e in json.load(open(dst))["entries"]:
-        if e["file"] not in fresh_files:
-            merged[key(e)] = e
 for f in sorted(glob.glob(f"{src}/*.json")):
     for e in json.load(open(f))["entries"]:
         merged[key(e)] = e
@@ -62,5 +68,6 @@ dst.write_text(json.dumps(doc, indent=2) + "\n")
 # template's known debt instead of failing on it.
 shipped = dst.parents[2] / "aegis/templates/copier-aegis-project/{{ project_slug }}/.queryspy-baseline.json"
 shipped.write_text(dst.read_text())
-print(f"wrote {dst}: {len(doc['entries'])} entries")
+stacks = len(glob.glob(f"{src}/*.json"))
+print(f"wrote {dst}: {len(doc['entries'])} entries from {stacks} stacks")
 PY

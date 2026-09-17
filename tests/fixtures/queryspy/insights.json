@@ -1,0 +1,78 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT apscheduler_jobs.id, apscheduler_jobs.next_run_time, apscheduler_jobs.job_state FROM apscheduler_jobs ORDER BY apscheduler_jobs.next_run_time DESC NULLS LAST",
+      "file": "app/services/scheduler/scheduled_task_manager.py",
+      "function": "list_tasks"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM insight_metric",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metric_count"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM job_execution WHERE job_execution.job_id = :job_id_1",
+      "file": "app/services/scheduler/scheduled_task_manager.py",
+      "function": "list_executions"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_event.id, insight_event.date, insight_event.event_type, insight_event.description, insight_event.metadata, insight_event.origin, insight_event.created_at FROM insight_event WHERE insight_event.event_type IN (__[POSTCOMPILE_event_type_1])",
+      "file": "app/services/insights/queries/events.py",
+      "function": "events_where"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric.id, insight_metric.date, insight_metric.metric_type_id, insight_metric.value, insight_metric.period, insight_metric.metadata, insight_metric.created_at FROM insight_metric WHERE insight_metric.metric_type_id = :metric_type_id_1 AND insight_metric.date = :date_1 AND insight_metric.period = :period_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metric_on"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric.id, insight_metric.date, insight_metric.metric_type_id, insight_metric.value, insight_metric.period, insight_metric.metadata, insight_metric.created_at FROM insight_metric WHERE insight_metric.metric_type_id IN (__[POSTCOMPILE_metric_type_id_1]) AND insight_metric.period = :period_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metrics_where"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric_type.id, insight_metric_type.source_id, insight_metric_type.key, insight_metric_type.display_name, insight_metric_type.unit, insight_metric_type.metadata, insight_metric_type.created_at FROM insight_metric_type WHERE insight_metric_type.key = :key_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metric_type_by_key"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_metric_type.id, insight_metric_type.source_id, insight_metric_type.key, insight_metric_type.display_name, insight_metric_type.unit, insight_metric_type.metadata, insight_metric_type.created_at FROM insight_metric_type WHERE insight_metric_type.key = :key_1 AND insight_metric_type.source_id = :source_id_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "metric_type_by_key"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_record.id, insight_record.metric_type_id, insight_record.value, insight_record.date_achieved, insight_record.previous_value, insight_record.previous_date, insight_record.context, insight_record.metadata, insight_record.updated_at, insight_record.created_at FROM insight_record WHERE insight_record.metric_type_id = :metric_type_id_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "record_for_type"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_source.id, insight_source.key, insight_source.display_name, insight_source.collection_interval_hours, insight_source.requires_auth, insight_source.enabled, insight_source.last_collected_at, insight_source.metadata, insight_source.created_at FROM insight_source WHERE insight_source.enabled = true ORDER BY insight_source.id",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "sources"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT insight_source.id, insight_source.key, insight_source.display_name, insight_source.collection_interval_hours, insight_source.requires_auth, insight_source.enabled, insight_source.last_collected_at, insight_source.metadata, insight_source.created_at FROM insight_source WHERE insight_source.key = :key_1",
+      "file": "app/services/insights/queries/metrics.py",
+      "function": "source_by_key"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT job_execution.id, job_execution.job_id, job_execution.job_name, job_execution.scheduled_run_time, job_execution.started_at, job_execution.finished_at, job_execution.duration_ms, job_execution.status, job_execution.error_message, job_execution.traceback FROM job_execution WHERE job_execution.job_id = :job_id_1 ORDER BY job_execution.started_at DESC LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/scheduler/scheduled_task_manager.py",
+      "function": "list_executions"
+    }
+  ]
+}

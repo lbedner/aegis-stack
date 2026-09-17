@@ -1888,12 +1888,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT large_language_model.id, large_language_model.model_id, large_language_model.title, large_language_model.description, large_language_model.context_window, large_language_model.training_data, large_language_model.streamable, large_language_model.enabled, large_language_model.color, large_language_model.icon_path, large_language_model.license, large_language_model.source_url, large_language_model.released_on, large_language_model.family, large_language_model.served_by_org_id, large_language_model.made_by_org_id FROM large_language_model WHERE large_language_model.served_by_org_id IN (__[POSTCOMPILE_served_by_org_id_1])",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "models_served_by"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT llm_active_selection.id, llm_active_selection.owner_user_id, llm_active_selection.model_id, llm_active_selection.provider, llm_active_selection.updated_at FROM llm_active_selection WHERE llm_active_selection.owner_user_id = :owner_user_id_1",
       "file": "app/services/ai/domains/llm/queries.py",
       "function": "active_selection"
@@ -1912,21 +1906,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT llm_deployment.llm_id AS llm_deployment_llm_id, llm_deployment.id AS llm_deployment_id, llm_deployment.org_id AS llm_deployment_org_id, llm_deployment.speed AS llm_deployment_speed, llm_deployment.intelligence AS llm_deployment_intelligence, llm_deployment.reasoning AS llm_deployment_reasoning, llm_deployment.output_max_tokens AS llm_deployment_output_max_tokens, llm_deployment.function_calling AS llm_deployment_function_calling, llm_deployment.input_cache AS llm_deployment_input_cache, llm_deployment.structured_output AS llm_deployment_structured_output FROM llm_deployment WHERE llm_deployment.llm_id IN (__[POSTCOMPILE_primary_keys])",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "models_served_by"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT llm_modality.id, llm_modality.llm_id, llm_modality.modality, llm_modality.direction FROM llm_modality",
       "file": "app/services/ai/domains/llm/etl/queries.py",
       "function": "all_rows"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT llm_modality.llm_id AS llm_modality_llm_id, llm_modality.id AS llm_modality_id, llm_modality.modality AS llm_modality_modality, llm_modality.direction AS llm_modality_direction FROM llm_modality WHERE llm_modality.llm_id IN (__[POSTCOMPILE_primary_keys])",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "models_served_by"
     },
     {
       "kind": "repeated_statement",
@@ -1954,21 +1936,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT llm_price.id, llm_price.org_id, llm_price.llm_id, llm_price.input_cost_per_token, llm_price.output_cost_per_token, llm_price.cache_input_cost_per_token, llm_price.effective_date FROM llm_price WHERE llm_price.llm_id = :llm_id_1 ORDER BY llm_price.effective_date DESC",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "latest_price_for_model"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT llm_price.id, llm_price.org_id, llm_price.llm_id, llm_price.input_cost_per_token, llm_price.output_cost_per_token, llm_price.cache_input_cost_per_token, llm_price.effective_date FROM llm_price WHERE llm_price.llm_id IN (__[POSTCOMPILE_llm_id_1]) ORDER BY llm_price.llm_id, llm_price.effective_date DESC",
       "file": "tests/services/ai/test_llm_service.py",
       "function": "exec"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT llm_price.llm_id AS llm_price_llm_id, llm_price.id AS llm_price_id, llm_price.org_id AS llm_price_org_id, llm_price.input_cost_per_token AS llm_price_input_cost_per_token, llm_price.output_cost_per_token AS llm_price_output_cost_per_token, llm_price.cache_input_cost_per_token AS llm_price_cache_input_cost_per_token, llm_price.effective_date AS llm_price_effective_date FROM llm_price WHERE llm_price.llm_id IN (__[POSTCOMPILE_primary_keys])",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "models_served_by"
     },
     {
       "kind": "repeated_statement",

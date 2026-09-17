@@ -1,0 +1,210 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "column_load",
+      "label": "Agent",
+      "file": "tests/services/ai/test_agent_loader.py",
+      "function": "_add_agent"
+    },
+    {
+      "kind": "column_load",
+      "label": "Agent",
+      "file": "tests/services/ai/test_agent_registry.py",
+      "function": "_add_agent"
+    },
+    {
+      "kind": "column_load",
+      "label": "Tool",
+      "file": "tests/services/ai/test_agent_loader.py",
+      "function": "test_only_active_tools_are_exposed"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT agent.id, agent.slug, agent.name, agent.description, agent.category, agent.model_id, agent.system_prompt, agent.temperature, agent.max_tokens, agent.memory_modules, agent.knowledge_base_ids, agent.is_active, agent.code_mode, agent.created_at, agent.updated_at FROM agent WHERE agent.slug = :slug_1",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "agent_by_slug"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT agent.id, agent.slug, agent.name, agent.description, agent.category, agent.model_id, agent.system_prompt, agent.temperature, agent.max_tokens, agent.memory_modules, agent.knowledge_base_ids, agent.is_active, agent.code_mode, agent.created_at, agent.updated_at FROM agent WHERE agent.slug = :slug_1",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "load_agent_fixtures"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT agent_1.id AS agent_1_id, tool.id AS tool_id, tool.name AS tool_name, tool.description AS tool_description, tool.is_active AS tool_is_active FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "agent_by_slug"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT agent_user_memory.id, agent_user_memory.user_id, agent_user_memory.memory, agent_user_memory.created_at, agent_user_memory.updated_at FROM agent_user_memory WHERE agent_user_memory.user_id = :user_id_1",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "user_memory_for"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT coalesce(sum(llm_usage.input_tokens), :coalesce_1) AS input_tokens, coalesce(sum(llm_usage.output_tokens), :coalesce_2) AS output_tokens, coalesce(sum(llm_usage.total_cost), :coalesce_3) AS total_cost, count(llm_usage.id) AS total_requests, sum(CAST(llm_usage.success AS INTEGER)) AS success_count FROM llm_usage",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "usage_totals"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT conversation.id AS conversation_id, conversation.title AS conversation_title, conversation.user_id AS conversation_user_id, conversation.created_at AS conversation_created_at, conversation.updated_at AS conversation_updated_at, conversation.meta_data AS conversation_meta_data FROM conversation WHERE conversation.id = :pk_1",
+      "file": "app/services/ai/domains/chat/chat_kit/history.py",
+      "function": "append_turn"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT conversation.id AS conversation_id, conversation.title AS conversation_title, conversation.user_id AS conversation_user_id, conversation.created_at AS conversation_created_at, conversation.updated_at AS conversation_updated_at, conversation.meta_data AS conversation_meta_data FROM conversation WHERE conversation.id = :pk_1",
+      "file": "app/services/ai/domains/chat/conversation.py",
+      "function": "_save_to_db"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT conversation.id, conversation.title, conversation.user_id, conversation.created_at, conversation.updated_at, conversation.meta_data FROM conversation LEFT OUTER JOIN sentiment_analysis ON sentiment_analysis.conversation_id = conversation.id WHERE sentiment_analysis.id IS NULL ORDER BY conversation.updated_at LIMIT :param_1",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "unscored_conversations"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT conversation.id, conversation.title, conversation.user_id, conversation.created_at, conversation.updated_at, conversation.meta_data FROM conversation ORDER BY conversation.updated_at DESC",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversations_with_messages"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT conversation_message.conversation_id AS conversation_message_conversation_id, conversation_message.id AS conversation_message_id, conversation_message.role AS conversation_message_role, conversation_message.content AS conversation_message_content, conversation_message.timestamp AS conversation_message_timestamp, conversation_message.meta_data AS conversation_message_meta_data FROM conversation_message WHERE conversation_message.conversation_id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversations_with_messages"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT conversation_message.id AS conversation_message_id, conversation_message.conversation_id AS conversation_message_conversation_id, conversation_message.role AS conversation_message_role, conversation_message.content AS conversation_message_content, conversation_message.timestamp AS conversation_message_timestamp, conversation_message.meta_data AS conversation_message_meta_data FROM conversation_message WHERE conversation_message.id = :pk_1",
+      "file": "app/services/ai/domains/chat/conversation.py",
+      "function": "_save_to_db"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT conversation_message.id, conversation_message.conversation_id, conversation_message.role, conversation_message.content, conversation_message.timestamp, conversation_message.meta_data FROM conversation_message WHERE conversation_message.conversation_id = :conversation_id_1 ORDER BY conversation_message.timestamp",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "messages_for_conversation"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM conversation",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversation_count"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM conversation_message",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "message_count"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(distinct(conversation.meta_data[:meta_data_1])) AS count_1 FROM conversation WHERE conversation.meta_data[:meta_data_1] IS NOT NULL",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "distinct_user_count"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT large_language_model.id, large_language_model.model_id, large_language_model.title, large_language_model.description, large_language_model.context_window, large_language_model.training_data, large_language_model.streamable, large_language_model.enabled, large_language_model.color, large_language_model.icon_path, large_language_model.license, large_language_model.source_url, large_language_model.released_on, large_language_model.family, large_language_model.served_by_org_id, large_language_model.made_by_org_id FROM large_language_model",
+      "file": "app/services/ai/domains/llm/etl/queries.py",
+      "function": "all_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT large_language_model.id, large_language_model.model_id, large_language_model.title, large_language_model.description, large_language_model.context_window, large_language_model.training_data, large_language_model.streamable, large_language_model.enabled, large_language_model.color, large_language_model.icon_path, large_language_model.license, large_language_model.source_url, large_language_model.released_on, large_language_model.family, large_language_model.served_by_org_id, large_language_model.made_by_org_id FROM large_language_model WHERE large_language_model.model_id = :model_id_1",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "llm_by_model_id"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_active_selection.id, llm_active_selection.owner_user_id, llm_active_selection.model_id, llm_active_selection.provider, llm_active_selection.updated_at FROM llm_active_selection WHERE llm_active_selection.owner_user_id = :owner_user_id_1",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "active_selection"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_active_selection.id, llm_active_selection.owner_user_id, llm_active_selection.model_id, llm_active_selection.provider, llm_active_selection.updated_at FROM llm_active_selection WHERE llm_active_selection.owner_user_id IS NULL",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "active_selection"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_deployment.id, llm_deployment.llm_id, llm_deployment.org_id, llm_deployment.speed, llm_deployment.intelligence, llm_deployment.reasoning, llm_deployment.output_max_tokens, llm_deployment.function_calling, llm_deployment.input_cache, llm_deployment.structured_output FROM llm_deployment",
+      "file": "app/services/ai/domains/llm/etl/queries.py",
+      "function": "all_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_modality.id, llm_modality.llm_id, llm_modality.modality, llm_modality.direction FROM llm_modality",
+      "file": "app/services/ai/domains/llm/etl/queries.py",
+      "function": "all_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_org.id AS llm_org_id, llm_org.slug AS llm_org_slug, llm_org.name AS llm_org_name, llm_org.description AS llm_org_description, llm_org.homepage AS llm_org_homepage, llm_org.icon_b64 AS llm_org_icon_b64, llm_org.color AS llm_org_color, llm_org.icon_path AS llm_org_icon_path, llm_org.api_base AS llm_org_api_base, llm_org.auth_method AS llm_org_auth_method, llm_org.source AS llm_org_source, llm_org.created_at AS llm_org_created_at, llm_org.updated_at AS llm_org_updated_at FROM llm_org WHERE llm_org.id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "tests/services/ai/test_llm_service.py",
+      "function": "all"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_org.id, llm_org.slug, llm_org.name, llm_org.description, llm_org.homepage, llm_org.icon_b64, llm_org.color, llm_org.icon_path, llm_org.api_base, llm_org.auth_method, llm_org.source, llm_org.created_at, llm_org.updated_at FROM llm_org",
+      "file": "app/services/ai/domains/llm/etl/queries.py",
+      "function": "all_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_org.id, llm_org.slug, llm_org.name, llm_org.description, llm_org.homepage, llm_org.icon_b64, llm_org.color, llm_org.icon_path, llm_org.api_base, llm_org.auth_method, llm_org.source, llm_org.created_at, llm_org.updated_at FROM llm_org WHERE llm_org.name IN (__[POSTCOMPILE_name_1])",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "orgs_named"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_price.id, llm_price.org_id, llm_price.llm_id, llm_price.input_cost_per_token, llm_price.output_cost_per_token, llm_price.cache_input_cost_per_token, llm_price.effective_date FROM llm_price",
+      "file": "app/services/ai/domains/llm/etl/queries.py",
+      "function": "all_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_price.id, llm_price.org_id, llm_price.llm_id, llm_price.input_cost_per_token, llm_price.output_cost_per_token, llm_price.cache_input_cost_per_token, llm_price.effective_date FROM llm_price WHERE llm_price.llm_id IN (__[POSTCOMPILE_llm_id_1]) ORDER BY llm_price.llm_id, llm_price.effective_date DESC",
+      "file": "tests/services/ai/test_llm_service.py",
+      "function": "exec"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_usage.model_id, coalesce(large_language_model.title, llm_usage.model_id) AS title, coalesce(llm_org.name, :coalesce_1) AS vendor, coalesce(llm_org.color, :coalesce_2) AS vendor_color, count(llm_usage.id) AS requests, coalesce(sum(llm_usage.input_tokens + llm_usage.output_tokens), :coalesce_3) AS tokens, coalesce(sum(llm_usage.total_cost), :coalesce_4) AS cost FROM llm_usage LEFT OUTER JOIN large_language_model ON llm_usage.model_id = large_language_model.model_id LEFT OUTER JOIN llm_org ON large_language_model.served_by_org_id = llm_org.id GROUP BY llm_usage.model_id, large_language_model.title, llm_org.name, llm_org.color ORDER BY count(llm_usage.id) DESC",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "usage_by_model"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_usage.timestamp, llm_usage.model_id, llm_usage.input_tokens, llm_usage.output_tokens, llm_usage.total_cost, llm_usage.success, llm_usage.action FROM llm_usage ORDER BY llm_usage.timestamp DESC LIMIT :param_1",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "recent_usage"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT max(conversation_message.timestamp) AS max_1 FROM conversation_message WHERE conversation_message.conversation_id = :conversation_id_1",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "latest_message_timestamp"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT memory_module.id, memory_module.slug, memory_module.name, memory_module.description, memory_module.category, memory_module.prompt_content, memory_module.fetch_function, memory_module.context_key, memory_module.supports_days_back, memory_module.default_days_back, memory_module.priority, memory_module.token_estimate, memory_module.is_active, memory_module.created_at, memory_module.updated_at FROM memory_module WHERE memory_module.slug = :slug_1",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "memory_module_by_slug"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT tool.name FROM tool",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "load_agent_fixtures"
+    }
+  ]
+}

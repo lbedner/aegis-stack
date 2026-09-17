@@ -1,0 +1,90 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.id = :id_1",
+      "file": "app/services/blog/service.py",
+      "function": "_get_post_model"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.slug = :slug_1",
+      "file": "app/services/blog/service.py",
+      "function": "_ensure_slug_available"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.slug = :slug_1",
+      "file": "app/services/blog/service.py",
+      "function": "_get_post_by_slug_any_status"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.slug = :slug_1 AND blog_post.id != :id_1",
+      "file": "app/services/blog/service.py",
+      "function": "_ensure_slug_available"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.slug = :slug_1 AND blog_post.status = :status_1",
+      "file": "app/services/blog/service.py",
+      "function": "_get_post_by_slug"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.status = :status_1 ORDER BY blog_post.created_at DESC LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/blog/service.py",
+      "function": "list_posts"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.status = :status_1 ORDER BY blog_post.published_at DESC LIMIT :param_1",
+      "file": "app/services/blog/service.py",
+      "function": "get_health_summary"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post.status, count(*) AS count_1 FROM blog_post GROUP BY blog_post.status",
+      "file": "app/services/blog/queries.py",
+      "function": "count_posts_by_status"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post_tag.post_id, blog_tag.id, blog_tag.name, blog_tag.slug, blog_tag.created_at FROM blog_post_tag JOIN blog_tag ON blog_tag.id = blog_post_tag.tag_id WHERE blog_post_tag.post_id IN (__[POSTCOMPILE_post_id_1]) ORDER BY blog_tag.name",
+      "file": "app/services/blog/queries.py",
+      "function": "tags_for_posts"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_tag.id, blog_tag.name, blog_tag.slug, blog_tag.created_at FROM blog_tag WHERE blog_tag.id = :id_1",
+      "file": "app/services/blog/service.py",
+      "function": "_get_tag_model"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_tag.id, blog_tag.name, blog_tag.slug, blog_tag.created_at FROM blog_tag WHERE blog_tag.slug = :slug_1",
+      "file": "app/services/blog/service.py",
+      "function": "_get_or_create_tag"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM blog_post WHERE blog_post.status = :status_1",
+      "file": "app/services/blog/service.py",
+      "function": "list_posts"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM blog_post WHERE blog_post.status = :status_1 AND blog_post.updated_at < :updated_at_1",
+      "file": "app/services/blog/service.py",
+      "function": "get_health_summary"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM blog_tag",
+      "file": "app/services/blog/service.py",
+      "function": "get_health_summary"
+    }
+  ]
+}

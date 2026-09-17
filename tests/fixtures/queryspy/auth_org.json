@@ -1,0 +1,138 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "column_load",
+      "label": "User",
+      "file": "tests/api/test_auth_endpoints.py",
+      "function": "_admin_and_target"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
+      "file": "app/services/auth/users.py",
+      "function": "get_user_by_email"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
+      "file": "app/services/auth/users.py",
+      "function": "hard_delete_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
+      "file": "app/services/auth/users.py",
+      "function": "restore_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM \"user\"",
+      "file": "app/services/auth/users.py",
+      "function": "create_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM organization",
+      "file": "app/services/auth/health.py",
+      "function": "check_auth_service_health"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS total, sum(CASE WHEN (\"user\".is_verified = true) THEN :param_1 ELSE :param_2 END) AS verified FROM \"user\"",
+      "file": "app/services/auth/health.py",
+      "function": "check_auth_service_health"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT email_verification_token.id, email_verification_token.user_id, email_verification_token.token, email_verification_token.created_at, email_verification_token.used FROM email_verification_token WHERE email_verification_token.token = :token_1",
+      "file": "tests/services/test_auth_integration.py",
+      "function": "test_resend_marks_prior_token_used"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT email_verification_token.id, email_verification_token.user_id, email_verification_token.token, email_verification_token.created_at, email_verification_token.used FROM email_verification_token WHERE email_verification_token.user_id = :user_id_1 AND email_verification_token.used = false",
+      "file": "app/services/auth/users.py",
+      "function": "_invalidate_prior_email_verification_tokens"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT org_invite.id, org_invite.organization_id, org_invite.email, org_invite.role, org_invite.invited_by, org_invite.status, org_invite.token, org_invite.created_at, org_invite.expires_at FROM org_invite WHERE org_invite.organization_id = :organization_id_1 AND org_invite.email = :email_1 AND org_invite.status = :status_1",
+      "file": "app/services/auth/invites.py",
+      "function": "_get_pending_invite"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.id = :id_1",
+      "file": "app/services/auth/orgs.py",
+      "function": "hard_delete_org"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.id = :id_1",
+      "file": "app/services/auth/orgs.py",
+      "function": "restore_org"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.id = :id_1",
+      "file": "tests/services/test_org_integration.py",
+      "function": "_org_deleted_at"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization.name, organization.slug, organization.description, organization.is_active, organization.id, organization.created_at, organization.updated_at, organization.deleted_at FROM organization WHERE organization.id = :id_1 AND organization.deleted_at IS NULL",
+      "file": "app/services/auth/orgs.py",
+      "function": "get_org_by_id"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.id, organization_member.organization_id, organization_member.user_id, organization_member.role, organization_member.joined_at FROM organization_member WHERE organization_member.organization_id = :organization_id_1",
+      "file": "app/services/auth/memberships.py",
+      "function": "list_org_members"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.id, organization_member.organization_id, organization_member.user_id, organization_member.role, organization_member.joined_at FROM organization_member WHERE organization_member.organization_id = :organization_id_1 AND organization_member.user_id = :user_id_1",
+      "file": "app/services/auth/memberships.py",
+      "function": "get_member"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.organization_id FROM organization_member JOIN organization ON organization.id = organization_member.organization_id WHERE organization_member.user_id = :user_id_1 AND organization_member.role = :role_1 AND organization.deleted_at IS NULL",
+      "file": "app/services/auth/users.py",
+      "function": "orphaned_sole_owner_org_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT organization_member.organization_id, count(*) AS count_1 FROM organization_member WHERE organization_member.organization_id IN (__[POSTCOMPILE_organization_id_1]) GROUP BY organization_member.organization_id",
+      "file": "app/services/auth/users.py",
+      "function": "orphaned_sole_owner_org_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/components/backend/api/auth/router.py",
+      "function": "_current_session_family"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "revoke"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "rotate"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token, refresh_token.user_id, refresh_token.family_id, refresh_token.expires_at, refresh_token.revoked_at, refresh_token.created_at, refresh_token.source, refresh_token.user_agent, refresh_token.ip, refresh_token.last_used_at FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "list_active_for_user"
+    }
+  ]
+}

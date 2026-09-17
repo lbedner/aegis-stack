@@ -1,0 +1,72 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM document WHERE document.deleted_at IS NULL AND document.received_at >= :received_at_1",
+      "file": "app/services/documents/queries.py",
+      "function": "store_summary"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.id, document.owner_user_id, document.title, document.kind, document.storage_key, document.storage_backend, document.content_hash, document.media_type, document.byte_size, document.page_count, document.document_date, document.received_at, document.source, document.channel, document.supersedes_id, document.protected, document.note, document.meta_data, document.created_at, document.updated_at, document.deleted_at FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_content"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.id, document.owner_user_id, document.title, document.kind, document.storage_key, document.storage_backend, document.content_hash, document.media_type, document.byte_size, document.page_count, document.document_date, document.received_at, document.source, document.channel, document.supersedes_id, document.protected, document.note, document.meta_data, document.created_at, document.updated_at, document.deleted_at FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_content"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.id, document.owner_user_id, document.title, document.kind, document.storage_key, document.storage_backend, document.content_hash, document.media_type, document.byte_size, document.page_count, document.document_date, document.received_at, document.source, document.channel, document.supersedes_id, document.protected, document.note, document.meta_data, document.created_at, document.updated_at, document.deleted_at FROM document WHERE document.id = :id_1 AND document.deleted_at IS NULL",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_id"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.id, document.owner_user_id, document.title, document.kind, document.storage_key, document.storage_backend, document.content_hash, document.media_type, document.byte_size, document.page_count, document.document_date, document.received_at, document.source, document.channel, document.supersedes_id, document.protected, document.note, document.meta_data, document.created_at, document.updated_at, document.deleted_at FROM document WHERE document.id = :id_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_id"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.kind, count(*) AS count_1, coalesce(sum(document.byte_size), :coalesce_2) AS coalesce_1 FROM document WHERE document.deleted_at IS NULL GROUP BY document.kind",
+      "file": "app/services/documents/queries.py",
+      "function": "store_summary"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_page.id, document_page.document_id, document_page.page_number, document_page.status, document_page.method, document_page.text, document_page.image_key, document_page.model, document_page.detail, document_page.created_at, document_page.updated_at FROM document_page WHERE document_page.document_id = :document_id_1 AND document_page.page_number = :page_number_1",
+      "file": "app/services/documents/queries.py",
+      "function": "page_for"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_page.id, document_page.document_id, document_page.page_number, document_page.status, document_page.method, document_page.text, document_page.image_key, document_page.model, document_page.detail, document_page.created_at, document_page.updated_at FROM document_page WHERE document_page.document_id = :document_id_1 ORDER BY document_page.page_number",
+      "file": "app/services/documents/queries.py",
+      "function": "pages_for"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_tag.id, document_tag.document_id, document_tag.label FROM document_tag WHERE document_tag.document_id = :document_id_1 AND document_tag.label = :label_1",
+      "file": "app/services/documents/service.py",
+      "function": "tag"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_tag.id, document_tag.document_id, document_tag.label FROM document_tag WHERE document_tag.document_id = :document_id_1 ORDER BY document_tag.label",
+      "file": "app/services/documents/queries.py",
+      "function": "tags_for"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_tag.id, document_tag.document_id, document_tag.label FROM document_tag WHERE document_tag.document_id IN (__[POSTCOMPILE_document_id_1]) ORDER BY document_tag.document_id, document_tag.label",
+      "file": "app/services/documents/queries.py",
+      "function": "tags_for_many"
+    }
+  ]
+}

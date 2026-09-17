@@ -67,7 +67,6 @@ BUDGET: dict[str, int] = {
     # a third module. Debt recorded at size; the fix is a schemas module.
     "services/ai/models/__init__.py.jinja": 457,
     "cli/ai.py.jinja": 2338,
-    "components/frontend/dashboard/modals/modal_sections.py": 2093,
     "components/frontend/dashboard/modals/voice_settings_tab.py": 1649,
     "services/payment/service.py.jinja": 1633,
     "components/frontend/dashboard/modals/blog_modal.py": 1454,

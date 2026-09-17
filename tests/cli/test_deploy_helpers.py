@@ -439,3 +439,103 @@ def test_both_deploy_paths_sync_the_same_way() -> None:
     command = deploy_mod._working_tree_rsync(source, "user@host:/srv/app/")
     assert "--delete" in command
     assert command[-2:] == [f"{source}/", "user@host:/srv/app/"]
+
+
+# ---------------------------------------------------------------------------
+# BUILD_ID: the deployed commit, stamped into the server's .env.
+#
+# The generated app namespaces its cached payloads by this value, so a
+# deploy has to move it or new code keeps serving what the old code built
+# until the TTL expires.
+# ---------------------------------------------------------------------------
+
+
+def _git_commit(path: Path) -> None:
+    subprocess.run(["git", "-C", str(path), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(path), "config", "user.email", "t@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(path), "config", "user.name", "T"], check=True)
+    (path / "a.txt").write_text("one")
+    subprocess.run(["git", "-C", str(path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(path), "commit", "-qm", "one"], check=True)
+
+
+def test_build_id_is_the_short_commit(tmp_path: Path) -> None:
+    _git_commit(tmp_path)
+
+    expected = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    assert deploy_mod._build_id(tmp_path) == expected
+
+
+def test_build_id_marks_a_dirty_tree(tmp_path: Path) -> None:
+    """Uncommitted changes ship code no commit describes, so that code
+    gets its own namespace instead of reusing the clean commit's."""
+    _git_commit(tmp_path)
+    clean = deploy_mod._build_id(tmp_path)
+
+    (tmp_path / "a.txt").write_text("two")
+    dirty = deploy_mod._build_id(tmp_path)
+
+    assert dirty != clean
+    assert dirty.startswith(f"{clean}-dirty-")
+
+
+def test_build_id_without_a_repo_is_not_fatal(tmp_path: Path) -> None:
+    """A deploy from an exported tree still has to produce a namespace."""
+    assert deploy_mod._build_id(tmp_path) == "unknown"
+
+
+def test_upload_env_stamps_the_build_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _git_commit(tmp_path)
+    (tmp_path / ".env.deploy").write_text("FOO=bar\n")
+    remote: list[str] = []
+    monkeypatch.setattr(
+        deploy_mod,
+        "_run_remote",
+        lambda host, user, command: remote.append(command),
+    )
+    real_run = subprocess.run
+
+    def fake_run(cmd, *a, **k):  # type: ignore[no-untyped-def]
+        # Let the git calls in ``_build_id`` run for real; stub the scp.
+        if cmd and cmd[0] == "git":
+            return real_run(cmd, *a, **k)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(deploy_mod.subprocess, "run", fake_run)
+
+    deploy_mod._upload_env(tmp_path, "h", "u", "/opt/app")
+
+    assert len(remote) == 1
+    command = remote[0]
+    # Replacing, not appending: a redeploy must not leave two BUILD_ID lines
+    # with the stale one winning depending on how the file is read.
+    assert "sed -i '/^BUILD_ID=/d'" in command
+    assert "BUILD_ID=" in command
+
+
+def test_upload_env_stamps_even_without_a_local_env_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The server may already hold its own ``.env``; the stamp still has to
+    land or that deploy serves stale payloads."""
+    _git_commit(tmp_path)
+    remote: list[str] = []
+    monkeypatch.setattr(
+        deploy_mod,
+        "_run_remote",
+        lambda host, user, command: remote.append(command),
+    )
+
+    deploy_mod._upload_env(tmp_path, "h", "u", "/opt/app")
+
+    assert len(remote) == 1
+    assert "BUILD_ID=" in remote[0]

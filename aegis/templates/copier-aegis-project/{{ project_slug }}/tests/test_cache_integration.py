@@ -21,8 +21,10 @@ class TestCacheIntegration:
         )
         assert resp1.status_code == 200
 
-        # Cache should now have the data
-        cached = await cache.get("insights:all")
+        # Cache should now have the data, under the build's namespace.
+        from app.services.insights.constants import all_insights_key
+
+        cached = await cache.get(all_insights_key())
         assert cached is not None
 
         resp2 = async_client_with_db.get(  # type: ignore[union-attr]

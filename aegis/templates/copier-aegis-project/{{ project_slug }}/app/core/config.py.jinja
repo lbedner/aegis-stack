@@ -104,6 +104,9 @@ class Settings(
     # Docker settings (used by docker-compose)
     AEGIS_STACK_TAG: str = "{{ project_slug }}:latest"
     AEGIS_STACK_VERSION: str = "dev"
+    # Deployed commit, stamped by ``aegis deploy``; cached payloads are
+    # namespaced by it. See ``services/insights/constants.py``.
+    BUILD_ID: str = "dev"
 
     # Health monitoring and alerting
     # Health checks are available via API endpoints (/health/)

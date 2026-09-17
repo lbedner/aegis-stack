@@ -212,6 +212,10 @@ class StatusOverviewPanel(ft.Container):
         )
         self.content = self._table
 
+        # What the current table was built from, so an unchanged refresh
+        # can be skipped entirely.
+        self._components: dict[str, ComponentStatus] = {}
+
     def update_components(self, components: dict[str, ComponentStatus]) -> None:
         """
         Update the panel with new component data.
@@ -219,6 +223,14 @@ class StatusOverviewPanel(ft.Container):
         Args:
             components: Dictionary mapping component names to ComponentStatus
         """
+        # Rebuilding assigns a brand new DataTable, so every row and cell
+        # is a new object and Flet sends a full replacement. Measured at
+        # 231 controls with 1 surviving a refresh whose rendered output
+        # was identical - which in the steady state is every refresh.
+        if self._components == components:
+            return
+        self._components = dict(components)
+
         # Define display order (most important first)
         display_order = [
             "backend",

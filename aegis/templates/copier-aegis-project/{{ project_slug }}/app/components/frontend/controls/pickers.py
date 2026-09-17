@@ -36,7 +36,7 @@ from app.components.frontend.controls.buttons import (
     PULSE_BUTTON_COMPACT_RADIUS,
     PulseButton,
 )
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.dropdown import Dropdown
 from app.components.frontend.controls.form_fields import FormTextField
 from app.components.frontend.controls.text import SecondaryText
@@ -546,12 +546,10 @@ class CategoryPickerField(ft.Container):
             return
         page = self.page
         rows_column = ft.Column(spacing=0, tight=True, scroll=ft.ScrollMode.AUTO)
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            page.update()
+            dialog_handle.close(page)
 
         def _pick(key: str) -> None:
             self.value = key
@@ -594,6 +592,7 @@ class CategoryPickerField(ft.Container):
             _close()
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=self._label,
             body=ft.Column(
                 [

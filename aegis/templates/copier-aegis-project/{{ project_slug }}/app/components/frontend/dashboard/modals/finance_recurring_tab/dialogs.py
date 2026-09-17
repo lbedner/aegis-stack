@@ -14,7 +14,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.form_fields import (
     FormDateField,
     FormTextField,
@@ -137,12 +137,10 @@ class StreamDialogsMixin(RecurringTabState):
                 ).launch(self.page)
                 return
             items = data.get("items", [])
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _cancel() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         async def _pick(txn: dict) -> None:
             await _cancel()
@@ -231,6 +229,7 @@ class StreamDialogsMixin(RecurringTabState):
                 )
             )
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=f"Which payment was {stream.get('name')}?{position}",
             body=ft.Column(
                 rows,
@@ -293,12 +292,10 @@ class StreamDialogsMixin(RecurringTabState):
             selected_days=3,
             on_change=_on_pick,
         )
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _cancel() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         async def _apply() -> None:
             from app.components.frontend.state.session_state import (
@@ -341,6 +338,7 @@ class StreamDialogsMixin(RecurringTabState):
 
         count = len(stream_ids)
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=("Pause this bill" if count == 1 else f"Pause {count} bills"),
             body=ft.Column(
                 [

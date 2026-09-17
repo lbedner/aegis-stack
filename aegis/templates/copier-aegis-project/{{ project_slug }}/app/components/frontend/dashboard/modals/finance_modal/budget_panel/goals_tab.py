@@ -16,7 +16,7 @@ from app.components.frontend.controls import (
     WarningText,
 )
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.form_fields import (
     FormTextField,
 )
@@ -153,12 +153,10 @@ class GoalsTabMixin(GoalEditorMixin):
             ).launch(self.page)
             return
         amount_field = FormTextField(label="Amount ($)", width=320)
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         async def _save() -> None:
             from app.components.frontend.state.session_state import (
@@ -181,6 +179,7 @@ class GoalsTabMixin(GoalEditorMixin):
             await self._load()
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=f"Add to {goal.get('name', 'goal')}",
             body=ft.Column([amount_field], tight=True),
             actions=[

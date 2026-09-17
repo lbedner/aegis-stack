@@ -13,7 +13,7 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls.buttons import BaseIconButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.text import SecondaryText

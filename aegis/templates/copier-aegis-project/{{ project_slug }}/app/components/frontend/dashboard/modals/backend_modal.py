@@ -511,7 +511,7 @@ class OverviewTab(ft.Container):
         # CPU metric
         if cpu_data and cpu_data.metadata:
             cpu_percent = cpu_data.metadata.get("percent_used", 0.0)
-            cpu_cores = cpu_data.metadata.get("core_count", 0)
+            cpu_cores = cpu_data.metadata.get("cpu_count", 0)
             cpu_color = _get_metric_color(cpu_percent)
             system_metrics.append(
                 create_progress_indicator(

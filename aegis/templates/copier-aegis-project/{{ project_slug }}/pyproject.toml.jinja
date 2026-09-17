@@ -70,6 +70,13 @@ dependencies = [
 {%- endif %}
 {%- if include_htmx %}
     "jinja2>=3.1.0",
+{%- if not include_ai %}
+    # The web frontend's ``markdown`` filter renders it. Pinned here as
+    # well as under the AI extra because the filter belongs to the
+    # frontend: a project with htmx and no AI still has a renderer, and
+    # without this its templates module fails at import.
+    "marko==2.1.3",
+{%- endif %}
 {%- endif %}
 {%- if include_auth %}
     "python-jose[cryptography]==3.3.0",

@@ -343,8 +343,13 @@ class UseModelControl(ft.Container):
         self.update()
 
 
-class LoadModelButton(ft.Container):
-    """Load button for cold models with loading state and error handling."""
+class ModelActionButton(ft.Container):
+    """Load or unload a model, with its own progress and error states.
+
+    One class rather than two: LoadModelButton and UnloadModelButton ran
+    to 163 lines that differed in the verb, the label, the button
+    variant, and which OllamaClient method they called.
+    """
 
     def __init__(
         self,
@@ -352,156 +357,68 @@ class LoadModelButton(ft.Container):
         page: ft.Page,
         ollama_url: str,
         dialog: OllamaDetailDialog | None = None,
+        *,
+        action: str = "load",
     ) -> None:
         """
-        Initialize load model button.
-
         Args:
-            model_name: Name of the model to load
+            model_name: Name of the model to act on
             page: Flet page instance for updates
             ollama_url: Ollama server URL
-            dialog: Parent dialog for refreshing data after model load
+            dialog: Parent dialog, refreshed after the action succeeds
+            action: ``"load"`` or ``"unload"``
         """
         super().__init__()
         self._model_name = model_name
         self._page = page
         self._ollama_url = ollama_url
         self._dialog = dialog
-        # Only under the pointer: a Load button on every row turns the table
-        # into a wall of controls and buries the data it is meant to describe.
+        self._action = action
+        # Only under the pointer: an action button on every row turns the
+        # table into a wall of controls and buries the data it describes.
         self.reveal_on_hover = True
-
-        self._button = PulseButton(
-            on_click_callable=self._on_load_click,
-            text="Load",
+        self.content = PulseButton(
+            on_click_callable=self._on_click,
+            text=action.capitalize(),
+            # Unload is the destructive-ish one and reads amber; load
+            # takes PulseButton's own default rather than passing None,
+            # which the button rejects outright.
+            variant="amber" if action == "unload" else "teal",
             compact=True,
         )
-        self.content = self._button
 
-    async def _on_load_click(self) -> None:
-        """Handle Load button click - warm up the model."""
-        # Pin visible: a spinner that disappears the moment the pointer moves
-        # off the row looks like the click did nothing.
-        self.reveal_on_hover = False
-        self.opacity = 1
-        # Show loading spinner
+    def _failed(self, text: str) -> PulseButton:
+        """The button becomes its own retry."""
+        return PulseButton(
+            on_click_callable=self._on_click,
+            text=text,
+            variant="stop",
+            compact=True,
+        )
+
+    async def _on_click(self) -> None:
+        """Run the action, showing progress and leaving a retry on failure."""
         self.content = ft.Row(
             [
                 ft.ProgressRing(width=16, height=16, stroke_width=2),
-                SecondaryText("Loading...", color=Theme.Colors.ACCENT),
+                SecondaryText(f"{self._action.capitalize()}ing...", color=Theme.Colors.ACCENT),
             ],
             spacing=4,
         )
         self._page.update()
 
-        # Load the model asynchronously
         try:
             from app.services.ai.domains.llm.ollama import OllamaClient
 
             client = OllamaClient(base_url=self._ollama_url)
-            success = await client.load_model(self._model_name)
-
-            if success:
-                # Model loaded - refresh the entire modal with fresh health data
+            run = getattr(client, f"{self._action}_model")
+            if await run(self._model_name):
                 if self._dialog:
                     await self._dialog.refresh_data()
             else:
-                # Failed to load - show error with retry button
-                self.content = PulseButton(
-                    on_click_callable=self._on_load_click,
-                    text="Failed",
-                    variant="stop",
-                    compact=True,
-                )
+                self.content = self._failed("Failed")
         except Exception:
-            # Error - show with retry option
-            self.content = PulseButton(
-                on_click_callable=self._on_load_click,
-                text="Error",
-                variant="stop",
-                compact=True,
-            )
-
-        self._page.update()
-
-
-class UnloadModelButton(ft.Container):
-    """Unload button for warm models with loading state and error handling."""
-
-    def __init__(
-        self,
-        model_name: str,
-        page: ft.Page,
-        ollama_url: str,
-        dialog: OllamaDetailDialog | None = None,
-    ) -> None:
-        """
-        Initialize unload model button.
-
-        Args:
-            model_name: Name of the model to unload
-            page: Flet page instance for updates
-            ollama_url: Ollama server URL
-            dialog: Parent dialog for refreshing data after model unload
-        """
-        super().__init__()
-        self._model_name = model_name
-        self._page = page
-        self._ollama_url = ollama_url
-        self._dialog = dialog
-        self.reveal_on_hover = True
-
-        self._button = PulseButton(
-            on_click_callable=self._on_unload_click,
-            text="Unload",
-            variant="amber",
-            compact=True,
-        )
-        self.content = self._button
-
-    async def _on_unload_click(self) -> None:
-        """Handle Unload button click - remove model from VRAM."""
-        # Pin visible: a spinner that disappears the moment the pointer moves
-        # off the row looks like the click did nothing.
-        self.reveal_on_hover = False
-        self.opacity = 1
-        # Show loading spinner
-        self.content = ft.Row(
-            [
-                ft.ProgressRing(width=16, height=16, stroke_width=2),
-                SecondaryText("...", color=Theme.Colors.WARNING),
-            ],
-            spacing=4,
-        )
-        self._page.update()
-
-        # Unload the model asynchronously
-        try:
-            from app.services.ai.domains.llm.ollama import OllamaClient
-
-            client = OllamaClient(base_url=self._ollama_url)
-            success = await client.unload_model(self._model_name)
-
-            if success:
-                # Model unloaded - refresh the entire modal with fresh health data
-                if self._dialog:
-                    await self._dialog.refresh_data()
-            else:
-                # Failed to unload - show error with retry button
-                self.content = PulseButton(
-                    on_click_callable=self._on_unload_click,
-                    text="Failed",
-                    variant="stop",
-                    compact=True,
-                )
-        except Exception:
-            # Error - show with retry option
-            self.content = PulseButton(
-                on_click_callable=self._on_unload_click,
-                text="Error",
-                variant="stop",
-                compact=True,
-            )
+            self.content = self._failed("Error")
 
         self._page.update()
 
@@ -794,21 +711,14 @@ class ModelsSection(ft.Container):
             vram_display = f"{vram_gb:.1f}G" if is_warm and vram_gb is not None else "—"
             vram_text = model_cell(vram_display, numeric=True)
 
-            # Status: Unload button for warm models, Load button for cold
-            if is_warm:
-                status_control: ft.Control = UnloadModelButton(
-                    model_name=model_name,
-                    page=page,
-                    ollama_url=ollama_url,
-                    dialog=dialog,
-                )
-            else:
-                status_control = LoadModelButton(
-                    model_name=model_name,
-                    page=page,
-                    ollama_url=ollama_url,
-                    dialog=dialog,
-                )
+            # Unload a warm model, load a cold one.
+            status_control: ft.Control = ModelActionButton(
+                model_name=model_name,
+                page=page,
+                ollama_url=ollama_url,
+                dialog=dialog,
+                action="unload" if is_warm else "load",
+            )
 
             rows.append(
                 [
@@ -1163,6 +1073,12 @@ class OllamaDetailDialog(BaseDetailPopup):
 
         self._snapshot = snapshot
         self._apply(fresh_status)
+        # Was stale for up to 30s after a load, and the only way to
+        # hurry it was repainting the whole board. This reading is
+        # already fresh, so hand it to the card it describes.
+        apply_one = self._page.data.get("update_component")
+        if apply_one is not None:
+            await apply_one("ollama", fresh_status)
         self._page.update()
 
     def _apply(self, fresh_status: ComponentStatus) -> None:

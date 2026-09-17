@@ -37,6 +37,10 @@ class CardRegistry:
     def __init__(self) -> None:
         self._cards: dict[str, ft.Control] = {}
         self._statuses: dict[str, ComponentStatus] = {}
+        # The creator the last sync used. A surface holding a fresh
+        # status - the Ollama modal, say - can then apply it without
+        # having to be handed the dashboard's card factory too.
+        self._creator: Callable[[str, ComponentStatus], ft.Control] | None = None
 
     def sync(
         self,
@@ -49,6 +53,7 @@ class CardRegistry:
         its metadata, so "did this component change" is an exact
         comparison rather than a heuristic.
         """
+        self._creator = card_creator_fn
         self._forget_departed(components)
 
         controls: list[ft.Control] = []
@@ -66,6 +71,28 @@ class CardRegistry:
                 self._statuses[name] = data
             controls.append(card)
         return controls
+
+    def apply(self, name: str, data: ComponentStatus) -> bool:
+        """Rebuild one component's card in place. True when it changed.
+
+        Returns False for a component this board does not show, and
+        before the first sync, when there is no creator and no slot to
+        put a card in.
+        """
+        if self._creator is None or name not in self._cards:
+            return False
+        if self._statuses.get(name) == data:
+            return False
+        card = self._build(name, data, self._creator)
+        if card is None:
+            return False
+        self._cards[name] = card
+        self._statuses[name] = data
+        return True
+
+    def controls(self) -> list[ft.Control]:
+        """The cards in the order the last sync arranged them."""
+        return [self._cards[name] for name in self._statuses if name in self._cards]
 
     def _forget_departed(self, components: dict[str, ComponentStatus]) -> None:
         """Drop what is no longer reported.

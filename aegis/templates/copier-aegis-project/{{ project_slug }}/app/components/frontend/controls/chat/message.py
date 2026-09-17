@@ -7,7 +7,7 @@ import flet as ft
 
 from app.components.frontend.controls.busy_bar import busy_bar
 from app.components.frontend.controls.buttons import IconCopyButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.markdown import markdown_control
 from app.components.frontend.controls.text import LabelText, SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
@@ -214,14 +214,13 @@ class ChatMessageBubble(ft.Container):
         if not sections:
             sections = [SecondaryText("No detail recorded for this call.")]
 
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-                self.page.update()
+            dialog_handle.close(self.page)
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=str(entry.get("tool", "tool call")),
             body=ft.Container(
                 content=ft.Column(

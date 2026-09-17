@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 import flet as ft
 
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.form_fields import FormDropdown, FormTextField
 from app.components.frontend.controls.loading_overlay import LoadingOverlay
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
@@ -65,12 +65,10 @@ class ImportTargetMixin(TransactionsPanelState):
             return
         target_dd = FormDropdown(label="Into account", options=options, value=default)
         layout = preview.get("layout") or "This file"
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         async def _preview_into() -> None:
             account_id = int(target_dd.value or default)
@@ -93,6 +91,7 @@ class ImportTargetMixin(TransactionsPanelState):
             await then(again, data, original_name, account_id=account_id)
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=f"Import {original_name}",
             body=ft.Column(
                 [
@@ -158,12 +157,10 @@ class ImportTargetMixin(TransactionsPanelState):
             value=default,
             on_change=_target_changed,
         )
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         async def _commit() -> None:
             choice = target_dd.value or _NEW_ACCOUNT_KEY
@@ -180,6 +177,7 @@ class ImportTargetMixin(TransactionsPanelState):
             await commit(data, original_name, params)
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=f"Import {original_name}",
             body=ft.Column(
                 [

@@ -12,7 +12,7 @@ from uuid import uuid4
 import flet as ft
 
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.form_fields import (
     FormDropdown,
     FormTextField,
@@ -268,14 +268,13 @@ class ImportsFlowMixin(ImportTargetMixin):
 
     async def _show_investment_import_summary(self, response: dict) -> None:
         """Modal breakdown of an investment-ledger import; dismissed by OK."""
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title="Import complete",
             body=investment_import_summary_body(response),
             actions=[
@@ -352,15 +351,14 @@ class ImportsFlowMixin(ImportTargetMixin):
         Import commits the very bytes just previewed (the batch dedup ties
         the two requests together by file hash); Cancel writes nothing.
         """
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         if nothing_to_import(preview):
             dialog = StyledAlertDialog(
+                handle=dialog_handle,
                 title=(
                     "Nothing to import"
                     if preview.get("identical_batch_id") is not None
@@ -394,6 +392,7 @@ class ImportsFlowMixin(ImportTargetMixin):
             f"Import {changes:,} change{plural_changes}" if changes else "Import"
         )
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title="Review import",
             body=body,
             actions=[
@@ -418,14 +417,13 @@ class ImportsFlowMixin(ImportTargetMixin):
 
     async def _show_import_summary(self, response: dict) -> None:
         """Modal breakdown of an import; dismissed by OK."""
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title="Import complete",
             body=import_summary_body(response),
             actions=[

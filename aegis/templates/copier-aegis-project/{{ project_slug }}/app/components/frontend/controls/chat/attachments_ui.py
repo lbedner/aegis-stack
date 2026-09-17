@@ -18,7 +18,7 @@ import flet as ft
 
 from app.components.frontend.controls.busy_bar import busy_bar
 from app.components.frontend.controls.chat.stream import image_media_type
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.text import SecondaryText
 from app.components.frontend.controls.uploads import BrowserUploads
@@ -227,14 +227,13 @@ class AttachmentsMixin:
 
     def _open_attachment_preview(self, attachment: dict[str, str]) -> None:
         """The chip's click-through: the staged image at full size."""
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-                self.page.update()
+            dialog_handle.close(self.page)
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=attachment.get("name") or "image",
             body=ft.Container(
                 content=ft.Image(

@@ -18,6 +18,30 @@ from app.components.frontend.controls.text import H3Text
 from app.components.frontend.theme import AegisTheme as Theme
 
 
+class DialogHandle:
+    """Lets a dialog's own buttons close it.
+
+    A dialog's actions are built before the dialog is, so call sites
+    used to open with ``dialog: StyledAlertDialog | None = None`` and
+    then re-check inside the handler. That check can never fail - a
+    button cannot be clicked before the dialog holding it exists - so
+    the ``| None`` was a lie told to the type checker and the guard was
+    ceremony around it.
+
+    Create the handle first, hand it to the dialog, close it by name.
+    """
+
+    def __init__(self) -> None:
+        self.dialog: ft.AlertDialog | None = None
+
+    def close(self, page: ft.Page | None = None) -> None:
+        """Shut the bound dialog, refreshing ``page`` when one is given."""
+        if self.dialog is not None:
+            self.dialog.open = False
+        if page is not None:
+            page.update()
+
+
 class StyledAlertDialog(ft.AlertDialog):
     """The house dialog: bordered panel, title, body, right-aligned actions.
 
@@ -36,6 +60,7 @@ class StyledAlertDialog(ft.AlertDialog):
         on_close: Callable[[], Awaitable[None] | None] | None = None,
         accent_color: str | None = None,
         modal: bool = True,
+        handle: DialogHandle | None = None,
     ) -> None:
         """
         Args:
@@ -47,6 +72,10 @@ class StyledAlertDialog(ft.AlertDialog):
                 own fix for exactly this). Leaves ``actions`` alone, so a
                 dialog that also has real actions (Save, Delete) can use
                 both - × to bail, the footer for committing something.
+            handle: A DialogHandle the dialog binds itself to, so its
+                own buttons can close it without the caller keeping an
+                Optional around for a value that is never None by the
+                time a handler runs.
             accent_color: A 2px tinted bar along the panel's top edge,
                 rounded to match its corners - a plain 1px OUTLINE border
                 on a SURFACE_CONTAINER_HIGHEST panel reads flat against
@@ -135,3 +164,5 @@ class StyledAlertDialog(ft.AlertDialog):
             bgcolor=ft.Colors.TRANSPARENT,
             elevation=0,
         )
+        if handle is not None:
+            handle.dialog = self

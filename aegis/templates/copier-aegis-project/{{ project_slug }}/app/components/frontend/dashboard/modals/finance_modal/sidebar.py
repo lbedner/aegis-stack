@@ -1,19 +1,4 @@
-"""
-Finance Service Detail Modal
-
-A Quicken-style finance workspace, organised into tabs:
-
-* **Accounts** — the register. A left sidebar lists accounts grouped into
-  Banking / Credit / Investments / etc., each with its balance and a grand
-  total; selecting one shows an account-detail header (with a Manage menu)
-  above its transactions (or holdings, for investment accounts). The sidebar
-  only lives on this tab.
-* **Overview** — a net-worth summary (assets, liabilities, net worth) with a
-  per-group breakdown. No sidebar; this is the "home" landing.
-
-Data is fetched async through the internal ``APIClient`` (never a DB session
-from the frontend). All colours, spacing, and type come from ``AegisTheme``.
-"""
+"""The account sidebar: accounts grouped by kind, with balances and a grand total."""
 
 import flet as ft
 

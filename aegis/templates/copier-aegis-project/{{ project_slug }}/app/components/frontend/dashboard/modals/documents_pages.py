@@ -14,7 +14,7 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls import PrimaryText, SecondaryText
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.theme import AegisTheme as Theme
 
 API = "/api/v1/documents"
@@ -115,12 +115,10 @@ class PagesStrip(ft.Row):
         fetched = await self._api().get(f"{API}/{self._document_id}/pages/{number}")
         detail: dict[str, Any] = fetched if isinstance(fetched, dict) else {}
         text = detail.get("text")
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-                self._page.update()
+            dialog_handle.close(self._page)
 
         image: ft.Control = (
             ft.Image(src_base64=base64.b64encode(png).decode(), fit=ft.ImageFit.CONTAIN)
@@ -128,6 +126,7 @@ class PagesStrip(ft.Row):
             else SecondaryText("No image for this page")
         )
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=f"Page {number}",
             body=ft.Row(
                 [

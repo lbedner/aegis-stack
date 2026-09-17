@@ -19,7 +19,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.debounce import Debouncer
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.form_fields import (
     FormDateField,
     FormDropdown,
@@ -229,12 +229,10 @@ class GoalEditorMixin(BudgetPanelState):
         link_dd: FormDropdown | None = None
         link_host = ft.Container(visible=False)
         name_host = ft.Container(content=name_field)
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         async def _save() -> None:
             from app.components.frontend.state.session_state import (
@@ -300,6 +298,7 @@ class GoalEditorMixin(BudgetPanelState):
             await self._load()
 
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title="New goal" if creating else f"Edit {goal.get('name', 'goal')}",
             body=ft.Column(
                 [

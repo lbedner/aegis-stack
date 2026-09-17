@@ -24,6 +24,7 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableDataTable,
     ExpandableRow,
 )
+from app.components.frontend.controls.surface_panel import SurfacePanel
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
@@ -369,14 +370,12 @@ class RouteGroupSection(ft.Container):
         route_rows = [RouteTableRow(route) for route in sorted_routes]
 
         # Table container (matches ExpandableDataTable styling)
-        self.table_container = ft.Container(
+        self.table_container = SurfacePanel(
             content=ft.Column(
                 [table_header] + route_rows,
                 spacing=0,
             ),
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-            border_radius=Theme.Components.CARD_RADIUS,
-            border=ft.border.all(1, ft.Colors.OUTLINE),
             visible=start_expanded,
         )
 
@@ -512,7 +511,7 @@ class OverviewTab(ft.Container):
         # CPU metric
         if cpu_data and cpu_data.metadata:
             cpu_percent = cpu_data.metadata.get("percent_used", 0.0)
-            cpu_cores = cpu_data.metadata.get("core_count", 0)
+            cpu_cores = cpu_data.metadata.get("cpu_count", 0)
             cpu_color = _get_metric_color(cpu_percent)
             system_metrics.append(
                 create_progress_indicator(

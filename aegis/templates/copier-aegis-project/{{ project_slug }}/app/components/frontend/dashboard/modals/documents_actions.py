@@ -20,7 +20,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.theme import AegisTheme as Theme
 
@@ -113,7 +113,7 @@ def _confirm_protected_delete(
     """One more gate: the title, typed back, is the confirmation the API
     requires too."""
     typed = FormTextField(label="Title", hint=title)
-    dialog: StyledAlertDialog | None = None
+    dialog_handle = DialogHandle()
 
     async def _do_delete() -> None:
         code, body = await api.request_with_status(
@@ -123,11 +123,11 @@ def _confirm_protected_delete(
             detail = body.get("detail") if isinstance(body, dict) else None
             ErrorSnackBar(str(detail or "The title did not match.")).launch(page)
             return
-        if dialog is not None:
-            dialog.open = False
+        dialog_handle.close()
         await on_deleted()
 
     dialog = StyledAlertDialog(
+        handle=dialog_handle,
         title="Delete protected document?",
         body=ft.Column(
             [

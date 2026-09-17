@@ -16,7 +16,7 @@ from app.components.frontend.controls import (
     SectionCard,
 )
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.dialog import StyledAlertDialog
+from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
 from app.components.frontend.controls.form_fields import (
     FormDropdown,
     FormTextField,
@@ -251,12 +251,10 @@ class LinesTabMixin(BudgetPanelState):
             value=f"{line.get('allocated_amount', 0) / 100:.2f}",
             width=200,
         )
-        dialog: StyledAlertDialog | None = None
+        dialog_handle = DialogHandle()
 
         async def _close() -> None:
-            if dialog is not None:
-                dialog.open = False
-            self.page.update()
+            dialog_handle.close(self.page)
 
         async def _save() -> None:
             cents = _parse_dollars(amount.value or "")
@@ -268,6 +266,7 @@ class LinesTabMixin(BudgetPanelState):
 
         spent = line.get("spent_amount", 0)
         dialog = StyledAlertDialog(
+            handle=dialog_handle,
             title=f"Limit for {label}",
             body=ft.Column(
                 [

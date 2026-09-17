@@ -4,6 +4,8 @@ from __future__ import annotations  # noqa: I001
 
 from typing import Any
 
+from datetime import datetime
+
 import flet as ft
 
 from app.components.frontend.controls import (
@@ -96,6 +98,31 @@ EVENT_STATUS_MAP: dict[str, str] = {
 }
 
 
+def safe_ratio(numerator: float, denominator: float) -> float:
+    """Clones per unique cloner, and the same for the previous period.
+
+    Zero when there is no denominator: a repository with no cloners has
+    no ratio, and dividing to find out is how the tab used to raise.
+    """
+    return numerator / denominator if denominator > 0 else 0
+
+
+def relative_day_label(date_str: str) -> str:
+    """How long ago a day was, in the words a reader expects.
+
+    The subtitle says "today" or "yesterday" rather than a date, because
+    the question being asked of it is whether the numbers are current.
+    """
+    if not date_str:
+        return "today"
+    days_ago = (datetime.now() - datetime.strptime(date_str, "%Y-%m-%d")).days
+    if days_ago == 0:
+        return "today"
+    if days_ago == 1:
+        return "yesterday"
+    return f"{days_ago}d ago"
+
+
 def events_by_selected_date(
     events: list[tuple[str, str, str]], selected_types: set[str] | frozenset[str]
 ) -> dict[str, list[str]]:
@@ -141,7 +168,7 @@ class GitHubTrafficTab(InsightsTab):
         total_unique = sum(d["unique_cloners"] for d in daily)
         total_views = sum(d["views"] for d in daily)
         total_visitors = sum(d["unique_visitors"] for d in daily)
-        clone_ratio = total_clones / total_unique if total_unique > 0 else 0
+        clone_ratio = safe_ratio(total_clones, total_unique)
         num_days = len(daily)
         range_label = next(
             (label for label, days in RANGE_OPTIONS if days == self._days),
@@ -163,18 +190,7 @@ class GitHubTrafficTab(InsightsTab):
         last_visitors = last_day.get("unique_visitors", 0)
         last_date = last_day.get("date", "")
 
-        from datetime import datetime as _dt
-
-        _days_ago = (
-            (_dt.now() - _dt.strptime(last_date, "%Y-%m-%d")).days if last_date else 0
-        )
-        _day_label = (
-            "today"
-            if _days_ago == 0
-            else "yesterday"
-            if _days_ago == 1
-            else f"{_days_ago}d ago"
-        )
+        _day_label = relative_day_label(last_date)
 
         # Metric cards — all on one row, always visible
         forks = data.get("forks", [])
@@ -185,7 +201,7 @@ class GitHubTrafficTab(InsightsTab):
         )
 
         # Previous period clone ratio
-        prev_ratio = prev_c / prev_u if prev_u > 0 else 0
+        prev_ratio = safe_ratio(prev_c, prev_u)
         prev_ratio_label = (
             f"prev: {prev_ratio:.1f}:1" if prev_ratio > 0 else f"in {range_label}"
         )

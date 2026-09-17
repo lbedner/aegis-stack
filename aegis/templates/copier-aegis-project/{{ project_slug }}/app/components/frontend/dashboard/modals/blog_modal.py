@@ -6,8 +6,6 @@ from typing import Any
 
 import flet as ft
 
-from app.core.formatting import slugify
-
 from app.components.frontend.controls import (
     ActionMenu,
     ActionMenuItem,
@@ -23,6 +21,7 @@ from app.components.frontend.controls import (
     Tag,
 )
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.markdown import copyable_markdown
 from app.components.frontend.controls.snack_bar import (
     ErrorSnackBar,
     SuccessSnackBar,
@@ -30,6 +29,7 @@ from app.components.frontend.controls.snack_bar import (
 )
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.formatting import slugify
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -190,12 +190,7 @@ class OverviewTab(ft.Container):
                 )
             )
 
-        body_control = ft.Markdown(
-            value=body,
-            selectable=True,
-            extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED,
-            auto_follow_links=True,
-        )
+        body_control = copyable_markdown(body)
 
         self._main_area.content = ft.Column(
             [

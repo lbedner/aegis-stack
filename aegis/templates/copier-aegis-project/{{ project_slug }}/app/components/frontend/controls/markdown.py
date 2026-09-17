@@ -11,6 +11,7 @@ import re
 
 import flet as ft
 
+from app.components.frontend.controls.snack_bar import SuccessSnackBar
 from app.components.frontend.controls.text import SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
 
@@ -79,3 +80,54 @@ def markdown_or_text(body: str) -> ft.Control:
     if not MARKDOWN_RE.search(body):
         return SecondaryText(body)
     return markdown_control(body)
+
+
+def copyable_markdown(
+    value: str,
+    *,
+    copy_text: str | None = None,
+    selectable: bool = True,
+    color: str | None = None,
+    dark: bool = True,
+) -> ft.Control:
+    """Themed markdown with a copy affordance in the top-right corner.
+
+    ``copy_text`` is what reaches the clipboard, and it is usually NOT
+    ``value``: a schema or a migration is displayed inside a fenced code
+    block, and pasting the fences into a SQL client or an editor is
+    useless. Callers pass the raw source and let the fences stay a
+    display concern. It defaults to ``value`` for bodies that are
+    already plain markdown.
+
+    Returns a Stack so the button floats over the body rather than
+    reserving a row above it; markdown bodies here can be long and the
+    affordance should not push the first line down.
+    """
+    body = markdown_control(value, selectable=selectable, color=color, dark=dark)
+    payload = value if copy_text is None else copy_text
+
+    def _copy(e: ft.ControlEvent) -> None:
+        e.page.set_clipboard(payload)
+        # Feedback matters more than it looks: a clipboard write is
+        # invisible, so without it the button gets pressed twice.
+        SuccessSnackBar("Copied to clipboard").launch(e.page)
+
+    return ft.Stack(
+        [
+            ft.Container(content=body, padding=ft.padding.only(right=28)),
+            ft.Container(
+                content=ft.IconButton(
+                    icon=ft.Icons.CONTENT_COPY,
+                    icon_size=14,
+                    tooltip="Copy",
+                    on_click=_copy,
+                    style=ft.ButtonStyle(
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        padding=ft.padding.all(4),
+                    ),
+                ),
+                right=0,
+                top=0,
+            ),
+        ]
+    )

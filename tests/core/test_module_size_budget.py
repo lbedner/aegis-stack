@@ -55,7 +55,13 @@ BUDGET: dict[str, int] = {
     "components/frontend/dashboard/modals/finance_modal/no_payee_panel.py": 668,
     "components/frontend/dashboard/modals/finance_modal/overview_tab.py": 749,
     "components/frontend/dashboard/modals/finance_modal/budget_cards.py": 681,
-    "components/frontend/dashboard/modals/insights_modal.py": 3940,
+    # Was one 3,940-line module. Split into a package of ten, six of them
+    # under 350 lines; these four are the same code relocated, not new
+    # debt, and each is one ~490-line _build_content away from fitting.
+    "components/frontend/dashboard/modals/insights_modal/github_traffic_tab.py": 792,
+    "components/frontend/dashboard/modals/insights_modal/pypi_tab.py": 750,
+    "components/frontend/dashboard/modals/insights_modal/docs_tab.py": 743,
+    "components/frontend/dashboard/modals/insights_modal/overview_tab.py": 725,
     "services/system/health.py.jinja": 714,
     # 457 lines of schemas in a package __init__; surfaced when ai/models gained
     # a third module. Debt recorded at size; the fix is a schemas module.

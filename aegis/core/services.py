@@ -775,7 +775,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/test_bulk_response.py",
                 "tests/test_cache_integration.py",
                 "app/components/frontend/dashboard/cards/insights_card.py",
-                "app/components/frontend/dashboard/modals/insights_modal.py",
+                "app/components/frontend/dashboard/modals/insights_modal",
             ],
         ),
     ),

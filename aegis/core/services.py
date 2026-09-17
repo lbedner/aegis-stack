@@ -903,6 +903,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/cli/blog.py",
                 "tests/services/test_blog_service.py",
                 "tests/services/test_blog_serialization.py",
+                "tests/services/test_blog_list_queries.py",
                 "tests/api/test_blog_endpoints.py",
                 "app/components/frontend/dashboard/cards/blog_card.py",
                 "app/components/frontend/dashboard/modals/blog_modal.py",

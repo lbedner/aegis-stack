@@ -238,9 +238,15 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT blog_tag.id, blog_tag.name, blog_tag.slug, blog_tag.created_at FROM blog_tag JOIN blog_post_tag ON blog_tag.id = blog_post_tag.tag_id WHERE blog_post_tag.post_id = :post_id_1 ORDER BY blog_tag.name",
-      "file": "app/services/blog/service.py",
-      "function": "_get_post_tags"
+      "label": "SELECT blog_post.status, count(*) AS count_1 FROM blog_post GROUP BY blog_post.status",
+      "file": "app/services/blog/queries.py",
+      "function": "count_posts_by_status"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT blog_post_tag.post_id, blog_tag.id, blog_tag.name, blog_tag.slug, blog_tag.created_at FROM blog_post_tag JOIN blog_tag ON blog_tag.id = blog_post_tag.tag_id WHERE blog_post_tag.post_id IN (__[POSTCOMPILE_post_id_1]) ORDER BY blog_tag.name",
+      "file": "app/services/blog/queries.py",
+      "function": "tags_for_posts"
     },
     {
       "kind": "repeated_statement",
@@ -331,18 +337,6 @@
       "label": "SELECT count(*) AS count_1 FROM \"user\"",
       "file": "app/services/auth/users.py",
       "function": "create_user"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT count(*) AS count_1 FROM blog_post",
-      "file": "app/services/blog/service.py",
-      "function": "_count_posts"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT count(*) AS count_1 FROM blog_post WHERE blog_post.status = :status_1",
-      "file": "app/services/blog/service.py",
-      "function": "_count_posts"
     },
     {
       "kind": "repeated_statement",

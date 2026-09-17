@@ -10,6 +10,8 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 
+from ..modal_sections import ChartColors
+
 
 # Event type → chip border/highlight color
 EVENT_TYPE_COLORS: dict[str, str] = {
@@ -160,3 +162,57 @@ def _pretty_date(date_str: str) -> str:
     else:
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
     return d.strftime(f"%B {day}{suffix}, %Y")
+
+
+def bounds_with_padding(values: list[float]) -> tuple[int, int]:
+    """Y-range for a bar chart whose bars are all nearly the same height.
+
+    Anchoring at zero would render seven near-identical bars; padding
+    below the minimum and above the maximum is what makes the shape
+    readable. The pad is proportional, with a floor of 1 so a flat
+    series still has an axis to sit in.
+    """
+    low, high = min(values), max(values)
+    spread = high - low
+    pad_bottom = max(spread * 0.3, 1)
+    pad_top = max(spread * 0.15, 1)
+    return max(0, int(low - pad_bottom)), int(high + pad_top + 0.5)
+
+
+def emphasis_color(value: float, low: float, high: float) -> str:
+    """Peak, trough, or neither.
+
+    Colouring the extremes is what lets the eye find the rhythm without
+    comparing seven bars by length.
+    """
+    if value == high:
+        return ChartColors.TEAL
+    if value == low:
+        return ChartColors.VIOLET
+    return ft.Colors.with_opacity(0.55, ChartColors.TEAL)
+
+
+def axis_tick_labels(low: int, high: int, step: int) -> list[ft.ChartAxisLabel]:
+    """Y-axis ticks from the first multiple of ``step`` at or above
+    ``low``.
+
+    Rendered explicitly rather than left to Flet, whose auto-labels are
+    larger and use the default text colour, so an axis styled this way
+    would not match the one below it.
+    """
+    if step <= 0:
+        return []
+    remainder = low % step
+    tick = low + (step - remainder if remainder else 0)
+    labels: list[ft.ChartAxisLabel] = []
+    while tick <= high:
+        labels.append(
+            ft.ChartAxisLabel(
+                value=tick,
+                label=ft.Text(
+                    f"{int(tick):,}", size=9, color=ft.Colors.ON_SURFACE_VARIANT
+                ),
+            )
+        )
+        tick += step
+    return labels

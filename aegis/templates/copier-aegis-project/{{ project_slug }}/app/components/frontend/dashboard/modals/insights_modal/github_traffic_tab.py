@@ -7,18 +7,19 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls import (
-    H3Text,
     SecondaryText,
-)
-from app.components.frontend.controls.data_table import (
-    DataTable,
-    DataTableColumn,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.insights.views import InsightViewService
 from app.services.insights.views.formatting import pct as pct_change
 from app.services.insights.views.events import (
     GITHUB_EVENT_TYPES,
+)
+
+from app.components.frontend.dashboard.modals.insights_modal.traffic_tables import (
+    TrafficTable,
+    path_rows,
+    referrer_rows,
 )
 
 from ..modal_sections import (
@@ -32,6 +33,9 @@ from app.components.frontend.dashboard.modals.insights_modal.base import (
     InsightsTab,
 )
 from app.components.frontend.dashboard.modals.insights_modal.charts import (
+    axis_tick_labels,
+    bounds_with_padding,
+    emphasis_color,
     _pretty_date,
     _smart_step,
 )
@@ -384,33 +388,17 @@ class GitHubTrafficTab(InsightsTab):
         )
 
         # -- Avg Unique Cloners by Day of Week --------------------------------
-        # Source/cadence pattern lives here — peak/trough days are colored
-        # distinctly so the rhythm pops without parsing seven nearly-equal
-        # bars. Hidden when there's no cloner data at all.
+        # The source/cadence rhythm. Peak and trough days are coloured
+        # distinctly so it reads without comparing seven near-equal
+        # bars. Hidden when there is no cloner data at all.
         weekday = data.get("weekday", [])
         if weekday and any(v > 0 for v in weekday):
-            wk_min = min(weekday)
-            wk_max = max(weekday)
-            pad_bottom = max((wk_max - wk_min) * 0.3, 1)
-            pad_top = max((wk_max - wk_min) * 0.15, 1)
-            wk_min_y = max(0, int(wk_min - pad_bottom))
-            wk_max_y = int(wk_max + pad_top + 0.5)
+            wk_min_y, wk_max_y = bounds_with_padding(weekday)
+            low, high = min(weekday), max(weekday)
+            days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-            # Peak (brand teal) + trough (violet) + middle days (muted teal)
-            # — same color treatment as the aegis-pulse Summary tab.
-            peak_color = ChartColors.TEAL
-            trough_color = ChartColors.VIOLET
-            mid_color = ft.Colors.with_opacity(0.55, ChartColors.TEAL)
-
-            wk_groups: list[ft.BarChartGroup] = []
-            for i, v in enumerate(weekday):
-                if v == wk_max:
-                    bar_color = peak_color
-                elif v == wk_min:
-                    bar_color = trough_color
-                else:
-                    bar_color = mid_color
-                wk_groups.append(
+            wk_chart = ft.BarChart(
+                bar_groups=[
                     ft.BarChartGroup(
                         x=i,
                         bar_rods=[
@@ -418,55 +406,30 @@ class GitHubTrafficTab(InsightsTab):
                                 from_y=wk_min_y,
                                 to_y=v,
                                 width=28,
-                                color=bar_color,
-                                tooltip=f"{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}: {v:.1f}",
+                                color=emphasis_color(v, low, high),
+                                tooltip=f"{days[i]}: {v:.1f}",
                                 border_radius=4,
                             )
                         ],
                     )
-                )
-
-            # Y-axis ticks rendered explicitly so they pick up the same
-            # small + muted styling as the bottom axis (and as the
-            # LineChartCard left-axis treatment) — without this, Flet
-            # falls back to its default-styled auto-labels which are
-            # larger and use the default white text color.
-            wk_step = _smart_step(wk_max_y - wk_min_y)
-            wk_left_labels: list[ft.ChartAxisLabel] = []
-            if wk_step > 0:
-                tick = int(wk_min_y) + (
-                    wk_step - (int(wk_min_y) % wk_step)
-                    if int(wk_min_y) % wk_step
-                    else 0
-                )
-                while tick <= wk_max_y:
-                    wk_left_labels.append(
-                        ft.ChartAxisLabel(
-                            value=tick,
-                            label=ft.Text(
-                                f"{int(tick):,}",
-                                size=9,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                            ),
-                        )
-                    )
-                    tick += wk_step
-
-            wk_chart = ft.BarChart(
-                bar_groups=wk_groups,
-                left_axis=ft.ChartAxis(labels_size=50, labels=wk_left_labels),
+                    for i, v in enumerate(weekday)
+                ],
+                left_axis=ft.ChartAxis(
+                    labels_size=50,
+                    labels=axis_tick_labels(
+                        wk_min_y, wk_max_y, _smart_step(wk_max_y - wk_min_y)
+                    ),
+                ),
                 bottom_axis=ft.ChartAxis(
                     labels_size=40,
                     labels=[
                         ft.ChartAxisLabel(
                             value=i,
                             label=ft.Text(
-                                ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i],
-                                size=11,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
+                                day, size=11, color=ft.Colors.ON_SURFACE_VARIANT
                             ),
                         )
-                        for i in range(7)
+                        for i, day in enumerate(days)
                     ],
                 ),
                 horizontal_grid_lines=ft.ChartGridLines(
@@ -482,9 +445,8 @@ class GitHubTrafficTab(InsightsTab):
                 expand=True,
             )
 
-            # Wrap in the same MetricCard-style card as the line charts
-            # so the surfaces stay visually unified. Title row dropped
-            # to match LineChartCard — the chart speaks for itself.
+            # Same card treatment as the line charts, title row dropped
+            # to match LineChartCard - the chart speaks for itself.
             content.append(ft.Container(height=12))
             content.append(
                 ft.Container(
@@ -496,92 +458,22 @@ class GitHubTrafficTab(InsightsTab):
                 )
             )
 
-        # -- Referrers + Popular Paths ----------------------------------------
-        # Side-by-side data tables, matching the aegis-pulse Summary tab.
-        # Each name cell is a clickable link (referrer domain or
-        # github.com path), so visitors can dig into the source from
-        # the modal instead of copy-pasting URLs.
-        referrers = data.get("referrers", [])
-        paths = data.get("popular_paths", [])
-
-        traffic_columns = [
-            DataTableColumn("Source", style="primary"),
-            DataTableColumn("Views", width=80, alignment="right", style="body"),
-            DataTableColumn("Unique", width=80, alignment="right", style="secondary"),
-        ]
-
-        def _link_cell(label: str, url: str) -> ft.Container:
-            return ft.Container(
-                content=ft.Text(
-                    label,
-                    size=Theme.Typography.BODY,
-                    style=ft.TextStyle(
-                        color=Theme.Colors.INFO,
-                        decoration=ft.TextDecoration.UNDERLINE,
-                    ),
-                    selectable=False,
-                    no_wrap=True,
-                    overflow=ft.TextOverflow.ELLIPSIS,
-                ),
-                on_click=lambda e, u=url: e.page.launch_url(u),
-                ink=True,
-                expand=True,
-            )
-
-        referrer_rows = [
-            [
-                _link_cell(
-                    ref["domain"],
-                    f"https://{ref['domain']}"
-                    if "." in ref["domain"]
-                    else f"https://www.google.com/search?q={ref['domain']}",
-                ),
-                f"{ref['views']:,}",
-                f"{ref['uniques']:,}",
-            ]
-            for ref in referrers
-        ]
-
-        paths_rows = [
-            [
-                _link_cell(p["path"], f"https://github.com{p['path']}"),
-                f"{p['views']:,}",
-                f"{p['uniques']:,}",
-            ]
-            for p in paths
-        ]
-
-        referrers_section = ft.Column(
-            [
-                H3Text("Referrers"),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                DataTable(
-                    columns=traffic_columns,
-                    rows=referrer_rows,
-                    empty_message="No referrer data available.",
-                ),
-            ],
-            spacing=6,
-            expand=1,
-        )
-        paths_section = ft.Column(
-            [
-                H3Text("Popular Paths"),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                DataTable(
-                    columns=traffic_columns,
-                    rows=paths_rows,
-                    empty_message="No popular path data available.",
-                ),
-            ],
-            spacing=6,
-            expand=1,
-        )
-
+        # Where the traffic came from, and which pages it read.
         content.append(ft.Container(height=8))
         content.append(
             ft.Row(
-                [referrers_section, paths_section],
+                [
+                    TrafficTable(
+                        "Referrers",
+                        referrer_rows(data.get("referrers", [])),
+                        empty_message="No referrer data available.",
+                    ),
+                    TrafficTable(
+                        "Popular Paths",
+                        path_rows(data.get("popular_paths", [])),
+                        empty_message="No popular path data available.",
+                    ),
+                ],
                 spacing=Theme.Spacing.LG,
                 vertical_alignment=ft.CrossAxisAlignment.START,
             )

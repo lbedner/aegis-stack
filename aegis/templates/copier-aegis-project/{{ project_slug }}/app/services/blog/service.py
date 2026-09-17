@@ -6,10 +6,11 @@ from sqlalchemy import func
 from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.formatting import slugify as core_slugify
 from app.core.config import settings
+from app.core.formatting import slugify as core_slugify
 from app.core.time import utcnow
 
+from . import queries as blog_queries
 from .constants import STALE_DRAFT_DAYS, BlogPostStatus, ImportConflictPolicy
 from .models import (
     BlogHealthSummary,
@@ -100,7 +101,11 @@ class BlogService:
             query.offset((page - 1) * page_size).limit(page_size)
         )
         posts = list(result.all())
-        responses = [await self._post_response(post) for post in posts]
+        tags_by_post = await blog_queries.tags_for_posts(self.db, [p.id for p in posts])
+        responses = [
+            self._build_post_response(post, tags_by_post.get(post.id, []))
+            for post in posts
+        ]
         return responses, total
 
     async def get_public_post_by_slug(self, slug: str) -> BlogPostResponse | None:
@@ -264,10 +269,11 @@ class BlogService:
 
     async def get_health_summary(self) -> BlogHealthSummary:
         """Return counts and latest activity for health metadata."""
-        total = await self._count_posts()
-        draft = await self._count_posts(BlogPostStatus.DRAFT)
-        published = await self._count_posts(BlogPostStatus.PUBLISHED)
-        archived = await self._count_posts(BlogPostStatus.ARCHIVED)
+        by_status = await blog_queries.count_posts_by_status(self.db)
+        draft = by_status.get(BlogPostStatus.DRAFT, 0)
+        published = by_status.get(BlogPostStatus.PUBLISHED, 0)
+        archived = by_status.get(BlogPostStatus.ARCHIVED, 0)
+        total = sum(by_status.values())
 
         tag_count_result = await self.db.exec(select(func.count()).select_from(BlogTag))
         tag_count = int(tag_count_result.one() or 0)
@@ -330,9 +336,10 @@ class BlogService:
         result = await self.db.exec(query)
         posts = list(result.all())
 
+        tags_by_post = await blog_queries.tags_for_posts(self.db, [p.id for p in posts])
         out: list[ExportedPost] = []
         for post in posts:
-            tags = await self._get_post_tags(post.id) if post.id is not None else []  # type: ignore[arg-type]
+            tags = tags_by_post.get(post.id, [])
             out.append(
                 ExportedPost(
                     title=post.title,
@@ -386,9 +393,7 @@ class BlogService:
                         result.skipped += 1
                         continue
                     if on_conflict == ImportConflictPolicy.FAIL:
-                        raise ValueError(
-                            f"Post slug already exists: {slug}"
-                        )
+                        raise ValueError(f"Post slug already exists: {slug}")
                     # OVERWRITE
                     self._apply_imported_fields(existing, incoming, now=now)
                     self.db.add(existing)
@@ -467,17 +472,8 @@ class BlogService:
         # ``canonical_url`` is not persisted — see import_posts create path.
 
     async def _get_post_by_slug_any_status(self, slug: str) -> BlogPost | None:
-        result = await self.db.exec(
-            select(BlogPost).where(BlogPost.slug == slug)
-        )
+        result = await self.db.exec(select(BlogPost).where(BlogPost.slug == slug))
         return result.first()
-
-    async def _count_posts(self, status: str | None = None) -> int:
-        query = select(func.count()).select_from(BlogPost)
-        if status:
-            query = query.where(BlogPost.status == status)
-        result = await self.db.exec(query)
-        return int(result.one() or 0)
 
     async def _get_post_model(self, post_id: int) -> BlogPost | None:
         result = await self.db.exec(select(BlogPost).where(BlogPost.id == post_id))
@@ -550,17 +546,14 @@ class BlogService:
             )
         await self.db.flush()
 
-    async def _get_post_tags(self, post_id: int) -> list[BlogTag]:
-        result = await self.db.exec(
-            select(BlogTag)
-            .join(BlogPostTag, BlogTag.id == BlogPostTag.tag_id)
-            .where(BlogPostTag.post_id == post_id)
-            .order_by(BlogTag.name)
-        )
-        return list(result.all())
-
     async def _post_response(self, post: BlogPost) -> BlogPostResponse:
-        tags = await self._get_post_tags(post.id) if post.id is not None else []  # type: ignore[arg-type]
+        """Single-post path. A page of one, so it reuses the batch query."""
+        grouped = await blog_queries.tags_for_posts(self.db, [post.id])
+        return self._build_post_response(post, grouped.get(post.id, []))
+
+    def _build_post_response(
+        self, post: BlogPost, tags: list[BlogTag]
+    ) -> BlogPostResponse:
         return BlogPostResponse(
             id=post.id,  # type: ignore[arg-type]
             title=post.title,

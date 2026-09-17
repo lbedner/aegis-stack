@@ -37,6 +37,7 @@ from app.components.frontend.auth.session import (
     persist_refresh_token,
     sign_out,
 )
+from app.components.frontend.dashboard.card_registry import CardRegistry
 from app.components.frontend.core.routes import LOGIN_ROUTE, REGISTER_ROUTE
 {% endif %}
 from app.components.frontend.controls.views.base import BaseView
@@ -238,12 +239,9 @@ class SystemDashboard:
         self._diagram_view: DiagramView | None = None
         self._theme_manager: ThemeManager | None = None
         self._page: ft.Page | None = None
-        # The card per component, and the status each was built FROM.
-        # Holding the objects is what lets a refresh leave them alone:
-        # Flet diffs the tree it already has, so a card rebuilt into an
-        # identical-looking new object still costs a full replacement.
-        self._cards_by_name: dict[str, ft.Control] = {}
-        self._status_by_name: dict[str, ComponentStatus] = {}
+        # Holds the cards between refreshes so an unchanged component
+        # keeps its card object; see card_registry for why that matters.
+        self._card_registry = CardRegistry()
 
     def initialize_components(
         self,
@@ -341,27 +339,6 @@ class SystemDashboard:
                 }
             )
 
-    @staticmethod
-    def _build_card(
-        name: str, data: ComponentStatus, card_creator_fn: Callable
-    ) -> ft.Control | None:
-        """Build one component's card, or None when it renders nothing."""
-        card = card_creator_fn(name, data)
-
-        # Skip empty cards (e.g., frontend merged into ServerCard)
-        if not card.content:
-            return None
-
-        if (
-            isinstance(card.content, ft.Text)
-            and "Unknown component" in card.content.value
-        ):
-            return None  # Skip unknown components
-
-        # All cards use uniform 1/3 width (3-column grid)
-        card.col = {"xs": 12, "sm": 6, "md": 4, "lg": 4, "xl": 4}
-        return card
-
     async def update_component_cards(
         self, components: dict[str, ComponentStatus], card_creator_fn: Callable
     ) -> None:
@@ -375,36 +352,11 @@ class SystemDashboard:
             return
 
         try:
-            # A component whose status is byte-identical to the one its
-            # card was built from has nothing to show that is not already
-            # on screen, so its card is left untouched - object and all.
-            # In the steady state that is every card.
-            for name in list(self._status_by_name):
-                if name not in components:
-                    self._cards_by_name.pop(name, None)
-                    self._status_by_name.pop(name, None)
-
-            controls: list[ft.Control] = []
-            for component_name, component_data in components.items():
-                card = self._cards_by_name.get(component_name)
-                if card is None or self._status_by_name.get(component_name) != (
-                    component_data
-                ):
-                    card = self._build_card(
-                        component_name, component_data, card_creator_fn
-                    )
-                    if card is None:
-                        self._cards_by_name.pop(component_name, None)
-                        self._status_by_name.pop(component_name, None)
-                        continue
-                    self._cards_by_name[component_name] = card
-                    self._status_by_name[component_name] = component_data
-                controls.append(card)
-
-            # Assigning the list wholesale is safe precisely because the
-            # entries are the same objects as last cycle where nothing
-            # moved; Flet compares the controls, not the list.
-            self._cards_container.content.controls = controls
+            # Unchanged components keep the card objects Flet already
+            # knows about, so the refresh diffs to nothing.
+            self._cards_container.content.controls = self._card_registry.sync(
+                components, card_creator_fn
+            )
 
             # No .update() call here - batched with
             # page.update() in refresh_dashboard

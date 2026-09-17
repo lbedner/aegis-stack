@@ -9,12 +9,14 @@ from collections.abc import Callable
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
     SecondaryText,
     Tag,
 )
+from app.components.frontend.controls.surface_panel import SurfacePanel
 from app.components.frontend.theme import AegisTheme as Theme
 
 from .modal_sections import EmptyStatePlaceholder, MetricCard
@@ -266,11 +268,8 @@ class RAGCollectionsTableSection(ft.Container):
                 rows.append(card)
 
             # Table container with dark background
-            table = ft.Container(
+            table = SurfacePanel(
                 content=ft.Column([header, *rows], spacing=0),
-                bgcolor=ft.Colors.SURFACE,
-                border_radius=Theme.Components.CARD_RADIUS,
-                border=ft.border.all(1, ft.Colors.OUTLINE),
             )
 
             self.content = ft.Column(

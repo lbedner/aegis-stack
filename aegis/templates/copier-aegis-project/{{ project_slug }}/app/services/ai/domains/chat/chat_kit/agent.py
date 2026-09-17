@@ -19,10 +19,14 @@ context in the system block is what feeds one.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 import inspect
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any, Generic, TypeVar
 
+from app.core.log import logger
+from app.services.ai.domains.chat.tool_telemetry import tool_turn
+from app.services.ai.domains.chat.user_memory import memory_user
+from app.services.ai.usage_recording import extract_usage, record_usage
 from pydantic_ai import Agent
 from pydantic_ai.messages import (
     ModelMessage,
@@ -37,10 +41,6 @@ from pydantic_ai.messages import (
 from pydantic_ai.run import AgentRunResultEvent
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
-
-from app.core.log import logger
-from app.services.ai.domains.chat.user_memory import memory_user
-from app.services.ai.usage_recording import extract_usage, record_usage
 
 from .context import ContextProvider, compose_context, gather_context
 from .models import (
@@ -159,10 +159,22 @@ class ToolChatAgent(Generic[DepsT]):
             result: Any = None
             # Bind the turn's user so a save_memory call mid-stream knows
             # whose fact it is; the scope is the only identity a turn has.
-            with memory_user(
-                scope.user_id,
-                agent_slug=getattr(self._agent, "name", None),
-                conversation_id=getattr(scope, "conversation_id", None),
+            # ``tool_turn`` groups this turn's tool calls in the ledger;
+            # the kit is generic over a deps type it never inspects, so
+            # there is nowhere on deps to hang the turn's identity.
+            agent_slug = getattr(self._agent, "name", None)
+            conversation_id = getattr(scope, "conversation_id", None)
+            with (
+                memory_user(
+                    scope.user_id,
+                    agent_slug=agent_slug,
+                    conversation_id=conversation_id,
+                ),
+                tool_turn(
+                    user_id=scope.user_id,
+                    agent_slug=agent_slug,
+                    conversation_id=conversation_id,
+                ),
             ):
                 async with self._agent.run_stream_events(
                     message,

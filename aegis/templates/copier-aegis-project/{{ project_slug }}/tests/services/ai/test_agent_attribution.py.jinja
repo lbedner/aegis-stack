@@ -4,6 +4,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import inspect
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -232,7 +233,9 @@ class TestAgentGrantsReachTheApiChatPath:
             )
             await service.chat("hello")
 
-            assert captured["tools"] == [lookup]
+            # ``resolve_tools`` wraps every callable for the tool-call
+            # ledger, so the grant is asserted on what the wrapper wraps.
+            assert [inspect.unwrap(t) for t in captured["tools"]] == [lookup]
             by_type = {
                 base.__name__: cap
                 for cap in captured["capabilities"]

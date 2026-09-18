@@ -642,7 +642,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "docs/services/comms",
                 # Frontend dashboard files
                 "app/components/frontend/dashboard/cards/comms_card.py",
-                "app/components/frontend/dashboard/modals/comms_modal.py",
+                "app/components/frontend/dashboard/modals/comms_modal",
             ],
         ),
     ),

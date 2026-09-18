@@ -1,4 +1,4 @@
-{% if database_engine == "sqlite" %}
+{%- if include_scheduler and include_database and database_engine == "sqlite" -%}
 """A backup taken while the database is in WAL must carry the log.
 
 ``shutil.copy2`` copies the main file and nothing else. Under WAL a

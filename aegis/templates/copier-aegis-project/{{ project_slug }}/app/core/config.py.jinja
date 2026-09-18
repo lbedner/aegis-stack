@@ -316,7 +316,7 @@ class Settings(
 {% endif %}
 
 {% if include_database %}
-    # Database settings
+    # Database. SQLite: absolute, on a volume, never the bind mount.
 {% if database_engine == "postgres" %}
     DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
     DATABASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage
@@ -356,10 +356,6 @@ class Settings(
         return self.database_url_effective
 {% endif %}
 {% else %}
-    # ABSOLUTE, on the db-data volume. It must stay OFF the bind mount:
-    # WAL coordinates readers through shared memory and is only coherent
-    # on one kernel (app/core/db.py has the why). The host cannot open
-    # it; use `docker compose exec`.
     DATABASE_URL: str = "sqlite:////data/db/app.db"
     DATABASE_ENGINE_ECHO: bool = False
     DATABASE_CONNECT_ARGS: dict[str, Any] = {"check_same_thread": False}

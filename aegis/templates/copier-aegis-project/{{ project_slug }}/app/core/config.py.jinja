@@ -356,7 +356,11 @@ class Settings(
         return self.database_url_effective
 {% endif %}
 {% else %}
-    DATABASE_URL: str = "sqlite:///./data/app.db"
+    # ABSOLUTE, on the db-data volume. It must stay OFF the bind mount:
+    # WAL coordinates readers through shared memory and is only coherent
+    # on one kernel (app/core/db.py has the why). The host cannot open
+    # it; use `docker compose exec`.
+    DATABASE_URL: str = "sqlite:////data/db/app.db"
     DATABASE_ENGINE_ECHO: bool = False
     DATABASE_CONNECT_ARGS: dict[str, Any] = {"check_same_thread": False}
 {% endif %}

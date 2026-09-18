@@ -289,6 +289,25 @@ async def startup_database_init() -> None:
         db_path = Path(DATABASE_PATH)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # The journal mode lives in the FILE and persists, so it is asked
+        # for once here rather than on every connect - where a pragma
+        # that returns a row leaves a statement open and breaks the first
+        # commit. WAL is what lets the engine take the write lock up
+        # front (BEGIN IMMEDIATE) without every read queuing behind every
+        # write.
+        try:
+            import sqlite3
+
+            from app.core.db import ensure_wal
+
+            connection = sqlite3.connect(DATABASE_PATH)
+            try:
+                ensure_wal(connection)
+            finally:
+                connection.close()
+        except Exception as e:  # noqa: BLE001 - never block startup on a pragma
+            logger.debug(f"Journal-mode setup skipped: {e}")
+
         # Create tables via SQLModel (no Alembic needed for SQLite)
         from sqlmodel import SQLModel
 

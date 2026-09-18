@@ -20,6 +20,21 @@ x-app: &app
     # merges volume lists across override files by target path, so the
     # dev overlay's code mount adds to this rather than replacing it.
     - storage-data:/data/storage
+{%- if database_engine == "sqlite" %}
+    # And one DATABASE, on a named volume rather than the bind mount.
+    # SQLite allows one writer, and WAL is what keeps readers out of that
+    # queue - but WAL coordinates readers through shared memory mapped
+    # from a -shm file, coherent only between processes on ONE kernel.
+    # Bind-mounted from the host into several containers, with a host CLI
+    # opening it too, that is two kernels and WAL is unsafe. Without WAL
+    # the BEGIN IMMEDIATE this stack emits makes every transaction a
+    # writer, so every read queues behind every write.
+    #
+    # A named volume is the container boundary the file never crosses.
+    # The cost is deliberate: the host can no longer open it, so anything
+    # that talks to the database runs `docker compose exec`.
+    - aegis-data:/data/db
+{%- endif %}
   labels:
     logging: "aegis-stack"
 

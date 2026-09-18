@@ -29,10 +29,10 @@ from app.components.backend.api.ai.router import router as ai_router
 from app.components.backend.api.voice.router import router as voice_router
 {%- endif %}
 {%- if ai_backend != "memory" %}
-from app.components.backend.api.llm.router import router as llm_router
+from app.components.backend.api.llm.routes import router as llm_router
 {%- endif %}
 {%- if ai_rag %}
-from app.components.backend.api.rag.router import router as rag_router
+from app.components.backend.api.rag.routes import router as rag_router
 {%- endif %}
 {%- endif %}
 {%- if include_comms %}

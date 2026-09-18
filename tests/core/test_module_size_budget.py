@@ -69,7 +69,6 @@ BUDGET: dict[str, int] = {
     "cli/ai.py.jinja": 2338,
     "components/frontend/dashboard/modals/voice_settings_tab.py": 1649,
     "services/payment/service.py.jinja": 1633,
-    "components/frontend/dashboard/modals/blog_modal.py": 1454,
     "components/frontend/main.py.jinja": 1423,
     "components/frontend/dashboard/modals/worker_modal.py": 1351,
     "i18n/locales/en.py": 1301,

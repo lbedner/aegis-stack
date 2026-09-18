@@ -204,17 +204,18 @@ class TestWorkerModalSSEMethods:
     def test_worker_modal_has_sse_methods(
         self, project_factory: "ProjectFactory"
     ) -> None:
-        """worker_modal.py should have set_totals, flush, _dirty, and all counter methods."""
+        """The worker modal should have set_totals, flush, _dirty, and all counter methods."""
         project_path = project_factory("base_with_worker")
-        content = (
+        modal_dir = (
             project_path
             / "app"
             / "components"
             / "frontend"
             / "dashboard"
             / "modals"
-            / "worker_modal.py"
-        ).read_text()
+            / "worker_modal"
+        )
+        content = "\n".join(f.read_text() for f in sorted(modal_dir.glob("*.py")))
         for method in [
             "set_totals",
             "flush",

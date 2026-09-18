@@ -180,62 +180,16 @@ def apply_sqlite_pragmas(dbapi_connection: Any) -> None:
     what the other had — so every async session ran the schema with its
     foreign keys unenforced.
 
-    NOT journal_mode, even though WAL is exactly what this stack needs.
-    That pragma ANSWERS - it returns the mode - and a row left unfetched
-    inside the connect hook is how a session that has not run a query yet
-    fails to commit. Closing the cursor is not enough either: under
-    aiosqlite close() is a coroutine, so a synchronous call returns an
-    un-awaited object and closes nothing.
-
-    The mode lives in the FILE and survives every restart, so it is set
-    once at startup by ensure_wal() below.
+    NOT journal_mode=WAL, though it is the usual answer to a writer
+    that starves readers. WAL coordinates its readers through shared
+    memory mapped from a -shm file, which is only coherent between
+    processes on one machine; a dev stack that bind-mounts this file from
+    the host into several containers, and a CLI that opens it from the
+    host as well, do not share that memory. It belongs with a database
+    the container boundary does not cross, or with Postgres.
     """
     dbapi_connection.execute("PRAGMA foreign_keys=ON")
     dbapi_connection.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
-
-
-def ensure_wal(dbapi_connection: Any) -> str | None:
-    """Put the database file in WAL, once, and say loudly if it would not.
-
-    WAL is what makes the BEGIN IMMEDIATE below affordable. Taking the
-    write lock up front removes the lock UPGRADE that busy_timeout
-    cannot cover - but under a rollback journal it also makes every
-    transaction a writer, reads included, so every read queues behind
-    every write. Under WAL a reader never queues behind the writer, and
-    the pair is correct together.
-
-    This was not safe while the database sat on the bind mount: WAL
-    coordinates readers through shared memory mapped from a -shm file,
-    coherent only between processes on one kernel, and a host CLI plus
-    several containers are two. The file now lives on a named volume the
-    container boundary never crosses, which is what makes this legal.
-
-    Called once at startup, never per connection - see
-    apply_sqlite_pragmas. An in-memory database reports "memory" and can
-    never be in WAL; that is not drift to report, and warning about it
-    would teach everyone to ignore the warning.
-
-    Returns the mode when it is NOT what was asked for, so a caller can
-    act. Silence is how a database runs for weeks in a configuration its
-    own code says would risk it.
-    """
-    try:
-        cursor = dbapi_connection.execute("PRAGMA journal_mode=WAL")
-        mode = cursor.fetchone()[0]
-        cursor.close()
-    except Exception:  # noqa: BLE001 - a pragma must never break startup
-        return None
-    found = str(mode).lower()
-    if found in ("wal", "memory"):
-        return None
-    logger.warning(
-        "SQLite would not go into WAL mode, which this stack requires: the "
-        "engine takes the write lock up front, and without WAL every read "
-        "queues behind every write. Something else holds this file - stop "
-        "the stack and run PRAGMA journal_mode=WAL.",
-        journal_mode=mode,
-    )
-    return found
 
 
 @event.listens_for(engine, "connect")

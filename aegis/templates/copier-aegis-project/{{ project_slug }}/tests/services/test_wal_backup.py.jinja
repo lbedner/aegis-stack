@@ -1,12 +1,18 @@
 {%- if include_scheduler and include_database and database_engine == "sqlite" -%}
-"""A backup taken while the database is in WAL must carry the log.
+"""A backup must carry writes the main file does not hold yet.
 
-``shutil.copy2`` copies the main file and nothing else. Under WAL a
-commit lives in the ``-wal`` until a checkpoint folds it back, so a plain
-file copy silently produces a backup missing the most recent writes -
-exactly the ones somebody restoring would be looking for. On a database
-whose schema is still in the log it produces a file with no tables at
-all: one that opens cleanly and contains nothing.
+``shutil.copy2`` copies the main database file and nothing else. That is
+fine only while every commit is already in it. Under WAL a commit lives
+in the ``-wal`` until a checkpoint folds it back, so a plain file copy
+silently produces a backup missing the most recent writes - exactly the
+ones somebody restoring is reaching for. On a database whose schema is
+still in the log it produces a file with no tables at all: one that
+opens cleanly and contains nothing.
+
+The template does not enable WAL today, so these set it per test. That
+is the point: the backup path has to be correct BEFORE anyone turns WAL
+on, because the failure is silent and the damage is discovered at
+restore time.
 """
 
 from pathlib import Path

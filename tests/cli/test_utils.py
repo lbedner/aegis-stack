@@ -488,10 +488,7 @@ def assert_file_contains(project_path: Path, relative_path: str, content: str) -
 def assert_database_config_present(config_content: str) -> None:
     """Assert that database configuration is present in config content."""
     assert "DATABASE_URL" in config_content
-    # ABSOLUTE, on the named volume. A relative path here means the file
-    # is back on the bind mount, where WAL is unsafe and BEGIN IMMEDIATE
-    # serialises every read behind every write.
-    assert "sqlite:////data/db/app.db" in config_content
+    assert "sqlite:///./data/app.db" in config_content
     assert "DATABASE_ENGINE_ECHO" in config_content
     assert "DATABASE_CONNECT_ARGS" in config_content
     assert "check_same_thread" in config_content

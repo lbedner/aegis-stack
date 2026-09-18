@@ -15,6 +15,7 @@ from .card_utils import (
     create_metric_container,
     get_status_colors,
 )
+from .card_metadata import metadata_number, metadata_text
 
 
 class OllamaCard:
@@ -36,8 +37,9 @@ class OllamaCard:
     def _get_model_display(self) -> str:
         """Get the primary running model name for display."""
         running_models = self.metadata.get("running_models", [])
-        if running_models:
-            model_name = running_models[0].get("name", "Unknown")
+        if isinstance(running_models, list) and running_models:
+            first = running_models[0]
+            model_name = first.get("name", "Unknown") if isinstance(first, dict) else "Unknown"
             # Truncate long model names
             if len(model_name) > 18:
                 return model_name[:15] + "..."
@@ -46,15 +48,15 @@ class OllamaCard:
 
     def _get_vram_display(self) -> str:
         """Get formatted VRAM usage for display."""
-        total_vram_gb = self.metadata.get("total_vram_gb", 0)
+        total_vram_gb = metadata_number(self.metadata, "total_vram_gb")
         if total_vram_gb > 0:
             return f"{total_vram_gb:.1f} GB"
         return "0 GB"
 
     def _get_models_count_display(self) -> str:
         """Get models count for display."""
-        running = self.metadata.get("running_models_count", 0)
-        installed = self.metadata.get("installed_models_count", 0)
+        running = int(metadata_number(self.metadata, "running_models_count"))
+        installed = int(metadata_number(self.metadata, "installed_models_count"))
         if running > 0:
             return f"{running} warm / {installed}"
         return f"0 / {installed}"
@@ -64,7 +66,7 @@ class OllamaCard:
         if not self.metadata.get("available", False):
             return "Offline"
         running_models = self.metadata.get("running_models", [])
-        if running_models:
+        if isinstance(running_models, list) and running_models:
             return "Warm"
         return "Cold"
 
@@ -99,7 +101,7 @@ class OllamaCard:
 
     def _get_subtitle(self) -> str:
         """Get subtitle showing Ollama with version."""
-        version = self.metadata.get("version", "")
+        version = metadata_text(self.metadata, "version")
         if version:
             return f"Ollama v{version}"
         return "Ollama"

@@ -27,7 +27,7 @@ from app.models.user import EmailVerificationToken, PasswordResetToken, User, Us
 from app.models.user import OAuthProvider, UserOAuthIdentity
 
 
-class RegistrationClosed(Exception):
+class RegistrationClosedError(Exception):
     """Raised by ``upsert_from_oauth`` when a brand-new user attempts to
     sign in via OAuth and ``settings.REGISTRATION_ENABLED`` is False.
 
@@ -606,7 +606,7 @@ class UserService:
            into OAuth without forcing a separate sign-up.
         3. Neither exists → create a new user (no password,
            ``is_verified=True`` since the provider already confirmed the
-           email) and link. Refused with ``RegistrationClosed`` when
+           email) and link. Refused with ``RegistrationClosedError`` when
            ``settings.REGISTRATION_ENABLED`` is False.
         """
         email = email.lower().strip()
@@ -696,7 +696,7 @@ class UserService:
 
         # Path 3: brand-new user.
         if not settings.REGISTRATION_ENABLED:
-            raise RegistrationClosed()
+            raise RegistrationClosedError()
 {%- if include_auth_rbac %}
         # First user becomes admin (matches password-registration behavior).
         count_result = await self.db.exec(select(func.count()).select_from(User))

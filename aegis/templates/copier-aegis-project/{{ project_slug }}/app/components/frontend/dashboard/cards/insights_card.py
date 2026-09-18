@@ -15,6 +15,7 @@ from .card_utils import (
     create_metric_container,
     get_status_colors,
 )
+from .card_metadata import metadata_number
 
 
 class InsightsCard:
@@ -26,9 +27,10 @@ class InsightsCard:
 
     def _create_metrics_section(self) -> ft.Container:
         """Create the metrics section with a clean grid layout."""
-        total_metrics = self.metadata.get("total_metrics", 0)
-        enabled_sources = self.metadata.get("enabled_sources", 0)
-        stale_sources = self.metadata.get("stale_sources", [])
+        total_metrics = int(metadata_number(self.metadata, "total_metrics"))
+        enabled_sources = int(metadata_number(self.metadata, "enabled_sources"))
+        raw_stale = self.metadata.get("stale_sources", [])
+        stale_sources = raw_stale if isinstance(raw_stale, list) else []
         stale_display = str(len(stale_sources)) if stale_sources else "0"
 
         return ft.Container(

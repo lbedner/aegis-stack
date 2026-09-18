@@ -39,15 +39,15 @@ def _extract_in_background(client: TestClient, title: str) -> str:
     return str(started.json()["job_id"])
 
 
-def test_every_job_is_listed_with_when_it_started(client: TestClient) -> None:
-    first = _extract_in_background(client, "Jobs list one")
+def test_every_job_is_listed_with_when_it_started(authenticated_app_client: TestClient) -> None:
+    first = _extract_in_background(authenticated_app_client, "Jobs list one")
     # In-process extraction writes from its own session; on SQLite a second
     # extraction starting mid-flight is a second writer, and the store locks.
-    wait_for_job(client, first)
-    second = _extract_in_background(client, "Jobs list two")
-    wait_for_job(client, second)
+    wait_for_job(authenticated_app_client, first)
+    second = _extract_in_background(authenticated_app_client, "Jobs list two")
+    wait_for_job(authenticated_app_client, second)
 
-    listed = client.get("/api/v1/jobs")
+    listed = authenticated_app_client.get("/api/v1/jobs")
 
     assert listed.status_code == 200
     rows = {row["job_id"]: row for row in listed.json()}

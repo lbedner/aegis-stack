@@ -11,6 +11,7 @@ from .card_utils import (
     create_metric_container,
     get_status_colors,
 )
+from .card_metadata import metadata_number
 
 STORAGE_COMPONENT_NAME = "storage"
 
@@ -29,11 +30,13 @@ class StorageCard:
         ]
         if "objects" in self.metadata:
             metrics.append(
-                create_metric_container("Objects", str(self.metadata.get("objects", 0)))
+                create_metric_container(
+                    "Objects", str(int(metadata_number(self.metadata, "objects")))
+                )
             )
             metrics.append(
                 create_metric_container(
-                    "Stored", format_bytes(int(self.metadata.get("bytes") or 0))
+                    "Stored", format_bytes(int(metadata_number(self.metadata, "bytes")))
                 )
             )
         return ft.Container(content=ft.Row(metrics, expand=True), expand=True)

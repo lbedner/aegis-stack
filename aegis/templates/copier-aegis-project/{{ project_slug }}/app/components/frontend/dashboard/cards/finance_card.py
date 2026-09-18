@@ -19,6 +19,7 @@ from .card_utils import (
     create_metric_container,
     get_status_colors,
 )
+from .card_metadata import metadata_number
 
 
 def _usd(cents: int | None) -> str:
@@ -34,10 +35,10 @@ class FinanceCard:
 
     def _create_metrics_section(self) -> ft.Container:
         """Net-worth headline, then account / connection counts."""
-        net_worth = self.metadata.get("net_worth_amount", 0)
-        accounts = self.metadata.get("account_count", 0)
-        connections = self.metadata.get("connection_count", 0)
-        insights = self.metadata.get("new_insight_count", 0)
+        net_worth = metadata_number(self.metadata, "net_worth_amount")
+        accounts = int(metadata_number(self.metadata, "account_count"))
+        connections = int(metadata_number(self.metadata, "connection_count"))
+        insights = int(metadata_number(self.metadata, "new_insight_count"))
 
         counts = [
             create_metric_container("Accounts", f"{accounts:,}"),

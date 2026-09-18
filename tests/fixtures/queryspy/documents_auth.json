@@ -1,0 +1,126 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
+      "file": "app/services/auth/users.py",
+      "function": "get_user_by_email"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
+      "file": "app/services/auth/users.py",
+      "function": "hard_delete_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
+      "file": "app/services/auth/users.py",
+      "function": "restore_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS count_1 FROM document WHERE document.deleted_at IS NULL AND document.received_at >= :received_at_1",
+      "file": "app/services/documents/queries.py",
+      "function": "store_summary"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT count(*) AS total, sum(CASE WHEN (\"user\".is_verified = true) THEN :param_1 ELSE :param_2 END) AS verified FROM \"user\"",
+      "file": "app/services/auth/health.py",
+      "function": "check_auth_service_health"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.id, document.owner_user_id, document.title, document.kind, document.storage_key, document.storage_backend, document.content_hash, document.media_type, document.byte_size, document.page_count, document.document_date, document.received_at, document.source, document.channel, document.supersedes_id, document.protected, document.note, document.meta_data, document.created_at, document.updated_at, document.deleted_at FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_content"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.id, document.owner_user_id, document.title, document.kind, document.storage_key, document.storage_backend, document.content_hash, document.media_type, document.byte_size, document.page_count, document.document_date, document.received_at, document.source, document.channel, document.supersedes_id, document.protected, document.note, document.meta_data, document.created_at, document.updated_at, document.deleted_at FROM document WHERE document.id = :id_1 AND document.deleted_at IS NULL",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_id"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.id, document.owner_user_id, document.title, document.kind, document.storage_key, document.storage_backend, document.content_hash, document.media_type, document.byte_size, document.page_count, document.document_date, document.received_at, document.source, document.channel, document.supersedes_id, document.protected, document.note, document.meta_data, document.created_at, document.updated_at, document.deleted_at FROM document WHERE document.id = :id_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_id"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document.kind, count(*) AS count_1, coalesce(sum(document.byte_size), :coalesce_2) AS coalesce_1 FROM document WHERE document.deleted_at IS NULL GROUP BY document.kind",
+      "file": "app/services/documents/queries.py",
+      "function": "store_summary"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_page.id, document_page.document_id, document_page.page_number, document_page.status, document_page.method, document_page.text, document_page.image_key, document_page.model, document_page.detail, document_page.created_at, document_page.updated_at FROM document_page WHERE document_page.document_id = :document_id_1 AND document_page.page_number = :page_number_1",
+      "file": "app/services/documents/queries.py",
+      "function": "page_for"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_page.id, document_page.document_id, document_page.page_number, document_page.status, document_page.method, document_page.text, document_page.image_key, document_page.model, document_page.detail, document_page.created_at, document_page.updated_at FROM document_page WHERE document_page.document_id = :document_id_1 ORDER BY document_page.page_number",
+      "file": "app/services/documents/queries.py",
+      "function": "pages_for"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_tag.id, document_tag.document_id, document_tag.label FROM document_tag WHERE document_tag.document_id = :document_id_1 AND document_tag.label = :label_1",
+      "file": "app/services/documents/service.py",
+      "function": "tag"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_tag.id, document_tag.document_id, document_tag.label FROM document_tag WHERE document_tag.document_id = :document_id_1 ORDER BY document_tag.label",
+      "file": "app/services/documents/queries.py",
+      "function": "tags_for"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT document_tag.id, document_tag.document_id, document_tag.label FROM document_tag WHERE document_tag.document_id IN (__[POSTCOMPILE_document_id_1]) ORDER BY document_tag.document_id, document_tag.label",
+      "file": "app/services/documents/queries.py",
+      "function": "tags_for_many"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT email_verification_token.id, email_verification_token.user_id, email_verification_token.token, email_verification_token.created_at, email_verification_token.used FROM email_verification_token WHERE email_verification_token.token = :token_1",
+      "file": "tests/services/test_auth_integration.py",
+      "function": "test_resend_marks_prior_token_used"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT email_verification_token.id, email_verification_token.user_id, email_verification_token.token, email_verification_token.created_at, email_verification_token.used FROM email_verification_token WHERE email_verification_token.user_id = :user_id_1 AND email_verification_token.used = false",
+      "file": "app/services/auth/users.py",
+      "function": "_invalidate_prior_email_verification_tokens"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/components/backend/api/auth/router.py",
+      "function": "_current_session_family"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "revoke"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "rotate"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token, refresh_token.user_id, refresh_token.family_id, refresh_token.expires_at, refresh_token.revoked_at, refresh_token.created_at, refresh_token.source, refresh_token.user_agent, refresh_token.ip, refresh_token.last_used_at FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "list_active_for_user"
+    }
+  ]
+}

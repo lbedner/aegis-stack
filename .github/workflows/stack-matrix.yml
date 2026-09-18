@@ -89,12 +89,13 @@ jobs:
           - auth_org
           - ai_service
           - ai_langchain
+          - ai_ollama
           - ai_voice
           - insights
           - insights_per_user
           - payment
           - blog
-          - documents
+          - documents_auth
           - documents_worker
           - storage
           - finance

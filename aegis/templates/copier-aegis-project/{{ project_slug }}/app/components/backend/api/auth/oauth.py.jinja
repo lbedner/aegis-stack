@@ -37,7 +37,7 @@ from app.core.security import create_access_token, set_refresh_cookie, set_sessi
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.deps import get_current_active_user
 from app.services.auth.refresh_tokens import RefreshService
-from app.services.auth.users import RegistrationClosed, UserService
+from app.services.auth.users import RegistrationClosedError, UserService
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response
@@ -257,7 +257,7 @@ async def github_callback(
             provider_username=profile.get("login"),
             avatar_url=profile.get("avatar_url"),
         )
-    except RegistrationClosed:
+    except RegistrationClosedError:
         return RedirectResponse(
             url="/login?oauth_error=signup_closed", status_code=302
         )
@@ -320,7 +320,7 @@ async def google_callback(
             provider_username=profile.get("name") or profile.get("given_name"),
             avatar_url=profile.get("picture"),
         )
-    except RegistrationClosed:
+    except RegistrationClosedError:
         return RedirectResponse(
             url="/login?oauth_error=signup_closed", status_code=302
         )

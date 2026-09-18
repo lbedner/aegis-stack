@@ -9,7 +9,7 @@ Covers the three resolution paths:
    identity to that user (account linking) and flip ``is_verified``
    if the local account hadn't verified yet.
 3. Brand-new user -> create with ``hashed_password=""`` (OAuth-only)
-   and link. Refused with ``RegistrationClosed`` when
+   and link. Refused with ``RegistrationClosedError`` when
    ``settings.REGISTRATION_ENABLED`` is False.
 
 These are direct service-level tests (no HTTP mocking), so they
@@ -20,7 +20,7 @@ authorize-redirect machinery.
 import pytest
 from app.core.config import settings
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
-from app.services.auth.users import RegistrationClosed, UserService
+from app.services.auth.users import RegistrationClosedError, UserService
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -139,7 +139,7 @@ class TestUpsertFromOauth:
         settings.REGISTRATION_ENABLED = False
         try:
             user_service = UserService(async_db_session)
-            with pytest.raises(RegistrationClosed):
+            with pytest.raises(RegistrationClosedError):
                 await user_service.upsert_from_oauth(
                     provider=OAuthProvider.GITHUB,
                     provider_user_id="closed-1",

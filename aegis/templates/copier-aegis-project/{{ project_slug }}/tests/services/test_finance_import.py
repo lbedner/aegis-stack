@@ -1393,7 +1393,12 @@ class TestDoubleSubmitLandsOnTheFirstBatch:
         # Simulate the race window: the second run's early check misses
         # (as if the first commit weren't visible yet), so it walks into
         # the unique constraint - and must land on the winner, not raise.
-        real = imports._prior_batch
+        # Patched on ``ingest``, not on ``imports``: ``ingest_transactions``
+        # lives there and looks the helper up in its OWN module, so patching
+        # the re-export would leave the real one running.
+        from app.services.finance.adapters.importers import ingest
+
+        real = ingest._prior_batch
         calls = {"n": 0}
 
         async def miss_once(db, **kwargs):
@@ -1402,7 +1407,7 @@ class TestDoubleSubmitLandsOnTheFirstBatch:
                 return None
             return await real(db, **kwargs)
 
-        monkeypatch.setattr(imports, "_prior_batch", miss_once)
+        monkeypatch.setattr(ingest, "_prior_batch", miss_once)
 
         second = await imports.ingest_transactions(
             async_db_session,

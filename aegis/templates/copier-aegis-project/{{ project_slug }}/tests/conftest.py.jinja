@@ -705,3 +705,53 @@ def acting_owner_user_id() -> int | None:
     return None
 {% endif %}
 
+
+{%- if include_auth %}
+
+
+# The seeded owner this fixture acts as. Any of ``KNOWN_OWNER_IDS`` would
+# do; 1 is the one tests already mean when they write ``owner_user_id=1``.
+APP_CLIENT_OWNER_ID = 1
+
+
+@pytest.fixture
+def authenticated_app_client(client: TestClient) -> TestClient:
+    """``client``, signed as a seeded owner.
+
+    The sibling of ``authenticated_client``, and the difference is which
+    database the request reads. ``authenticated_client`` rides
+    ``async_client_with_db``, whose override binds the request to the
+    test's own session: work handed to a SEPARATE session cannot see
+    what it wrote, because that session never commits. Use this one for
+    endpoints that hand work off - document extraction, job dispatch -
+    and ``authenticated_client`` everywhere else, so the test
+    transaction still rolls the data back.
+
+    It cannot reuse ``auth_headers``: that seeds its user inside the
+    test transaction, so a request on the app's own engine authenticates
+    against a database where that user does not exist, and every call
+    401s. The owners in ``KNOWN_OWNER_IDS`` are already committed to
+    ``app_owned_engine`` and active, so a token for one of them resolves
+    on the engine the request actually reads.
+    """
+    from app.core.security import create_access_token
+
+    token = create_access_token(
+        data={"sub": f"owner{APP_CLIENT_OWNER_ID}@test.local"}
+    )
+    client.headers.update({"Authorization": f"Bearer {token}"})
+    return client
+{%- else %}
+
+
+@pytest.fixture
+def authenticated_app_client(client: TestClient) -> TestClient:
+    """No auth service, so this is ``client`` unchanged.
+
+    Keeps the documents suites written once: they ask for the same
+    fixture in both stacks, and only the auth stack has anything to
+    sign. See the auth-stack docstring for why it is not
+    ``authenticated_client``.
+    """
+    return client
+{%- endif %}

@@ -133,6 +133,12 @@
       "label": "SELECT refresh_token.token, refresh_token.user_id, refresh_token.family_id, refresh_token.expires_at, refresh_token.revoked_at, refresh_token.created_at, refresh_token.source, refresh_token.user_agent, refresh_token.ip, refresh_token.last_used_at FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
       "file": "app/services/auth/refresh_tokens.py",
       "function": "list_active_for_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT user_oauth_identity.id, user_oauth_identity.user_id, user_oauth_identity.provider, user_oauth_identity.provider_user_id, user_oauth_identity.provider_username, user_oauth_identity.provider_email, user_oauth_identity.avatar_url, user_oauth_identity.created_at, user_oauth_identity.updated_at FROM user_oauth_identity WHERE user_oauth_identity.provider = :provider_1 AND user_oauth_identity.provider_user_id = :provider_user_id_1",
+      "file": "app/services/auth/users.py",
+      "function": "upsert_from_oauth"
     }
   ]
 }

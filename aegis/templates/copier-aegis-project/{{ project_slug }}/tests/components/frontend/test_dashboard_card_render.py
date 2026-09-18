@@ -22,6 +22,8 @@ from __future__ import annotations
 import importlib
 import inspect
 import pkgutil
+import re
+import sys
 
 import pytest
 
@@ -156,3 +158,53 @@ class TestStatusReachesTheCard:
             f"{name} renders identically whether the component is healthy "
             f"or unhealthy"
         )
+
+
+# Values a health check could plausibly publish where a card expects a
+# number. A string is the realistic one - a field that used to be an int
+# becomes "12.4%" or "unknown" across an upgrade, or a third-party
+# plugin publishes metadata in its own shape - and it is what breaks
+# ``f"{value:.1f}"`` and arithmetic alike.
+HOSTILE_VALUES = ["unexpected-string", None, [], {}]
+
+_METADATA_READ = re.compile(r"""metadata\.get\(\s*["']([A-Za-z_0-9]+)["']""")
+
+
+def keys_a_card_reads(card_cls: type) -> set[str]:
+    """Every metadata key named in the card's own module."""
+    return set(_METADATA_READ.findall(inspect.getsource(sys.modules[card_cls.__module__])))
+
+
+class TestEveryCardSurvivesAWrongType:
+    """The other half of the degrade contract.
+
+    The class above covers metadata that is MISSING, which is well
+    handled: every read is ``.get(key, default)``. Nothing covers
+    metadata that is PRESENT and the wrong type, and ``.get`` hands that
+    straight through:
+
+        RedisCard._get_hit_ratio_display
+            return f"{hit_rate:.1f}%"
+        ValueError: Unknown format code 'f' for object of type 'str'
+
+    That is not cosmetic. ``update_component_cards`` builds cards inside
+    the refresh loop, so one bad value takes out the card build for the
+    whole cycle, not just its own tile.
+
+    The keys are scraped from each card's source rather than listed, for
+    the same reason the cards are discovered rather than listed: a card
+    that starts reading a new key is covered without anyone remembering
+    to add it here.
+    """
+
+    @pytest.mark.parametrize("name,card_cls", CARDS, ids=CARD_IDS)
+    @pytest.mark.parametrize("hostile", HOSTILE_VALUES, ids=repr)
+    def test_it_builds_when_every_value_is_the_wrong_type(
+        self, name: str, card_cls: type, hostile: object
+    ) -> None:
+        keys = keys_a_card_reads(card_cls)
+        if not keys:
+            pytest.skip(f"{name} reads no metadata keys")
+        payload = dict.fromkeys(keys, hostile)
+        component = name.replace("Card", "").lower()
+        assert rendered(card_cls, status(component, **payload))

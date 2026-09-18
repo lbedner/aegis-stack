@@ -175,7 +175,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/components/test_worker_events.py",
                 "tests/api/test_worker_endpoints.py",
                 "app/components/frontend/dashboard/cards/worker_card.py",
-                "app/components/frontend/dashboard/modals/worker_modal.py",
+                "app/components/frontend/dashboard/modals/worker_modal",
                 # Worker-only modal section (imported solely by worker_modal);
                 # part of the worker footprint so add/remove cover it.
                 "app/components/frontend/dashboard/modals/task_history_section.py",

@@ -548,7 +548,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 # Imports ai.ollama_activity; only jinja-gated files reference
                 # it, so without AI it would ship as a dead module whose
                 # import cannot resolve.
-                "app/components/frontend/dashboard/modals/ollama_modal.py",
+                "app/components/frontend/dashboard/modals/ollama_modal",
                 "tests/components/frontend/test_ai_analytics_utils.py",
                 "app/models/conversation.py",
             ],
@@ -566,14 +566,14 @@ SERVICES: dict[str, ServiceSpec] = {
                     # otherwise the retrofit copies it even with ``ai_rag``
                     # off, rendering a dead RAG tab (issue #814). The modal's
                     # ``_HAS_RAG`` import guard handles its absence.
-                    "app/components/frontend/dashboard/modals/rag_tab.py",
+                    "app/components/frontend/dashboard/modals/rag_tab",
                 ],
                 "ai_voice": [
                     "app/components/backend/api/voice",
                     "app/services/ai/domains/voice",
                     "tests/services/ai/voice",
                     "tests/api/test_voice_endpoints.py",
-                    "app/components/frontend/dashboard/modals/voice_settings_tab.py",
+                    "app/components/frontend/dashboard/modals/voice_settings",
                 ],
             },
         ),
@@ -642,7 +642,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "docs/services/comms",
                 # Frontend dashboard files
                 "app/components/frontend/dashboard/cards/comms_card.py",
-                "app/components/frontend/dashboard/modals/comms_modal.py",
+                "app/components/frontend/dashboard/modals/comms_modal",
             ],
         ),
     ),
@@ -869,7 +869,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/shutdown/payment_webhook_forwarder.py",
                 # Frontend dashboard files
                 "app/components/frontend/dashboard/cards/payment_card.py",
-                "app/components/frontend/dashboard/modals/payment_modal.py",
+                "app/components/frontend/dashboard/modals/payment_modal",
             ],
         ),
     ),
@@ -946,7 +946,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_blog_list_queries.py",
                 "tests/api/test_blog_endpoints.py",
                 "app/components/frontend/dashboard/cards/blog_card.py",
-                "app/components/frontend/dashboard/modals/blog_modal.py",
+                "app/components/frontend/dashboard/modals/blog_modal",
             ],
         ),
     ),

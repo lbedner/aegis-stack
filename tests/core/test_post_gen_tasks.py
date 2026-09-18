@@ -530,13 +530,13 @@ class TestOllamaModeCleanup:
     """``ollama_mode: none`` must leave no Ollama file behind.
 
     Their importers are all jinja-gated, so the files ship dead rather than
-    breaking the boot — but ``ollama_modal.py`` imports ``ollama_activity``,
-    which renders empty in that mode, so the module cannot even import.
+    breaking the boot — but ``ollama_modal`` imports ``ollama_activity``,
+    which renders empty in that mode, so the package cannot even import.
     """
 
     OLLAMA_FILES = (
         "app/components/frontend/dashboard/cards/ollama_card.py",
-        "app/components/frontend/dashboard/modals/ollama_modal.py",
+        "app/components/frontend/dashboard/modals/ollama_modal/dialog.py",
         "app/services/system/health_ollama.py",
         "app/services/ai/domains/llm/ollama.py",
         "app/services/ai/domains/llm/ollama_activity.py",

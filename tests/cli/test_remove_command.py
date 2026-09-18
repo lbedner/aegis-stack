@@ -115,7 +115,7 @@ class TestRemoveCommand:
             / "backend"
             / "api"
             / "rag"
-            / "router.py"
+            / "routes.py"
         )
         voice_router = (
             project_path

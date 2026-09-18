@@ -156,7 +156,7 @@ class TestFootprintSplit:
         rag_tab = "app/components/frontend/dashboard/modals/rag_tab/tab.py"
 
         # LLM API dir is in primary -> its files land in the add base.
-        assert "app/components/backend/api/llm/router.py" in add_base
+        assert "app/components/backend/api/llm/routes.py" in add_base
         # rag_tab only on the remove side / when ai_rag is enabled.
         assert rag_tab not in add_base
         assert rag_tab in full

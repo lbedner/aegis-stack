@@ -10,12 +10,9 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from app.core.db import get_async_session
-
 from ..models import AudioInput, STTProvider, TranscriptionResult
 from .config import STTConfig, get_stt_config
 from .providers import BaseSTTProvider, get_stt_provider
-from app.services.ai.models.voice_usage import STTUsage
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +196,7 @@ class STTService:
             List of validation error messages (empty if valid).
         """
         if self._settings:
-            return self._config.validate(self._settings)
+            return self._config.validation_errors(self._settings)
         return []
 
     def is_available(self) -> bool:
@@ -253,6 +250,18 @@ class STTService:
             success: Whether transcription succeeded.
             error_message: Error message if transcription failed.
         """
+        try:
+            from app.core.db import get_async_session
+
+            from app.services.ai.models.voice_usage import STTUsage
+        except ImportError:
+            # A project generated without a database has no stt_usage table
+            # (and no app.core.db at all). The recording call stays in the
+            # transcription path so the code is one shape everywhere; there is
+            # simply nowhere to write, and a warning per request would be
+            # worse than silence.
+            return
+
         try:
             async with get_async_session() as session:
                 usage = STTUsage(

@@ -414,6 +414,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Every chat read goes through the queries module; its tables are gone.
         remove_file(project_path, "app/services/ai/domains/chat/queries.py")
         remove_file(project_path, "app/services/ai/models/sentiment.py")
+        # stt_usage/tts_usage are tables. ai_voice gates the file's body, but
+        # persistence gates whether there is anywhere to put a table at all —
+        # without it the model registry walks into an unimportable sqlalchemy.
+        remove_file(project_path, "app/services/ai/models/voice_usage.py")
         remove_file(project_path, "tests/services/ai/test_sentiment.py")
         # Agent registry CLI inspects DB rows.
         remove_file(project_path, "app/cli/agents.py")
@@ -446,6 +450,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_dir(project_path, "tests/services/ai/etl")
         remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
         remove_file(project_path, "tests/services/ai/test_llm_catalog_context.py")
+        # Prints catalog rows; imports sqlmodel + the llm tables removed above.
+        remove_file(project_path, "tests/services/ai/test_model_id_display.py")
         remove_file(project_path, "tests/services/ai/test_llm_service.py")
         remove_file(project_path, "tests/services/ai/test_provider_management.py")
         # Remove LLM CLI and API (catalog management needs database)

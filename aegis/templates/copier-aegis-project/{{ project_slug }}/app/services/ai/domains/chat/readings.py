@@ -34,12 +34,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from app.core.db import get_async_session
 from app.services.ai.domains.chat.tools import register_tool
-from app.services.ai.domains.chat.user_memory import (
-    load_user_readings,
-    store_user_readings,
-)
 
 # Bounded: readings are context re-injected EVERY turn, so an unbounded
 # list would slowly crowd out the conversation itself. Oldest go first.
@@ -125,6 +120,20 @@ async def merge_staged_readings(
     """
     if not staged:
         return
+
+    try:
+        from app.core.db import get_async_session
+        from app.services.ai.domains.chat.user_memory import (
+            load_user_readings,
+            store_user_readings,
+        )
+    except ImportError:
+        # A memory-backend project ships neither app.core.db nor the
+        # per-user memory table. The tool stays registered so the model
+        # sees one shape everywhere; a reading just lives for the turn
+        # that took it, which is what a memory backend means.
+        return
+
     async with get_async_session() as session:
         readings = await load_user_readings(session, user_id)
         if not readings and legacy:
@@ -135,6 +144,12 @@ async def merge_staged_readings(
 
 async def user_readings(user_id: str) -> list[dict[str, Any]]:
     """Everything this user has recorded, for the turn about to run."""
+    try:
+        from app.core.db import get_async_session
+        from app.services.ai.domains.chat.user_memory import load_user_readings
+    except ImportError:
+        return []  # no store on a memory backend; see merge_staged_readings
+
     async with get_async_session() as session:
         return await load_user_readings(session, user_id)
 

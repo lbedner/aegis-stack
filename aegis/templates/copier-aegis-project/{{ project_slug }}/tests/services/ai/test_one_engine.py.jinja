@@ -11,7 +11,11 @@ this keeps it.
 
 import inspect
 
+{%- if ai_backend != "memory" %}
 from app.services.ai.domains.chat import conversation, llm_catalog_context
+{%- else %}
+from app.services.ai.domains.chat import conversation
+{%- endif %}
 from app.services.ai.service import contexts, status, usage
 {%- if ai_backend != "memory" %}
 from app.services.ai import usage_recording
@@ -19,7 +23,11 @@ from app.services.ai import usage_recording
 
 
 def test_the_ai_store_never_opens_a_sync_session() -> None:
+{%- if ai_backend != "memory" %}
     modules = [conversation, llm_catalog_context, usage, status, contexts]
+{%- else %}
+    modules = [conversation, usage, status, contexts]
+{%- endif %}
 {%- if ai_backend != "memory" %}
     modules.append(usage_recording)
 {%- endif %}

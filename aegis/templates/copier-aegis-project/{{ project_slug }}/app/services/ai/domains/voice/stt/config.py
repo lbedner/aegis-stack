@@ -72,7 +72,7 @@ class STTConfig(BaseModel):
 
         return None  # Local providers don't need API keys
 
-    def validate(self, settings: Any) -> list[str]:
+    def validation_errors(self, settings: Any) -> list[str]:
         """
         Validate STT configuration and return list of issues.
 
@@ -107,7 +107,7 @@ class STTConfig(BaseModel):
 
     def is_available(self, settings: Any) -> bool:
         """Check if the configured provider is available."""
-        return len(self.validate(settings)) == 0
+        return len(self.validation_errors(settings)) == 0
 
 
 def get_stt_config(settings: Any) -> STTConfig:

@@ -128,6 +128,10 @@ class TestTTSServiceValidation:
         """Test validate returns empty list for valid config."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
+        settings.TTS_PROVIDER = "openai"
+        settings.TTS_MODEL = None
+        settings.TTS_VOICE = None
+        settings.TTS_SPEED = 1.0
 
         service = TTSService(settings)
         errors = service.validate()
@@ -148,6 +152,10 @@ class TestTTSServiceValidation:
         """Test is_available returns True when validation passes."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
+        settings.TTS_PROVIDER = "openai"
+        settings.TTS_MODEL = None
+        settings.TTS_VOICE = None
+        settings.TTS_SPEED = 1.0
 
         service = TTSService(settings)
 

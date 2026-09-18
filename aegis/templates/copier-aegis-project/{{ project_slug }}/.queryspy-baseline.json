@@ -178,9 +178,21 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT agent.id, agent.slug, agent.name, agent.description, agent.category, agent.model_id, agent.system_prompt, agent.temperature, agent.max_tokens, agent.memory_modules, agent.knowledge_base_ids, agent.is_active, agent.code_mode, agent.created_at, agent.updated_at FROM agent WHERE agent.slug = :slug_1",
+      "file": "app/services/finance/domains/detection/analyst/seeds.py",
+      "function": "load_finance_agent_fixtures"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT agent_1.id AS agent_1_id, tool.id AS tool_id, tool.name AS tool_name, tool.description AS tool_description, tool.is_active AS tool_is_active FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "agent_by_slug"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT agent_tool.id, agent_tool.agent_id, agent_tool.tool_id FROM agent_tool WHERE agent_tool.agent_id = :agent_id_1",
+      "file": "app/services/finance/domains/detection/analyst/seeds.py",
+      "function": "_attach_chat_tools"
     },
     {
       "kind": "repeated_statement",
@@ -700,6 +712,18 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT finance_analyst_snapshot.id, finance_analyst_snapshot.owner_user_id, finance_analyst_snapshot.as_of_date, finance_analyst_snapshot.net_worth, finance_analyst_snapshot.cash_today, finance_analyst_snapshot.portfolio_total, finance_analyst_snapshot.positions, finance_analyst_snapshot.projection_end_date, finance_analyst_snapshot.projection_end_amount, finance_analyst_snapshot.projection_low_date, finance_analyst_snapshot.projection_low_amount, finance_analyst_snapshot.first_negative_date, finance_analyst_snapshot.first_negative_name, finance_analyst_snapshot.open_critical, finance_analyst_snapshot.open_warning, finance_analyst_snapshot.goals_total_saved, finance_analyst_snapshot.created_at FROM finance_analyst_snapshot WHERE finance_analyst_snapshot.owner_user_id = :owner_user_id_1 AND finance_analyst_snapshot.as_of_date < :as_of_date_1 ORDER BY finance_analyst_snapshot.as_of_date DESC LIMIT :param_1",
+      "file": "app/services/finance/domains/detection/queries.py",
+      "function": "analyst_snapshot_before"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_analyst_snapshot.id, finance_analyst_snapshot.owner_user_id, finance_analyst_snapshot.as_of_date, finance_analyst_snapshot.net_worth, finance_analyst_snapshot.cash_today, finance_analyst_snapshot.portfolio_total, finance_analyst_snapshot.positions, finance_analyst_snapshot.projection_end_date, finance_analyst_snapshot.projection_end_amount, finance_analyst_snapshot.projection_low_date, finance_analyst_snapshot.projection_low_amount, finance_analyst_snapshot.first_negative_date, finance_analyst_snapshot.first_negative_name, finance_analyst_snapshot.open_critical, finance_analyst_snapshot.open_warning, finance_analyst_snapshot.goals_total_saved, finance_analyst_snapshot.created_at FROM finance_analyst_snapshot WHERE finance_analyst_snapshot.owner_user_id = :owner_user_id_1 AND finance_analyst_snapshot.as_of_date = :as_of_date_1",
+      "file": "app/services/finance/domains/detection/queries.py",
+      "function": "analyst_snapshot_on"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT finance_balance_snapshot.balance_date, finance_account.classification, sum(finance_balance_snapshot.balance) AS sum_1 FROM finance_balance_snapshot JOIN finance_account ON finance_account.id = finance_balance_snapshot.account_id WHERE finance_balance_snapshot.account_id IN (__[POSTCOMPILE_account_id_1]) AND finance_balance_snapshot.balance_date >= :balance_date_1 AND finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1 GROUP BY finance_balance_snapshot.balance_date, finance_account.classification ORDER BY finance_balance_snapshot.balance_date",
       "file": "app/services/finance/domains/ledger/queries/networth.py",
       "function": "balance_class_series"
@@ -940,6 +964,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT finance_insight.id, finance_insight.owner_user_id, finance_insight.organization_id, finance_insight.insight_type, finance_insight.severity, finance_insight.title, finance_insight.body, finance_insight.related_account_id, finance_insight.related_transaction_id, finance_insight.related_category_id, finance_insight.related_stream_id, finance_insight.detected_amount, finance_insight.currency, finance_insight.dedup_key, finance_insight.period_start, finance_insight.period_end, finance_insight.data, finance_insight.status, finance_insight.is_read, finance_insight.dismissed_at, finance_insight.metadata, finance_insight.created_at, finance_insight.updated_at FROM finance_insight WHERE finance_insight.owner_user_id = :owner_user_id_1 AND finance_insight.dedup_key = :dedup_key_1",
+      "file": "app/services/finance/domains/detection/queries.py",
+      "function": "insight_first_where"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT finance_insight.id, finance_insight.owner_user_id, finance_insight.organization_id, finance_insight.insight_type, finance_insight.severity, finance_insight.title, finance_insight.body, finance_insight.related_account_id, finance_insight.related_transaction_id, finance_insight.related_category_id, finance_insight.related_stream_id, finance_insight.detected_amount, finance_insight.currency, finance_insight.dedup_key, finance_insight.period_start, finance_insight.period_end, finance_insight.data, finance_insight.status, finance_insight.is_read, finance_insight.dismissed_at, finance_insight.metadata, finance_insight.created_at, finance_insight.updated_at FROM finance_insight WHERE finance_insight.owner_user_id = :owner_user_id_1 AND finance_insight.insight_type = :insight_type_1 AND finance_insight.related_stream_id = :related_stream_id_1",
       "file": "app/services/finance/domains/detection/queries.py",
       "function": "insight_rows_where"
@@ -949,6 +979,12 @@
       "label": "SELECT finance_insight.id, finance_insight.owner_user_id, finance_insight.organization_id, finance_insight.insight_type, finance_insight.severity, finance_insight.title, finance_insight.body, finance_insight.related_account_id, finance_insight.related_transaction_id, finance_insight.related_category_id, finance_insight.related_stream_id, finance_insight.detected_amount, finance_insight.currency, finance_insight.dedup_key, finance_insight.period_start, finance_insight.period_end, finance_insight.data, finance_insight.status, finance_insight.is_read, finance_insight.dismissed_at, finance_insight.metadata, finance_insight.created_at, finance_insight.updated_at FROM finance_insight WHERE finance_insight.owner_user_id = :owner_user_id_1 AND finance_insight.insight_type = :insight_type_1 AND finance_insight.related_stream_id IS NOT NULL",
       "file": "app/services/finance/domains/detection/queries.py",
       "function": "insight_rows_where"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_insight.id, finance_insight.owner_user_id, finance_insight.organization_id, finance_insight.insight_type, finance_insight.severity, finance_insight.title, finance_insight.body, finance_insight.related_account_id, finance_insight.related_transaction_id, finance_insight.related_category_id, finance_insight.related_stream_id, finance_insight.detected_amount, finance_insight.currency, finance_insight.dedup_key, finance_insight.period_start, finance_insight.period_end, finance_insight.data, finance_insight.status, finance_insight.is_read, finance_insight.dismissed_at, finance_insight.metadata, finance_insight.created_at, finance_insight.updated_at FROM finance_insight WHERE finance_insight.owner_user_id = :owner_user_id_1 AND finance_insight.status = :status_1 ORDER BY finance_insight.id DESC",
+      "file": "app/services/finance/domains/planning/queries.py",
+      "function": "insights_list"
     },
     {
       "kind": "repeated_statement",
@@ -1015,6 +1051,12 @@
       "label": "SELECT finance_net_worth_snapshot.id, finance_net_worth_snapshot.owner_user_id, finance_net_worth_snapshot.organization_id, finance_net_worth_snapshot.as_of_date, finance_net_worth_snapshot.total_assets_amount, finance_net_worth_snapshot.total_liabilities_amount, finance_net_worth_snapshot.net_worth_amount, finance_net_worth_snapshot.cash_amount, finance_net_worth_snapshot.investments_amount, finance_net_worth_snapshot.other_assets_amount, finance_net_worth_snapshot.currency, finance_net_worth_snapshot.breakdown, finance_net_worth_snapshot.is_estimated FROM finance_net_worth_snapshot",
       "file": "tests/services/test_finance_demo_seed.py",
       "function": "test_clear_repairs_the_net_worth_history"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_net_worth_snapshot.id, finance_net_worth_snapshot.owner_user_id, finance_net_worth_snapshot.organization_id, finance_net_worth_snapshot.as_of_date, finance_net_worth_snapshot.total_assets_amount, finance_net_worth_snapshot.total_liabilities_amount, finance_net_worth_snapshot.net_worth_amount, finance_net_worth_snapshot.cash_amount, finance_net_worth_snapshot.investments_amount, finance_net_worth_snapshot.other_assets_amount, finance_net_worth_snapshot.currency, finance_net_worth_snapshot.breakdown, finance_net_worth_snapshot.is_estimated FROM finance_net_worth_snapshot WHERE finance_net_worth_snapshot.as_of_date >= :as_of_date_1 AND finance_net_worth_snapshot.currency = :currency_1 AND finance_net_worth_snapshot.owner_user_id = :owner_user_id_1 ORDER BY finance_net_worth_snapshot.as_of_date",
+      "file": "app/services/finance/domains/ledger/queries/networth.py",
+      "function": "net_worth_series_since"
     },
     {
       "kind": "repeated_statement",
@@ -1345,6 +1387,12 @@
       "label": "SELECT finance_transaction.category_id, sum(finance_transaction.amount) AS sum_1 FROM finance_transaction WHERE finance_transaction.deleted_at IS NULL AND finance_transaction.dedup_status != :dedup_status_1 AND finance_transaction.excluded_from_reports IS false AND finance_transaction.account_id IN (SELECT finance_account.id FROM finance_account WHERE finance_account.deleted_at IS NULL) AND finance_transaction.amount < :amount_1 AND finance_transaction.date >= :date_1 AND finance_transaction.date < :date_2 AND finance_transaction.owner_user_id = :owner_user_id_1 AND finance_transaction.is_split IS false AND finance_transaction.category_id IN (__[POSTCOMPILE_category_id_1]) GROUP BY finance_transaction.category_id",
       "file": "app/services/finance/domains/planning/queries.py",
       "function": "spend_by_category"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_transaction.date, finance_transaction.amount FROM finance_transaction WHERE finance_transaction.deleted_at IS NULL AND finance_transaction.dedup_status != :dedup_status_1 AND finance_transaction.excluded_from_reports IS false AND finance_transaction.is_transfer IS false AND finance_transaction.account_id IN (SELECT finance_account.id FROM finance_account WHERE finance_account.deleted_at IS NULL) AND finance_transaction.date >= :date_1 AND finance_transaction.date <= :date_2 AND finance_transaction.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/ledger/queries/transactions.py",
+      "function": "dated_amounts_in_window"
     },
     {
       "kind": "repeated_statement",
@@ -1966,6 +2014,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT memory_module.id, memory_module.slug, memory_module.name, memory_module.description, memory_module.category, memory_module.prompt_content, memory_module.fetch_function, memory_module.context_key, memory_module.supports_days_back, memory_module.default_days_back, memory_module.priority, memory_module.token_estimate, memory_module.is_active, memory_module.created_at, memory_module.updated_at FROM memory_module WHERE memory_module.slug = :slug_1",
+      "file": "app/services/finance/domains/detection/analyst/seeds.py",
+      "function": "load_finance_agent_fixtures"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT org_invite.id, org_invite.organization_id, org_invite.email, org_invite.role, org_invite.invited_by, org_invite.status, org_invite.token, org_invite.created_at, org_invite.expires_at FROM org_invite WHERE org_invite.organization_id = :organization_id_1 AND org_invite.email = :email_1 AND org_invite.status = :status_1",
       "file": "app/services/auth/invites.py",
       "function": "_get_pending_invite"
@@ -2173,6 +2227,12 @@
       "label": "SELECT refresh_token.token, refresh_token.user_id, refresh_token.family_id, refresh_token.expires_at, refresh_token.revoked_at, refresh_token.created_at, refresh_token.source, refresh_token.user_agent, refresh_token.ip, refresh_token.last_used_at FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
       "file": "app/services/auth/refresh_tokens.py",
       "function": "list_active_for_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT tool.id, tool.name, tool.description, tool.is_active FROM tool WHERE tool.name = :name_1",
+      "file": "app/services/finance/domains/detection/analyst/seeds.py",
+      "function": "_attach_chat_tools"
     },
     {
       "kind": "repeated_statement",

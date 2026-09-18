@@ -255,6 +255,18 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "langchain-openai"],
     ),
     StackCombination(
+        name="ai_voice",
+        components=[],
+        services=["ai[voice]"],
+        description="Voice with no database: usage recording has nowhere to write",
+        expected_files=[
+            "app/services/ai/domains/voice/stt/service.py",
+            "app/services/ai/domains/voice/tts/service.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
+    ),
+    StackCombination(
         name="insights",
         components=["database", "scheduler"],
         services=["insights"],
@@ -358,6 +370,32 @@ STACK_COMBINATIONS = [
         ],
         expected_docker_services=["webserver", "scheduler"],
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
+    ),
+    StackCombination(
+        name="finance_ai_rbac",
+        # Finance's two neighbours, which nothing else in the matrix pairs
+        # it with. AI is what renders ``api/finance/analyst.py`` at all
+        # (it needs a non-memory backend and pydantic-ai), so without it
+        # the finance clock guard walks a directory the file is missing
+        # from. RBAC is what puts the NOT NULL ``role`` column on ``user``,
+        # which the finance sentinel owner row has to name. One bug each,
+        # both invisible to every other row.
+        #
+        # ``rbac`` rather than ``org``: role is the whole point and org
+        # only adds tables and tests on top, and this suite has to finish
+        # inside QUALITY_CHECK_TIMEOUTS["tests"] — the kitchen sink is
+        # already near it, which is why finance is not simply added there.
+        components=["database", "scheduler"],
+        services=["auth[rbac]", "ai[sqlite]", "finance"],
+        description="Finance beside AI and RBAC auth: analyst renders, user.role exists",
+        expected_files=[
+            "app/services/finance/",
+            "app/components/backend/api/finance/analyst.py",
+            "tests/services/test_finance_clock.py",
+            "app/core/db.py",
+        ],
+        expected_docker_services=["webserver", "scheduler"],
+        expected_pyproject_deps=["fastapi", "flet", "sqlmodel", "pydantic-ai"],
     ),
     StackCombination(
         name="comms",

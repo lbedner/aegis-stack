@@ -7,6 +7,8 @@ later turn gets it re-injected as context - so "list the items again"
 works forever without re-attaching anything, in any thread.
 """
 
+import importlib.util
+
 import pytest
 
 from app.services.ai.domains.chat.readings import (
@@ -17,6 +19,11 @@ from app.services.ai.domains.chat.readings import (
     reading_stage,
     record_reading,
 )
+
+# Staging, validation and formatting are DB-free and run on every backend.
+# Only the durable half needs somewhere to write: a memory-backend project
+# ships no ``app.core.db``, and a reading there lives for its own turn.
+_HAS_STORE = importlib.util.find_spec("app.core.db") is not None
 
 _ITEMS = [
     {"label": "Disposable Clear Cups 18oz 28ct", "quantity": 4, "amount_cents": 299},
@@ -64,6 +71,7 @@ class TestRecordReading:
 
 
 class TestMergeAndFormat:
+    @pytest.mark.skipif(not _HAS_STORE, reason="no per-user store without a database")
     @pytest.mark.asyncio
     async def test_staged_readings_merge_into_the_user_store(self) -> None:
         from app.services.ai.domains.chat.readings import user_readings

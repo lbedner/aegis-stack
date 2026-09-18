@@ -25,12 +25,16 @@ QUALITY_CHECK_TIMEOUTS = {
     "cli_install": 60,
     "lint": 60,
     "typecheck": 120,
-    # The heaviest stacks (everything, finance_auth) carry the largest
-    # internal suites and have twice outgrown this limit on slower CI
-    # runners (122s at the old 120s cap; a hard 180.0s at 180s once the
-    # finance split/attachment suites landed). 300s buys real headroom
-    # without masking a genuine hang.
-    "tests": 300,
+    # The heaviest stacks carry the largest internal suites and have now
+    # outgrown this limit three times on slower CI runners (122s at the
+    # old 120s cap; a hard 180.0s at 180s once the finance split/
+    # attachment suites landed; a hard 300.0s at 300s when ``finance``
+    # was briefly added to ``everything``). CI runs these ~1.5x slower
+    # than a dev machine, so the margin has to be read in that ratio:
+    # ``finance_ai_rbac`` at ~160s locally lands near 245s here, which
+    # left too little room under 300. 480s keeps a genuine hang bounded
+    # while ending the reactive bump each time a suite grows.
+    "tests": 480,
 }
 
 STANDARD_ENV_OVERRIDES = {

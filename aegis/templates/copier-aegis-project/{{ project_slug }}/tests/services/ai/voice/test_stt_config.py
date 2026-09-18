@@ -172,7 +172,7 @@ class TestSTTConfigGetApiKey:
 
 
 class TestSTTConfigValidation:
-    """Test STTConfig.validate() method."""
+    """Test STTConfig.validation_errors() method."""
 
     def test_validate_openai_with_key_passes(self) -> None:
         """Test validation passes when OpenAI key is set."""
@@ -180,7 +180,7 @@ class TestSTTConfigValidation:
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER)
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 0
 
@@ -189,7 +189,7 @@ class TestSTTConfigValidation:
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER)
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 1
         assert "OPENAI_API_KEY" in errors[0]
@@ -200,7 +200,7 @@ class TestSTTConfigValidation:
         settings.GROQ_API_KEY = "gsk-test-key"
 
         config = STTConfig(provider=STTProvider.GROQ_WHISPER)
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 0
 
@@ -209,7 +209,7 @@ class TestSTTConfigValidation:
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.GROQ_WHISPER)
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 1
         assert "GROQ_API_KEY" in errors[0]
@@ -219,7 +219,7 @@ class TestSTTConfigValidation:
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.WHISPER_LOCAL)
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 0
 
@@ -228,7 +228,7 @@ class TestSTTConfigValidation:
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.FASTER_WHISPER)
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 0
 
@@ -238,7 +238,7 @@ class TestSTTConfigValidation:
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER, language="english")
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 1
         assert "language code" in errors[0].lower()
@@ -249,7 +249,7 @@ class TestSTTConfigValidation:
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER, language="en")
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 0
 
@@ -258,7 +258,7 @@ class TestSTTConfigValidation:
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER, language="invalid")
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 2  # Missing API key + invalid language
 

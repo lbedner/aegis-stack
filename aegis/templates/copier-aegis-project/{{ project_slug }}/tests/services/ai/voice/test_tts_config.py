@@ -142,7 +142,7 @@ class TestTTSConfigGetApiKey:
 
 
 class TestTTSConfigValidation:
-    """Test TTSConfig.validate() method."""
+    """Test TTSConfig.validation_errors() method."""
 
     def test_validate_openai_with_key_passes(self) -> None:
         """Test validation passes when OpenAI key is set."""
@@ -150,7 +150,7 @@ class TestTTSConfigValidation:
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = TTSConfig(provider=TTSProvider.OPENAI)
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 0
 
@@ -159,7 +159,7 @@ class TestTTSConfigValidation:
         settings = MagicMock(spec=[])
 
         config = TTSConfig(provider=TTSProvider.OPENAI)
-        errors = config.validate(settings)
+        errors = config.validation_errors(settings)
 
         assert len(errors) == 1
         assert "OPENAI_API_KEY" in errors[0]

@@ -69,6 +69,13 @@ class ServiceMigrationSpec:
     # must be idempotent: ``aegis update`` can deliver a migration to a
     # database that already holds the row. Not reversed in ``downgrade``.
     data_sql: list[str] = field(default_factory=list)
+    # Same job as ``data_sql`` but written as the body of ``upgrade()``
+    # instead of one statement, for data whose SHAPE depends on the
+    # database it lands in. The sentinel owner row is the case: the
+    # column list it must name differs by auth level, and one service's
+    # migration has no business knowing another's answers, so it asks
+    # the database instead. Mutually exclusive with ``data_sql``.
+    data_body: str = ""
     # Tables emptied BEFORE this service's DDL runs. Declared rather than
     # written as SQL because two places need it: the revision gets a DELETE
     # at the top of ``upgrade()``, and the generator is told the table will
@@ -92,16 +99,36 @@ class ServiceMigrationSpec:
 
 
 def _sentinel_owner_insert(user_ref_schema: str | None) -> str:
+    """The body of ``upgrade()`` for the finance sentinel owner row.
+
+    ``user.role`` exists only under auth RBAC and is NOT NULL with no
+    server default, so an insert that never names it fails outright on an
+    org-level stack (``NOT NULL constraint failed: user.role``). Which
+    columns to name is therefore a property of the database this revision
+    lands in, not of the answers that generated it — and an ``aegis
+    update`` that raises the auth level later moves it. So the revision
+    asks the table, the way ``cleared_tables`` asks whether a table is
+    there, rather than being told at generation time.
+    """
     user_table = f'"{user_ref_schema}"."user"' if user_ref_schema else '"user"'
-    return (
-        f"INSERT INTO {user_table} "
-        "(id, email, is_active, is_verified, hashed_password, "
-        "failed_login_attempts, created_at) "
-        # Boolean literals, not 0: Postgres refuses an integer in a boolean
-        # column and SQLite accepts FALSE (3.23+), so one statement serves both.
-        "SELECT 0, 'standalone@finance.local', FALSE, FALSE, '!', 0, CURRENT_TIMESTAMP "
-        f"WHERE NOT EXISTS (SELECT 1 FROM {user_table} WHERE id = 0)"
+    reflect = (
+        f'sa.inspect(op.get_bind()).get_columns("user", schema={user_ref_schema!r})'
+        if user_ref_schema
+        else 'sa.inspect(op.get_bind()).get_columns("user")'
     )
+    return f"""    columns = {{c["name"] for c in {reflect}}}
+    role_column = ", role" if "role" in columns else ""
+    role_value = ", 'user'" if "role" in columns else ""
+    op.execute(
+        f'INSERT INTO {user_table} '
+        f"(id, email, is_active, is_verified, hashed_password, "
+        f"failed_login_attempts, created_at{{role_column}}) "
+        # Boolean literals, not 0: Postgres refuses an integer in a boolean
+        # column and SQLite accepts FALSE (3.23+), so one serves both.
+        f"SELECT 0, 'standalone@finance.local', FALSE, FALSE, '!', 0, "
+        f"CURRENT_TIMESTAMP{{role_value}} "
+        f'WHERE NOT EXISTS (SELECT 1 FROM {user_table} WHERE id = 0)'
+    )"""
 
 
 AUTH_MIGRATION = ServiceMigrationSpec(
@@ -184,7 +211,7 @@ FINANCE_MIGRATION = ServiceMigrationSpec(
 FINANCE_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
     service_name="finance_auth_link",
     description="Link finance owner_user_id columns to user.id (auth + finance)",
-    data_sql=[_sentinel_owner_insert(None)],
+    data_body=_sentinel_owner_insert(None),
 )
 
 BLOG_MIGRATION = ServiceMigrationSpec(
@@ -461,6 +488,7 @@ Revises: {down_revision}
 Create Date: {create_date}
 
 """
+import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -481,6 +509,11 @@ def downgrade() -> None:
 
 def _data_lines(statements: list[str]) -> str:
     return "\n".join(f'    op.execute("""{stmt}""")' for stmt in statements)
+
+
+def _upgrade_body(spec: "ServiceMigrationSpec") -> str:
+    """What this spec adds to ``upgrade()``: statements, or a raw body."""
+    return spec.data_body or _data_lines(spec.data_sql)
 
 
 _CLEAR_TABLE = """    if sa.inspect(op.get_bind()).has_table("{table}"):
@@ -527,22 +560,24 @@ def _place_data_statements(
     created: list[Path] = []
     for service in services:
         spec = specs.get(service)
-        if spec is None or not (spec.data_sql or spec.cleared_tables):
+        if spec is None or not (spec.data_sql or spec.data_body or spec.cleared_tables):
             continue
         own = [p for p in written if p.name.endswith(f"_{service}.py")]
         if own:
             src = own[0].read_text()
             if spec.cleared_tables:
                 src = _prepend_to_upgrade(own[0].name, src, spec.cleared_tables)
-            if spec.data_sql:
+            if spec.data_sql or spec.data_body:
                 head, sep, tail = src.rpartition("\n\n\ndef downgrade")
                 if not sep:
                     raise MigrationGenerationError(
                         f"{own[0].name}: no downgrade() to anchor data statements"
                     )
-                src = f"{head}\n{_data_lines(spec.data_sql)}{sep}{tail}"
+                src = f"{head}\n{_upgrade_body(spec)}{sep}{tail}"
             own[0].write_text(src)
-        elif spec.data_sql and not service_has_migration(project_path, service):
+        elif (spec.data_sql or spec.data_body) and not service_has_migration(
+            project_path, service
+        ):
             revision = get_next_revision_id(project_path)
             path = get_versions_dir(project_path) / f"{revision}_{service}.py"
             path.write_text(
@@ -551,7 +586,7 @@ def _place_data_statements(
                     revision=revision,
                     down_revision=get_previous_revision(project_path),
                     create_date=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f"),
-                    body=_data_lines(spec.data_sql),
+                    body=_upgrade_body(spec),
                 )
             )
             created.append(path)

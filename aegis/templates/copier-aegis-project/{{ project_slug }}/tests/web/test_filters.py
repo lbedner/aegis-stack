@@ -136,3 +136,59 @@ class TestWindows:
         assert ranges.horizon(ranges.ALL, 730) == 730
         assert ranges.horizon(90, 730) == 90
         assert ranges.horizon(3650, 730) == 730
+
+
+class TestMarkdown:
+    """One renderer for anything a model wrote.
+
+    A chat reply, a generated report and a long-form field are all model
+    markdown. Rendering them in the browser instead means a second, weaker
+    implementation that drifts from this one, and the escaping has to be
+    earned again there.
+    """
+
+    @pytest.fixture
+    def markdown(self) -> Callable[..., str]:
+        return templates.env.filters["markdown"]
+
+    def test_the_things_a_model_actually_writes(
+        self, markdown: Callable[..., str]
+    ) -> None:
+        """Headings, tables and fenced code are exactly what a
+        regex-and-replace renderer in the browser gets wrong."""
+        out = markdown(
+            "# Head\n\n"
+            "| a | b |\n|---|---|\n| 1 | 2 |\n\n"
+            "```python\nx = 1\n```\n\n"
+            "- one\n- two\n"
+        )
+
+        assert "<h1>" in out
+        assert "<table>" in out
+        assert "<pre>" in out
+        assert "<ul>" in out
+
+    def test_raw_html_is_shown_not_run(self, markdown: Callable[..., str]) -> None:
+        """The model can format, never inject. This is why the renderer
+        carries an escaping mixin instead of using marko bare."""
+        out = markdown("<script>alert(1)</script>")
+
+        assert "<script>" not in out
+        assert "&lt;script&gt;" in out
+
+    def test_inline_html_is_escaped_too(self, markdown: Callable[..., str]) -> None:
+        assert "<img" not in markdown("hello <img src=x onerror=alert(1)> there")
+
+    def test_empty_input_is_not_an_error(
+        self, markdown: Callable[..., str]
+    ) -> None:
+        assert markdown(None) == ""
+        assert markdown("") == ""
+
+    def test_one_set_of_classes_styles_the_output(self) -> None:
+        """A heading that looks different in chat than in a report is a bug
+        nobody files and everybody notices."""
+        from app.components.web_frontend.filters import PROSE_CLASSES
+
+        for element in ("h1", "h2", "h3", "ul", "ol", "li", "pre", "table", "a"):
+            assert f"[&_{element}]" in PROSE_CLASSES, element

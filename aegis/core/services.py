@@ -869,7 +869,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/shutdown/payment_webhook_forwarder.py",
                 # Frontend dashboard files
                 "app/components/frontend/dashboard/cards/payment_card.py",
-                "app/components/frontend/dashboard/modals/payment_modal.py",
+                "app/components/frontend/dashboard/modals/payment_modal",
             ],
         ),
     ),

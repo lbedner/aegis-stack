@@ -507,14 +507,14 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
 
     # Remove the Ollama surface when no Ollama is configured. Every importer
     # is jinja-gated, so these ship dead rather than breaking the boot — but
-    # ``ollama_modal.py`` imports ``ollama_activity``, which renders empty in
-    # this mode, so the module cannot even import (aegis-stack#1117).
+    # ``ollama_modal`` imports ``ollama_activity``, which renders empty in
+    # this mode, so the package cannot even import (aegis-stack#1117).
     if context.get(AnswerKeys.OLLAMA_MODE, OllamaMode.NONE) == OllamaMode.NONE:
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/ollama_card.py"
         )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/ollama_modal.py"
+        remove_dir(
+            project_path, "app/components/frontend/dashboard/modals/ollama_modal"
         )
         remove_file(project_path, "app/services/system/health_ollama.py")
         # Both render to a one-line comment in this mode, and every importer

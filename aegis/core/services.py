@@ -548,7 +548,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 # Imports ai.ollama_activity; only jinja-gated files reference
                 # it, so without AI it would ship as a dead module whose
                 # import cannot resolve.
-                "app/components/frontend/dashboard/modals/ollama_modal.py",
+                "app/components/frontend/dashboard/modals/ollama_modal",
                 "tests/components/frontend/test_ai_analytics_utils.py",
                 "app/models/conversation.py",
             ],

@@ -566,7 +566,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     # otherwise the retrofit copies it even with ``ai_rag``
                     # off, rendering a dead RAG tab (issue #814). The modal's
                     # ``_HAS_RAG`` import guard handles its absence.
-                    "app/components/frontend/dashboard/modals/rag_tab.py",
+                    "app/components/frontend/dashboard/modals/rag_tab",
                 ],
                 "ai_voice": [
                     "app/components/backend/api/voice",

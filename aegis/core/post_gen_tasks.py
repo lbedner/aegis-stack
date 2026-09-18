@@ -481,7 +481,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/chat/rag_context.py")
         remove_file(project_path, "app/services/ai/domains/chat/rag_stats_context.py")
         remove_file(project_path, "tests/services/ai/test_rag_stats_context.py")
-        remove_file(project_path, "app/components/frontend/dashboard/modals/rag_tab.py")
+        remove_dir(project_path, "app/components/frontend/dashboard/modals/rag_tab")
 
     # chat_kit is a pydantic-ai chat engine (imports ``pydantic_ai``); it has
     # no langchain path, so strip it on langchain. ``usage_recording`` stays:

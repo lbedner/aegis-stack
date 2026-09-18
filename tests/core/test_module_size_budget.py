@@ -100,7 +100,6 @@ BUDGET: dict[str, int] = {
     "cli/blog.py.jinja": 795,
     "services/auth/users.py.jinja": 783,
     "components/frontend/dashboard/modals/llm_catalog_tab.py.jinja": 780,
-    "components/frontend/dashboard/modals/rag_tab.py": 780,
     "components/frontend/dashboard/cards/card_utils.py.jinja": 659,
     # 799 not 796: BUILD_ID (3 lines) had nowhere else to live, settings are
     # this file. Still 299 over the 500 limit and wants a split.

@@ -153,7 +153,7 @@ class TestFootprintSplit:
         so it belongs to the ai_rag extras, not the always-copied primary)."""
         add_base = set(get_component_files("ai"))
         full = set(get_component_files("ai", full=True))
-        rag_tab = "app/components/frontend/dashboard/modals/rag_tab.py"
+        rag_tab = "app/components/frontend/dashboard/modals/rag_tab/tab.py"
 
         # LLM API dir is in primary -> its files land in the add base.
         assert "app/components/backend/api/llm/router.py" in add_base

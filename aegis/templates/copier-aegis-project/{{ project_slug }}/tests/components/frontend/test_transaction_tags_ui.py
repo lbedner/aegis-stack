@@ -115,19 +115,28 @@ class TestPicker:
         assert 'Create "Tax 2026"' in rendered
 
 
+class _NullPicker:
+    """A picker that records nothing; these tests never open one."""
+
+    def open_for(self, ids: list, event: object) -> None:
+        return None
+
+
 class TestRegisterWiring:
     """The panel actually uses the pieces: a Tags COLUMN of compact chips
     (not squatting in the payee cell), a Tag bulk action, and a
     tag_id-filtered fetch."""
 
     def test_the_panel_wires_the_feature(self) -> None:
+        """The picker, the filtered fetch and the bulk verb are the
+        panel's own. The CHIPS are not - they moved to
+        ``RegisterRowBuilder`` and are asserted there, on rendered
+        output rather than on the panel's source text."""
         import inspect
 
         from app.components.frontend.dashboard.modals import finance_modal
 
         source = inspect.getsource(finance_modal.TransactionsPanel)
-        assert "transaction_tag_chips(" in source
-        assert "compact=True" in source
         assert "_tag_picker" in source
         assert "tag_id" in source
         assert "_bulk_tag_trigger" in source
@@ -210,15 +219,36 @@ class TestRegisterWiring:
     def test_the_tags_cell_rides_its_own_column(self) -> None:
         """Both row shapes fill the Tags cell - a trade row skipping it
         would shift every later cell one column left, the same silent
-        misalignment the Account column's tests pin."""
-        import inspect
-        import re
+        misalignment the Account column's tests pin.
 
-        from app.components.frontend.dashboard.modals import finance_modal
+        Asserted on the rows the builder returns. The previous version
+        counted ``_tags_cell(record)`` twice in the panel's source,
+        which passed for a row shape that never rendered and broke the
+        moment the cells moved to a module of their own.
+        """
+        from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.rows import (  # noqa: E501
+            RegisterRowBuilder,
+        )
 
-        source = inspect.getsource(finance_modal.TransactionsPanel)
-        assert len(re.findall(r"_tags_cell\(record\)", source)) == 2
-        # The chips no longer ride the payee cell.
-        payee_cell = source[source.index("def _payee_cell") :]
-        payee_cell = payee_cell[: payee_cell.index("def _account_cell")]
-        assert "transaction_tag_chips" not in payee_cell
+        builder = RegisterRowBuilder(
+            all_accounts=False,
+            account_names={},
+            category_picker=_NullPicker(),
+            merchant_picker=_NullPicker(),
+            on_tag_tap=lambda tag: None,
+            split_category_cell=lambda record: ft.Text("split"),
+        )
+        txn = {
+            "id": 1,
+            "date": "2026-09-18",
+            "name": "SQ *COFFEE",
+            "merchant": "Blue Bottle",
+            "amount": -650,
+            "tags": [{"name": "work"}],
+        }
+        trade = {"trade_date": "2026-09-18", "type": "buy", "amount": 1000}
+        assert len(builder.row("txn", txn)) == len(builder.row("trade", trade))
+
+        # The chips ride the Tags cell, not the payee cell.
+        assert "work" in _texts(builder.tags_cell(txn))
+        assert "work" not in _texts(builder.payee_cell(txn))

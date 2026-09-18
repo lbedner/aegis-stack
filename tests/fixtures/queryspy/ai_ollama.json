@@ -16,12 +16,6 @@
     },
     {
       "kind": "column_load",
-      "label": "KnowledgeBase",
-      "file": "tests/services/rag/test_knowledge_models.py",
-      "function": "test_kb_and_source_round_trip"
-    },
-    {
-      "kind": "column_load",
       "label": "Tool",
       "file": "tests/services/ai/test_agent_loader.py",
       "function": "test_only_active_tools_are_exposed"

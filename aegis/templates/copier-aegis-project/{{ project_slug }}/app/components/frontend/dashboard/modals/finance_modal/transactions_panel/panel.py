@@ -73,6 +73,9 @@ from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.i
 from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.manage import (
     ManageAccountMixin,
 )
+from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.rows import (
+    RegisterRowBuilder,
+)
 from app.components.frontend.dashboard.modals.finance_modal.transactions_panel.splits_flow import (
     SplitsFlowMixin,
 )
@@ -559,115 +562,15 @@ class TransactionsPanel(
         all_accounts = self._account is None
         columns = register_columns(all_accounts)
 
-        def _category_cell(record: dict) -> ft.Control:
-            # Re-categorizing an ALREADY-categorized transaction - unlike
-            # UncategorizedPanel's placeholder, this shows the current
-            # pick as the trigger's own label, same idea as any other
-            # "click a value to change it" field.
-            txn_id = record.get("id")
-            if record.get("is_split") and record.get("splits"):
-                return self._split_category_cell(record)
-            label = TableCellText(record.get("category") or "Uncategorized")
-            if txn_id is None:
-                return label
-            return picker_trigger_cell(
-                label,
-                _TXN_CATEGORY_COLUMN_WIDTH,
-                on_tap=lambda e, t=txn_id: self._category_picker.open_for([t], e),
-                tooltip="Click to change category",
-            )
-
-        def _payee_cell(record: dict) -> ft.Control:
-            # Shows the assigned PAYEE when there is one, falling back to
-            # the raw bank descriptor - Quicken's behavior, and the reason
-            # the descriptor isn't lost either way is that the row's
-            # inline-expand detail still lists "Original description".
-            # Assigning here is what makes a bill survive the descriptor
-            # changing later (domains/domains/detection/recurring/cadence.py's _payee_key).
-            txn_id = record.get("id")
-            payee = record.get("merchant")
-            raw = record.get("name") or ""
-            if txn_id is None:
-                return TableNameText(raw)
-            cell = picker_trigger_cell(
-                ft.Row(
-                    [
-                        ProviderIcon(payee or raw, record.get("icon_b64")),
-                        ft.Container(content=TableNameText(payee or raw), expand=True),
-                    ],
-                    spacing=Theme.Spacing.SM,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                None,
-                on_tap=lambda e, t=txn_id: self._merchant_picker.open_for([t], e),
-                tooltip=(
-                    f"Payee: {payee}\n{raw}\nClick to change"
-                    if payee
-                    else "No payee assigned - click to set one"
-                ),
-            )
-            # DataTable sorts a control cell by its .data (see
-            # data_table.py's _cell_text) - a Row has no .value of its
-            # own, so Payee would silently stop sorting without this.
-            cell.data = payee or raw
-            return cell
-
-        def _account_cell(record: dict) -> list[ft.Control]:
-            if not all_accounts:
-                return []
-            return [
-                TableCellText(
-                    self._account_names.get(record.get("account_id"), "\u2014")
-                )
-            ]
-
-        def _tags_cell(record: dict) -> ft.Control:
-            tags = record.get("tags") or []
-            if not tags:
-                cell = ft.Container(content=TableCellText(""))
-                cell.data = ""
-                return cell
-            cell = ft.Row(
-                transaction_tag_chips(
-                    tags, on_tap=self._filter_by_tag, cap=2, compact=True
-                ),
-                spacing=Theme.Spacing.XS,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            )
-            # A Row has no .value, so the Tags column would silently stop
-            # sorting without this (same note as the payee cell).
-            cell.data = ", ".join(t.get("name", "") for t in tags)
-            return cell
-
-        def _row(kind: str, record: dict) -> list[ft.Control]:
-            if kind == "trade":
-                return [
-                    date_cell(record.get("trade_date")),
-                    *_account_cell(record),
-                    TableNameText(
-                        record.get("name") or _trade_type_label(record.get("type"))
-                    ),
-                    # Trades are not categorized - they are position moves,
-                    # not spending.
-                    TableCellText("\u2014"),
-                    _tags_cell(record),
-                    TableCellText(_trade_type_label(record.get("type")).lower()),
-                    _amount_cell(record.get("amount", 0)),
-                ]
-            return [
-                date_cell(record.get("date")),
-                *_account_cell(record),
-                _payee_cell(record),
-                _category_cell(record),
-                _tags_cell(record),
-                TableCellText(record.get("source", "")),
-                _amount_cell(
-                    record.get("amount", 0),
-                    excluded=bool(record.get("excluded_from_reports")),
-                ),
-            ]
-
-        rows = [_row(kind, record) for kind, record in merged]
+        builder = RegisterRowBuilder(
+            all_accounts=all_accounts,
+            account_names=self._account_names,
+            category_picker=self._category_picker,
+            merchant_picker=self._merchant_picker,
+            on_tag_tap=self._filter_by_tag,
+            split_category_cell=self._split_category_cell,
+        )
+        rows = [builder.row(kind, record) for kind, record in merged]
 
         def _expand(index: int, _merged: list = merged) -> ft.Control:
             kind, record = _merged[index]

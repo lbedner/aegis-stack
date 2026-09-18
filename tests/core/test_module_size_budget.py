@@ -49,7 +49,7 @@ DECLARATION_PARTS = ("models", "schemas", "i18n", "seeds", "fixtures", "locales"
 # path -> line count when recorded. The refactoring backlog, largest first.
 BUDGET: dict[str, int] = {
     "components/frontend/dashboard/modals/finance_modal/budget_panel/panel.py": 552,
-    "components/frontend/dashboard/modals/finance_modal/transactions_panel/panel.py": 903,
+    "components/frontend/dashboard/modals/finance_modal/transactions_panel/panel.py": 802,
     "components/frontend/dashboard/modals/finance_modal/transactions_panel/declare.py": 586,
     "components/frontend/dashboard/modals/finance_modal/uncategorized_panel.py": 850,
     "components/frontend/dashboard/modals/finance_modal/no_payee_panel.py": 668,
@@ -82,7 +82,6 @@ BUDGET: dict[str, int] = {
     "i18n/locales/ru.py": 1247,
     "i18n/locales/ko.py": 1246,
     "i18n/locales/zh_hant.py": 1243,
-    "services/finance/adapters/importers/imports.py": 1189,
     "components/frontend/controls/data_table.py": 1089,
     "services/finance/adapters/providers/connections/plaid_sync.py": 1024,
     "services/finance/seeds/demo_seed.py": 1075,

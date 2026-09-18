@@ -40,20 +40,14 @@ class TestRegisterColumns:
         (No payee, the payee drill-down, the recurring preview)."""
         assert register_columns(True)[1].header == "Account"
 
-    def test_both_row_shapes_fill_the_conditional_cell(self) -> None:
-        """Transactions AND trades merge into one table in All Accounts,
-        so a trade row missing the Account cell would misalign only the
-        trade rows - the kind of gap that survives a glance at the top of
-        the table."""
-        source = inspect.getsource(finance_modal.TransactionsPanel)
-        # The trade branch and the transaction branch must each splice it.
-        assert len(re.findall(r"\*_account_cell\(record\)", source)) == 2
-
-    def test_the_cell_is_empty_when_the_column_is_absent(self) -> None:
-        """The gate lives in one place: _account_cell returns [] rather
-        than each call site re-checking the flag."""
-        source = inspect.getsource(finance_modal.TransactionsPanel)
-        assert "if not all_accounts:\n                return []" in source
+    # Both row shapes filling the conditional cell, and the cell being
+    # empty when the column is absent, are asserted on the rows
+    # ``RegisterRowBuilder`` actually returns - see
+    # ``test_register_rows.py``. They used to be grepped out of
+    # ``TransactionsPanel``'s source, which passed for a row shape that
+    # never rendered and broke the moment the cells moved to a module of
+    # their own. This class keeps the column SET, which is what it is
+    # named for; the row it fills is the builder's business.
 
 
 class TestExcludedRowsRecede:

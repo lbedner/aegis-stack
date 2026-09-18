@@ -218,9 +218,13 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="auth_org",
+        # Carries `oauth` too: the provider flow, its own user-service path
+        # and its test file are all gated behind that flag, and nothing in
+        # the matrix set it - so a generated oauth stack shipped a lint
+        # failure (N818) that no job could see.
         components=["database"],
-        services=["auth[org]"],
-        description="Auth with org/RBAC level + database",
+        services=["auth[org,oauth]"],
+        description="Auth at org/RBAC level with OAuth + database",
         expected_files=[
             "app/services/auth/",
             "app/core/db.py",
@@ -232,12 +236,40 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="ai_service",
+        # Carries `rag` as well: it is a whole service (its own API, CLI,
+        # tests and dashboard tab) gated behind one flag, and nothing in
+        # the matrix set that flag, so none of it was ever generated. Folded
+        # in here rather than given a row, which costs no extra runner.
         components=["database"],
-        services=["ai[sqlite]"],
-        description="AI service with sqlite backend + database",
+        services=["ai[sqlite,rag]"],
+        description="AI service with sqlite backend + RAG + database",
         expected_files=[
             "app/services/ai/",
+            "app/services/rag/",
+            "app/components/backend/api/rag/",
+            "app/cli/rag.py",
             "app/core/db.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
+    ),
+    StackCombination(
+        name="ai_ollama",
+        # The only stack that sets ``ollama_mode``. Without one, post-gen
+        # strips the whole Ollama surface from every generated project -
+        # including ``tests/components/frontend/test_ollama_model_table.py``,
+        # whose 33 tests therefore never ran anywhere (#1183). ``ai[ollama]``
+        # resolves the mode to ``host`` in non-interactive mode, and ``host``
+        # needs no running Ollama to import and render, which is the point.
+        components=["database"],
+        services=["ai[ollama,sqlite]"],
+        description="AI with the Ollama surface: the only stack that renders it",
+        expected_files=[
+            "app/components/frontend/dashboard/modals/ollama_modal/",
+            "app/components/frontend/dashboard/cards/ollama_card.py",
+            "app/services/ai/domains/llm/ollama.py",
+            "app/services/system/health_ollama.py",
+            "tests/components/frontend/test_ollama_model_table.py",
         ],
         expected_docker_services=["webserver"],
         expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
@@ -268,9 +300,11 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="insights",
+        # Every source, not the default two: `plausible` and `reddit` have
+        # collectors of their own that nothing generated.
         components=["database", "scheduler"],
-        services=["insights"],
-        description="Insights service + database + scheduler",
+        services=["insights[github,pypi,plausible,reddit]"],
+        description="Insights service, all four sources + database + scheduler",
         expected_files=[
             "app/services/insights/",
             "app/core/db.py",
@@ -321,16 +355,26 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
     ),
     StackCombination(
-        name="documents",
+        name="documents_auth",
+        # Paired with auth deliberately: the documents routes sit behind
+        # ``get_current_active_user`` whenever the auth service is present,
+        # and the generated suite 401'd on every request in that shape while
+        # the matrix stayed green (#1179). ``documents_worker`` below is the
+        # same service WITHOUT auth, so both shapes stay covered and this
+        # costs no extra runner.
         components=["database"],
-        services=["documents"],
-        description="Document store service + database",
+        services=["auth", "documents"],
+        description="Document store service + auth (owner-scoped) + database",
         expected_files=[
+            "app/services/auth/",
             "app/services/documents/",
             "app/components/backend/api/documents/",
             "app/core/storage.py",
             "app/core/db.py",
-            "alembic/versions/001_documents.py",
+            # 002, not 001: auth's migration takes the first slot in this
+            # stack. The number moves with whatever else the row carries,
+            # which is why no other row pins one.
+            "alembic/versions/002_documents.py",
         ],
         expected_docker_services=["webserver"],
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel", "alembic"],
@@ -455,8 +499,21 @@ STACK_COMBINATIONS = [
     StackCombination(
         name="everything",
         components=["database", "scheduler", "worker", "redis"],
-        services=["auth[org]", "ai[sqlite]", "insights", "payment", "blog", "comms"],
-        description="Kitchen sink: all services + all processing infra",
+        # Every service, which is the point of the row: `documents` sits in
+        # 6 of the 10 service pairs nothing used to build and `finance` in 5,
+        # so carrying both here closes all ten at no new runner. See
+        # tests/core/test_combination_coverage.py.
+        services=[
+            "auth[org]",
+            "ai[sqlite]",
+            "insights",
+            "payment",
+            "blog",
+            "comms",
+            "documents",
+            "finance",
+        ],
+        description="Kitchen sink: every service + all processing infra",
         expected_files=[
             "app/services/auth/",
             "app/services/ai/",
@@ -464,6 +521,8 @@ STACK_COMBINATIONS = [
             "app/services/payment/",
             "app/services/blog/",
             "app/services/comms/",
+            "app/services/documents/",
+            "app/services/finance/",
             "app/core/db.py",
             "app/components/scheduler/",
             "app/components/worker/",

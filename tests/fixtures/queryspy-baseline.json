@@ -100,6 +100,12 @@
     },
     {
       "kind": "column_load",
+      "label": "KnowledgeBase",
+      "file": "tests/services/rag/test_knowledge_models.py",
+      "function": "test_kb_and_source_round_trip"
+    },
+    {
+      "kind": "column_load",
       "label": "Tool",
       "file": "tests/services/ai/test_agent_loader.py",
       "function": "test_only_active_tools_are_exposed"
@@ -2239,6 +2245,12 @@
       "label": "SELECT tool.name FROM tool",
       "file": "app/services/ai/fixtures/agent_fixtures.py",
       "function": "load_agent_fixtures"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT user_oauth_identity.id, user_oauth_identity.user_id, user_oauth_identity.provider, user_oauth_identity.provider_user_id, user_oauth_identity.provider_username, user_oauth_identity.provider_email, user_oauth_identity.avatar_url, user_oauth_identity.created_at, user_oauth_identity.updated_at FROM user_oauth_identity WHERE user_oauth_identity.provider = :provider_1 AND user_oauth_identity.provider_user_id = :provider_user_id_1",
+      "file": "app/services/auth/users.py",
+      "function": "upsert_from_oauth"
     }
   ]
 }

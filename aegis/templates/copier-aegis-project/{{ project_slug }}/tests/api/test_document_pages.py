@@ -38,56 +38,56 @@ def _upload(client: TestClient, texts: list[str], title: str) -> int:
 
 
 class TestExtraction:
-    def test_extract_reads_the_text_layer_and_reports(self, client: TestClient) -> None:
+    def test_extract_reads_the_text_layer_and_reports(self, authenticated_app_client: TestClient) -> None:
         doc_id = _upload(
-            client, ["Renewal request received", "Page two of the same"], "Renewal"
+            authenticated_app_client, ["Renewal request received", "Page two of the same"], "Renewal"
         )
 
-        response = client.post(f"/api/v1/documents/{doc_id}/extract")
+        response = authenticated_app_client.post(f"/api/v1/documents/{doc_id}/extract")
 
         assert response.status_code == 200
         body = response.json()
         assert body["read"] == 2 and body["unread"] == 0
 
-    def test_pages_list_carries_status_not_text(self, client: TestClient) -> None:
-        doc_id = _upload(client, ["Alpha page with text", ""], "Mixed")
-        client.post(f"/api/v1/documents/{doc_id}/extract")
+    def test_pages_list_carries_status_not_text(self, authenticated_app_client: TestClient) -> None:
+        doc_id = _upload(authenticated_app_client, ["Alpha page with text", ""], "Mixed")
+        authenticated_app_client.post(f"/api/v1/documents/{doc_id}/extract")
 
-        pages = client.get(f"/api/v1/documents/{doc_id}/pages").json()
+        pages = authenticated_app_client.get(f"/api/v1/documents/{doc_id}/pages").json()
 
         assert [p["page_number"] for p in pages] == [1, 2]
         assert pages[0]["status"] == "read" and pages[1]["status"] == "unread"
         assert "text" not in pages[0]
         assert pages[0]["has_image"] is True
 
-    def test_one_page_carries_its_text_and_image(self, client: TestClient) -> None:
-        doc_id = _upload(client, ["Alpha page with text"], "Single")
-        client.post(f"/api/v1/documents/{doc_id}/extract")
+    def test_one_page_carries_its_text_and_image(self, authenticated_app_client: TestClient) -> None:
+        doc_id = _upload(authenticated_app_client, ["Alpha page with text"], "Single")
+        authenticated_app_client.post(f"/api/v1/documents/{doc_id}/extract")
 
-        page = client.get(f"/api/v1/documents/{doc_id}/pages/1")
-        image = client.get(f"/api/v1/documents/{doc_id}/pages/1/image")
+        page = authenticated_app_client.get(f"/api/v1/documents/{doc_id}/pages/1")
+        image = authenticated_app_client.get(f"/api/v1/documents/{doc_id}/pages/1/image")
 
         assert page.status_code == 200 and "Alpha" in page.json()["text"]
         assert image.status_code == 200
         assert image.headers["content-type"] == "image/png"
         assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
 
-    def test_a_missing_page_is_a_404(self, client: TestClient) -> None:
-        doc_id = _upload(client, ["Alpha page with text"], "Short")
-        client.post(f"/api/v1/documents/{doc_id}/extract")
+    def test_a_missing_page_is_a_404(self, authenticated_app_client: TestClient) -> None:
+        doc_id = _upload(authenticated_app_client, ["Alpha page with text"], "Short")
+        authenticated_app_client.post(f"/api/v1/documents/{doc_id}/extract")
 
-        assert client.get(f"/api/v1/documents/{doc_id}/pages/7").status_code == 404
+        assert authenticated_app_client.get(f"/api/v1/documents/{doc_id}/pages/7").status_code == 404
 
-    def test_background_returns_a_job(self, client: TestClient) -> None:
-        doc_id = _upload(client, ["Alpha page with text"], "Job")
+    def test_background_returns_a_job(self, authenticated_app_client: TestClient) -> None:
+        doc_id = _upload(authenticated_app_client, ["Alpha page with text"], "Job")
 
-        response = client.post(f"/api/v1/documents/{doc_id}/extract?background=true")
+        response = authenticated_app_client.post(f"/api/v1/documents/{doc_id}/extract?background=true")
 
         assert response.status_code == 202
         job_id = response.json()["job_id"]
         # Drive the job to its end here: the runner's task only advances
-        # while the test client is inside a request, and a job left
+        # while the test authenticated_app_client is inside a request, and a job left
         # running would hold the shared test database into the next test.
-        body = wait_for_job(client, job_id)
+        body = wait_for_job(authenticated_app_client, job_id)
         assert body["status"] == "done", body
         assert body["result"]["read"] == 1

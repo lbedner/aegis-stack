@@ -12,15 +12,18 @@ window are very different machines behind the same parameter count.
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from app.components.frontend.controls.data_table import (
     PICKER_GUTTER_WIDTH,
     style_cell,
 )
+from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.text import NumericText
 from app.components.frontend.dashboard.modals.modal_constants import ModalLayout
 from app.components.frontend.dashboard.modals.ollama_modal import (
     CAPABILITIES,
+    ModelActionButton,
     MODEL_COLUMNS,
     MODEL_TABLE_WIDTH,
     MODELS_MODAL_WIDTH,
@@ -274,4 +277,57 @@ class TestTheModifiedColumn:
 
         cell = build_modified_cell("")
         assert cell.value == "—"
+
+
+class TestTheActionButton:
+    """The load/unload control, which is built rather than described.
+
+    Everything above this class is presentation: a column list, a width
+    sum, a formatted string. ``ModelActionButton`` is the one part of
+    the table that CONSTRUCTS something, and construction is where it
+    broke - folding LoadModelButton and UnloadModelButton into one class
+    left the load case passing ``variant=None``, which PulseButton
+    rejects outright:
+
+        ValueError: Unknown PulseButton variant 'None'.
+                    Must be one of: amber, muted, stop, teal
+
+    Every Ollama user would have hit that on first render of the table;
+    no job could have, because nothing generated a stack with the
+    surface in it. The ``ai_ollama`` row is what runs this file at all.
+
+    Asserted against PulseButton's OWN variant table rather than a copy
+    of it here, so renaming a variant cannot leave this passing against
+    a name the button no longer takes.
+    """
+
+    def _button(self, action: str) -> ModelActionButton:
+        return ModelActionButton(
+            model_name="llama3:8b",
+            page=SimpleNamespace(update=lambda: None),
+            ollama_url="http://localhost:11434",
+            action=action,
+        )
+
+    def test_both_actions_build_without_raising(self) -> None:
+        for action in ("load", "unload"):
+            assert self._button(action) is not None
+
+    def test_each_action_builds_a_real_button(self) -> None:
+        for action in ("load", "unload"):
+            button = self._button(action).content
+            assert isinstance(button, PulseButton)
+            # The variant is resolved into a style at construction, so a
+            # style is the proof one was accepted.
+            assert button.style is not None
+
+    def test_unload_is_the_one_that_reads_destructive(self) -> None:
+        amber = PulseButton._VARIANTS["amber"]
+        assert self._button("unload").content.style.bgcolor == amber.bgcolor
+
+    def test_the_two_actions_do_not_look_alike(self) -> None:
+        """Folding two classes into one must not collapse the distinction."""
+        load = self._button("load").content.style
+        unload = self._button("unload").content.style
+        assert load.bgcolor != unload.bgcolor
 {% endif %}

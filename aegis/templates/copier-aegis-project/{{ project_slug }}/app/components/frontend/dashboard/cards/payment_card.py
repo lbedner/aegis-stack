@@ -15,6 +15,7 @@ from .card_utils import (
     create_metric_container,
     get_status_colors,
 )
+from .card_metadata import metadata_number
 
 
 class PaymentCard:
@@ -26,9 +27,9 @@ class PaymentCard:
 
     def _create_metrics_section(self) -> ft.Container:
         """Create the metrics section with transaction stats."""
-        total_txns = self.metadata.get("total_transactions", 0)
-        revenue_cents = self.metadata.get("total_revenue_cents", 0)
-        active_subs = self.metadata.get("active_subscriptions", 0)
+        total_txns = int(metadata_number(self.metadata, "total_transactions"))
+        revenue_cents = metadata_number(self.metadata, "total_revenue_cents")
+        active_subs = int(metadata_number(self.metadata, "active_subscriptions"))
         revenue_display = f"${revenue_cents / 100:,.2f}" if revenue_cents else "$0.00"
 
         return ft.Container(

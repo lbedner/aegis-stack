@@ -7,6 +7,23 @@ from app.services.ai.models import AIProvider
 from app.services.system.models import ComponentStatusType
 
 
+# Every state the check is allowed to settle in. WARNING belongs here
+# because it is the CORRECT answer to a reachability question the test
+# environment cannot control: an Ollama-configured stack with no server
+# running reports "configured for Ollama but server not reachable",
+# which is the check working, not failing.
+#
+# Left out of the original list because nothing built an Ollama stack -
+# and on a developer machine with Ollama running the gap is invisible,
+# since the provider IS reachable there. CI has no Ollama, so the
+# `ai_ollama` row is what surfaced it.
+_SETTLED_STATES = (
+    ComponentStatusType.HEALTHY,
+    ComponentStatusType.WARNING,
+    ComponentStatusType.UNHEALTHY,
+)
+
+
 class TestAIHealthCheck:
     """Test AI service health check functionality."""
 
@@ -79,10 +96,7 @@ class TestAIHealthCheck:
             status = await check_ai_service_health()
 
             assert status.metadata["enabled"] is True
-            assert status.status in [
-                ComponentStatusType.HEALTHY,
-                ComponentStatusType.UNHEALTHY,
-            ]
+            assert status.status in _SETTLED_STATES
 
     @pytest.mark.asyncio
     async def test_health_check_dependencies_metadata(self) -> None:
@@ -116,11 +130,8 @@ class TestAIHealthCheck:
 
         assert status is not None
         assert status.name == "ai"
-        # Either healthy or unhealthy, but shouldn't crash
-        assert status.status in [
-            ComponentStatusType.HEALTHY,
-            ComponentStatusType.UNHEALTHY,
-        ]
+        # Any settled state, but it must not crash.
+        assert status.status in _SETTLED_STATES
 
 
 class TestAIHealthMetadataAccuracy:

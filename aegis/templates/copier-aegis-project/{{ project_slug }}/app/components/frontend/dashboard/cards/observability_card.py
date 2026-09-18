@@ -16,6 +16,7 @@ from .card_utils import (
     create_metric_container,
     get_status_colors,
 )
+from .card_metadata import metadata_number, metadata_text
 
 
 class ObservabilityCard:
@@ -62,10 +63,10 @@ class ObservabilityCard:
 
     def _create_analytics_metrics(self) -> ft.Container:
         """Create metrics section with trace analytics data."""
-        total_traces = self.metadata.get("total_traces", 0)
-        exceptions = self.metadata.get("exceptions", 0)
-        avg_ms = self.metadata.get("avg_duration_ms", 0)
-        max_ms = self.metadata.get("max_duration_ms", 0)
+        total_traces = int(metadata_number(self.metadata, "total_traces"))
+        exceptions = int(metadata_number(self.metadata, "exceptions"))
+        avg_ms = metadata_number(self.metadata, "avg_duration_ms")
+        max_ms = metadata_number(self.metadata, "max_duration_ms")
 
         # Format exception display with visual emphasis
         exc_str = str(exceptions)
@@ -136,7 +137,7 @@ class ObservabilityCard:
                 [
                     create_header_row(
                         "Observability",
-                        f"Pydantic Logfire {self.metadata.get('logfire_version', '')}".strip(),
+                        f"Pydantic Logfire {metadata_text(self.metadata, 'logfire_version')}".strip(),
                         self.component_data,
                     ),
                     self._create_metrics_section(),

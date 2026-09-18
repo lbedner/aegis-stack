@@ -29,8 +29,12 @@ or scheduled work.
    Typer runner. Confirm it fails for the right reason.
 2. Create the command module in `app/cli/` with a Typer app and the command
    functions.
-3. Commands are sync `def`: Typer has no native async support, so call async
-   code with `asyncio.run(...)` from inside the sync command.
+3. Commands that need async are `async def` with plain `await`. NEVER call
+   `asyncio.run(...)` inside a command: `app/cli/main.py` runs Typer with
+   `standalone_mode=False`, checks `inspect.iscoroutine` on the result, and
+   owns the single `asyncio.run`. Exemplar: `app/cli/llm.py:reset`. Most
+   existing commands still use the old sync-plus-`asyncio.run` shape; that
+   is the majority, not the standard, and it should not be copied.
 4. Register the module in `app/cli/main.py` (mount its Typer app under a name).
 5. Route user-facing text through i18n keys in `app/i18n/locales/en.py`.
 6. Run the gates and fix anything red.
@@ -43,7 +47,7 @@ or scheduled work.
 
 - A command defined but not registered in `app/cli/main.py` never appears in the
   CLI; registration is what wires it in.
-- Declaring a command `async def` does not work: Typer runs it as a coroutine it
-  never awaits, so keep the command sync and use `asyncio.run(...)` for async
-  calls.
+- Calling `asyncio.run(...)` inside a command fights the harness in
+  `app/cli/main.py`, which already awaits a returned coroutine. Declare the
+  command `async def` and `await` directly.
 - Hardcoded user-facing strings bypass i18n; add a key in `en.py` instead.

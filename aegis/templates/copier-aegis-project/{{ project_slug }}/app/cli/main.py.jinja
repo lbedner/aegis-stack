@@ -63,6 +63,11 @@ from app.cli import api_load_test as _api_load_test  # noqa: E402
 
 app.add_typer(_api_load_test.app, name="api-load-test")
 
+# Benchmarks — same story: no component dependencies, ships everywhere
+from app.cli import bench as _bench  # noqa: E402
+
+app.add_typer(_bench.app, name="bench")
+
 # Conditionally register load-test command if worker components are available
 try:
     load_test_module = importlib.import_module("app.cli.load_test")

@@ -15,6 +15,28 @@ MESSAGES: dict[str, str] = {
     "main.help": "프로젝트 관리 CLI",
     "main.opt_lang": "출력 언어 (de, en, es, fr, ja, ko, ru, zh, zh_Hant). 기본값: 자동 감지",
     # ── Health ────────────────────────────────────────────────────────
+    # Benchmark CLI: comparisons of one configuration against another.
+    "bench.help": "Benchmark this app under different configurations",
+    "bench.running": "Benchmarking {engine} on {loop}, port {port}...",
+    "bench.skip": "Skipping {engine}: it cannot run on {loop}.",
+    "bench.summary": (
+        "{requests} requests, {clients} clients, {rounds} rounds, "
+        "best of each, {target}, driver={driver}"
+    ),
+    "bench.ratio": "{winner} is {ratio}x {loser} on this route.",
+    "bench.one_engine": "Only one engine ran; nothing to compare on this loop.",
+    "bench.noise": (
+        "Laptop numbers move with load; re-run before believing a small gap."
+    ),
+    "bench.auth.one_only": "Pass only one of --as-admin / --as-user / --anon.",
+    "bench.driver.fallback": "Falling back to the {driver} driver: {reason}.",
+    "bench.driver.method": "ab cannot issue {method}",
+    "bench.driver.missing": "ab is not installed",
+    "bench.driver.warning": (
+        "This driver tops out below what either engine can serve, so the two "
+        "look equal no matter what. Install ab (apache2-utils) for a "
+        "comparison that means something."
+    ),
     "health.count_healthy": "{count}개 정상",
     "health.count_warning": "{count}개 경고",
     "health.count_warnings": "{count}개 경고",

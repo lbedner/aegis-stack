@@ -73,15 +73,15 @@ BUDGET: dict[str, int] = {
     "components/frontend/dashboard/modals/voice_settings/recorder.py": 785,
     "services/payment/service.py.jinja": 1633,
     "components/frontend/main.py.jinja": 1423,
-    "i18n/locales/en.py": 1301,
-    "i18n/locales/zh.py": 1277,
-    "i18n/locales/de.py": 1247,
-    "i18n/locales/es.py": 1247,
-    "i18n/locales/fr.py": 1247,
-    "i18n/locales/ja.py": 1247,
-    "i18n/locales/ru.py": 1247,
-    "i18n/locales/ko.py": 1246,
-    "i18n/locales/zh_hant.py": 1243,
+    "i18n/locales/en.py": 1323,
+    "i18n/locales/zh.py": 1299,
+    "i18n/locales/de.py": 1269,
+    "i18n/locales/es.py": 1269,
+    "i18n/locales/fr.py": 1269,
+    "i18n/locales/ja.py": 1269,
+    "i18n/locales/ru.py": 1269,
+    "i18n/locales/ko.py": 1268,
+    "i18n/locales/zh_hant.py": 1265,
     "components/frontend/controls/data_table.py": 1089,
     "services/finance/adapters/providers/connections/plaid_sync.py": 1024,
     "services/finance/seeds/demo_seed.py": 1075,
@@ -97,9 +97,12 @@ BUDGET: dict[str, int] = {
     "services/auth/users.py.jinja": 783,
     "components/frontend/dashboard/modals/llm_catalog_tab.py.jinja": 780,
     "components/frontend/dashboard/cards/card_utils.py.jinja": 659,
-    # 799 not 796: BUILD_ID (3 lines) had nowhere else to live, settings are
-    # this file. Still 299 over the 500 limit and wants a split.
-    "core/config.py.jinja": 799,
+    # 807 not 796: BUILD_ID (3 lines), WEBSERVER_ENGINE (4) and
+    # WEBSERVER_LOOP (4) had nowhere else to live, settings are this file.
+    # Now 307 over the 500 limit. The serving settings are the third group
+    # to land here by default; grouping them into nested models is the
+    # split this file keeps asking for.
+    "core/config.py.jinja": 807,
     "cli/rag.py": 686,
     "services/ai/fixtures/llm_fixtures.py": 684,
     "services/load_test/worker/service.py": 678,
@@ -115,7 +118,10 @@ BUDGET: dict[str, int] = {
     "services/blog/service.py": 598,
     "services/ai/domains/chat/health_context.py": 596,
     "services/finance/domains/planning/budgets/summary.py": 595,
-    "cli/api_load_test.py": 592,
+    # 597: the header/auth helpers went public for app/cli/bench.py, and the
+    # module gained `from __future__ import annotations` because its
+    # TYPE_CHECKING-only FastAPI import broke at runtime on 3.13.
+    "cli/api_load_test.py": 597,
     "components/frontend/dashboard/modals/finance_payees_tab.py": 581,
     "cli/slash_commands.py.jinja": 579,
     "services/finance/domains/planning/goals.py": 575,

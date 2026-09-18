@@ -13,6 +13,9 @@ dependencies = [
     "fastapi==0.116.1",
     "flet[all]==0.28.3",
     "uvicorn==0.35.0",
+    # Alternate ASGI server, selected per run by `make serve ENGINE=granian`.
+    # Shipped rather than made optional so the switch needs no install step.
+    "granian==2.8.3",
     "structlog==25.4.0",
     "pydantic-settings>=2.12.0",
     "typer==0.16.0",

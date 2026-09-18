@@ -12,22 +12,15 @@ match — that's an internal detail; the CLI surface uses "api" because
 that's what users are testing.
 """
 
+
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Awaitable, Callable
 import json as json_lib
 import sys
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
-import typer
-from app.cli import theme
-from app.core.formatting import format_relative_time
-from app.services.load_test.api.discovery import list_routes
-from app.services.load_test.api.models import (
-    APILoadTestConfiguration,
-    APILoadTestResult,
-)
-from app.services.load_test.api.service import APILoadTestService
-from app.services.load_test.common.storage import RedisResultStore
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -38,6 +31,17 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from rich.table import Table
+import typer
+
+from app.cli import theme
+from app.core.formatting import format_relative_time
+from app.services.load_test.api.discovery import list_routes
+from app.services.load_test.api.models import (
+    APILoadTestConfiguration,
+    APILoadTestResult,
+)
+from app.services.load_test.api.service import APILoadTestService
+from app.services.load_test.common.storage import RedisResultStore
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -73,7 +77,7 @@ def _progress_console() -> Any:
     )
 
 
-def _get_fastapi_app() -> "FastAPI":
+def _get_fastapi_app() -> FastAPI:
     """Lazily import + construct the project's FastAPI app.
 
     Kept as a separate function so tests can mock it without booting the
@@ -90,6 +94,7 @@ def _build_redis_client() -> Any | None:
     Redis isn't configured/available."""
     try:
         import redis.asyncio as aioredis
+
         from app.core.config import settings
 
         redis_url = getattr(settings, "redis_url_effective", None)
@@ -139,7 +144,7 @@ async def _with_store(
             await store.aclose()
 
 
-def _parse_kv_flag(items: list[str], flag_name: str) -> dict[str, str]:
+def parse_kv_flag(items: list[str], flag_name: str) -> dict[str, str]:
     """Parse repeated ``KEY=VALUE`` flags (``--header``, ``--path-param``).
 
     Centralized so the error message points at the actual flag the user
@@ -156,8 +161,8 @@ def _parse_kv_flag(items: list[str], flag_name: str) -> dict[str, str]:
     return parsed
 
 
-def _parse_headers(items: list[str]) -> dict[str, str]:
-    return _parse_kv_flag(items, "--header")
+def parse_headers(items: list[str]) -> dict[str, str]:
+    return parse_kv_flag(items, "--header")
 
 
 def _get_auth_dependency() -> object | None:
@@ -175,7 +180,7 @@ def _get_auth_dependency() -> object | None:
 _LOAD_TEST_USER_EMAIL = "loadtest@example.com"
 
 
-def _apply_auto_auth(
+def apply_auto_auth(
     headers: dict[str, str],
     *,
     as_admin: bool,
@@ -380,11 +385,11 @@ def run(
     json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
 ) -> None:
     """Run a load test against an endpoint."""
-    headers = _parse_headers(header)
-    auth_as = _apply_auto_auth(
+    headers = parse_headers(header)
+    auth_as = apply_auto_auth(
         headers, as_admin=as_admin, as_user=as_user, anon=anon, quiet=json
     )
-    path_params = _parse_kv_flag(path_param, "--path-param")
+    path_params = parse_kv_flag(path_param, "--path-param")
 
     parsed_payload: dict | str | None = None
     if payload_file:

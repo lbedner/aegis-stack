@@ -14,7 +14,7 @@ so both formats coexist until the old ones age out.
 
 import asyncio
 {% if database_engine == "sqlite" %}
-import shutil
+import sqlite3
 {% else %}
 import subprocess
 {% endif %}
@@ -46,6 +46,37 @@ BACKUP_FILE_PATTERNS = (
 BACKUP_FILE_PATTERN = BACKUP_FILE_PATTERNS[0]
 
 
+{% if database_engine == "sqlite" %}
+def _copy_database(source: Path, destination: Path) -> None:
+    """A consistent copy of a live SQLite database.
+
+    NOT shutil.copy2. Under WAL a commit lives in the -wal until
+    something checkpoints it back, and copying the main file alone
+    silently produces a backup missing the newest writes - the exact
+    ones anybody restoring is reaching for. On a database young enough
+    that even its schema is still in the log, the copy comes back with
+    NO TABLES AT ALL: a backup that opens cleanly and contains nothing.
+
+    SQLite's own backup API reads through the log and takes a consistent
+    snapshot while other connections keep writing, which is the whole
+    reason it exists. It is also the right way to RESTORE: writing bytes
+    over a database that still has a -wal beside it leaves the old log to
+    be replayed on top of the new contents.
+
+    Blocking, so callers run it off the loop.
+    """
+    live = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+    try:
+        copy = sqlite3.connect(destination)
+        try:
+            live.backup(copy)
+        finally:
+            copy.close()
+    finally:
+        live.close()
+
+
+{% endif %}
 def backup_dir() -> Path:
     """The directory dumps are written to and pruned from.
 
@@ -101,11 +132,11 @@ async def backup_database_job() -> None:
     backup_path = directory / backup_filename
 {% if database_engine == "sqlite" %}
 
-    # Copy the database file. A missing source means nothing was backed up,
-    # which is a failure the operator needs to see -- don't swallow it.
+    # A missing source means nothing was backed up, which is a failure
+    # the operator needs to see -- don't swallow it.
     if not Path(DATABASE_PATH).exists():
         raise RuntimeError(f"Database file not found for backup: {DATABASE_PATH}")
-    await asyncio.to_thread(shutil.copy2, DATABASE_PATH, backup_path)
+    await asyncio.to_thread(_copy_database, Path(DATABASE_PATH), backup_path)
     logger.info(f"Database backup created: {backup_path}")
 {% else %}
 
@@ -226,11 +257,15 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
             current_backup = (
                 directory / f"pre_restore_backup_{timestamp}{BACKUP_FILE_SUFFIX}"
             )
-            await asyncio.to_thread(shutil.copy2, current_db, current_backup)
+            await asyncio.to_thread(_copy_database, current_db, current_backup)
             logger.info(f"Created pre-restore backup: {current_backup}")
 
         # Restore from backup
-        await asyncio.to_thread(shutil.copy2, backup_path, DATABASE_PATH)
+        # Restore THROUGH SQLite rather than over the file: bytes written
+        # onto a database that still has a -wal beside it leave the old
+        # log to be replayed on top of the new contents, which is not a
+        # failed restore but a corrupted one.
+        await asyncio.to_thread(_copy_database, backup_path, Path(DATABASE_PATH))
         logger.info(f"Database restored from backup: {backup_filename}")
         return True
 {% else %}

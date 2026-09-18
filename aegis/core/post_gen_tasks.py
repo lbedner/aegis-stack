@@ -481,7 +481,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/chat/rag_context.py")
         remove_file(project_path, "app/services/ai/domains/chat/rag_stats_context.py")
         remove_file(project_path, "tests/services/ai/test_rag_stats_context.py")
-        remove_file(project_path, "app/components/frontend/dashboard/modals/rag_tab.py")
+        remove_dir(project_path, "app/components/frontend/dashboard/modals/rag_tab")
 
     # chat_kit is a pydantic-ai chat engine (imports ``pydantic_ai``); it has
     # no langchain path, so strip it on langchain. ``usage_recording`` stays:
@@ -500,21 +500,21 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_dir(project_path, "app/services/ai/domains/voice")
         remove_dir(project_path, "tests/services/ai/voice")
         remove_file(project_path, "tests/api/test_voice_endpoints.py")
-        remove_file(
+        remove_dir(
             project_path,
-            "app/components/frontend/dashboard/modals/voice_settings_tab.py",
+            "app/components/frontend/dashboard/modals/voice_settings",
         )
 
     # Remove the Ollama surface when no Ollama is configured. Every importer
     # is jinja-gated, so these ship dead rather than breaking the boot — but
-    # ``ollama_modal.py`` imports ``ollama_activity``, which renders empty in
-    # this mode, so the module cannot even import (aegis-stack#1117).
+    # ``ollama_modal`` imports ``ollama_activity``, which renders empty in
+    # this mode, so the package cannot even import (aegis-stack#1117).
     if context.get(AnswerKeys.OLLAMA_MODE, OllamaMode.NONE) == OllamaMode.NONE:
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/ollama_card.py"
         )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/ollama_modal.py"
+        remove_dir(
+            project_path, "app/components/frontend/dashboard/modals/ollama_modal"
         )
         remove_file(project_path, "app/services/system/health_ollama.py")
         # Both render to a one-line comment in this mode, and every importer

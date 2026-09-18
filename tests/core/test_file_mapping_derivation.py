@@ -145,7 +145,7 @@ class TestFootprintSplit:
         full = set(get_component_files("ai", full=True))
         assert "app/cli/rag.py" not in add_base
         assert "app/cli/rag.py" in full
-        assert "app/components/frontend/dashboard/modals/voice_settings_tab.py" in full
+        assert "app/components/frontend/dashboard/modals/voice_settings/tab.py" in full
 
     def test_ai_add_base_ships_llm_api_and_omits_rag_tab(self) -> None:
         """Retrofit parity with a fresh scaffold (issue #814): the LLM catalog
@@ -153,7 +153,7 @@ class TestFootprintSplit:
         so it belongs to the ai_rag extras, not the always-copied primary)."""
         add_base = set(get_component_files("ai"))
         full = set(get_component_files("ai", full=True))
-        rag_tab = "app/components/frontend/dashboard/modals/rag_tab.py"
+        rag_tab = "app/components/frontend/dashboard/modals/rag_tab/tab.py"
 
         # LLM API dir is in primary -> its files land in the add base.
         assert "app/components/backend/api/llm/router.py" in add_base

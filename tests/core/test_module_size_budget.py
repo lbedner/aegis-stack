@@ -67,11 +67,12 @@ BUDGET: dict[str, int] = {
     # a third module. Debt recorded at size; the fix is a schemas module.
     "services/ai/models/__init__.py.jinja": 457,
     "cli/ai.py.jinja": 2338,
-    "components/frontend/dashboard/modals/voice_settings_tab.py": 1649,
+    # Was one 1,649-line module, now a package of four. The recorder
+    # still carries a 211-line _build_ui; the number ratchets down
+    # when that comes out.
+    "components/frontend/dashboard/modals/voice_settings/recorder.py": 785,
     "services/payment/service.py.jinja": 1633,
-    "components/frontend/dashboard/modals/blog_modal.py": 1454,
     "components/frontend/main.py.jinja": 1423,
-    "components/frontend/dashboard/modals/worker_modal.py": 1351,
     "i18n/locales/en.py": 1301,
     "i18n/locales/zh.py": 1277,
     "i18n/locales/de.py": 1247,
@@ -80,11 +81,8 @@ BUDGET: dict[str, int] = {
     "i18n/locales/ja.py": 1247,
     "i18n/locales/ru.py": 1247,
     "i18n/locales/ko.py": 1246,
-    "components/frontend/dashboard/modals/backend_modal.py": 1244,
     "i18n/locales/zh_hant.py": 1243,
     "services/finance/adapters/importers/imports.py": 1189,
-    "components/frontend/dashboard/modals/ollama_modal.py": 1202,
-    "components/frontend/dashboard/modals/payment_modal.py": 1111,
     "components/frontend/controls/data_table.py": 1089,
     "services/finance/adapters/providers/connections/plaid_sync.py": 1024,
     "services/finance/seeds/demo_seed.py": 1075,
@@ -94,13 +92,11 @@ BUDGET: dict[str, int] = {
     "services/ai/domains/llm/providers.py.jinja": 980,
     "components/backend/api/auth/router.py.jinja": 882,
     "services/finance/domains/detection/insights/rules.py": 944,
-    "components/frontend/dashboard/modals/comms_modal.py": 831,
     "components/frontend/controls/form_fields.py": 817,
     "cli/load_test.py.jinja": 797,
     "cli/blog.py.jinja": 795,
     "services/auth/users.py.jinja": 783,
     "components/frontend/dashboard/modals/llm_catalog_tab.py.jinja": 780,
-    "components/frontend/dashboard/modals/rag_tab.py": 780,
     "components/frontend/dashboard/cards/card_utils.py.jinja": 659,
     # 799 not 796: BUILD_ID (3 lines) had nowhere else to live, settings are
     # this file. Still 299 over the 500 limit and wants a split.

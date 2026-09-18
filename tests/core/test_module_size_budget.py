@@ -80,7 +80,6 @@ BUDGET: dict[str, int] = {
     "i18n/locales/ja.py": 1247,
     "i18n/locales/ru.py": 1247,
     "i18n/locales/ko.py": 1246,
-    "components/frontend/dashboard/modals/backend_modal.py": 1244,
     "i18n/locales/zh_hant.py": 1243,
     "services/finance/adapters/importers/imports.py": 1189,
     "components/frontend/dashboard/modals/ollama_modal.py": 1202,

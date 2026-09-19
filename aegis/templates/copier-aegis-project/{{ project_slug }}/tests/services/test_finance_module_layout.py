@@ -239,14 +239,17 @@ def test_the_vocabulary_is_imported_at_module_scope_by_its_callers() -> None:
                 )
 
 
+# Where each name is DEFINED, not re-exported from. ``plaid_sync`` is a
+# package now, so its names are pinned to the submodule that owns them -
+# a re-export would satisfy a looser check while the definition wandered.
 CONNECTION_OWNERS = {
-    "create_plaid_connection": "plaid_sync",
-    "sync_plaid_connection": "plaid_sync",
-    "process_plaid_webhook": "plaid_sync",
-    "refresh_webhook_urls": "plaid_sync",
-    "fire_sandbox_webhook": "plaid_sync",
-    "complete_hosted_link": "plaid_sync",
-    "relink_connection": "plaid_sync",
+    "create_plaid_connection": "plaid_sync.lifecycle",
+    "sync_plaid_connection": "plaid_sync.sync",
+    "process_plaid_webhook": "plaid_sync.lifecycle",
+    "refresh_webhook_urls": "plaid_sync.lifecycle",
+    "fire_sandbox_webhook": "plaid_sync.lifecycle",
+    "complete_hosted_link": "plaid_sync.lifecycle",
+    "relink_connection": "plaid_sync.lifecycle",
     "start_snaptrade_connect": "snaptrade_sync",
     "complete_snaptrade_connect": "snaptrade_sync",
     "sync_snaptrade_connection": "snaptrade_sync",

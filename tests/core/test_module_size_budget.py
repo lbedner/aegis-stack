@@ -88,7 +88,6 @@ BUDGET: dict[str, int] = {
     "services/ai/domains/llm/etl/llm_sync_service.py": 793,
     "services/ai/domains/llm/providers.py.jinja": 980,
     "components/backend/api/auth/router.py.jinja": 882,
-    "components/frontend/controls/form_fields.py": 817,
     "cli/load_test.py.jinja": 797,
     "cli/blog.py.jinja": 795,
     "services/auth/users.py.jinja": 783,

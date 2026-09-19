@@ -54,7 +54,6 @@ BUDGET: dict[str, int] = {
     "components/frontend/dashboard/modals/finance_modal/uncategorized_panel.py": 850,
     "components/frontend/dashboard/modals/finance_modal/no_payee_panel.py": 668,
     "components/frontend/dashboard/modals/finance_modal/overview_tab.py": 749,
-    "components/frontend/dashboard/modals/finance_modal/budget_cards.py": 681,
     # Was one 3,940-line module, now a package of fourteen. These four
     # still carry a long builder each; the numbers ratchet down as the
     # sections come out, and nothing may give the ground back.

@@ -28,7 +28,7 @@ build-static: ## Compile Tailwind CSS and fingerprint assets into static/dist
 	@uv run python -m app.components.web_frontend.build
 {%- endif %}
 
-serve: build ## Run all services (auto-selects a free host port if the default is taken)
+serve: build ## Run all services (ENGINE=granian swaps the ASGI server for this run)
 	@uv run python scripts/dev_tasks.py serve
 
 serve-bg: ## Run all services in background (auto-selects a free host port if the default is taken)
@@ -132,6 +132,9 @@ health-json: ## System health as JSON
 
 health-probe: ## Health probe (exits 1 if unhealthy)
 	@uv run {{ project_slug }} health probe
+
+bench-engines: ## Compare ASGI engines head to head (ARGS="--path /health/ -n 3000")
+	@uv run {{ project_slug }} bench engines $(ARGS)
 
 test: ## Run tests locally
 	@echo "Running tests..."

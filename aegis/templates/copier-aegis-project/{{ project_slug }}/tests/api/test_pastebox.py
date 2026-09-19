@@ -9,10 +9,15 @@ consumer drains first owns the paste.
 """
 
 import base64
+from pathlib import Path
 
 from fastapi.testclient import TestClient
+from starlette.types import Message, Receive, Scope, Send
 
-from app.components.backend.middleware.paste_capture import inject_paste_script
+from app.components.backend.middleware.paste_capture import (
+    PasteCaptureMiddleware,
+    inject_paste_script,
+)
 from app.core.pastebox import Pastebox
 
 _PNG = b"\x89PNG fake bytes"
@@ -115,3 +120,107 @@ class TestPasteScriptInjection:
     def test_html_without_head_is_left_alone(self) -> None:
         blob = b'{"not": "html"}'
         assert inject_paste_script(blob) == blob
+
+
+class TestPasteCaptureUnderPathsend:
+    """Servers that offer ``http.response.pathsend`` hand the file off to the
+    server instead of streaming a body, so a middleware that rewrites HTML
+    sees a ``pathsend`` message where it expected bytes. The dashboard index
+    still has to arrive injected, and the server must never be handed a body
+    before a start.
+    """
+
+    async def _serve(
+        self,
+        tmp_path: Path,
+        *,
+        extensions: dict[str, dict[str, object]],
+        path: str = "/dashboard/",
+        content_type: bytes = b"text/html; charset=utf-8",
+    ) -> list[Message]:
+        index = tmp_path / "index.html"
+        index.write_bytes(b"<html><head></head><body>hi</body></html>")
+
+        async def file_app(scope: Scope, receive: Receive, send: Send) -> None:
+            # Mirrors starlette's FileResponse: pathsend when it is offered.
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [
+                        (b"content-type", content_type),
+                        (b"content-length", str(index.stat().st_size).encode()),
+                    ],
+                }
+            )
+            if "http.response.pathsend" in scope.get("extensions", {}):
+                await send({"type": "http.response.pathsend", "path": str(index)})
+                return
+            await send({"type": "http.response.body", "body": index.read_bytes()})
+
+        sent: list[Message] = []
+        started = False
+
+        async def send(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            elif not started:
+                # The server's own guard, which is what produced the 500.
+                raise RuntimeError("ASGI flow error: Response not started")
+            sent.append(message)
+
+        async def receive() -> Message:
+            return {"type": "http.disconnect"}
+
+        scope: Scope = {"type": "http", "path": path, "extensions": extensions}
+        await PasteCaptureMiddleware(file_app)(scope, receive, send)
+        return sent
+
+    async def test_dashboard_html_is_injected_when_the_server_offers_pathsend(
+        self, tmp_path: Path
+    ) -> None:
+        sent = await self._serve(
+            tmp_path, extensions={"http.response.pathsend": {}}
+        )
+
+        types = [message["type"] for message in sent]
+        assert "http.response.pathsend" not in types
+        assert types[0] == "http.response.start"
+        body = b"".join(
+            message.get("body", b"")
+            for message in sent
+            if message["type"] == "http.response.body"
+        )
+        assert b"/api/v1/pastebox" in body
+        headers = dict(sent[0]["headers"])
+        assert headers[b"content-length"] == str(len(body)).encode()
+
+    async def test_non_html_keeps_the_zero_copy_pathsend(
+        self, tmp_path: Path
+    ) -> None:
+        # Flet's bundle assets are large; buffering them to inject nothing
+        # would trade the server's sendfile for pointless memory.
+        sent = await self._serve(
+            tmp_path,
+            extensions={"http.response.pathsend": {}},
+            path="/dashboard/main.dart.js",
+            content_type=b"application/javascript",
+        )
+
+        assert [message["type"] for message in sent] == [
+            "http.response.start",
+            "http.response.pathsend",
+        ]
+
+    async def test_servers_without_pathsend_are_unaffected(
+        self, tmp_path: Path
+    ) -> None:
+        sent = await self._serve(tmp_path, extensions={})
+
+        body = b"".join(
+            message.get("body", b"")
+            for message in sent
+            if message["type"] == "http.response.body"
+        )
+        assert b"/api/v1/pastebox" in body

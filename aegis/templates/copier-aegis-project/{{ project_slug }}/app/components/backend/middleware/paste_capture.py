@@ -13,6 +13,8 @@ without carrying a copy of it.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 # Posts every pasted image file; non-file pastes (plain text) fall
@@ -63,6 +65,18 @@ class PasteCaptureMiddleware:
         chunks: list[bytes] = []
         is_html = False
 
+        async def send_injected(raw: bytes) -> None:
+            """Release the stashed start plus the rewritten body."""
+            body = inject_paste_script(raw)
+            assert start_message is not None
+            start_message["headers"] = [
+                (k, v)
+                for k, v in start_message["headers"]
+                if k.lower() != b"content-length"
+            ] + [(b"content-length", str(len(body)).encode())]
+            await send(start_message)
+            await send({"type": "http.response.body", "body": body})
+
         async def buffered_send(message: Message) -> None:
             nonlocal start_message, is_html
             if message["type"] == "http.response.start":
@@ -76,15 +90,15 @@ class PasteCaptureMiddleware:
             if message["type"] == "http.response.body" and is_html:
                 chunks.append(message.get("body") or b"")
                 if not message.get("more_body"):
-                    body = inject_paste_script(b"".join(chunks))
-                    assert start_message is not None
-                    start_message["headers"] = [
-                        (k, v)
-                        for k, v in start_message["headers"]
-                        if k.lower() != b"content-length"
-                    ] + [(b"content-length", str(len(body)).encode())]
-                    await send(start_message)
-                    await send({"type": "http.response.body", "body": body})
+                    await send_injected(b"".join(chunks))
+                return
+            if message["type"] == "http.response.pathsend" and is_html:
+                # Servers that advertise ``http.response.pathsend`` get the
+                # file path instead of its bytes, so the page never passes
+                # through here to be rewritten. Read the one small document
+                # and answer normally; every other asset under the mount
+                # keeps the server's zero-copy send.
+                await send_injected(Path(message["path"]).read_bytes())
                 return
             await send(message)
 

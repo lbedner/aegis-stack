@@ -15,6 +15,28 @@ MESSAGES: dict[str, str] = {
     "main.help": "CLI управления проектом",
     "main.opt_lang": "Язык вывода (de, en, es, fr, ja, ko, ru, zh, zh_Hant). По умолчанию: автоопределение",
     # ── Здоровье ─────────────────────────────────────────────────────
+    # Benchmark CLI: comparisons of one configuration against another.
+    "bench.help": "Benchmark this app under different configurations",
+    "bench.running": "Benchmarking {engine} on {loop}, port {port}...",
+    "bench.skip": "Skipping {engine}: it cannot run on {loop}.",
+    "bench.summary": (
+        "{requests} requests, {clients} clients, {rounds} rounds, "
+        "best of each, {target}, driver={driver}"
+    ),
+    "bench.ratio": "{winner} is {ratio}x {loser} on this route.",
+    "bench.one_engine": "Only one engine ran; nothing to compare on this loop.",
+    "bench.noise": (
+        "Laptop numbers move with load; re-run before believing a small gap."
+    ),
+    "bench.auth.one_only": "Pass only one of --as-admin / --as-user / --anon.",
+    "bench.driver.fallback": "Falling back to the {driver} driver: {reason}.",
+    "bench.driver.method": "ab cannot issue {method}",
+    "bench.driver.missing": "ab is not installed",
+    "bench.driver.warning": (
+        "This driver tops out below what either engine can serve, so the two "
+        "look equal no matter what. Install ab (apache2-utils) for a "
+        "comparison that means something."
+    ),
     "health.count_healthy": "{count} в норме",
     "health.count_warning": "{count} предупреждение",
     "health.count_warnings": "{count} предупреждений",

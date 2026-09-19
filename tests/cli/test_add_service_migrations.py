@@ -428,3 +428,113 @@ class TestAddAuthOntoFinance:
         tables = {r[0] for r in db.execute("select name from sqlite_master")}
         assert "user" in tables, (sorted(tables), result.stdout[-1500:])
         assert db.execute("select id from user where id = 0").fetchall() == [(0,)]
+
+    def test_sentinel_owned_rows_survive_the_fk(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """The same add, onto a project that has actually been USED.
+
+        The sibling above proves user 0 lands. It cannot prove the order
+        is right, because it adds auth to an empty database: with no rows
+        owned by the sentinel, an FK created before its target still
+        holds. A standalone finance install stores insights under owner
+        ``0`` (they are NOT-NULL owner - see ``generate_insights``), so a
+        real one has rows the FK must not refuse. Found on an install
+        with 154 of them, 2026-09-19.
+        """
+        import shutil
+        import sqlite3
+
+        project_path = project_factory(
+            components=["database", "scheduler"], services=["finance"]
+        )
+        versions_dir = project_path / "alembic" / "versions"
+        before = sorted(p.name for p in versions_dir.glob("*.py"))
+
+        shutil.rmtree(project_path / ".venv", ignore_errors=True)
+        no_venv = {"VIRTUAL_ENV": "", "UV_PYTHON": ""}
+        sync = run_project_command(
+            ["uv", "sync"], project_path, timeout=600, env_overrides=no_venv
+        )
+        assert sync.success, sync.stderr[-800:]
+
+        # Bring the finance tables up before seeding: the point is a
+        # database that was in use before auth arrived.
+        migrate = run_project_command(
+            # -c: the generated project keeps its config at
+            # alembic/alembic.ini, as its own Makefile target does.
+            ["uv", "run", "alembic", "-c", "alembic/alembic.ini", "upgrade", "head"],
+            project_path,
+            timeout=300,
+            env_overrides=no_venv,
+        )
+        assert migrate.success, (migrate.stdout[-800:], migrate.stderr[-800:])
+
+        db_path = project_path / "data" / "app.db"
+        assert db_path.exists(), migrate.stdout[-800:]
+        seeded = sqlite3.connect(db_path)
+        seeded.execute(
+            "INSERT INTO finance_insight (owner_user_id, insight_type, severity,"
+            " title, dedup_key, data, status, is_read, metadata, created_at,"
+            " updated_at) VALUES (0, 'fee', 'info', 'A fee worth avoiding',"
+            " 'seeded-1', '{}', 'new', 0, '{}', CURRENT_TIMESTAMP,"
+            " CURRENT_TIMESTAMP)"
+        )
+        seeded.commit()
+        seeded.close()
+
+        result = run_aegis_command(
+            "add-service", "auth", "--project-path", str(project_path), "--yes"
+        )
+        assert result.returncode == 0, (
+            "add-service failed on a finance project with sentinel-owned "
+            f"rows:\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
+        )
+
+        added = sorted({p.name for p in versions_dir.glob("*.py")} - set(before))
+        link_name = next(n for n in added if "finance_auth_link" in n)
+        link = (versions_dir / link_name).read_text()
+
+        # The invariant this test exists for, and the one SQLite cannot
+        # show on its own: the row a foreign key points at has to be
+        # written BEFORE the key. SQLite adds an FK by rebuilding the
+        # table and does not re-validate the rows it copies, so a wrong
+        # order passes here and fails on Postgres, which validates on
+        # ADD CONSTRAINT. Assert the order in the file, not the outcome
+        # in this engine.
+        sentinel_at = link.find("standalone@finance.local")
+        assert sentinel_at != -1, link
+
+        # Where a revision both writes the sentinel and adds the key that
+        # needs it, the row has to come first. It does not arise on the
+        # add path today - the owner FKs are inline in the finance
+        # revision, which on this path was written before auth existed,
+        # so they never arrive at all (see #DRIFT below) - but the order
+        # is the invariant, and SQLite would not show it either way: it
+        # adds a key by rebuilding the table and does not re-validate the
+        # rows it copies, while Postgres validates on ADD CONSTRAINT.
+        fk_at = min(
+            (
+                link.find(marker)
+                for marker in ("create_foreign_key", "ForeignKeyConstraint")
+                if link.find(marker) != -1
+            ),
+            default=-1,
+        )
+        if fk_at != -1:
+            assert sentinel_at < fk_at, (
+                "the sentinel row is written after the FK that needs it; "
+                "SQLite tolerates this and Postgres will not:\n" + link
+            )
+
+        db = sqlite3.connect(db_path)
+        # The row is still there, and now points at a user that exists.
+        assert db.execute(
+            "select owner_user_id from finance_insight where dedup_key = 'seeded-1'"
+        ).fetchall() == [(0,)]
+        assert db.execute("select id from user where id = 0").fetchall() == [(0,)]
+        # And SQLite agrees the constraint is satisfied, which is the
+        # whole question: the FK was added to a table that already had
+        # rows in it.
+        db.execute("PRAGMA foreign_keys=ON")
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []

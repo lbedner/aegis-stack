@@ -351,6 +351,47 @@ class TestVariantDelta:
             "ai_rag": True,
         }
 
+    def test_the_shipped_auth_spec_names_its_oauth_answer(self) -> None:
+        """``aegis add-service auth[oauth]`` accepted the flag and then
+        dropped it: the option carried no ``answer_key``, so the request
+        parsed, matched, and named nothing, and ``include_oauth`` stayed
+        false. ``aegis init --services auth[oauth]`` honoured it the
+        whole time, through a different parser - two doors, one of them
+        silent (2026-09-19).
+
+        Against the SHIPPED spec rather than a fake, because the fake is
+        what agreed with the bug.
+        """
+        from aegis.constants import AnswerKeys
+        from aegis.core.services import SERVICES
+
+        auth = SERVICES["auth"]
+        assert variant_answers("auth[oauth]", auth) == {AnswerKeys.AUTH_OAUTH: True}
+        assert variant_answers("auth[rbac,oauth]", auth) == {
+            AnswerKeys.AUTH_LEVEL: "rbac",
+            AnswerKeys.AUTH_OAUTH: True,
+        }
+
+    def test_oauth_can_be_added_to_an_auth_project_that_has_none(self) -> None:
+        """The upgrade path the drop broke: a project on basic auth asks
+        for oauth and is told it already has auth."""
+        from aegis.constants import AnswerKeys
+        from aegis.core.services import SERVICES
+
+        installed = {AnswerKeys.AUTH_LEVEL: "basic", AnswerKeys.AUTH_OAUTH: False}
+        assert variant_delta("auth[oauth]", SERVICES["auth"], installed) == {
+            AnswerKeys.AUTH_OAUTH: True
+        }
+        # Already granted: nothing to do, and no conflict either.
+        assert (
+            variant_delta(
+                "auth[oauth]",
+                SERVICES["auth"],
+                {AnswerKeys.AUTH_LEVEL: "basic", AnswerKeys.AUTH_OAUTH: True},
+            )
+            == {}
+        )
+
     def test_provider_request_merges_with_what_the_project_has(self) -> None:
         """Providers accumulate: ``ai[openai]`` on an ollama project keeps
         ollama and adds openai, as the comma string copier stores."""

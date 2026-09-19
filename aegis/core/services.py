@@ -250,6 +250,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 name="oauth",
                 mode=OptionMode.FLAG,
                 choices=["oauth"],
+                answer_key=AnswerKeys.AUTH_OAUTH,
                 default=False,
             ),
         ],

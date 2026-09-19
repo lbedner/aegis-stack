@@ -83,7 +83,6 @@ BUDGET: dict[str, int] = {
     "i18n/locales/ko.py": 1268,
     "i18n/locales/zh_hant.py": 1265,
     "components/frontend/controls/data_table.py": 1089,
-    "services/finance/seeds/demo_seed.py": 1075,
     "components/backend/api/ai/router.py.jinja": 1009,
     "cli/payment.py.jinja": 917,
     "services/ai/domains/llm/etl/llm_sync_service.py": 793,

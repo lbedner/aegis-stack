@@ -677,7 +677,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT finance_account.id, finance_account.owner_user_id, finance_account.subject_id, finance_account.organization_id, finance_account.connection_id, finance_account.institution_id, finance_account.provider, finance_account.provider_account_id, finance_account.persistent_account_id, finance_account.name, finance_account.official_name, finance_account.mask, finance_account.type, finance_account.subtype, finance_account.account_type, finance_account.classification, finance_account.currency, finance_account.current_balance, finance_account.available_balance, finance_account.credit_limit, finance_account.balance_as_of, finance_account.is_manual, finance_account.is_hidden, finance_account.is_closed, finance_account.is_on_budget, finance_account.linked_at, finance_account.last_synced_at, finance_account.deleted_at, finance_account.metadata, finance_account.created_at, finance_account.updated_at FROM finance_account WHERE finance_account.owner_user_id = :owner_user_id_1",
-      "file": "app/services/finance/seeds/demo_seed.py",
+      "file": "app/services/finance/seeds/demo_seed/shared.py",
       "function": "_demo_accounts"
     },
     {
@@ -1121,7 +1121,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT finance_recurring_stream.id, finance_recurring_stream.owner_user_id, finance_recurring_stream.subject_id, finance_recurring_stream.organization_id, finance_recurring_stream.account_id, finance_recurring_stream.merchant_id, finance_recurring_stream.category_id, finance_recurring_stream.connection_id, finance_recurring_stream.provider_stream_id, finance_recurring_stream.name, finance_recurring_stream.normalized_payee, finance_recurring_stream.direction, finance_recurring_stream.frequency, finance_recurring_stream.average_amount, finance_recurring_stream.last_amount, finance_recurring_stream.expected_amount, finance_recurring_stream.amount_is_variable, finance_recurring_stream.amount_tolerance_bps, finance_recurring_stream.currency, finance_recurring_stream.first_date, finance_recurring_stream.last_date, finance_recurring_stream.next_expected_date, finance_recurring_stream.occurrence_count, finance_recurring_stream.status, finance_recurring_stream.confidence, finance_recurring_stream.is_subscription, finance_recurring_stream.is_active, finance_recurring_stream.is_user_confirmed, finance_recurring_stream.is_muted, finance_recurring_stream.paused_until, finance_recurring_stream.service_type, finance_recurring_stream.source, finance_recurring_stream.deleted_at, finance_recurring_stream.metadata, finance_recurring_stream.created_at, finance_recurring_stream.updated_at FROM finance_recurring_stream WHERE finance_recurring_stream.account_id IN (__[POSTCOMPILE_account_id_1])",
-      "file": "app/services/finance/seeds/demo_seed.py",
+      "file": "app/services/finance/seeds/demo_seed/curate.py",
       "function": "_count_derived"
     },
     {
@@ -1205,7 +1205,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT finance_recurring_stream.id, finance_recurring_stream.owner_user_id, finance_recurring_stream.subject_id, finance_recurring_stream.organization_id, finance_recurring_stream.account_id, finance_recurring_stream.merchant_id, finance_recurring_stream.category_id, finance_recurring_stream.connection_id, finance_recurring_stream.provider_stream_id, finance_recurring_stream.name, finance_recurring_stream.normalized_payee, finance_recurring_stream.direction, finance_recurring_stream.frequency, finance_recurring_stream.average_amount, finance_recurring_stream.last_amount, finance_recurring_stream.expected_amount, finance_recurring_stream.amount_is_variable, finance_recurring_stream.amount_tolerance_bps, finance_recurring_stream.currency, finance_recurring_stream.first_date, finance_recurring_stream.last_date, finance_recurring_stream.next_expected_date, finance_recurring_stream.occurrence_count, finance_recurring_stream.status, finance_recurring_stream.confidence, finance_recurring_stream.is_subscription, finance_recurring_stream.is_active, finance_recurring_stream.is_user_confirmed, finance_recurring_stream.is_muted, finance_recurring_stream.paused_until, finance_recurring_stream.service_type, finance_recurring_stream.source, finance_recurring_stream.deleted_at, finance_recurring_stream.metadata, finance_recurring_stream.created_at, finance_recurring_stream.updated_at FROM finance_recurring_stream WHERE finance_recurring_stream.owner_user_id = :owner_user_id_1 AND finance_recurring_stream.deleted_at IS NULL",
-      "file": "app/services/finance/seeds/demo_seed.py",
+      "file": "app/services/finance/seeds/demo_seed/seed.py",
       "function": "seed_demo"
     },
     {
@@ -1451,7 +1451,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT finance_transaction.id, finance_transaction.owner_user_id, finance_transaction.organization_id, finance_transaction.account_id, finance_transaction.connection_id, finance_transaction.import_batch_id, finance_transaction.source, finance_transaction.external_id, finance_transaction.external_id_source, finance_transaction.import_hash, finance_transaction.within_day_ordinal, finance_transaction.dedup_status, finance_transaction.canonical_transaction_id, finance_transaction.source_precedence, finance_transaction.amount, finance_transaction.raw_amount, finance_transaction.raw_sign_convention, finance_transaction.currency, finance_transaction.unofficial_currency_code, finance_transaction.date, finance_transaction.authorized_date, finance_transaction.datetime, finance_transaction.name, finance_transaction.original_description, finance_transaction.merchant_id, finance_transaction.merchant_name, finance_transaction.logo_url, finance_transaction.merchant_entity_id, finance_transaction.memo, finance_transaction.check_number, finance_transaction.payment_channel, finance_transaction.pfc_primary, finance_transaction.pfc_detailed, finance_transaction.pfc_confidence_level, finance_transaction.category_id, finance_transaction.category_source, finance_transaction.is_user_categorized, finance_transaction.is_reviewed, finance_transaction.pending, finance_transaction.pending_provider_id, finance_transaction.pending_transaction_id, finance_transaction.status, finance_transaction.is_transfer, finance_transaction.transfer_group_id, finance_transaction.transfer_pair_transaction_id, finance_transaction.is_split, finance_transaction.excluded_from_reports, finance_transaction.is_reversal, finance_transaction.reverses_transaction_id, finance_transaction.recurring_stream_id, finance_transaction.reconciled_status, finance_transaction.location, finance_transaction.counterparties, finance_transaction.raw_payload, finance_transaction.is_removed, finance_transaction.removed_at, finance_transaction.deleted_at, finance_transaction.metadata, finance_transaction.created_at, finance_transaction.updated_at FROM finance_transaction WHERE finance_transaction.account_id IN (__[POSTCOMPILE_account_id_1])",
-      "file": "app/services/finance/seeds/demo_seed.py",
+      "file": "app/services/finance/seeds/demo_seed/clear.py",
       "function": "_delete_demo_rows"
     },
     {
@@ -1469,7 +1469,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT finance_transaction.id, finance_transaction.owner_user_id, finance_transaction.organization_id, finance_transaction.account_id, finance_transaction.connection_id, finance_transaction.import_batch_id, finance_transaction.source, finance_transaction.external_id, finance_transaction.external_id_source, finance_transaction.import_hash, finance_transaction.within_day_ordinal, finance_transaction.dedup_status, finance_transaction.canonical_transaction_id, finance_transaction.source_precedence, finance_transaction.amount, finance_transaction.raw_amount, finance_transaction.raw_sign_convention, finance_transaction.currency, finance_transaction.unofficial_currency_code, finance_transaction.date, finance_transaction.authorized_date, finance_transaction.datetime, finance_transaction.name, finance_transaction.original_description, finance_transaction.merchant_id, finance_transaction.merchant_name, finance_transaction.logo_url, finance_transaction.merchant_entity_id, finance_transaction.memo, finance_transaction.check_number, finance_transaction.payment_channel, finance_transaction.pfc_primary, finance_transaction.pfc_detailed, finance_transaction.pfc_confidence_level, finance_transaction.category_id, finance_transaction.category_source, finance_transaction.is_user_categorized, finance_transaction.is_reviewed, finance_transaction.pending, finance_transaction.pending_provider_id, finance_transaction.pending_transaction_id, finance_transaction.status, finance_transaction.is_transfer, finance_transaction.transfer_group_id, finance_transaction.transfer_pair_transaction_id, finance_transaction.is_split, finance_transaction.excluded_from_reports, finance_transaction.is_reversal, finance_transaction.reverses_transaction_id, finance_transaction.recurring_stream_id, finance_transaction.reconciled_status, finance_transaction.location, finance_transaction.counterparties, finance_transaction.raw_payload, finance_transaction.is_removed, finance_transaction.removed_at, finance_transaction.deleted_at, finance_transaction.metadata, finance_transaction.created_at, finance_transaction.updated_at FROM finance_transaction WHERE finance_transaction.account_id IN (__[POSTCOMPILE_account_id_1]) AND finance_transaction.deleted_at IS NULL AND finance_transaction.is_transfer IS false AND finance_transaction.merchant_id IS NULL",
-      "file": "app/services/finance/seeds/demo_seed.py",
+      "file": "app/services/finance/seeds/demo_seed/curate.py",
       "function": "_name_payees"
     },
     {
@@ -1799,7 +1799,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT finance_transfer.id, finance_transfer.owner_user_id, finance_transfer.organization_id, finance_transfer.from_account_id, finance_transfer.to_account_id, finance_transfer.from_transaction_id, finance_transfer.to_transaction_id, finance_transfer.amount, finance_transfer.currency, finance_transfer.transfer_date, finance_transfer.transfer_group_key, finance_transfer.is_credit_card_payment, finance_transfer.match_method, finance_transfer.confidence, finance_transfer.status FROM finance_transfer WHERE finance_transfer.from_account_id IN (__[POSTCOMPILE_from_account_id_1]) OR finance_transfer.to_account_id IN (__[POSTCOMPILE_to_account_id_1])",
-      "file": "app/services/finance/seeds/demo_seed.py",
+      "file": "app/services/finance/seeds/demo_seed/curate.py",
       "function": "_count_derived"
     },
     {

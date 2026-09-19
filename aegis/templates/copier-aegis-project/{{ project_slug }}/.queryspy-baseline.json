@@ -125,13 +125,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "hard_delete_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "restore_user"
     },
     {
@@ -143,13 +143,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "hard_delete_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "restore_user"
     },
     {
@@ -575,7 +575,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT email_verification_token.id, email_verification_token.user_id, email_verification_token.token, email_verification_token.created_at, email_verification_token.used FROM email_verification_token WHERE email_verification_token.user_id = :user_id_1 AND email_verification_token.used = false",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_verification.py",
       "function": "_invalidate_prior_email_verification_tokens"
     },
     {
@@ -2081,13 +2081,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT organization_member.organization_id FROM organization_member JOIN organization ON organization.id = organization_member.organization_id WHERE organization_member.user_id = :user_id_1 AND organization_member.role = :role_1 AND organization.deleted_at IS NULL",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "orphaned_sole_owner_org_ids"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT organization_member.organization_id, count(*) AS count_1 FROM organization_member WHERE organization_member.organization_id IN (__[POSTCOMPILE_organization_id_1]) GROUP BY organization_member.organization_id",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "orphaned_sole_owner_org_ids"
     },
     {
@@ -2213,7 +2213,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/components/backend/api/auth/router.py",
+      "file": "app/components/backend/api/auth/sessions.py",
       "function": "_current_session_family"
     },
     {

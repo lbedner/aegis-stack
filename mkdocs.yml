@@ -61,6 +61,7 @@ nav:
         - Performance: components/backend/middleware/performance.md
       - Lifecycle: components/backend/lifecycle.md
       - Routes: components/backend/routes.md
+      - ASGI Server: components/backend/serving.md
       - Authentication Integration: components/backend/auth.md
       - API Load Testing: components/backend/load-testing.md
     - Database:

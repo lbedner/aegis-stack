@@ -7,6 +7,10 @@ composition point for the rest of the stack: services register routes,
 infrastructure components register middleware, and the lifespan is owned by
 auto-discovered startup and shutdown hooks.
 
+What serves it is a choice rather than a given: uvicorn by default, granian
+with `make serve ENGINE=granian`, and the event loop underneath is its own
+separate switch. See [ASGI Server](serving.md).
+
 !!! example "Musings: On Backend Choices (November 2025)"
     Most of my experience is with [FastAPI](https://fastapi.tiangolo.com/), but I did have the chance to do some [Flask](https://flask.palletsprojects.com/) work in a production environment this past summer, and it was rather fun.
 
@@ -123,6 +127,8 @@ new middleware or hook, restart the backend and it shows up automatically.
   and the Overseer Lifecycle tab.
 - [Routes](routes.md): how routers are registered, what each conditional
   block maps to, and how to add one.
+- [ASGI Server](serving.md): uvicorn or granian, the event loop underneath,
+  and how to measure which is faster on your own routes.
 - [Authentication Integration](auth.md): how the auth service plugs into
   the backend through SessionMiddleware, rate limiting, and router
   registration.

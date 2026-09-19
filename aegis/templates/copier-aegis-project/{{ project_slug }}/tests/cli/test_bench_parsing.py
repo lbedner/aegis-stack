@@ -7,8 +7,11 @@ like a real result.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
+from app.cli import bench
 from app.cli.bench import choose_driver, parse_ab, substitute_path_params
 
 AB_REPORT = """Concurrency Level:      50
@@ -88,3 +91,26 @@ class TestDriverChoice:
 
     def test_an_explicit_choice_is_honored(self) -> None:
         assert choose_driver("api-load-test", "GET") == ("api-load-test", None)
+        assert choose_driver("ab-docker", "GET") == ("ab-docker", None)
+
+    def test_no_local_ab_falls_to_the_container_not_the_slow_client(self) -> None:
+        # Most Linux has no ab, which is CI and most containers. Docker is
+        # already required for a generated project, so the fallback that
+        # can still saturate beats the one that cannot.
+        with (
+            patch.object(bench, "AB", "/nonexistent/ab"),
+            patch.object(bench.shutil, "which", lambda name: "/usr/bin/docker"),
+        ):
+            driver, reason = choose_driver("auto", "GET")
+
+        assert driver == "ab-docker"
+        assert reason is not None
+
+    def test_no_ab_and_no_docker_is_the_last_resort(self) -> None:
+        with (
+            patch.object(bench, "AB", "/nonexistent/ab"),
+            patch.object(bench.shutil, "which", lambda name: None),
+        ):
+            driver, _ = choose_driver("auto", "GET")
+
+        assert driver == "api-load-test"

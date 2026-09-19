@@ -107,7 +107,9 @@ class Settings(
 
     # Event loop, a separate axis from the engine. "auto" resolves to
     # uvloop when installed; it never resolves to rloop on its own.
-    WEBSERVER_LOOP: Literal["auto", "asyncio", "uvloop", "rloop"] = "auto"
+    WEBSERVER_LOOP: Literal[
+        "auto", "asyncio", "uvloop", "rloop", "zuvloop"
+    ] = "auto"
 
     # Docker settings (used by docker-compose)
     AEGIS_STACK_TAG: str = "{{ project_slug }}:latest"

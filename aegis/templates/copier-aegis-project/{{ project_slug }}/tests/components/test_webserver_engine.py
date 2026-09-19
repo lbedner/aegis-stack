@@ -70,6 +70,28 @@ class TestEngineSelection:
         assert granian_calls[0]["interface"] == "asgi"
         assert granian_calls[0]["port"] == settings.PORT
 
+    def test_granian_respawns_a_dead_worker_in_dev(
+        self, granian_calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Granian defaults this off, which means one transient bad save
+        # stops the dev server permanently and prints no error.
+        monkeypatch.setattr(settings, "AUTO_RELOAD", True)
+
+        webserver.main()
+
+        assert granian_calls[0]["respawn_failed_workers"] is True
+
+    def test_granian_fails_fast_in_production(
+        self, granian_calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No reloader there, and the container healthcheck already
+        # restarts a dead server. Respawning would mask a crashloop.
+        monkeypatch.setattr(settings, "AUTO_RELOAD", False)
+
+        webserver.main()
+
+        assert granian_calls[0]["respawn_failed_workers"] is False
+
     def test_granian_honors_auto_reload_scoped_to_the_app_package(
         self, granian_calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -124,15 +146,16 @@ class TestLoopSelection:
         monkeypatch.setattr(settings, "WEBSERVER_LOOP", "rloop")
 
         with pytest.raises(ValueError, match="uvicorn cannot run on 'rloop'"):
-            webserver.uvicorn_settings()
+            webserver.uvicorn_settings("rloop")
 
     def test_the_matrix_says_what_each_engine_takes(self) -> None:
         # One definition, because the entrypoint enforces it and the
         # benchmark skips incompatible combinations by reading it.
         assert "rloop" in loops.ENGINE_LOOPS["granian"]
         assert "rloop" not in loops.ENGINE_LOOPS["uvicorn"]
-        # zuvloop reaches neither engine through this path today.
-        assert not any("zuvloop" in v for v in loops.ENGINE_LOOPS.values())
+        # And the mirror image: zuvloop is uvicorn's alone.
+        assert "zuvloop" in loops.ENGINE_LOOPS["uvicorn"]
+        assert "zuvloop" not in loops.ENGINE_LOOPS["granian"]
 
     def test_granian_is_given_the_resolved_loop(
         self, granian_calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
@@ -143,3 +166,87 @@ class TestLoopSelection:
         webserver.main()
 
         assert granian_calls[0]["loop"] == "rloop"
+
+
+@pytest.fixture
+def on_314(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend we are on a Python that can run zuvloop."""
+    monkeypatch.setattr(loops.sys, "version_info", (3, 14, 0))
+
+
+class TestZuvloop:
+    """zuvloop is uvicorn-only, 3.14+, and needs a different startup shape.
+
+    `uvicorn.run()` owns the event loop, so reaching a loop uvicorn does
+    not know about means dropping to Config + Server with `loop="none"`
+    and letting zuvloop provide one.
+    """
+
+    def test_the_matrix_offers_it_to_uvicorn_only(self) -> None:
+        assert "zuvloop" in loops.ENGINE_LOOPS["uvicorn"]
+        # Granian's Loops enum has no member for it, and zuvloop ships no
+        # EventLoopPolicy to redirect granian's asyncio builder.
+        assert "zuvloop" not in loops.ENGINE_LOOPS["granian"]
+
+    def test_it_is_refused_below_314(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "WEBSERVER_LOOP", "zuvloop")
+        monkeypatch.setattr(loops.sys, "version_info", (3, 13, 9))
+
+        with pytest.raises(ValueError, match="3.14"):
+            loops.resolve_loop()
+
+    def test_auto_never_picks_it(
+        self, on_314: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Even on 3.14 with zuvloop installed: it is 0.0.x, so it is opt-in.
+        monkeypatch.setattr(settings, "WEBSERVER_LOOP", "auto")
+        monkeypatch.setattr(
+            loops.importlib.util, "find_spec", lambda name: object()
+        )
+
+        assert loops.resolve_loop() == "uvloop"
+
+    def test_uvicorn_hands_the_server_to_zuvloop(
+        self, on_314: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        served: list[object] = []
+        configs: list[dict[str, Any]] = []
+
+        monkeypatch.setattr(settings, "WEBSERVER_LOOP", "zuvloop")
+        monkeypatch.setattr(settings, "AUTO_RELOAD", False)
+        # The subject is the startup shape, not app construction. Building
+        # the real integrated app here would drag in every service import
+        # for no assertion.
+        monkeypatch.setattr(webserver, "create_integrated_app", lambda: object())
+        monkeypatch.setattr(
+            webserver.uvicorn, "Config", lambda *a, **kw: configs.append(kw) or kw
+        )
+        monkeypatch.setattr(
+            webserver.uvicorn, "Server", lambda config: _FakeServer(config)
+        )
+        monkeypatch.setattr(webserver, "_zuvloop_run", served.append)
+
+        webserver.main()
+
+        # uvicorn must be told to set up no loop of its own.
+        assert configs[0]["loop"] == "none"
+        assert served, "the server coroutine never reached zuvloop"
+
+    def test_reload_with_zuvloop_is_refused(
+        self, on_314: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # uvicorn's reloader is a supervisor that spawns child processes;
+        # there is nowhere to hand zuvloop a coroutine.
+        monkeypatch.setattr(settings, "WEBSERVER_LOOP", "zuvloop")
+        monkeypatch.setattr(settings, "AUTO_RELOAD", True)
+
+        with pytest.raises(ValueError, match="reload"):
+            webserver.main()
+
+
+class _FakeServer:
+    def __init__(self, config: object) -> None:
+        self.config = config
+
+    def serve(self) -> str:
+        return "coroutine"

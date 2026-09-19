@@ -36,7 +36,7 @@ def app_package_dir() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def uvicorn_settings() -> dict[str, Any]:
+def uvicorn_settings(loop: str) -> dict[str, Any]:
     """What both uvicorn call sites share.
 
     One place on purpose: a server-level setting has to land on the reload
@@ -44,7 +44,6 @@ def uvicorn_settings() -> dict[str, Any]:
     means dev and prod quietly serve differently. Proxy-header handling
     lands here when it arrives.
     """
-    loop = resolve_loop()
     if loop not in ENGINE_LOOPS["uvicorn"]:
         raise ValueError(
             f"uvicorn cannot run on {loop!r}. It accepts "
@@ -63,7 +62,43 @@ def uvicorn_settings() -> dict[str, Any]:
     }
 
 
-def serve_uvicorn() -> None:
+def _zuvloop_run(coro: Any) -> None:
+    """Run a coroutine on zuvloop's loop.
+
+    Indirected so tests can stand in for it without importing a Zig
+    extension, and imported lazily so 3.13 never reaches for it.
+    """
+    import zuvloop
+
+    zuvloop.run(coro)
+
+
+def serve_zuvloop(loop: str) -> None:
+    """uvicorn on zuvloop.
+
+    ``uvicorn.run()`` owns the event loop, so a loop uvicorn does not know
+    by name is unreachable through it. ``loop="none"`` is uvicorn's hook
+    for that: it sets up nothing, and whoever calls ``Server.serve()``
+    supplies the loop.
+    """
+    config = uvicorn.Config(
+        create_integrated_app(), **{**uvicorn_settings(loop), "loop": "none"}
+    )
+    _zuvloop_run(uvicorn.Server(config).serve())
+
+
+def serve_uvicorn(loop: str) -> None:
+    if loop == "zuvloop":
+        if settings.AUTO_RELOAD:
+            # uvicorn's reloader is a supervisor that spawns child
+            # processes; there is no coroutine to hand zuvloop.
+            raise ValueError(
+                "zuvloop cannot be used with reload. Run with AUTO_RELOAD "
+                "off, or develop on uvloop and deploy on zuvloop."
+            )
+        serve_zuvloop(loop)
+        return
+
     if settings.AUTO_RELOAD:
         # When reload is enabled, uvicorn requires an import string
         uvicorn.run(
@@ -72,15 +107,15 @@ def serve_uvicorn() -> None:
             reload=True,
             reload_dirs=[str(app_package_dir())],
             timeout_graceful_shutdown=5,
-            **uvicorn_settings(),
+            **uvicorn_settings(loop),
         )
         return
 
     # Use the integration layer (handles webserver hooks, service discovery, etc.)
-    uvicorn.run(create_integrated_app(), **uvicorn_settings())
+    uvicorn.run(create_integrated_app(), **uvicorn_settings(loop))
 
 
-def serve_granian() -> None:
+def serve_granian(loop: str) -> None:
     # Imported here, not at module scope: the default engine must not need
     # the alternate one installed. A stale image that predates the granian
     # dependency keeps serving on uvicorn instead of failing to import.
@@ -96,10 +131,20 @@ def serve_granian() -> None:
         address=HOST,
         port=settings.PORT,
         interface=Interfaces.ASGI,
-        loop=Loops(resolve_loop()),
+        loop=Loops(loop),
         websockets=True,
         reload=settings.AUTO_RELOAD,
         reload_paths=[app_package_dir()],
+        # Granian defaults this off, so a worker that exits is never
+        # replaced. On in dev, off in production where the container
+        # healthcheck already restarts a dead server and respawning
+        # would hide a crashloop.
+        #
+        # Measured caveat: this does NOT rescue a reload into code that
+        # fails to import. Granian still tears the server down, and the
+        # repaired file does not bring it back. The flag covers a worker
+        # that dies while running, not one that dies on the way up.
+        respawn_failed_workers=settings.AUTO_RELOAD,
     ).serve()
 
 
@@ -107,15 +152,19 @@ def main() -> None:
     """Main webserver entry point"""
     setup_logging()
     engine = settings.WEBSERVER_ENGINE
-    # The loop is named in the log because it is otherwise invisible:
-    # nothing downstream reports which one a process ended up on.
-    logger.info(f"Starting Aegis Stack Web Server ({engine} on {resolve_loop()})...")
+    # Resolved once, here, and carried. Four separate calls agreed only
+    # because the function is deterministic; the log line in particular
+    # must name the loop that actually runs, not one computed again.
+    loop = resolve_loop()
+    # Named in the log because it is otherwise invisible: nothing
+    # downstream reports which one a process ended up on.
+    logger.info(f"Starting Aegis Stack Web Server ({engine} on {loop})...")
 
     if engine == "uvicorn":
-        serve_uvicorn()
+        serve_uvicorn(loop)
         return
     if engine == "granian":
-        serve_granian()
+        serve_granian(loop)
         return
     raise ValueError(
         f"Unknown WEBSERVER_ENGINE {engine!r}. Valid engines: uvicorn, granian."

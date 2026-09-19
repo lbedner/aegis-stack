@@ -10,7 +10,7 @@ from io import StringIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from app.cli.ai import _stream_chat_response
+from app.cli.ai.streaming import _stream_chat_response
 from app.services.ai.models import (
     AIProvider,
     Conversation,
@@ -94,7 +94,7 @@ class TestConversationMemory:
         mock_ai_service.stream_chat = mock_stream_chat
 
         # Patch console to use our mock
-        with patch("app.cli.ai.console", mock_console):
+        with patch("app.cli.ai.streaming.console", mock_console):
             conversation_id = await _stream_chat_response(
                 ai_service=mock_ai_service,
                 message="Hello AI",
@@ -133,7 +133,7 @@ class TestConversationMemory:
 
         mock_ai_service.stream_chat = mock_stream_chat
 
-        with patch("app.cli.ai.console", mock_console):
+        with patch("app.cli.ai.streaming.console", mock_console):
             returned_id = await _stream_chat_response(
                 ai_service=mock_ai_service,
                 message="Continue conversation",
@@ -165,7 +165,7 @@ class TestConversationMemory:
 
         # Mock signal handling to simulate interruption
         with (
-            patch("app.cli.ai.console", mock_console),
+            patch("app.cli.ai.streaming.console", mock_console),
             patch("signal.signal"),
             patch("signal.SIGINT"),
         ):
@@ -212,7 +212,7 @@ class TestConversationMemory:
 
         # Mock the timeout duration to be much shorter for testing
         with (
-            patch("app.cli.ai.console", mock_console),
+            patch("app.cli.ai.streaming.console", mock_console),
             patch("asyncio.timeout", return_value=asyncio.timeout(1.0)),
         ):
             # Should timeout and return None
@@ -323,7 +323,7 @@ class TestConversationPersistence:
 
         mock_ai_service.stream_chat = mock_multi_turn_stream
 
-        with patch("app.cli.ai.console", mock_console):
+        with patch("app.cli.ai.streaming.console", mock_console):
             # First interaction
             first_conversation_id = await _stream_chat_response(
                 ai_service=mock_ai_service,
@@ -420,7 +420,7 @@ class TestConversationMemoryEdgeCases:
 
         mock_ai_service.stream_chat = mock_duplicate_stream
 
-        with patch("app.cli.ai.console", mock_console):
+        with patch("app.cli.ai.streaming.console", mock_console):
             conversation_id = await _stream_chat_response(
                 ai_service=mock_ai_service,
                 message="Test duplicates",
@@ -453,7 +453,7 @@ class TestConversationMemoryEdgeCases:
 
         mock_ai_service.stream_chat = mock_empty_stream
 
-        with patch("app.cli.ai.console", mock_console):
+        with patch("app.cli.ai.streaming.console", mock_console):
             conversation_id = await _stream_chat_response(
                 ai_service=mock_ai_service,
                 message="Test empty conversation_id",

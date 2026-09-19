@@ -35,6 +35,7 @@ from .models import (
     DoneFrame,
     ErrorFrame,
     StreamFrame,
+    ToolFrame,
 )
 from .streaming import ndjson_line, ndjson_response
 
@@ -52,6 +53,7 @@ __all__ = [
     "ChatMessage",
     "DeltaFrame",
     "DoneFrame",
+    "ToolFrame",
     "BlockedFrame",
     "ErrorFrame",
     "StreamFrame",

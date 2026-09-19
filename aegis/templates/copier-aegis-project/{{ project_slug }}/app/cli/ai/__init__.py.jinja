@@ -1,0 +1,20 @@
+"""The ``ai`` command group.
+
+``main.py`` imports this module and reads ``app``, so every command
+module must be imported here for its ``@app.command`` decorator to
+run. Those imports look unused and are not - they ARE the
+registration, which is why the names are asserted in
+``tests/cli/test_ai_cli_registration.py``.
+"""
+
+{%- if ai_backend != "memory" %}
+from app.cli.ai import analytics as analytics  # noqa: F401
+{%- endif %}
+from app.cli.ai import chat as chat  # noqa: F401
+from app.cli.ai import providers as providers  # noqa: F401
+from app.cli.ai import record as record  # noqa: F401
+from app.cli.ai import speech as speech  # noqa: F401
+from app.cli.ai import voice as voice  # noqa: F401
+from app.cli.ai.shared import app
+
+__all__ = ["app"]

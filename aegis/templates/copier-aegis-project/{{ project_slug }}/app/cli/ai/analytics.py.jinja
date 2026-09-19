@@ -1,0 +1,319 @@
+"""What the model cost, and how the conversations felt."""
+{% if ai_backend != "memory" %}
+
+import asyncio
+
+from rich.panel import Panel
+from rich.table import Table
+import typer
+
+from app.cli import theme
+from app.cli.ai.shared import (
+    PROVIDER_DISPLAY_NAMES,
+    app,
+    console,
+)
+from app.i18n import lazy_t, t
+
+from ...core.config import settings
+
+
+@app.command(help=lazy_t("ai.help_usage"))
+def usage(
+    url: str = typer.Option(
+        None,
+        "--url",
+        "-u",
+        help=lazy_t("ai.opt_url"),
+    ),
+    user_id: str | None = typer.Option(
+        None,
+        "--user-id",
+        help=lazy_t("ai.opt_filter_user_id"),
+    ),
+    recent: int = typer.Option(
+        10,
+        "--recent",
+        "-r",
+        help=lazy_t("ai.opt_recent"),
+        min=1,
+        max=50,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help=lazy_t("ai.opt_json"),
+    ),
+) -> None:
+    from datetime import datetime
+    import json
+    import sys
+
+    import httpx
+
+    from app.core.constants import APIEndpoints, Defaults
+    from app.core.formatting import format_cost, format_number, format_percentage
+    from app.services.ai.schemas import UsageStatsResponse
+
+    # CLI-specific color utilities
+    def get_success_color(rate: float) -> str:
+        if rate >= 95:
+            return theme.ACCENT
+        elif rate >= 66.7:  # At least 2/3 success rate
+            return theme.WARNING
+        return theme.ERROR
+
+    def get_vendor_display_name(vendor: str) -> str:
+        """Get display name for a vendor, with aliases for branding."""
+        return PROVIDER_DISPLAY_NAMES.get(vendor.lower(), vendor)
+
+    # Display functions
+    def display_summary_panel(stats: UsageStatsResponse) -> None:
+        success_color = get_success_color(stats.success_rate)
+        tokens_label = t("ai.usage_total_tokens")
+        cost_label = t("ai.usage_total_cost")
+        requests_label = t("ai.usage_total_requests")
+        rate_label = t("ai.usage_success_rate")
+        tokens_str = format_number(stats.total_tokens)
+        cost_str = format_cost(stats.total_cost)
+        requests_str = format_number(stats.total_requests)
+        rate_str = format_percentage(stats.success_rate)
+        summary_lines = [
+            f"[dim]{tokens_label}[/dim]   {tokens_str}",
+            f"[dim]{cost_label}[/dim]     {cost_str}",
+            f"[dim]{requests_label}[/dim] {requests_str}",
+            f"[dim]{rate_label}[/dim]   [{success_color}]{rate_str}[/{success_color}]",
+        ]
+        console.print(
+            Panel(
+                "\n".join(summary_lines),
+                title=f"[bold {theme.ACCENT}]{t('ai.usage_title')}[/bold {theme.ACCENT}]",
+                border_style=theme.ACCENT,
+                padding=(1, 2),
+            )
+        )
+
+    def display_token_breakdown(stats: UsageStatsResponse) -> None:
+        total = stats.total_tokens
+        if total == 0:
+            console.print(f"\n[dim]{t('ai.no_token_usage')}[/dim]")
+            return
+        input_pct = (stats.input_tokens / total) * 100
+        output_pct = (stats.output_tokens / total) * 100
+        console.print(f"\n[bold]{t('ai.token_breakdown')}[/bold]")
+        input_str = format_number(stats.input_tokens)
+        output_str = format_number(stats.output_tokens)
+        in_label = t("ai.input_tokens")
+        out_label = t("ai.output_tokens")
+        console.print(f"  [dim]{in_label}[/dim]  {input_str:>12} ({input_pct:.0f}%)")
+        console.print(f"  [dim]{out_label}[/dim] {output_str:>12} ({output_pct:.0f}%)")
+        bar_width = 40
+        input_bars = int((input_pct / 100) * bar_width)
+        output_bars = bar_width - input_bars
+        bar = (
+            f"[{theme.ACCENT}]{'█' * input_bars}[/{theme.ACCENT}]"
+            f"[dim]{'█' * output_bars}[/dim]"
+        )
+        console.print(f"\n  {bar}")
+        legend = f"[{theme.ACCENT}]█ Input[/{theme.ACCENT}]  [dim]█ Output[/dim]"
+        console.print(f"  {legend}")
+
+    def display_model_usage(stats: UsageStatsResponse) -> None:
+        if not stats.models:
+            console.print(f"\n[dim]{t('ai.no_model_usage')}[/dim]")
+            return
+        console.print(f"\n[bold]{t('ai.model_usage')}[/bold]")
+        table = Table(show_header=True, header_style="bold", box=None)
+        table.add_column("Model", style=theme.ACCENT, no_wrap=True)
+        table.add_column("Vendor", style="dim")
+        table.add_column("Requests", justify="right")
+        table.add_column("Tokens", justify="right")
+        table.add_column("Cost", justify="right")
+        table.add_column("Share", justify="right")
+        for model in stats.models:
+            vendor_display = get_vendor_display_name(model.vendor)
+            table.add_row(
+                model.model_title,
+                vendor_display,
+                format_number(model.requests),
+                format_number(model.tokens),
+                format_cost(model.cost),
+                format_percentage(model.percentage),
+            )
+        console.print(table)
+
+    def display_recent_activity(stats: UsageStatsResponse) -> None:
+        if not stats.recent_activity:
+            console.print(f"\n[dim]{t('ai.no_recent_activity')}[/dim]")
+            return
+        console.print(f"\n[bold]{t('ai.recent_activity')}[/bold]")
+        table = Table(show_header=True, header_style="bold", box=None)
+        table.add_column("Time", style="dim")
+        table.add_column("Model", style=theme.ACCENT)
+        table.add_column("Action")
+        table.add_column("Tokens", justify="right")
+        table.add_column("Cost", justify="right")
+        table.add_column("Status", justify="center")
+        for activity in stats.recent_activity:
+            try:
+                dt = datetime.fromisoformat(activity.timestamp.replace("Z", "+00:00"))
+                time_str = dt.strftime("%H:%M:%S")
+            except ValueError:
+                time_str = activity.timestamp[:8]
+            status = (
+                f"[{theme.ACCENT}]OK[/{theme.ACCENT}]"
+                if activity.success
+                else f"[{theme.ERROR}]FAIL[/{theme.ERROR}]"
+            )
+            total_tokens = activity.input_tokens + activity.output_tokens
+            table.add_row(
+                time_str,
+                activity.model,
+                activity.action,
+                format_number(total_tokens),
+                format_cost(activity.cost),
+                status,
+            )
+        console.print(table)
+
+    # Async fetch function
+    async def get_usage_stats(
+        base_url: str,
+        filter_user_id: str | None = None,
+        recent_limit: int = 10,
+    ) -> UsageStatsResponse:
+        api_url = f"{base_url}{APIEndpoints.AI_USAGE_STATS}"
+        params: dict[str, str | int] = {"recent_limit": recent_limit}
+        if filter_user_id:
+            params["user_id"] = filter_user_id
+        timeout = httpx.Timeout(Defaults.API_TIMEOUT)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                response = await client.get(api_url, params=params)
+                response.raise_for_status()
+                return UsageStatsResponse.model_validate(response.json())
+            except httpx.ConnectError:
+                raise ConnectionError(
+                    f"Cannot connect to API server at {base_url}. "
+                    "Make sure the application is running."
+                ) from None
+            except httpx.TimeoutException:
+                raise TimeoutError(
+                    f"API request timed out after {Defaults.API_TIMEOUT} seconds."
+                ) from None
+            except httpx.HTTPStatusError as e:
+                raise RuntimeError(
+                    f"API error {e.response.status_code}: {e.response.text}"
+                ) from None
+
+    # Main execution
+    base_url = url or getattr(settings, "API_BASE_URL", "http://localhost:8000")
+    try:
+        stats = asyncio.run(get_usage_stats(base_url, user_id, recent))
+        if json_output:
+            print(json.dumps(stats.model_dump(), indent=2))
+            return
+        display_summary_panel(stats)
+        display_token_breakdown(stats)
+        display_model_usage(stats)
+        display_recent_activity(stats)
+    except ConnectionError as e:
+        console.print(
+            f"[{theme.ERROR}]{t('ai.connection_error', error=str(e))}[/{theme.ERROR}]"
+        )
+        sys.exit(1)
+    except TimeoutError as e:
+        console.print(
+            f"[{theme.ERROR}]{t('ai.timeout_label', error=str(e))}[/{theme.ERROR}]"
+        )
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
+        sys.exit(1)
+
+
+@app.command(help=lazy_t("ai.help_sentiment"))
+def sentiment(
+    url: str = typer.Option(
+        None,
+        "--url",
+        "-u",
+        help=lazy_t("ai.opt_url"),
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help=lazy_t("ai.opt_json"),
+    ),
+) -> None:
+    import json
+    import sys
+
+    import httpx
+
+    from app.core.constants import APIEndpoints
+
+    async def fetch_stats(base_url: str) -> dict:
+        api_url = f"{base_url}{APIEndpoints.AI_SENTIMENT_STATS}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(api_url)
+            response.raise_for_status()
+            return response.json()
+
+    def display_stats(stats: dict) -> None:
+        title = t("ai.sentiment_title")
+        console.print(f"\n[bold {theme.ACCENT}]{title}[/bold {theme.ACCENT}]")
+        if not stats.get("enabled", False):
+            console.print(f"[dim]{t('ai.sentiment_disabled_hint')}[/dim]")
+        total = stats.get("total", 0)
+        if total == 0:
+            console.print(f"\n[dim]{t('ai.sentiment_empty')}[/dim]")
+            return
+
+        distribution: dict = stats.get("distribution", {})
+        bar_width = 30
+        console.print(f"\n[bold]{t('ai.sentiment_distribution')}[/bold]")
+        colors = {
+            "positive": theme.ACCENT,
+            "neutral": "dim",
+            "negative": theme.WARNING,
+            "frustrated": theme.ERROR,
+        }
+        for value, count in distribution.items():
+            share = count / total if total else 0
+            bars = "█" * max(1 if count else 0, int(share * bar_width))
+            color = colors.get(value, "dim")
+            console.print(f"  {value:<11} {count:>5}  [{color}]{bars}[/{color}]")
+
+        avg_label = t("ai.sentiment_avg_score")
+        console.print(f"\n[dim]{avg_label}[/dim] {stats.get('average_score', 0.0)}")
+
+        performance: dict = stats.get("performance", {})
+        perf_line = "  ".join(
+            f"{value}: {count}" for value, count in performance.items()
+        )
+        console.print(f"[dim]{t('ai.sentiment_performance')}[/dim] {perf_line}")
+
+        negatives = stats.get("recent_negatives", [])
+        if negatives:
+            console.print(f"\n[bold]{t('ai.sentiment_recent_negatives')}[/bold]")
+            for row in negatives:
+                summary = row.get("summary") or row.get("conversation_id", "")
+                console.print(
+                    f"  [{theme.ERROR}]•[/{theme.ERROR}] "
+                    f"[dim]({row.get('overall_sentiment')})[/dim] {summary}"
+                )
+
+    base_url = url or getattr(settings, "API_BASE_URL", "http://localhost:8000")
+    try:
+        stats = asyncio.run(fetch_stats(base_url))
+        if json_output:
+            print(json.dumps(stats, indent=2))
+            return
+        display_stats(stats)
+    except Exception as e:
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
+        sys.exit(1)
+{% endif %}

@@ -253,7 +253,7 @@ class RowsMixin(RecurringTabState):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
         # DataTable sorts a control cell by its .data (see data_table.py's
-        # _cell_text) - a Row has no .value of its own the way the plain
+        # cell_text) - a Row has no .value of its own the way the plain
         # TableNameText this replaced did, so Name would silently stop
         # sorting without this.
         name_cell.data = name

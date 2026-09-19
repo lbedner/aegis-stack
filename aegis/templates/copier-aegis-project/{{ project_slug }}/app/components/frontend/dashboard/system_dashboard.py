@@ -23,7 +23,7 @@ from app.components.frontend.dashboard.cards.card_utils import (
 )
 from app.components.frontend.dashboard.diagram.diagram_view import DiagramView
 from app.components.frontend.dashboard.status_overview import StatusOverviewPanel
-from app.components.frontend.theme import ThemeManager
+from app.components.frontend.theme_manager import ThemeManager
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 

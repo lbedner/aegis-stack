@@ -6,7 +6,7 @@ provider list: any provider whose anonymous/free endpoint rejects
 ``supports_streaming=False`` and must fall back to non-streaming chat.
 """
 
-from app.cli.ai import _use_streaming
+from app.cli.ai.shared import _use_streaming
 from app.services.ai.models import (
     PROVIDER_CAPABILITIES,
     AIProvider,

@@ -5,7 +5,6 @@ from collections.abc import Callable
 import flet as ft
 
 from app.components.frontend.controls import (
-    DataTable,
     SecondaryText,
 )
 from app.components.frontend.controls.buttons import PulseButton
@@ -17,10 +16,7 @@ from app.components.frontend.controls.pickers import (
     BulkActionTrigger,
     CategoryPickerButton,
     TagPickerButton,
-    picker_trigger_cell,
 )
-from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
-from app.components.frontend.controls.table import TableCellText, TableNameText
 
 # Named rows in the import review's detail sections before the tail folds
 # into a count. A Quicken tree can carry hundreds of new categories, and a
@@ -36,39 +32,36 @@ from app.components.frontend.controls.table import TableCellText, TableNameText
 # disguised top categories. PieChartCard's legend scrolls within its fixed
 # height (modal_sections.py) rather than clipping, so this isn't bounded
 # by legend space anymore.
-from app.components.frontend.dashboard.modals.finance_modal.constants import (
-    _CATEGORY_COLUMN_WIDTH,
-    _DENSE_ROW_HEIGHT,
-    _UNCATEGORIZED_COLUMNS,
-    _UNCATEGORIZED_LOAD_LIMIT,
-)
 from app.components.frontend.dashboard.modals.finance_modal.curation_shared import (
-    CompactIconButton,
     TagApplyMixin,
-    apply_category_picks,
-    create_category,
-    range_start,
 )
 from app.components.frontend.dashboard.modals.finance_modal.filters import (
     AccountFilter,
     AccountFilterButton,
 )
-from app.components.frontend.dashboard.modals.finance_modal.formatting import (
-    _amount_cell,
+from app.components.frontend.dashboard.modals.finance_modal.uncategorized_cells import (
+    CategoryCellMixin,
 )
-from app.components.frontend.dashboard.modals.finance_modal.transactions_view import (
-    _transaction_expanded_content,
-    fetch_tag_options,
+from app.components.frontend.dashboard.modals.finance_modal.uncategorized_data import (
+    UncategorizedTableMixin,
+)
+from app.components.frontend.dashboard.modals.finance_modal.uncategorized_staging import (
+    CategoryStagingMixin,
 )
 from app.components.frontend.dashboard.modals.finance_panel import FinancePanel
 from app.components.frontend.dashboard.modals.modal_sections import (
     DateRangeChips,
-    date_cell,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 
 
-class UncategorizedPanel(TagApplyMixin, FinancePanel):
+class UncategorizedPanel(
+    UncategorizedTableMixin,
+    CategoryCellMixin,
+    CategoryStagingMixin,
+    TagApplyMixin,
+    FinancePanel,
+):
     """A work queue for uncategorized transactions, not a report. Two
     consumers share this one class rather than duplicating it: the
     Overview card's dialog (``OverviewTab._open_uncategorized``, fixed
@@ -380,456 +373,3 @@ class UncategorizedPanel(TagApplyMixin, FinancePanel):
 
     def _on_account_filter_change(self) -> None:
         self._debounce.run_now(lambda: self._load(reset_state=False))
-
-    async def _load(self, *, reset_state: bool = True) -> None:
-        """``reset_state=False`` for a search-, range-, or account-filter-
-        triggered reload: the server response is a different SUBSET of
-        the same backlog, not a fresh backlog - a pending pick or an
-        unreviewed suggestion on a row that happens not to match the
-        current search text, date range, or account selection is still
-        real, unsaved work, and narrowing the view was wiping it. True
-        fresh loads (initial mount, post-Save) keep clearing: that state
-        genuinely doesn't apply to a new fetch there.
-        """
-        from app.components.frontend.state.session_state import get_session_state
-        from app.services.finance.constants import UNCATEGORIZED_CATEGORY_NAMES
-
-        # Claim this run - two requests in flight can return out of
-        # order, so a superseded one must not paint (same guard the
-        # Accounts register uses around its own search).
-        sequence = self._debounce.sequence
-        api = get_session_state(self.page).api_client
-
-        if not self._categories:
-            cat_data = await api.get("/api/v1/finance/categories/options", cache_ttl=30)
-            cat_items = cat_data.get("items", []) if isinstance(cat_data, dict) else []
-            self._categories = [
-                (str(c["id"]), c["name"])
-                for c in cat_items
-                if str(c.get("name", "")).lower() not in UNCATEGORIZED_CATEGORY_NAMES
-            ]
-            self._category_picker.update_categories(self._categories)
-        self._tags = await fetch_tag_options(api)
-        self._tag_picker.update_tags(self._tags)
-
-        if not self._account_names:
-            acct_data = await api.get(
-                "/api/v1/finance/accounts",
-                params={"page_size": 200},
-                cache_ttl=30,
-            )
-            self._account_items = (
-                acct_data.get("items", []) if isinstance(acct_data, dict) else []
-            )
-            self._account_names = {a["id"]: a["name"] for a in self._account_items}
-        # Every load, not just the first fetch above: a filter change
-        # (toggling one account, "Remove all") has to redraw the menu's
-        # own dots/trigger label too, not just refilter the table below -
-        # this was gated behind the fetch-once cache, so the menu stayed
-        # stuck showing the state from whenever it first mounted while the
-        # table underneath it kept correctly refiltering (confirmed live:
-        # "Remove all" correctly emptied the table, but every dot in the
-        # still-open menu stayed lit). None when a shared button above the
-        # tab strip owns this instead (see the constructor).
-        if self._account_filter_button is not None:
-            self._account_filter_button.set_accounts(self._account_items)
-
-        # An explicit empty selection ("Remove all") means literally
-        # nothing, not "no filter" - AccountFilter.params() is never
-        # called in this state (see its own docstring), so the fetch is
-        # skipped outright instead, same as OverviewTab's own charts do.
-        if self._account_filter.is_empty:
-            if not self._debounce.is_current(sequence):
-                return
-            self._items = []
-            self._total = 0
-            if reset_state:
-                self._pending.clear()
-                self._suggested.clear()
-                self._selected.clear()
-            self._render_table()
-            return
-
-        params: dict[str, object] = {
-            "limit": _UNCATEGORIZED_LOAD_LIMIT,
-            **self._account_filter.params(),
-        }
-        if self._query:
-            params["q"] = self._query
-        from_date = range_start(self._range_days)
-        if from_date is not None:
-            params["from"] = from_date.isoformat()
-        data = await api.get("/api/v1/finance/uncategorized", params=params)
-        if not self._debounce.is_current(sequence):
-            return  # a newer keystroke already owns this load
-        self._items = data.get("items", []) if isinstance(data, dict) else []
-        self._total = data.get("total", 0) if isinstance(data, dict) else 0
-        if reset_state:
-            self._pending.clear()
-            self._suggested.clear()
-            self._selected.clear()
-
-        self._render_table()
-
-    def _header_text(self) -> str:
-        return (
-            "Nothing left to categorize."
-            if not self._items
-            else f"Showing {len(self._items)} of {self._total:,}"
-            if self._total > len(self._items)
-            else f"{self._total:,} to review"
-        )
-
-    def _render_table(self) -> None:
-        """Rebuild the table from in-memory state (no re-fetch) - called
-        after a real data change (a load, a search, a save). A single
-        row's pick/accept/reject/clear does NOT come through here - see
-        ``_refresh_category_cell``, which swaps just that row's cell in
-        place instead of rebuilding all ~900 rows for a one-row change.
-
-        Also the single source of truth for the header text - both
-        ``_load`` and ``_save_pending`` used to set it themselves before
-        calling this, which was one more place for the two to drift.
-        Every real state change ends up here, so this is the one spot
-        that always has the freshest counts to hand.
-
-        Suggested rows sort to the top - after Auto-categorize they'd
-        otherwise be scattered wherever their transaction falls in normal
-        date order, and the whole point of clicking that button is to
-        review what it proposed, not hunt through the list for it.
-        ``sorted`` is stable, so date order still holds within each group.
-        A row accepted/rejected one at a time afterward stays put rather
-        than re-sorting out from under the cursor - only a fresh sweep
-        (Auto-categorize itself, which does call this) regroups them.
-        This is just the NATURAL order though - clicking the Category
-        header (or any other column's) overrides it via DataTable's own
-        generic sort, same as every other column.
-        """
-        ordered = sorted(
-            self._items, key=lambda txn: 0 if txn["id"] in self._suggested else 1
-        )
-        self._ordered = ordered
-        self._category_cells = {}
-        selected_indices = {
-            i for i, txn in enumerate(ordered) if txn["id"] in self._selected
-        }
-        self._header.value = self._header_text()
-        self._body.content = DataTable(
-            columns=_UNCATEGORIZED_COLUMNS,
-            rows=[self._row(item) for item in ordered],
-            empty_message="No uncategorized transactions.",
-            scroll_height=560,
-            row_padding=6,
-            item_extent=_DENSE_ROW_HEIGHT,
-            selectable=True,
-            selected_indices=selected_indices,
-            on_selection_change=self._on_selection_change,
-            # Same inline row-expand the Accounts register uses
-            # (TransactionsPanel._load) - the checkbox and the category
-            # cell each claim their own tap, so this only fires from the
-            # rest of the row (date/payee/amount, or empty space), same as
-            # any other Flet control nested in a row.
-            expandable_content=self._expand_transaction_detail,
-        )
-        self._save_button.disabled = not self._pending
-        self._update_selection_label()
-        if self.page:
-            self.update()
-
-    def _expand_transaction_detail(self, idx: int) -> ft.Control:
-        if idx >= len(self._ordered):
-            return ft.Container()
-        return _transaction_expanded_content(self._ordered[idx])
-
-    def _on_selection_change(self, indices: set[int]) -> None:
-        """DataTable's own checkbox toggling stays cheap (no table
-        rebuild) by owning selection between renders itself - this just
-        mirrors the result back into transaction ids, which survive
-        across the NEXT rebuild (a pick, an accept/reject, a reload)
-        where DataTable's own index-based state does not."""
-        self._selected = {
-            self._ordered[i]["id"] for i in indices if i < len(self._ordered)
-        }
-        self._update_selection_label()
-
-    def _update_selection_label(self) -> None:
-        count = len(self._selected)
-        self._selection_label.value = f"{count} selected" if count else ""
-        self._selection_label.visible = bool(count)
-        if self._selection_label.page:
-            self._selection_label.update()
-        self._bulk_categorize_trigger.set_count(count)
-        self._bulk_tag_trigger.set_count(count)
-
-    def _open_bulk_categorize(self, e: ft.ControlEvent) -> None:
-        if self._selected:
-            self._category_picker.open_for(list(self._selected), e)
-
-    def _open_bulk_tag(self, e: ft.ControlEvent) -> None:
-        if self._selected:
-            self._tag_picker.open_for(list(self._selected), e)
-
-    def _row(self, txn: dict) -> list[ft.Control]:
-        name = txn.get("name") or txn.get("merchant_name") or "(no description)"
-        account_name = self._account_names.get(txn.get("account_id"), "—")
-        return [
-            date_cell(txn.get("date")),
-            # A plain string, not a pre-built SecondaryText - letting
-            # DataTable's own style_cell() construct it is what gives it
-            # the column's style="secondary" AND the single-line ellipsis
-            # truncation style_cell applies; a hand-built control bypasses
-            # both (style_cell passes any already-built control through
-            # untouched).
-            account_name,
-            TableNameText(name),
-            _amount_cell(txn.get("amount") or 0),
-            self._category_cell(txn["id"]),
-        ]
-
-    def _category_cell(self, transaction_id: int) -> ft.Control:
-        """A stable Container, tracked in ``self._category_cells`` -
-        ``_refresh_category_cell`` swaps its content in place later
-        without needing a full table rebuild to reach it."""
-        container = ft.Container(content=self._category_cell_content(transaction_id))
-        # DataTable's generic column sort reads a cell's .value (or
-        # .content.value) for plain text; this cell is a Row of buttons,
-        # not text, so .data carries the sortable name explicitly -
-        # DataTable's _cell_text falls back to it. Flet's own generic
-        # "attach arbitrary data to a control" field, not a new concept.
-        container.data = self._category_sort_text(transaction_id)
-        self._category_cells[transaction_id] = container
-        return container
-
-    def _category_cell_content(self, transaction_id: int) -> ft.Control:
-        if transaction_id in self._pending:
-            return self._pending_cell(transaction_id)
-        if transaction_id in self._suggested:
-            return self._suggested_cell(transaction_id)
-        return self._empty_cell(transaction_id)
-
-    def _category_sort_text(self, transaction_id: int) -> str:
-        """Blank sorts last (DataTable treats "" as no value) - an
-        untouched row has no category opinion yet, so it belongs after
-        everything that does, in either sort direction."""
-        if transaction_id in self._pending:
-            return self._category_name(self._pending[transaction_id])
-        if transaction_id in self._suggested:
-            return self._suggested[transaction_id][1]
-        return ""
-
-    def _refresh_category_cell(self, transaction_id: int) -> None:
-        """One row's state changed (pick/accept/reject/clear) - swap just
-        that row's category cell content, not the whole ~900-row table."""
-        container = self._category_cells.get(transaction_id)
-        if container is not None:
-            container.content = self._category_cell_content(transaction_id)
-            container.data = self._category_sort_text(transaction_id)
-            if container.page:
-                container.update()
-        self._save_button.disabled = not self._pending
-        if self._save_button.page:
-            self._save_button.update()
-
-    def _empty_cell(self, transaction_id: int) -> ft.Container:
-        """A cheap placeholder that opens the shared category-picker
-        popup on tap - see ``pickers.py`` for why one popup is
-        shared across every row instead of building one per cell, and
-        ``category_trigger_cell``'s own docstring for why it's the width
-        and the on_click no-op, not just on_tap_down, that make this
-        reliably clickable."""
-        return picker_trigger_cell(
-            SecondaryText("Tap to categorize", size=Theme.Typography.CAPTION),
-            _CATEGORY_COLUMN_WIDTH,
-            on_tap=lambda e, t=transaction_id: self._category_picker.open_for([t], e),
-        )
-
-    def _pending_cell(self, transaction_id: int) -> ft.Control:
-        name = self._category_name(self._pending[transaction_id])
-        return ft.Row(
-            [
-                # expand=True: the text claims whatever's left after the
-                # button's own fixed size and truncates (TableNameText's
-                # own ellipsis default) INSIDE that space, instead of the
-                # Row sizing to the text's full natural width first and
-                # pushing the button out past the column's own edge - a
-                # long category path ("Fees & Charges:Finance Charge")
-                # was clipping the button clean off before this.
-                ft.Container(
-                    content=TableNameText(name),
-                    expand=True,
-                ),
-                CompactIconButton(
-                    ft.Icons.CLOSE,
-                    ft.Colors.ON_SURFACE_VARIANT,
-                    "Clear",
-                    lambda _e, t=transaction_id: self._clear_pending(t),
-                ),
-            ],
-            spacing=0,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-
-    def _suggested_cell(self, transaction_id: int) -> ft.Control:
-        _category_id, name = self._suggested[transaction_id]
-        return ft.Row(
-            [
-                # Same expand=True reasoning as _pending_cell - two
-                # buttons here instead of one, so there's even less
-                # margin for the text to push them off the edge.
-                ft.Container(
-                    content=TableCellText(f"Suggested: {name}"),
-                    expand=True,
-                ),
-                CompactIconButton(
-                    ft.Icons.CHECK,
-                    Theme.Colors.SUCCESS,
-                    "Accept",
-                    lambda _e, t=transaction_id: self._accept_suggestion(t),
-                ),
-                CompactIconButton(
-                    ft.Icons.CLOSE,
-                    Theme.Colors.ERROR,
-                    "Reject",
-                    lambda _e, t=transaction_id: self._reject_suggestion(t),
-                ),
-            ],
-            spacing=0,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-
-    def _category_name(self, category_id: int) -> str:
-        key = str(category_id)
-        for k, name in self._categories:
-            if k == key:
-                return name
-        return f"Category {category_id}"
-
-    def _pick_category(self, transaction_ids: list[int], category_key: str) -> None:
-        """CategoryPickerButton's on_pick contract - a single row's pick
-        and a bulk "categorize the selected rows" pick are the same call,
-        just with a longer list (see pickers.py's own docstring).
-        Stages the pick(s) - does not save."""
-        if not category_key:
-            return
-        category_id = int(category_key)
-        for transaction_id in transaction_ids:
-            self._pending[transaction_id] = category_id
-            self._suggested.pop(transaction_id, None)
-            self._refresh_category_cell(transaction_id)
-
-    def _create_category(self, transaction_ids: list[int], name: str) -> None:
-        """Name a category, then STAGE it on the rows - this panel saves
-        on its own Save button, and creating one must not quietly become
-        the exception that writes immediately."""
-        if not name.strip() or not transaction_ids or self.page is None:
-            return
-        self.page.run_task(self._create_and_stage, transaction_ids, name)
-
-    async def _create_and_stage(self, transaction_ids: list[int], name: str) -> None:
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        created = await create_category(api, name)
-        if created is None:
-            ErrorSnackBar("Could not create that category.").launch(self.page)
-            return
-        key, stored = created
-        if key not in {k for k, _ in self._categories}:
-            self._categories = sorted(
-                [*self._categories, (key, stored)], key=lambda c: c[1].casefold()
-            )
-            self._category_picker.update_categories(self._categories)
-        self._pick_category(transaction_ids, key)
-        self.page.update()
-
-    def _clear_pending(self, transaction_id: int) -> None:
-        self._pending.pop(transaction_id, None)
-        self._refresh_category_cell(transaction_id)
-
-    def _accept_suggestion(self, transaction_id: int) -> None:
-        suggestion = self._suggested.pop(transaction_id, None)
-        if suggestion is not None:
-            self._pending[transaction_id] = suggestion[0]
-        self._refresh_category_cell(transaction_id)
-
-    def _reject_suggestion(self, transaction_id: int) -> None:
-        self._suggested.pop(transaction_id, None)
-        self._refresh_category_cell(transaction_id)
-
-    async def _auto_categorize(self) -> None:
-        from app.components.frontend.state.session_state import get_session_state
-
-        self._progress.visible = True
-        if self.page:
-            self.update()
-
-        scope = set(self._selected)  # snapshot - cleared below before the render
-        api = get_session_state(self.page).api_client
-        body = {"transaction_ids": list(scope)} if scope else {}
-        result = await api.post(
-            "/api/v1/finance/transactions/auto-categorize", json=body
-        )
-        self._progress.visible = False
-        if self.page:
-            self.update()
-        suggestions = result.get("items", []) if isinstance(result, dict) else []
-        added = 0
-        for s in suggestions:
-            txn_id = s.get("transaction_id")
-            # Don't clobber a row the user already picked or already has
-            # an unreviewed suggestion on.
-            if txn_id is None or txn_id in self._pending or txn_id in self._suggested:
-                continue
-            self._suggested[txn_id] = (s["category_id"], s.get("category_name") or "")
-            added += 1
-        scoped_note = f" from {len(scope):,} selected" if scope else ""
-        SuccessSnackBar(
-            f"{added} suggestion{'s' if added != 1 else ''} ready to review"
-            f"{scoped_note}."
-            if added
-            else "No new suggestions - nothing had a clear category precedent yet."
-        ).launch(self.page)
-        self._selected.clear()
-        # A real rebuild here on purpose (unlike a single accept/reject):
-        # this is what re-sorts newly-suggested rows to the top, the
-        # whole point of clicking this button being able to review what
-        # it proposed without hunting for it in 900 date-sorted rows.
-        # Tried skipping this for speed (in-place per-cell updates,
-        # keeping rows in place) - lost the grouping, which mattered
-        # more than the speed here. Reverted.
-        self._render_table()
-
-    async def _save_pending(self) -> None:
-        if not self._pending:
-            return
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        to_save = list(self._pending.items())
-        saved_ids = await apply_category_picks(api, to_save)
-        failed = len(to_save) - len(saved_ids)
-        message = (
-            f"Saved {len(saved_ids)}."
-            if not failed
-            else f"Saved {len(saved_ids)}, {failed} failed."
-        )
-        (ErrorSnackBar if failed else SuccessSnackBar)(message).launch(self.page)
-
-        # A saved row disappears immediately - tried leaving it visible
-        # with a "Saved" confirmation to skip the rebuild below entirely,
-        # but that's not what was wanted: hitting Save should remove the
-        # row, not leave it lingering until the next reload. Reverted.
-        #
-        # Still no re-``GET /uncategorized`` though - the POST results
-        # above already say exactly which rows just left the backlog, so
-        # splicing locally and rebuilding once (no network round trip)
-        # is the honest middle ground: correct behavior, still cheaper
-        # than the original refetch-then-rebuild.
-        saved = set(saved_ids)
-        for transaction_id, _ in to_save:
-            self._pending.pop(transaction_id, None)
-        if saved:
-            self._items = [t for t in self._items if t["id"] not in saved]
-            self._selected -= saved
-            self._total = max(self._total - len(saved), 0)
-        self._render_table()

@@ -67,7 +67,7 @@ class TestUsageStatsEndpoint:
     ) -> None:
         """Test successful usage stats retrieval."""
         with patch(
-            "app.components.backend.api.ai.router.ai_service.get_usage_stats",
+            "app.components.backend.api.ai.service.ai_service.get_usage_stats",
             new_callable=AsyncMock,
             return_value=mock_usage_stats,
         ):
@@ -85,7 +85,7 @@ class TestUsageStatsEndpoint:
     ) -> None:
         """Test usage stats with query parameters."""
         with patch(
-            "app.components.backend.api.ai.router.ai_service.get_usage_stats",
+            "app.components.backend.api.ai.service.ai_service.get_usage_stats",
             new_callable=AsyncMock,
             return_value=mock_usage_stats,
         ) as mock_get:
@@ -106,7 +106,7 @@ class TestUsageStatsEndpoint:
     def test_get_usage_stats_error_handling(self, client: TestClient) -> None:
         """Test error handling when service fails."""
         with patch(
-            "app.components.backend.api.ai.router.ai_service.get_usage_stats",
+            "app.components.backend.api.ai.service.ai_service.get_usage_stats",
             new_callable=AsyncMock,
             side_effect=Exception("Database error"),
         ):
@@ -120,7 +120,7 @@ class TestUsageStatsEndpoint:
     ) -> None:
         """Test response matches Pydantic schema."""
         with patch(
-            "app.components.backend.api.ai.router.ai_service.get_usage_stats",
+            "app.components.backend.api.ai.service.ai_service.get_usage_stats",
             new_callable=AsyncMock,
             return_value=mock_usage_stats,
         ):
@@ -163,7 +163,7 @@ class TestUsageStatsEndpoint:
             "recent_activity": [],
         }
         with patch(
-            "app.components.backend.api.ai.router.ai_service.get_usage_stats",
+            "app.components.backend.api.ai.service.ai_service.get_usage_stats",
             new_callable=AsyncMock,
             return_value=empty_stats,
         ):
@@ -190,7 +190,7 @@ class TestChatAgentSlug:
 
     def test_chat_passes_agent_slug(self, client: TestClient) -> None:
         with patch(
-            "app.components.backend.api.ai.router.ai_service.chat",
+            "app.components.backend.api.ai.service.ai_service.chat",
             new=AsyncMock(return_value=self._reply()),
         ) as mock_chat:
             response = client.post(
@@ -203,7 +203,7 @@ class TestChatAgentSlug:
 
     def test_chat_defaults_agent_slug_to_none(self, client: TestClient) -> None:
         with patch(
-            "app.components.backend.api.ai.router.ai_service.chat",
+            "app.components.backend.api.ai.service.ai_service.chat",
             new=AsyncMock(return_value=self._reply()),
         ) as mock_chat:
             response = client.post("/api/v1/ai/chat", json={"message": "hello"})
@@ -217,7 +217,7 @@ class TestChatAgentSlug:
         """Image parts ride the same request body as the message - one
         generic surface for every agent, not a per-surface upload."""
         with patch(
-            "app.components.backend.api.ai.router.ai_service.chat",
+            "app.components.backend.api.ai.service.ai_service.chat",
             new=AsyncMock(return_value=self._reply()),
         ) as mock_chat:
             response = client.post(
@@ -242,7 +242,7 @@ class TestChatAgentSlug:
 
     def test_chat_defaults_attachments_to_empty(self, client: TestClient) -> None:
         with patch(
-            "app.components.backend.api.ai.router.ai_service.chat",
+            "app.components.backend.api.ai.service.ai_service.chat",
             new=AsyncMock(return_value=self._reply()),
         ) as mock_chat:
             response = client.post("/api/v1/ai/chat", json={"message": "hello"})
@@ -424,7 +424,7 @@ class TestStreamToolFrame:
     def test_tool_frame_carries_the_label(self, client: TestClient) -> None:
         from types import SimpleNamespace
 
-        from app.components.backend.api.ai import router
+        from app.components.backend.api.ai import service
 
         async def fake_stream(**_: Any) -> Any:
             yield SimpleNamespace(
@@ -437,7 +437,7 @@ class TestStreamToolFrame:
                 },
             )
 
-        with patch.object(router.ai_service, "stream_chat", fake_stream):
+        with patch.object(service.ai_service, "stream_chat", fake_stream):
             body = client.post(
                 "/api/v1/ai/chat/stream", json={"message": "hi", "user_id": "u"}
             ).text

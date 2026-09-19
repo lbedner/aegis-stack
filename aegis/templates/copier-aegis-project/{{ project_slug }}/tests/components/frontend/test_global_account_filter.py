@@ -13,6 +13,7 @@ from app.components.frontend.dashboard.modals import (
     finance_payees_tab,
     finance_recurring_tab,
 )
+from tests.components.frontend._tree import panel_source
 
 # Every panel that lists money, and the handler each uses.
 PANELS = [
@@ -41,7 +42,7 @@ class TestEveryPanelListens:
             # risk (see test_finance_panel_lifecycle).
             if issubclass(cls, FinancePanel):
                 continue
-            source = inspect.getsource(cls)
+            source = panel_source(cls)
             if "register_filter_listener(" not in source:
                 missing.append(name)
         assert missing == [], f"these ignore the global filter: {missing}"
@@ -49,7 +50,7 @@ class TestEveryPanelListens:
     def test_each_panel_reads_the_filter(self) -> None:
         missing = []
         for module, name in PANELS:
-            source = inspect.getsource(getattr(module, name))
+            source = panel_source(getattr(module, name))
             if "_account_filter" not in source:
                 missing.append(name)
         assert missing == [], f"these never consult the filter: {missing}"

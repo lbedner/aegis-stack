@@ -1,7 +1,7 @@
 """A register row sorts by what the column shows.
 
 ``DataTable`` sorts a control cell by its ``.data`` (see
-``data_table.py``'s ``_cell_text``), falling back to ``.value`` for
+``data_table.py``'s ``cell_text``), falling back to ``.value`` for
 plain text. Payee and Tags both render a ``ft.Row``, which has no
 ``.value`` of its own - so both columns stop sorting the moment a cell
 is built without setting ``.data``.

@@ -5,25 +5,25 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT coalesce(sum(payment_transaction.amount), :coalesce_2) AS coalesce_1 FROM payment_transaction WHERE payment_transaction.status = :status_1 AND payment_transaction.type = :type_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT count(*) AS count_1 FROM payment_dispute WHERE payment_dispute.status IN (__[POSTCOMPILE_status_1])",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT count(*) AS count_1 FROM payment_subscription WHERE payment_subscription.status = :status_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT count(*) AS count_1 FROM payment_transaction",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
     },
     {
@@ -47,31 +47,31 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute ORDER BY payment_dispute.created_at DESC",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "get_disputes"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute WHERE payment_dispute.id = :id_1 AND payment_dispute.transaction_id IN (__[POSTCOMPILE_transaction_id_1])",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "get_dispute_by_id"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute WHERE payment_dispute.provider_dispute_id = :provider_dispute_id_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "_handle_dispute_event"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute WHERE payment_dispute.provider_dispute_id = :provider_dispute_id_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "_handle_early_fraud_warning"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute WHERE payment_dispute.transaction_id IN (__[POSTCOMPILE_transaction_id_1]) ORDER BY payment_dispute.created_at DESC",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "get_disputes"
     },
     {
@@ -83,19 +83,19 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_subscription.id, payment_subscription.customer_id, payment_subscription.provider_subscription_id, payment_subscription.plan_name, payment_subscription.status, payment_subscription.current_period_start, payment_subscription.current_period_end, payment_subscription.cancel_at_period_end, payment_subscription.metadata, payment_subscription.created_at, payment_subscription.updated_at FROM payment_subscription ORDER BY payment_subscription.created_at DESC",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/subscriptions.py",
       "function": "get_subscriptions"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_subscription.id, payment_subscription.customer_id, payment_subscription.provider_subscription_id, payment_subscription.plan_name, payment_subscription.status, payment_subscription.current_period_start, payment_subscription.current_period_end, payment_subscription.cancel_at_period_end, payment_subscription.metadata, payment_subscription.created_at, payment_subscription.updated_at FROM payment_subscription WHERE payment_subscription.customer_id IN (__[POSTCOMPILE_customer_id_1]) ORDER BY payment_subscription.created_at DESC",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/subscriptions.py",
       "function": "get_subscriptions"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_transaction.id FROM payment_transaction WHERE payment_transaction.customer_id IN (__[POSTCOMPILE_customer_id_1])",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "_transaction_ids_for_customers"
     },
     {
@@ -125,13 +125,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_transaction.id, payment_transaction.provider_id, payment_transaction.customer_id, payment_transaction.provider_transaction_id, payment_transaction.type, payment_transaction.status, payment_transaction.amount, payment_transaction.currency, payment_transaction.description, payment_transaction.metadata, payment_transaction.created_at, payment_transaction.updated_at FROM payment_transaction WHERE payment_transaction.provider_transaction_id = :provider_transaction_id_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "_find_transaction_by_charge_id"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_transaction.id, payment_transaction.provider_id, payment_transaction.customer_id, payment_transaction.provider_transaction_id, payment_transaction.type, payment_transaction.status, payment_transaction.amount, payment_transaction.currency, payment_transaction.description, payment_transaction.metadata, payment_transaction.created_at, payment_transaction.updated_at FROM payment_transaction WHERE payment_transaction.provider_transaction_id = :provider_transaction_id_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/webhooks_billing.py",
       "function": "_handle_checkout_completed"
     }
   ]

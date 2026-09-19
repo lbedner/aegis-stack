@@ -160,7 +160,7 @@ All aggregations are performed at the SQL level (`GROUP BY`, `SUM`, `COUNT`, `AV
 
 ## Analytics Dashboard
 
-The frontend includes an analytics tab (`ai_analytics_tab.py`) with real-time usage visualization.
+The frontend includes an analytics tab (`ai_analytics_tab/`) with real-time usage visualization.
 
 **Hero stats cards:**
 

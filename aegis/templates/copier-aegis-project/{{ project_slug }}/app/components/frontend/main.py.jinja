@@ -139,7 +139,8 @@ from {{ c.module }} import {{ c.symbol }}
 from .dashboard.cards.card_utils import create_health_status_indicator
 from .dashboard.diagram import DiagramView
 from .dashboard.status_overview import StatusOverviewPanel
-from .theme import AegisTheme as Theme, ThemeManager
+from .theme import AegisTheme as Theme
+from .theme_manager import ThemeManager
 
 # Constants for health system grouping
 COMPONENTS_GROUP_KEY = "components"

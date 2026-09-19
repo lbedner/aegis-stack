@@ -69,7 +69,6 @@ BUDGET: dict[str, int] = {
     "i18n/locales/zh_hant.py": 1266,
     "components/frontend/controls/data_table/table.py": 750,
     "services/ai/domains/llm/providers.py.jinja": 980,
-    "components/backend/api/auth/router.py.jinja": 882,
     "components/frontend/dashboard/cards/card_utils.py.jinja": 659,
     # 809 not 796: BUILD_ID (3 lines), WEBSERVER_ENGINE (4) and
     # WEBSERVER_LOOP (6, its Literal wraps) had nowhere else to live,

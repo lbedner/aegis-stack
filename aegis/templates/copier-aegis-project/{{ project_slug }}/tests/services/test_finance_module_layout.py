@@ -11,7 +11,9 @@ the split is stated, and they fail on the drift rather than on a name.
 from __future__ import annotations
 
 from datetime import date
+import ast
 import inspect
+from pathlib import Path
 from types import FunctionType
 
 from app.services.finance import models
@@ -250,9 +252,9 @@ CONNECTION_OWNERS = {
     "fire_sandbox_webhook": "plaid_sync.lifecycle",
     "complete_hosted_link": "plaid_sync.lifecycle",
     "relink_connection": "plaid_sync.lifecycle",
-    "start_snaptrade_connect": "snaptrade_sync",
-    "complete_snaptrade_connect": "snaptrade_sync",
-    "sync_snaptrade_connection": "snaptrade_sync",
+    "start_snaptrade_connect": "snaptrade_sync.lifecycle",
+    "complete_snaptrade_connect": "snaptrade_sync.lifecycle",
+    "sync_snaptrade_connection": "snaptrade_sync.sync",
     "disconnect_connection": "registry",
     "sync_owner_connections": "registry",
     "sync_one_connection": "registry",
@@ -271,15 +273,51 @@ def test_each_connection_function_is_defined_by_its_owning_module() -> None:
         )
 
 
+def _imported_modules(package: object) -> dict[str, set[str]]:
+    """Every module name imported by every file of a package.
+
+    Walks the files rather than ``inspect.getsource``, which returns only
+    ``__init__.py`` for a package - both providers are packages now, so
+    reading just the source text would inspect thirty lines of re-exports
+    and miss a cross-import sitting in a submodule.
+    """
+    root = Path(package.__file__).parent
+    files = sorted(root.glob("*.py")) if package.__file__.endswith(
+        "__init__.py"
+    ) else [Path(package.__file__)]
+    found: dict[str, set[str]] = {}
+    for f in files:
+        names: set[str] = set()
+        for node in ast.walk(ast.parse(f.read_text())):
+            if isinstance(node, ast.Import):
+                names |= {a.name for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names.add(node.module)
+                names |= {f"{node.module}.{a.name}" for a in node.names}
+        found[f.name] = names
+    return found
+
+
 def test_the_two_providers_never_import_each_other() -> None:
     """The property that makes a third aggregator cheap. Only ``registry``
     may name both; the moment one provider's module reaches for the other,
-    every future provider has to be threaded through both of them."""
-    plaid_source = inspect.getsource(connections.plaid_sync)
-    snaptrade_source = inspect.getsource(connections.snaptrade_sync)
-    assert "snaptrade" not in plaid_source.lower().replace("snaptrade_connect", "")
-    assert "PlaidClient" not in snaptrade_source
-    assert "plaid_sync" not in snaptrade_source
+    every future provider has to be threaded through both of them.
+
+    Asserted on what each file IMPORTS, not on whether the other
+    provider's name appears in its text - a docstring that says "mirrors
+    plaid_sync" is not a dependency, and a substring check cannot tell
+    the difference.
+    """
+    for label, package, forbidden in (
+        ("plaid", connections.plaid_sync, "snaptrade"),
+        ("snaptrade", connections.snaptrade_sync, "plaid"),
+    ):
+        for filename, imports in _imported_modules(package).items():
+            offenders = sorted(i for i in imports if forbidden in i.lower())
+            assert not offenders, (
+                f"{label}'s {filename} imports {offenders}; only the "
+                f"registry may name both providers"
+            )
 
 
 def test_dispatch_across_providers_lives_only_in_the_registry() -> None:

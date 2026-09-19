@@ -68,7 +68,6 @@ BUDGET: dict[str, int] = {
     "i18n/locales/ko.py": 1269,
     "i18n/locales/zh_hant.py": 1266,
     "components/frontend/controls/data_table/table.py": 750,
-    "components/frontend/dashboard/cards/card_utils.py.jinja": 659,
     # 809 not 796: BUILD_ID (3 lines), WEBSERVER_ENGINE (4) and
     # WEBSERVER_LOOP (6, its Literal wraps) had nowhere else to live,
     # settings are this file. Now 309 over the 500 limit. The serving

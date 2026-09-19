@@ -1,0 +1,121 @@
+"""Opening a component's modal, and refreshing after."""
+
+from collections.abc import Callable
+import flet as ft
+{%- if include_observability %}
+import logfire
+{%- endif %}
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+{%- if include_observability %}
+@logfire.instrument("overseer.modal.create {component_name}")
+{%- endif %}
+def create_modal_for_component(
+    component_name: str, component_data: ComponentStatus, page: ft.Page
+) -> ft.Container | None:
+    """
+    Factory function to create appropriate popup dialog for a component.
+
+    Args:
+        component_name: Name of the component (e.g., "scheduler", "worker")
+        component_data: ComponentStatus containing component health and metrics
+        page: The Flet page instance
+
+    Returns:
+        Popup Container instance for the component, or None if component not supported
+    """
+    from app.components.frontend.dashboard.modal_registry import modal_registry
+
+    modal_class = modal_registry().get(component_name)
+    if modal_class:
+        return modal_class(component_data, page)
+
+    return None
+
+
+{%- if include_observability %}
+@logfire.instrument("overseer.modal.open {component_name}")
+{%- endif %}
+def _open_modal(
+    component_name: str, component_data: ComponentStatus, page: ft.Page
+) -> None:
+    """Open a component detail modal, using cache for subsequent opens."""
+    modal_cache: dict[str, ft.Container] = page.data.setdefault("_modal_cache", {})
+
+    # Data-heavy modals: always recreate so they load fresh data on each open.
+    # Backend's Performance tab pulls per-request metrics that change on every
+    # call; a cached dialog freezes those numbers at first-open time.
+    no_cache = {"backend"}
+{%- if include_insights %}
+    from app.services.insights.constants import INSIGHT_COMPONENT_NAME
+
+    no_cache.add(f"service_{INSIGHT_COMPONENT_NAME}")
+{%- endif %}
+    if component_name in no_cache:
+        old = modal_cache.pop(component_name, None)
+        if old and old in page.overlay:
+            page.overlay.remove(old)
+
+    popup = modal_cache.get(component_name)
+    if popup is None:
+        popup = create_modal_for_component(component_name, component_data, page)
+        if popup:
+            modal_cache[component_name] = popup
+            page.overlay.append(popup)
+        else:
+            # No factory branch matched — the click silently does nothing.
+            # That is almost always a wiring gap (a missing
+            # create_modal_for_component branch or modal_map entry), so leave a
+            # trail instead of a dead click. See issue #814.
+            from app.core.log import logger
+
+            logger.warning(
+                "No modal registered for component '%s'; card click is a no-op "
+                "(check create_modal_for_component and the modal_map).",
+                component_name,
+            )
+    else:
+        # Refresh cached modal with latest health check data
+        if hasattr(popup, "update_data"):
+            popup.update_data(component_data)
+    if popup:
+        popup.show()
+        page.update()
+
+
+def create_card_click_handler(
+    component_name: str, component_data: ComponentStatus
+) -> Callable[[ft.ControlEvent], None]:
+    """
+    Create a click handler for a card that opens its detail popup.
+
+    Args:
+        component_name: Name of the component
+        component_data: ComponentStatus containing component information
+
+    Returns:
+        Click event handler function
+    """
+
+    def handle_click(e: ft.ControlEvent) -> None:
+        """Handle card click by opening detail popup."""
+        if not e.page:
+            return
+        _open_modal(component_name, component_data, e.page)
+
+    return handle_click
+
+
+async def trigger_dashboard_refresh(page: ft.Page) -> None:
+    """
+    Trigger an immediate dashboard refresh.
+
+    Call this after any action that changes component state
+    (e.g., saving config, toggling services).
+
+    Args:
+        page: The Flet page instance
+    """
+    refresh_fn = page.data.get("refresh_dashboard")
+    if refresh_fn:
+        await refresh_fn()

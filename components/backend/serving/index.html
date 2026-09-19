@@ -12,13 +12,13 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://docs.aegis-stack.io/services/finance/investments/">
+        <link rel="canonical" href="https://docs.aegis-stack.io/components/backend/serving/">
       
       
-        <link rel="prev" href="../review/">
+        <link rel="prev" href="../routes/">
       
       
-        <link rel="next" href="../imports/">
+        <link rel="next" href="../auth/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Investments - Aegis Stack</title>
+        <title>ASGI Server - Aegis Stack</title>
       
     
     
@@ -100,7 +100,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#investments" class="md-skip">
+        <a href="#asgi-server" class="md-skip">
           Skip to content
         </a>
       
@@ -133,7 +133,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Investments
+              ASGI Server
             
           </span>
         </div>
@@ -284,11 +284,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../../components/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../" class="md-tabs__link">
           
   
   
@@ -304,13 +306,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../../services/" class="md-tabs__link">
           
   
   
@@ -684,24 +684,29 @@
       
   
   
+    
   
   
+  
     
     
     
     
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -719,7 +724,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -737,7 +742,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   
@@ -762,6 +767,8 @@
                 
   
   
+    
+  
   
   
     
@@ -772,11 +779,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" checked>
         
           
           <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
@@ -797,7 +804,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -815,7 +822,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -893,7 +900,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/middleware/" class="md-nav__link">
+      <a href="../middleware/" class="md-nav__link">
         
   
   
@@ -921,7 +928,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/middleware/performance/" class="md-nav__link">
+      <a href="../middleware/performance/" class="md-nav__link">
         
   
   
@@ -957,7 +964,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/lifecycle/" class="md-nav__link">
+      <a href="../lifecycle/" class="md-nav__link">
         
   
   
@@ -985,7 +992,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/routes/" class="md-nav__link">
+      <a href="../routes/" class="md-nav__link">
         
   
   
@@ -1010,10 +1017,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../components/backend/serving/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ASGI Server
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1029,6 +1063,187 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Engine
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Event Loop
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Event Loop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#whats-out-there" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's out there
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-each-engine-accepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What each engine accepts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-is-resolved-by-the-app-deliberately" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        auto is resolved by the app, deliberately
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measuring-it-yourself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measuring It Yourself
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Measuring It Yourself">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drivers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-choose-granian" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When To Choose Granian
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="When To Choose Granian">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#websocket-keepalive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebSocket keepalive
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reload-behavior-in-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reload behavior in development
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#httpresponsepathsend-if-you-write-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        http.response.pathsend, if you write middleware
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1041,7 +1256,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/auth/" class="md-nav__link">
+      <a href="../auth/" class="md-nav__link">
         
   
   
@@ -1069,7 +1284,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/load-testing/" class="md-nav__link">
+      <a href="../load-testing/" class="md-nav__link">
         
   
   
@@ -1155,7 +1370,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/database/" class="md-nav__link">
+      <a href="../../database/" class="md-nav__link">
         
   
   
@@ -1183,7 +1398,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/database/neon/" class="md-nav__link">
+      <a href="../../database/neon/" class="md-nav__link">
         
   
   
@@ -1319,7 +1534,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/" class="md-nav__link">
+      <a href="../../frontend/" class="md-nav__link">
         
   
   
@@ -1347,7 +1562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/architecture/" class="md-nav__link">
+      <a href="../../frontend/architecture/" class="md-nav__link">
         
   
   
@@ -1375,7 +1590,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/routing/" class="md-nav__link">
+      <a href="../../frontend/routing/" class="md-nav__link">
         
   
   
@@ -1403,7 +1618,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/state/" class="md-nav__link">
+      <a href="../../frontend/state/" class="md-nav__link">
         
   
   
@@ -1431,7 +1646,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/api-client/" class="md-nav__link">
+      <a href="../../frontend/api-client/" class="md-nav__link">
         
   
   
@@ -1459,7 +1674,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/events/" class="md-nav__link">
+      <a href="../../frontend/events/" class="md-nav__link">
         
   
   
@@ -1487,7 +1702,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/example/" class="md-nav__link">
+      <a href="../../frontend/example/" class="md-nav__link">
         
   
   
@@ -1573,7 +1788,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/" class="md-nav__link">
+      <a href="../../web-frontend/" class="md-nav__link">
         
   
   
@@ -1601,7 +1816,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/templates-and-partials/" class="md-nav__link">
+      <a href="../../web-frontend/templates-and-partials/" class="md-nav__link">
         
   
   
@@ -1629,7 +1844,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/styling/" class="md-nav__link">
+      <a href="../../web-frontend/styling/" class="md-nav__link">
         
   
   
@@ -1657,7 +1872,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/asset-pipeline/" class="md-nav__link">
+      <a href="../../web-frontend/asset-pipeline/" class="md-nav__link">
         
   
   
@@ -1685,7 +1900,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/auth-pages/" class="md-nav__link">
+      <a href="../../web-frontend/auth-pages/" class="md-nav__link">
         
   
   
@@ -1779,7 +1994,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/" class="md-nav__link">
+      <a href="../../scheduler/" class="md-nav__link">
         
   
   
@@ -1807,7 +2022,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/examples/" class="md-nav__link">
+      <a href="../../scheduler/examples/" class="md-nav__link">
         
   
   
@@ -1835,7 +2050,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/cli/" class="md-nav__link">
+      <a href="../../scheduler/cli/" class="md-nav__link">
         
   
   
@@ -1863,7 +2078,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/persistence/" class="md-nav__link">
+      <a href="../../scheduler/persistence/" class="md-nav__link">
         
   
   
@@ -1891,7 +2106,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/running-jobs/" class="md-nav__link">
+      <a href="../../scheduler/running-jobs/" class="md-nav__link">
         
   
   
@@ -1977,7 +2192,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/" class="md-nav__link">
+      <a href="../../storage/" class="md-nav__link">
         
   
   
@@ -2005,7 +2220,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/configuration/" class="md-nav__link">
+      <a href="../../storage/configuration/" class="md-nav__link">
         
   
   
@@ -2033,7 +2248,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/examples/" class="md-nav__link">
+      <a href="../../storage/examples/" class="md-nav__link">
         
   
   
@@ -2119,7 +2334,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/" class="md-nav__link">
+      <a href="../../worker/" class="md-nav__link">
         
   
   
@@ -2147,7 +2362,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/configuration/" class="md-nav__link">
+      <a href="../../worker/configuration/" class="md-nav__link">
         
   
   
@@ -2175,7 +2390,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/jobs/" class="md-nav__link">
+      <a href="../../worker/jobs/" class="md-nav__link">
         
   
   
@@ -2203,7 +2418,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/examples/" class="md-nav__link">
+      <a href="../../worker/examples/" class="md-nav__link">
         
   
   
@@ -2281,7 +2496,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/extras/load-testing/" class="md-nav__link">
+      <a href="../../worker/extras/load-testing/" class="md-nav__link">
         
   
   
@@ -2325,7 +2540,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/ingress/" class="md-nav__link">
+      <a href="../../ingress/" class="md-nav__link">
         
   
   
@@ -2353,7 +2568,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/observability/" class="md-nav__link">
+      <a href="../../observability/" class="md-nav__link">
         
   
   
@@ -2385,29 +2600,24 @@
       
   
   
-    
   
   
-  
     
     
     
     
       
-        
-        
-      
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
   
@@ -2425,7 +2635,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2443,7 +2653,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../" class="md-nav__link">
+      <a href="../../../services/" class="md-nav__link">
         
   
   
@@ -2521,7 +2731,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/" class="md-nav__link">
+      <a href="../../../services/ai/" class="md-nav__link">
         
   
   
@@ -2549,7 +2759,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/illiana/" class="md-nav__link">
+      <a href="../../../services/ai/illiana/" class="md-nav__link">
         
   
   
@@ -2577,7 +2787,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/agents/" class="md-nav__link">
+      <a href="../../../services/ai/agents/" class="md-nav__link">
         
   
   
@@ -2605,7 +2815,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/memory-modules/" class="md-nav__link">
+      <a href="../../../services/ai/memory-modules/" class="md-nav__link">
         
   
   
@@ -2633,7 +2843,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/llm-catalog/" class="md-nav__link">
+      <a href="../../../services/ai/llm-catalog/" class="md-nav__link">
         
   
   
@@ -2661,7 +2871,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/rag/" class="md-nav__link">
+      <a href="../../../services/ai/rag/" class="md-nav__link">
         
   
   
@@ -2689,7 +2899,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/cost-tracking/" class="md-nav__link">
+      <a href="../../../services/ai/cost-tracking/" class="md-nav__link">
         
   
   
@@ -2717,7 +2927,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/voice/" class="md-nav__link">
+      <a href="../../../services/ai/voice/" class="md-nav__link">
         
   
   
@@ -2745,7 +2955,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/engines/" class="md-nav__link">
+      <a href="../../../services/ai/engines/" class="md-nav__link">
         
   
   
@@ -2773,7 +2983,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/providers/" class="md-nav__link">
+      <a href="../../../services/ai/providers/" class="md-nav__link">
         
   
   
@@ -2801,7 +3011,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/api/" class="md-nav__link">
+      <a href="../../../services/ai/api/" class="md-nav__link">
         
   
   
@@ -2829,7 +3039,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/integration/" class="md-nav__link">
+      <a href="../../../services/ai/integration/" class="md-nav__link">
         
   
   
@@ -2857,7 +3067,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/cli/" class="md-nav__link">
+      <a href="../../../services/ai/cli/" class="md-nav__link">
         
   
   
@@ -2885,7 +3095,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/examples/" class="md-nav__link">
+      <a href="../../../services/ai/examples/" class="md-nav__link">
         
   
   
@@ -2971,7 +3181,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/" class="md-nav__link">
+      <a href="../../../services/auth/" class="md-nav__link">
         
   
   
@@ -2999,7 +3209,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/levels/" class="md-nav__link">
+      <a href="../../../services/auth/levels/" class="md-nav__link">
         
   
   
@@ -3027,7 +3237,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/api/" class="md-nav__link">
+      <a href="../../../services/auth/api/" class="md-nav__link">
         
   
   
@@ -3055,7 +3265,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/integration/" class="md-nav__link">
+      <a href="../../../services/auth/integration/" class="md-nav__link">
         
   
   
@@ -3083,7 +3293,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/cli/" class="md-nav__link">
+      <a href="../../../services/auth/cli/" class="md-nav__link">
         
   
   
@@ -3111,7 +3321,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/examples/" class="md-nav__link">
+      <a href="../../../services/auth/examples/" class="md-nav__link">
         
   
   
@@ -3197,7 +3407,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/" class="md-nav__link">
+      <a href="../../../services/blog/" class="md-nav__link">
         
   
   
@@ -3225,7 +3435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/api/" class="md-nav__link">
+      <a href="../../../services/blog/api/" class="md-nav__link">
         
   
   
@@ -3253,7 +3463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/dashboard/" class="md-nav__link">
+      <a href="../../../services/blog/dashboard/" class="md-nav__link">
         
   
   
@@ -3281,7 +3491,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/cli/" class="md-nav__link">
+      <a href="../../../services/blog/cli/" class="md-nav__link">
         
   
   
@@ -3309,7 +3519,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/examples/" class="md-nav__link">
+      <a href="../../../services/blog/examples/" class="md-nav__link">
         
   
   
@@ -3395,7 +3605,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/" class="md-nav__link">
+      <a href="../../../services/documents/" class="md-nav__link">
         
   
   
@@ -3423,7 +3633,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/api/" class="md-nav__link">
+      <a href="../../../services/documents/api/" class="md-nav__link">
         
   
   
@@ -3451,7 +3661,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/extraction/" class="md-nav__link">
+      <a href="../../../services/documents/extraction/" class="md-nav__link">
         
   
   
@@ -3479,7 +3689,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/dashboard/" class="md-nav__link">
+      <a href="../../../services/documents/dashboard/" class="md-nav__link">
         
   
   
@@ -3565,7 +3775,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/" class="md-nav__link">
+      <a href="../../../services/comms/" class="md-nav__link">
         
   
   
@@ -3593,7 +3803,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/setup/" class="md-nav__link">
+      <a href="../../../services/comms/setup/" class="md-nav__link">
         
   
   
@@ -3621,7 +3831,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/api/" class="md-nav__link">
+      <a href="../../../services/comms/api/" class="md-nav__link">
         
   
   
@@ -3649,7 +3859,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/cli/" class="md-nav__link">
+      <a href="../../../services/comms/cli/" class="md-nav__link">
         
   
   
@@ -3677,7 +3887,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/examples/" class="md-nav__link">
+      <a href="../../../services/comms/examples/" class="md-nav__link">
         
   
   
@@ -3710,8 +3920,6 @@
                 
   
   
-    
-  
   
   
     
@@ -3722,11 +3930,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_7" >
         
           
           <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
@@ -3747,7 +3955,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3765,7 +3973,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../../services/finance/" class="md-nav__link">
         
   
   
@@ -3793,7 +4001,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../accounts/" class="md-nav__link">
+      <a href="../../../services/finance/accounts/" class="md-nav__link">
         
   
   
@@ -3821,7 +4029,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../bills/" class="md-nav__link">
+      <a href="../../../services/finance/bills/" class="md-nav__link">
         
   
   
@@ -3849,7 +4057,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../projected/" class="md-nav__link">
+      <a href="../../../services/finance/projected/" class="md-nav__link">
         
   
   
@@ -3877,7 +4085,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../budget/" class="md-nav__link">
+      <a href="../../../services/finance/budget/" class="md-nav__link">
         
   
   
@@ -3905,7 +4113,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../review/" class="md-nav__link">
+      <a href="../../../services/finance/review/" class="md-nav__link">
         
   
   
@@ -3930,37 +4138,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Investments
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../services/finance/investments/" class="md-nav__link">
         
   
   
@@ -3976,70 +4157,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-is-tracked" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What Is Tracked
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-the-data-comes-from" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where the Data Comes From
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#holdings-and-net-worth" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Holdings and Net Worth
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#related" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Related
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -4052,7 +4169,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../imports/" class="md-nav__link">
+      <a href="../../../services/finance/imports/" class="md-nav__link">
         
   
   
@@ -4080,7 +4197,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../chat/" class="md-nav__link">
+      <a href="../../../services/finance/chat/" class="md-nav__link">
         
   
   
@@ -4108,7 +4225,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/" class="md-nav__link">
+      <a href="../../../services/finance/api/" class="md-nav__link">
         
   
   
@@ -4136,7 +4253,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/" class="md-nav__link">
+      <a href="../../../services/finance/cli/" class="md-nav__link">
         
   
   
@@ -4222,7 +4339,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/" class="md-nav__link">
+      <a href="../../../services/insights/" class="md-nav__link">
         
   
   
@@ -4250,7 +4367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/data-sources/" class="md-nav__link">
+      <a href="../../../services/insights/data-sources/" class="md-nav__link">
         
   
   
@@ -4278,7 +4395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/cli/" class="md-nav__link">
+      <a href="../../../services/insights/cli/" class="md-nav__link">
         
   
   
@@ -4306,7 +4423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/dashboard/" class="md-nav__link">
+      <a href="../../../services/insights/dashboard/" class="md-nav__link">
         
   
   
@@ -4334,7 +4451,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/configuration/" class="md-nav__link">
+      <a href="../../../services/insights/configuration/" class="md-nav__link">
         
   
   
@@ -4362,7 +4479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/examples/" class="md-nav__link">
+      <a href="../../../services/insights/examples/" class="md-nav__link">
         
   
   
@@ -4448,7 +4565,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/" class="md-nav__link">
+      <a href="../../../services/payment/" class="md-nav__link">
         
   
   
@@ -4476,7 +4593,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/setup/" class="md-nav__link">
+      <a href="../../../services/payment/setup/" class="md-nav__link">
         
   
   
@@ -4504,7 +4621,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/dashboard/" class="md-nav__link">
+      <a href="../../../services/payment/dashboard/" class="md-nav__link">
         
   
   
@@ -4532,7 +4649,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/api/" class="md-nav__link">
+      <a href="../../../services/payment/api/" class="md-nav__link">
         
   
   
@@ -4560,7 +4677,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/cli/" class="md-nav__link">
+      <a href="../../../services/payment/cli/" class="md-nav__link">
         
   
   
@@ -4588,7 +4705,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/examples/" class="md-nav__link">
+      <a href="../../../services/payment/examples/" class="md-nav__link">
         
   
   
@@ -5046,10 +5163,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-is-tracked" class="md-nav__link">
+  <a href="#quick-usage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What Is Tracked
+        Quick Usage
       
     </span>
   </a>
@@ -5057,10 +5174,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-the-data-comes-from" class="md-nav__link">
+  <a href="#the-engine" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where the Data Comes From
+        The Engine
       
     </span>
   </a>
@@ -5068,21 +5185,138 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#holdings-and-net-worth" class="md-nav__link">
+  <a href="#the-event-loop" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Holdings and Net Worth
+        The Event Loop
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Event Loop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#whats-out-there" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's out there
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#related" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#what-each-engine-accepts" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Related
+        What each engine accepts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-is-resolved-by-the-app-deliberately" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        auto is resolved by the app, deliberately
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measuring-it-yourself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measuring It Yourself
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Measuring It Yourself">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drivers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-choose-granian" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When To Choose Granian
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="When To Choose Granian">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#websocket-keepalive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebSocket keepalive
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reload-behavior-in-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reload behavior in development
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#httpresponsepathsend-if-you-write-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        http.response.pathsend, if you write middleware
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
       
     </span>
   </a>
@@ -5110,67 +5344,359 @@
   
 
 
-<h1 id="investments">Investments</h1>
-<p>Holdings, trades, and what they are worth. Investment accounts sit in the same ledger as everything else, so net worth is one number rather than two apps added together.</p>
-<h2 id="what-is-tracked">What Is Tracked</h2>
+<h1 id="asgi-server">ASGI Server</h1>
+<div class="admonition example">
+<p class="admonition-title">Musings: On Not Picking a Winner (September 18th, 2026)</p>
+<p><a href="https://github.com/emmett-framework/granian">Granian</a> is faster. I measured it, it's about 1.5x on a trivial route, and it's the most mature of the new crop by a distance. So the obvious move is to swap the default and move on.</p>
+<p>I'm not doing that, and it took me a minute to articulate why. There are two camps forming underneath Python web serving right now and they're both moving fast. <a href="https://github.com/gi0baro">Giovanni Barillari</a> is going Rust: granian, <a href="https://github.com/gi0baro/rloop">rloop</a>, and now <a href="https://github.com/gi0baro/tonio">TonIO</a>, which walks away from asyncio entirely. <a href="https://marcelotryle.com/">Marcelo Trylesinski</a>, who maintains <a href="https://uvicorn.dev/">uvicorn</a>, is rebuilding its two speed dependencies in Zig: <a href="https://github.com/Kludex/zuvloop">zuvloop</a> for <a href="https://github.com/MagicStack/uvloop">uvloop</a>, <a href="https://github.com/Kludex/zttp">zttp</a> for <a href="https://github.com/MagicStack/httptools">httptools</a>. I benchmarked uvicorn on zuvloop and it ate 38% of granian's lead, taking it from 1.54x down to 1.28x. Granian is still ahead. But that's a three-day-old 0.0.x library with the other half of the pair not even wired in yet, and it's the slope that matters, not today's number.</p>
+<p>So whoever is fastest today is not who's fastest in six months, and Aegis Stack is supposed to be about options. If I collapse this to one server because of one benchmark on one endpoint, I've deleted the thing I'm actually selling. The default stays uvicorn because that's what works everywhere, and granian is one flag away because sometimes you want it.</p>
+<p>The part that surprised me: the loop barely matters under granian and matters a lot under uvicorn. Makes sense once you think about where the Rust is. And rloop, which I was excited about, came out a wash. Still glad it's reachable.</p>
+<p>What I don't have yet is the honest answer to "does this matter for my app". The engine gap shrinks the moment your handler waits on a database, which is most handlers. That's why the benchmark takes any route instead of hardcoding one. Go measure your own stuff.</p>
+</div>
+<p>Two independent choices sit underneath your FastAPI app: the <strong>ASGI server</strong>
+that speaks HTTP, and the <strong>event loop</strong> it runs on. Both default to what
+Aegis has always shipped, and both are one flag away from something else.</p>
+<div class="admonition info">
+<p class="admonition-title">Built-in</p>
+<p>Ships in every generated project. No component to enable. Defaults are
+unchanged from before this existed: uvicorn, on uvloop where it is
+installed.</p>
+</div>
+<h2 id="quick-usage">Quick Usage</h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>make<span class="w"> </span>serve<span class="w">                     </span><span class="c1"># uvicorn on uvloop (the default)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>make<span class="w"> </span>serve<span class="w"> </span><span class="nv">ENGINE</span><span class="o">=</span>granian<span class="w">      </span><span class="c1"># this run only</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>make<span class="w"> </span>serve<span class="w"> </span><span class="nv">LOOP</span><span class="o">=</span>rloop<span class="w">          </span><span class="c1"># granian only</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>make<span class="w"> </span>serve<span class="w"> </span><span class="nv">LOOP</span><span class="o">=</span>zuvloop<span class="w">        </span><span class="c1"># uvicorn only, 3.14+, reload off</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>make<span class="w"> </span>bench-engines<span class="w">             </span><span class="c1"># measure both on your own routes</span>
+</span></code></pre></div>
+<p>Nothing is persisted by a flag. For a deployment, set <code>WEBSERVER_ENGINE</code>
+and <code>WEBSERVER_LOOP</code> in the env file alongside every other deploy setting.</p>
+<h2 id="the-engine">The Engine</h2>
 <table>
 <thead>
 <tr>
-<th>Thing</th>
-<th>Meaning</th>
+<th></th>
+<th><a href="https://uvicorn.dev/">uvicorn</a></th>
+<th><a href="https://github.com/emmett-framework/granian">granian</a></th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Security</strong></td>
-<td>the instrument: ticker, name, type</td>
+<td>Written in</td>
+<td>Python + C</td>
+<td>Rust</td>
 </tr>
 <tr>
-<td><strong>Holding</strong></td>
-<td>how much of it an account holds, and at what cost</td>
+<td>Status</td>
+<td>default</td>
+<td>opt-in</td>
 </tr>
 <tr>
-<td><strong>Trade</strong></td>
-<td>a buy, sell, dividend, or contribution</td>
-</tr>
-<tr>
-<td><strong>Price</strong></td>
-<td>a stored quote, so a valuation is reproducible</td>
+<td>Free-threaded wheels</td>
+<td>not verified</td>
+<td>yes, since 2.0 (upstream calls it experimental)</td>
 </tr>
 </tbody>
 </table>
-<p>Prices are stored rather than fetched at read time. A number on a report should mean the same thing tomorrow as it did when it was written, and a chart that silently re-prices history is not a record.</p>
-<h2 id="where-the-data-comes-from">Where the Data Comes From</h2>
-<p>Two paths, deliberately separate:</p>
-<p><strong>Custodian activity files.</strong> A brokerage or HSA export is a trade ledger, not a register, so it has its own importer path with one profile per source shape. Optum ships today; another custodian is a sibling profile rather than a fork of the CSV importer.</p>
-<p><strong>Provider connections.</strong> SnapTrade covers brokerage links where a connection is available.</p>
-<p>Both land through the same idempotent writes, so re-importing an overlapping export updates rather than duplicates.</p>
-<h2 id="holdings-and-net-worth">Holdings and Net Worth</h2>
-<p>Net worth spans cash, liabilities and positions. Investment balances feed the same snapshot series the rest of the ledger uses, which is what lets the net-worth chart cover a portfolio and a checking account on one line.</p>
-<p>The projection deliberately does <strong>not</strong> spend your positions. It walks cash, because "can I cover the month" is a question about cash, not about what you could liquidate.</p>
-<h2 id="related">Related</h2>
+<p>Granian runs <strong>1.5x to 1.6x uvicorn</strong> on a trivial route, measured on a
+generated base stack against uvicorn at its best (uvloop plus httptools,
+both of which a generated project already installs). It is a range because
+a laptop is a range; every number on this page comes from one session, and
+re-running moves them a few percent while leaving the ratios alone.</p>
+<p>That number shrinks as your handler does real work. The same benchmark on
+<code>/health/detailed</code> gives 1.35x, and a route that waits on the database will
+compress further, because at that point you are timing PostgreSQL rather
+than the server. <strong>The ratio is a property of your app, not of the engine</strong>,
+which is why <code>bench-engines</code> takes any route rather than hardcoding one.</p>
+<h2 id="the-event-loop">The Event Loop</h2>
+<p>A separate axis, and the surprising one: <strong>the loop barely moves granian and
+moves uvicorn a lot.</strong> Granian handles HTTP in Rust and only touches the
+Python loop at your application's await points, so swapping the loop
+underneath it changes very little. Uvicorn's loop is doing all the I/O.</p>
+<h3 id="whats-out-there">What's out there</h3>
 <table>
 <thead>
 <tr>
-<th>Topic</th>
-<th>Description</th>
+<th>Loop</th>
+<th>Built on</th>
+<th>Status</th>
+<th>Installed by default</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><a href="../imports/">Importing and Connections</a></td>
-<td>file imports and provider links</td>
+<td><a href="https://docs.python.org/3/library/asyncio-eventloop.html">asyncio</a></td>
+<td>the standard library</td>
+<td>always available</td>
+<td>yes</td>
 </tr>
 <tr>
-<td><a href="../accounts/">Accounts and the Register</a></td>
-<td>how net worth is carried over time</td>
+<td><a href="https://github.com/MagicStack/uvloop">uvloop</a></td>
+<td>Cython on libuv</td>
+<td>mature, the usual default</td>
+<td>yes</td>
 </tr>
 <tr>
-<td><a href="../api/">API Reference</a></td>
-<td>holdings and trades endpoints</td>
+<td><a href="https://github.com/gi0baro/rloop">rloop</a></td>
+<td>Rust on mio</td>
+<td>0.5.x, Unix only</td>
+<td>no</td>
+</tr>
+<tr>
+<td><a href="https://github.com/Kludex/zuvloop">zuvloop</a></td>
+<td>Zig on libuv</td>
+<td>0.0.x, Python 3.14+, uvicorn only</td>
+<td>on 3.14+</td>
 </tr>
 </tbody>
 </table>
+<h3 id="what-each-engine-accepts">What each engine accepts</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>asyncio</th>
+<th>uvloop</th>
+<th>rloop</th>
+<th>zuvloop</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uvicorn</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>yes, on 3.14+</td>
+</tr>
+<tr>
+<td>granian</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+</tbody>
+</table>
+<p>A combination that cannot work fails at startup, naming what the running
+engine accepts.</p>
+<p><strong>rloop</strong> works fine under granian and is simply not faster. Five samples
+each on <code>/health/</code> put it level with uvloop, median 8,029 against 8,207,
+which is inside the run-to-run spread. That is one endpoint, so it is
+evidence rather than proof, but there is no reason to reach for it yet.</p>
+<p><strong>zuvloop</strong> comes from <a href="https://marcelotryle.com/">Marcelo Trylesinski</a>,
+who maintains uvicorn, and it is half of a pair: zuvloop replaces uvloop,
+<a href="https://github.com/Kludex/zttp">zttp</a> replaces
+<a href="https://github.com/MagicStack/httptools">httptools</a>. Those are exactly
+uvicorn's two speed dependencies, both being rewritten in Zig.</p>
+<p>Measured through this entrypoint, one session, best of three, <code>GET
+/health/</code> at 3000 requests and 50 clients:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>req/s</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uvicorn + uvloop</td>
+<td>4,919</td>
+<td></td>
+</tr>
+<tr>
+<td>uvicorn + zuvloop</td>
+<td>5,927</td>
+<td>+20%</td>
+</tr>
+<tr>
+<td>granian + uvloop</td>
+<td>7,561</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>So zuvloop closes <strong>38%</strong> of the gap and granian stays <strong>1.28x</strong> ahead,
+down from 1.54x. Worth having on the uvicorn side, and not a reason to
+stop reaching for granian.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>make<span class="w"> </span>serve<span class="w"> </span><span class="nv">LOOP</span><span class="o">=</span>zuvloop<span class="w">      </span><span class="c1"># uvicorn only, Python 3.14+, reload off</span>
+</span></code></pre></div>
+<p>Three things to know before you reach for it:</p>
+<ul>
+<li><strong>Python 3.14 or newer.</strong> The dependency carries a marker
+  (<code>python_version &gt;= '3.14'</code>), so older projects resolve without it
+  rather than failing to install, and asking for it anyway fails at
+  startup with a sentence rather than an <code>ImportError</code>.</li>
+<li><strong>It cannot run with reload.</strong> Uvicorn's reloader is a supervisor that
+  spawns child processes, so there is no coroutine to hand zuvloop.
+  Develop on uvloop, deploy on zuvloop.</li>
+<li><strong><code>auto</code> will never pick it.</strong> It is 0.0.x. It stays something you ask
+  for by name.</li>
+</ul>
+<p>Granian cannot use it at all. Its <code>Loops</code> enum has no <code>zuvloop</code> member,
+and zuvloop ships no <code>EventLoopPolicy</code>, so there is no back door through
+granian's asyncio builder either.</p>
+<h3 id="auto-is-resolved-by-the-app-deliberately"><code>auto</code> is resolved by the app, deliberately</h3>
+<p><code>WEBSERVER_LOOP</code> defaults to <code>auto</code>, which resolves to uvloop when it is
+installed and asyncio otherwise. Aegis resolves this itself rather than
+passing <code>auto</code> down to the server, and that is not an accident.</p>
+<p>Granian's own <code>auto</code> prefers rloop the moment rloop is importable. Left
+alone, a transitive dependency pulling rloop into your tree would move
+production onto an alpha event loop with no code change, no flag, and
+nothing in the logs. Resolving here means the loop is always a decision, and
+the startup line always names it:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Starting Aegis Stack Web Server (granian on uvloop)...
+</span></code></pre></div>
+<p>The compatibility matrix lives in <code>app/core/loops.py</code>, in one place, because
+it is the part of this that grows.</p>
+<h2 id="measuring-it-yourself">Measuring It Yourself</h2>
+<p><code>bench engines</code> boots your app once per engine and drives identical load at
+each, so both numbers share a client, a route and a machine.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>my-app<span class="w"> </span>bench<span class="w"> </span>engines
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>my-app<span class="w"> </span>bench<span class="w"> </span>engines<span class="w"> </span>--path<span class="w"> </span><span class="s2">&quot;/api/v1/jobs/{job_id}&quot;</span><span class="w"> </span>--path-param<span class="w"> </span><span class="nv">job_id</span><span class="o">=</span>abc-123
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>my-app<span class="w"> </span>bench<span class="w"> </span>engines<span class="w"> </span>--method<span class="w"> </span>POST<span class="w"> </span>--path<span class="w"> </span>/api/v1/things<span class="w"> </span>--payload<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;:&quot;x&quot;}&#39;</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>my-app<span class="w"> </span>bench<span class="w"> </span>engines<span class="w"> </span>--path<span class="w"> </span>/api/v1/private/<span class="w"> </span>--as-admin
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>my-app<span class="w"> </span>bench<span class="w"> </span>engines<span class="w"> </span>--loop<span class="w"> </span>rloop<span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>-c<span class="w"> </span><span class="m">100</span><span class="w"> </span>--rounds<span class="w"> </span><span class="m">3</span>
+</span></code></pre></div>
+<p>It takes the same flags <a href="../load-testing/"><code>api-load-test run</code></a> does, because
+it is the same vocabulary for describing a route.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>engine    loop             req/s      p50 ms      p95 ms      p99 ms    failed
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>------------------------------------------------------------------------------
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>uvicorn   uvloop           4,919       10.00       11.00       12.00         0
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>granian   uvloop           7,561        7.00        8.00        8.00         0
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>granian is 1.54x uvicorn on this route.
+</span></code></pre></div>
+<h3 id="drivers">Drivers</h3>
+<p>The load generator matters as much as the server, because a client that
+cannot saturate reports every engine as equal. Three, tried in order, and
+the output always names the one that ran:</p>
+<table>
+<thead>
+<tr>
+<th>Driver</th>
+<th>When</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ab</code></td>
+<td>a local <a href="https://httpd.apache.org/docs/2.4/programs/ab.html">ApacheBench</a> exists</td>
+<td>bundled on macOS</td>
+</tr>
+<tr>
+<td><code>ab-docker</code></td>
+<td>no local <code>ab</code>, but Docker</td>
+<td>the official <code>httpd:alpine</code> image</td>
+</tr>
+<tr>
+<td><code>api-load-test</code></td>
+<td>neither, or a method <code>ab</code> cannot issue</td>
+<td><strong>cannot saturate</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>ab</code> is absent from most Linux, which is CI, most containers, and plenty
+of laptops. Docker is already required for a generated project, so the
+tool that tells you to measure your own routes should not itself need a
+system package first.</p>
+<p>On Linux the container runs with <code>--network host</code>, so there is no NAT
+between it and the server and it should measure close to a local <code>ab</code>.
+That is reasoning rather than a measurement: it was written on macOS,
+where Docker NATs through a VM. <strong>That</strong> path is measured, and the NAT
+costs several times the absolute throughput while leaving the ratio
+between engines intact, 1.53x against 1.54x native.</p>
+<p>Either way, treat a container number as comparable only to another
+container number.</p>
+<p>The last row is the honest dead end: the project's own load-test client
+tops out near 500 req/s, well under what either engine serves, so it
+reports them as equal no matter what. The output says so when it happens.</p>
+<h2 id="when-to-choose-granian">When To Choose Granian</h2>
+<p>Reach for it when a benchmark on <strong>your</strong> routes shows a gap worth having,
+which in practice means routes that are mostly serving rather than mostly
+waiting.</p>
+<p>The two engines are not drop-in equivalents. Three differences are worth
+knowing before you flip the flag, in rough order of how likely they are to
+bite you.</p>
+<h3 id="websocket-keepalive">WebSocket keepalive</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uvicorn</td>
+<td>pings every 20s, drops the socket if the pong is late</td>
+</tr>
+<tr>
+<td>granian</td>
+<td>sends no server-initiated ping at all</td>
+</tr>
+</tbody>
+</table>
+<p>Uvicorn's ping is why the uvicorn path sets <code>ws_ping_interval=None</code>: behind
+a reverse proxy the pong arrives late and the connection dies mid-session.
+Granian has no equivalent knob because it has no equivalent behavior.
+Nothing to configure, nothing to time out.</p>
+<h3 id="reload-behavior-in-development">Reload behavior in development</h3>
+<p>Granian's <code>respawn_failed_workers</code> defaults to <strong>off</strong>, so a worker that
+dies on reload is never replaced: one transient broken save stops the dev
+server, prints no error line, and leaves it stopped until you restart by
+hand.</p>
+<p>Aegis owns the granian invocation, so it sets <code>respawn_failed_workers</code>
+rather than only warning about it: on in dev, off in production where the
+container healthcheck already restarts a dead server and respawning would
+hide a crashloop.</p>
+<p><strong>That flag does not fully close the hole, and it is worth knowing which
+half it leaves open.</strong> Tested by saving a syntax error into a running dev
+server: granian tore the server down anyway, and repairing the file did
+not bring it back, because nothing was left watching. The flag covers a
+worker that dies while <em>running</em>; a worker that dies on the way <em>up</em>, as
+a bad import does, still takes the server with it.</p>
+<p>So under granian, treat a dev server that has gone quiet as needing a
+restart. Uvicorn's reloader retries on the next save and does not.</p>
+<h3 id="httpresponsepathsend-if-you-write-middleware"><code>http.response.pathsend</code>, if you write middleware</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>advertises the extension</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uvicorn</td>
+<td>no</td>
+</tr>
+<tr>
+<td>granian</td>
+<td><strong>yes</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A server offering <code>pathsend</code> receives a file <em>path</em> rather than a response
+body for static files, and hands the sending off to itself. That is faster,
+and it means any middleware rewriting response bodies has to handle
+<code>http.response.pathsend</code> as well as <code>http.response.body</code>.</p>
+<p>Miss it and the symptom is not subtle: the middleware forwards a body with
+no start, and every affected page returns 500. That is not hypothetical,
+it is what happened to the dashboard the first time this app was served
+under granian.</p>
+<p>The middleware Aegis ships handles it, and a test enforces that rather
+than trusting the docs: anything under
+<code>app/components/backend/middleware/</code> that touches <code>http.response.body</code>
+must also handle <code>http.response.pathsend</code>. Your own middleware is outside
+that net, so this is the one to remember.</p>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li><a href="../load-testing/">API Load Testing</a> — capacity of a single route</li>
+<li><a href="../middleware/performance/">Performance Middleware</a> — per-route timing from inside the app</li>
+</ul>
 
 
 

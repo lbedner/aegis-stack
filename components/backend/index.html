@@ -1122,6 +1122,34 @@
   
   
     <li class="md-nav__item">
+      <a href="serving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ASGI Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="auth/" class="md-nav__link">
         
   
@@ -5111,6 +5139,9 @@ factory and three drop-in directories that turn the backend into a
 composition point for the rest of the stack: services register routes,
 infrastructure components register middleware, and the lifespan is owned by
 auto-discovered startup and shutdown hooks.</p>
+<p>What serves it is a choice rather than a given: uvicorn by default, granian
+with <code>make serve ENGINE=granian</code>, and the event loop underneath is its own
+separate switch. See <a href="serving/">ASGI Server</a>.</p>
 <div class="admonition example">
 <p class="admonition-title">Musings: On Backend Choices (November 2025)</p>
 <p>Most of my experience is with <a href="https://fastapi.tiangolo.com/">FastAPI</a>, but I did have the chance to do some <a href="https://flask.palletsprojects.com/">Flask</a> work in a production environment this past summer, and it was rather fun.</p>
@@ -5232,6 +5263,8 @@ new middleware or hook, restart the backend and it shows up automatically.</p>
   and the Overseer Lifecycle tab.</li>
 <li><a href="routes/">Routes</a>: how routers are registered, what each conditional
   block maps to, and how to add one.</li>
+<li><a href="serving/">ASGI Server</a>: uvicorn or granian, the event loop underneath,
+  and how to measure which is faster on your own routes.</li>
 <li><a href="auth/">Authentication Integration</a>: how the auth service plugs into
   the backend through SessionMiddleware, rate limiting, and router
   registration.</li>

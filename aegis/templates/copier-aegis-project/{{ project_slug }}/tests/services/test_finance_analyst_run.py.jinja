@@ -102,11 +102,11 @@ class TestModelFor:
         settings.ollama_base_url_effective = "http://localhost:11434"
 
         with (
-            patch("app.services.ai.domains.llm.providers.AsyncOpenAI") as client,
+            patch("app.services.ai.domains.llm.model_factory.AsyncOpenAI") as client,
             patch(
-                "app.services.ai.domains.llm.providers.OpenAIChatModel"
+                "app.services.ai.domains.llm.model_factory.OpenAIChatModel"
             ) as chat_model,
-            patch("app.services.ai.domains.llm.providers.OpenAIProvider"),
+            patch("app.services.ai.domains.llm.model_factory.OpenAIProvider"),
         ):
             model, model_name = model_for(config, settings)
 

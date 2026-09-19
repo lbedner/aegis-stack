@@ -509,6 +509,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     ):
         remove_dir(project_path, "app/services/ai/domains/chat/chat_kit")
         remove_dir(project_path, "tests/services/ai/chat_kit")
+        # PydanticAI model + agent construction; the LangChain branch of
+        # providers.py builds its own and never imports these.
+        remove_file(project_path, "app/services/ai/domains/llm/model_factory.py")
+        remove_file(project_path, "app/services/ai/domains/llm/agents.py")
 
     # Remove voice (TTS/STT) if not enabled
     if not is_enabled(AnswerKeys.AI_VOICE):

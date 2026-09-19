@@ -1,0 +1,446 @@
+"""Reading a period and drawing the overview from it."""
+
+from typing import TYPE_CHECKING, Any
+
+import flet as ft
+
+from app.components.frontend.controls import (
+    SecondaryText,
+)
+from app.components.frontend.dashboard.modals.finance_modal.accounts_tab import (
+    _list_card,
+    _overview_row,
+)
+
+# Named rows in the import review's detail sections before the tail folds
+# into a count. A Quicken tree can carry hundreds of new categories, and a
+# dialog that scrolls for a page stops being read at all.
+# One height for every Overview card, so the row has a single baseline.
+# Named slices in the spending donut (and rows in the list under it) before
+# the tail folds into "Other". Five left "Other" as the biggest slice on any
+# real ledger, which hides exactly the breakdown the card exists to show.
+# Measured against a real ledger (23 parent-level categories after the
+# spending_by_category rollup): 10 slices still left "Other" at 16.3%; 15
+# gets it to 5.3%, with everything past #15 individually under 1% of total
+# spend - the tail at that point really is "everything else", not a few
+# disguised top categories. PieChartCard's legend scrolls within its fixed
+# height (modal_sections.py) rather than clipping, so this isn't bounded
+# by legend space anymore.
+from app.components.frontend.dashboard.modals.finance_modal.constants import (
+    _ACCOUNT_GROUPS,
+    _MAX_CASHFLOW_BARS,
+    _OVERVIEW_CARD_HEIGHT,
+    _PIE_CATEGORIES,
+)
+from app.components.frontend.dashboard.modals.finance_modal.formatting import (
+    _account_display_balance,
+    _balance_color,
+    _group_for,
+    _month_label,
+    _usd,
+)
+from app.components.frontend.dashboard.modals.modal_sections import (
+    PIE_CHART_TAIL_COLOR,
+    BarChartCard,
+    BarSeries,
+    ChartColors,
+    EmptyStatePlaceholder,
+    LineChartCard,
+    LineSeries,
+    PieChartCard,
+    RankedBar,
+    RankedBarCard,
+    chart_floor,
+    headline_stat,
+    headline_stat_color,
+    ledger_amount_color,
+)
+from app.components.frontend.theme import AegisTheme as Theme
+
+
+def _fold_cashflow(months: list[dict]) -> list[dict]:
+    """Group a monthly cashflow series into at most ``_MAX_CASHFLOW_BARS``.
+
+    Returns rows carrying a display ``label`` alongside the summed income
+    and expense. Short windows pass through untouched, labelled by month.
+    """
+    if len(months) <= _MAX_CASHFLOW_BARS:
+        return [
+            {**month, "label": _month_label(month.get("month", ""))} for month in months
+        ]
+
+    def bucket(month_key: str) -> str:
+        year, _, mon = str(month_key).partition("-")
+        if len(months) <= _MAX_CASHFLOW_BARS * 3:  # <= ~3 years -> quarters
+            quarter = (int(mon or 1) - 1) // 3 + 1
+            return f"Q{quarter} '{year[-2:]}"
+        return year
+
+    folded: dict[str, dict] = {}
+    for month in months:
+        key = bucket(month.get("month", ""))
+        row = folded.setdefault(key, {"label": key, "income": 0, "expense": 0})
+        row["income"] += month.get("income") or 0
+        row["expense"] += month.get("expense") or 0
+    return list(folded.values())
+
+
+class OverviewLoadMixin:
+    """One fetch, then every card on the tab.
+
+    The drilldowns it wires into the cards live on
+    ``OverviewDrilldownMixin``; both sit on ``OverviewTab``.
+    """
+
+    if TYPE_CHECKING:
+        page: ft.Page | None
+        _account_filter: Any
+        _body: ft.Column
+        _days: int
+        _pending_changes: Any
+        _pie_slice_categories: list[str]
+        _stats: Any
+        _uncategorized_dialog: Any
+        _uncategorized_panel: Any
+
+        def _on_pie_slice_click(self, *args: Any, **kwargs: Any) -> Any: ...
+        def _open_uncategorized(self, *args: Any, **kwargs: Any) -> Any: ...
+
+    async def _load(self) -> None:
+        await self._pending_changes.refresh()
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        # Everything below describes only the accounts in view. An EMPTY
+        # selection ("Remove all") must render an empty page - its params
+        # would serialize to nothing and read as "no filter" server-side,
+        # so the filtered sections are ignored client-side instead.
+        filter_empty = self._account_filter.is_empty
+        filter_params = self._account_filter.params()
+        window = 3650 if self._days >= 9000 else self._days
+        # One surface, one round trip (house rule): the whole Overview
+        # arrives as a single composite payload; the granular endpoints
+        # remain for targeted refreshes only.
+        overview = await api.get(
+            "/api/v1/finance/overview",
+            params={
+                "days": window,
+                "months": max(1, min(36, round(window / 30))),
+                **filter_params,
+            },
+        )
+        if not isinstance(overview, dict):
+            overview = {}
+        data = overview.get("accounts") or {}
+        all_items = data.get("items", []) if isinstance(data, dict) else []
+        items = [a for a in all_items if self._account_filter.allows(a.get("id"))]
+
+        assets = sum(
+            _account_display_balance(a)
+            for a in items
+            if a.get("classification") != "liability"
+        )
+        liabilities = sum(
+            _account_display_balance(a)
+            for a in items
+            if a.get("classification") == "liability"
+        )
+        net_worth = assets + liabilities
+
+        # Net-worth trend (materialized daily by the scheduler; empty until it
+        # has run against real accounts).
+        nw = [] if filter_empty else overview.get("net_worth") or []
+        points = nw if isinstance(nw, list) else []
+        chart: ft.Control | None = None
+        if len(points) >= 2:
+            values = [p.get("net_worth_amount", 0) / 100 for p in points]
+            chart = LineChartCard(
+                title="Net worth over time",
+                subtitle="",
+                x_labels=[str(p.get("as_of_date", "")) for p in points],
+                series=[
+                    LineSeries(
+                        label="Net Worth",
+                        color=Theme.Colors.SUCCESS,
+                        points=[(i, v) for i, v in enumerate(values)],
+                        tooltips=[_usd(p.get("net_worth_amount", 0)) for p in points],
+                        fill=True,
+                        stroke_width=3,
+                    )
+                ],
+                min_y=chart_floor(values),
+            )
+
+        self._stats.controls = [
+            headline_stat("Assets", _usd(assets), headline_stat_color(assets)),
+            headline_stat(
+                "Liabilities", _usd(liabilities), headline_stat_color(liabilities)
+            ),
+            headline_stat("Net Worth", _usd(net_worth), headline_stat_color(net_worth)),
+        ]
+        if self._stats.page is not None:
+            self._stats.update()
+
+        # Per-group breakdown (same buckets as the sidebar).
+        grouped: dict[str, list] = {}
+        for account in items:
+            grouped.setdefault(_group_for(account.get("account_type", "")), []).append(
+                account
+            )
+        breakdown_rows: list[ft.Control] = []
+        for label, _types in _ACCOUNT_GROUPS:
+            group = grouped.get(label)
+            if not group:
+                continue
+            subtotal = sum(_account_display_balance(a) for a in group)
+            plural = "s" if len(group) != 1 else ""
+            breakdown_rows.append(
+                _overview_row(
+                    label,
+                    f"{len(group)} account{plural}",
+                    subtotal,
+                    _balance_color(subtotal),
+                )
+            )
+
+        # Income vs spend per month - grouped bars, one axis. Two series get
+        # the house ramp's most-separated pair (validated for CVD), never
+        # red for spending: outflow is the assumption here, not an alarm.
+        # Months, not days: 36 is the endpoint's ceiling and also as many
+        # bars as fit before they turn into hairlines.
+        cash = {} if filter_empty else overview.get("cashflow") or {}
+        cash_months = cash.get("items", []) if isinstance(cash, dict) else []
+        cash_card: ft.Control | None = None
+        if any(m.get("income") or m.get("expense") for m in cash_months):
+            cash_months = _fold_cashflow(cash_months)
+            cash_card = BarChartCard(
+                x_labels=[str(m.get("label", "")) for m in cash_months],
+                series=[
+                    BarSeries(
+                        "Income",
+                        ChartColors.TEAL,
+                        [(m.get("income") or 0) / 100 for m in cash_months],
+                    ),
+                    BarSeries(
+                        "Spending",
+                        ChartColors.VIOLET,
+                        [(m.get("expense") or 0) / 100 for m in cash_months],
+                    ),
+                ],
+                value_format=lambda v: f"${v:,.0f}",
+            )
+
+        # Who took the most, and what is about to hit. Both are ranked
+        # lists rather than plots: the labels are names, and the ordering
+        # is the point.
+        payees = overview.get("top_payees") or {}
+        payee_items = payees.get("items", []) if isinstance(payees, dict) else []
+        payee_card: ft.Control | None = None
+        if payee_items:
+            payee_card = RankedBarCard(
+                title=f"Top payees · {window}d",
+                rows=[
+                    RankedBar(
+                        label=item.get("payee") or "",
+                        value=(item.get("amount") or 0) / 100,
+                        display=_usd(item.get("amount") or 0),
+                        meta=f"{item.get('transaction_count', 0)}x",
+                    )
+                    for item in payee_items
+                ],
+            )
+
+        # Upcoming bills come from the same projection the Projected tab
+        # walks, so the two can never disagree about what is due.
+        upcoming = overview.get("projection") or {}
+        points = upcoming.get("points", []) if isinstance(upcoming, dict) else []
+        bills = [p for p in points if (p.get("amount") or 0) < 0][:7]
+        bills_card: ft.Control | None = None
+        if bills:
+            bills_card = RankedBarCard(
+                title="Upcoming bills · next 30 days",
+                rows=[
+                    RankedBar(
+                        label=bill.get("name") or "",
+                        value=abs(bill.get("amount") or 0) / 100,
+                        display=_usd(abs(bill.get("amount") or 0)),
+                        meta=str(bill.get("date", ""))[5:],
+                    )
+                    for bill in bills
+                ],
+                color=ChartColors.VIOLET,
+            )
+
+        # Recent transactions: the ledger itself, newest first. Not ranked
+        # and not plotted - it answers "what just happened", where the
+        # ORDER is the information, so bars would be actively misleading.
+        recent = overview.get("recent_transactions") or {}
+        recent_items = recent.get("items", []) if isinstance(recent, dict) else []
+        recent_card: ft.Control | None = None
+        if recent_items:
+            recent_card = _list_card(
+                "Recent transactions",
+                [
+                    _overview_row(
+                        item.get("name") or "",
+                        f"{item.get('date', '')} · {item.get('category') or 'uncategorized'}",
+                        item.get("amount") or 0,
+                        ledger_amount_color(item.get("amount") or 0),
+                    )
+                    for item in recent_items
+                ],
+            )
+
+        # Uncategorized: work waiting, not a metric. The title carries the
+        # FULL backlog count while the rows show only the newest few, so
+        # the card says how much there is without pretending to list it.
+        uncat = overview.get("uncategorized") or {}
+        uncat_items = uncat.get("items", []) if isinstance(uncat, dict) else []
+        uncat_total = uncat.get("total", 0) if isinstance(uncat, dict) else 0
+        uncat_card: ft.Control | None = None
+        if uncat_items:
+            uncat_card = _list_card(
+                f"Uncategorized · {uncat_total:,} to review",
+                [
+                    _overview_row(
+                        item.get("name") or "",
+                        str(item.get("date", "")),
+                        item.get("amount") or 0,
+                        ledger_amount_color(item.get("amount") or 0),
+                    )
+                    for item in uncat_items
+                ],
+                on_click=self._open_uncategorized,
+            )
+
+        # Spending by category (last 30 days) — outflows, largest first.
+        spending = [] if filter_empty else overview.get("spending") or []
+        spend_list = spending if isinstance(spending, list) else []
+        # ``category`` here is already the PARENT category name -
+        # spending_by_category rolls up "Parent:Child" leaves before it
+        # ever reaches this endpoint (domains/ledger/categories.py), specifically
+        # so this pie doesn't fragment a real ledger's spending across
+        # every sub-category and dump most of it in "Other" (was 30.7%
+        # leaf-grouped on real data, 16.3% parent-rolled-up, 5.3% at
+        # _PIE_CATEGORIES=15 - the fix lives server-side, not here; the
+        # slice COUNT is tuned above). The legend scrolls if it runs past
+        # the chart's own height (modal_sections.py) rather than clipping
+        # entries silently; the tail keeps a fixed neutral color so it
+        # reads as tail, not category.
+        pie_card: ft.Control | None = None
+        top_spend = spend_list[:_PIE_CATEGORIES]
+        self._pie_slice_categories = []
+        if top_spend:
+            tail_items = spend_list[_PIE_CATEGORIES:]
+            tail = sum(item.get("amount", 0) for item in tail_items)
+            slices = [
+                {
+                    "value": item.get("amount", 0) / 100,
+                    "label": item.get("category", ""),
+                }
+                for item in top_spend
+            ]
+            self._pie_slice_categories = [
+                [item.get("category", "")] for item in top_spend
+            ]
+            if tail:
+                slices.append(
+                    {
+                        "value": tail / 100,
+                        "label": "Other",
+                        "color": PIE_CHART_TAIL_COLOR,
+                    }
+                )
+                self._pie_slice_categories.append(
+                    [item.get("category", "") for item in tail_items]
+                )
+            pie_card = PieChartCard(
+                "Spending by category",
+                slices,
+                value_formatter=lambda value: f"${value:,.2f}",
+                on_slice_click=self._on_pie_slice_click,
+                # This card sits in a Row stretched to _OVERVIEW_CARD_HEIGHT
+                # (320px) - PieChartCard's own default 130px chart left most
+                # of that height empty (see chart_size's own docstring).
+                # 230 -> a 310px card, close to the 320 stretch target.
+                chart_size=230,
+            )
+
+        spend_rows = [
+            _overview_row(
+                s.get("category", ""),
+                "",
+                s.get("amount", 0),
+                Theme.Colors.ERROR,
+            )
+            for s in spend_list[:_PIE_CATEGORIES]
+        ]
+
+        self._body.controls.clear()
+        # One card row, three questions: where is it going (pie), am I
+        # keeping any of it (bars), and where has it got me (net worth).
+        # Each card expands, so the Row divides the width between however
+        # many of them have data.
+        # Each card is wrapped in an expanding Container so the Row hands
+        # it a FINITE width. Charts inside are ``expand=True``; in a Row
+        # with no bound that resolves to infinity and fl_chart fails to
+        # lay out, which is why an unwrapped card row renders blank.
+        card_row = [c for c in (chart, pie_card, cash_card) if c is not None]
+        if card_row:
+            self._body.controls.append(
+                ft.Row(
+                    [ft.Container(content=card, expand=True) for card in card_row],
+                    spacing=Theme.Spacing.MD,
+                    # STRETCH, not START: cards whose content differs in
+                    # height (a donut is shorter than a plot + legend)
+                    # otherwise end at three different baselines.
+                    vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+                    height=_OVERVIEW_CARD_HEIGHT,
+                )
+            )
+        # Second row: the two ranked lists. Kept off the first row so the
+        # plots there keep enough width to be readable.
+        # Two per row, not three. These are name-labelled lists, and at a
+        # third of the modal each the name column lost to the value and
+        # the count beside it: "Whole Foods Market" rendered as "Whol...".
+        for row_cards in (
+            (payee_card, bills_card),
+            (recent_card, uncat_card),
+        ):
+            cards = [c for c in row_cards if c is not None]
+            if not cards:
+                continue
+            self._body.controls.append(
+                ft.Row(
+                    [ft.Container(content=card, expand=True) for card in cards],
+                    spacing=Theme.Spacing.MD,
+                    vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+                    height=_OVERVIEW_CARD_HEIGHT,
+                )
+            )
+        if breakdown_rows:
+            self._body.controls.append(
+                SecondaryText(
+                    "By group",
+                    size=Theme.Typography.CAPTION,
+                    color=Theme.Colors.TEXT_SECONDARY,
+                    weight=ft.FontWeight.W_600,
+                )
+            )
+            self._body.controls.append(ft.Column(breakdown_rows, spacing=0))
+        elif not items:
+            self._body.controls.append(
+                EmptyStatePlaceholder(message="No accounts yet.")
+            )
+        if spend_rows:
+            self._body.controls.append(
+                SecondaryText(
+                    "Spending · last 30 days",
+                    size=Theme.Typography.CAPTION,
+                    color=Theme.Colors.TEXT_SECONDARY,
+                    weight=ft.FontWeight.W_600,
+                )
+            )
+            self._body.controls.append(ft.Column(spend_rows, spacing=0))
+        if self._body.page is not None:
+            self._body.update()

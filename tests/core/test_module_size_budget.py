@@ -48,29 +48,15 @@ DECLARATION_PARTS = ("models", "schemas", "i18n", "seeds", "fixtures", "locales"
 
 # path -> line count when recorded. The refactoring backlog, largest first.
 BUDGET: dict[str, int] = {
-    "components/frontend/dashboard/modals/finance_modal/budget_panel/panel.py": 552,
-    "components/frontend/dashboard/modals/finance_modal/transactions_panel/panel.py": 802,
-    "components/frontend/dashboard/modals/finance_modal/transactions_panel/declare.py": 586,
-    "components/frontend/dashboard/modals/finance_modal/uncategorized_panel.py": 850,
-    "components/frontend/dashboard/modals/finance_modal/no_payee_panel.py": 668,
-    "components/frontend/dashboard/modals/finance_modal/overview_tab.py": 749,
     # Was one 3,940-line module, now a package of fourteen. These four
     # still carry a long builder each; the numbers ratchet down as the
     # sections come out, and nothing may give the ground back.
-    "components/frontend/dashboard/modals/insights_modal/github_traffic_tab.py": 660,
-    "components/frontend/dashboard/modals/insights_modal/pypi_tab.py": 730,
-    "components/frontend/dashboard/modals/insights_modal/docs_tab.py": 653,
-    "components/frontend/dashboard/modals/insights_modal/overview_tab.py": 697,
-    "services/system/health.py.jinja": 714,
     # 457 lines of schemas in a package __init__; surfaced when ai/models gained
     # a third module. Debt recorded at size; the fix is a schemas module.
     "services/ai/models/__init__.py.jinja": 457,
-    "cli/ai.py.jinja": 2338,
     # Was one 1,649-line module, now a package of four. The recorder
     # still carries a 211-line _build_ui; the number ratchets down
     # when that comes out.
-    "components/frontend/dashboard/modals/voice_settings/recorder.py": 785,
-    "services/payment/service.py.jinja": 1633,
     "components/frontend/main.py.jinja": 1423,
     "i18n/locales/en.py": 1324,
     "i18n/locales/zh.py": 1300,
@@ -81,16 +67,8 @@ BUDGET: dict[str, int] = {
     "i18n/locales/ru.py": 1270,
     "i18n/locales/ko.py": 1269,
     "i18n/locales/zh_hant.py": 1266,
-    "components/frontend/controls/data_table.py": 1089,
-    "components/backend/api/ai/router.py.jinja": 1009,
-    "cli/payment.py.jinja": 917,
-    "services/ai/domains/llm/etl/llm_sync_service.py": 793,
+    "components/frontend/controls/data_table/table.py": 750,
     "services/ai/domains/llm/providers.py.jinja": 980,
-    "components/backend/api/auth/router.py.jinja": 882,
-    "cli/load_test.py.jinja": 797,
-    "cli/blog.py.jinja": 795,
-    "services/auth/users.py.jinja": 783,
-    "components/frontend/dashboard/modals/llm_catalog_tab.py.jinja": 780,
     "components/frontend/dashboard/cards/card_utils.py.jinja": 659,
     # 809 not 796: BUILD_ID (3 lines), WEBSERVER_ENGINE (4) and
     # WEBSERVER_LOOP (6, its Literal wraps) had nowhere else to live,
@@ -98,41 +76,25 @@ BUDGET: dict[str, int] = {
     # settings are the third group to land here by default; grouping them
     # into nested models is the split this file keeps asking for.
     "core/config.py.jinja": 809,
-    "cli/rag.py": 686,
     "services/ai/fixtures/llm_fixtures.py": 684,
-    "services/load_test/worker/service.py": 678,
     "components/backend/startup/component_health.py.jinja": 690,
-    "services/load_test/worker/service_dramatiq.py": 659,
-    "components/frontend/dashboard/modals/database_modal.py": 656,
-    "cli/health.py.jinja": 652,
-    "services/load_test/worker/service_taskiq.py": 651,
-    "components/frontend/controls/pickers.py": 629,
-    "services/finance/domains/detection/recurring/detect.py": 615,
-    "services/blog/service.py": 598,
-    "services/ai/domains/chat/health_context.py": 596,
-    "services/finance/domains/planning/budgets/summary.py": 595,
+    # declare.py is unchanged at 408 and under the 500 cap. It trips the
+    # SHARE rule only because detect.py - the other big file in
+    # recurring/ - became a package, leaving declare the largest thing
+    # left. Splitting it would terminate (cadence.py is 332, under the
+    # rule's 400 floor) but it is 8 lines past that floor and under its
+    # own cap, so it is recorded rather than churned.
+    "services/finance/domains/detection/recurring/declare.py": 408,
     # 597: the header/auth helpers went public for app/cli/bench.py, and the
     # module gained `from __future__ import annotations` because its
     # TYPE_CHECKING-only FastAPI import broke at runtime on 3.13.
-    "cli/api_load_test.py": 597,
-    "components/frontend/dashboard/modals/finance_payees_tab.py": 581,
     "cli/slash_commands.py.jinja": 579,
-    "services/finance/domains/planning/goals.py": 575,
-    "components/frontend/theme.py": 572,
-    "components/frontend/dashboard/activity_feed.py": 572,
-    "components/worker/task_history.py": 569,
     "components/scheduler/main.py.jinja": 561,
     "services/system/health_db_sqlite.py.jinja": 559,
     "cli/finance.py.jinja": 551,
-    "services/rag/vectorstore.py": 538,
-    "cli/marko_terminal_renderer.py": 535,
     "components/backend/api/orgs/router.py.jinja": 534,
-    "services/finance/domains/ledger/networth.py": 531,
-    "components/frontend/dashboard/modals/ai_analytics_tab.py": 530,
     "components/backend/api/worker.py.jinja": 528,
     "components/frontend/dashboard/modals/auth_users_tab.py.jinja": 521,
-    "services/finance/domains/detection/transfers.py": 520,
-    "cli/llm.py": 512,
     "services/system/health_db_postgres.py.jinja": 503,
     "services/ai/domains/voice/stt/providers.py": 491,
     "services/load_test_workloads.py": 456,
@@ -142,7 +104,19 @@ BUDGET: dict[str, int] = {
 
 
 def _is_declaration(rel: str) -> bool:
-    return any(part in rel.split("/") or part in rel for part in DECLARATION_PARTS)
+    """True for a module that is a list rather than an argument.
+
+    Matched on path segments, not substrings: a directory named for one
+    of the parts, a file named exactly that, or one suffixed with it
+    (``load_test_models.py``). The substring test this replaced handed
+    the 900-line allowance to ``models_tab.py`` and ``_i18n_click.py``,
+    neither of which is a declaration.
+    """
+    segments = rel.split("/")
+    stem = segments[-1].removesuffix(".jinja").removesuffix(".py")
+    return any(part in segments[:-1] for part in DECLARATION_PARTS) or any(
+        stem == part or stem.endswith(f"_{part}") for part in DECLARATION_PARTS
+    )
 
 
 def _limit_for(rel: str) -> int:
@@ -155,6 +129,26 @@ def _python_files() -> dict[str, int]:
         for p in TEMPLATE_APP.rglob("*")
         if p.suffix in (".py", ".jinja") and "__pycache__" not in str(p)
     }
+
+
+def test_a_name_that_merely_contains_a_part_is_not_a_declaration() -> None:
+    """The 900-line allowance is for lists, not for anything whose path
+    happens to spell one.
+
+    ``models_tab.py`` is a UI tab and ``_i18n_click.py`` is CLI glue;
+    a substring test handed both the declaration limit, which would let
+    either grow to 900 lines of logic unremarked.
+    """
+    assert not _is_declaration("components/frontend/dashboard/modals/models_tab.py")
+    assert not _is_declaration("cli/_i18n_click.py")
+    assert not _is_declaration("services/finance/seeds_helper.py")
+
+
+def test_real_declaration_modules_still_get_the_allowance() -> None:
+    assert _is_declaration("i18n/locales/en.py")
+    assert _is_declaration("services/blog/models.py")
+    assert _is_declaration("services/load_test_models.py")
+    assert _is_declaration("services/ai/fixtures/llm_fixtures.py")
 
 
 def test_no_module_exceeds_its_line_budget() -> None:

@@ -64,3 +64,22 @@ def accent_texts(node: Any, accent: str) -> list[str]:
             if isinstance(text, str) and text and color == accent:
                 out.append(text)
     return out
+
+
+def panel_source(panel: type) -> str:
+    """A panel's source plus every mixin it inherits from.
+
+    The dashboard panels are thin classes over several mixin modules,
+    so ``inspect.getsource(panel)`` reads a fraction of the behaviour
+    and calls anything that lives on a mixin "missing". Only ``app.``
+    bases are read - Flet's own source is noise here. The panel comes
+    first, so a test that slices from a marker in ``__init__`` still
+    slices the panel.
+    """
+    import inspect
+
+    return "".join(
+        inspect.getsource(base)
+        for base in panel.__mro__
+        if base.__module__.startswith("app.")
+    )

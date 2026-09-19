@@ -1,0 +1,344 @@
+"""Recording a clip from the microphone."""
+
+import asyncio
+import os
+import shutil
+
+import typer
+
+from app.cli import theme
+from app.cli.ai.shared import (
+    app,
+    console,
+)
+from app.i18n import lazy_t, t
+
+from ...core.config import settings
+from ...core.log import suppress_logs
+
+
+@app.command(help=lazy_t("ai.help_record"))
+def record(
+    send: bool = typer.Option(False, "--send", "-s", help=lazy_t("ai.opt_send")),
+    voice_response: bool = typer.Option(
+        False, "--voice", "-v", help=lazy_t("ai.opt_voice_response")
+    ),
+    conversation_id: str | None = typer.Option(
+        None, "--conversation-id", "-c", help=lazy_t("ai.opt_conversation_id")
+    ),
+    user_id: str = typer.Option(
+        "cli-user", "--user-id", "-u", help=lazy_t("ai.opt_user_id")
+    ),
+    output: str | None = typer.Option(
+        None, "--output", "-o", help=lazy_t("ai.opt_output_recording")
+    ),
+    use_rag: bool = typer.Option(False, "--rag", help=lazy_t("ai.opt_rag_send")),
+    collection: str | None = typer.Option(
+        None, "--collection", help=lazy_t("ai.opt_collection")
+    ),
+) -> None:
+    from pathlib import Path
+    import subprocess
+    import tempfile
+    import time
+
+    # Check for sounddevice
+    try:
+        import sounddevice as sd
+        import soundfile as sf
+    except ImportError:
+        console.print(
+            f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {t('ai.recording_requires')}"
+        )
+        console.print()
+        console.print(f"{t('ai.install_with')}")
+        console.print(
+            f"  [{theme.ACCENT}]pip install sounddevice soundfile[/{theme.ACCENT}]"
+        )
+        console.print()
+        console.print(f"{t('ai.macos_portaudio')}")
+        console.print(f"  [{theme.ACCENT}]brew install portaudio[/{theme.ACCENT}]")
+        console.print()
+        console.print(f"{t('ai.linux_deps')}")
+        console.print(f"  [{theme.ACCENT}]apt install portaudio19-dev[/{theme.ACCENT}]")
+        raise typer.Exit(1)
+
+    from app.services.ai.domains.voice import (
+        AudioFormat,
+        AudioInput,
+        SpeechRequest,
+        get_tts_models,
+    )
+    from app.services.ai.service import AIService
+
+    async def run_record() -> None:
+        try:
+            # Get default input device's sample rate
+            device_info = sd.query_devices(sd.default.device[0])
+            sample_rate = int(device_info["default_samplerate"])
+            channels = 1  # Mono
+
+            mic_label = t(
+                "ai.using_mic",
+                name=device_info["name"],
+                rate=sample_rate,
+            )
+            console.print(f"[dim]{mic_label}[/dim]")
+
+            # Determine output path
+            if output:
+                audio_path = Path(output)
+            else:
+                # Create temp file
+                temp_fd, temp_path = tempfile.mkstemp(suffix=".wav")
+                os.close(temp_fd)
+                audio_path = Path(temp_path)
+
+            console.print()
+            console.print(f"[bold]{t('ai.recording')}[/bold]")
+            console.print(f"[dim]{t('ai.recording_hint')}[/dim]")
+            console.print()
+
+            # Storage for recorded audio
+            audio_chunks: list = []
+
+            def audio_callback(indata, frames, time_info, status) -> None:
+                """Callback to capture audio data."""
+                if status:
+                    console.print(
+                        f"[{theme.WARNING}]{t('ai.audio_status', status=status)}[/{theme.WARNING}]",
+                        end="",
+                    )
+                audio_chunks.append(indata.copy())
+
+            # Track duration
+            start_time = time.time()
+
+            # Wait for user to press Enter (in a separate thread to not block)
+            import threading
+
+            stop_event = threading.Event()
+
+            def wait_for_enter() -> None:
+                try:
+                    input()
+                    stop_event.set()
+                except EOFError:
+                    stop_event.set()
+
+            input_thread = threading.Thread(target=wait_for_enter, daemon=True)
+            input_thread.start()
+
+            # Start recording with InputStream
+            try:
+                with sd.InputStream(
+                    samplerate=sample_rate,
+                    channels=channels,
+                    callback=audio_callback,
+                    dtype="float32",
+                ):
+                    while not stop_event.is_set():
+                        elapsed = time.time() - start_time
+                        minutes = int(elapsed // 60)
+                        seconds = int(elapsed % 60)
+                        # Use regular print with \r for proper carriage return
+                        timer_str = f"{minutes:02d}:{seconds:02d}"
+                        print(
+                            f"\r  \033[91m●\033[0m Recording: {timer_str}",
+                            end="",
+                            flush=True,
+                        )
+                        await asyncio.sleep(0.1)
+            except KeyboardInterrupt:
+                print()  # New line after recording indicator
+                console.print(
+                    f"[{theme.WARNING}]{t('ai.recording_cancelled')}[/{theme.WARNING}]"
+                )
+                if not output and audio_path.exists():
+                    audio_path.unlink()
+                raise typer.Exit(0)
+
+            elapsed = time.time() - start_time
+            print(f"\r  \033[92m✓\033[0m Recorded: {elapsed:.1f}s            ")
+            print()  # New line
+
+            # Check if we captured any audio
+            if not audio_chunks:
+                console.print(
+                    f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {t('ai.recording_failed')}"
+                )
+                console.print(f"[dim]{t('ai.check_mic')}[/dim]")
+                raise typer.Exit(1)
+
+            # Concatenate all audio chunks
+            import numpy as np
+
+            audio_data = np.concatenate(audio_chunks, axis=0)
+
+            # Save to WAV file
+            sf.write(str(audio_path), audio_data, sample_rate)
+
+            size_str = f"{audio_path.stat().st_size:,}"
+            saved_label = t(
+                "ai.audio_saved",
+                path=str(audio_path),
+                size=size_str,
+            )
+            console.print(f"[dim]{saved_label}[/dim]")
+
+            # Read audio file
+            with open(audio_path, "rb") as f:
+                audio_content = f.read()
+
+            # Determine format
+            ext = audio_path.suffix[1:].lower() if audio_path.suffix else "wav"
+            try:
+                audio_format = AudioFormat(ext)
+            except ValueError:
+                audio_format = AudioFormat.WAV
+
+            audio_input = AudioInput(
+                content=audio_content,
+                format=audio_format,
+                duration_seconds=elapsed,
+            )
+
+            with suppress_logs():
+                ai_service = AIService(settings)
+
+            # Transcribe
+            from rich.progress import Progress, SpinnerColumn, TextColumn
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task(description=t("ai.transcribing"), total=None)
+                result = await ai_service.stt.transcribe(audio_input)
+
+            console.print()
+            console.print(f"[bold]{t('ai.transcription_label')}[/bold]")
+            console.print(f"  {result.text}")
+
+            if result.language:
+                console.print(
+                    f"  [dim]{t('ai.language_label', lang=result.language)}[/dim]"
+                )
+
+            # Send to agent if requested
+            if send and result.text.strip():
+                console.print()
+
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=console,
+                    transient=True,
+                ) as progress:
+                    progress.add_task(description=t("ai.sending_to_agent"), total=None)
+
+                    chat_result = await ai_service.chat(
+                        message=result.text,
+                        conversation_id=conversation_id,
+                        user_id=user_id,
+                    )
+
+                console.print(f"[bold]{t('ai.response_label')}[/bold]")
+                from app.cli.ai_rendering import render_markdown_response
+
+                render_markdown_response(console, chat_result.content)
+
+                if chat_result.metadata.get("conversation_id"):
+                    console.print()
+                    conv_label = t(
+                        "ai.conversation_id_label",
+                        id=chat_result.metadata["conversation_id"][:8],
+                    )
+                    console.print(f"[dim]{conv_label}...[/dim]")
+
+                # Play TTS response if requested
+                if voice_response:
+                    console.print()
+
+                    # Get TTS model's max input chars from catalog
+                    tts_config = ai_service.tts.config
+                    models = get_tts_models(tts_config.provider)
+                    model_info = next(
+                        (m for m in models if m.id == tts_config.model), None
+                    )
+                    max_chars = (
+                        model_info.max_input_chars
+                        if model_info and model_info.max_input_chars
+                        else 4096
+                    )
+
+                    # Transform response for natural speech output
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        console=console,
+                        transient=True,
+                    ) as progress:
+                        progress.add_task(
+                            description=t("ai.preparing_voice"), total=None
+                        )
+                        tts_text = await ai_service.prepare_for_voice(
+                            chat_result.content, max_chars=max_chars
+                        )
+
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        console=console,
+                        transient=True,
+                    ) as progress:
+                        progress.add_task(
+                            description=t("ai.generating_speech"), total=None
+                        )
+
+                        speech_request = SpeechRequest(text=tts_text)
+                        speech_result = await ai_service.tts.synthesize(speech_request)
+
+                    # Save and play audio
+                    speech_path = Path(tempfile.mktemp(suffix=".mp3"))
+                    with open(speech_path, "wb") as f:
+                        f.write(speech_result.audio)
+
+                    # Try to play audio
+                    played = False
+                    if shutil.which("afplay"):  # macOS
+                        subprocess.run(["afplay", str(speech_path)], check=False)
+                        played = True
+                    elif shutil.which("aplay"):  # Linux
+                        subprocess.run(["aplay", str(speech_path)], check=False)
+                        played = True
+                    elif shutil.which("ffplay"):  # ffmpeg
+                        subprocess.run(
+                            ["ffplay", "-nodisp", "-autoexit", str(speech_path)],
+                            check=False,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        played = True
+
+                    if not played:
+                        console.print(
+                            f"[dim]{t('ai.speech_saved', path=str(speech_path))}[/dim]"
+                        )
+                    else:
+                        speech_path.unlink(missing_ok=True)
+
+            # Clean up temp file if not saving
+            if not output and audio_path.exists():
+                audio_path.unlink()
+
+        except KeyboardInterrupt:
+            console.print(f"\n[{theme.WARNING}]{t('ai.cancelled')}[/{theme.WARNING}]")
+            raise typer.Exit(0)
+        except Exception as e:
+            console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
+            raise typer.Exit(1)
+
+    asyncio.run(run_record())

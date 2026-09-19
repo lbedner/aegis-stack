@@ -20,15 +20,18 @@ context in the system block is what feeds one.
 from __future__ import annotations
 
 import inspect
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any, Generic, TypeVar
 
+from app.core.chat_transcript import tool_label
 from app.core.log import logger
 from app.services.ai.domains.chat.tool_telemetry import tool_turn
 from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.usage_recording import extract_usage, record_usage
 from pydantic_ai import Agent
 from pydantic_ai.messages import (
+    FunctionToolCallEvent,
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -50,6 +53,7 @@ from .models import (
     DoneFrame,
     ErrorFrame,
     StreamFrame,
+    ToolFrame,
 )
 
 
@@ -195,6 +199,8 @@ class ToolChatAgent(Generic[DepsT]):
                             delta = event.delta.content_delta
                         elif isinstance(event, AgentRunResultEvent):
                             result = event.result
+                        elif isinstance(event, FunctionToolCallEvent):
+                            yield _tool_frame(event)
                         if delta:
                             answer_parts.append(delta)
                             yield DeltaFrame(delta)
@@ -224,6 +230,28 @@ class ToolChatAgent(Generic[DepsT]):
         yield DoneFrame(
             answer=answer, usage=usage, cost_usd=cost, tool_calls=tool_calls
         )
+
+
+def _tool_frame(event: FunctionToolCallEvent) -> ToolFrame:
+    """A tool-call event as the frame the UI captions the pause with.
+
+    Arguments arrive as a JSON string or an already-parsed mapping
+    depending on the provider, so both are normalised to the string the
+    shared label builder expects.
+    """
+    part = event.part
+    raw = getattr(part, "args", "")
+    if isinstance(raw, str):
+        args = raw
+    elif raw is None:
+        args = ""
+    else:
+        try:
+            args = json.dumps(raw, default=str)
+        except (TypeError, ValueError):
+            args = str(raw)
+    name = str(getattr(part, "tool_name", "") or "")
+    return ToolFrame(tool=name, args=args, label=tool_label(name, args))
 
 
 def _count_tool_calls(result: Any) -> int:

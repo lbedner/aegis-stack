@@ -7,6 +7,8 @@ payee; clicking a chip filters the register to that tag, and the row's
 inline expand is where a tag comes OFF.
 """
 
+import inspect
+
 import flet as ft
 
 from app.components.frontend.controls.pickers import TagPickerButton
@@ -16,6 +18,7 @@ from app.components.frontend.dashboard.modals.finance_modal import (
     transaction_tag_chips,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from tests.components.frontend._tree import panel_source
 from tests.components.frontend._tree import texts as _texts
 from tests.components.frontend._tree import walk as _walk
 
@@ -132,11 +135,10 @@ class TestRegisterWiring:
         panel's own. The CHIPS are not - they moved to
         ``RegisterRowBuilder`` and are asserted there, on rendered
         output rather than on the panel's source text."""
-        import inspect
 
         from app.components.frontend.dashboard.modals import finance_modal
 
-        source = inspect.getsource(finance_modal.TransactionsPanel)
+        source = panel_source(finance_modal.TransactionsPanel)
         assert "_tag_picker" in source
         assert "tag_id" in source
         assert "_bulk_tag_trigger" in source
@@ -145,7 +147,6 @@ class TestRegisterWiring:
         """The register is not special: the two Review work queues edit
         transactions too (category, payee), so the Tag verb rides their
         selection rows as well - one mechanism, every editor."""
-        import inspect
 
         from app.components.frontend.dashboard.modals import finance_modal
 
@@ -154,7 +155,7 @@ class TestRegisterWiring:
             finance_modal.UncategorizedPanel,
             finance_modal.NoPayeePanel,
         ):
-            source = inspect.getsource(panel)
+            source = panel_source(panel)
             assert "_bulk_tag_trigger" in source, panel.__name__
             assert "_tag_picker" in source, panel.__name__
 
@@ -184,7 +185,6 @@ class TestRegisterWiring:
         a trigger added to the row but skipped in the selection handler
         simply never appears (confirmed live: Tag and Delete were in the
         layout and never on screen)."""
-        import inspect
         import re
 
         from app.components.frontend.dashboard.modals import finance_modal
@@ -194,7 +194,10 @@ class TestRegisterWiring:
             finance_modal.UncategorizedPanel,
             finance_modal.NoPayeePanel,
         ):
-            source = inspect.getsource(panel)
+            # The whole MRO, not just the class: a panel may build its
+            # triggers in __init__ and count them in a mixin, and reading
+            # one class would call that a missing count.
+            source = panel_source(panel)
             triggers = set(re.findall(r"self\.(_bulk\w*trigger)\s*=", source))
             counted = set(re.findall(r"self\.(_bulk\w*trigger)\.set_count\(", source))
             assert triggers == counted, (panel.__name__, triggers - counted)
@@ -204,11 +207,10 @@ class TestRegisterWiring:
         being the one irreversible-feeling verb it goes through
         ConfirmDialog (destructive red confirm) and restates the count
         and dollar sum the selection label already shows."""
-        import inspect
 
         from app.components.frontend.dashboard.modals import finance_modal
 
-        source = inspect.getsource(finance_modal.TransactionsPanel)
+        source = panel_source(finance_modal.TransactionsPanel)
         assert "_bulk_delete_trigger" in source
         delete_handler = inspect.getsource(
             finance_modal.TransactionsPanel._open_bulk_delete

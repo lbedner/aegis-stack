@@ -84,8 +84,8 @@ BUDGET_OWNERS = {
     "budget_summary": "summary",
     "uncovered_spending_rate": "uncovered",
     "uncovered_spend_filters": "uncovered",
-    "budget_stat_details": "summary",
-    "plan_budget_trims": "summary",
+    "budget_stat_details": "details",
+    "plan_budget_trims": "trims",
     "budget_month_outlook": "outlook",
     "parse_budget_goal": "outlook",
     "month_bounds": "queries",
@@ -419,8 +419,8 @@ def test_the_dead_snapshot_read_is_gone() -> None:
 
 
 DETECTION_OWNERS = {
-    "detect_recurring": "detect",
-    "RecurringDetectionResult": "detect",
+    "detect_recurring": "detect.run",
+    "RecurringDetectionResult": "detect.shared",
     "plan_recurring": "declare",
     "declare_recurring": "declare",
     "RecurringPlanGroup": "declare",

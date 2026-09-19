@@ -23,7 +23,7 @@ class TestHealthUtilityFunctions:
 
     def test_format_bytes(self) -> None:
         """Test format_bytes utility function."""
-        from app.services.system.health import format_bytes
+        from app.core.formatting import format_bytes
 
         # Test various byte sizes
         assert format_bytes(0) == "0 B"

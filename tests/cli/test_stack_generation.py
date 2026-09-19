@@ -247,7 +247,7 @@ STACK_COMBINATIONS = [
             "app/services/ai/",
             "app/services/rag/",
             "app/components/backend/api/rag/",
-            "app/cli/rag.py",
+            "app/cli/rag/",
             "app/core/db.py",
         ],
         expected_docker_services=["webserver"],

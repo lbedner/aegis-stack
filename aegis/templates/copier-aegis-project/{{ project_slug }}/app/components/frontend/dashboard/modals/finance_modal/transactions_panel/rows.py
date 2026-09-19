@@ -8,7 +8,7 @@ register is showing every account - and that list was previously
 discoverable only by reading the closure bodies.
 
 The rule worth having a seam for: DataTable sorts a control cell by its
-``.data`` (see ``data_table.py``'s ``_cell_text``). Payee and Tags both
+``.data`` (see ``data_table.py``'s ``cell_text``). Payee and Tags both
 render a ``Row``, which has no ``.value``, so both columns stop sorting
 the moment someone builds one without setting ``.data`` - silently, and
 only noticed by a user clicking the header. ``test_register_rows.py``
@@ -128,7 +128,7 @@ class RegisterRowBuilder:
             ),
         )
         # DataTable sorts a control cell by its .data (see
-        # data_table.py's _cell_text) - a Row has no .value of its
+        # data_table.py's cell_text) - a Row has no .value of its
         # own, so Payee would silently stop sorting without this.
         cell.data = payee or raw
         return cell

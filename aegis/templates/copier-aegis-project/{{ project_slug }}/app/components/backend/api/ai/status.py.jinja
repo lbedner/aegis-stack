@@ -1,0 +1,66 @@
+"""Is the AI service up, and what is it running."""
+
+from typing import Any
+from fastapi import APIRouter
+
+from app.components.backend.api.ai.service import ai_service
+
+router = APIRouter()
+
+
+@router.get("/health")
+async def ai_health() -> dict[str, Any]:
+    """
+    AI service health endpoint.
+
+    Returns comprehensive health status including configuration,
+    conversation count, and service availability.
+    """
+    try:
+        status = await ai_service.get_service_status()
+        validation_errors = ai_service.validate_service()
+
+        return {
+            "service": "ai",
+            "status": "healthy" if not validation_errors else "unhealthy",
+            "enabled": status["enabled"],
+            "provider": status["provider"],
+            "model": status["model"],
+            "agent_ready": status["agent_initialized"],
+            "total_conversations": status["total_conversations"],
+            "configuration_valid": status["configuration_valid"],
+            "validation_errors": validation_errors,
+        }
+
+    except Exception as e:
+        return {
+            "service": "ai",
+            "status": "error",
+            "error": str(e),
+        }
+
+
+@router.get("/version")
+async def ai_version() -> dict[str, Any]:
+    """AI service version and feature information."""
+    return {
+        "service": "ai",
+        "engine": "{{ ai_framework }}",
+        "version": "1.0",
+        "features": [
+            "chat",
+            "conversation_management",
+            "multi_provider_support",
+            "health_monitoring",
+            "api_endpoints",
+            "cli_commands",
+        ],
+        "providers_supported": [
+            "openai",
+            "anthropic",
+            "google",
+            "groq",
+            "mistral",
+            "cohere",
+        ],
+    }

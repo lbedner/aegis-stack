@@ -1,0 +1,300 @@
+"""Talking to the model, and reading a conversation back."""
+
+import json
+from collections.abc import AsyncIterator
+from typing import Any
+from app.services.ai.domains.chat.attachments import ChatAttachment
+from app.core.chat_transcript import tool_label
+from app.services.ai.service import (
+    AIServiceError,
+    ConversationError,
+    ProviderError,
+)
+from fastapi import (
+    APIRouter,
+    HTTPException,
+)
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
+from app.components.backend.api.ai.service import ai_service
+
+router = APIRouter()
+
+
+class ChatRequest(BaseModel):
+    """Request model for chat messages."""
+
+    message: str
+    conversation_id: str | None = None
+    user_id: str = "api-user"
+    agent_slug: str | None = None
+    surface: str | None = None
+    # Image parts riding this turn (screenshots, receipts) - generic
+    # across every agent and surface; see domains/chat/attachments.py.
+    attachments: list[ChatAttachment] = Field(default_factory=list)
+
+
+class ChatResponse(BaseModel):
+    """Response model for chat messages."""
+
+    message_id: str
+    content: str
+    conversation_id: str
+    response_time_ms: float | None = None
+
+
+class ConversationSummary(BaseModel):
+    """Summary model for conversation listing."""
+
+    id: str
+    title: str | None
+    message_count: int
+    last_activity: str
+    provider: str
+    model: str
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest) -> ChatResponse:
+    """
+    Send a chat message and get AI response.
+
+    Args:
+        request: Chat request with message and optional conversation ID
+
+    Returns:
+        ChatResponse: AI response with conversation details
+
+    Raises:
+        HTTPException: If chat processing fails
+    """
+    try:
+        response_message = await ai_service.chat(
+            message=request.message,
+            conversation_id=request.conversation_id,
+            user_id=request.user_id,
+            agent_slug=request.agent_slug,
+            surface=request.surface,
+            attachments=request.attachments,
+        )
+
+        # Get updated conversation for metadata
+        conversation_id = response_message.metadata.get("conversation_id")
+        conversation = (
+            await ai_service.get_conversation(conversation_id)
+            if conversation_id
+            else None
+        )
+        response_time = None
+        if conversation and "last_response_time_ms" in conversation.metadata:
+            response_time = conversation.metadata["last_response_time_ms"]
+
+        return ChatResponse(
+            message_id=response_message.id,
+            content=response_message.content,
+            conversation_id=conversation.id if conversation else "unknown",
+            response_time_ms=response_time,
+        )
+
+    except AIServiceError as e:
+        raise HTTPException(status_code=503, detail=f"AI service error: {e}")
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"AI provider error: {e}")
+    except ConversationError as e:
+        raise HTTPException(status_code=400, detail=f"Conversation error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+
+@router.post("/chat/stream")
+async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    """
+    Stream a chat message with real-time Server-Sent Events.
+
+    Args:
+        request: Chat request with message and optional conversation ID
+
+    Returns:
+        StreamingResponse: SSE stream with real-time AI response
+
+    Raises:
+        HTTPException: If streaming fails
+    """
+
+    async def generate_sse_stream() -> AsyncIterator[str]:
+        """Generate Server-Sent Events stream for chat response."""
+        try:
+            # Send initial connection event
+            connect_data = {"status": "connected", "message": "Streaming started"}
+            yield f"event: connect\ndata: {json.dumps(connect_data)}\n\n"
+
+            # Stream the AI response
+            async for chunk in ai_service.stream_chat(
+                message=request.message,
+                conversation_id=request.conversation_id,
+                user_id=request.user_id,
+                stream_delta=True,
+                agent_slug=request.agent_slug,
+                surface=request.surface,
+                attachments=request.attachments,
+            ):
+                # Tool-use notice: no content, just which tool started, so
+                # the frontend can caption the pause in the token stream.
+                if (chunk.metadata or {}).get("event") == "tool":
+                    # The trail line is computed here, once: the browser
+                    # shows this label live and the stored trace renders
+                    # the same words later (chat_transcript.trace_label).
+                    tool_data = {
+                        "tool": chunk.metadata.get("tool", ""),
+                        "args": chunk.metadata.get("args", ""),
+                        "label": tool_label(
+                            str(chunk.metadata.get("tool", "")),
+                            str(chunk.metadata.get("args", "") or ""),
+                        ),
+                    }
+                    yield f"event: tool\ndata: {json.dumps(tool_data)}\n\n"
+                    continue
+
+                # Format chunk as SSE event
+                event_data = {
+                    "content": chunk.content,
+                    "is_final": chunk.is_final,
+                    "is_delta": chunk.is_delta,
+                    "message_id": chunk.message_id,
+                    "conversation_id": chunk.conversation_id,
+                    "timestamp": chunk.timestamp.isoformat(),
+                }
+
+                # Add metadata for final chunk
+                if chunk.is_final:
+                    event_data.update(chunk.metadata)
+
+                # Send chunk as SSE event
+                event_type = "final" if chunk.is_final else "chunk"
+                yield f"event: {event_type}\ndata: {json.dumps(event_data)}\n\n"
+
+                # Break after final chunk
+                if chunk.is_final:
+                    break
+
+            # Send stream complete event
+            complete_data = {"status": "completed", "message": "Stream finished"}
+            yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
+
+        except AIServiceError as e:
+            error_data = {"error": "AI service error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        except ProviderError as e:
+            error_data = {"error": "AI provider error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        except ConversationError as e:
+            error_data = {"error": "Conversation error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        except Exception as e:
+            error_data = {"error": "Unexpected error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+
+    # Create streaming response with proper SSE headers
+    return StreamingResponse(
+        generate_sse_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
+
+
+@router.get("/conversations", response_model=list[ConversationSummary])
+async def list_conversations(
+    user_id: str = "api-user", surface: str | None = None, limit: int = 50
+) -> list[ConversationSummary]:
+    """
+    List conversations for a user, optionally scoped to one chat surface.
+
+    Args:
+        user_id: User identifier
+        surface: Originating surface to filter by (e.g. "finance")
+        limit: Maximum number of conversations to return
+
+    Returns:
+        List of conversation summaries
+    """
+    try:
+        conversations = (
+            await ai_service.list_conversations(user_id, surface=surface)
+        )[:limit]
+
+        return [
+            ConversationSummary(
+                id=conv.id,
+                title=conv.title,
+                message_count=conv.get_message_count(),
+                last_activity=conv.updated_at.isoformat(),
+                provider=conv.provider.value,
+                model=conv.model,
+            )
+            for conv in conversations
+        ]
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list conversations: {e}"
+        )
+
+
+@router.get("/conversations/{conversation_id}")
+async def get_conversation(
+    conversation_id: str, user_id: str = "api-user"
+) -> dict[str, Any]:
+    """
+    Get a specific conversation with full message history.
+
+    Args:
+        conversation_id: The conversation identifier
+        user_id: User identifier for access control
+
+    Returns:
+        Full conversation details with messages
+
+    Raises:
+        HTTPException: If conversation not found or access denied
+    """
+    try:
+        conversation = await ai_service.get_conversation(conversation_id)
+
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        # Check access (basic user matching)
+        if conversation.metadata.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        return {
+            "id": conversation.id,
+            "title": conversation.title,
+            "provider": conversation.provider.value,
+            "model": conversation.model,
+            "created_at": conversation.created_at.isoformat(),
+            "updated_at": conversation.updated_at.isoformat(),
+            "message_count": conversation.get_message_count(),
+            "messages": [
+                {
+                    "id": msg.id,
+                    "role": msg.role.value,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp.isoformat(),
+                    "metadata": msg.metadata,
+                }
+                for msg in conversation.messages
+            ],
+            "metadata": conversation.metadata,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {e}")

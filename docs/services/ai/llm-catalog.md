@@ -401,7 +401,8 @@ This enables Illiana to recommend models when asked "What's the cheapest model w
 | File | Purpose |
 |------|---------|
 | `app/services/ai/llm_service.py` | Service functions (list, search, switch) |
-| `app/services/ai/etl/llm_sync_service.py` | Catalog sync from APIs |
+| `app/services/ai/domains/llm/etl/llm_sync_service.py` | Catalog sync from APIs |
+| `app/services/ai/domains/llm/etl/upserts.py` | Row writes for the sync |
 | `app/services/ai/etl/clients/openrouter_client.py` | OpenRouter API client |
 | `app/services/ai/etl/clients/litellm_client.py` | LiteLLM API client |
 | `app/services/ai/etl/mappers/llm_mapper.py` | Data transformation |

@@ -143,8 +143,8 @@ class TestFootprintSplit:
     def test_ai_remove_includes_rag_and_voice(self) -> None:
         add_base = set(get_component_files("ai"))
         full = set(get_component_files("ai", full=True))
-        assert "app/cli/rag.py" not in add_base
-        assert "app/cli/rag.py" in full
+        assert "app/cli/rag/shared.py" not in add_base
+        assert "app/cli/rag/shared.py" in full
         assert "app/components/frontend/dashboard/modals/voice_settings/tab.py" in full
 
     def test_ai_add_base_ships_llm_api_and_omits_rag_tab(self) -> None:

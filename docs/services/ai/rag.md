@@ -373,9 +373,10 @@ When RAG is enabled, search results are injected into Illiana's system prompt vi
 | `app/services/rag/loaders.py` | Document loading |
 | `app/services/rag/chunking.py` | Text chunking |
 | `app/services/rag/vectorstore.py` | ChromaDB wrapper |
+| `app/services/rag/shaping.py` | Metadata, filters, dedup |
 | `app/services/ai/rag_context.py` | Prompt context formatting |
 | `app/services/ai/rag_stats_context.py` | Stats context |
-| `app/cli/rag.py` | CLI commands |
+| `app/cli/rag/` | CLI commands |
 | `app/components/backend/api/rag/router.py` | API endpoints |
 
 ---

@@ -125,13 +125,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "hard_delete_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "restore_user"
     },
     {
@@ -143,13 +143,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "hard_delete_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT \"user\".email, \"user\".full_name, \"user\".is_active, \"user\".is_verified, \"user\".role, \"user\".id, \"user\".hashed_password, \"user\".last_login, \"user\".created_at, \"user\".updated_at, \"user\".deleted_at, \"user\".failed_login_attempts, \"user\".locked_until FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "restore_user"
     },
     {
@@ -227,7 +227,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.slug = :slug_1",
-      "file": "app/services/blog/service.py",
+      "file": "app/services/blog/transfer.py",
       "function": "_get_post_by_slug_any_status"
     },
     {
@@ -251,8 +251,8 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT blog_post.id, blog_post.title, blog_post.slug, blog_post.excerpt, blog_post.content, blog_post.status, blog_post.author_id, blog_post.author_name, blog_post.created_at, blog_post.updated_at, blog_post.published_at, blog_post.seo_title, blog_post.seo_description, blog_post.hero_image_url, blog_post.syndicate_targets FROM blog_post WHERE blog_post.status = :status_1 ORDER BY blog_post.published_at DESC LIMIT :param_1",
-      "file": "app/services/blog/service.py",
-      "function": "get_health_summary"
+      "file": "app/services/blog/summary.py",
+      "function": "blog_health_summary"
     },
     {
       "kind": "repeated_statement",
@@ -275,8 +275,8 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT blog_tag.id, blog_tag.name, blog_tag.slug, blog_tag.created_at FROM blog_tag WHERE blog_tag.slug = :slug_1",
-      "file": "app/services/blog/service.py",
-      "function": "_get_or_create_tag"
+      "file": "app/services/blog/tags.py",
+      "function": "get_or_create_tag"
     },
     {
       "kind": "repeated_statement",
@@ -305,7 +305,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT coalesce(sum(payment_transaction.amount), :coalesce_2) AS coalesce_1 FROM payment_transaction WHERE payment_transaction.status = :status_1 AND payment_transaction.type = :type_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
     },
     {
@@ -365,14 +365,14 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT count(*) AS count_1 FROM blog_post WHERE blog_post.status = :status_1 AND blog_post.updated_at < :updated_at_1",
-      "file": "app/services/blog/service.py",
-      "function": "get_health_summary"
+      "file": "app/services/blog/summary.py",
+      "function": "blog_health_summary"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT count(*) AS count_1 FROM blog_tag",
-      "file": "app/services/blog/service.py",
-      "function": "get_health_summary"
+      "file": "app/services/blog/summary.py",
+      "function": "blog_health_summary"
     },
     {
       "kind": "repeated_statement",
@@ -461,19 +461,19 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT count(*) AS count_1 FROM payment_dispute WHERE payment_dispute.status IN (__[POSTCOMPILE_status_1])",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT count(*) AS count_1 FROM payment_subscription WHERE payment_subscription.status = :status_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT count(*) AS count_1 FROM payment_transaction",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
     },
     {
@@ -575,7 +575,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT email_verification_token.id, email_verification_token.user_id, email_verification_token.token, email_verification_token.created_at, email_verification_token.used FROM email_verification_token WHERE email_verification_token.user_id = :user_id_1 AND email_verification_token.used = false",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_verification.py",
       "function": "_invalidate_prior_email_verification_tokens"
     },
     {
@@ -2081,13 +2081,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT organization_member.organization_id FROM organization_member JOIN organization ON organization.id = organization_member.organization_id WHERE organization_member.user_id = :user_id_1 AND organization_member.role = :role_1 AND organization.deleted_at IS NULL",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "orphaned_sole_owner_org_ids"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT organization_member.organization_id, count(*) AS count_1 FROM organization_member WHERE organization_member.organization_id IN (__[POSTCOMPILE_organization_id_1]) GROUP BY organization_member.organization_id",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/user_deletion.py",
       "function": "orphaned_sole_owner_org_ids"
     },
     {
@@ -2105,31 +2105,31 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute ORDER BY payment_dispute.created_at DESC",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "get_disputes"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute WHERE payment_dispute.id = :id_1 AND payment_dispute.transaction_id IN (__[POSTCOMPILE_transaction_id_1])",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "get_dispute_by_id"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute WHERE payment_dispute.provider_dispute_id = :provider_dispute_id_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "_handle_dispute_event"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute WHERE payment_dispute.provider_dispute_id = :provider_dispute_id_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "_handle_early_fraud_warning"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_dispute.id, payment_dispute.transaction_id, payment_dispute.provider_dispute_id, payment_dispute.status, payment_dispute.reason, payment_dispute.amount, payment_dispute.currency, payment_dispute.evidence_due_by, payment_dispute.event_type, payment_dispute.metadata, payment_dispute.created_at, payment_dispute.updated_at FROM payment_dispute WHERE payment_dispute.transaction_id IN (__[POSTCOMPILE_transaction_id_1]) ORDER BY payment_dispute.created_at DESC",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "get_disputes"
     },
     {
@@ -2141,19 +2141,19 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_subscription.id, payment_subscription.customer_id, payment_subscription.provider_subscription_id, payment_subscription.plan_name, payment_subscription.status, payment_subscription.current_period_start, payment_subscription.current_period_end, payment_subscription.cancel_at_period_end, payment_subscription.metadata, payment_subscription.created_at, payment_subscription.updated_at FROM payment_subscription ORDER BY payment_subscription.created_at DESC",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/subscriptions.py",
       "function": "get_subscriptions"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_subscription.id, payment_subscription.customer_id, payment_subscription.provider_subscription_id, payment_subscription.plan_name, payment_subscription.status, payment_subscription.current_period_start, payment_subscription.current_period_end, payment_subscription.cancel_at_period_end, payment_subscription.metadata, payment_subscription.created_at, payment_subscription.updated_at FROM payment_subscription WHERE payment_subscription.customer_id IN (__[POSTCOMPILE_customer_id_1]) ORDER BY payment_subscription.created_at DESC",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/subscriptions.py",
       "function": "get_subscriptions"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_transaction.id FROM payment_transaction WHERE payment_transaction.customer_id IN (__[POSTCOMPILE_customer_id_1])",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "_transaction_ids_for_customers"
     },
     {
@@ -2183,13 +2183,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_transaction.id, payment_transaction.provider_id, payment_transaction.customer_id, payment_transaction.provider_transaction_id, payment_transaction.type, payment_transaction.status, payment_transaction.amount, payment_transaction.currency, payment_transaction.description, payment_transaction.metadata, payment_transaction.created_at, payment_transaction.updated_at FROM payment_transaction WHERE payment_transaction.provider_transaction_id = :provider_transaction_id_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/disputes.py",
       "function": "_find_transaction_by_charge_id"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT payment_transaction.id, payment_transaction.provider_id, payment_transaction.customer_id, payment_transaction.provider_transaction_id, payment_transaction.type, payment_transaction.status, payment_transaction.amount, payment_transaction.currency, payment_transaction.description, payment_transaction.metadata, payment_transaction.created_at, payment_transaction.updated_at FROM payment_transaction WHERE payment_transaction.provider_transaction_id = :provider_transaction_id_1",
-      "file": "app/services/payment/service.py",
+      "file": "app/services/payment/webhooks_billing.py",
       "function": "_handle_checkout_completed"
     },
     {
@@ -2213,7 +2213,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/components/backend/api/auth/router.py",
+      "file": "app/components/backend/api/auth/sessions.py",
       "function": "_current_session_family"
     },
     {

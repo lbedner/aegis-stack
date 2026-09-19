@@ -50,7 +50,8 @@ composition points a real project needs:
 | View lifecycle ABC | `app/components/frontend/controls/views/base.py` | Inherit |
 | Session state | `app/components/frontend/state/session_state.py` | Per-session |
 | API client | `app/core/client.py` | Per-session |
-| Theme manager | `app/components/frontend/theme.py` | Per-session |
+| Theme manager | `app/components/frontend/theme_manager.py` | Per-session |
+| Theme tokens | `app/components/frontend/theme.py` | Import |
 | Reusable controls | `app/components/frontend/controls/*` | Import |
 
 The split is asymmetric on purpose. Page-level events, the route table, and

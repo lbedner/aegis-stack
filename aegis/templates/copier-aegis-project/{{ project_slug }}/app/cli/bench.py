@@ -8,7 +8,7 @@ is different and because the answers are comparisons, not measurements.
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 import json
 import os
@@ -38,6 +38,9 @@ ENGINES = ("uvicorn", "granian")
 READY_TIMEOUT_S = 90.0
 # ApacheBench: ships with macOS, `apt install apache2-utils` on Debian.
 AB = shutil.which("ab") or "/usr/sbin/ab"
+# Official Apache image; ab lives on its PATH. Used when the host has
+# no ab of its own, which is most Linux.
+DOCKER_AB_IMAGE = "httpd:alpine"
 # ab can issue these; anything else has to go through the Python driver.
 AB_METHODS = {"GET": None, "POST": "-p", "PUT": "-u"}
 
@@ -168,30 +171,94 @@ def parse_ab(stdout: str) -> Sample:
     )
 
 
+def _ab_flags(
+    target: Target, requests: int, clients: int, body: str | None
+) -> list[str]:
+    """The ab flags both drivers share. ``body`` is a path inside whichever
+    filesystem the binary will read."""
+    # -q quiets the per-150-request progress counter; percentiles stay.
+    flags = ["-n", str(requests), "-c", str(clients), "-q"]
+    for key, value in target.headers.items():
+        flags += ["-H", f"{key}: {value}"]
+    if (method_flag := AB_METHODS[target.method]) and body:
+        flags += [method_flag, body, "-T", "application/json"]
+    return flags
+
+
+@contextmanager
+def _body_file(target: Target) -> Generator[Path | None]:
+    """A temp file holding the request body, when the method needs one."""
+    if not AB_METHODS[target.method]:
+        yield None
+        return
+    with tempfile.NamedTemporaryFile("w", suffix=".body", delete=False) as handle:
+        handle.write(target.payload or "")
+        path = Path(handle.name)
+    try:
+        yield path
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def _measure_ab(port: int, target: Target, requests: int, clients: int) -> Sample:
     """Drive with ApacheBench, which can actually saturate these servers."""
-    # -q quiets the per-150-request progress counter; percentiles stay.
-    argv = [AB, "-n", str(requests), "-c", str(clients), "-q"]
-    for key, value in target.headers.items():
-        argv += ["-H", f"{key}: {value}"]
-
-    body_file: Path | None = None
-    if flag := AB_METHODS[target.method]:
-        with tempfile.NamedTemporaryFile("w", suffix=".body", delete=False) as handle:
-            handle.write(target.payload or "")
-            body_file = Path(handle.name)
-        argv += [flag, str(body_file), "-T", "application/json"]
-
-    try:
+    with _body_file(target) as body:
+        flags = _ab_flags(target, requests, clients, str(body) if body else None)
         completed = subprocess.run(
-            [*argv, f"http://127.0.0.1:{port}{target.path}"],
+            [AB, *flags, f"http://127.0.0.1:{port}{target.path}"],
             capture_output=True,
             text=True,
             check=True,
         )
-    finally:
-        if body_file:
-            body_file.unlink(missing_ok=True)
+    return parse_ab(completed.stdout)
+
+
+def _measure_ab_docker(
+    port: int, target: Target, requests: int, clients: int
+) -> Sample:
+    """The same ab, out of the official httpd image.
+
+    ab is bundled on macOS and absent on most Linux, which is CI, most
+    containers, and plenty of laptops. Docker is already a hard
+    requirement for a generated project, so the tool that says "go
+    measure your own routes" should not be the one thing that needs a
+    system package first.
+
+    ``host.docker.internal`` plus the host-gateway alias reaches the
+    server on the host from both Docker Desktop and Linux.
+    """
+    # Linux gets the host's own network stack, with no NAT between the
+    # container and the server, so it should measure close to a local ab.
+    # Unverified: written on macOS, where Docker NATs through a VM. That
+    # path IS measured, and it throttles absolute throughput several times
+    # over while leaving the ratio between engines intact (1.53x against
+    # 1.54x native). Either way, do not compare a container number to a
+    # native one.
+    if sys.platform == "linux":
+        network, host = ["--network", "host"], "127.0.0.1"
+    else:
+        network = ["--add-host=host.docker.internal:host-gateway"]
+        host = "host.docker.internal"
+
+    with _body_file(target) as body:
+        mount = ["-v", f"{body}:/tmp/body:ro"] if body else []
+        flags = _ab_flags(target, requests, clients, "/tmp/body" if body else None)
+        completed = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                *network,
+                *mount,
+                DOCKER_AB_IMAGE,
+                "ab",
+                *flags,
+                f"http://{host}:{port}{target.path}",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
     return parse_ab(completed.stdout)
 
 
@@ -252,14 +319,21 @@ def _row(engine: str, loop: str, sample: Sample) -> str:
 
 
 def choose_driver(requested: str, method: str) -> tuple[str, str | None]:
-    """Pick the load generator, and say why when it is not the fast one."""
-    if requested == "api-load-test":
+    """Pick the load generator, and say why when it is not the fast one.
+
+    Order matters: a local ab beats a containerized one on startup cost,
+    and both beat the Python client, which cannot saturate either engine
+    and so reports them as equal.
+    """
+    if requested in {"api-load-test", "ab", "ab-docker"}:
         return requested, None
     if method not in AB_METHODS:
         return "api-load-test", t("bench.driver.method", method=method)
-    if not Path(AB).exists():
-        return "api-load-test", t("bench.driver.missing")
-    return "ab", None
+    if Path(AB).exists():
+        return "ab", None
+    if shutil.which("docker"):
+        return "ab-docker", t("bench.driver.docker")
+    return "api-load-test", t("bench.driver.missing")
 
 
 def _resolve_target(
@@ -305,7 +379,9 @@ def engines(
     clients: Annotated[int, typer.Option("--clients", "-c")] = 50,
     rounds: Annotated[int, typer.Option(help="Runs per engine; best is kept")] = 2,
     loop: Annotated[str, typer.Option(help="Event loop to pin")] = "auto",
-    driver: Annotated[str, typer.Option(help="auto | ab | api-load-test")] = "auto",
+    driver: Annotated[
+        str, typer.Option(help="auto | ab | ab-docker | api-load-test")
+    ] = "auto",
 ) -> None:
     """Compare the ASGI engines on one of this app's routes."""
     if sum((as_admin, as_user, anon)) > 1:
@@ -331,7 +407,7 @@ def engines(
     chosen_driver, reason = choose_driver(driver, target.method)
     if reason:
         console.print(t("bench.driver.fallback", driver=chosen_driver, reason=reason))
-    measure = _measure_ab if chosen_driver == "ab" else _measure_api_load_test
+    measure = _driver_fn(chosen_driver)
 
     # The same rule the entrypoint uses, called once so the report states
     # the loop rather than inferring it.
@@ -354,6 +430,19 @@ def engines(
                     best[engine] = sample
 
     _report(best, pinned, target, requests, clients, rounds, chosen_driver)
+
+
+def _driver_fn(driver: str) -> Callable[[int, Target, int, int], Sample]:
+    """Resolve the driver by name, at call time.
+
+    A module-level dict would capture these at import, which quietly
+    breaks both patching and any later reassignment.
+    """
+    if driver == "ab":
+        return _measure_ab
+    if driver == "ab-docker":
+        return _measure_ab_docker
+    return _measure_api_load_test
 
 
 def _report(
@@ -405,5 +494,5 @@ def _report(
             )
         )
     console.print(t("bench.noise"))
-    if driver != "ab":
+    if driver == "api-load-test":
         console.print(t("bench.driver.warning"))

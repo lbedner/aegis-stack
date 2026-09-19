@@ -72,15 +72,15 @@ BUDGET: dict[str, int] = {
     "components/frontend/dashboard/modals/voice_settings/recorder.py": 785,
     "services/payment/service.py.jinja": 1633,
     "components/frontend/main.py.jinja": 1423,
-    "i18n/locales/en.py": 1323,
-    "i18n/locales/zh.py": 1299,
-    "i18n/locales/de.py": 1269,
-    "i18n/locales/es.py": 1269,
-    "i18n/locales/fr.py": 1269,
-    "i18n/locales/ja.py": 1269,
-    "i18n/locales/ru.py": 1269,
-    "i18n/locales/ko.py": 1268,
-    "i18n/locales/zh_hant.py": 1265,
+    "i18n/locales/en.py": 1324,
+    "i18n/locales/zh.py": 1300,
+    "i18n/locales/de.py": 1270,
+    "i18n/locales/es.py": 1270,
+    "i18n/locales/fr.py": 1270,
+    "i18n/locales/ja.py": 1270,
+    "i18n/locales/ru.py": 1270,
+    "i18n/locales/ko.py": 1269,
+    "i18n/locales/zh_hant.py": 1266,
     "components/frontend/controls/data_table.py": 1089,
     "components/backend/api/ai/router.py.jinja": 1009,
     "cli/payment.py.jinja": 917,
@@ -92,12 +92,12 @@ BUDGET: dict[str, int] = {
     "services/auth/users.py.jinja": 783,
     "components/frontend/dashboard/modals/llm_catalog_tab.py.jinja": 780,
     "components/frontend/dashboard/cards/card_utils.py.jinja": 659,
-    # 807 not 796: BUILD_ID (3 lines), WEBSERVER_ENGINE (4) and
-    # WEBSERVER_LOOP (4) had nowhere else to live, settings are this file.
-    # Now 307 over the 500 limit. The serving settings are the third group
-    # to land here by default; grouping them into nested models is the
-    # split this file keeps asking for.
-    "core/config.py.jinja": 807,
+    # 809 not 796: BUILD_ID (3 lines), WEBSERVER_ENGINE (4) and
+    # WEBSERVER_LOOP (6, its Literal wraps) had nowhere else to live,
+    # settings are this file. Now 309 over the 500 limit. The serving
+    # settings are the third group to land here by default; grouping them
+    # into nested models is the split this file keeps asking for.
+    "core/config.py.jinja": 809,
     "cli/rag.py": 686,
     "services/ai/fixtures/llm_fixtures.py": 684,
     "services/load_test/worker/service.py": 678,

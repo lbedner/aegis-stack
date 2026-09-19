@@ -31,7 +31,8 @@ MESSAGES: dict[str, str] = {
     "bench.auth.one_only": "Pass only one of --as-admin / --as-user / --anon.",
     "bench.driver.fallback": "Falling back to the {driver} driver: {reason}.",
     "bench.driver.method": "ab cannot issue {method}",
-    "bench.driver.missing": "ab is not installed",
+    "bench.driver.missing": "ab is not installed",    "bench.driver.docker": "no local ab, using the httpd image instead",
+
     "bench.driver.warning": (
         "This driver tops out below what either engine can serve, so the two "
         "look equal no matter what. Install ab (apache2-utils) for a "

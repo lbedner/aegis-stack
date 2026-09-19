@@ -16,6 +16,10 @@ dependencies = [
     # Alternate ASGI server, selected per run by `make serve ENGINE=granian`.
     # Shipped rather than made optional so the switch needs no install step.
     "granian==2.8.3",
+    # Zig event loop for uvicorn, opt-in via WEBSERVER_LOOP=zuvloop. The
+    # marker is the gate: wheels start at 3.14, so older environments
+    # resolve without it rather than failing to install.
+    "zuvloop>=0.0.17; python_version >= '3.14'",
     "structlog==25.4.0",
     "pydantic-settings>=2.12.0",
     "typer==0.16.0",

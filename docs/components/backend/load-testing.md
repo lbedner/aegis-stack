@@ -164,3 +164,11 @@ Shared with the worker load-test service through
 - No run-to-run regression comparison built in. Persist results yourself
   via `--json` if you need historical trends
 - HTTP only — no WebSocket or gRPC targets
+
+## Related
+
+Comparing two *configurations* rather than measuring one is a different
+command: [`bench engines`](serving.md#measuring-it-yourself) boots the app
+once per ASGI server and drives identical load at each. It takes the same
+flags for describing a route, so anything you can load test here you can
+benchmark there.

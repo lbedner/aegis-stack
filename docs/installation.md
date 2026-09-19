@@ -21,7 +21,7 @@ Generated projects use Docker for:
 - **Production parity** - Development closely mirrors production deployment
 
 !!! note "Docker Alternatives"
-    While the standard workflow uses Docker, generated projects are standard Python applications. Advanced users can manually run components (uvicorn for backend, direct Redis installation, etc.), but this workflow is currently undocumented and unsupported.
+    While the standard workflow uses Docker, generated projects are standard Python applications. Advanced users can manually run components (the [ASGI server](components/backend/serving.md) for the backend, direct Redis installation, etc.), but this workflow is currently undocumented and unsupported.
 
 !!! note "Windows"
     `make` isn't a native Windows binary. After installing the project's dev dependencies once (`uv sync --all-extras`), every `make <target>` command in a generated project also works as `uv run poe <target>` (for example `uv run poe serve`), including the standard Docker-based workflow above. Run `uv run poe -h` for the full list.

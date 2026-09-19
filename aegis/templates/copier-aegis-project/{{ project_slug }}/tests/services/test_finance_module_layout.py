@@ -178,6 +178,10 @@ def test_the_forecast_reads_month_bounds_through_the_package_boundary() -> None:
     assert "budgets._month_bounds" not in inspect.getsource(forecast)
 
 
+# Which module each name is DEFINED in, not merely re-exported from.
+# ``rules`` is a package now, so its four shared names are pinned to the
+# submodule that owns them rather than to the package - a re-export
+# would satisfy the looser check while the definition wandered.
 INSIGHT_OWNERS = {
     "is_commitment": "commitments",
     "is_paused": "commitments",
@@ -192,10 +196,10 @@ INSIGHT_OWNERS = {
     "days_in_month": "formatting",
     "month_is_complete": "formatting",
     "pace_day": "formatting",
-    "generate_insights": "rules",
-    "create_insight_if_new": "rules",
-    "monthly_category_spend": "rules",
-    "live_account_ids": "rules",
+    "generate_insights": "rules.generate",
+    "create_insight_if_new": "rules.shared",
+    "monthly_category_spend": "rules.shared",
+    "live_account_ids": "rules.shared",
 }
 
 

@@ -57,7 +57,7 @@ BUDGET: dict[str, int] = {
     # Was one 1,649-line module, now a package of four. The recorder
     # still carries a 211-line _build_ui; the number ratchets down
     # when that comes out.
-    "components/frontend/main.py.jinja": 1423,
+    "components/frontend/main.py.jinja": 894,
     "i18n/locales/en.py": 1324,
     "i18n/locales/zh.py": 1300,
     "i18n/locales/de.py": 1270,

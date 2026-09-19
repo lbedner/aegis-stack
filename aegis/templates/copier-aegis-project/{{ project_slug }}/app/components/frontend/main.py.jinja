@@ -137,84 +137,30 @@ from {{ c.module }} import {{ c.symbol }}
 {%- endfor %}
 {%- endfor %}
 from .dashboard.cards.card_utils import create_health_status_indicator
+from .dashboard_cards import (
+    COMPONENTS_GROUP_KEY,
+    SERVICE_PREFIX,
+    SERVICES_GROUP_KEY,
+    _convert_component,
+    _format_uptime,
+    create_component_card,
+)
+{%- if insights_per_user %}
+from .dashboard_cards import override_insights_for_active_project
+{%- endif %}
 from .dashboard.diagram import DiagramView
 from .dashboard.status_overview import StatusOverviewPanel
 from .theme import AegisTheme as Theme
 from .theme_manager import ThemeManager
 
-# Constants for health system grouping
-COMPONENTS_GROUP_KEY = "components"
-SERVICES_GROUP_KEY = "services"
-SERVICE_PREFIX = "service_"
 
 # Use simple filenames - Flet should auto-resolve from assets_dir
 DEFAULT_LOGO_PATH = "aegis-manifesto.png"
 DEFAULT_DARK_LOGO_PATH = "aegis-manifesto-dark.png"
 
 
-def _format_uptime(start: float) -> str:
-    """Format elapsed time since start as a compact uptime string."""
-    elapsed = int(time.monotonic() - start)
-    minutes = elapsed // 60
-    hours = minutes // 60
-    days = hours // 24
-    if days > 0:
-        return f"Up {days}d {hours % 24}h"
-    elif hours > 0:
-        return f"Up {hours}h {minutes % 60}m"
-    elif minutes > 0:
-        return f"Up {minutes}m"
-    else:
-        return "Up <1m"
 
 
-def _convert_component(comp_data: dict[str, Any]) -> ComponentStatus:
-    """Recursively convert API component data to ComponentStatus."""
-    try:
-        sub_components = {}
-        if "sub_components" in comp_data:
-            for sub_name, sub_data in comp_data[
-                "sub_components"
-            ].items():
-                sub_components[sub_name] = _convert_component(sub_data)
-
-        # Parse status from API response
-        status_str = comp_data.get("status", "unhealthy")
-        try:
-            status = ComponentStatusType(status_str)
-        except ValueError:
-            logger.warning(
-                f"Unknown status: {status_str}, default UNHEALTHY"
-            )
-            status = ComponentStatusType.UNHEALTHY
-
-        return ComponentStatus(
-            name=comp_data.get("name", "Unknown"),
-            status=status,
-            message=comp_data.get("message", "No message"),
-            response_time_ms=comp_data.get("response_time_ms"),
-            metadata=comp_data.get("metadata", {}),
-            sub_components=sub_components,
-        )
-    except Exception as e:
-        logger.error(
-            f"Failed to convert component data: {e}",
-            exc_info=True,
-            extra={
-                "error_type": type(e).__name__,
-                "function": "_convert_component",
-                "comp_data": comp_data
-            }
-        )
-        # Return a fallback ComponentStatus
-        return ComponentStatus(
-            name=comp_data.get("name", "Unknown"),
-            status=ComponentStatusType.UNHEALTHY,
-            message=f"Error converting component: {e}",
-            response_time_ms=None,
-            metadata={},
-            sub_components={},
-        )
 
 
 async def setup_dashboard(view: BaseView) -> None:
@@ -593,222 +539,8 @@ async def setup_dashboard(view: BaseView) -> None:
     # httpx.AsyncClient anywhere in the dashboard.
     api_client = get_session_state(page).api_client
 
-    def create_component_card(
-        component_name: str, component_data: Any
-    ) -> ft.Container:
-        """Create stunning marketing-grade component cards."""
-        try:
-            if not component_data:
-                logger.warning(f"No component data provided for {component_name}")
-                return ft.Container()
-
-            # Map component names to their stunning card classes
-            if component_name == "backend":
-                return ServerCard(component_data).build()
-            elif component_name == "frontend":
-                # Frontend is merged into ServerCard, return empty
-                return ft.Container()
-{% if include_worker %}
-            elif component_name == "worker":
-                return WorkerCard(component_data).build()
-{% endif %}
-{% if include_redis %}
-            elif component_name == "cache":
-                return RedisCard(component_data).build()
-{% endif %}
-{% if include_database %}
-            elif component_name == "database":
-                return DatabaseCard(component_data).build()
-{% endif %}
-{% if include_ingress %}
-            elif component_name == "ingress":
-                return IngressCard(component_data).build()
-{% endif %}
-{% if include_observability %}
-            elif component_name == "observability":
-                return ObservabilityCard(component_data).build()
-{% endif %}
-{% if include_storage %}
-            elif component_name == "storage":
-                return StorageCard(component_data).build()
-{% endif %}
-{% if ollama_mode != "none" %}
-            elif component_name == "ollama":
-                return OllamaCard(component_data).build()
-{% endif %}
-{% if include_scheduler %}
-            elif component_name == "scheduler":
-                return SchedulerCard(component_data).build()
-{% endif %}
-{% if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance %}
-            elif component_name == "services":
-                return ServicesCard(component_data).build()
-{% endif %}
-            # Service cards - specific checks BEFORE generic fallback
-{% if include_ai %}
-            elif component_name == "service_ai":
-                return AICard(component_data).build()
-{% endif %}
-{% if include_auth %}
-            elif component_name == "service_auth":
-                return AuthCard(component_data).build()
-{% endif %}
-{% if include_blog %}
-            elif component_name == f"{SERVICE_PREFIX}{BLOG_COMPONENT_NAME}":
-                return BlogCard(component_data).build()
-{% endif %}
-{% if include_comms %}
-            elif component_name == "service_comms":
-                return CommsCard(component_data).build()
-{% endif %}
-{% if include_documents %}
-            elif component_name == DOCUMENTS_MODAL_ID:
-                return DocumentsCard(component_data).build()
-{% endif %}
-{% if include_insights %}
-            elif component_name == f"{SERVICE_PREFIX}{INSIGHT_COMPONENT_NAME}":
-                return InsightsCard(component_data).build()
-{% endif %}
-{% if include_payment %}
-            elif component_name == f"{SERVICE_PREFIX}{PAYMENT_COMPONENT_NAME}":
-                return PaymentCard(component_data).build()
-{% endif %}
-{% if include_finance %}
-            elif component_name == f"{SERVICE_PREFIX}{FINANCE_COMPONENT_NAME}":
-                return FinanceCard(component_data).build()
-{% endif %}
-{%- for p in _plugins | default([]) %}
-{%- for c in p.wiring.dashboard_cards %}
-            elif component_name in ("{{ c.modal_id }}", f"{SERVICE_PREFIX}{{ c.modal_id }}"):
-                return {{ c.symbol }}(component_data).build()
-{%- endfor %}
-{%- endfor %}
-{% if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance or _plugins %}
-            elif component_name.startswith("service_"):
-                # For other services, use generic ServicesCard for now
-                return ServicesCard(component_data).build()
-{% endif %}
-            else:
-                # Fallback for unknown components - should not happen in practice
-                logger.warning(f"Unknown component type: {component_name}")
-                return ft.Container(
-                    content=ft.Text(f"Unknown component: {component_name}"),
-                    padding=20,
-                    bgcolor=ft.Colors.SURFACE,
-                    border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-                    border_radius=16,
-                    width=800,
-                    height=240,
-                )
-        except Exception as e:
-            logger.error(
-                f"Failed to create component card for {component_name}: {e}",
-                exc_info=True,
-                extra={
-                    "error_type": type(e).__name__,
-                    "function": "create_component_card",
-                    "component_name": component_name,
-                    "component_data": component_data
-                }
-            )
-            # Return fallback card on error
-            return ft.Container(
-                content=ft.Text(f"Error loading {component_name}"),
-                padding=20,
-                bgcolor=ft.Colors.ERROR_CONTAINER,
-                border=ft.border.all(1, ft.Colors.ERROR),
-                border_radius=16,
-                width=800,
-                height=240,
-            )
 
     {% if insights_per_user -%}
-    async def _override_insights_for_active_project(
-        components: dict[str, ComponentStatus],
-    ) -> None:
-        """Replace the aggregate insights metadata with the active project's slice.
-
-        Mirrors the staleness logic in ``app/services/insights/health.py``
-        (3x ``collection_interval_hours``), but scoped to the rows
-        returned by ``/api/v1/insights/projects/{slug}/all``. Bails out
-        cleanly if no project is active, the card isn't present, or the
-        request fails — the aggregate values stay as fallback.
-        """
-        slug = get_active_project(page)
-        if not slug:
-            return
-        insights_key = f"{SERVICE_PREFIX}{INSIGHT_COMPONENT_NAME}"
-        insights_comp = components.get(insights_key)
-        if insights_comp is None:
-            return
-
-        bulk = await api_client.get(f"/api/v1/insights/projects/{slug}/all")
-        if not isinstance(bulk, dict):
-            return
-
-        daily = bulk.get("daily") or {}
-        events = bulk.get("events") or {}
-        sources = bulk.get("sources") or []
-
-        total_metrics = 0
-        if isinstance(daily, dict):
-            for rows in daily.values():
-                if isinstance(rows, list):
-                    total_metrics += len(rows)
-        if isinstance(events, dict):
-            for rows in events.values():
-                if isinstance(rows, list):
-                    total_metrics += len(rows)
-
-        from datetime import datetime as _dt, timedelta as _td
-
-        now = _dt.now()
-        enabled_sources = 0
-        stale_sources: list[str] = []
-        for src in sources:
-            if not isinstance(src, dict):
-                continue
-            if not src.get("enabled", False):
-                continue
-            enabled_sources += 1
-            interval_hours = src.get("collection_interval_hours")
-            last_raw = src.get("last_collected_at")
-            key = str(src.get("key") or "")
-            if interval_hours is None or not key:
-                continue
-            if last_raw is None:
-                stale_sources.append(key)
-                continue
-            try:
-                last = _dt.fromisoformat(str(last_raw))
-            except (TypeError, ValueError):
-                continue
-            if now - last > _td(hours=int(interval_hours) * 3):
-                stale_sources.append(key)
-
-        if total_metrics == 0:
-            status = ComponentStatusType.WARNING
-            message = "No data collected yet"
-        elif stale_sources:
-            status = ComponentStatusType.WARNING
-            message = f"Stale sources: {', '.join(stale_sources)}"
-        else:
-            status = ComponentStatusType.HEALTHY
-            message = f"{total_metrics} metrics across {enabled_sources} sources"
-
-        components[insights_key] = ComponentStatus(
-            name=insights_comp.name,
-            status=status,
-            message=message,
-            response_time_ms=insights_comp.response_time_ms,
-            metadata={
-                "total_metrics": total_metrics,
-                "enabled_sources": enabled_sources,
-                "stale_sources": stale_sources,
-                "active_project_slug": slug,
-            },
-            sub_components=insights_comp.sub_components,
-        )
     {%- endif %}
 
     async def refresh_dashboard() -> None:
@@ -856,7 +588,9 @@ async def setup_dashboard(view: BaseView) -> None:
             # When a project is active, override the aggregate insights
             # card with the active project's slice so the dashboard
             # reflects what the user actually owns.
-            await _override_insights_for_active_project(components)
+            await override_insights_for_active_project(
+                components, api_client, page
+            )
             {%- endif %}
 
             total_components = len(components)

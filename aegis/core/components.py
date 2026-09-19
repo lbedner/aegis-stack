@@ -312,7 +312,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         files=FileManifest(
             primary=[
                 "app/components/frontend/dashboard/cards/redis_card.py",
-                "app/components/frontend/dashboard/modals/redis_modal.py",
+                "app/components/frontend/dashboard/modals/redis_modal",
             ],
         ),
     ),
@@ -391,7 +391,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/components/backend/middleware/logfire_tracing.py",
                 "app/components/frontend/dashboard/cards/observability_card.py",
-                "app/components/frontend/dashboard/modals/observability_modal.py",
+                "app/components/frontend/dashboard/modals/observability_modal",
             ],
         ),
     ),

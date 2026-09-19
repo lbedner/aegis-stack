@@ -11,7 +11,9 @@ the split is stated, and they fail on the drift rather than on a name.
 from __future__ import annotations
 
 from datetime import date
+import ast
 import inspect
+from pathlib import Path
 from types import FunctionType
 
 from app.services.finance import models
@@ -178,6 +180,10 @@ def test_the_forecast_reads_month_bounds_through_the_package_boundary() -> None:
     assert "budgets._month_bounds" not in inspect.getsource(forecast)
 
 
+# Which module each name is DEFINED in, not merely re-exported from.
+# ``rules`` is a package now, so its four shared names are pinned to the
+# submodule that owns them rather than to the package - a re-export
+# would satisfy the looser check while the definition wandered.
 INSIGHT_OWNERS = {
     "is_commitment": "commitments",
     "is_paused": "commitments",
@@ -192,10 +198,10 @@ INSIGHT_OWNERS = {
     "days_in_month": "formatting",
     "month_is_complete": "formatting",
     "pace_day": "formatting",
-    "generate_insights": "rules",
-    "create_insight_if_new": "rules",
-    "monthly_category_spend": "rules",
-    "live_account_ids": "rules",
+    "generate_insights": "rules.generate",
+    "create_insight_if_new": "rules.shared",
+    "monthly_category_spend": "rules.shared",
+    "live_account_ids": "rules.shared",
 }
 
 
@@ -235,17 +241,20 @@ def test_the_vocabulary_is_imported_at_module_scope_by_its_callers() -> None:
                 )
 
 
+# Where each name is DEFINED, not re-exported from. ``plaid_sync`` is a
+# package now, so its names are pinned to the submodule that owns them -
+# a re-export would satisfy a looser check while the definition wandered.
 CONNECTION_OWNERS = {
-    "create_plaid_connection": "plaid_sync",
-    "sync_plaid_connection": "plaid_sync",
-    "process_plaid_webhook": "plaid_sync",
-    "refresh_webhook_urls": "plaid_sync",
-    "fire_sandbox_webhook": "plaid_sync",
-    "complete_hosted_link": "plaid_sync",
-    "relink_connection": "plaid_sync",
-    "start_snaptrade_connect": "snaptrade_sync",
-    "complete_snaptrade_connect": "snaptrade_sync",
-    "sync_snaptrade_connection": "snaptrade_sync",
+    "create_plaid_connection": "plaid_sync.lifecycle",
+    "sync_plaid_connection": "plaid_sync.sync",
+    "process_plaid_webhook": "plaid_sync.lifecycle",
+    "refresh_webhook_urls": "plaid_sync.lifecycle",
+    "fire_sandbox_webhook": "plaid_sync.lifecycle",
+    "complete_hosted_link": "plaid_sync.lifecycle",
+    "relink_connection": "plaid_sync.lifecycle",
+    "start_snaptrade_connect": "snaptrade_sync.lifecycle",
+    "complete_snaptrade_connect": "snaptrade_sync.lifecycle",
+    "sync_snaptrade_connection": "snaptrade_sync.sync",
     "disconnect_connection": "registry",
     "sync_owner_connections": "registry",
     "sync_one_connection": "registry",
@@ -264,15 +273,51 @@ def test_each_connection_function_is_defined_by_its_owning_module() -> None:
         )
 
 
+def _imported_modules(package: object) -> dict[str, set[str]]:
+    """Every module name imported by every file of a package.
+
+    Walks the files rather than ``inspect.getsource``, which returns only
+    ``__init__.py`` for a package - both providers are packages now, so
+    reading just the source text would inspect thirty lines of re-exports
+    and miss a cross-import sitting in a submodule.
+    """
+    root = Path(package.__file__).parent
+    files = sorted(root.glob("*.py")) if package.__file__.endswith(
+        "__init__.py"
+    ) else [Path(package.__file__)]
+    found: dict[str, set[str]] = {}
+    for f in files:
+        names: set[str] = set()
+        for node in ast.walk(ast.parse(f.read_text())):
+            if isinstance(node, ast.Import):
+                names |= {a.name for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names.add(node.module)
+                names |= {f"{node.module}.{a.name}" for a in node.names}
+        found[f.name] = names
+    return found
+
+
 def test_the_two_providers_never_import_each_other() -> None:
     """The property that makes a third aggregator cheap. Only ``registry``
     may name both; the moment one provider's module reaches for the other,
-    every future provider has to be threaded through both of them."""
-    plaid_source = inspect.getsource(connections.plaid_sync)
-    snaptrade_source = inspect.getsource(connections.snaptrade_sync)
-    assert "snaptrade" not in plaid_source.lower().replace("snaptrade_connect", "")
-    assert "PlaidClient" not in snaptrade_source
-    assert "plaid_sync" not in snaptrade_source
+    every future provider has to be threaded through both of them.
+
+    Asserted on what each file IMPORTS, not on whether the other
+    provider's name appears in its text - a docstring that says "mirrors
+    plaid_sync" is not a dependency, and a substring check cannot tell
+    the difference.
+    """
+    for label, package, forbidden in (
+        ("plaid", connections.plaid_sync, "snaptrade"),
+        ("snaptrade", connections.snaptrade_sync, "plaid"),
+    ):
+        for filename, imports in _imported_modules(package).items():
+            offenders = sorted(i for i in imports if forbidden in i.lower())
+            assert not offenders, (
+                f"{label}'s {filename} imports {offenders}; only the "
+                f"registry may name both providers"
+            )
 
 
 def test_dispatch_across_providers_lives_only_in_the_registry() -> None:

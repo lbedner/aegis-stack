@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.services.system.jobs import JobSnapshot, now_iso
+from app.services.system.jobs import JobSnapshot, SetLabel, now_iso
 
 KEY_PREFIX = "jobs:"
 # Long enough for a client that asks after the fact, short enough that a
@@ -58,6 +58,15 @@ class RedisJobStore:
 
     async def set_label(self, job_id: str, label: str) -> None:
         await self._write(job_id, label=label)
+
+    def label_writer(self, job_id: str) -> SetLabel:
+        """One job's label as a ``SetLabel``, so work running on a worker
+        narrates itself the same way in-process work does."""
+
+        async def write(label: str) -> None:
+            await self.set_label(job_id, label)
+
+        return write
 
     async def finish(self, job_id: str, result: dict[str, Any] | None) -> None:
         await self._write(job_id, status="done", result=json.dumps(result or {}))

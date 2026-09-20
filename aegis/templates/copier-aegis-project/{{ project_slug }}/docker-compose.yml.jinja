@@ -254,8 +254,21 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
-          cpus: '0.25'
+{%- if include_finance or include_documents %}
+          # Not a maintenance worker once finance or documents are in the
+          # stack: finance_import_task and extract_document_task both land
+          # on this queue and are the heaviest jobs the app has. An
+          # 18,618-row import measured 253 MiB in its planning step alone -
+          # a pure read, before a single write - so 256M killed it twelve
+          # seconds in, and restart + WORKER_MAX_TRIES made that a retry
+          # loop. 0.25 CPU made it slow as well as dead.
+          memory: ${SYSTEM_WORKER_MEMORY:-1G}
+          cpus: '${SYSTEM_WORKER_CPUS:-1.0}'
+{%- else %}
+          # Maintenance tasks only - health checks and cleanup.
+          memory: ${SYSTEM_WORKER_MEMORY:-256M}
+          cpus: '${SYSTEM_WORKER_CPUS:-0.25}'
+{%- endif %}
     profiles:
       - dev
       - prod

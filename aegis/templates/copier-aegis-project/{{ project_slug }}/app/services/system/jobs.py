@@ -100,6 +100,23 @@ class _Job:
         )
 
 
+# What long work is handed so it can say where it has got to, without
+# learning who is listening or which lane it is running in. Both places a
+# label can live answer it: the in-process ``JobHandle`` below and the
+# shared ``RedisJobStore``. A follower renders whichever it finds, so a
+# job that takes one of these needs no frame, field or route of its own
+# to report progress.
+SetLabel = Callable[[str], Awaitable[None]]
+
+
+async def unwatched(label: str) -> None:
+    """A ``SetLabel`` for work nobody is following.
+
+    So a caller with no job behind it - a test, a direct call - needs no
+    argument, and the work needs no ``if`` around everything it says.
+    """
+
+
 class JobHandle:
     """Given to job work so it can narrate progress to whoever is watching."""
 
@@ -110,6 +127,15 @@ class JobHandle:
     def set_label(self, label: str) -> None:
         self._job.label = label
         self._runner._publish(self._job)
+
+    def label_writer(self) -> SetLabel:
+        """This handle as a ``SetLabel``. Async so one shape serves both
+        lanes; publishing in process is synchronous and stays that way."""
+
+        async def write(label: str) -> None:
+            self.set_label(label)
+
+        return write
 
 
 class JobRunner:

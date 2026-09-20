@@ -363,7 +363,14 @@ def _signature(kept: list[Any]) -> tuple[str, ...] | None:
         if isinstance(op, ops.CreateForeignKeyOp):
             return (
                 "foreign_key",
-                _qualified(op.source_table, op.source_schema),
+                # The schema is in ``kw``, not an attribute: alembic's
+                # CreateForeignKeyOp takes (constraint_name, source_table,
+                # referent_table, local_cols, remote_cols, **kw) and keeps
+                # everything else there. ``op.source_schema`` raises
+                # AttributeError, which took out every revision whose diff
+                # contained a foreign key - and with it the signature the
+                # startup adoption walk needs (alembic 1.16.5, 2026-09-20).
+                _qualified(op.source_table, op.kw.get("source_schema")),
                 op.local_cols[0],
             )
     return None

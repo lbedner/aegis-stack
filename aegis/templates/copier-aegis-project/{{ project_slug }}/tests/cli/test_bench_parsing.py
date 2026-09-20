@@ -11,8 +11,11 @@ from unittest.mock import patch
 
 import pytest
 
-from app.cli import bench
-from app.cli.bench import choose_driver, parse_ab, substitute_path_params
+# Patch where the name is READ, not where it used to live: ``choose_driver``
+# resolves ``AB`` and ``shutil`` in ``bench_drivers``, so patching ``bench``
+# would set an attribute nothing looks at and the test would pass blind.
+from app.cli import bench_drivers
+from app.cli.bench_drivers import choose_driver, parse_ab, substitute_path_params
 
 AB_REPORT = """Concurrency Level:      50
 Time taken for tests:   0.361 seconds
@@ -98,8 +101,8 @@ class TestDriverChoice:
         # already required for a generated project, so the fallback that
         # can still saturate beats the one that cannot.
         with (
-            patch.object(bench, "AB", "/nonexistent/ab"),
-            patch.object(bench.shutil, "which", lambda name: "/usr/bin/docker"),
+            patch.object(bench_drivers, "AB", "/nonexistent/ab"),
+            patch.object(bench_drivers.shutil, "which", lambda name: "/usr/bin/docker"),
         ):
             driver, reason = choose_driver("auto", "GET")
 
@@ -108,8 +111,8 @@ class TestDriverChoice:
 
     def test_no_ab_and_no_docker_is_the_last_resort(self) -> None:
         with (
-            patch.object(bench, "AB", "/nonexistent/ab"),
-            patch.object(bench.shutil, "which", lambda name: None),
+            patch.object(bench_drivers, "AB", "/nonexistent/ab"),
+            patch.object(bench_drivers.shutil, "which", lambda name: None),
         ):
             driver, _ = choose_driver("auto", "GET")
 

@@ -1,0 +1,220 @@
+"""Stack, cards and diagram - the three views, and the toggle that cycles them.
+
+The toggle is the reason this is a class rather than three builders:
+``current_view`` is mutable state four separate handlers read and write,
+which as closures meant a ``nonlocal`` and a thousand-line function to
+hold it. Here it is one attribute, and every control that depends on it
+is a sibling of it.
+"""
+
+from typing import Any
+
+import flet as ft
+from flet import PageDisconnectedException
+
+from app.core.log import logger
+{% if insights_per_user %}
+from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.text import H3Text, SecondaryText
+from app.components.frontend.core.routes import PROJECT_NEW_ROUTE
+from app.components.frontend.projects.project_switcher import ProjectSwitcher
+{% endif %}
+from ..controls.views.base import BaseView
+from ..dashboard.activity_feed import ActivityFeed
+from ..dashboard.diagram import DiagramView
+from ..dashboard.status_overview import StatusOverviewPanel
+
+# View state, in the order the toggle cycles them.
+STACK_VIEW = 0
+CARDS_VIEW = 1
+DIAGRAM_VIEW = 2
+
+
+class DashboardViews:
+    """The dashboard body: three view containers and the state picking one."""
+
+    def __init__(
+        self,
+        page: ft.Page,
+        view: BaseView,
+        view_toggle_button: ft.IconButton,
+    ) -> None:
+        self.page = page
+        self.view = view
+        self.view_toggle_button = view_toggle_button
+        self.current_view = STACK_VIEW
+
+        # Status overview panel - compact view of all components
+        self.status_overview_panel = StatusOverviewPanel()
+
+        # Activity feed panel - expands to fill available space
+        self.activity_feed = ActivityFeed()
+
+        # Stack view: Status overview + Activity feed (50/50 split)
+        # Activity feed expands to fill remaining vertical space
+        top_row = ft.ResponsiveRow(
+            controls=[
+                ft.Container(
+                    content=self.status_overview_panel,
+                    col={"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6},
+                ),
+                ft.Container(
+                    content=self.activity_feed,
+                    col={"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6},
+                    expand=True,
+                ),
+            ],
+            spacing=20,
+            run_spacing=20,
+            expand=True,
+        )
+
+        # Responsive grid container for cards
+        self.component_cards_container = ft.Container(
+            content=ft.ResponsiveRow(
+                controls=[],  # Will be populated with cards
+                spacing=20,  # Space between cards
+                run_spacing=20,  # Space between rows
+            ),
+            alignment=ft.alignment.center,
+        )
+
+        # Cards view has its own scroll for when there are many cards
+        self.cards_view_container = ft.Column(
+            controls=[self.component_cards_container],
+            scroll=ft.ScrollMode.AUTO,
+            visible=False,
+            expand=True,
+        )
+
+        self.stack_view_container = ft.Container(
+            content=top_row,
+            visible=True,
+            expand=True,
+        )
+
+        # Diagram view for architecture visualization
+        self.diagram_view = DiagramView()
+        self.diagram_view_container = ft.Container(
+            content=self.diagram_view,
+            visible=False,
+            expand=True,
+            alignment=ft.alignment.center,
+        )
+
+        view_toggle_button.on_click = self.toggle
+
+        {%- if insights_per_user %}
+
+        # Empty-state CTA: shown only when the signed-in user has zero
+        # projects. Hidden by default; toggled by ``apply_projects_state``
+        # after the switcher fetches its list.
+        self.empty_state_container = ft.Container(
+            visible=False,
+            padding=ft.padding.symmetric(vertical=48, horizontal=24),
+            alignment=ft.alignment.center,
+            content=ft.Column(
+                controls=[
+                    H3Text("Create your first project"),
+                    SecondaryText(
+                        "Projects are how you track GitHub repos, PyPI packages,"
+                        " and Plausible sites separately."
+                    ),
+                    ft.Container(height=12),
+                    PulseButton(
+                        text="New project",
+                        on_click_callable=self._goto_new_project,
+                    ),
+                ],
+                spacing=8,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
+            ),
+        )
+        {%- endif %}
+
+        # Header stays fixed; content scrolls inside one selection region
+        # (text controls are plain - see controls/text.py).
+        self.body = ft.Container(
+            content=ft.Column(
+                [
+                    {% if insights_per_user -%}
+                    self.empty_state_container,
+                    {%- endif %}
+                    self.stack_view_container,   # Stack + Activity view (default)
+                    self.cards_view_container,   # Cards view
+                    self.diagram_view_container, # Diagram view
+                ],
+                spacing=20,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                scroll=ft.ScrollMode.AUTO,
+            ),
+            alignment=ft.alignment.top_center,
+            expand=True,
+        )
+
+    async def toggle(self, _: Any) -> None:
+        """Cycle through Stack, Cards, and Diagram views."""
+        try:
+            # Cycle: 0 (stack) -> 1 (cards) -> 2 (diagram) -> 0 (stack)
+            self.current_view = (self.current_view + 1) % 3
+
+            # Update visibility and button state
+            if self.current_view == STACK_VIEW:
+                self.view_toggle_button.icon = ft.Icons.VIEW_LIST
+                self.view_toggle_button.tooltip = "Switch to Cards View"
+            elif self.current_view == CARDS_VIEW:
+                self.view_toggle_button.icon = ft.Icons.GRID_VIEW
+                self.view_toggle_button.tooltip = "Switch to Diagram View"
+            else:
+                self.view_toggle_button.icon = ft.Icons.ACCOUNT_TREE
+                self.view_toggle_button.tooltip = "Switch to Stack View"
+            self._show_selected_view()
+
+            self.page.update()
+        except PageDisconnectedException:
+            logger.debug("Page disconnected during view toggle")
+        except Exception as e:
+            logger.error(
+                f"View toggle failed: {e}",
+                exc_info=True,
+                extra={
+                    "error_type": type(e).__name__,
+                    "function": "toggle_view"
+                }
+            )
+
+    def _show_selected_view(self) -> None:
+        """Exactly one of the three containers is visible at a time."""
+        self.stack_view_container.visible = self.current_view == STACK_VIEW
+        self.cards_view_container.visible = self.current_view == CARDS_VIEW
+        self.diagram_view_container.visible = self.current_view == DIAGRAM_VIEW
+
+    {%- if insights_per_user %}
+
+    async def _goto_new_project(self) -> None:
+        self.page.go(PROJECT_NEW_ROUTE)
+
+    def apply_projects_state(self, switcher: ProjectSwitcher) -> None:
+        """Toggle empty-state CTA vs. dashboard body based on owned-projects count.
+
+        Treats a failed project-list fetch as "show the dashboard body
+        anyway" rather than the empty-state CTA — a transient 5xx or
+        auth blip shouldn't make a user with existing projects see
+        "Create your first project."
+        """
+        has_projects = bool(switcher.projects)
+        show_empty_state = not has_projects and not switcher.load_failed
+        self.empty_state_container.visible = show_empty_state
+        if show_empty_state:
+            self.stack_view_container.visible = False
+            self.cards_view_container.visible = False
+            self.diagram_view_container.visible = False
+        else:
+            # Restore the view selected by the toggle.
+            self._show_selected_view()
+        try:
+            self.view.update()
+        except PageDisconnectedException:
+            logger.debug("Page disconnected during projects-state apply")
+    {%- endif %}

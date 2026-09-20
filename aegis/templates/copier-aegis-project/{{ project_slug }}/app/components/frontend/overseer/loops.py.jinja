@@ -1,0 +1,160 @@
+"""The background tasks that keep the dashboard current.
+
+All three share one rule set, which is what ``SessionLoops`` is: how
+long a disconnect is tolerated, which exceptions are fatal, and the
+fact that a fatal one ends ALL of this page's loops rather than the
+one that happened to notice. Pass it in and the loop needs nothing
+else from the bootstrap.
+"""
+
+import asyncio
+from collections.abc import Awaitable, Callable
+{%- if include_worker and include_redis %}
+import json
+from typing import Any
+
+import flet as ft
+{%- endif %}
+from flet import PageDisconnectedException
+{%- if include_worker and include_redis %}
+import httpx
+
+from app.core.client import APIClient
+{%- endif %}
+from app.core.log import logger
+
+from ..core.session_health import SessionLoops
+{%- if include_worker and include_redis %}
+
+# How often the frontend pushes UI updates to the browser (seconds).
+# Events are received and counted immediately; only rendering is throttled.
+UI_FLUSH_INTERVAL = 0.1
+{%- endif %}
+
+
+async def auto_refresh(
+    loops: SessionLoops, refresh: Callable[[], Awaitable[None]]
+) -> None:
+    """Auto-refresh loop. Exits on page disconnect or session corruption."""
+    while loops.alive():
+        try:
+            await refresh()
+            await asyncio.sleep(30)
+        except PageDisconnectedException:
+            # Transient disconnect — skip this cycle, loop will retry
+            logger.debug("Page disconnected during refresh, retrying")
+            await asyncio.sleep(5)
+        except Exception as e:
+            if await loops.fatal(e):
+                return
+            logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
+            await asyncio.sleep(30)
+
+{%- if include_worker and include_redis %}
+
+
+async def flush_worker_modal(loops: SessionLoops, page: ft.Page) -> None:
+    """Periodically flush dirty worker modal UI updates.
+
+    Runs independently of the SSE listener so that the final batch
+    of events is always rendered — even when the stream goes quiet
+    and aiter_lines() blocks waiting for the next event.
+    """
+    while loops.alive():
+        await asyncio.sleep(UI_FLUSH_INTERVAL)
+        worker_popup = page.data.get("_modal_cache", {}).get("worker")
+        if worker_popup and worker_popup.visible:
+            try:
+                worker_popup.flush()
+            except PageDisconnectedException:
+                # Transient disconnect — skip this flush, loop will retry
+                pass
+            except Exception as e:
+                if await loops.fatal(e):
+                    return
+                logger.debug(f"Worker modal flush failed: {e}")
+
+
+def _apply_worker_event(worker_popup: Any, event: dict[str, Any]) -> None:
+    """Apply one SSE payload to the worker modal's counters."""
+    event_type = event.get("type", "")
+    queue = event.get("queue", "")
+
+    # Absolute baseline (sent once on connect)
+    if event_type == "totals":
+        worker_popup.set_totals(event.get("queues", {}))
+    # Individual deltas
+    elif event_type == "job.enqueued" and queue:
+        worker_popup.increment_queued(queue)
+    elif event_type == "job.started" and queue:
+        worker_popup.increment_ongoing(queue)
+        worker_popup.decrement_queued(queue)
+    elif event_type == "job.completed" and queue:
+        worker_popup.increment_completed(queue)
+    elif event_type == "job.failed" and queue:
+        worker_popup.increment_failed(queue)
+
+
+async def listen_for_worker_events(
+    loops: SessionLoops, page: ft.Page, api_client: APIClient
+) -> None:
+    """
+    Listen to SSE worker events and update the worker modal directly.
+
+    On connect, receives a "totals" event with absolute counters
+    (baseline). Then receives individual job events as deltas.
+    On reconnect, a new baseline is sent automatically.
+
+    UI updates are flushed by a separate periodic task, not inline,
+    so the last batch always renders even when the stream goes quiet.
+
+    Survives transient page disconnects (Flet session reconnects).
+    Only exits when the session is permanently gone.
+    """
+    logger.info("SSE: starting worker event listener")
+    while loops.alive():
+        try:
+            logger.info("SSE: connecting to /events/worker/stream")
+            async with api_client.stream(
+                "GET",
+                "/events/worker/stream",
+                timeout=httpx.Timeout(
+                    connect=5.0, read=15.0, write=5.0, pool=5.0,
+                ),
+            ) as response:
+                logger.info(f"SSE: connected, status={response.status_code}")
+                async for line in response.aiter_lines():
+                    if not loops.alive():
+                        return
+                    if not line.startswith("data: "):
+                        continue
+
+                    try:
+                        event = json.loads(line[6:])
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+
+                    worker_popup = page.data.get("_modal_cache", {}).get("worker")
+                    if not worker_popup:
+                        continue
+
+                    try:
+                        _apply_worker_event(worker_popup, event)
+                    except PageDisconnectedException:
+                        # Transient disconnect — break inner loop,
+                        # outer loop will reconnect after sleep
+                        break
+                    except Exception as e:
+                        logger.debug(f"SSE modal update failed: {e}")
+
+        except PageDisconnectedException:
+            # Transient disconnect — sleep and retry
+            logger.debug("SSE: page disconnected, retrying in 5s")
+            await asyncio.sleep(5)
+        except Exception as e:
+            if await loops.fatal(e):
+                return
+            logger.info(f"SSE: connection error: {e}, reconnecting in 5s")
+            await asyncio.sleep(5)
+    logger.info("SSE: listener exiting (page permanently disconnected)")
+{%- endif %}

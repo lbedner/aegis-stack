@@ -1,0 +1,151 @@
+"""One pass over ``/health/detailed``, applied to the dashboard.
+
+Everything this needed from ``setup_dashboard`` was a value, not a
+decision: the client to call with, the dashboard to write to, the page
+to repaint, and the two things the header shows. So it is a function
+with five parameters rather than a closure over a thousand lines.
+"""
+
+from typing import Any
+
+import flet as ft
+from flet import PageDisconnectedException
+
+from app.core.client import APIClient
+from app.core.log import logger
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+from ..core.session_health import is_tree_corruption
+from ..dashboard.system_dashboard import SystemDashboard
+from .cards import (
+    COMPONENTS_GROUP_KEY,
+    SERVICE_PREFIX,
+    SERVICES_GROUP_KEY,
+    _convert_component,
+    _format_uptime,
+    create_component_card,
+)
+{%- if insights_per_user %}
+from .cards import override_insights_for_active_project
+{%- endif %}
+
+
+def _components_from_health(data: dict[str, Any]) -> dict[str, ComponentStatus]:
+    """Flatten the ``/health/detailed`` tree into one name -> status map.
+
+    The payload nests everything under ``aegis``, then groups it into
+    ``components`` and ``services``; the dashboard wants one flat dict,
+    with services prefixed so a card can tell them apart.
+    """
+    # Extract components from health API response (navigate structure)
+    if "components" in data and "aegis" in data["components"]:
+        aegis_component = data["components"]["aegis"]
+        if "sub_components" in aegis_component:
+            api_components = aegis_component["sub_components"]
+        else:
+            api_components = {}
+    else:
+        api_components = {}
+
+    components: dict[str, ComponentStatus] = {}
+    for name, comp_data in api_components.items():
+        # Special handling for "components" grouping - expand it
+        if name == COMPONENTS_GROUP_KEY and "sub_components" in comp_data:
+            # Add all individual components from the grouping
+            for sub_name, sub_data in comp_data["sub_components"].items():
+                components[sub_name] = _convert_component(sub_data)
+        # Special handling for "services" grouping - expand services
+        elif name == SERVICES_GROUP_KEY and "sub_components" in comp_data:
+            # Add all individual services from the grouping
+            for service_name, service_data in comp_data["sub_components"].items():
+                components[f"{SERVICE_PREFIX}{service_name}"] = _convert_component(
+                    service_data
+                )
+        else:
+            # For other groupings, add as-is
+            components[name] = _convert_component(comp_data)
+    return components
+
+
+def _worst_status(
+    components: dict[str, ComponentStatus],
+) -> ComponentStatusType:
+    """Worst status wins the health colour: UNHEALTHY > WARNING > INFO > HEALTHY."""
+    worst = ComponentStatusType.HEALTHY
+    for c in components.values():
+        if c.status == ComponentStatusType.UNHEALTHY:
+            return ComponentStatusType.UNHEALTHY
+        elif c.status == ComponentStatusType.WARNING:
+            worst = ComponentStatusType.WARNING
+        elif c.status == ComponentStatusType.INFO and worst not in (
+            ComponentStatusType.WARNING,
+            ComponentStatusType.UNHEALTHY,
+        ):
+            worst = ComponentStatusType.INFO
+    return worst
+
+
+async def refresh_dashboard(
+    api_client: APIClient,
+    dashboard: SystemDashboard,
+    page: ft.Page,
+    uptime_text: ft.Text,
+    session_start: float,
+) -> None:
+    """Refresh the stunning marketing-grade dashboard."""
+    try:
+        # Health data comes from /health/detailed; /health/ is a bare
+        # liveness probe. APIClient returns parsed JSON or ``None``.
+        data = await api_client.get("/health/detailed")
+        if data is None:
+            logger.debug("refresh_dashboard.skipping: no health data")
+            return
+        assert isinstance(data, dict), f"unexpected /health/ shape: {type(data)}"
+
+        components = _components_from_health(data)
+
+        {%- if insights_per_user %}
+        # When a project is active, override the aggregate insights
+        # card with the active project's slice so the dashboard
+        # reflects what the user actually owns.
+        await override_insights_for_active_project(components, api_client, page)
+        {%- endif %}
+
+        total_components = len(components)
+        healthy_components = len([c for c in components.values() if c.healthy])
+
+        # Update health status, status overview, diagram, and component cards
+        await dashboard.update_health_status(
+            healthy_components, total_components, _worst_status(components)
+        )
+        await dashboard.update_status_overview(components)
+        await dashboard.update_diagram_view(components)
+        await dashboard.update_component_cards(components, create_component_card)
+
+        # Update uptime display
+        uptime_text.value = _format_uptime(session_start)
+
+        # Safe page update - check connection first
+        if dashboard._is_page_connected():
+            try:
+                page.update()
+            except PageDisconnectedException:
+                logger.debug("Page disconnected during page.update()")
+                raise
+
+    except PageDisconnectedException:
+        # Disconnected: no UI can render; propagate so auto_refresh stops.
+        logger.debug("Page disconnected during dashboard refresh")
+        raise
+    except Exception as e:
+        if is_tree_corruption(e):
+            raise  # unrecoverable session - auto_refresh terminates it
+        logger.error(
+            f"Dashboard refresh failed: {e}",
+            exc_info=True,
+            extra={
+                "error_type": type(e).__name__,
+                "function": "refresh_dashboard"
+            }
+        )
+        await dashboard.show_error_status()

@@ -87,7 +87,7 @@ class DataTableRow(ft.Container):
         on_click: Callable[[ft.ControlEvent], None] | None = None,
         leading: ft.Control | None = None,
         leading_arrow: ft.Control | None = None,
-        on_hover_change: Callable[[DataTableRow, bool], None] | None = None,
+        on_hover_change: Callable[["DataTableRow", bool], None] | None = None,
     ) -> None:
         super().__init__()
         self._on_hover_change = on_hover_change

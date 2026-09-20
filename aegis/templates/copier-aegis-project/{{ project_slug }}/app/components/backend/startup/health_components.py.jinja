@@ -1,0 +1,199 @@
+"""Health checks for the components that ride in the backend process.
+
+The Flet frontend, the htmx pages and the scheduler all answer the same
+question differently: the first two are "did the thing that renders
+import, and is what it renders actually on disk", the scheduler is "what
+do the persisted tasks say". The backend's own check is big enough to
+live next door, in ``health_backend``.
+"""
+
+{%- if include_htmx %}
+from pathlib import Path
+{%- endif %}
+{%- if include_scheduler and scheduler_backend != "memory" %}
+
+from app.core.log import logger
+{%- endif %}
+
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+
+def _unhealthy(name: str, message: str, error: str, details: str) -> ComponentStatus:
+    return ComponentStatus(
+        name=name,
+        status=ComponentStatusType.UNHEALTHY,
+        message=message,
+        response_time_ms=None,
+        metadata={
+            "type": "component_check",
+            "error": error,
+            "error_details": details,
+        },
+    )
+
+
+async def frontend_component_health() -> ComponentStatus:
+    """
+    Flet frontend health check.
+
+    Since the frontend runs in the same process as the backend,
+    we check if the frontend component is properly initialized.
+    """
+    try:
+        # Check if frontend component is available
+        from importlib.metadata import version
+
+        from app.components.frontend.main import create_frontend_app
+
+        # Verify the frontend app factory function works
+        create_frontend_app()
+
+        # Get Flet version safely
+        try:
+            flet_version = version("flet")
+        except Exception:
+            flet_version = "unknown"
+
+        return ComponentStatus(
+            name="frontend",
+            status=ComponentStatusType.HEALTHY,
+            message="Flet frontend component available",
+            response_time_ms=None,
+            metadata={
+                "type": "component_check",
+                "framework": "Flet",
+                "version": flet_version,
+                "note": "Frontend integrated with FastAPI",
+            },
+        )
+
+    except ImportError as e:
+        return _unhealthy(
+            "frontend", "Frontend component not found", "import_error", str(e)
+        )
+    except Exception as e:
+        return _unhealthy(
+            "frontend",
+            f"Frontend component error: {str(e)}",
+            "unexpected_error",
+            str(e),
+        )
+
+{%- if include_htmx %}
+
+
+async def web_frontend_component_health() -> ComponentStatus:
+    """
+    htmx web frontend health check.
+
+    The web frontend renders in this process, so the signals worth reporting
+    are whether its router imports, whether the directory it renders
+    templates from exists, and whether an asset build has produced a
+    fingerprinted manifest. A missing manifest is the normal dev state -
+    pages fall back to unhashed asset paths - so it is reported as metadata
+    rather than treated as a failure.
+    """
+    try:
+        from app.components.web_frontend.main import create_web_frontend_app
+        from app.core.config import settings
+
+        project_root = Path(__file__).resolve().parents[4]
+        templates_dir = project_root / settings.WEB_TEMPLATES_DIR
+        manifest = project_root / settings.WEB_STATIC_DIR / "dist" / "manifest.json"
+
+        return ComponentStatus(
+            name="web_frontend",
+            status=ComponentStatusType.HEALTHY,
+            message="htmx web frontend component available",
+            response_time_ms=None,
+            metadata={
+                "type": "component_check",
+                "framework": "Jinja2 + htmx",
+                "routes": len(create_web_frontend_app().routes),
+                "templates_dir_present": templates_dir.is_dir(),
+                "assets_built": manifest.is_file(),
+                "note": "Server-rendered pages mounted at /",
+            },
+        )
+
+    except ImportError as e:
+        return _unhealthy(
+            "web_frontend",
+            "Web frontend component not found",
+            "import_error",
+            str(e),
+        )
+    except Exception as e:
+        return _unhealthy(
+            "web_frontend",
+            f"Web frontend component error: {str(e)}",
+            "unexpected_error",
+            str(e),
+        )
+{%- endif %}
+
+{%- if include_scheduler %}
+
+
+async def scheduler_component_health() -> ComponentStatus:
+    """
+    Check scheduler component health from backend.
+{%- if scheduler_backend != "memory" %}
+
+    With persistence: Gets real task data from database
+{%- else %}
+
+    Without persistence: Shows component as activated only
+{%- endif %}
+    """
+    {% if scheduler_backend != "memory" %}
+    try:
+        from app.services.scheduler.task_monitor import TaskHealthMonitor
+
+        monitor = TaskHealthMonitor()
+        # No scheduler instance available in backend
+        health_data = await monitor.get_health_metadata(None)
+
+        # Format message based on task data
+        total_tasks = health_data.total_tasks
+        if total_tasks > 0:
+            message = f"Scheduler running with {total_tasks} tasks"
+        else:
+            message = "Scheduler running (no tasks)"
+
+        return ComponentStatus(
+            name="scheduler",
+            status=ComponentStatusType.HEALTHY,
+            message=message,
+            response_time_ms=None,
+            metadata=health_data.model_dump(),
+        )
+    except Exception as e:
+        logger.error("Failed to get scheduler health data", error=str(e))
+        # Fallback to basic status
+        return ComponentStatus(
+            name="scheduler",
+            status=ComponentStatusType.WARNING,
+            message="Scheduler enabled, health data unavailable",
+            response_time_ms=None,
+            metadata={
+                "type": "component_status",
+                "error": "health_check_failed",
+                "error_details": str(e),
+            },
+        )
+    {% else %}
+    return ComponentStatus(
+        name="scheduler",
+        status=ComponentStatusType.HEALTHY,
+        message="Scheduler component activated",
+        response_time_ms=None,
+        metadata={
+            "type": "component_status",
+            "deployment": "separate_container",
+            "status": "activated",
+            "note": "Memory-only mode - no cross-container health monitoring",
+        },
+    )
+    {% endif %}
+{%- endif %}

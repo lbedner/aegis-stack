@@ -96,16 +96,18 @@ class TestHtmxOffLeavesNoTrace:
         assert "FLET_ASSETS_DIR:" in rendered
 
     def test_health_has_no_web_frontend_entry(self) -> None:
-        rendered = _render(
-            "app/components/backend/startup/component_health.py.jinja", _ctx()
-        )
-        assert "web_frontend" not in rendered
+        """Neither the registry nor the checks it registers may mention it."""
+        for template in (
+            "app/components/backend/startup/component_health.py.jinja",
+            "app/components/backend/startup/health_components.py.jinja",
+        ):
+            assert "web_frontend" not in _render(template, _ctx()), template
 
     def test_health_keeps_flet_frontend_check(self) -> None:
         rendered = _render(
-            "app/components/backend/startup/component_health.py.jinja", _ctx()
+            "app/components/backend/startup/health_components.py.jinja", _ctx()
         )
-        assert "_frontend_component_health" in rendered
+        assert "frontend_component_health" in rendered
 
     def test_ui_label_is_flet_only(self) -> None:
         rendered = _render("app/services/system/ui.py.jinja", _ctx())
@@ -197,7 +199,7 @@ class TestHtmxOnAddsWebFrontend:
 
     def test_health_web_frontend_checks_templates_and_manifest(self) -> None:
         rendered = _render(
-            "app/components/backend/startup/component_health.py.jinja",
+            "app/components/backend/startup/health_components.py.jinja",
             _ctx(include_htmx=True),
         )
         assert "manifest.json" in rendered
@@ -214,6 +216,7 @@ GATED_PYTHON_TEMPLATES = [
     "app/integrations/main.py.jinja",
     "app/core/config.py.jinja",
     "app/components/backend/startup/component_health.py.jinja",
+    "app/components/backend/startup/health_components.py.jinja",
     "app/services/system/ui.py.jinja",
 ]
 

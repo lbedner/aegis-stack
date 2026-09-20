@@ -407,14 +407,15 @@ class TestIngressDashboardCard:
         assert "IngressCard" in content
         assert "ingress_card" in content
 
-    def test_ingress_card_in_main_py(self) -> None:
-        """Test that IngressCard is used in main.py.jinja."""
+    def test_ingress_card_is_built_by_the_card_factory(self) -> None:
+        """Test that IngressCard is used in the dashboard card factory."""
         from pathlib import Path
 
-        main_path = Path(
-            "aegis/templates/copier-aegis-project/{{ project_slug }}/app/components/frontend/main.py.jinja"
+        cards_path = Path(
+            "aegis/templates/copier-aegis-project/{{ project_slug }}"
+            "/app/components/frontend/overseer/cards.py.jinja"
         )
-        content = main_path.read_text()
+        content = cards_path.read_text()
 
         assert "IngressCard" in content
         assert 'component_name == "ingress"' in content

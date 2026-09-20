@@ -134,7 +134,7 @@ class PaymentService(
     async def _tag_with_email_result(
         self,
         row: PaymentTransaction | PaymentSubscription,
-        result: EmailDeliveryResult,
+        result: "EmailDeliveryResult",
     ) -> None:
         """Persist the email-send outcome onto a row's ``metadata_``
         JSON column under an ``email`` key.

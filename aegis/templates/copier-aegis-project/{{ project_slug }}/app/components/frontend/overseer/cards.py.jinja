@@ -27,12 +27,9 @@ from app.services.documents.health import DOCUMENTS_MODAL_ID
 from app.services.finance.constants import FINANCE_COMPONENT_NAME
 {% endif %}
 {% if insights_per_user -%}
-from app.components.frontend.projects.active_project import (
-    get_active_project,
-    load_active_project,
-)
+from app.components.frontend.projects.active_project import get_active_project
 {% endif %}
-from .dashboard.cards import (
+from ..dashboard.cards import (
 {% if include_ai %}
     AICard,
 {% endif %}
@@ -86,10 +83,6 @@ from .dashboard.cards import (
     WorkerCard,
 {% endif %}
 )
-{% if include_insights %}
-from app.services.insights.constants import INSIGHT_COMPONENT_NAME
-{% endif %}
-from app.components.frontend.projects.active_project import get_active_project
 {%- for p in _plugins | default([]) %}
 {%- for c in p.wiring.dashboard_cards %}
 from {{ c.module }} import {{ c.symbol }}

@@ -1,5 +1,7 @@
 """The end-to-end run: drive a checkout through and watch it land."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from rich.table import Table

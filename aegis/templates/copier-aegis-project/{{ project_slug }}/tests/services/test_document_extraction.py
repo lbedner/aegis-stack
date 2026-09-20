@@ -234,13 +234,33 @@ class TestOtherMedia:
 class TestEachPageLandsOnItsOwn:
     """One transaction across a whole scan held the write lock for every
     model call of every page - minutes - and two readings of one file
-    deadlocked. A page commits as soon as it is read."""
+    deadlocked. A page commits as soon as it is read.
 
-    async def test_a_page_is_committed_before_the_next_is_read(self, svc) -> None:
+    This used to assert strict alternation: each model call sees exactly
+    one more commit than the last. That was true while the pages were
+    read one at a time and is not true now that they overlap - the third
+    call can begin before the second page has landed, and which pages
+    are in flight together is a matter of timing. What has to stay true
+    is the thing the alternation was standing in for: one transaction
+    per page, not one per document.
+    """
+
+    async def test_each_page_lands_in_its_own_transaction(self, svc) -> None:
+        """More pages than the concurrency limit, on purpose.
+
+        With everything in flight at once there is nothing to observe:
+        every call starts before any page lands. Eight pages against a
+        limit of four means the last batch can only begin after earlier
+        pages have committed, so a version that gathered them all and
+        wrote at the end is visibly different - its last call still sees
+        only the one commit that ended the read.
+        """
+        from app.services.documents.domains.extraction.pages import PAGE_CONCURRENCY
         from tests._pdf import pdf_bytes
 
+        pages = PAGE_CONCURRENCY * 2
         doc = await svc.ingest(
-            pdf_bytes(["", "", ""]),
+            pdf_bytes([""] * pages),
             title="scan.pdf",
             media_type="application/pdf",
             owner_user_id=1,
@@ -256,14 +276,22 @@ class TestEachPageLandsOnItsOwn:
 
         async def vision(image: bytes, media_type: str) -> tuple[str, str]:
             commits_at_call.append(commits)
+            await asyncio.sleep(0.01)
             return "read", "fake-model"
 
         svc.db.commit = counting_commit  # type: ignore[method-assign]
         await extract_document(svc.db, doc.id, owner_user_id=1, vision=vision)
 
-        # The reads are committed before the first model call, and each
-        # call after that sees one more page landed than the last.
-        assert commits_at_call == [1, 2, 3]
+        # One commit ends the read before any page is touched, then one
+        # per page.
+        assert commits == 1 + pages
+        assert len(commits_at_call) == pages
+        # The later pages started after earlier ones had already landed.
+        # Gather-then-write would leave every one of these at 1.
+        assert commits_at_call[-1] > 1, (
+            "no page had committed by the last model call, so the writes "
+            f"were deferred to the end; counts seen: {commits_at_call}"
+        )
 
 
 class TestPagesAreReadTogether:

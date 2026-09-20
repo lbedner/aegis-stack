@@ -6,6 +6,8 @@ calls no model unless forced; what cannot be read is recorded as unread,
 with the reason, never as an empty string.
 """
 
+import asyncio
+
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -24,6 +26,15 @@ def svc(async_db_session: AsyncSession, tmp_path):
 
 
 class FakeVision:
+    """A stand-in reader that numbers its answers by call.
+
+    Pages are read concurrently, so call order is not page order and the
+    number in the text says nothing about which page it came back for.
+    The real reader transcribes the image it is handed, which is what
+    ties text to page; a fake over two blank pages cannot tell them
+    apart at all, since their renders are byte-identical.
+    """
+
     def __init__(self) -> None:
         self.calls = 0
 
@@ -88,7 +99,13 @@ class TestScans:
         assert vision.calls == 2
         pages = await pages_for(svc.db, doc.id)
         assert all(p.method == "vision" and p.model == "fake-vision" for p in pages)
-        assert pages[1].text == "transcribed page 2"
+        # Both transcriptions landed, one per page. Which page got which
+        # is the fake's call counter, not a property of the code - see
+        # FakeVision.
+        assert sorted(p.text or "" for p in pages) == [
+            "transcribed page 1",
+            "transcribed page 2",
+        ]
 
     @pytest.mark.asyncio
     async def test_a_rerun_reads_nothing_and_calls_no_model(self, svc) -> None:
@@ -247,6 +264,103 @@ class TestEachPageLandsOnItsOwn:
         # The reads are committed before the first model call, and each
         # call after that sees one more page landed than the last.
         assert commits_at_call == [1, 2, 3]
+
+
+class TestPagesAreReadTogether:
+    """The reads overlap; the writes do not.
+
+    A scan is one model call per page and a person is watching, so the
+    calls run concurrently. Everything that touches the session still
+    happens one at a time, which is what keeps the write lock free
+    between pages.
+    """
+
+    async def test_several_pages_are_in_the_model_at_once(self, svc) -> None:
+        from app.services.documents.domains.extraction.pages import PAGE_CONCURRENCY
+        from tests._pdf import pdf_bytes
+
+        doc = await svc.ingest(
+            pdf_bytes([""] * 6),
+            title="scan.pdf",
+            media_type="application/pdf",
+            owner_user_id=1,
+        )
+        live = 0
+        peak = 0
+
+        async def vision(image: bytes, media_type: str) -> tuple[str, str]:
+            nonlocal live, peak
+            live += 1
+            peak = max(peak, live)
+            await asyncio.sleep(0.02)
+            live -= 1
+            return "read", "fake-model"
+
+        await extract_document(svc.db, doc.id, owner_user_id=1, vision=vision)
+
+        assert peak > 1, "pages were read one at a time"
+        assert peak <= PAGE_CONCURRENCY, f"{peak} at once exceeds the cap"
+
+    async def test_the_session_is_never_used_by_two_pages_at_once(self, svc) -> None:
+        """The reads are safe to overlap only because none of them touch
+        the session. A commit that overlapped another would corrupt it."""
+        from tests._pdf import pdf_bytes
+
+        doc = await svc.ingest(
+            pdf_bytes([""] * 6),
+            title="scan.pdf",
+            media_type="application/pdf",
+            owner_user_id=1,
+        )
+        committing = False
+        overlapped = False
+        real_commit = svc.db.commit
+
+        async def counting_commit() -> None:
+            nonlocal committing, overlapped
+            if committing:
+                overlapped = True
+            committing = True
+            await real_commit()
+            committing = False
+
+        async def vision(image: bytes, media_type: str) -> tuple[str, str]:
+            await asyncio.sleep(0.01)
+            return "read", "fake-model"
+
+        svc.db.commit = counting_commit  # type: ignore[method-assign]
+        await extract_document(svc.db, doc.id, owner_user_id=1, vision=vision)
+
+        assert not overlapped, "two pages committed at the same time"
+
+    async def test_a_page_that_blows_up_does_not_take_the_others_down(
+        self, svc
+    ) -> None:
+        """One bad page is an unread row with a reason, not a failed run."""
+        from tests._pdf import pdf_bytes
+
+        doc = await svc.ingest(
+            pdf_bytes([""] * 4),
+            title="scan.pdf",
+            media_type="application/pdf",
+            owner_user_id=1,
+        )
+        seen = 0
+
+        async def vision(image: bytes, media_type: str) -> tuple[str, str]:
+            nonlocal seen
+            seen += 1
+            if seen == 2:
+                raise RuntimeError("the model fell over")
+            return "read", "fake-model"
+
+        result = await extract_document(svc.db, doc.id, owner_user_id=1, vision=vision)
+
+        assert (result.read, result.unread) == (3, 1)
+        pages = await pages_for(svc.db, doc.id)
+        assert len(pages) == 4
+        (failed,) = [p for p in pages if p.status != "read"]
+        assert "fell over" in (failed.detail or "")
 
 
 class TestOcrComesBeforeTheModel:

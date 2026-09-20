@@ -14,6 +14,7 @@ from app.components.frontend.dashboard.modals.finance_modal import (
     outlook_stats_cells,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from tests.components.frontend._tree import panel_source
 
 STATS = {
     "income_total": 500_000,
@@ -95,11 +96,9 @@ class TestTheWiring:
         assert "_open_edit_limit" in source
 
     def test_a_negative_month_offers_its_trims(self) -> None:
-        import inspect
-
         from app.components.frontend.dashboard.modals import finance_modal
 
-        source = inspect.getsource(finance_modal.BudgetPanel)
+        source = panel_source(finance_modal.BudgetPanel)
         assert "_trims_section" in source
         assert "trims" in source
 
@@ -304,11 +303,9 @@ class TestStatPopups:
         assert "May - Jul 2026 average" in rendered
 
     def test_the_cells_are_wired_to_open_it(self) -> None:
-        import inspect
-
         from app.components.frontend.dashboard.modals import finance_modal
 
-        source = inspect.getsource(finance_modal.BudgetPanel)
+        source = panel_source(finance_modal.BudgetPanel)
         assert "_stat_detail" in source
         assert "_open_stat_detail" in source
         assert "stat-details" in source

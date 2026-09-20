@@ -64,6 +64,30 @@ class DeltaFrame:
 
 
 @dataclass(frozen=True, slots=True)
+class ToolFrame:
+    """A tool call starting, emitted before the model waits on it.
+
+    Content-free: it exists so a pause in the token stream says what it is
+    waiting for. Silence that looks identical to a hang is the thing this
+    ends. ``label`` is built once here so the live trail and the stored
+    transcript read the same words rather than two renderings drifting.
+    """
+
+    tool: str
+    args: str = ""
+    label: str = ""
+    kind: Literal["tool"] = "tool"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "tool": self.tool,
+            "args": self.args,
+            "label": self.label,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DoneFrame:
     """Terminal success frame: the full answer plus exact cost accounting.
 
@@ -117,7 +141,7 @@ class ErrorFrame:
         return {"kind": self.kind, "message": self.message}
 
 
-StreamFrame = DeltaFrame | DoneFrame | BlockedFrame | ErrorFrame
+StreamFrame = DeltaFrame | ToolFrame | DoneFrame | BlockedFrame | ErrorFrame
 
 
 @dataclass(frozen=True, slots=True)

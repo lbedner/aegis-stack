@@ -456,12 +456,19 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/ai/test_provider_management.py")
         # Remove LLM CLI and API (catalog management needs database)
         remove_file(project_path, "app/cli/llm.py")
+        remove_file(project_path, "app/cli/llm_rendering.py")
         remove_file(project_path, "tests/cli/test_llm_cli.py")
         remove_dir(project_path, "app/components/backend/api/llm")
         remove_file(project_path, "tests/api/test_llm_endpoints.py")
         # Remove analytics UI (needs database for usage tracking)
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/ai_analytics_tab.py"
+        remove_dir(
+            project_path, "app/components/frontend/dashboard/modals/ai_analytics_tab"
+        )
+        # Cloud Catalog reads the llm tables removed above. ``ai_modal``
+        # imports it inside try/except ImportError, so removing the
+        # package is what hides the tab.
+        remove_dir(
+            project_path, "app/components/frontend/dashboard/modals/llm_catalog_tab"
         )
         remove_file(
             project_path, "tests/components/frontend/test_ai_analytics_utils.py"
@@ -481,8 +488,11 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     if not is_enabled(AnswerKeys.AI_RAG):
         remove_dir(project_path, "app/components/backend/api/rag")
         remove_dir(project_path, "app/services/rag")
-        remove_file(project_path, "app/cli/rag.py")
+        # A package now, so remove_dir - remove_file unlinks and would
+        # silently no-op on a directory that is no longer a .py file.
+        remove_dir(project_path, "app/cli/rag")
         remove_dir(project_path, "tests/services/rag")
+        remove_file(project_path, "tests/cli/test_rag_cli_registration.py")
         # Remove RAG-related files within AI service
         remove_file(project_path, "app/services/ai/domains/chat/rag_context.py")
         remove_file(project_path, "app/services/ai/domains/chat/rag_stats_context.py")
@@ -499,10 +509,17 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     ):
         remove_dir(project_path, "app/services/ai/domains/chat/chat_kit")
         remove_dir(project_path, "tests/services/ai/chat_kit")
+        # PydanticAI model + agent construction; the LangChain branch of
+        # providers.py builds its own and never imports these.
+        remove_file(project_path, "app/services/ai/domains/llm/model_factory.py")
+        remove_file(project_path, "app/services/ai/domains/llm/agents.py")
 
     # Remove voice (TTS/STT) if not enabled
     if not is_enabled(AnswerKeys.AI_VOICE):
         remove_dir(project_path, "app/components/backend/api/voice")
+        # The spoken-turn endpoints under /ai; the /voice catalog above
+        # is a different router.
+        remove_file(project_path, "app/components/backend/api/ai/speech.py")
         remove_dir(project_path, "app/services/ai/domains/voice")
         remove_dir(project_path, "tests/services/ai/voice")
         remove_file(project_path, "tests/api/test_voice_endpoints.py")

@@ -1,19 +1,25 @@
 """Budgets: the limits you set, and whether the month survives them.
 
-Five concerns, one per module - ``lines`` for setting a limit,
-``suggestions`` for proposing and declining them, ``summary`` for reading
-a period back and closing a negative month, ``outlook`` for running the
-same equation forward, ``queries`` for the reads only this domain issues.
+One concern per module - ``lines`` for setting a limit, ``suggestions``
+for proposing and declining them, ``summary`` for reading a period back,
+``trims`` for closing a negative month, ``details`` for the rows behind
+one stat, ``outlook`` for running the same equation forward, ``queries``
+for the reads only this domain issues.
 The package boundary is the API: callers reach every verb as
 ``budgets.foo(db, ...)`` and never import a submodule.
 """
 
 from app.services.finance.domains.planning.budgets import (
+    details,
     lines,
     outlook,
     queries,
     suggestions,
     summary,
+    trims,
+)
+from app.services.finance.domains.planning.budgets.details import (
+    budget_stat_details,
 )
 from app.services.finance.domains.planning.budgets.lines import (
     budget_line_status,
@@ -41,11 +47,8 @@ from app.services.finance.domains.planning.budgets.suggestions import (
     restore_budget_suggestions,
     suggest_budget_lines,
 )
-from app.services.finance.domains.planning.budgets.summary import (
-    budget_stat_details,
-    budget_summary,
-    plan_budget_trims,
-)
+from app.services.finance.domains.planning.budgets.summary import budget_summary
+from app.services.finance.domains.planning.budgets.trims import plan_budget_trims
 from app.services.finance.domains.planning.budgets.uncovered import (
     uncovered_spend,
     uncovered_spend_filters,
@@ -62,6 +65,7 @@ __all__ = [
     "budget_line_status",
     "budget_month_outlook",
     "budget_stat_details",
+    "details",
     "budget_summary",
     "delete_budget_line",
     "dismiss_budget_suggestions",
@@ -80,6 +84,7 @@ __all__ = [
     "suggest_budget_lines",
     "suggestions",
     "summary",
+    "trims",
     "uncovered_spend",
     "uncovered_spend_filters",
     "uncovered_spending_rate",

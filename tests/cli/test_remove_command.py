@@ -107,7 +107,7 @@ class TestRemoveCommand:
         # Representative gated-extra files (check files, not dirs — an emptied
         # directory may linger; the behavior under test is file deletion).
         rag_service = project_path / "app" / "services" / "rag" / "service.py"
-        rag_cli = project_path / "app" / "cli" / "rag.py"
+        rag_cli = project_path / "app" / "cli" / "rag" / "shared.py"
         rag_router = (
             project_path
             / "app"

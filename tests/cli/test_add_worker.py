@@ -84,8 +84,11 @@ class TestAddWorkerComponent:
             / "startup"
             / "component_health.py"
         ).read_text()
-        frontend_main_before = (
-            project_path / "app" / "components" / "frontend" / "main.py"
+        # WorkerCard is built by the overseer card factory, not by
+        # ``frontend/main.py`` — but both are shared files the add path
+        # must regenerate, which is what this test is about.
+        cards_factory_before = (
+            project_path / "app" / "components" / "frontend" / "overseer" / "cards.py"
         ).read_text()
         cards_init_before = (
             project_path
@@ -99,7 +102,7 @@ class TestAddWorkerComponent:
 
         # Worker health check should NOT be present
         assert "worker" not in component_health_before.lower()
-        assert "WorkerCard" not in frontend_main_before
+        assert "WorkerCard" not in cards_factory_before
         assert "WorkerCard" not in cards_init_before
 
         # Add worker component
@@ -118,8 +121,8 @@ class TestAddWorkerComponent:
             / "startup"
             / "component_health.py"
         ).read_text()
-        frontend_main_after = (
-            project_path / "app" / "components" / "frontend" / "main.py"
+        cards_factory_after = (
+            project_path / "app" / "components" / "frontend" / "overseer" / "cards.py"
         ).read_text()
         cards_init_after = (
             project_path
@@ -136,7 +139,7 @@ class TestAddWorkerComponent:
         assert "check_worker_health" in component_health_after
 
         # Worker card imports SHOULD be present
-        assert "WorkerCard" in frontend_main_after
+        assert "WorkerCard" in cards_factory_after
         assert "WorkerCard" in cards_init_after
 
     def test_add_worker_creates_component_directory(

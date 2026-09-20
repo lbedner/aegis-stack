@@ -1,0 +1,211 @@
+"""The shapes a card is built from: rows, metrics, bars."""
+
+from .status import create_health_tag
+
+import flet as ft
+from app.components.frontend.controls import (
+    H3Text,
+    LabelText,
+    PrimaryText,
+    SecondaryText,
+    StatusTag,
+)
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+def create_metric_container(label: str, value: str) -> ft.Container:
+    """
+    Create a metric container with label and value.
+
+    Args:
+        label: Metric label text
+        value: Metric value text
+
+    Returns:
+        Container with styled metric display
+    """
+    return ft.Container(
+        content=ft.Column(
+            [
+                SecondaryText(label),
+                ft.Container(height=8),
+                PrimaryText(value),
+            ],
+            spacing=0,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+        ),
+        padding=ft.padding.all(16),
+        bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.GREY),
+        border_radius=8,
+        border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
+        height=80,
+        expand=True,
+    )
+
+
+def create_header_row(
+    title: str,
+    subtitle: str,
+    component_data: ComponentStatus,
+    status_detail: str | None = None,
+    padding: ft.Padding | None = None,
+) -> ft.Container:
+    """
+    Create a header row with title/subtitle on left and health tag on right.
+
+    Args:
+        title: Card title text
+        subtitle: Card subtitle text
+        component_data: ComponentStatus for health tag
+        status_detail: Optional detail for status tag (e.g., "2/3 online")
+        padding: Optional padding override (default: bottom=16 for cards)
+
+    Returns:
+        Container with header layout
+    """
+    # Default padding for card headers; None for table rows
+    if padding is None:
+        padding = ft.padding.only(bottom=16)
+
+    return ft.Container(
+        content=ft.Row(
+            [
+                ft.Column(
+                    [
+                        H3Text(title),
+                        SecondaryText(subtitle),
+                    ],
+                    spacing=2,
+                ),
+                create_health_tag(component_data, detail=status_detail),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        ),
+        padding=padding,
+    )
+
+
+def create_responsive_3_section_layout(
+    left_content: ft.Control, middle_content: ft.Control, right_content: ft.Control
+) -> ft.Row:
+    """
+    Create responsive 3-section card layout prioritizing middle section.
+
+    Args:
+        left_content: Technology badge content
+        middle_content: Main metrics/data content (gets priority)
+        right_content: Details/performance content
+
+    Returns:
+        Row with responsive flex layout
+    """
+    return ft.Row(
+        [
+            # Left: Tech badge (fixed width)
+            ft.Container(
+                content=left_content,
+                width=200,  # Fixed width - honors TechBadge width
+            ),
+            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+            # Middle: Metrics (PRIORITY - gets most space and protection)
+            ft.Container(
+                content=middle_content,
+                expand=5,  # ~50% of space, PRIORITY SECTION
+                padding=ft.padding.all(16),
+                width=300,  # Minimum width to keep metrics functional
+            ),
+            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
+            # Right: Details (flexible, shrinks most aggressively)
+            ft.Container(
+                content=right_content,
+                expand=3,  # ~30% of space, can shrink aggressively
+                padding=ft.padding.all(16),
+                width=150,  # Minimum width to prevent complete disappearance
+            ),
+        ]
+    )
+
+
+def create_stats_row(label: str, value: str, value_color: str | None = None) -> ft.Row:
+    """
+    Create a standardized statistics row with label and value.
+
+    Args:
+        label: The label text (e.g., "Active Workers")
+        value: The value text (e.g., "2")
+        value_color: Optional color for the value text
+
+    Returns:
+        Row with label and value properly aligned
+    """
+    value_control = LabelText(value)
+    if value_color:
+        value_control.color = value_color
+
+    return ft.Row(
+        [
+            SecondaryText(f"{label}:"),
+            value_control,
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+    )
+
+
+def create_progress_indicator(
+    label: str, value: float, details: str, color: str
+) -> ft.Container:
+    """
+    Create a progress indicator with label, progress bar, and details.
+
+    Args:
+        label: Label for the progress indicator
+        value: Progress value (0-100)
+        details: Additional details text
+        color: Color for the progress bar
+
+    Returns:
+        Container with the progress indicator
+    """
+    return ft.Container(
+        content=ft.Column(
+            [
+                ft.Text(
+                    label,
+                    size=12,
+                    weight=ft.FontWeight.W_600,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                ft.Container(
+                    content=ft.ProgressBar(
+                        value=value / 100.0,
+                        height=8,
+                        color=color,
+                        bgcolor=ft.Colors.with_opacity(
+                            0.3, ft.Colors.ON_SURFACE_VARIANT
+                        ),
+                        border_radius=4,
+                    ),
+                    margin=ft.margin.only(top=4, bottom=4),
+                ),
+                ft.Row(
+                    [
+                        ft.Text(
+                            f"{value:.1f}%",
+                            size=16,
+                            weight=ft.FontWeight.W_700,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                        ft.Text(
+                            details,
+                            size=14,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+            ],
+            spacing=2,
+        ),
+        padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        expand=True,
+    )

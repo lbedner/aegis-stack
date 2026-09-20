@@ -9,23 +9,23 @@ taxonomy from scripts. Authoring (post body editing) stays in the dashboard.
 import asyncio
 
 import typer
+
 from app.cli import theme
+from app.cli.blog_posts import (
+    _archive,
+    _delete,
+    _post_show,
+    _posts,
+    _publish,
+    _status,
+)
+from app.cli.blog_shared import (
+    _ex,
+)
+from app.cli.blog_tags import _tag_create, _tag_delete, _tag_update, _tags
+from app.cli.blog_transfer import _export, _import
 from app.i18n import lazy_t, t
 from app.services.blog.constants import ImportConflictPolicy
-from rich.console import Console
-from rich.table import Table
-
-
-def _ex(*lines: str) -> str:
-    """Render an indented Examples block for a command epilog.
-
-    Rich (typer's default help renderer) collapses single newlines into
-    soft wraps. Joining examples with a blank line keeps each on its own
-    visual line.
-    """
-    body = "\n\n".join(lines)
-    return f"Examples:\n\n{body}"
-
 
 BLOG_EPILOG = _ex(
     "{{ project_slug }} blog status",
@@ -37,52 +37,6 @@ BLOG_EPILOG = _ex(
 
 app = typer.Typer(help=lazy_t("blog.help"), epilog=BLOG_EPILOG)
 console = theme.console()
-
-_PAGE_SIZE_MAX = 100
-_RESOLVE_PAGE_SIZE = 100
-_RESOLVE_PAGE_LIMIT = 50
-
-
-def _format_dt(value: object) -> str:
-    """Render a datetime cell, falling back to a dim dash."""
-    if value is None:
-        return "[dim]-[/dim]"
-    if hasattr(value, "strftime"):
-        return value.strftime("%Y-%m-%d %H:%M")  # type: ignore[union-attr]
-    return str(value)
-
-
-def _status_color(status: str) -> str:
-    return {
-        "draft": theme.WARNING,
-        "published": theme.ACCENT,
-        "archived": "dim",
-    }.get(status, "dim")
-
-
-async def _resolve_post_id(service: object, slug: str) -> int | None:
-    """Find a post id by slug across all statuses (paginated scan)."""
-    page = 1
-    while page <= _RESOLVE_PAGE_LIMIT:
-        posts, total = await service.list_posts(  # type: ignore[attr-defined]
-            page=page, page_size=_RESOLVE_PAGE_SIZE
-        )
-        for post in posts:
-            if post.slug == slug:
-                return post.id
-        if page * _RESOLVE_PAGE_SIZE >= total:
-            return None
-        page += 1
-    return None
-
-
-async def _resolve_tag_id(service: object, slug: str) -> int | None:
-    """Find a tag id by slug."""
-    tags = await service.list_tags()  # type: ignore[attr-defined]
-    for tag in tags:
-        if tag.slug == slug:
-            return tag.id
-    return None
 
 
 # Read commands
@@ -102,53 +56,6 @@ def status() -> None:
     asyncio.run(_status())
 
 
-async def _status() -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        summary = await service.get_health_summary()
-
-    console.print()
-    console.print(f"[bold]{t('blog.status_title')}[/bold]")
-    console.print()
-
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column("Label", style="dim")
-    table.add_column("Value")
-
-    table.add_row(t("blog.col_total_posts"), str(summary.total_posts))
-    table.add_row(
-        t("blog.col_drafts"),
-        f"[{theme.WARNING}]{summary.draft_posts}[/{theme.WARNING}]",
-    )
-    table.add_row(
-        t("blog.col_published"),
-        f"[{theme.ACCENT}]{summary.published_posts}[/{theme.ACCENT}]",
-    )
-    table.add_row(
-        t("blog.col_archived"),
-        f"[dim]{summary.archived_posts}[/dim]",
-    )
-    table.add_row(t("blog.col_tags"), str(summary.tag_count))
-    if summary.stale_draft_count:
-        table.add_row(
-            t("blog.col_stale_drafts"),
-            f"[{theme.ERROR}]{summary.stale_draft_count}[/{theme.ERROR}]",
-        )
-
-    latest = summary.latest_published_post
-    if latest:
-        table.add_row(
-            t("blog.col_latest_published"),
-            f"{latest.get('title')} ([dim]{latest.get('slug')}[/dim])",
-        )
-
-    console.print(table)
-    console.print()
-
-
 @app.command(
     help=lazy_t("blog.help_posts"),
     epilog=_ex(
@@ -161,12 +68,8 @@ def posts(
     status_filter: str | None = typer.Option(
         None, "--status", "-s", help=lazy_t("blog.opt_status")
     ),
-    tag: str | None = typer.Option(
-        None, "--tag", "-t", help=lazy_t("blog.opt_tag")
-    ),
-    limit: int = typer.Option(
-        20, "--limit", "-n", help=lazy_t("blog.opt_limit")
-    ),
+    tag: str | None = typer.Option(None, "--tag", "-t", help=lazy_t("blog.opt_tag")),
+    limit: int = typer.Option(20, "--limit", "-n", help=lazy_t("blog.opt_limit")),
 ) -> None:
     """List blog posts with optional status and tag filters.
 
@@ -177,44 +80,6 @@ def posts(
         {{ project_slug }} blog posts --tag release-notes --limit 50
     """
     asyncio.run(_posts(status_filter, tag, limit))
-
-
-async def _posts(status_filter: str | None, tag: str | None, limit: int) -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-
-    page_size = min(max(limit, 1), _PAGE_SIZE_MAX)
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        rows, total = await service.list_posts(
-            page=1, page_size=page_size, status=status_filter, tag=tag
-        )
-
-    if not rows:
-        console.print(f"[dim]{t('blog.no_posts')}[/dim]")
-        return
-
-    table = Table(title=t("blog.posts_title", total=total))
-    table.add_column(t("blog.col_id"), style="dim")
-    table.add_column(t("blog.col_slug"))
-    table.add_column(t("blog.col_title"))
-    table.add_column(t("blog.col_status"))
-    table.add_column(t("blog.col_author"))
-    table.add_column(t("blog.col_published_at"))
-
-    for post in rows:
-        color = _status_color(post.status)
-        table.add_row(
-            str(post.id),
-            post.slug,
-            post.title,
-            f"[{color}]{post.status}[/{color}]",
-            post.author_name or "[dim]-[/dim]",
-            _format_dt(post.published_at),
-        )
-
-    console.print(table)
 
 
 @app.command(
@@ -234,55 +99,6 @@ def post_show(
     asyncio.run(_post_show(slug))
 
 
-async def _post_show(slug: str) -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        post_id = await _resolve_post_id(service, slug)
-        if post_id is None:
-            console.print(
-                f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
-            )
-            raise typer.Exit(1)
-        post = await service.get_post(post_id)
-
-    if post is None:
-        console.print(
-            f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(1)
-
-    color = _status_color(post.status)
-    console.print()
-    console.print(f"[bold]{post.title}[/bold]")
-    console.print()
-
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column("Label", style="dim")
-    table.add_column("Value")
-
-    table.add_row(t("blog.col_id"), str(post.id))
-    table.add_row(t("blog.col_slug"), post.slug)
-    table.add_row(t("blog.col_status"), f"[{color}]{post.status}[/{color}]")
-    table.add_row(t("blog.col_author"), post.author_name or "-")
-    table.add_row(t("blog.col_created_at"), _format_dt(post.created_at))
-    table.add_row(t("blog.col_updated_at"), _format_dt(post.updated_at))
-    table.add_row(t("blog.col_published_at"), _format_dt(post.published_at))
-    if post.tags:
-        table.add_row(
-            t("blog.col_tags"),
-            ", ".join(tag.slug for tag in post.tags),
-        )
-    if post.excerpt:
-        table.add_row(t("blog.col_excerpt"), post.excerpt)
-
-    console.print(table)
-    console.print()
-    console.print(f"[dim]{t('blog.body_hint')}[/dim]")
-
-
 @app.command(
     help=lazy_t("blog.help_tags"),
     epilog=_ex("{{ project_slug }} blog tags"),
@@ -295,35 +111,6 @@ def tags() -> None:
         {{ project_slug }} blog tags
     """
     asyncio.run(_tags())
-
-
-async def _tags() -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        rows = await service.list_tags()
-
-    if not rows:
-        console.print(f"[dim]{t('blog.no_tags')}[/dim]")
-        return
-
-    table = Table(title=t("blog.tags_title", total=len(rows)))
-    table.add_column(t("blog.col_id"), style="dim")
-    table.add_column(t("blog.col_slug"))
-    table.add_column(t("blog.col_name"))
-    table.add_column(t("blog.col_created_at"))
-
-    for tag in rows:
-        table.add_row(
-            str(tag.id),
-            tag.slug,
-            tag.name,
-            _format_dt(tag.created_at),
-        )
-
-    console.print(table)
 
 
 # State transitions
@@ -345,31 +132,6 @@ def publish(
     asyncio.run(_publish(slug))
 
 
-async def _publish(slug: str) -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        post_id = await _resolve_post_id(service, slug)
-        if post_id is None:
-            console.print(
-                f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
-            )
-            raise typer.Exit(1)
-        post = await service.publish_post(post_id)
-
-    if post is None:
-        console.print(
-            f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(1)
-
-    console.print(
-        f"[{theme.ACCENT}]{t('blog.published', slug=post.slug)}[/{theme.ACCENT}]"
-    )
-
-
 @app.command(
     help=lazy_t("blog.help_archive"),
     epilog=_ex("{{ project_slug }} blog archive my-old-post"),
@@ -386,31 +148,6 @@ def archive(
     asyncio.run(_archive(slug))
 
 
-async def _archive(slug: str) -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        post_id = await _resolve_post_id(service, slug)
-        if post_id is None:
-            console.print(
-                f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
-            )
-            raise typer.Exit(1)
-        post = await service.archive_post(post_id)
-
-    if post is None:
-        console.print(
-            f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(1)
-
-    console.print(
-        f"[{theme.WARNING}]{t('blog.archived', slug=post.slug)}[/{theme.WARNING}]"
-    )
-
-
 @app.command(
     help=lazy_t("blog.help_delete"),
     epilog=_ex(
@@ -420,9 +157,7 @@ async def _archive(slug: str) -> None:
 )
 def delete(
     slug: str = typer.Argument(..., help=lazy_t("blog.arg_slug")),
-    yes: bool = typer.Option(
-        False, "--yes", "-y", help=lazy_t("blog.opt_yes")
-    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("blog.opt_yes")),
 ) -> None:
     """Permanently delete a post and its tag links.
 
@@ -431,37 +166,6 @@ def delete(
         {{ project_slug }} blog delete obsolete-post --yes
     """
     asyncio.run(_delete(slug, yes))
-
-
-async def _delete(slug: str, yes: bool) -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-
-    if not yes:
-        confirmed = typer.confirm(t("blog.confirm_delete_post", slug=slug))
-        if not confirmed:
-            console.print(f"[dim]{t('blog.cancelled')}[/dim]")
-            raise typer.Exit(0)
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        post_id = await _resolve_post_id(service, slug)
-        if post_id is None:
-            console.print(
-                f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
-            )
-            raise typer.Exit(1)
-        ok = await service.delete_post(post_id)
-
-    if not ok:
-        console.print(
-            f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(1)
-
-    console.print(
-        f"[{theme.ACCENT}]{t('blog.deleted', slug=slug)}[/{theme.ACCENT}]"
-    )
 
 
 # Tag CRUD
@@ -477,9 +181,7 @@ async def _delete(slug: str, yes: bool) -> None:
 )
 def tag_create(
     name: str = typer.Argument(..., help=lazy_t("blog.arg_tag_name")),
-    slug: str | None = typer.Option(
-        None, "--slug", help=lazy_t("blog.opt_tag_slug")
-    ),
+    slug: str | None = typer.Option(None, "--slug", help=lazy_t("blog.opt_tag_slug")),
 ) -> None:
     """Create a new tag.
 
@@ -489,24 +191,6 @@ def tag_create(
         {{ project_slug }} blog tag-create "Release Notes" --slug releases
     """
     asyncio.run(_tag_create(name, slug))
-
-
-async def _tag_create(name: str, slug: str | None) -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-    from app.services.blog.schemas import BlogTagCreate
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        try:
-            tag = await service.create_tag(BlogTagCreate(name=name, slug=slug))
-        except ValueError as e:
-            console.print(f"[{theme.ERROR}]{e}[/{theme.ERROR}]")
-            raise typer.Exit(1) from e
-
-    console.print(
-        f"[{theme.ACCENT}]{t('blog.tag_created', name=tag.name, slug=tag.slug)}[/{theme.ACCENT}]"
-    )
 
 
 @app.command(
@@ -541,38 +225,6 @@ def tag_update(
     asyncio.run(_tag_update(slug, name, new_slug))
 
 
-async def _tag_update(slug: str, name: str | None, new_slug: str | None) -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-    from app.services.blog.schemas import BlogTagUpdate
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        tag_id = await _resolve_tag_id(service, slug)
-        if tag_id is None:
-            console.print(
-                f"[{theme.ERROR}]{t('blog.tag_not_found', slug=slug)}[/{theme.ERROR}]"
-            )
-            raise typer.Exit(1)
-        try:
-            tag = await service.update_tag(
-                tag_id, BlogTagUpdate(name=name, slug=new_slug)
-            )
-        except ValueError as e:
-            console.print(f"[{theme.ERROR}]{e}[/{theme.ERROR}]")
-            raise typer.Exit(1) from e
-
-    if tag is None:
-        console.print(
-            f"[{theme.ERROR}]{t('blog.tag_not_found', slug=slug)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(1)
-
-    console.print(
-        f"[{theme.ACCENT}]{t('blog.tag_updated', name=tag.name, slug=tag.slug)}[/{theme.ACCENT}]"
-    )
-
-
 @app.command(
     name="tag-delete",
     help=lazy_t("blog.help_tag_delete"),
@@ -583,9 +235,7 @@ async def _tag_update(slug: str, name: str | None, new_slug: str | None) -> None
 )
 def tag_delete(
     slug: str = typer.Argument(..., help=lazy_t("blog.arg_tag_slug")),
-    yes: bool = typer.Option(
-        False, "--yes", "-y", help=lazy_t("blog.opt_yes")
-    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("blog.opt_yes")),
 ) -> None:
     """Delete a tag and remove it from all posts.
 
@@ -594,37 +244,6 @@ def tag_delete(
         {{ project_slug }} blog tag-delete obsolete --yes
     """
     asyncio.run(_tag_delete(slug, yes))
-
-
-async def _tag_delete(slug: str, yes: bool) -> None:
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-
-    if not yes:
-        confirmed = typer.confirm(t("blog.confirm_delete_tag", slug=slug))
-        if not confirmed:
-            console.print(f"[dim]{t('blog.cancelled')}[/dim]")
-            raise typer.Exit(0)
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        tag_id = await _resolve_tag_id(service, slug)
-        if tag_id is None:
-            console.print(
-                f"[{theme.ERROR}]{t('blog.tag_not_found', slug=slug)}[/{theme.ERROR}]"
-            )
-            raise typer.Exit(1)
-        ok = await service.delete_tag(tag_id)
-
-    if not ok:
-        console.print(
-            f"[{theme.ERROR}]{t('blog.tag_not_found', slug=slug)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(1)
-
-    console.print(
-        f"[{theme.ACCENT}]{t('blog.tag_deleted', slug=slug)}[/{theme.ACCENT}]"
-    )
 
 
 # Export / Import
@@ -651,55 +270,6 @@ def export(
     asyncio.run(_export(path, fmt, status_filter))
 
 
-async def _export(path: str, fmt: str, status_filter: str | None) -> None:
-    from pathlib import Path
-
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-    from app.services.blog.serialization import (
-        post_to_markdown,
-        posts_to_json,
-    )
-
-    if fmt not in ("markdown", "json"):
-        console.print(
-            f"[{theme.ERROR}]{t('blog.export_bad_format', fmt=fmt)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(2)
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        posts = await service.export_posts(status=status_filter)
-
-    if not posts:
-        console.print(f"[dim]{t('blog.no_posts')}[/dim]")
-        return
-
-    target = Path(path)
-    if fmt == "json":
-        target.write_text(posts_to_json(posts), encoding="utf-8")
-        console.print(
-            f"[{theme.ACCENT}]{t('blog.exported_json', count=len(posts), path=target)}[/{theme.ACCENT}]"
-        )
-        return
-
-    target.mkdir(parents=True, exist_ok=True)
-    seen: set[str] = set()
-    for post in posts:
-        base = post.slug or "post"
-        name = f"{base}.md"
-        counter = 1
-        while name in seen:
-            counter += 1
-            name = f"{base}-{counter}.md"
-        seen.add(name)
-        (target / name).write_text(post_to_markdown(post), encoding="utf-8")
-
-    console.print(
-        f"[{theme.ACCENT}]{t('blog.exported_markdown', count=len(posts), path=target)}[/{theme.ACCENT}]"
-    )
-
-
 @app.command(
     name="import",
     help=lazy_t("blog.help_import"),
@@ -719,77 +289,3 @@ def import_(
 ) -> None:
     """Import posts from a markdown file/dir, a zip archive, or a JSON document."""
     asyncio.run(_import(path, on_conflict))
-
-
-async def _import(path: str, on_conflict: "ImportConflictPolicy") -> None:
-    from pathlib import Path
-
-    from app.core.db import get_async_session
-    from app.services.blog.service import BlogService
-    from app.services.blog.schemas import ImportedPost
-    from app.services.blog.serialization import (
-        json_to_posts,
-        markdown_to_post,
-        zip_to_posts,
-    )
-
-    source = Path(path)
-    if not source.exists():
-        console.print(
-            f"[{theme.ERROR}]{t('blog.import_path_missing', path=path)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(1)
-
-    posts: list[ImportedPost] = []
-    if source.is_dir():
-        for md_path in sorted(source.rglob("*.md")):
-            text = md_path.read_text(encoding="utf-8")
-            posts.append(markdown_to_post(text, fallback_slug=md_path.stem))
-    elif source.suffix.lower() == ".zip":
-        posts = zip_to_posts(source.read_bytes())
-    elif source.suffix.lower() == ".json":
-        posts = json_to_posts(source.read_text(encoding="utf-8"))
-    elif source.suffix.lower() in (".md", ".markdown"):
-        posts = [
-            markdown_to_post(
-                source.read_text(encoding="utf-8"), fallback_slug=source.stem
-            )
-        ]
-    else:
-        console.print(
-            f"[{theme.ERROR}]{t('blog.import_bad_type', path=path)}[/{theme.ERROR}]"
-        )
-        raise typer.Exit(2)
-
-    if not posts:
-        console.print(f"[dim]{t('blog.import_empty')}[/dim]")
-        return
-
-    async with get_async_session() as session:
-        service = BlogService(session)
-        result = await service.import_posts(posts, on_conflict=on_conflict)
-
-    table = Table(title=t("blog.import_summary_title"))
-    table.add_column(t("blog.col_kind"), style="dim")
-    table.add_column(t("blog.col_count"), justify="right")
-    table.add_row(
-        t("blog.col_created"),
-        f"[{theme.ACCENT}]{result.created}[/{theme.ACCENT}]",
-    )
-    table.add_row(t("blog.col_updated"), str(result.updated))
-    table.add_row(
-        t("blog.col_skipped"),
-        f"[{theme.WARNING}]{result.skipped}[/{theme.WARNING}]",
-    )
-    table.add_row(
-        t("blog.col_failed"),
-        f"[{theme.ERROR}]{result.failed}[/{theme.ERROR}]",
-    )
-    console.print(table)
-
-    if result.errors:
-        console.print()
-        for err in result.errors:
-            console.print(
-                f"  [{theme.ERROR}]{err.slug or '(unknown)'}[/{theme.ERROR}]: {err.message}"
-            )

@@ -1,0 +1,379 @@
+"""Administering other people's accounts.
+
+Two complete variants: with RBAC every route is role-guarded, and
+without it they are plain. The gate is the one that was already
+here - the whole block moved with it.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from app.core.audit import get_audit
+from app.services.auth.deps import get_refresh_service, get_user_service
+from app.core.audit import AuditEmitter
+from app.models.user import (
+    EmailVerifyRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    ResendVerificationResponse,
+    StatusMessage,
+    TokenResponse,
+    User,
+    UserCreate,
+    UserResponse,
+)
+from app.services.auth.service import get_current_user_from_token
+from app.services.auth.deps import get_current_active_user, get_session_token
+from app.services.auth.users import RestoreConflictError, UserService
+{% if include_auth_rbac %}
+from pydantic import BaseModel
+{% endif %}
+{% if include_auth_rbac %}
+from app.core.security import VALID_ROLES
+{% endif %}
+{% if include_auth_rbac %}
+from app.services.auth.service import require_role
+{% endif %}
+
+router = APIRouter()
+
+
+{% if include_auth_rbac %}
+class RoleUpdateRequest(BaseModel):
+    """Body for ``PATCH /users/{user_id}/role``."""
+
+    role: str
+{% endif %}
+
+{% if include_auth_rbac %}
+@router.get("/users", response_model=list[UserResponse])
+async def list_users(
+    current_user: User = Depends(require_role("admin", "moderator")),
+    user_service: UserService = Depends(get_user_service),
+) -> list[UserResponse]:
+    """List all users. Requires admin or moderator role."""
+    users = await user_service.list_users()
+    return [UserResponse.model_validate(u) for u in users]
+{% else %}
+@router.get("/users", response_model=list[UserResponse])
+async def list_users(
+    user_service: UserService = Depends(get_user_service),
+) -> list[UserResponse]:
+    """List all users."""
+    users = await user_service.list_users()
+    return [UserResponse.model_validate(user) for user in users]
+{% endif %}
+
+
+@router.get("/users/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: int,
+    token: str | None = Depends(get_session_token),
+    user_service: UserService = Depends(get_user_service),
+) -> UserResponse:
+    """Get a specific user by ID. Caller must be the user or an admin."""
+    current_user = await get_current_user_from_token(token, user_service)
+    is_self = current_user.id == user_id
+{% if include_auth_rbac %}
+    is_admin = current_user.role == "admin"
+{% else %}
+    is_admin = False
+{% endif %}
+    if not is_self and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this user",
+        )
+
+    user = await user_service.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return UserResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int,
+    full_name: str | None = None,
+    token: str | None = Depends(get_session_token),
+    user_service: UserService = Depends(get_user_service),
+) -> UserResponse:
+    """Update a user's profile. Caller must be the user or an admin."""
+    current_user = await get_current_user_from_token(token, user_service)
+    is_self = current_user.id == user_id
+{% if include_auth_rbac %}
+    is_admin = current_user.role == "admin"
+{% else %}
+    is_admin = False
+{% endif %}
+    if not is_self and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this user",
+        )
+
+    updates: dict[str, str] = {}
+    if full_name is not None:
+        updates["full_name"] = full_name
+
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update",
+        )
+
+    user = await user_service.update_user(user_id, **updates)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return UserResponse.model_validate(user)
+
+
+{% if include_auth_rbac %}
+@router.patch("/users/{user_id}/deactivate", response_model=UserResponse)
+async def deactivate_user(
+    user_id: int,
+    current_user: User = Depends(require_role("admin")),
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Deactivate a user account. Requires admin role."""
+    deactivated = await user_service.deactivate_user(user_id)
+    if not deactivated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    await audit.emit("auth.user_deactivated", actor_id=current_user.id, target_type="user", target_id=user_id)
+    return UserResponse.model_validate(deactivated)
+
+
+@router.patch("/users/{user_id}/activate", response_model=UserResponse)
+async def activate_user(
+    user_id: int,
+    current_user: User = Depends(require_role("admin")),
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Activate a user account. Requires admin role."""
+    activated = await user_service.activate_user(user_id)
+    if not activated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    await audit.emit("auth.user_activated", actor_id=current_user.id, target_type="user", target_id=user_id)
+    return UserResponse.model_validate(activated)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: int,
+    hard: bool = False,
+    current_user: User = Depends(require_role("admin")),
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> None:
+    """Delete a user. Requires admin role.
+
+    Default is a soft delete — the row stays with ``deleted_at`` set so it
+    can be restored via ``POST /users/{user_id}/restore``. Pass ``?hard=true``
+    for permanent removal (also drops org memberships and invites).
+    """
+{%- if include_auth_org %}
+    # Orgs the delete will cascade (issue #709), captured before the delete so
+    # we can emit their audit events. A hard delete also purges an org an
+    # earlier soft delete tombstoned, hence ``include_deleted=hard``.
+    cascaded_org_ids = await user_service.orphaned_sole_owner_org_ids(
+        user_id, include_deleted=hard
+    )
+{%- endif %}
+    if hard:
+        success = await user_service.hard_delete_user(user_id)
+    else:
+        success = await user_service.delete_user(user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    await audit.emit(
+        "auth.user_hard_deleted" if hard else "auth.user_deleted",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
+    )
+{%- if include_auth_org %}
+    for org_id in cascaded_org_ids:
+        await audit.emit(
+            "auth.org_hard_deleted" if hard else "auth.org_deleted",
+            actor_id=current_user.id,
+            target_type="org",
+            target_id=org_id,
+        )
+{%- endif %}
+
+
+@router.post("/users/{user_id}/restore", response_model=UserResponse)
+async def restore_user(
+    user_id: int,
+    current_user: User = Depends(require_role("admin")),
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Clear ``deleted_at`` on a soft-deleted user. Requires admin role.
+
+    Returns 409 if another live user has claimed the same email since
+    the soft delete — partial unique index would reject the restore.
+    """
+    try:
+        restored = await user_service.restore_user(user_id)
+    except RestoreConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    if restored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found or not deleted",
+        )
+    await audit.emit(
+        "auth.user_restored",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
+    )
+    return UserResponse.model_validate(restored)
+
+
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+async def set_user_role(
+    user_id: int,
+    body: RoleUpdateRequest,
+    current_user: User = Depends(require_role("admin")),
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Change a user's role. Requires admin role.
+
+    Admins cannot mutate their own role — prevents accidental
+    self-demotion of the only admin and self-promotion shenanigans.
+    Another admin must perform the change.
+    """
+    if body.role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role. Must be one of: {sorted(VALID_ROLES)}",
+        )
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role. Ask another admin.",
+        )
+    updated = await user_service.update_user(user_id, role=body.role)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    await audit.emit(
+        "auth.role_changed",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
+        new_role=body.role,
+    )
+    return UserResponse.model_validate(updated)
+{% else %}
+@router.patch("/users/{user_id}/deactivate", response_model=UserResponse)
+async def deactivate_user(
+    user_id: int,
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Deactivate a user account."""
+    user = await user_service.deactivate_user(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    await audit.emit("auth.user_deactivated", target_type="user", target_id=user_id)
+    return UserResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}/activate", response_model=UserResponse)
+async def activate_user(
+    user_id: int,
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Activate a user account."""
+    user = await user_service.activate_user(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    await audit.emit("auth.user_activated", target_type="user", target_id=user_id)
+    return UserResponse.model_validate(user)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: int,
+    hard: bool = False,
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> None:
+    """Delete a user.
+
+    Default is a soft delete (``deleted_at`` set, row preserved). Pass
+    ``?hard=true`` for permanent removal.
+    """
+    if hard:
+        success = await user_service.hard_delete_user(user_id)
+    else:
+        success = await user_service.delete_user(user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    await audit.emit(
+        "auth.user_hard_deleted" if hard else "auth.user_deleted",
+        target_type="user",
+        target_id=user_id,
+    )
+
+
+@router.post("/users/{user_id}/restore", response_model=UserResponse)
+async def restore_user(
+    user_id: int,
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Clear ``deleted_at`` on a soft-deleted user.
+
+    Returns 409 if another live user has claimed the same email since
+    the soft delete.
+    """
+    try:
+        restored = await user_service.restore_user(user_id)
+    except RestoreConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    if restored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found or not deleted",
+        )
+    await audit.emit(
+        "auth.user_restored", target_type="user", target_id=user_id
+    )
+    return UserResponse.model_validate(restored)
+{% endif %}

@@ -168,10 +168,10 @@ class TestFrontendSSEListener:
     def test_frontend_dispatches_all_event_types(
         self, project_factory: "ProjectFactory"
     ) -> None:
-        """main.py should dispatch all SSE event types to the worker popup."""
+        """The listener should dispatch all SSE event types to the worker popup."""
         project_path = project_factory(components=["worker", "redis"])
         content = (
-            project_path / "app" / "components" / "frontend" / "main.py"
+            project_path / "app" / "components" / "frontend" / "overseer" / "loops.py"
         ).read_text()
         for method in [
             "increment_queued",
@@ -189,13 +189,16 @@ class TestModalCacheHandling:
     def test_worker_modal_cached_permanently(
         self, project_factory: "ProjectFactory"
     ) -> None:
-        """main.py should keep worker modal cached so SSE counters survive close/reopen."""
+        """The loops should keep the worker modal cached so SSE counters
+        survive close/reopen."""
         project_path = project_factory(components=["worker", "redis"])
-        content = (
-            project_path / "app" / "components" / "frontend" / "main.py"
-        ).read_text()
-        # Should NOT prune the worker popup from cache on close
-        assert "_cache.pop" not in content
+        frontend = project_path / "app" / "components" / "frontend"
+        # Both halves: the bootstrap and the loops that read the cache.
+        # Checking only ``main.py`` would pass vacuously now that the
+        # cache reads live in ``overseer/loops.py``.
+        for module in (frontend / "main.py", frontend / "overseer" / "loops.py"):
+            # Should NOT prune the worker popup from cache on close
+            assert "_cache.pop" not in module.read_text(), module.name
 
 
 class TestWorkerModalSSEMethods:
@@ -238,7 +241,8 @@ class TestBaseProjectNoWorkerEvents:
         worker_dir = project_path / "app" / "components" / "worker"
         assert not worker_dir.exists()
 
-        main_content = (
-            project_path / "app" / "components" / "frontend" / "main.py"
-        ).read_text()
-        assert "listen_for_worker_events" not in main_content
+        frontend = project_path / "app" / "components" / "frontend"
+        # The listener is gated in both places: ``main.py`` does not import
+        # it and ``overseer/loops.py`` does not define it.
+        for module in (frontend / "main.py", frontend / "overseer" / "loops.py"):
+            assert "listen_for_worker_events" not in module.read_text(), module.name

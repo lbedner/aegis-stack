@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Any
 
 import chromadb
-from app.core.log import logger
 from chromadb.config import Settings as ChromaSettings
 from chromadb.errors import NotFoundError
 
+from app.core.log import logger
+
 from .ids import generate_chunk_id
 from .models import CollectionInfo, Document, IndexStats, SearchResult
+from .shaping import build_where_clause, clean_metadata, deduplicate_results
 
 
 class VectorStoreError(Exception):
@@ -197,8 +199,7 @@ class VectorStoreManager:
                 metadata = doc.metadata
 
             # ChromaDB requires string/int/float/bool values
-            clean_metadata = self._clean_metadata(metadata)
-            metadatas.append(clean_metadata)
+            metadatas.append(clean_metadata(metadata))
 
         # Upsert to collection in batches (upsert = add or update)
         batch_size = 500
@@ -376,7 +377,7 @@ class VectorStoreManager:
         # Build ChromaDB where clause
         where = None
         if filter_metadata:
-            where = self._build_where_clause(filter_metadata)
+            where = build_where_clause(filter_metadata)
 
         # Query for more results if deduping (to ensure enough unique results)
         query_k = top_k * 3 if dedupe else top_k
@@ -411,7 +412,7 @@ class VectorStoreManager:
 
         # Deduplicate by content fingerprint
         if dedupe and search_results:
-            search_results = self._deduplicate_results(search_results, top_k)
+            search_results = deduplicate_results(search_results, top_k)
 
         logger.debug(
             "vectorstore.search",
@@ -421,43 +422,6 @@ class VectorStoreManager:
         )
 
         return search_results
-
-    def _deduplicate_results(
-        self, results: list[SearchResult], top_k: int
-    ) -> list[SearchResult]:
-        """
-        Remove near-duplicate results, keeping highest scored.
-
-        Uses source file + start line as fingerprint. Chunks from the same
-        location are considered duplicates regardless of slight content differences.
-
-        Args:
-            results: Search results to deduplicate
-            top_k: Maximum results to return
-
-        Returns:
-            Deduplicated results sorted by score
-        """
-        seen_content: dict[str, SearchResult] = {}
-
-        for result in results:
-            # Use source file + start line as fingerprint
-            source = result.metadata.get("source", "")
-            start_line = result.metadata.get("start_line", 0)
-            fingerprint = f"{source}:{start_line}"
-
-            if fingerprint not in seen_content:
-                seen_content[fingerprint] = result
-            elif result.score > seen_content[fingerprint].score:
-                # Keep higher scored version
-                seen_content[fingerprint] = result
-
-        # Sort by score descending, re-rank, and limit to top_k
-        deduped = sorted(seen_content.values(), key=lambda r: r.score, reverse=True)
-        for i, result in enumerate(deduped):
-            result.rank = i + 1
-
-        return deduped[:top_k]
 
     async def delete_collection(self, collection_name: str) -> bool:
         """Delete a collection."""
@@ -509,30 +473,3 @@ class VectorStoreManager:
         """Check if a collection exists."""
         collections = await self.list_collections()
         return collection_name in collections
-
-    def _clean_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        """Clean metadata for ChromaDB compatibility."""
-        clean: dict[str, Any] = {}
-        for key, value in metadata.items():
-            if isinstance(value, str | int | float | bool):
-                clean[key] = value
-            elif value is None:
-                continue
-            else:
-                # Convert other types to string
-                clean[key] = str(value)
-        return clean
-
-    def _build_where_clause(self, filter_metadata: dict[str, Any]) -> dict[str, Any]:
-        """Build ChromaDB where clause from filter."""
-        # Simple equality filter
-        if len(filter_metadata) == 1:
-            key, value = next(iter(filter_metadata.items()))
-            return {key: value}
-
-        # Multiple conditions with AND
-        conditions = []
-        for key, value in filter_metadata.items():
-            conditions.append({key: value})
-
-        return {"$and": conditions}

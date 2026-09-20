@@ -488,7 +488,7 @@ SERVICES: dict[str, ServiceSpec] = {
         ],
         template_files=[
             "app/services/ai/",
-            "app/cli/ai.py",
+            "app/cli/ai",
             "app/components/backend/api/ai/",
         ],
         files=FileManifest(
@@ -506,13 +506,15 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/api/llm",
                 "app/services/ai",
                 "docs/services/ai",
-                "app/cli/ai.py",
+                "app/cli/ai",
                 "app/cli/agents.py",
                 "app/cli/ai_rendering.py",
                 "app/cli/marko_terminal_renderer.py",
+                "app/cli/marko_table_renderer.py",
                 "app/cli/chat_completer.py",
                 "app/cli/slash_commands.py",
                 "app/cli/llm.py",
+                "app/cli/llm_rendering.py",
                 "app/cli/status_line.py",
                 # ``app/core/formatting.py`` is NOT removed on AI-off —
                 # it also backs the always-shipping API load test CLI +
@@ -527,6 +529,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_conversation_memory.py",
                 "tests/cli/test_chat_completer.py",
                 "tests/cli/test_llm_cli.py",
+                "tests/cli/test_ai_cli_registration.py",
                 "tests/cli/test_agents_cli.py",
                 "tests/cli/test_ai_streaming_gate.py",
                 "tests/cli/test_slash_commands.py",
@@ -543,9 +546,9 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/startup/llm_catalog.py",
                 "app/components/frontend/dashboard/cards/ai_card.py",
                 "app/components/frontend/dashboard/modals/ai_modal.py",
-                "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
+                "app/components/frontend/dashboard/modals/ai_analytics_tab",
                 "app/components/frontend/dashboard/modals/agents_tab.py",
-                "app/components/frontend/dashboard/modals/llm_catalog_tab.py",
+                "app/components/frontend/dashboard/modals/llm_catalog_tab",
                 # Imports ai.ollama_activity; only jinja-gated files reference
                 # it, so without AI it would ship as a dead module whose
                 # import cannot resolve.
@@ -561,8 +564,9 @@ SERVICES: dict[str, ServiceSpec] = {
                 "ai_rag": [
                     "app/components/backend/api/rag",
                     "app/services/rag",
-                    "app/cli/rag.py",
+                    "app/cli/rag",
                     "tests/services/rag",
+                    "tests/cli/test_rag_cli_registration.py",
                     # RAG-gated, so it belongs here rather than ``primary`` —
                     # otherwise the retrofit copies it even with ``ai_rag``
                     # off, rendering a dead RAG tab (issue #814). The modal's
@@ -852,6 +856,8 @@ SERVICES: dict[str, ServiceSpec] = {
         template_files=[
             "app/services/payment/",
             "app/cli/payment.py",
+            "app/cli/payment_views.py",
+            "app/cli/payment_e2e.py",
             "app/components/backend/api/payment/",
         ],
         files=FileManifest(
@@ -859,6 +865,8 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/api/payment",
                 "app/services/payment",
                 "app/cli/payment.py",
+                "app/cli/payment_views.py",
+                "app/cli/payment_e2e.py",
                 "tests/services/test_payment_service.py",
                 "tests/services/test_payment_models.py",
                 "tests/services/test_payment_catalog.py",
@@ -942,6 +950,10 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/api/blog",
                 "app/services/blog",
                 "app/cli/blog.py",
+                "app/cli/blog_shared.py",
+                "app/cli/blog_posts.py",
+                "app/cli/blog_tags.py",
+                "app/cli/blog_transfer.py",
                 "tests/services/test_blog_service.py",
                 "tests/services/test_blog_serialization.py",
                 "tests/services/test_blog_list_queries.py",
@@ -1038,6 +1050,7 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/components/frontend/dashboard/modals/finance_attention_tab.py",
             "app/components/frontend/dashboard/modals/finance_categories_tab.py",
             "app/components/frontend/dashboard/modals/finance_payees_tab.py",
+            "app/components/frontend/dashboard/modals/finance_payees_dialogs.py",
             "app/components/frontend/dashboard/modals/finance_recurring_tab",
             "app/components/frontend/dashboard/modals/finance_settings_tab.py",
             "app/cli/finance.py",
@@ -1053,6 +1066,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/modals/finance_attention_tab.py",
                 "app/components/frontend/dashboard/modals/finance_categories_tab.py",
                 "app/components/frontend/dashboard/modals/finance_payees_tab.py",
+                "app/components/frontend/dashboard/modals/finance_payees_dialogs.py",
                 "app/components/frontend/dashboard/modals/finance_recurring_tab",
                 "app/components/frontend/dashboard/modals/finance_settings_tab.py",
                 "app/cli/finance.py",

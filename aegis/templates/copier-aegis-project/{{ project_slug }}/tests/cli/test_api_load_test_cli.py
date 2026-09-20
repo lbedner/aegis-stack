@@ -8,6 +8,8 @@ boundary so they don't need a running FastAPI app or Redis instance.
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from typer.testing import CliRunner
+
 from app.cli.main import app
 from app.services.load_test.api.models import (
     APILoadTestConfiguration,
@@ -16,7 +18,6 @@ from app.services.load_test.api.models import (
     ErrorSample,
     RouteInfo,
 )
-from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -28,8 +29,11 @@ def _make_result(test_id: str = "t1", failures: int = 0) -> APILoadTestResult:
         status="completed",
         test_id=test_id,
         configuration=APILoadTestConfiguration(
-            test_id=test_id, method="GET", path="/health",
-            requests=sent, clients=2,
+            test_id=test_id,
+            method="GET",
+            path="/health",
+            requests=sent,
+            clients=2,
         ),
         metrics=APILoadTestMetrics(
             tasks_sent=sent,
@@ -161,6 +165,7 @@ class TestListCommand:
         result = runner.invoke(app, ["api-load-test", "list", "--json"])
         assert result.exit_code == 0
         import json
+
         # Output may have extra whitespace; locate the JSON document
         payload = json.loads(result.output.strip())
         assert isinstance(payload, list)
@@ -181,9 +186,15 @@ class TestPathParamFlag:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/users/{user_id}",
-                "--path-param", "user_id=abc-123",
-                "--requests", "5", "--clients", "1",
+                "api-load-test",
+                "run",
+                "/users/{user_id}",
+                "--path-param",
+                "user_id=abc-123",
+                "--requests",
+                "5",
+                "--clients",
+                "1",
                 "--in-process",
             ],
         )
@@ -201,10 +212,17 @@ class TestPathParamFlag:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/items/{item_id}/owner/{user_id}",
-                "--path-param", "item_id=42",
-                "--path-param", "user_id=u-9",
-                "--requests", "3", "--clients", "1",
+                "api-load-test",
+                "run",
+                "/items/{item_id}/owner/{user_id}",
+                "--path-param",
+                "item_id=42",
+                "--path-param",
+                "user_id=u-9",
+                "--requests",
+                "3",
+                "--clients",
+                "1",
                 "--in-process",
             ],
         )
@@ -221,8 +239,13 @@ class TestPathParamFlag:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/users/{user_id}",
-                "--requests", "3", "--clients", "1",
+                "api-load-test",
+                "run",
+                "/users/{user_id}",
+                "--requests",
+                "3",
+                "--clients",
+                "1",
                 "--in-process",
             ],
         )
@@ -240,8 +263,13 @@ class TestRunCommand:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/health",
-                "--requests", "10", "--clients", "2",
+                "api-load-test",
+                "run",
+                "/health",
+                "--requests",
+                "10",
+                "--clients",
+                "2",
                 "--in-process",
             ],
         )
@@ -270,8 +298,13 @@ class TestRunCommand:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/health",
-                "--requests", "10", "--clients", "2",
+                "api-load-test",
+                "run",
+                "/health",
+                "--requests",
+                "10",
+                "--clients",
+                "2",
                 "--in-process",
             ],
         )
@@ -291,8 +324,13 @@ class TestRunCommand:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/health",
-                "--requests", "10", "--clients", "2",
+                "api-load-test",
+                "run",
+                "/health",
+                "--requests",
+                "10",
+                "--clients",
+                "2",
                 "--in-process",
             ],
         )
@@ -309,10 +347,17 @@ class TestRunCommand:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/echo",
-                "--method", "POST",
-                "--payload", '{"value": 42}',
-                "--requests", "10", "--clients", "2",
+                "api-load-test",
+                "run",
+                "/echo",
+                "--method",
+                "POST",
+                "--payload",
+                '{"value": 42}',
+                "--requests",
+                "10",
+                "--clients",
+                "2",
                 "--in-process",
             ],
         )
@@ -331,19 +376,33 @@ class TestRunCommand:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/health",
-                "--header", "X-Custom=hello",
-                "--header", "X-Other=world",
-                "--requests", "5", "--clients", "1",
-                "--in-process", "--anon",
+                "api-load-test",
+                "run",
+                "/health",
+                "--header",
+                "X-Custom=hello",
+                "--header",
+                "X-Other=world",
+                "--requests",
+                "5",
+                "--clients",
+                "1",
+                "--in-process",
+                "--anon",
             ],
         )
         assert result.exit_code == 0
         call_config = mock_service.run.call_args.args[0]
         assert call_config.headers == {"X-Custom": "hello", "X-Other": "world"}
 
+    # Patched where it is CALLED, not where the CLI re-exports it:
+    # ``apply_auto_auth`` reads this name from its own module, so a patch
+    # on ``app.cli.api_load_test`` would rebind a name nothing reads.
+    # (``_get_auth_dependency`` above is the opposite case - the ``list``
+    # command reads it from ``api_load_test``'s globals.)
     @patch(
-        "app.cli.api_load_test._ensure_active_verified_user", new_callable=AsyncMock
+        "app.cli.api_load_test_auth._ensure_active_verified_user",
+        new_callable=AsyncMock,
     )
     @patch("app.cli.api_load_test.APILoadTestService")
     @patch("app.cli.api_load_test._get_fastapi_app")
@@ -385,8 +444,17 @@ class TestRunCommand:
         mock_service_cls.return_value = mock_service
         result = runner.invoke(
             app,
-            ["api-load-test", "run", "/health", "-n", "2", "-c", "1",
-             "--in-process", "--anon"],
+            [
+                "api-load-test",
+                "run",
+                "/health",
+                "-n",
+                "2",
+                "-c",
+                "1",
+                "--in-process",
+                "--anon",
+            ],
         )
         assert result.exit_code == 0
         call_config = mock_service.run.call_args.args[0]
@@ -403,13 +471,20 @@ class TestRunCommand:
         result = runner.invoke(
             app,
             [
-                "api-load-test", "run", "/health",
-                "--requests", "10", "--clients", "2",
-                "--in-process", "--json",
+                "api-load-test",
+                "run",
+                "/health",
+                "--requests",
+                "10",
+                "--clients",
+                "2",
+                "--in-process",
+                "--json",
             ],
         )
         assert result.exit_code == 0
         import json
+
         # Locate JSON in output (Rich may emit progress before it)
         # Try the last "{" .. matching close
         # Simplest: the test result is the only top-level JSON object

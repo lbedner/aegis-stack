@@ -26,7 +26,8 @@ import urllib.request
 import typer
 
 from app.cli import theme
-from app.cli.api_load_test import apply_auto_auth, parse_kv_flag
+from app.cli.api_load_test import parse_kv_flag
+from app.cli.api_load_test_auth import apply_auto_auth
 from app.core.loops import ENGINE_LOOPS, resolve_loop
 from app.i18n import lazy_t, t
 from scripts.resolve_ports import _find_free_port

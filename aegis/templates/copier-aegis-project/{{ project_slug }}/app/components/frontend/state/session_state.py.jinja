@@ -23,7 +23,7 @@ from app.core.client import APIClient
 from app.core.log import logger
 
 if TYPE_CHECKING:
-    from app.components.frontend.theme import ThemeManager
+    from app.components.frontend.theme_manager import ThemeManager
 
 _SESSION_KEY = "session_state"
 

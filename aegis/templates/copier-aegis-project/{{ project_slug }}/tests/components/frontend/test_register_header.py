@@ -14,11 +14,12 @@ the title text can never wrap even if the rule is broken again.
 import inspect
 
 from app.components.frontend.dashboard.modals import finance_modal
+from tests.components.frontend._tree import panel_source
 
 
 class TestHeaderLayout:
     def _source(self) -> str:
-        return inspect.getsource(finance_modal.TransactionsPanel)
+        return panel_source(finance_modal.TransactionsPanel)
 
     def test_bulk_actions_are_not_in_the_title_row(self) -> None:
         source = self._source()
@@ -56,7 +57,9 @@ class TestHeaderLayout:
         parent that IS mounted.
         """
         source = self._source()
-        block = source[source.index("self._selection_row.visible = bool(count or trades)") :]
+        block = source[
+            source.index("self._selection_row.visible = bool(count or trades)") :
+        ]
         block = block[: block.index("def ")]
         assert "elif self.page is not None:" in block
         assert "self.update()" in block
@@ -74,8 +77,6 @@ class TestRecurringTabPickerMount:
     """
 
     def test_each_panel_mounts_only_what_it_defines(self) -> None:
-        import inspect
-
         from app.components.frontend.dashboard.modals import finance_recurring_tab
 
         for name in ("ProjectionPanel", "RecurringTab"):
@@ -130,9 +131,7 @@ class TestMixedSelectionNarratesItself:
         assert panel._bulk_payee_trigger.visible is False
 
     def test_the_register_no_longer_strips_trade_checkboxes(self) -> None:
-        import inspect
-
         from app.components.frontend.dashboard.modals import finance_modal
 
-        source = inspect.getsource(finance_modal.TransactionsPanel)
+        source = panel_source(finance_modal.TransactionsPanel)
         assert "row_selectable" not in source

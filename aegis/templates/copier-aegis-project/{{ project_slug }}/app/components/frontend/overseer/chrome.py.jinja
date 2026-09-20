@@ -1,0 +1,231 @@
+"""The dashboard header: brand mark, health readout, and the chrome buttons.
+
+The header is the one part of ``setup_dashboard`` that was always
+self-contained - it needs the page, and (for the project switcher) one
+callback to run when the active project changes. So it is a builder
+returning the handful of controls the rest of the bootstrap still has
+to reach: the two toggle buttons it wires handlers onto, the health
+container the ``SystemDashboard`` writes into, and the uptime text the
+refresh cycle restamps.
+
+``toggle_theme`` stays here with the button it owns, but takes its
+dependencies as arguments: the dashboard does not exist yet when the
+header is built, so ``main`` binds the connection check afterwards.
+"""
+
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+import time
+from typing import Any
+
+import flet as ft
+from flet import PageDisconnectedException
+
+from app.core.log import logger
+{% if include_auth %}
+from app.components.frontend.auth.session import sign_out
+{% endif %}
+{% if insights_per_user %}
+from app.components.frontend.projects.project_switcher import ProjectSwitcher
+{% endif %}
+from ..dashboard.cards.card_utils import create_health_status_indicator
+from ..theme import AegisTheme as Theme
+from ..theme_manager import ThemeManager
+from .cards import _format_uptime
+
+
+@dataclass
+class DashboardChrome:
+    """The header, plus the controls the rest of the bootstrap writes to."""
+
+    header: ft.Container
+    theme_button: ft.IconButton
+    view_toggle_button: ft.IconButton
+    health_indicator_container: ft.Container
+    uptime_text: ft.Text
+    session_start: float
+    {%- if insights_per_user %}
+    project_switcher: ProjectSwitcher
+    {%- endif %}
+
+
+def build_chrome(
+    page: ft.Page,
+    on_project_change: Callable[[], Awaitable[None]],
+) -> DashboardChrome:
+    """Build the header row and everything sitting in it."""
+    # Brand mark: the same teal-dot + "Overseer · <project>" chip the
+    # auth shell uses. Replaces a 96x96 PNG that overwhelmed the header
+    # once the 3D shield render landed — the mark scales with theme
+    # colors automatically so the per-theme logo swap below is gone too.
+    from app.components.frontend.controls.brand_mark import BrandMark
+
+    brand_mark = BrandMark()
+
+    # Theme toggle button. ``on_click`` is bound by the caller, once
+    # the dashboard exists to answer "is the page still connected".
+    theme_button = ft.IconButton(
+        icon=ft.Icons.DARK_MODE,
+        tooltip="Switch to Dark Mode",
+        icon_size=24,
+        icon_color=Theme.Colors.TEXT_SECONDARY,
+    )
+
+    # View toggle button - cycle between Stack, Cards, and Diagram views.
+    # ``DashboardViews`` binds ``on_click`` when the containers exist.
+    view_toggle_button = ft.IconButton(
+        icon=ft.Icons.VIEW_LIST,
+        tooltip="Switch to Cards View",
+        icon_size=24,
+        icon_color=Theme.Colors.TEXT_SECONDARY,
+    )
+
+    {%- if include_auth %}
+
+    async def handle_logout(_: Any) -> None:
+        """
+        Sign the current session out.
+
+        Calls ``/auth/logout`` (revokes server-side + drops the cookie),
+        then navigates to ``/login``. The router fires ``view.on_leave``
+        on this view (cancelling the refresh + SSE tasks tracked on
+        ``view._tasks``) before mounting ``LoginView``.
+        """
+        logger.info("auth.logout", session_id=page.session_id)
+        await sign_out(page)
+
+    logout_button = ft.IconButton(
+        icon=ft.Icons.LOGOUT,
+        tooltip="Sign out",
+        icon_size=24,
+        icon_color=Theme.Colors.TEXT_SECONDARY,
+        on_click=handle_logout,
+    )
+    {%- endif %}
+
+    # Health status indicator with circular progress - create before header
+    health_status_indicator = create_health_status_indicator(
+        0, 0
+    )  # Start with loading state
+
+    # Create health indicator container with direct reference
+    # (no more brittle indexing)
+    health_indicator_container = ft.Container(
+        content=health_status_indicator,
+        margin=ft.margin.only(right=20),  # Space before theme button
+    )
+
+    # Subtle uptime indicator - updated on each refresh cycle
+    session_start = time.monotonic()
+    uptime_text = ft.Text(
+        value=_format_uptime(session_start),
+        size=Theme.Typography.CAPTION,
+        color=Theme.Colors.TEXT_SECONDARY,
+        weight=ft.FontWeight.W_400,
+        opacity=0.7,
+    )
+
+    # Wrap health indicator + uptime in a column
+    health_with_uptime = ft.Column(
+        [
+            health_indicator_container,
+            ft.Container(
+                content=uptime_text,
+                alignment=ft.alignment.center,
+            ),
+        ],
+        spacing=0,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    {%- if insights_per_user %}
+
+    # Project switcher (active-project state + dropdown). ``on_change``
+    # refreshes the dashboard so the cards reflect the new project.
+    project_switcher = ProjectSwitcher(page=page, on_change=on_project_change)
+    {%- endif %}
+
+    # Header with modern layout: brand mark left, status+controls right
+    header = ft.Container(
+        content=ft.Row(
+            [
+                ft.Container(
+                    content=brand_mark,
+                    padding=ft.padding.all(10),
+                ),
+                ft.Row(
+                    [
+                        health_with_uptime,  # Health status + uptime
+                        # View toggle
+                        ft.Container(content=view_toggle_button, padding=10),
+                        # Theme toggle
+                        ft.Container(content=theme_button, padding=10),
+                        {% if insights_per_user -%}
+                        ft.Container(content=project_switcher, padding=10),
+                        {%- endif %}
+                        {% if include_auth -%}
+                        # Sign out
+                        ft.Container(content=logout_button, padding=10),
+                        {%- endif %}
+                    ],
+                    alignment=ft.MainAxisAlignment.END,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        ),
+        margin=ft.margin.only(bottom=8),
+        padding=ft.padding.only(left=0, right=0),  # Remove any default padding
+    )
+
+    return DashboardChrome(
+        header=header,
+        theme_button=theme_button,
+        view_toggle_button=view_toggle_button,
+        health_indicator_container=health_indicator_container,
+        uptime_text=uptime_text,
+        session_start=session_start,
+        {%- if insights_per_user %}
+        project_switcher=project_switcher,
+        {%- endif %}
+    )
+
+
+async def toggle_theme(
+    theme_manager: ThemeManager,
+    theme_button: ft.IconButton,
+    page: ft.Page,
+    is_page_connected: Callable[[], bool],
+    _: Any,
+) -> None:
+    """Toggle theme and update button icon.
+
+    The old per-image logo swap is gone: ``BrandMark`` reads its
+    colors from ``PulseColors`` which the ``ThemeManager`` already
+    retargets on toggle, so the chip recolors itself with the rest
+    of the chrome.
+    """
+    try:
+        await theme_manager.toggle_theme()
+        if theme_manager.is_dark_mode:
+            theme_button.icon = ft.Icons.LIGHT_MODE
+            theme_button.tooltip = "Switch to Light Mode"
+        else:
+            theme_button.icon = ft.Icons.DARK_MODE
+            theme_button.tooltip = "Switch to Dark Mode"
+
+        if is_page_connected():
+            try:
+                page.update()
+            except PageDisconnectedException:
+                logger.debug("Page disconnected during theme toggle")
+    except PageDisconnectedException:
+        logger.debug("Page disconnected during theme toggle")
+    except Exception as e:
+        logger.error(
+            f"Theme toggle failed: {e}",
+            exc_info=True,
+            extra={
+                "error_type": type(e).__name__,
+                "function": "toggle_theme"
+            }
+        )

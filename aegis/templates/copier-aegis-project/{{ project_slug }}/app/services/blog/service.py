@@ -1,17 +1,13 @@
 """Blog service business logic."""
 
-from datetime import datetime, timedelta
-
 from sqlalchemy import func
 from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.config import settings
-from app.core.formatting import slugify as core_slugify
 from app.core.time import utcnow
 
 from . import queries as blog_queries
-from .constants import STALE_DRAFT_DAYS, BlogPostStatus, ImportConflictPolicy
+from .constants import BlogPostStatus, ImportConflictPolicy
 from .models import (
     BlogHealthSummary,
     BlogPost,
@@ -20,7 +16,6 @@ from .models import (
     BlogTag,
 )
 from .schemas import (
-    BlogImportError,
     BlogPostCreate,
     BlogPostResponse,
     BlogPostUpdate,
@@ -31,15 +26,11 @@ from .schemas import (
     ImportedPost,
     ImportResult,
 )
-
-
-def slugify(value: str) -> str:
-    """The shared slug shape, with the blog's fallback for empty titles."""
-    return core_slugify(value) or "post"
-
-
-def _normalize_tag_slug(value: str) -> str:
-    return slugify(value)
+from .slugs import slugify
+from .summary import blog_health_summary
+from .tags import set_post_tags
+from .transfer import export_posts as _export_posts
+from .transfer import import_posts as _import_posts
 
 
 class BlogService:
@@ -82,7 +73,7 @@ class BlogService:
             count_query = count_query.where(BlogPost.status == status)
 
         if tag:
-            tag_slug = _normalize_tag_slug(tag)
+            tag_slug = slugify(tag)
             query = (
                 query.join(BlogPostTag, BlogPost.id == BlogPostTag.post_id)
                 .join(BlogTag, BlogTag.id == BlogPostTag.tag_id)
@@ -150,7 +141,7 @@ class BlogService:
         )
         self.db.add(post)
         await self.db.flush()
-        await self._set_post_tags(post.id, payload.tag_slugs)  # type: ignore[arg-type]
+        await set_post_tags(self.db, post.id, payload.tag_slugs)  # type: ignore[arg-type]
         return await self._post_response(post)
 
     async def update_post(
@@ -187,7 +178,7 @@ class BlogService:
         post.updated_at = utcnow()
         self.db.add(post)
         if payload.tag_slugs is not None:
-            await self._set_post_tags(post_id, payload.tag_slugs)
+            await set_post_tags(self.db, post_id, payload.tag_slugs)
         await self.db.flush()
         return await self._post_response(post)
 
@@ -267,53 +258,11 @@ class BlogService:
         await self.db.flush()
         return True
 
+        # ``canonical_url`` is not persisted — see import_posts create path.
+
     async def get_health_summary(self) -> BlogHealthSummary:
         """Return counts and latest activity for health metadata."""
-        by_status = await blog_queries.count_posts_by_status(self.db)
-        draft = by_status.get(BlogPostStatus.DRAFT, 0)
-        published = by_status.get(BlogPostStatus.PUBLISHED, 0)
-        archived = by_status.get(BlogPostStatus.ARCHIVED, 0)
-        total = sum(by_status.values())
-
-        tag_count_result = await self.db.exec(select(func.count()).select_from(BlogTag))
-        tag_count = int(tag_count_result.one() or 0)
-
-        stale_cutoff = utcnow() - timedelta(days=STALE_DRAFT_DAYS)
-        stale_result = await self.db.exec(
-            select(func.count())
-            .select_from(BlogPost)
-            .where(BlogPost.status == BlogPostStatus.DRAFT)
-            .where(BlogPost.updated_at < stale_cutoff)
-        )
-        stale_draft_count = int(stale_result.one() or 0)
-
-        latest_result = await self.db.exec(
-            select(BlogPost)
-            .where(BlogPost.status == BlogPostStatus.PUBLISHED)
-            .order_by(BlogPost.published_at.desc())
-            .limit(1)
-        )
-        latest = latest_result.first()
-        latest_payload = None
-        if latest:
-            latest_payload = {
-                "id": latest.id,
-                "title": latest.title,
-                "slug": latest.slug,
-                "published_at": latest.published_at.isoformat()
-                if latest.published_at
-                else None,
-            }
-
-        return BlogHealthSummary(
-            total_posts=total,
-            draft_posts=draft,
-            published_posts=published,
-            archived_posts=archived,
-            tag_count=tag_count,
-            stale_draft_count=stale_draft_count,
-            latest_published_post=latest_payload,
-        )
+        return await blog_health_summary(self.db)
 
     async def export_posts(
         self,
@@ -321,52 +270,8 @@ class BlogService:
         slugs: list[str] | None = None,
         status: str | None = None,
     ) -> list[ExportedPost]:
-        """Return all (or filtered) posts as portable, ID-free payloads.
-
-        ``author_id`` is intentionally omitted (FK to the source project's
-        user table — does not transfer cleanly across projects).
-        """
-        query = select(BlogPost).order_by(BlogPost.created_at.asc())
-        if status:
-            query = query.where(BlogPost.status == status)
-        if slugs is not None:
-            normalized = [slugify(s) for s in slugs]
-            query = query.where(BlogPost.slug.in_(normalized))  # type: ignore[attr-defined]
-
-        result = await self.db.exec(query)
-        posts = list(result.all())
-
-        tags_by_post = await blog_queries.tags_for_posts(self.db, [p.id for p in posts])
-        out: list[ExportedPost] = []
-        for post in posts:
-            tags = tags_by_post.get(post.id, [])
-            out.append(
-                ExportedPost(
-                    title=post.title,
-                    slug=post.slug,
-                    excerpt=post.excerpt,
-                    content=post.content,
-                    status=str(post.status),
-                    author_name=post.author_name,
-                    created_at=post.created_at,
-                    updated_at=post.updated_at,
-                    published_at=post.published_at,
-                    seo_title=post.seo_title,
-                    seo_description=post.seo_description,
-                    hero_image_url=post.hero_image_url,
-                    syndicate_targets=post.syndicate_targets,
-                    # Origin URL, recomputed from PUBLIC_BASE_URL every export so
-                    # syndicated copies (Dev.to/Hashnode read this frontmatter
-                    # key) point rel=canonical back here. Built from the
-                    # normalized ``post.slug`` — the canonical form the
-                    # /blog/{slug} page resolves to.
-                    canonical_url=(
-                        f"{settings.PUBLIC_BASE_URL.rstrip('/')}/blog/{post.slug}"
-                    ),
-                    tag_slugs=[tag.slug for tag in tags],
-                )
-            )
-        return out
+        """Return all (or filtered) posts as portable, ID-free payloads."""
+        return await _export_posts(self.db, slugs=slugs, status=status)
 
     async def import_posts(
         self,
@@ -374,106 +279,8 @@ class BlogService:
         *,
         on_conflict: ImportConflictPolicy = ImportConflictPolicy.SKIP,
     ) -> ImportResult:
-        """Upsert a batch of posts. Slug is the natural key.
-
-        Runs inside the caller's session. ``ImportConflictPolicy.FAIL``
-        raises on the first collision; the surrounding transaction in
-        ``get_async_session`` rolls everything back.
-        """
-        result = ImportResult()
-        now = utcnow()
-
-        for incoming in posts:
-            try:
-                slug = slugify(incoming.slug or incoming.title)
-                existing = await self._get_post_by_slug_any_status(slug)
-
-                if existing is not None:
-                    if on_conflict == ImportConflictPolicy.SKIP:
-                        result.skipped += 1
-                        continue
-                    if on_conflict == ImportConflictPolicy.FAIL:
-                        raise ValueError(f"Post slug already exists: {slug}")
-                    # OVERWRITE
-                    self._apply_imported_fields(existing, incoming, now=now)
-                    self.db.add(existing)
-                    await self.db.flush()
-                    await self._set_post_tags(
-                        existing.id,  # type: ignore[arg-type]
-                        list(incoming.tag_slugs),
-                    )
-                    result.updated += 1
-                    continue
-
-                created = BlogPost(
-                    title=incoming.title,
-                    slug=slug,
-                    excerpt=incoming.excerpt,
-                    content=incoming.content or "",
-                    status=self._coerce_import_status(incoming.status),
-                    author_id=None,
-                    author_name=incoming.author_name,
-                    created_at=incoming.created_at or now,
-                    updated_at=incoming.updated_at or now,
-                    published_at=incoming.published_at,
-                    seo_title=incoming.seo_title,
-                    seo_description=incoming.seo_description,
-                    hero_image_url=incoming.hero_image_url,
-                    syndicate_targets=incoming.syndicate_targets or None,
-                    # ``canonical_url`` from the import is intentionally
-                    # dropped — a foreign origin must not override the local
-                    # one; export recomputes it from PUBLIC_BASE_URL.
-                )
-                self.db.add(created)
-                await self.db.flush()
-                await self._set_post_tags(
-                    created.id,  # type: ignore[arg-type]
-                    list(incoming.tag_slugs),
-                )
-                result.created += 1
-            except Exception as exc:
-                if on_conflict == ImportConflictPolicy.FAIL:
-                    raise
-                result.failed += 1
-                result.errors.append(
-                    BlogImportError(slug=incoming.slug or "", message=str(exc))
-                )
-
-        return result
-
-    @staticmethod
-    def _coerce_import_status(value: str | None) -> str:
-        if value in BlogPostStatus.ALL:
-            return value  # type: ignore[return-value]
-        return BlogPostStatus.DRAFT
-
-    def _apply_imported_fields(
-        self,
-        post: BlogPost,
-        payload: ImportedPost,
-        *,
-        now: datetime,
-    ) -> None:
-        post.title = payload.title
-        post.excerpt = payload.excerpt
-        post.content = payload.content or ""
-        post.status = self._coerce_import_status(payload.status)
-        if payload.author_name is not None:
-            post.author_name = payload.author_name
-        if payload.created_at is not None:
-            post.created_at = payload.created_at
-        post.updated_at = payload.updated_at or now
-        post.published_at = payload.published_at
-        post.seo_title = payload.seo_title
-        post.seo_description = payload.seo_description
-        post.hero_image_url = payload.hero_image_url
-        if payload.syndicate_targets is not None:
-            post.syndicate_targets = payload.syndicate_targets or None
-        # ``canonical_url`` is not persisted — see import_posts create path.
-
-    async def _get_post_by_slug_any_status(self, slug: str) -> BlogPost | None:
-        result = await self.db.exec(select(BlogPost).where(BlogPost.slug == slug))
-        return result.first()
+        """Create or update posts from portable payloads."""
+        return await _import_posts(self.db, posts, on_conflict=on_conflict)
 
     async def _get_post_model(self, post_id: int) -> BlogPost | None:
         result = await self.db.exec(select(BlogPost).where(BlogPost.id == post_id))
@@ -515,36 +322,6 @@ class BlogService:
         result = await self.db.exec(query)
         if result.first():
             raise ValueError(f"Tag already exists: {slug}")
-
-    async def _get_or_create_tag(self, raw_slug: str) -> BlogTag:
-        slug = _normalize_tag_slug(raw_slug)
-        result = await self.db.exec(select(BlogTag).where(BlogTag.slug == slug))
-        existing = result.first()
-        if existing:
-            return existing
-
-        name = raw_slug.strip() or slug.replace("-", " ").title()
-        tag = BlogTag(name=name, slug=slug)
-        self.db.add(tag)
-        await self.db.flush()
-        return tag
-
-    async def _set_post_tags(self, post_id: int, tag_slugs: list[str]) -> None:
-        await self.db.exec(delete(BlogPostTag).where(BlogPostTag.post_id == post_id))
-        seen: set[str] = set()
-        for raw_slug in tag_slugs:
-            slug = _normalize_tag_slug(raw_slug)
-            if slug in seen:
-                continue
-            seen.add(slug)
-            tag = await self._get_or_create_tag(raw_slug)
-            self.db.add(
-                BlogPostTag(
-                    post_id=post_id,
-                    tag_id=tag.id,  # type: ignore[arg-type]
-                )
-            )
-        await self.db.flush()
 
     async def _post_response(self, post: BlogPost) -> BlogPostResponse:
         """Single-post path. A page of one, so it reuses the batch query."""

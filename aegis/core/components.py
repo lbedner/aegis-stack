@@ -146,6 +146,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/worker",
                 ".claude/skills/add-background-job",
                 "app/cli/load_test.py",
+                "app/cli/load_test_display.py",
                 # The worker subpackage of the load_test service, including
                 # the ``service_<backend>.py`` variants Pattern D resolves
                 # to ``service.py`` at generation. The api/ and common/
@@ -284,7 +285,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/core/db.py",
                 "app/components/frontend/dashboard/cards/database_card.py",
-                "app/components/frontend/dashboard/modals/database_modal.py",
+                "app/components/frontend/dashboard/modals/database_modal",
                 # queryspy only means anything with a database, and the
                 # test job runs the gate against this file.
                 ".queryspy-baseline.json",

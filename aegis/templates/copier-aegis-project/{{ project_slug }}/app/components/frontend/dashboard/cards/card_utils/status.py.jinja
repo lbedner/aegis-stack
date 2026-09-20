@@ -1,0 +1,232 @@
+"""What a component's health looks like: colour, tag, detail."""
+
+import flet as ft
+from app.components.frontend.controls import (
+    H3Text,
+    LabelText,
+    PrimaryText,
+    SecondaryText,
+    StatusTag,
+)
+from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+PROVIDER_COLORS = {
+    "groq": ft.Colors.PURPLE,
+    "openai": ft.Colors.GREEN,
+    "anthropic": ft.Colors.ORANGE,
+    "google": ft.Colors.BLUE,
+    "mistral": ft.Colors.INDIGO,
+    "cohere": ft.Colors.TEAL,
+    "gemini": ft.Colors.BLUE,
+}
+
+
+def get_status_colors(component_data: ComponentStatus) -> tuple[str, str, str]:
+    """
+    Get status-aware colors for any card.
+
+    Args:
+        component_data: ComponentStatus containing status information
+
+    Returns:
+        Tuple of (primary_color, background_color, border_color)
+    """
+    status = component_data.status
+
+    if status == ComponentStatusType.HEALTHY:
+        return (Theme.Colors.SUCCESS, ft.Colors.SURFACE, ft.Colors.OUTLINE)
+    elif status == ComponentStatusType.INFO:
+        return (Theme.Colors.INFO, ft.Colors.SURFACE, Theme.Colors.INFO)
+    elif status == ComponentStatusType.WARNING:
+        return (Theme.Colors.WARNING, ft.Colors.SURFACE, Theme.Colors.WARNING)
+    else:  # UNHEALTHY
+        return (
+            Theme.Colors.ERROR,
+            ft.Colors.with_opacity(0.25, Theme.Colors.ERROR),
+            Theme.Colors.ERROR,
+        )
+
+
+def get_status_color(status: str) -> str:
+    """
+    Map a status string to a theme color.
+
+    Args:
+        status: Status string ("success", "healthy", "info",
+            "warning", "error", "unhealthy")
+
+    Returns:
+        Theme color constant
+    """
+    status_colors = {
+        "success": Theme.Colors.SUCCESS,
+        "healthy": Theme.Colors.SUCCESS,
+        "info": Theme.Colors.INFO,
+        "warning": Theme.Colors.WARNING,
+        "error": Theme.Colors.ERROR,
+        "unhealthy": Theme.Colors.ERROR,
+    }
+    return status_colors.get(status.lower(), Theme.Colors.SUCCESS)
+
+
+def get_ai_engine_display(metadata: dict) -> str:
+    """
+    Get formatted AI engine name for display.
+
+    Args:
+        metadata: Component metadata dict containing 'engine' key
+
+    Returns:
+        Formatted engine name (e.g., "Pydantic AI", "LangChain")
+    """
+    engine = metadata.get("engine", "AI Engine")
+    engine_display_map = {
+        "pydantic-ai": "Pydantic AI",
+        "langchain": "LangChain",
+    }
+    return engine_display_map.get(
+        engine, engine.replace("-", " ").title() if engine else "AI Engine"
+    )
+
+
+def get_status_detail(component_data: ComponentStatus) -> str | None:
+    """
+    Get status detail text explaining why a component is not healthy.
+
+    Only shows detail for INFO, WARNING, UNHEALTHY states (not HEALTHY).
+    Looks at sub-components to find the specific issue causing the status.
+
+    Args:
+        component_data: ComponentStatus containing status and message
+
+    Returns:
+        Issue-specific detail string, or None for healthy components
+    """
+    if component_data.status == ComponentStatusType.HEALTHY:
+        return None
+
+    # Look for non-healthy sub-components to explain the issue
+    if component_data.sub_components:
+        issues = []
+        for name, sub in component_data.sub_components.items():
+            if sub.status != ComponentStatusType.HEALTHY:
+                # Check nested sub_components (e.g., worker -> queues -> media)
+                if sub.sub_components:
+                    for sub_name, sub_sub in sub.sub_components.items():
+                        if sub_sub.status != ComponentStatusType.HEALTHY:
+                            # Use just the message, not "name: message" for brevity
+                            msg = sub_sub.message or sub_sub.status.value
+                            issues.append(f"{sub_name}: {msg}")
+                else:
+                    # Show the message directly - e.g. Pydantic ValidationError
+                    # text - falling back to the bare status level.
+                    msg = sub.message or sub.status.value
+                    issues.append(f"{name}: {msg}")
+        if issues:
+            # Limit to 2 issues for brevity
+            return "; ".join(issues[:2])
+
+    # Fallback: extract detail after colon if present
+    message = component_data.message
+    if message and not message.startswith("Failed"):
+        if ": " in message:
+            return message.split(": ", 1)[1]
+        return message
+    return None
+
+
+def create_health_tag(
+    component_data: ComponentStatus, detail: str | None = None
+) -> StatusTag:
+    """
+    Create a health status tag for a component.
+
+    Uses exception-based design: "Quiet when Good, Loud when Bad"
+    - HEALTHY: Subtle dot + text
+    - INFO/WARNING: Dot + text with tinted background
+    - UNHEALTHY: Bold filled background (alarm state)
+
+    Args:
+        component_data: ComponentStatus containing status information
+        detail: Optional detail text (e.g., "2/3 online")
+
+    Returns:
+        StatusTag with escalating visual weight based on severity
+    """
+    return StatusTag(status=component_data.status, detail=detail)
+
+
+def create_health_status_indicator(
+    healthy_count: int,
+    total_count: int,
+    worst_status: ComponentStatusType | None = None,
+) -> ft.Container:
+    """
+    Create a circular health status indicator with color coding.
+
+    Args:
+        healthy_count: Number of healthy components
+        total_count: Total number of components
+        worst_status: The worst status among all components (determines color)
+
+    Returns:
+        Container with circular progress and component count
+    """
+    percentage = 0.0 if total_count == 0 else healthy_count / total_count * 100
+
+    # Color coding based on worst status present
+    if worst_status == ComponentStatusType.UNHEALTHY:
+        color = Theme.Colors.ERROR
+        status_text = "Critical"
+        status_color = Theme.Colors.ERROR
+    elif worst_status == ComponentStatusType.WARNING:
+        color = Theme.Colors.WARNING
+        status_text = "Warning"
+        status_color = Theme.Colors.WARNING
+    elif worst_status == ComponentStatusType.INFO:
+        color = Theme.Colors.INFO
+        status_text = "Info"
+        status_color = Theme.Colors.INFO
+    else:
+        # All healthy or no components
+        color = Theme.Colors.SUCCESS
+        status_text = "Healthy"
+        status_color = Theme.Colors.SUCCESS
+
+    return ft.Container(
+        content=ft.Row(
+            [
+                ft.ProgressRing(
+                    value=percentage / 100,
+                    color=color,
+                    bgcolor=ft.Colors.with_opacity(0.3, color),
+                    stroke_width=6,
+                    width=50,
+                    height=50,
+                ),
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Text(
+                                f"{healthy_count}/{total_count}",
+                                size=18,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.ON_SURFACE,
+                            ),
+                            ft.Text(
+                                status_text,
+                                size=12,
+                                color=status_color,
+                                weight=ft.FontWeight.W_500,
+                            ),
+                        ],
+                        spacing=2,
+                    ),
+                    margin=ft.margin.only(left=12),
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.START,
+        ),
+        padding=ft.padding.symmetric(horizontal=16, vertical=8),
+    )

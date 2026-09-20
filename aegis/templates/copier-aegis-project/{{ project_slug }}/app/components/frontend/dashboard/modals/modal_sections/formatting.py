@@ -79,7 +79,7 @@ def date_cell(
 
     DataTable sorts on a cell's text (controls/data_table.py), so the
     rendered "Aug 19, 2026" would sort alphabetically. ``.data`` is the
-    escape hatch ``_cell_text`` falls back to, so the ISO string rides
+    escape hatch ``cell_text`` falls back to, so the ISO string rides
     along invisibly and the column keeps sorting by date. ``sort_value``
     is for a column that shows one date and sorts in the order of another.
     """

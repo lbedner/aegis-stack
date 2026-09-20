@@ -52,3 +52,33 @@ def resolve_loop(choice: str | None = None) -> str:
         return chosen
     # Never zuvloop: it is 0.0.x, so it stays something you ask for.
     return "uvloop" if importlib.util.find_spec("uvloop") else "asyncio"
+
+
+def check_engine_loop(engine: str, loop: str) -> None:
+    """Raise unless ``engine`` can actually run ``loop``.
+
+    One function because the two serve paths disagreed: uvicorn raised a
+    sentence naming both engines, granian raised nothing at all and let
+    ``Loops(loop)`` fail on an enum lookup. The benchmark deliberately
+    does not use this - sweeping a loop only one engine runs is normal,
+    so it skips the other rather than dying halfway through the matrix.
+    ``auto`` always passes: it resolves to something the engine accepts.
+    """
+    if loop == "auto":
+        return
+    accepted = ENGINE_LOOPS.get(engine)
+    if accepted is None:
+        raise ValueError(
+            f"unknown engine {engine!r}; expected one of "
+            f"{', '.join(sorted(ENGINE_LOOPS))}."
+        )
+    if loop not in accepted:
+        other = ", ".join(
+            f"{name} accepts {', '.join(loops)}"
+            for name, loops in ENGINE_LOOPS.items()
+            if name != engine
+        )
+        raise ValueError(
+            f"{engine} cannot run on {loop!r}. It accepts "
+            f"{', '.join(accepted)}; {other}."
+        )

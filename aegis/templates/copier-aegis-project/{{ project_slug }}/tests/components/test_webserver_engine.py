@@ -148,6 +148,35 @@ class TestLoopSelection:
         with pytest.raises(ValueError, match="uvicorn cannot run on 'rloop'"):
             webserver.uvicorn_settings("rloop")
 
+    def test_granian_refuses_a_loop_it_cannot_run(self) -> None:
+        """The half that had no check at all.
+
+        ``serve_granian`` used to hand the name straight to
+        ``Loops(loop)``, so a bad pairing surfaced as granian's own enum
+        lookup failing - no mention of which loops granian takes, and
+        none of the sentence the uvicorn path had written for exactly
+        this case.
+        """
+        with pytest.raises(ValueError, match="granian cannot run on 'zuvloop'"):
+            loops.check_engine_loop("granian", "zuvloop")
+
+    def test_the_refusal_names_where_the_loop_does_work(self) -> None:
+        """A loop is never wrong, only wrong for this engine, so the
+        error says which engine would have taken it."""
+        with pytest.raises(ValueError) as caught:
+            loops.check_engine_loop("uvicorn", "rloop")
+        assert "granian accepts" in str(caught.value)
+
+    def test_auto_passes_for_either_engine(self) -> None:
+        """``auto`` is not a loop, it is a promise to resolve to a good
+        one, so the pairing check must not reject it."""
+        loops.check_engine_loop("uvicorn", "auto")
+        loops.check_engine_loop("granian", "auto")
+
+    def test_an_engine_nobody_ships_is_refused_by_name(self) -> None:
+        with pytest.raises(ValueError, match="unknown engine 'hypercorn'"):
+            loops.check_engine_loop("hypercorn", "uvloop")
+
     def test_the_matrix_says_what_each_engine_takes(self) -> None:
         # One definition, because the entrypoint enforces it and the
         # benchmark skips incompatible combinations by reading it.

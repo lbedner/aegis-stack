@@ -15,7 +15,7 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.log import logger, setup_logging
-from app.core.loops import ENGINE_LOOPS, resolve_loop
+from app.core.loops import check_engine_loop, resolve_loop
 from app.integrations.main import create_integrated_app
 
 # Import string rather than the app object: both engines need one to
@@ -44,12 +44,7 @@ def uvicorn_settings(loop: str) -> dict[str, Any]:
     means dev and prod quietly serve differently. Proxy-header handling
     lands here when it arrives.
     """
-    if loop not in ENGINE_LOOPS["uvicorn"]:
-        raise ValueError(
-            f"uvicorn cannot run on {loop!r}. It accepts "
-            f"{', '.join(ENGINE_LOOPS['uvicorn'])}; granian accepts "
-            f"{', '.join(ENGINE_LOOPS['granian'])}."
-        )
+    check_engine_loop("uvicorn", loop)
     return {
         "host": HOST,
         "port": settings.PORT,
@@ -119,6 +114,8 @@ def serve_granian(loop: str) -> None:
     # Imported here, not at module scope: the default engine must not need
     # the alternate one installed. A stale image that predates the granian
     # dependency keeps serving on uvicorn instead of failing to import.
+    check_engine_loop("granian", loop)
+
     from granian import Granian
     from granian.constants import Interfaces, Loops
 

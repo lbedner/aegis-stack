@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from app.services.system.job_store import RedisJobStore
-from app.services.system.jobs import JobRunner
+from app.services.system.jobs import JobRunner, unwatched
 
 
 class FakeRedis:
@@ -222,3 +222,52 @@ class TestAStoreThatIsDown:
         count, ghost = asyncio.run(scenario())
 
         assert count == 1 and ghost is None
+
+
+class TestOneWayToNarrate:
+    """Long work should not learn which lane it is running in. Both places
+    a label can live hand out the same ``SetLabel``, so a job takes one
+    callable and whoever is following renders whichever wrote it. The
+    alternative is a wrapper closure per lane, which is two homes for one
+    idea - and the second home is the one that goes stale."""
+
+    def test_the_store_hands_out_a_writer_for_one_job(self, store) -> None:
+        asyncio.run(store.create("j1", "finance-import:x.csv", "Queued..."))
+
+        write = store.label_writer("j1")
+        asyncio.run(write("Importing 4,000 of 18,607 - 12 added"))
+
+        snapshot = asyncio.run(store.get("j1"))
+        assert snapshot is not None
+        assert snapshot.label == "Importing 4,000 of 18,607 - 12 added"
+
+    def test_the_in_process_handle_hands_out_the_same_shape(self) -> None:
+        runner = JobRunner()
+        seen: list[str] = []
+
+        async def work(handle) -> dict[str, Any]:
+            # The point of the exercise: work takes a SetLabel, not a
+            # handle and not a store, and cannot tell which one it got.
+            await _narrate(handle.label_writer())
+            return {}
+
+        async def _narrate(write) -> None:
+            await write("Checking 18,607 rows...")
+            seen.append(runner.get(job_id).label)  # type: ignore[union-attr]
+
+        async def main() -> None:
+            nonlocal job_id
+            job_id = runner.start("finance-import:x.csv", work)
+            for _ in range(50):
+                if runner.get(job_id).status != "running":  # type: ignore[union-attr]
+                    return
+                await asyncio.sleep(0.01)
+
+        job_id = ""
+        asyncio.run(main())
+        assert seen == ["Checking 18,607 rows..."]
+
+    def test_nobody_watching_is_a_writer_too(self) -> None:
+        # So work that reports progress needs no ``if`` around every line
+        # and no optional argument threaded through every caller.
+        asyncio.run(unwatched("said to no one"))

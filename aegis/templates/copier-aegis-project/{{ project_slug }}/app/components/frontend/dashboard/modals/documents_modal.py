@@ -234,7 +234,11 @@ class DocumentsTab(ft.Container):
             empty_message="No documents yet",
             on_row_click=lambda i: self._pane.show(docs[i], others=self._docs),
         )
-        if self.page:
+        # Guard the control being updated, not this tab: ``self.page`` is
+        # assigned in ``__init__`` so it is truthy from the first line,
+        # while ``_table`` has no page until the tab is mounted - and
+        # ``_load`` is kicked off by ``run_task`` before that happens.
+        if self._table.page:
             self._table.update()
 
     async def _pick(self) -> None:
@@ -290,7 +294,11 @@ class TagsTab(ft.Container):
             scroll_height=600,
             empty_message="No tags yet. Select a document on the Documents tab to tag it.",
         )
-        if self.page:
+        # Guard the control being updated, not this tab: ``self.page`` is
+        # assigned in ``__init__`` so it is truthy from the first line,
+        # while ``_table`` has no page until the tab is mounted - and
+        # ``_load`` is kicked off by ``run_task`` before that happens.
+        if self._table.page:
             self._table.update()
 
 

@@ -224,7 +224,10 @@ class PostsTab(ft.Container):
             scroll_height=520,
             empty_message="No posts yet",
         )
-        if self.page:
+        # Guard the control being updated: this class assigns
+        # ``self.page`` in ``__init__``, so ``if self.page`` is true
+        # from the first line and says nothing about being mounted.
+        if self._table_container.page:
             self._table_container.update()
 
     def _action_buttons(self, post: dict[str, Any]) -> ft.Control:

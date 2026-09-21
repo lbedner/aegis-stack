@@ -125,7 +125,10 @@ class OverviewTab(ft.Container):
         self._refresh_chart()
 
     def _refresh_chart(self) -> None:
-        if self.page:
+        # Guard the control being updated: this class assigns
+        # ``self.page`` in ``__init__``, so ``if self.page`` is true
+        # from the first line and says nothing about being mounted.
+        if self._chart_container.page:
             self._chart_container.update()
 
     @staticmethod

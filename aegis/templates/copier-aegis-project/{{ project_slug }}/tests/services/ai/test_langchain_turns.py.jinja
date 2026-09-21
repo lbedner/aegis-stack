@@ -128,12 +128,16 @@ class TestLangChainStreaming:
         assert "tool_trace" not in final.metadata
 {%- if ai_backend != "memory" %}
         # LangChain reports no token counts while streaming: the turn is
-        # ledgered at zero rather than not at all.
-        recorder.assert_called_once_with(
+        # ledgered at zero rather than not at all. It IS timed, though -
+        # no tokens does not mean no wall clock, and latency is the one
+        # number this path can still honestly report.
+        recorder.assert_called_once()
+        assert recorder.call_args.args == (
             f"stream_chat:{DEFAULT_AGENT_SLUG}",
             {"input_tokens": 0, "output_tokens": 0},
             "default",
         )
+        assert recorder.call_args.kwargs["duration_ms"] > 0
         assert final.metadata["input_tokens"] == 0
         assert final.metadata["output_tokens"] == 0
 {%- endif %}

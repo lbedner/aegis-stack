@@ -135,6 +135,154 @@ def _store_session(session: AsyncSession) -> Generator[None]:
         yield
 
 
+class TestWhatTheLedgerKeeps:
+    """The ledger records what a call cost in time and work, not just tokens.
+
+    ``duration_ms`` was on ``record_usage``'s signature for months and was
+    passed straight into ``LLMUsage(...)`` - a model with no such field, so
+    SQLModel discarded it without a word. The parameter read as captured
+    and was not. These pin the four fields that were being dropped.
+
+    Nullable is the point: "nobody measured this" and "this was zero" are
+    different facts, and a backfilled zero becomes a lie in an average.
+    """
+
+    async def test_a_timed_call_keeps_its_duration(
+        self,
+        async_db_session: AsyncSession,
+        llm: LargeLanguageModel,
+        price: LLMPrice,
+    ) -> None:
+        from app.services.ai import usage_recording
+
+        with _store_session(async_db_session):
+            await usage_recording.record_usage(
+                action="chat",
+                model_name="gpt-4o",
+                usage={"input_tokens": 10, "output_tokens": 5},
+                user_id="u-timed",
+                duration_ms=1234.5,
+            )
+
+        stmt = select(LLMUsage).where(LLMUsage.user_id == "u-timed")
+        row = (await async_db_session.exec(stmt)).first()
+        assert row is not None
+        assert row.duration_ms == 1234.5
+
+    async def test_an_untimed_call_records_nothing_rather_than_zero(
+        self,
+        async_db_session: AsyncSession,
+        llm: LargeLanguageModel,
+        price: LLMPrice,
+    ) -> None:
+        """A path that does not time itself must be distinguishable from
+        one that ran instantly, or the averages quietly lie."""
+        from app.services.ai import usage_recording
+
+        with _store_session(async_db_session):
+            await usage_recording.record_usage(
+                action="chat",
+                model_name="gpt-4o",
+                usage={"input_tokens": 10, "output_tokens": 5},
+                user_id="u-untimed",
+            )
+
+        stmt = select(LLMUsage).where(LLMUsage.user_id == "u-untimed")
+        row = (await async_db_session.exec(stmt)).first()
+        assert row is not None
+        assert row.duration_ms is None
+
+    async def test_cache_tokens_land_when_the_provider_reports_them(
+        self,
+        async_db_session: AsyncSession,
+        llm: LargeLanguageModel,
+        price: LLMPrice,
+    ) -> None:
+        """They are already in the usage dict and already in the log line;
+        only the columns were missing."""
+        from app.services.ai import usage_recording
+
+        with _store_session(async_db_session):
+            await usage_recording.record_usage(
+                action="chat",
+                model_name="gpt-4o",
+                usage={
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_read_tokens": 900,
+                    "cache_write_tokens": 40,
+                },
+                user_id="u-cache",
+            )
+
+        stmt = select(LLMUsage).where(LLMUsage.user_id == "u-cache")
+        row = (await async_db_session.exec(stmt)).first()
+        assert row is not None
+        assert row.cache_read_tokens == 900
+        assert row.cache_write_tokens == 40
+
+    async def test_a_provider_that_reports_no_cache_records_nothing(
+        self,
+        async_db_session: AsyncSession,
+        llm: LargeLanguageModel,
+        price: LLMPrice,
+    ) -> None:
+        """An absent key stays None. Reading it as 0 would claim the
+        provider offered a cache and missed every time."""
+        from app.services.ai import usage_recording
+
+        with _store_session(async_db_session):
+            await usage_recording.record_usage(
+                action="chat",
+                model_name="gpt-4o",
+                usage={"input_tokens": 10, "output_tokens": 5},
+                user_id="u-nocache",
+            )
+
+        stmt = select(LLMUsage).where(LLMUsage.user_id == "u-nocache")
+        row = (await async_db_session.exec(stmt)).first()
+        assert row is not None
+        assert row.cache_read_tokens is None
+        assert row.cache_write_tokens is None
+
+    async def test_a_turn_that_used_no_tools_records_zero_not_null(
+        self,
+        async_db_session: AsyncSession,
+        llm: LargeLanguageModel,
+        price: LLMPrice,
+    ) -> None:
+        """Zero tool calls is a measurement. Not having counted is not."""
+        from app.services.ai import usage_recording
+
+        with _store_session(async_db_session):
+            await usage_recording.record_usage(
+                action="chat",
+                model_name="gpt-4o",
+                usage={"input_tokens": 10, "output_tokens": 5},
+                user_id="u-notools",
+                tool_calls=0,
+            )
+            await usage_recording.record_usage(
+                action="chat",
+                model_name="gpt-4o",
+                usage={"input_tokens": 10, "output_tokens": 5},
+                user_id="u-uncounted",
+            )
+
+        counted = (
+            await async_db_session.exec(
+                select(LLMUsage).where(LLMUsage.user_id == "u-notools")
+            )
+        ).first()
+        uncounted = (
+            await async_db_session.exec(
+                select(LLMUsage).where(LLMUsage.user_id == "u-uncounted")
+            )
+        ).first()
+        assert counted is not None and counted.tool_calls == 0
+        assert uncounted is not None and uncounted.tool_calls is None
+
+
 class TestRecordUsage:
     """Tests for the _record_usage method."""
 

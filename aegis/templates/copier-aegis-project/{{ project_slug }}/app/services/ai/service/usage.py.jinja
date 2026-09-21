@@ -63,8 +63,14 @@ class UsageMixin(AIServiceBase):
         user_id: str,
         success: bool = True,
         error_message: str | None = None,
+        duration_ms: float | None = None,
     ) -> None:
-        """Write one ledger row for this request; never raises."""
+        """Write one ledger row for this request; never raises.
+
+        ``duration_ms`` stays optional and defaults to None: a caller
+        that does not time itself must be distinguishable from one that
+        answered instantly, or the column's averages are fiction.
+        """
         await usage_recording.record_usage(
             action,
             self.config.model,
@@ -72,6 +78,7 @@ class UsageMixin(AIServiceBase):
             user_id,
             success=success,
             error_message=error_message,
+            duration_ms=duration_ms,
         )
 
     async def get_usage_stats(
@@ -220,6 +227,12 @@ class UsageMixin(AIServiceBase):
                 "cost": float(r.total_cost),
                 "success": r.success,
                 "action": r.action,
+                "duration_ms": r.duration_ms,
+                "cache_read_tokens": r.cache_read_tokens,
+                "cache_write_tokens": r.cache_write_tokens,
+                "tool_calls": r.tool_calls,
+                "user_id": r.user_id,
+                "error_message": r.error_message,
             }
             for r in results
         ]

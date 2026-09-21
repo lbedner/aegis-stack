@@ -34,3 +34,13 @@ class LLMUsage(SQLModel, table=True):
     success: bool = Field(default=True)
     error_message: str | None = None
     action: str = Field(index=True)
+
+    # What the call cost in time and work. All nullable, and deliberately
+    # not defaulted to zero: "nobody measured this" and "this was zero"
+    # are different facts, and a backfilled zero becomes a lie the moment
+    # anything averages the column. A path that does not time itself
+    # records None; a turn that genuinely used no tools records 0.
+    duration_ms: float | None = Field(default=None, ge=0)
+    cache_read_tokens: int | None = Field(default=None, ge=0)
+    cache_write_tokens: int | None = Field(default=None, ge=0)
+    tool_calls: int | None = Field(default=None, ge=0)

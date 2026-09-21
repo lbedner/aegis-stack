@@ -29,6 +29,17 @@ class RecentActivity(BaseModel):
     success: bool
     action: str
 
+    # What the call cost in time and work. Optional throughout: a row
+    # written before these columns existed, or by a path that does not
+    # time itself, carries None - and the surface renders that as a
+    # dash, never as a zero it did not measure.
+    duration_ms: float | None = None
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    tool_calls: int | None = None
+    user_id: str | None = None
+    error_message: str | None = None
+
 
 class UsageStatsResponse(BaseModel):
     """Aggregated LLM usage statistics response."""

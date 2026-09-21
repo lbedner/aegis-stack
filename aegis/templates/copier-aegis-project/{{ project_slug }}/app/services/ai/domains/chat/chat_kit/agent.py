@@ -19,16 +19,12 @@ context in the system block is what feeds one.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 import inspect
 import json
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+import time
 from typing import Any, Generic, TypeVar
 
-from app.core.chat_transcript import tool_label
-from app.core.log import logger
-from app.services.ai.domains.chat.tool_telemetry import tool_turn
-from app.services.ai.domains.chat.user_memory import memory_user
-from app.services.ai.usage_recording import extract_usage, record_usage
 from pydantic_ai import Agent
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
@@ -44,6 +40,12 @@ from pydantic_ai.messages import (
 from pydantic_ai.run import AgentRunResultEvent
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
+
+from app.core.chat_transcript import tool_label
+from app.core.log import logger
+from app.services.ai.domains.chat.tool_telemetry import tool_turn
+from app.services.ai.domains.chat.user_memory import memory_user
+from app.services.ai.usage_recording import extract_usage, record_usage
 
 from .context import ContextProvider, compose_context, gather_context
 from .models import (
@@ -161,6 +163,9 @@ class ToolChatAgent(Generic[DepsT]):
             # before calling a tool keeps streaming after the tool returns
             # instead of the early text ending the turn.
             result: Any = None
+            # Wall clock for the whole turn, tool pauses included: what a
+            # person waited, not what the model spent thinking.
+            started = time.perf_counter()
             # Bind the turn's user so a save_memory call mid-stream knows
             # whose fact it is; the scope is the only identity a turn has.
             # ``tool_turn`` groups this turn's tool calls in the ledger;
@@ -224,6 +229,8 @@ class ToolChatAgent(Generic[DepsT]):
             model_name=self._model_name,
             usage=usage,
             user_id=scope.user_id,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            tool_calls=tool_calls,
         )
         if inspect.isawaitable(cost):
             cost = await cost

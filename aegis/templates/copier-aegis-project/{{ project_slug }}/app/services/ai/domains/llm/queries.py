@@ -332,8 +332,13 @@ async def recent_usage(
     end_time: datetime | None,
     limit: int,
 ) -> Sequence[Any]:
-    """The newest ledger rows (timestamp, model_id, input_tokens,
-    output_tokens, total_cost, success, action)."""
+    """The newest ledger rows, with what each call cost in time and work.
+
+    Columns are named rather than selecting the whole row so the ledger
+    can grow without widening this query by accident - but that cuts
+    both ways: a column added to the model and not added here is simply
+    absent from the response, and the caller fails on the attribute.
+    """
     stmt = (
         select(
             LLMUsage.timestamp,
@@ -343,6 +348,12 @@ async def recent_usage(
             LLMUsage.total_cost,
             LLMUsage.success,
             LLMUsage.action,
+            LLMUsage.duration_ms,
+            LLMUsage.cache_read_tokens,
+            LLMUsage.cache_write_tokens,
+            LLMUsage.tool_calls,
+            LLMUsage.user_id,
+            LLMUsage.error_message,
         )
         .order_by(LLMUsage.timestamp.desc())
         .limit(limit)

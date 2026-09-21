@@ -34,6 +34,21 @@ def _token_count(usage: Any, *names: str) -> int:
     return 0
 
 
+def _optional_token_count(usage: Any, *names: str) -> int | None:
+    """Like ``_token_count`` but None when the provider never said.
+
+    A provider that supports caching and got no hits reports 0, which is
+    a measurement worth keeping. A provider or client version that has
+    no such attribute reported nothing at all, and folding that to 0
+    would claim a cache was offered and missed on every call.
+    """
+    for name in names:
+        value = getattr(usage, name, None)
+        if isinstance(value, int):
+            return value
+    return None
+
+
 def extract_usage(result: Any) -> dict[str, int]:
     """Token usage from a pydantic-ai run result.
 
@@ -46,8 +61,8 @@ def extract_usage(result: Any) -> dict[str, int]:
     Cache accounting: pydantic-ai's ``input_tokens`` AGGREGATES uncached +
     cache-read + cache-write tokens, so the cache splits ride along for
     pricing (cached reads bill at ~0.1x, writes at ~1.25x on Anthropic).
-    Zero on providers/runs without caching, which prices identically to
-    the pre-cache behavior.
+    Absent on providers/clients that report no cache counts at all,
+    which prices identically to the pre-cache behavior.
     """
     usage = getattr(result, "usage", None)
     if callable(usage):
@@ -57,12 +72,17 @@ def extract_usage(result: Any) -> dict[str, int]:
             return {"input_tokens": 0, "output_tokens": 0}
     if usage is None:
         return {"input_tokens": 0, "output_tokens": 0}
-    return {
+    counts = {
         "input_tokens": _token_count(usage, "input_tokens", "request_tokens"),
         "output_tokens": _token_count(usage, "output_tokens", "response_tokens"),
-        "cache_read_tokens": _token_count(usage, "cache_read_tokens"),
-        "cache_write_tokens": _token_count(usage, "cache_write_tokens"),
     }
+    # Present only when the provider actually reported them, so the
+    # ledger can tell "no cache hits" from "no cache at all".
+    for key in ("cache_read_tokens", "cache_write_tokens"):
+        reported = _optional_token_count(usage, key)
+        if reported is not None:
+            counts[key] = reported
+    return counts
 
 
 async def calculate_cost(
@@ -124,7 +144,8 @@ async def record_usage(
     user_id: str | None,
     success: bool = True,
     error_message: str | None = None,
-    duration_ms: int | None = None,
+    duration_ms: float | None = None,
+    tool_calls: int | None = None,
 ) -> float:
     """Write one ``llm_usage`` ledger row; returns the calculated cost.
 
@@ -160,6 +181,12 @@ async def record_usage(
                     success=success,
                     error_message=error_message,
                     duration_ms=duration_ms,
+                    # ``.get`` with no default, so a provider that reports
+                    # no cache records None rather than claiming it offered
+                    # one and missed every time.
+                    cache_read_tokens=usage.get("cache_read_tokens"),
+                    cache_write_tokens=usage.get("cache_write_tokens"),
+                    tool_calls=tool_calls,
                 )
             )
         logger.info(

@@ -51,9 +51,13 @@ def _scope() -> ChatScope:
 def _agent(model: TestModel, **overrides):
     captured: dict = {}
 
-    def recorder(*, action, model_name, usage, user_id):
+    def recorder(*, action, model_name, usage, user_id, **extra):
+        # ``**extra`` on purpose: the recorder is a seam, and the turn
+        # hands it whatever it measured. A fixed signature here turns
+        # every new measurement into a TypeError in the tests rather
+        # than a missing column in the ledger.
         captured.update(
-            action=action, model_name=model_name, usage=usage, user_id=user_id
+            action=action, model_name=model_name, usage=usage, user_id=user_id, **extra
         )
         return 0.0123
 
@@ -85,6 +89,20 @@ async def test_streams_deltas_then_done_with_answer() -> None:
     assert isinstance(frames[-1], DoneFrame)
     assert done[0].answer == "Downloads held steady."
     assert "".join(d.text for d in deltas) == "Downloads held steady."
+
+
+async def test_the_turn_is_timed_and_its_tool_calls_counted() -> None:
+    """What the ledger could not show: how long the person waited, and
+    how much work the turn did. Both were computed and dropped -
+    ``duration_ms`` was passed to a model with no such column, and the
+    tool count only ever reached the UI frame."""
+    agent, captured = _agent(TestModel(custom_output_text="ok"))
+    await _drain(agent, scope=_scope(), deps=_Deps(7), message="q")
+
+    assert captured["duration_ms"] is not None
+    assert captured["duration_ms"] > 0, "a turn cannot take no time at all"
+    # Zero tools is a measurement; None would mean nobody counted.
+    assert captured["tool_calls"] == 0
 
 
 async def test_records_usage_via_injected_recorder() -> None:

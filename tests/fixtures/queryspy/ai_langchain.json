@@ -166,9 +166,21 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT llm_price.id, llm_price.org_id, llm_price.llm_id, llm_price.input_cost_per_token, llm_price.output_cost_per_token, llm_price.cache_input_cost_per_token, llm_price.effective_date FROM llm_price WHERE llm_price.llm_id = :llm_id_1 ORDER BY llm_price.effective_date DESC LIMIT :param_1",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "latest_price_for"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT llm_price.id, llm_price.org_id, llm_price.llm_id, llm_price.input_cost_per_token, llm_price.output_cost_per_token, llm_price.cache_input_cost_per_token, llm_price.effective_date FROM llm_price WHERE llm_price.llm_id IN (__[POSTCOMPILE_llm_id_1]) ORDER BY llm_price.llm_id, llm_price.effective_date DESC",
       "file": "tests/services/ai/test_llm_service.py",
       "function": "exec"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT llm_usage.id, llm_usage.model_id, llm_usage.user_id, llm_usage.timestamp, llm_usage.input_tokens, llm_usage.output_tokens, llm_usage.total_cost, llm_usage.success, llm_usage.error_message, llm_usage.action, llm_usage.duration_ms, llm_usage.cache_read_tokens, llm_usage.cache_write_tokens, llm_usage.tool_calls FROM llm_usage WHERE llm_usage.user_id = :user_id_1",
+      "file": "tests/services/ai/test_usage_tracking.py",
+      "function": "test_a_turn_that_used_no_tools_records_zero_not_null"
     },
     {
       "kind": "repeated_statement",
@@ -178,7 +190,7 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT llm_usage.timestamp, llm_usage.model_id, llm_usage.input_tokens, llm_usage.output_tokens, llm_usage.total_cost, llm_usage.success, llm_usage.action FROM llm_usage ORDER BY llm_usage.timestamp DESC LIMIT :param_1",
+      "label": "SELECT llm_usage.timestamp, llm_usage.model_id, llm_usage.input_tokens, llm_usage.output_tokens, llm_usage.total_cost, llm_usage.success, llm_usage.action, llm_usage.duration_ms, llm_usage.cache_read_tokens, llm_usage.cache_write_tokens, llm_usage.tool_calls, llm_usage.user_id, llm_usage.error_message FROM llm_usage ORDER BY llm_usage.timestamp DESC LIMIT :param_1",
       "file": "app/services/ai/domains/llm/queries.py",
       "function": "recent_usage"
     },

@@ -8,6 +8,8 @@ under its own surface so the cost of reading paper is visible.
 
 from __future__ import annotations
 
+import time
+
 from app.core.config import settings
 from app.services.ai.domains.llm import active_model
 from app.services.ai.domains.llm.providers import ProviderError
@@ -31,11 +33,16 @@ async def read_page(image: bytes, media_type: str) -> tuple[str, str]:
 
     model, model_name = await active_model.model_for_active(settings)
     agent: PydanticAgent[None, str] = PydanticAgent(model, instructions=INSTRUCTIONS)
+    started = time.perf_counter()
     result = await agent.run(
         ["Transcribe this page.", BinaryContent(data=image, media_type=media_type)]
     )
     await record_usage(
-        action=SURFACE, model_name=model_name, usage=extract_usage(result), user_id=None
+        action=SURFACE,
+        model_name=model_name,
+        usage=extract_usage(result),
+        user_id=None,
+        duration_ms=(time.perf_counter() - started) * 1000,
     )
     return str(result.output), model_name
 

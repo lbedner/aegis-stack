@@ -339,7 +339,10 @@ class StreamingMixin(ChatMixin):
             # Record usage, attributed to the resolved agent. Zero under
             # LangChain, which reports no token counts while streaming.
             await self._record_usage(
-                f"stream_chat:{agent_config.slug}", stream_usage, user_id
+                f"stream_chat:{agent_config.slug}",
+                stream_usage,
+                user_id,
+                duration_ms=response_time_ms,
             )
 {%- endif %}
             # Extractions recorded mid-run outlive the image AND the

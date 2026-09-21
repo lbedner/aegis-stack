@@ -209,3 +209,86 @@ class TestAgentRowCells:
         # The current pin is present even when absent from the catalog,
         # and catalog duplicates collapse.
         assert keys == ["claude-sonnet-5", "gpt-4o"]
+
+
+class TestWhatTheLedgerCouldNotShow:
+    """Duration, cache and tool counts render, and absent ones read as a dash.
+
+    Every one of these columns is nullable: rows written before they
+    existed carry NULL, and so does any path that does not time itself.
+    Rendering those as ``0`` would turn "nobody measured" into "it took
+    no time", which is exactly the lie the nullable columns exist to
+    avoid - so the dash is asserted, not assumed.
+    """
+
+    def test_a_duration_reads_in_the_unit_that_suits_it(self) -> None:
+        from app.components.frontend.dashboard.modals.ai_analytics_tab.activity import (
+            _format_duration,
+        )
+
+        assert _format_duration(840) == "840 ms"
+        assert _format_duration(2400) == "2.4 s"
+        # A local model answering slowly is the case this column is for.
+        assert _format_duration(31500) == "31.5 s"
+
+    def test_an_untimed_call_reads_as_a_dash_not_a_zero(self) -> None:
+        from app.components.frontend.dashboard.modals.ai_analytics_tab.activity import (
+            _format_duration,
+        )
+
+        assert _format_duration(None) == "-"
+
+    def test_the_drawer_survives_a_row_that_predates_every_new_column(self) -> None:
+        """Historical rows are all-NULL here and must still render."""
+        from app.components.frontend.dashboard.modals.ai_analytics_tab.activity import (
+            _detail,
+        )
+
+        panel = _detail(
+            {
+                "timestamp": "2026-09-01T10:00:00+00:00",
+                "model": "gpt-4o",
+                "action": "chat",
+                "cost": 0.01,
+                "success": True,
+            }
+        )
+        assert panel is not None
+
+    def test_a_failed_call_shows_why_in_the_drawer(self) -> None:
+        from app.components.frontend.dashboard.modals.ai_analytics_tab.activity import (
+            _detail,
+        )
+
+        panel = _detail(
+            {
+                "timestamp": "2026-09-01T10:00:00+00:00",
+                "success": False,
+                "error_message": "rate limited",
+                "duration_ms": 120.0,
+                "tool_calls": 0,
+            }
+        )
+        rendered = _flatten(panel)
+        assert "rate limited" in rendered
+        # Zero tool calls is a measurement and must not read as a dash.
+        assert "Tool calls" in rendered
+
+
+def _flatten(control: ft.Control) -> str:
+    """Every string reachable from a control tree, for assertion."""
+    out: list[str] = []
+    stack = [control]
+    while stack:
+        node = stack.pop()
+        for attr in ("value", "text"):
+            found = getattr(node, attr, None)
+            if isinstance(found, str):
+                out.append(found)
+        for attr in ("content", "controls"):
+            child = getattr(node, attr, None)
+            if isinstance(child, list):
+                stack.extend(child)
+            elif child is not None:
+                stack.append(child)
+    return " | ".join(out)

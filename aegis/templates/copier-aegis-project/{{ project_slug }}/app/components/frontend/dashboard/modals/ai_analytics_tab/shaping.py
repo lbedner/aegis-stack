@@ -39,6 +39,15 @@ def _transform_api_response(api_data: dict[str, Any]) -> dict[str, Any]:
                 "output_tokens": r.get("output_tokens", 0),
                 "cost": r.get("cost", 0.0),
                 "success": r.get("success", True),
+                # ``.get`` with no default: these are nullable in the
+                # ledger and a missing value must stay missing, so the
+                # drawer can show a dash instead of inventing a zero.
+                "duration_ms": r.get("duration_ms"),
+                "cache_read_tokens": r.get("cache_read_tokens"),
+                "cache_write_tokens": r.get("cache_write_tokens"),
+                "tool_calls": r.get("tool_calls"),
+                "user_id": r.get("user_id"),
+                "error_message": r.get("error_message"),
             }
         )
 

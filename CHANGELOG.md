@@ -7,6 +7,101 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-22
+
+### Added
+
+- **Pick the ASGI server and its event loop.** `WEBSERVER_ENGINE`
+  (`uvicorn` or `granian`) and `WEBSERVER_LOOP` are typed settings, both
+  defaulting to what shipped before, so `make serve` is unchanged.
+  `make serve ENGINE=granian` / `LOOP=...` switch for one run, granian
+  refuses a loop it cannot run instead of starting on another, and uvicorn
+  can now run on zuvloop. `bench engines` measures the choice on your own
+  routes and sweeps the loop axis (`--loop uvloop --loop asyncio`). A new
+  ASGI Server docs page names each difference by its symptom.
+- **Documents read scans locally before asking a model.** A Tesseract OCR
+  tier sits between a PDF's text layer and the vision model; a page that
+  reads as words and figures is stored with `method = "ocr"`, anything
+  thinner still goes to the model, and a machine without Tesseract behaves
+  as before. Pages are now extracted concurrently and land one at a time,
+  about 3.3x faster on a multi-page scan.
+- **One markdown renderer for anything a model wrote.** Server-side marko
+  with GFM (tables, strikethrough, autolinks) that escapes raw HTML in the
+  source, so a model can format but never inject markup. Every dashboard
+  markdown view gains a copy button that hands over the raw source, not the
+  fenced display.
+- **Every chat tool call is recorded**, keyed to its turn, so an agent with
+  twenty tools can be reasoned about: which are never reached for and how
+  often a turn spends its whole call budget. The usage ledger now actually
+  stores `duration_ms`, which it accepted and silently dropped at every
+  call site.
+- **A generated project gates its own CI on N+1 queries.** It ships
+  `.queryspy-baseline.json` and its test job runs strict against it;
+  `make check-queries` / `check-queries-baseline` do the same locally.
+  Each stack in the matrix now owns its own baseline.
+- **Cached payloads are namespaced by the deployed commit.** `aegis deploy`
+  stamps `BUILD_ID` into the server's `.env`, so a deploy never serves a
+  cached response shaped by the previous code.
+- **A dashboard session outlives the webserver process.** The rotating
+  refresh token persists in client storage (never the access token), so a
+  deploy or hot reload no longer sends every user back to login.
+- **Any worker job can report where it got to**, and the system worker is
+  sized for the imports and extractions it actually runs rather than
+  maintenance chores, which an 18,000-row finance import was OOM-killed on.
+- **SQLite backups take a consistent snapshot** rather than copying a file
+  that may be mid-write.
+
+### Changed
+
+- **The chat store and usage ledger are async.** They were the last
+  request-path code on the sync SQLite engine, where a slow model turn could
+  freeze the whole webserver on "database is locked".
+- **The dashboard repaints the component that changed, not the board.**
+  Cards, the table and the diagram reuse their controls across refreshes,
+  and a modal that already knows a component's status applies it to that
+  card directly.
+- **Oversized modules became packages** under the module size budget: the
+  insights and modal-sections surfaces, eight dashboard modals, the finance
+  insight rules, `cli/rag.py` and others. Import paths are unchanged.
+  `BaseCard`, which no card could inherit from, is deleted.
+- **A generated project's test app is built once per session**, with
+  dependency overrides cleared around each test; on a downstream suite this
+  took the full run from 22 to under 10 minutes.
+- **The README is wired per plugin.** Each plugin spec declares its own
+  README lines, so a new service can no longer be absent from the README
+  its project ships with.
+- Windows users meet `uv run poe` in step 3 of Installation, before the
+  first `make` that would not work for them.
+
+### Fixed
+
+- **sqlmodel is pinned below 0.0.45**, which rejects every naive UTC
+  timestamp the template writes; a fresh project resolved 0.0.46 and failed
+  3,617 tests. The arq worker no longer dies on its own event loop, and the
+  generated suite now sees database locks.
+- **`add-service` checks template version compatibility** like `add` and
+  `remove` already did, and a foreign key onto a sentinel row gets a
+  migration signature, so adding auth to a finance project that has been
+  used migrates instead of installing code with no schema.
+- **`auth[oauth]` on `add-service` enables OAuth** instead of being parsed
+  and dropped.
+- **An `ai` stack without a database boots.** Three modules imported
+  `app.core.db` at module scope.
+- **documents + auth passes its own API suite** on a fresh init, and the
+  combinations nobody generated are now exercised.
+- **A corrupt Flet tree stops every loop on the page**, not only the
+  dashboard refresh, and a guard checks the control actually being updated
+  (the documents modal failed to open).
+- `api/llm` and `api/rag` modules are named `routes`, so the package export
+  no longer shadows the module.
+- A blog page of posts costs the same queries as one post.
+- Add and update write the same answers init does; the vestigial
+  `scheduler_with_persistence` question is removed.
+- The test suite no longer rewrites the developer's global git identity,
+  and `uv add --dev` no longer uninstalls pytest.
+- A failed old-template render during `update` aborts loudly instead of
+  turning every file into a conflict.
+
 ## [0.12.1] - 2026-09-14
 
 ### Fixed

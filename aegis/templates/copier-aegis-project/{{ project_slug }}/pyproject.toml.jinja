@@ -59,7 +59,9 @@ dependencies = [
 {%- endif %}
 {%- endif %}
 {%- if include_database %}
-    "sqlmodel>=0.0.14",
+    # <0.0.45: that release rejects naive datetimes, and every timestamp
+    # this project writes is naive UTC (see app/core/time.py).
+    "sqlmodel>=0.0.14,<0.0.45",
     "sqlalchemy>=2.0.0",
 {%- if database_engine == "postgres" %}
     "asyncpg>=0.29.0",

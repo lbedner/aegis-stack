@@ -58,3 +58,34 @@ def test_the_scheduler_reloads_in_dev() -> None:
     end = rendered.index('elif [ "$run_command"', start + 1)
 
     assert "watchfiles" in rendered[start:end]
+
+
+class TestTheArqWorkerOwnsItsLoop:
+    """``python -m arq <settings>`` calls ``asyncio.get_event_loop()`` with
+    no running loop, which is a RuntimeError on Python 3.14. arq's own
+    ``--watch`` hid it by running the worker inside ``asyncio.run`` - so
+    the dev branch worked, the non-dev branch (the one a deployment takes)
+    was dead, and the "reload" re-ran the worker in the same process
+    without re-importing anything. Found in aegis-steward, which hit all
+    three."""
+
+    def _branch(self) -> str:
+        return _worker_branch(_render(_ctx(worker_backend="arq")))
+
+    def test_neither_branch_runs_arqs_cli(self) -> None:
+        branch = self._branch()
+        assert "python -m arq" not in branch, (
+            "arq's CLI cannot start its own event loop on Python 3.14"
+        )
+
+    def test_both_branches_run_the_same_entrypoint(self) -> None:
+        """A command only dev runs is a command only dev has tested."""
+        assert self._branch().count("app.entrypoints.worker") == 2
+
+    def test_dev_restarts_the_process_rather_than_reconnecting(self) -> None:
+        branch = self._branch()
+        assert "--watch" not in branch, (
+            "arq's watch flag re-runs the worker in the same process and "
+            "re-imports nothing"
+        )
+        assert "watchfiles --filter python" in branch

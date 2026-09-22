@@ -28,6 +28,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from aegis.core.components import COMPONENTS
 from aegis.core.file_manifest import FileManifest
 from aegis.core.plugins.spec import PluginKind, PluginSpec
@@ -123,6 +125,42 @@ class TestWorkerDeclaresItsPatternDTransform:
         assert (worker_dir / "pools.py").read_text() == "# arq\n"
         assert not (worker_dir / "pools_dramatiq.py").exists()
         assert not (worker_dir / "pools_taskiq.py").exists()
+
+
+class TestTheArqEntrypointShipsOnlyWithArq:
+    """``app/entrypoints/worker.py`` exists because arq's CLI cannot start
+    its own event loop on Python 3.14. taskiq and dramatiq start theirs
+    (measured: both CLIs boot on 3.14, arq's exits with "There is no
+    current event loop"), so their stacks must not carry an arq module
+    nothing runs - and whose import of ``arq`` would fail there."""
+
+    ARQ_ONLY = (
+        "app/entrypoints/worker.py",
+        "tests/components/test_worker_entrypoint.py",
+    )
+
+    def _tree(self, root: Path) -> None:
+        TestWorkerDeclaresItsPatternDTransform._worker_tree(root)
+        for rel in self.ARQ_ONLY:
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text("# arq\n")
+
+    @pytest.mark.parametrize("backend", ["taskiq", "dramatiq"])
+    def test_other_backends_drop_it(self, tmp_path: Path, backend: str) -> None:
+        self._tree(tmp_path)
+        hook = COMPONENTS["worker"].post_render
+        assert hook is not None
+        hook(tmp_path, {"worker_backend": backend})
+        for rel in self.ARQ_ONLY:
+            assert not (tmp_path / rel).exists(), f"{rel} left in a {backend} stack"
+
+    def test_arq_keeps_it(self, tmp_path: Path) -> None:
+        self._tree(tmp_path)
+        hook = COMPONENTS["worker"].post_render
+        assert hook is not None
+        hook(tmp_path, {"worker_backend": "arq"})
+        for rel in self.ARQ_ONLY:
+            assert (tmp_path / rel).exists(), f"{rel} missing from an arq stack"
 
 
 class TestSpecDeclaresAnswerResets:

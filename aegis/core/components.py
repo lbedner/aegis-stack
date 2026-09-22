@@ -144,6 +144,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
             # leaves it. worker_taskiq.py IS here — cleanup removes it.
             primary=[
                 "app/components/worker",
+                # arq-only: removed for taskiq and dramatiq by
+                # cleanup_worker_backend_files (see ARQ_ONLY_FILES).
+                "app/entrypoints/worker.py",
+                "tests/components/test_worker_entrypoint.py",
                 ".claude/skills/add-background-job",
                 "app/cli/load_test.py",
                 "app/cli/load_test_display.py",
@@ -277,7 +281,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
             "database for development; PostgreSQL is the production path. "
             "Most services build on this."
         ),
-        pyproject_deps=["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0"],
+        # <0.0.45: that release rejects naive datetimes, and every timestamp
+        # this template writes is naive UTC (see app/core/time.py).
+        pyproject_deps=["sqlmodel>=0.0.14,<0.0.45", "sqlalchemy>=2.0.0"],
         # Note: async driver (aiosqlite or asyncpg) selected based on database_type in copier.yml
         template_files=["app/core/db.py"],
         marker_path="app/core/db.py",

@@ -108,20 +108,28 @@ elif [ "$run_command" = "worker" ]; then
             --processes "${worker_processes}" --threads "${worker_threads}" "$@"
     fi
 {%- else %}
-    # Worker component using STANDARD arq CLI
+    # Worker component using arq
     queue_type="${1:-system}"  # Default to system queue if not specified
     shift
 
-    # Build the module path for the queue
-    worker_module="app.components.worker.queues.${queue_type}.WorkerSettings"
-
-    # Development mode auto-reload (APP_ENV from .env or WORKER_WATCH override)
-    if [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; then
+    # Not arq's own CLI: it calls asyncio.get_event_loop() with no
+    # running loop, a RuntimeError on Python 3.14. Its watch flag hid
+    # that by running the worker inside
+    # asyncio.run - so the dev branch worked, this non-dev branch was
+    # dead, and the "reload" re-ran the worker in the same process
+    # without re-importing anything. Both branches run one entrypoint
+    # that owns its loop; dev restarts the process under watchfiles, as
+    # the scheduler branch does.
+    if { [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; } \
+        && uv run python -c "import watchfiles" 2>/dev/null; then
         echo "Starting ${queue_type} worker with auto-reload..."
-        exec uv run python -m arq "${worker_module}" --watch /code/app "$@"
+        exec uv run watchfiles --filter python \
+            "python -m app.entrypoints.worker ${queue_type}" /code/app
     else
+        # watchfiles ships via uvicorn[standard] (not guaranteed in every
+        # stack shape) - a missing watcher must not stop the worker.
         echo "Starting ${queue_type} worker..."
-        exec uv run python -m arq "${worker_module}" "$@"
+        exec uv run python -m app.entrypoints.worker "${queue_type}"
     fi
 {%- endif %}
 {%- endif %}

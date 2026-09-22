@@ -116,6 +116,13 @@ def remove_dir(project_path: Path, dirpath: str) -> None:
         shutil.rmtree(full_path)
 
 
+# Files only an arq worker runs. See cleanup_worker_backend_files.
+ARQ_ONLY_FILES = (
+    "app/entrypoints/worker.py",
+    "tests/components/test_worker_entrypoint.py",
+)
+
+
 def cleanup_worker_backend_files(project_path: Path, worker_backend: str) -> None:
     """Resolve worker backend variant files to canonical names (Pattern D).
 
@@ -230,6 +237,16 @@ def cleanup_worker_backend_files(project_path: Path, worker_backend: str) -> Non
 
     if not queues_dir.exists():
         return
+
+    # arq's CLI cannot start its own event loop on Python 3.14, so arq
+    # stacks run through app/entrypoints/worker.py. taskiq and dramatiq
+    # start theirs; their stacks must not carry an arq module nothing
+    # runs, whose ``import arq`` would fail there.
+    if worker_backend != WorkerBackends.ARQ:
+        for rel in ARQ_ONLY_FILES:
+            target = project_path / rel
+            if target.exists():
+                target.unlink()
 
     if worker_backend == WorkerBackends.DRAMATIQ:
         # Using Dramatiq: rename _dramatiq.py files, remove arq + taskiq.

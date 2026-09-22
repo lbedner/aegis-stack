@@ -342,7 +342,7 @@ class TemplateGenerator:
                             deps.extend(spec.pyproject_deps)  # arq deps from spec
                     # Handle database engine-specific dependencies
                     elif base_name == ComponentNames.DATABASE:
-                        deps.extend(["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0"])
+                        deps.extend(spec.pyproject_deps)
                         if self.database_engine == StorageBackends.POSTGRES:
                             deps.extend(["asyncpg>=0.29.0", "psycopg2-binary>=2.9.9"])
                         else:

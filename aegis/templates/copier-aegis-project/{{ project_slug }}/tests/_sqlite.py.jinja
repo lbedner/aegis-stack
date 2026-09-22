@@ -1,0 +1,65 @@
+{%- if include_database and database_engine == "sqlite" -%}
+"""Test engines shaped like the real one.
+
+``app.core.db`` opens every transaction with ``BEGIN IMMEDIATE`` so
+``busy_timeout`` applies - a deferred BEGIN fails its lock upgrade at
+once instead of waiting. The suite's engines emitted a plain ``BEGIN``
+with no timeout, so an open session in a test was not the write lock and
+no test could reproduce a lock-contention bug. aegis-steward shipped two
+in a week that way, each found by watching the app freeze.
+
+The shape is DERIVED from ``app.core.db``'s own pragma function, never
+restated: a change to the real pragmas that the suite does not get is
+how the suite goes back to lying. No WAL here because production sets
+none (see ``apply_sqlite_pragmas``); if it ever does, add it here too.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+# Short enough to assert against. A test proving the lock is held must
+# not take the production thirty seconds to say so.
+IMPATIENT_BUSY_TIMEOUT_MS = 400
+
+Attach = Callable[[Any], None]
+
+
+def shape_like_production(
+    engine: AsyncEngine,
+    *,
+    attach: Attach | None = None,
+    busy_timeout_ms: int | None = None,
+) -> None:
+    """Give ``engine`` production's transaction behaviour.
+
+    ``attach`` adds the schema databases, which differ per fixture.
+    ``busy_timeout_ms`` overrides the real wait for tests that must not
+    spend it.
+    """
+    from app.core.db import apply_sqlite_pragmas
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _connect(dbapi_connection: Any, connection_record: Any) -> None:
+        # Take over transaction control, as production does: pysqlite's
+        # implicit BEGIN/COMMIT sniffing commits before SAVEPOINT.
+        dbapi_connection.isolation_level = None
+        apply_sqlite_pragmas(dbapi_connection)
+        if busy_timeout_ms is not None:
+            # Through a cursor that is closed: an assigning PRAGMA answers
+            # with a row, and an unfinished statement makes the next
+            # COMMIT fail with "SQL statements in progress".
+            cursor = dbapi_connection.cursor()
+            cursor.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
+            cursor.close()
+        if attach is not None:
+            attach(dbapi_connection)
+
+    @event.listens_for(engine.sync_engine, "begin")
+    def _begin(conn: Any) -> None:
+        conn.exec_driver_sql("BEGIN IMMEDIATE")
+{%- endif -%}

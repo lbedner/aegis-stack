@@ -87,4 +87,60 @@ class TestTwoWritersInOneTurn:
         from app.core.db import _async_sqlite_emit_begin
 
         assert "BEGIN IMMEDIATE" in inspect.getsource(_async_sqlite_emit_begin)
+
+
+class TestTheSuiteCanSeeALock:
+    """The test engines are shaped like the real one.
+
+    They emitted a plain BEGIN with no busy_timeout, so an open session in
+    a test was not the write lock and no test could reproduce a
+    lock-contention bug - an open session held across a model call, an
+    HTTP request, anything slow. The shape comes from ``tests/_sqlite.py``,
+    derived from ``apply_sqlite_pragmas`` so the two cannot drift.
+    """
+
+    @staticmethod
+    async def _one(engine: Any, sql: str) -> Any:
+        async with engine.connect() as conn:
+            return (await conn.exec_driver_sql(sql)).scalar()
+
+    @pytest.mark.asyncio
+    async def test_the_app_owned_engine_has_the_real_pragmas(
+        self, app_owned_engine: Any
+    ) -> None:
+        assert await self._one(app_owned_engine, "PRAGMA busy_timeout") == (
+            SQLITE_BUSY_TIMEOUT_MS
+        )
+        assert await self._one(app_owned_engine, "PRAGMA foreign_keys") == 1
+
+    @pytest.mark.asyncio
+    async def test_an_open_session_is_the_write_lock(
+        self, impatient_engine: Any
+    ) -> None:
+        """The point. A session open against a production-shaped engine
+        HOLDS the write lock, so a second writer waits and then gives up -
+        which is what makes "held across something slow" catchable. Against
+        the old engines this passed straight through."""
+        from sqlalchemy import text
+        from sqlalchemy.exc import OperationalError
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+        from sqlmodel.ext.asyncio.session import AsyncSession
+
+        maker = async_sessionmaker(impatient_engine, class_=AsyncSession)
+        async with maker() as holder:
+            await holder.execute(text("SELECT 1"))
+            async with maker() as other:
+                with pytest.raises(OperationalError, match="database is locked"):
+                    await other.execute(text("SELECT 1"))
+
+    @pytest.mark.asyncio
+    async def test_the_impatient_engine_waits_only_a_moment(
+        self, impatient_engine: Any
+    ) -> None:
+        from tests._sqlite import IMPATIENT_BUSY_TIMEOUT_MS
+
+        assert IMPATIENT_BUSY_TIMEOUT_MS < SQLITE_BUSY_TIMEOUT_MS
+        assert await self._one(impatient_engine, "PRAGMA busy_timeout") == (
+            IMPATIENT_BUSY_TIMEOUT_MS
+        )
 {%- endif -%}

@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""
+Worker entrypoint for {{ project_name }}.
+
+Starts one queue's arq worker inside a loop it owns.
+
+Not ``python -m arq <settings>``: arq's CLI calls
+``asyncio.get_event_loop()`` with no running loop, which is a
+RuntimeError on Python 3.14. Its own watch flag hid that by running the
+worker inside ``asyncio.run`` - so the dev branch worked and the
+non-dev branch was dead for as long as a project had been on
+3.14. One entrypoint for both, and it starts the loop itself.
+"""
+
+import asyncio
+import sys
+
+# Observability bootstrap BEFORE the app imports: auto-tracing installs an
+# import hook, so it must run while app.services is still unimported.
+try:
+    from app.components.backend.middleware.logfire_tracing import (
+        install_auto_tracing,
+    )
+except ImportError:  # observability component not installed
+    pass
+else:
+    install_auto_tracing()
+
+from importlib import import_module  # noqa: E402
+from typing import Any  # noqa: E402
+
+from arq.worker import create_worker  # noqa: E402
+
+from app.core.log import setup_logging  # noqa: E402
+
+
+def settings_for(queue: str) -> Any:
+    """The ``WorkerSettings`` of one queue, by its name.
+
+    Exits rather than raises: a typo in the compose command is a
+    deployment mistake, and a traceback about an import is a worse way
+    to hear about it than the name that was not found.
+    """
+    try:
+        module = import_module(f"app.components.worker.queues.{queue}")
+    except ModuleNotFoundError:
+        raise SystemExit(f"No such worker queue: {queue!r}") from None
+    return module.WorkerSettings
+
+
+async def main(queue: str) -> None:
+    """Run one queue until something stops it.
+
+    Closed in a ``finally`` because watchfiles stops this process on
+    every edit: without it the loop shuts before redis connections do,
+    and each reload prints a page of "Event loop is closed" raised by
+    their deallocators.
+    """
+    setup_logging()
+    worker = create_worker(settings_for(queue))
+    try:
+        await worker.async_run()
+    finally:
+        await worker.close()
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main(sys.argv[1] if len(sys.argv) > 1 else "system"))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # Being stopped is not a crash. watchfiles signals this process
+        # on every edit, and a page of traceback per save is how a log
+        # nobody reads gets made.
+        pass

@@ -2,8 +2,17 @@
 
 set -e
 
-# Configure UV environment based on execution context
-if [ -n "$DOCKER_CONTAINER" ] || [ "$USER" = "root" ]; then
+# Configure UV environment based on execution context.
+#
+# A container is known by the file its runtime writes into every one
+# (docker: /.dockerenv, podman: /run/.containerenv), not by a variable
+# each compose service has to remember. The dev build-static-watcher
+# forgot DOCKER_CONTAINER, took the local branch below, and ran uv
+# against /code/.venv - the HOST's venv, through the bind mount -
+# rewriting it with a Linux interpreter, so the developer's dev tools
+# vanished after every ``make serve``. DOCKER_CONTAINER still forces it.
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ] \
+    || [ -n "$DOCKER_CONTAINER" ] || [ "$USER" = "root" ]; then
     echo "Running in Docker container..."
 
     # Docker uses /opt/venv (set in Dockerfile) to avoid volume mount conflicts

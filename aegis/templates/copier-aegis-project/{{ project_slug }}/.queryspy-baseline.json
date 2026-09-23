@@ -1932,12 +1932,6 @@
       "kind": "repeated_statement",
       "label": "SELECT large_language_model.id, large_language_model.model_id, large_language_model.title, large_language_model.description, large_language_model.context_window, large_language_model.training_data, large_language_model.streamable, large_language_model.enabled, large_language_model.color, large_language_model.icon_path, large_language_model.license, large_language_model.source_url, large_language_model.released_on, large_language_model.family, large_language_model.served_by_org_id, large_language_model.made_by_org_id FROM large_language_model WHERE large_language_model.model_id = :model_id_1",
       "file": "app/services/ai/domains/llm/queries.py",
-      "function": "latest_price_for_model"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT large_language_model.id, large_language_model.model_id, large_language_model.title, large_language_model.description, large_language_model.context_window, large_language_model.training_data, large_language_model.streamable, large_language_model.enabled, large_language_model.color, large_language_model.icon_path, large_language_model.license, large_language_model.source_url, large_language_model.released_on, large_language_model.family, large_language_model.served_by_org_id, large_language_model.made_by_org_id FROM large_language_model WHERE large_language_model.model_id = :model_id_1",
-      "file": "app/services/ai/domains/llm/queries.py",
       "function": "llm_by_model_id"
     },
     {

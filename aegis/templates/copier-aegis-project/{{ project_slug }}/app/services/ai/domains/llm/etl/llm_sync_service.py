@@ -13,6 +13,7 @@ from app.core.log import logger
 # Re-exported: callers have always reached the catalog readers through
 # this module, and moving them out did not move their address.
 from app.services.ai.domains.llm.etl import queries
+from app.services.ai.domains.llm.queries import invalidate_price_cache
 from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMClient
 from app.services.ai.domains.llm.etl.clients.openrouter_client import (
     OpenRouterClient,
@@ -181,6 +182,9 @@ class LLMSyncService(UpsertMixin):
 
         if not dry_run:
             self.session.commit()
+            # Prices are memoized in the shared cache for the recording
+            # path; a sync is the only thing that changes them.
+            await invalidate_price_cache()
 
         logger.info(
             f"Sync complete: {result.vendors_added} vendors added, "
@@ -308,6 +312,7 @@ class LLMSyncService(UpsertMixin):
 
         if not dry_run:
             self.session.commit()
+            await invalidate_price_cache()
             await attach_labs(self.session, [m.model_id for m in ollama_models])
 
         logger.info(

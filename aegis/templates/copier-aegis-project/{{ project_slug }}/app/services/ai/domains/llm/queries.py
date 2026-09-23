@@ -13,7 +13,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Integer, func
+from sqlalchemy import Integer, case, func
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -77,13 +77,83 @@ async def latest_price_for(session: AsyncSession, llm_id: int) -> LLMPrice | Non
     ).first()
 
 
+# Prices are looked up on every recorded turn and change only when the
+# catalog sync runs, so the answer is memoized and cleared by that sync.
+#
+# In the shared cache (Redis when the stack has it), not a per-process
+# dict: the sync runs in the scheduler, and a dict it cleared would be the
+# scheduler's own while the webserver kept charging the old rate.
+PRICE_CACHE_PREFIX = "llm_price:"
+# A backstop, not the mechanism: the sync invalidates on every change, and
+# a day matches its cadence if an invalidation is ever lost.
+PRICE_CACHE_TTL = 24 * 60 * 60
+# ``CacheService.get`` returns None for a miss, so an uncatalogued model is
+# stored as this instead - a miss must not cost a query on every turn either.
+_NOT_CATALOGUED = ()
+
+
+async def invalidate_price_cache() -> None:
+    """Forget memoized prices in every process. Called after a sync writes
+    new ones."""
+    from app.core.cache import get_cache
+
+    await get_cache().invalidate_prefix(PRICE_CACHE_PREFIX)
+
+
+async def price_for_model(
+    session: AsyncSession, model_name: str
+) -> tuple[float, float] | None:
+    """Per-token input and output cost for a model, memoized.
+
+    A plain tuple rather than the row: it crosses processes through the
+    cache, and the caller only ever reads two floats.
+    """
+    from app.core.cache import get_cache
+
+    cache = get_cache()
+    key = f"{PRICE_CACHE_PREFIX}{model_name}"
+    cached = await cache.get(key)
+    if cached is not None:
+        return None if cached == _NOT_CATALOGUED else cached
+    row = await latest_price_for_model(session, model_name)
+    price = (
+        None if row is None else (row.input_cost_per_token, row.output_cost_per_token)
+    )
+    await cache.set(
+        key, _NOT_CATALOGUED if price is None else price, ttl=PRICE_CACHE_TTL
+    )
+    return price
+
+
 async def latest_price_for_model(
     session: AsyncSession, model_name: str
 ) -> LLMPrice | None:
-    """Current price row for a bare model name, or None if uncataloged."""
+    """Current price row for a model, or None if uncataloged.
+
+    Tried as given, then as a suffix. A provider reports the name it
+    answered under ("deepseek-v4.1-flash") while the catalog keys the
+    routed id ("openrouter/deepseek/deepseek-v4.1-flash"), so matching
+    only on equality priced every routed call at zero - and the per-user
+    daily budget, computed from that ledger, could never trip.
+
+    Suffix and not substring: "gpt-4o" must not match "not-gpt-4o", and
+    the separator is what makes it a whole segment.
+    """
+    # One statement, not a lookup and then a fallback. The ordering is
+    # what keeps the exact match winning.
     llm = (
         await session.exec(
-            select(LargeLanguageModel).where(LargeLanguageModel.model_id == model_name)
+            select(LargeLanguageModel)
+            .where(
+                or_(
+                    LargeLanguageModel.model_id == model_name,
+                    col(LargeLanguageModel.model_id).endswith(f"/{model_name}"),
+                )
+            )
+            .order_by(
+                case((LargeLanguageModel.model_id == model_name, 0), else_=1),
+                col(LargeLanguageModel.model_id),
+            )
         )
     ).first()
     if llm is None:

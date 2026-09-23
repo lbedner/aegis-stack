@@ -5398,21 +5398,82 @@ and <code>WEBSERVER_LOOP</code> in the env file alongside every other deploy set
 </tr>
 </tbody>
 </table>
-<p>Granian runs <strong>1.5x to 1.6x uvicorn</strong> on a trivial route, measured on a
-generated base stack against uvicorn at its best (uvloop plus httptools,
-both of which a generated project already installs). It is a range because
-a laptop is a range; every number on this page comes from one session, and
-re-running moves them a few percent while leaving the ratios alone.</p>
+<p>Granian runs <strong>1.4x uvicorn on Python 3.11 and 3.12, and 1.5x on 3.13 and
+3.14</strong>, on a trivial route. Measured on a generated 0.13.0 base stack for
+each Python version Aegis supports, <code>GET /health/</code>, 5,000 requests, 50
+clients, best of 3, two passes averaged, one Apple M4 Max session:</p>
+<table>
+<thead>
+<tr>
+<th>Python</th>
+<th style="text-align: right;">uvicorn + uvloop</th>
+<th style="text-align: right;">uvicorn + asyncio</th>
+<th style="text-align: right;">granian + uvloop</th>
+<th style="text-align: right;">granian + asyncio</th>
+<th style="text-align: right;">granian vs uvicorn</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3.11</td>
+<td style="text-align: right;">4,980</td>
+<td style="text-align: right;">4,520</td>
+<td style="text-align: right;">6,925</td>
+<td style="text-align: right;">5,632</td>
+<td style="text-align: right;">1.39x</td>
+</tr>
+<tr>
+<td>3.12</td>
+<td style="text-align: right;">5,008</td>
+<td style="text-align: right;">4,692</td>
+<td style="text-align: right;">6,838</td>
+<td style="text-align: right;">6,025</td>
+<td style="text-align: right;">1.37x</td>
+</tr>
+<tr>
+<td>3.13</td>
+<td style="text-align: right;">5,277</td>
+<td style="text-align: right;">5,447</td>
+<td style="text-align: right;">8,442</td>
+<td style="text-align: right;">7,404</td>
+<td style="text-align: right;">1.55x</td>
+</tr>
+<tr>
+<td>3.14</td>
+<td style="text-align: right;">5,050</td>
+<td style="text-align: right;">5,310</td>
+<td style="text-align: right;">8,130</td>
+<td style="text-align: right;">6,954</td>
+<td style="text-align: right;">1.53x</td>
+</tr>
+</tbody>
+</table>
+<p>The last column compares each engine on its faster loop. Uvicorn barely
+moves across versions; granian gains about 20% from 3.13 on, which is where
+the gap widens. Re-running moves any one number a few percent, so read the
+ratios, not the digits.</p>
 <p>That number shrinks as your handler does real work. The same benchmark on
 <code>/health/detailed</code> gives 1.35x, and a route that waits on the database will
 compress further, because at that point you are timing PostgreSQL rather
 than the server. <strong>The ratio is a property of your app, not of the engine</strong>,
 which is why <code>bench-engines</code> takes any route rather than hardcoding one.</p>
 <h2 id="the-event-loop">The Event Loop</h2>
-<p>A separate axis, and the surprising one: <strong>the loop barely moves granian and
-moves uvicorn a lot.</strong> Granian handles HTTP in Rust and only touches the
-Python loop at your application's await points, so swapping the loop
-underneath it changes very little. Uvicorn's loop is doing all the I/O.</p>
+<p>A separate axis, and it does not behave the way its reputation says. From
+the table above:</p>
+<ul>
+<li><strong>Under granian, uvloop wins on every version</strong>, by 12% to 25% over
+  asyncio. Granian hands each request from its Rust runtime to the Python
+  loop, and uvloop's C implementation of that hand-off is the likely
+  difference.</li>
+<li><strong>Under uvicorn, uvloop's lead has gone.</strong> It is about 10% ahead of
+  asyncio on 3.11, 7% on 3.12, level on 3.13, and a few percent <em>behind</em> on
+  3.14. The standard library's asyncio got faster in every one of those
+  releases and uvloop did not. HTTP parsing is httptools either way, so the
+  loop only moves bytes, and there is little left for it to win.</li>
+</ul>
+<p><code>auto</code> still resolves to uvloop: it is the clear winner under granian, the
+faster choice under uvicorn on 3.11 and 3.12, and at most a few percent
+behind anywhere else.</p>
 <h3 id="whats-out-there">What's out there</h3>
 <table>
 <thead>

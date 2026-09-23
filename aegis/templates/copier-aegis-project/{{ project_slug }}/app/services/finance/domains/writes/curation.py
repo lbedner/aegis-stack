@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.finance.domains.ledger import categories, merchants, transactions
 from app.services.finance.domains.writes.display import txn_subject
 from app.services.finance.schemas import ChangeDisplayRow
+from app.services.shared.queries import stored_owner
 
 
 class CategorizePayload(BaseModel):
@@ -183,7 +184,7 @@ async def untag_execute(
     from app.services.finance.domains.ledger.queries import transactions as queries
     from app.services.finance.utils import normalize_payee
 
-    store_owner = 0 if owner_user_id is None else owner_user_id
+    store_owner = stored_owner(owner_user_id)
     tag = await queries.tag_by_normalized_name(
         db, store_owner=store_owner, normalized=normalize_payee(payload.tag)
     )

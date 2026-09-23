@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
 from app.services.documents.models import Document, DocumentPage, DocumentTag
+from app.services.shared.queries import owner_filters
 
 
 async def document_by_content(
@@ -22,8 +23,7 @@ async def document_by_content(
     query = select(Document).where(
         Document.content_hash == digest, Document.deleted_at.is_(None)
     )
-    if owner_user_id is not None:
-        query = query.where(Document.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(Document.owner_user_id, owner_user_id))
     return (await db.exec(query)).first()
 
 
@@ -33,8 +33,7 @@ async def document_by_id(
     query = select(Document).where(
         Document.id == document_id, Document.deleted_at.is_(None)
     )
-    if owner_user_id is not None:
-        query = query.where(Document.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(Document.owner_user_id, owner_user_id))
     return (await db.exec(query)).first()
 
 
@@ -132,8 +131,7 @@ async def tag_counts(
         .join(Document, Document.id == DocumentTag.document_id)
         .where(Document.deleted_at.is_(None))
     )
-    if owner_user_id is not None:
-        query = query.where(Document.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(Document.owner_user_id, owner_user_id))
     rows = (
         await db.exec(
             query.group_by(DocumentTag.label).order_by(

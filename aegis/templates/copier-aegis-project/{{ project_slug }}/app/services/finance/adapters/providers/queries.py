@@ -13,6 +13,7 @@ from app.services.finance.models import (
 )
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.shared.queries import owner_filters
 
 
 async def connection_by_provider_item(
@@ -109,8 +110,7 @@ async def connections_for_owner(
     query = select(FinanceConnection).where(FinanceConnection.deleted_at.is_(None))
     if provider is not None:
         query = query.where(FinanceConnection.provider == provider)
-    if owner_user_id is not None:
-        query = query.where(FinanceConnection.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceConnection.owner_user_id, owner_user_id))
     return list((await db.exec(query)).all())
 
 
@@ -121,8 +121,7 @@ async def connection_by_id_live(
         FinanceConnection.id == connection_id,
         FinanceConnection.deleted_at.is_(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceConnection.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceConnection.owner_user_id, owner_user_id))
     return (await db.exec(query)).first()
 
 

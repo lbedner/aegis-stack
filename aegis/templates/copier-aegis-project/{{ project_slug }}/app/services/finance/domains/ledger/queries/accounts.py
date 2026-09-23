@@ -23,6 +23,7 @@ from app.services.finance.models import (
 from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.shared.queries import owner_filters
 
 
 async def currency_by_code(db: AsyncSession, code: str) -> FinanceCurrency | None:
@@ -51,8 +52,7 @@ async def account_by_id(
         FinanceAccount.id == account_id,
         FinanceAccount.deleted_at.is_(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceAccount.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceAccount.owner_user_id, owner_user_id))
     return (await db.exec(query)).first()
 
 
@@ -142,8 +142,7 @@ async def transaction_totals_by_account(
         FinanceTransaction.deleted_at.is_(None),
         FinanceTransaction.dedup_status != "duplicate",
     ]
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     if account_ids is not None:
         filters.append(FinanceTransaction.account_id.in_(account_ids))
     query = (

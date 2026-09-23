@@ -68,6 +68,7 @@ from app.services.finance.adapters.importers.classify import (  # noqa: F401
 from app.services.finance.adapters.importers.ingest import (  # noqa: F401
     ingest_transactions,
 )
+from app.services.shared.queries import stored_owner
 
 
 def _detect_csv(
@@ -104,7 +105,7 @@ async def import_csv(
     profile, header_index = _detect_csv(file_bytes, profiles)
     if profile is None:
         header = csv_profiles.header_preview(file_bytes)
-        batch_owner = 0 if owner_user_id is None else owner_user_id
+        batch_owner = stored_owner(owner_user_id)
         # No file hash on a failed batch: the hash dedups files that were
         # ingested (uq_finance_importbatch_file), and carrying it here made
         # the second try of the same unknown bytes an IntegrityError.
@@ -193,7 +194,7 @@ async def get_import_batch(
     db: AsyncSession, batch_id: int, *, owner_user_id: int | None = None
 ) -> FinanceImportBatch | None:
     # finance_import_batch.owner_user_id is NOT NULL; standalone uses 0.
-    batch_owner = 0 if owner_user_id is None else owner_user_id
+    batch_owner = stored_owner(owner_user_id)
     return await queries.import_batch_by_id(db, batch_id, batch_owner=batch_owner)
 
 
@@ -204,7 +205,7 @@ async def list_import_batches(
     page: int = 1,
     page_size: int = 20,
 ) -> list[FinanceImportBatch]:
-    batch_owner = 0 if owner_user_id is None else owner_user_id
+    batch_owner = stored_owner(owner_user_id)
     return await queries.import_batches_page(
         db, batch_owner=batch_owner, page=page, page_size=page_size
     )

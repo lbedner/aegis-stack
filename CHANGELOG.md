@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Owner scoping lives in one place.** `get_owner_user_id` was defined
+  twice, identically, in the finance and documents services; it is now one
+  dependency in `app/services/shared/deps.py`. The 47 hand-written
+  "filter by owner unless standalone" branches and 31 "store a standalone
+  owner as 0" conversions are two helpers beside `owner_clause` in
+  `app/services/shared/queries.py`. Behaviour is unchanged.
+
+### Fixed
+
+- **A granian reload no longer leaves nothing serving the port.** Granian
+  waits on a stopping worker forever by default, and a worker holding an
+  open dashboard session never finishes stopping. With reload on, a stuck
+  worker is now killed after five seconds and replaced.
+- **Pinning a loop that is not installed fails with a sentence.**
+  `make serve LOOP=rloop` without rloop died inside granian's worker, and
+  `bench engines --loop rloop` lost every result the sweep had already
+  measured. The loop is now checked before the engine starts, and a sweep
+  drops it and carries on.
+
 ## [0.13.0] - 2026-09-22
 
 ### Added

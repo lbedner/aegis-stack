@@ -20,6 +20,7 @@ from app.services.finance.models import (
     FinanceRecurringStream,
     FinanceTransaction,
 )
+from app.services.shared.queries import owner_filters
 
 
 async def merchant_by_id(db: AsyncSession, merchant_id: int) -> FinanceMerchant | None:
@@ -160,8 +161,7 @@ async def merchant_usage_rows(
         )
         .group_by(FinanceTransaction.merchant_id)
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     if account_ids is not None:
         query = query.where(FinanceTransaction.account_id.in_(account_ids))
     return list((await db.exec(query)).all())
@@ -174,8 +174,7 @@ async def live_transactions_for_merchant(
         FinanceTransaction.merchant_id == merchant_id,
         FinanceTransaction.deleted_at.is_(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return list((await db.exec(query)).all())
 
 
@@ -189,8 +188,7 @@ async def payeeless_transactions(
         FinanceTransaction.deleted_at.is_(None),
         FinanceTransaction.merchant_id.is_(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return list((await db.exec(query)).all())
 
 
@@ -228,8 +226,7 @@ async def named_transactions(
         FinanceTransaction.deleted_at.is_(None),
         FinanceTransaction.merchant_id.isnot(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return list((await db.exec(query)).all())
 
 

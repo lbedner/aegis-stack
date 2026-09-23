@@ -1,0 +1,27 @@
+"""FastAPI dependencies more than one service injects.
+
+``get_owner_user_id`` centralizes owner scoping in one place: it resolves to
+the authenticated user's id when the auth service is present, else ``None``
+(single-user / standalone) - so route handlers stay auth-agnostic and never
+repeat the auth guard per endpoint.
+"""
+{%- if include_auth %}
+
+from fastapi import Depends
+
+from app.models.user import User
+from app.services.auth.deps import get_current_active_user
+
+
+async def get_owner_user_id(
+    current_user: User = Depends(get_current_active_user),
+) -> int | None:
+    """Owner scope = the authenticated user (auth service present)."""
+    return current_user.id
+{%- else %}
+
+
+async def get_owner_user_id() -> int | None:
+    """No auth service - single-user, so rows are unscoped."""
+    return None
+{%- endif %}

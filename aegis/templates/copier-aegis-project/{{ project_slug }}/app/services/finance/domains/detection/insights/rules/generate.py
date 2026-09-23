@@ -30,6 +30,7 @@ from app.services.finance.domains.detection.insights.rules.spending import (
     _subscription_creep,
 )
 from app.services.finance.utils import current_date
+from app.services.shared.queries import stored_owner
 
 
 async def generate_insights(
@@ -56,7 +57,7 @@ async def generate_insights(
     if lookback_days is None:
         lookback_days = settings.FINANCE_RULES_LOOKBACK_DAYS
     floor = today - timedelta(days=lookback_days) if lookback_days else None
-    store_owner = 0 if owner_user_id is None else owner_user_id
+    store_owner = stored_owner(owner_user_id)
 
     live_accounts = live_account_ids(owner_user_id)
 

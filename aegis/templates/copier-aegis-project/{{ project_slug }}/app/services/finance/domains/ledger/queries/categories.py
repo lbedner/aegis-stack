@@ -25,6 +25,7 @@ from app.services.finance.utils import current_date
 from sqlalchemy import and_, func
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.shared.queries import owner_filters
 
 
 async def category_alias_ids(
@@ -131,8 +132,7 @@ async def category_usage_rows(
         FinanceTransaction.dedup_status != "duplicate",
         FinanceTransaction.excluded_from_reports.is_(False),
     ]
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     if days is not None:
         filters.append(
             FinanceTransaction.date_ >= current_date() - timedelta(days=days)
@@ -223,8 +223,7 @@ def _category_outflow_filters(
         filters.append(FinanceTransaction.date_ < end)
     if account_ids is not None:
         filters.append(FinanceTransaction.account_id.in_(account_ids))
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return filters
 
 
@@ -325,6 +324,5 @@ async def categorized_history(
         FinanceTransaction.category_id.is_not(None),
         FinanceTransaction.category_id.not_in(uncategorized_catchall_ids()),
     ]
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return list((await db.exec(select(FinanceTransaction).where(*filters))).all())

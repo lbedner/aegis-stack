@@ -13,13 +13,11 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from app.core.db import get_async_session as _job_session
-from app.services.finance.deps import (
-    get_finance_service,
-    get_owner_user_id,
-)
+from app.services.finance.deps import get_finance_service
 from app.services.finance.schemas import InsightResponse
 from app.services.finance.utils import current_date
 from app.services.finance.service import FinanceService
+from app.services.shared.deps import get_owner_user_id
 from app.services.system.jobs import (
     JobHandle,
     get_job_runner,

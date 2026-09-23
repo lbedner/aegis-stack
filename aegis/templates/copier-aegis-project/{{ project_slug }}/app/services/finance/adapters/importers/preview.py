@@ -22,6 +22,7 @@ from app.services.finance.adapters.importers.imports import (
 from app.services.finance.adapters.importers.ingest import _prior_batch
 from app.services.finance.adapters.importers.plan import ImportPlan
 from app.services.finance.models import FinanceAccount
+from app.services.shared.queries import stored_owner
 
 
 def _asks_for_account(
@@ -61,7 +62,7 @@ async def preview_file(
     An exact-bytes re-upload returns a plan carrying ``identical_batch_id``
     and no rows: importing it again would change nothing.
     """
-    batch_owner = 0 if owner_user_id is None else owner_user_id
+    batch_owner = stored_owner(owner_user_id)
     file_sha256 = hashlib.sha256(file_bytes).hexdigest()
     prior = await _prior_batch(db, batch_owner=batch_owner, file_sha256=file_sha256)
     if prior is not None:

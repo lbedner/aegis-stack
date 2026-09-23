@@ -41,11 +41,22 @@ and `WEBSERVER_LOOP` in the env file alongside every other deploy setting.
 | Status | default | opt-in |
 | Free-threaded wheels | not verified | yes, since 2.0 (upstream calls it experimental) |
 
-Granian runs **1.5x to 1.6x uvicorn** on a trivial route, measured on a
-generated base stack against uvicorn at its best (uvloop plus httptools,
-both of which a generated project already installs). It is a range because
-a laptop is a range; every number on this page comes from one session, and
-re-running moves them a few percent while leaving the ratios alone.
+Granian runs **1.4x uvicorn on Python 3.11 and 3.12, and 1.5x on 3.13 and
+3.14**, on a trivial route. Measured on a generated 0.13.0 base stack for
+each Python version Aegis supports, `GET /health/`, 5,000 requests, 50
+clients, best of 3, two passes averaged, one Apple M4 Max session:
+
+| Python | uvicorn + uvloop | uvicorn + asyncio | granian + uvloop | granian + asyncio | granian vs uvicorn |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 3.11 | 4,980 | 4,520 | 6,925 | 5,632 | 1.39x |
+| 3.12 | 5,008 | 4,692 | 6,838 | 6,025 | 1.37x |
+| 3.13 | 5,277 | 5,447 | 8,442 | 7,404 | 1.55x |
+| 3.14 | 5,050 | 5,310 | 8,130 | 6,954 | 1.53x |
+
+The last column compares each engine on its faster loop. Uvicorn barely
+moves across versions; granian gains about 20% from 3.13 on, which is where
+the gap widens. Re-running moves any one number a few percent, so read the
+ratios, not the digits.
 
 That number shrinks as your handler does real work. The same benchmark on
 `/health/detailed` gives 1.35x, and a route that waits on the database will
@@ -55,10 +66,22 @@ which is why `bench-engines` takes any route rather than hardcoding one.
 
 ## The Event Loop
 
-A separate axis, and the surprising one: **the loop barely moves granian and
-moves uvicorn a lot.** Granian handles HTTP in Rust and only touches the
-Python loop at your application's await points, so swapping the loop
-underneath it changes very little. Uvicorn's loop is doing all the I/O.
+A separate axis, and it does not behave the way its reputation says. From
+the table above:
+
+- **Under granian, uvloop wins on every version**, by 12% to 25% over
+  asyncio. Granian hands each request from its Rust runtime to the Python
+  loop, and uvloop's C implementation of that hand-off is the likely
+  difference.
+- **Under uvicorn, uvloop's lead has gone.** It is about 10% ahead of
+  asyncio on 3.11, 7% on 3.12, level on 3.13, and a few percent *behind* on
+  3.14. The standard library's asyncio got faster in every one of those
+  releases and uvloop did not. HTTP parsing is httptools either way, so the
+  loop only moves bytes, and there is little left for it to win.
+
+`auto` still resolves to uvloop: it is the clear winner under granian, the
+faster choice under uvicorn on 3.11 and 3.12, and at most a few percent
+behind anywhere else.
 
 ### What's out there
 

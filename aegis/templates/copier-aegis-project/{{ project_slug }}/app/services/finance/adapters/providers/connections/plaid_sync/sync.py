@@ -38,6 +38,7 @@ from app.services.finance.models import (
     FinanceImportBatch,
 )
 from app.services.finance.service import FinanceService
+from app.services.shared.queries import stored_owner
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +138,7 @@ async def sync_plaid_connection(
     # cursor window it applied. Committed only after every row lands, so the
     # session's single commit keeps batch, rows, and cursor advance atomic.
     batch = FinanceImportBatch(
-        owner_user_id=(
-            0 if connection.owner_user_id is None else connection.owner_user_id
-        ),
+        owner_user_id=stored_owner(connection.owner_user_id),
         connection_id=connection.id,
         source_type="plaid_sync",
         sync_cursor_before=cursor_before,

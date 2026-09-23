@@ -50,6 +50,8 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransactionTag,
 )
+from app.services.shared.queries import stored_owner
+
 
 async def _prior_batch(
     db: AsyncSession, *, batch_owner: int, file_sha256: str
@@ -91,7 +93,7 @@ async def ingest_transactions(
     multi-account CSV), creating one when absent. Otherwise rows use
     ``default_account_id`` (single-account) or provider-id matching.
     """
-    batch_owner = 0 if owner_user_id is None else owner_user_id
+    batch_owner = stored_owner(owner_user_id)
     file_sha256 = hashlib.sha256(file_bytes).hexdigest()
 
     # Identical re-upload short-circuit: return the prior batch, all-duplicate.

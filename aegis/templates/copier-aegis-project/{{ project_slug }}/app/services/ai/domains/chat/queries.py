@@ -80,6 +80,22 @@ async def conversation_ids_before(
     ).all()
 
 
+async def existing_message_ids(session: AsyncSession, ids: Iterable[str]) -> set[str]:
+    """Which of ``ids`` are already stored, in one statement."""
+    ids = list(ids)
+    if not ids:
+        return set()
+    return set(
+        (
+            await session.exec(
+                select(ConversationMessage.id).where(
+                    col(ConversationMessage.id).in_(ids)
+                )
+            )
+        ).all()
+    )
+
+
 # --- Conversations (async) ---------------------------------------------
 
 

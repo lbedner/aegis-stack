@@ -340,9 +340,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT conversation_message.id AS conversation_message_id, conversation_message.conversation_id AS conversation_message_conversation_id, conversation_message.role AS conversation_message_role, conversation_message.content AS conversation_message_content, conversation_message.timestamp AS conversation_message_timestamp, conversation_message.meta_data AS conversation_message_meta_data FROM conversation_message WHERE conversation_message.id = :pk_1",
-      "file": "app/services/ai/domains/chat/conversation.py",
-      "function": "_save_to_db"
+      "label": "SELECT conversation_message.id FROM conversation_message WHERE conversation_message.id IN (__[POSTCOMPILE_id_1])",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "existing_message_ids"
     },
     {
       "kind": "repeated_statement",

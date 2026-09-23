@@ -502,3 +502,66 @@ class TestSurfaceScopingAndTitles:
 
             all_convos = await ai_service.list_conversations(user)
             assert len(all_convos) == 2
+{% if ai_backend != "memory" %}
+
+
+class TestTheSavePath:
+    """Two things SQLite never shows: asyncpg refuses a timezone-aware value
+    for a ``TIMESTAMP WITHOUT TIME ZONE`` column (the sync driver quietly
+    dropped the zone), and ``session.get`` per message was one select per
+    message before the inserts."""
+
+    @pytest.mark.asyncio
+    async def test_timestamps_are_stored_naive_utc(self, conversation_manager) -> None:
+        from sqlalchemy import event
+
+        from app.models.conversation import Conversation as ConversationRow
+        from app.models.conversation import ConversationMessage as MessageRow
+
+        seen: list[datetime] = []
+
+        def capture(_mapper, _conn, target) -> None:
+            seen.extend(
+                v
+                for v in (
+                    getattr(target, "created_at", None),
+                    getattr(target, "updated_at", None),
+                    getattr(target, "timestamp", None),
+                )
+                if v is not None
+            )
+
+        event.listen(ConversationRow, "before_insert", capture)
+        event.listen(MessageRow, "before_insert", capture)
+        try:
+            conversation = await conversation_manager.create_conversation(
+                provider=AIProvider.PUBLIC, model="m", user_id="tz-probe"
+            )
+            conversation.add_message(MessageRole.USER, "hello")
+            await conversation_manager.save_conversation(conversation)
+        finally:
+            event.remove(ConversationRow, "before_insert", capture)
+            event.remove(MessageRow, "before_insert", capture)
+
+        assert seen, "nothing was inserted"
+        assert all(v.tzinfo is None for v in seen), seen
+
+    @pytest.mark.asyncio
+    async def test_saving_a_longer_thread_costs_no_more_queries(
+        self, conversation_manager
+    ) -> None:
+        """One membership query for the whole thread, not one per message."""
+        from queryspy import record
+
+        async def cost(messages: int) -> int:
+            conversation = await conversation_manager.create_conversation(
+                provider=AIProvider.PUBLIC, model="m", user_id=f"n1-{messages}"
+            )
+            for i in range(messages):
+                conversation.add_message(MessageRole.USER, f"m{i}")
+            with record() as recorder:
+                await conversation_manager.save_conversation(conversation)
+            return recorder.query_count
+
+        assert await cost(2) == await cost(7)
+{% endif %}

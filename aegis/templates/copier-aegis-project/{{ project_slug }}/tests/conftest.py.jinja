@@ -117,6 +117,21 @@ def _use_dict_backed_cache():
     cache_module.cache = original
 
 
+{%- if include_ai and ai_backend != "memory" %}
+
+
+@pytest.fixture(autouse=True)
+async def _forget_memoized_prices() -> None:
+    """Model prices are memoized in the shared cache, cleared in production
+    by the catalog sync that changes them. A test suite has no sync: one
+    test's seeded price would still be cached when the next expects none,
+    and the failure lands in whichever test happens to run second.
+    """
+    from app.services.ai.domains.llm.queries import invalidate_price_cache
+
+    await invalidate_price_cache()
+{%- endif %}
+
 @pytest.fixture(scope="session")
 def app() -> FastAPI:
     """The configured FastAPI app, built once for the whole session.

@@ -454,6 +454,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # tables removed above, so they only work with a persistent backend.
         remove_dir(project_path, "app/services/ai/domains/chat/chat_kit")
         remove_file(project_path, "app/services/ai/usage_recording.py")
+        remove_file(project_path, "tests/services/ai/test_price_memo.py")
+        remove_file(project_path, "tests/services/ai/test_llm_pricing_lookup.py")
         remove_dir(project_path, "tests/services/ai/chat_kit")
         remove_dir(project_path, "app/services/ai/domains/llm/etl")
         remove_dir(project_path, "app/services/ai/fixtures")

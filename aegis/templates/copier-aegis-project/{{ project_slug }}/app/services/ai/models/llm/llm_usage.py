@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import Index
+from app.core.time import utcnow
 from sqlmodel import Field, SQLModel
 
 
@@ -27,7 +28,8 @@ class LLMUsage(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     model_id: str = Field(index=True)
     user_id: str | None = Field(default=None, index=True)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+    # Naive UTC, like every timestamp column (asyncpg rejects an aware one).
+    timestamp: datetime = Field(default_factory=utcnow, index=True)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     total_cost: float = Field(ge=0)

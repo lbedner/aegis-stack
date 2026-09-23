@@ -676,3 +676,44 @@ class TestGetUsageStats:
 
         assert stats["total_requests"] == 2
         assert stats["success_rate"] == 50.0
+
+
+class TestTheLedgerRowIsStoredNaive:
+    """asyncpg rejects a timezone-aware value for ``timestamp without time
+    zone``, and ``record_usage`` swallows the exception - so an aware
+    timestamp is not a crash but a silently lost row: an empty ledger, a
+    zero cost, a daily budget that never trips. SQLite accepts either, so
+    the value is checked on its way in."""
+
+    async def test_the_timestamp_has_no_zone(
+        self, async_db_session: AsyncSession, llm: LargeLanguageModel, price: LLMPrice
+    ) -> None:
+        from sqlalchemy import event
+
+        from app.services.ai.usage_recording import record_usage
+
+        seen: list[datetime] = []
+
+        def capture(_mapper: Any, _conn: Any, target: LLMUsage) -> None:
+            seen.append(target.timestamp)
+
+        event.listen(LLMUsage, "before_insert", capture)
+        try:
+            with _store_session(async_db_session):
+                await record_usage(
+                    "chat", "gpt-4o", {"input_tokens": 1, "output_tokens": 1}, "u-tz"
+                )
+            # The real session commits on exit; the test's does not.
+            await async_db_session.flush()
+        finally:
+            event.remove(LLMUsage, "before_insert", capture)
+
+        assert seen, "no ledger row was written"
+        assert all(value.tzinfo is None for value in seen)
+
+    def test_the_models_default_is_naive_too(self) -> None:
+        row = LLMUsage(
+            action="chat", model_id="m", input_tokens=0, output_tokens=0, total_cost=0.0
+        )
+
+        assert row.timestamp.tzinfo is None

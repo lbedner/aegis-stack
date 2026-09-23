@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.db import get_async_session
+from app.core.time import utcnow
 from app.core.log import logger
 from app.services.ai.domains.llm import queries as llm_queries
 
@@ -99,13 +100,11 @@ async def calculate_cost(
     bare = _bare_model_name(model_name)
     try:
         async with get_async_session() as session:
-            price = await llm_queries.latest_price_for_model(session, bare)
-            if not price:
-                return 0.0
-            return (
-                input_tokens * price.input_cost_per_token
-                + output_tokens * price.output_cost_per_token
-            )
+            price = await llm_queries.price_for_model(session, bare)
+        if not price:
+            return 0.0
+        input_cost, output_cost = price
+        return input_tokens * input_cost + output_tokens * output_cost
     except Exception as e:
         logger.warning("Failed to calculate cost", error=str(e), model=bare)
         return 0.0
@@ -158,11 +157,12 @@ async def record_usage(
     total_cost = 0.0
     try:
         async with get_async_session() as session:
-            price = await llm_queries.latest_price_for_model(session, bare)
+            price = await llm_queries.price_for_model(session, bare)
             if price:
+                input_cost, output_cost = price
                 total_cost = (
-                    _priced_input_cost(usage, price.input_cost_per_token)
-                    + usage.get("output_tokens", 0) * price.output_cost_per_token
+                    _priced_input_cost(usage, input_cost)
+                    + usage.get("output_tokens", 0) * output_cost
                 )
             else:
                 logger.warning(
@@ -174,7 +174,10 @@ async def record_usage(
                     action=action,
                     model_id=bare,
                     user_id=user_id,
-                    timestamp=datetime.now(UTC),
+                    # Naive UTC: asyncpg rejects an aware value for a
+                    # ``timestamp without time zone`` column, and the
+                    # except below would swallow that as a lost row.
+                    timestamp=utcnow(),
                     input_tokens=usage.get("input_tokens", 0),
                     output_tokens=usage.get("output_tokens", 0),
                     total_cost=total_cost,

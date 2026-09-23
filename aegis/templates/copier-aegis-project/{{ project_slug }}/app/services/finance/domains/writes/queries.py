@@ -6,6 +6,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.models import FinancePendingChange
+from app.services.shared.queries import owner_filters
 
 
 async def batch_rows(
@@ -14,8 +15,9 @@ async def batch_rows(
     query = select(FinancePendingChange).where(
         FinancePendingChange.batch_id == batch_id
     )
-    if owner_user_id is not None:
-        query = query.where(FinancePendingChange.owner_user_id == owner_user_id)
+    query = query.where(
+        *owner_filters(FinancePendingChange.owner_user_id, owner_user_id)
+    )
     return list((await db.exec(query.order_by(FinancePendingChange.id))).all())  # type: ignore[arg-type]
 
 
@@ -51,6 +53,7 @@ async def list_changes(
         query = query.where(FinancePendingChange.status == status)
     if proposed_by_agent is not None:
         query = query.where(FinancePendingChange.proposed_by_agent == proposed_by_agent)
-    if owner_user_id is not None:
-        query = query.where(FinancePendingChange.owner_user_id == owner_user_id)
+    query = query.where(
+        *owner_filters(FinancePendingChange.owner_user_id, owner_user_id)
+    )
     return list((await db.exec(query)).all())

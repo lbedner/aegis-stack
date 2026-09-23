@@ -27,6 +27,7 @@ from app.services.finance.models import (
     FinanceTransactionSplit,
 )
 from app.services.finance.utils import transaction_payee_key
+from app.services.shared.queries import owner_filters
 
 
 def spend_filters(
@@ -51,8 +52,7 @@ def spend_filters(
         filters.append(FinanceTransaction.date_ < end)
     if account_ids is not None:
         filters.append(FinanceTransaction.account_id.in_(account_ids))
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return filters
 
 
@@ -99,8 +99,7 @@ async def spend_by_category(
             )
             .join(
                 FinanceTransaction,
-                FinanceTransaction.id
-                == FinanceTransactionSplit.parent_transaction_id,
+                FinanceTransaction.id == FinanceTransactionSplit.parent_transaction_id,
             )
             .where(
                 *filters,
@@ -187,8 +186,7 @@ async def accounts_of_type(
         FinanceAccount.deleted_at.is_(None),
         FinanceAccount.account_type == account_type,
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceAccount.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceAccount.owner_user_id, owner_user_id))
     return list((await db.exec(query.order_by(FinanceAccount.id))).all())
 
 
@@ -204,8 +202,7 @@ async def insights_list(
     exclude_types: Sequence[str] = (),
 ) -> list[FinanceInsight]:
     query = select(FinanceInsight)
-    if owner_user_id is not None:
-        query = query.where(FinanceInsight.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceInsight.owner_user_id, owner_user_id))
     if status is not None:
         query = query.where(FinanceInsight.status == status)
     if insight_type is not None:
@@ -227,8 +224,7 @@ async def new_insight_count(
             FinanceInsight.insight_type != exclude_type,
         )
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceInsight.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceInsight.owner_user_id, owner_user_id))
     return (await db.exec(query)).one()
 
 
@@ -236,6 +232,5 @@ async def insight_by_id(
     db: AsyncSession, insight_id: int, *, owner_user_id: int | None = None
 ) -> FinanceInsight | None:
     query = select(FinanceInsight).where(FinanceInsight.id == insight_id)
-    if owner_user_id is not None:
-        query = query.where(FinanceInsight.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceInsight.owner_user_id, owner_user_id))
     return (await db.exec(query)).first()

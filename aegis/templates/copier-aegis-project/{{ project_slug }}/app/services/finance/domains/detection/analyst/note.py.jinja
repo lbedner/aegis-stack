@@ -29,13 +29,14 @@ from app.services.finance.domains.detection.analyst.shared import (
 from app.services.finance.domains.detection.insights import create_insight_if_new
 from app.services.finance.models import FinanceInsight
 from app.services.finance.utils import current_date
+from app.services.shared.queries import stored_owner
 
 
 async def existing_note(
     db: AsyncSession, *, owner_user_id: int | None, today: date
 ) -> FinanceInsight | None:
     """Today's note for this owner, if one has already been written."""
-    store_owner = 0 if owner_user_id is None else owner_user_id
+    store_owner = stored_owner(owner_user_id)
     return await queries.insight_first_where(
         db,
         [
@@ -162,7 +163,7 @@ async def run_analyst_note(
 
     note = await create_insight_if_new(
         db,
-        owner_user_id=0 if owner_user_id is None else owner_user_id,
+        owner_user_id=stored_owner(owner_user_id),
         insight_type=ANALYST_NOTE_INSIGHT_TYPE,
         dedup_key=note_dedup_key(today),
         severity="info",

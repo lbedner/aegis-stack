@@ -26,6 +26,7 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransactionSplit,
 )
+from app.services.shared.queries import owner_filters
 
 
 def month_bounds(period_month: int) -> tuple[date, date]:
@@ -43,8 +44,7 @@ async def monthly_budget(
         FinanceBudget.name == "Monthly",
         FinanceBudget.deleted_at.is_(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceBudget.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceBudget.owner_user_id, owner_user_id))
     return (await db.exec(query.order_by(FinanceBudget.id))).first()
 
 
@@ -147,8 +147,7 @@ async def budget_line_by_id(
     db: AsyncSession, line_id: int, *, owner_user_id: int | None = None
 ) -> FinanceBudgetCategory | None:
     filters = [FinanceBudgetCategory.id == line_id]
-    if owner_user_id is not None:
-        filters.append(FinanceBudgetCategory.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceBudgetCategory.owner_user_id, owner_user_id))
     return (await db.exec(select(FinanceBudgetCategory).where(*filters))).first()
 
 
@@ -163,8 +162,7 @@ async def categorized_outflow_history(
         FinanceTransaction.amount < 0,
         FinanceTransaction.category_id.is_not(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return list((await db.exec(query)).all())
 
 
@@ -210,8 +208,7 @@ async def outflow_tuples(
             )
             .join(
                 FinanceTransaction,
-                FinanceTransaction.id
-                == FinanceTransactionSplit.parent_transaction_id,
+                FinanceTransaction.id == FinanceTransactionSplit.parent_transaction_id,
             )
             .where(*filters, FinanceTransaction.is_split.is_(True))
         )

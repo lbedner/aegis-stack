@@ -22,6 +22,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import aliased
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.shared.queries import owner_filters
 
 
 async def all_live_streams(db: AsyncSession) -> list[FinanceRecurringStream]:
@@ -44,8 +45,9 @@ async def active_streams(
         FinanceRecurringStream.deleted_at.is_(None),
         FinanceRecurringStream.status != "cancelled",
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceRecurringStream.owner_user_id == owner_user_id)
+    query = query.where(
+        *owner_filters(FinanceRecurringStream.owner_user_id, owner_user_id)
+    )
     query = query.order_by(FinanceRecurringStream.next_expected_date)
     return list((await db.exec(query)).all())
 
@@ -54,8 +56,9 @@ async def stream_by_id(
     db: AsyncSession, stream_id: int, *, owner_user_id: int | None = None
 ) -> FinanceRecurringStream | None:
     query = select(FinanceRecurringStream).where(FinanceRecurringStream.id == stream_id)
-    if owner_user_id is not None:
-        query = query.where(FinanceRecurringStream.owner_user_id == owner_user_id)
+    query = query.where(
+        *owner_filters(FinanceRecurringStream.owner_user_id, owner_user_id)
+    )
     return (await db.exec(query)).first()
 
 

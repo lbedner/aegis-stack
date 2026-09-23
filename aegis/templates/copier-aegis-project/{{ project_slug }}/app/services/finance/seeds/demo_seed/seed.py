@@ -52,6 +52,7 @@ from app.services.finance.seeds.demo_seed.write import (
 )
 from app.services.finance.service import FinanceService
 from app.services.finance.utils import current_date
+from app.services.shared.queries import stored_owner
 
 
 async def seed_demo(
@@ -123,8 +124,7 @@ async def seed_demo(
     demo_streams = (
         await db.exec(
             select(FinanceRecurringStream).where(
-                FinanceRecurringStream.owner_user_id
-                == (0 if owner_user_id is None else owner_user_id),
+                FinanceRecurringStream.owner_user_id == stored_owner(owner_user_id),
                 FinanceRecurringStream.deleted_at.is_(None),
             )
         )

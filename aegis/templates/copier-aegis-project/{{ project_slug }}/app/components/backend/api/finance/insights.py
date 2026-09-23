@@ -12,15 +12,13 @@ from fastapi import (
 )
 
 from app.components.backend.api.finance.base import _NOT_FOUND
-from app.services.finance.deps import (
-    get_finance_service,
-    get_owner_user_id,
-)
+from app.services.finance.deps import get_finance_service
 from app.services.finance.schemas import (
     InsightListResponse,
     InsightResponse,
 )
 from app.services.finance.service import FinanceService
+from app.services.shared.deps import get_owner_user_id
 
 router = APIRouter()
 

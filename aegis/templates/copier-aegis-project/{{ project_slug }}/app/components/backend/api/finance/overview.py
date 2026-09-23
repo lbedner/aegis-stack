@@ -17,10 +17,7 @@ from app.components.backend.api.finance.register import (
     list_transactions,
     uncategorized_transactions,
 )
-from app.services.finance.deps import (
-    get_finance_service,
-    get_owner_user_id,
-)
+from app.services.finance.deps import get_finance_service
 from app.services.finance.schemas import (
     CashflowResponse,
     FinanceHealth,
@@ -28,6 +25,7 @@ from app.services.finance.schemas import (
     NetWorthPoint,
 )
 from app.services.finance.service import FinanceService
+from app.services.shared.deps import get_owner_user_id
 
 router = APIRouter()
 

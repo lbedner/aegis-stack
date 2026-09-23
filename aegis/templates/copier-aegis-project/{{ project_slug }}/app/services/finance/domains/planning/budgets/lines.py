@@ -22,6 +22,7 @@ from app.services.finance.utils import (
 )
 from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.shared.queries import stored_owner
 
 
 def budget_line_status(
@@ -59,7 +60,7 @@ async def get_or_create_budget(
     budget = FinanceBudget(
         # NOT NULL column - standalone (no-auth) installs use the same
         # ``0`` owner sentinel ``create_recurring_stream`` already does.
-        owner_user_id=0 if owner_user_id is None else owner_user_id,
+        owner_user_id=stored_owner(owner_user_id),
         name="Monthly",
         period="monthly",
         start_date=start,
@@ -188,7 +189,7 @@ async def upsert_budget_line(
     )
     if line is None:
         line = FinanceBudgetCategory(
-            owner_user_id=0 if owner_user_id is None else owner_user_id,
+            owner_user_id=stored_owner(owner_user_id),
             budget_id=budget.id,
             category_id=category_id,
             payee_key=payee_key,

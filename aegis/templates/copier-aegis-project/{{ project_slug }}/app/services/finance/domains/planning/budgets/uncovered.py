@@ -27,6 +27,7 @@ from app.services.finance.models import FinanceAccount, FinanceTransaction
 from app.services.finance.utils import current_date, current_period_month
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.shared.queries import owner_filters
 
 UNCOVERED_WINDOW_MONTHS = 3
 
@@ -211,8 +212,7 @@ async def uncovered_spend_filters(
             FinanceTransaction.external_id_source != "reconcile",
         ),
     ]
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     if account_ids is not None:
         filters.append(FinanceTransaction.account_id.in_(account_ids))
     if budgeted_category_ids:

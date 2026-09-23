@@ -23,6 +23,9 @@ from app.integrations.main import create_integrated_app
 APP_TARGET = "app.integrations.main:create_integrated_app"
 # Every interface: the container publishes the port, nothing else reaches it.
 HOST = "0.0.0.0"
+# Seconds a reload waits for the old worker before killing it. A clean
+# stop takes milliseconds; this only ever cuts off one that is stuck.
+RELOAD_KILL_TIMEOUT = 5
 
 
 def app_package_dir() -> Path:
@@ -142,6 +145,12 @@ def serve_granian(loop: str) -> None:
         # repaired file does not bring it back. The flag covers a worker
         # that dies while running, not one that dies on the way up.
         respawn_failed_workers=settings.AUTO_RELOAD,
+        # Granian waits on a stopping worker forever by default, and a
+        # worker holding an open dashboard websocket never finishes
+        # stopping: a reload then leaves nothing on the port. Bounded in
+        # dev only; in production a stop is a deploy, which the container
+        # runtime already bounds.
+        workers_kill_timeout=RELOAD_KILL_TIMEOUT if settings.AUTO_RELOAD else None,
     ).serve()
 
 

@@ -38,7 +38,7 @@ from app.services.finance.models import (
     FinanceTransaction,
 )
 from app.services.finance.utils import current_date
-from app.services.shared.queries import owner_clause
+from app.services.shared.queries import owner_clause, stored_owner
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -188,7 +188,7 @@ async def plan_recurring(
         # where the write would in fact fork a second bill.
         resolved_key, target = await _resolve_payee_key(
             db,
-            owner_user_id=(0 if owner_user_id is None else owner_user_id),
+            owner_user_id=stored_owner(owner_user_id),
             account_id=account_id,
             direction=direction,
             base=payee,
@@ -201,7 +201,7 @@ async def plan_recurring(
                     s
                     for s in await _sibling_streams(
                         db,
-                        owner_user_id=(0 if owner_user_id is None else owner_user_id),
+                        owner_user_id=stored_owner(owner_user_id),
                         account_id=account_id,
                         direction=direction,
                         base=payee,
@@ -319,7 +319,7 @@ async def declare_recurring(
     )
     if not plan:
         return result
-    store_owner = 0 if owner_user_id is None else owner_user_id
+    store_owner = stored_owner(owner_user_id)
     chosen = names or {}
     chosen_categories = categories or {}
     chosen_amounts = amounts or {}

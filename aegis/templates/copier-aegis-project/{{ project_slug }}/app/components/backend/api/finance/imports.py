@@ -20,10 +20,7 @@ from app.services.finance.adapters.importers import (
     csv_profiles,
     imports,
 )
-from app.services.finance.deps import (
-    get_finance_service,
-    get_owner_user_id,
-)
+from app.services.finance.deps import get_finance_service
 from app.services.finance.schemas import (
     ImportBatchResponse,
     ImportBatchSummary,
@@ -31,6 +28,7 @@ from app.services.finance.schemas import (
     ImportResultResponse,
 )
 from app.services.finance.service import FinanceService
+from app.services.shared.deps import get_owner_user_id
 from app.services.system.jobs import (
     JobHandle,
     get_job_runner,

@@ -27,6 +27,7 @@ from app.services.finance.utils import current_date
 from sqlalchemy import func
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.shared.queries import owner_filters
 
 
 async def dedup_match(
@@ -63,8 +64,7 @@ async def transaction_by_id(
         FinanceTransaction.id == transaction_id,
         FinanceTransaction.deleted_at.is_(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return (await db.exec(query)).first()
 
 
@@ -87,8 +87,7 @@ async def live_transactions_by_ids(
         FinanceTransaction.id.in_(ids),
         FinanceTransaction.deleted_at.is_(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     return list((await db.exec(query)).all())
 
 
@@ -117,8 +116,7 @@ async def transactions_page(
     ]
     if not include_transfers:
         filters.append(FinanceTransaction.is_transfer.is_(False))
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     if account_id is not None:
         filters.append(FinanceTransaction.account_id == account_id)
     if account_ids is not None:
@@ -181,8 +179,7 @@ async def transactions_window_with_payees(
         FinanceTransaction.account_id.in_(live_account_ids()),
         FinanceTransaction.is_transfer.is_(False),
     ]
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     if from_date is not None:
         filters.append(FinanceTransaction.date_ >= from_date)
     count_query = select(func.count()).select_from(FinanceTransaction).where(*filters)
@@ -229,8 +226,7 @@ async def uncategorized_page(
             FinanceTransaction.category_id.in_(catchall),
         ),
     ]
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     if query:
         filters.append(transaction_search_filter(query))
     if account_ids is not None:
@@ -275,8 +271,7 @@ async def top_payees_over_window(
         FinanceTransaction.date_ >= current_date() - timedelta(days=days),
         payee.is_not(None),
     ]
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     rows = (
         await db.exec(
             select(
@@ -314,8 +309,7 @@ async def dated_amounts_in_window(
     ]
     if account_ids is not None:
         filters.append(FinanceTransaction.account_id.in_(account_ids))
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     rows = (
         await db.exec(
             select(FinanceTransaction.date_, FinanceTransaction.amount).where(*filters)
@@ -461,8 +455,7 @@ async def outflow_by_account_in_window(
         )
     else:
         filters.append(FinanceTransaction.is_transfer.is_(False))
-    if owner_user_id is not None:
-        filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceTransaction.owner_user_id, owner_user_id))
     if exclude_stream_ids:
         filters.append(
             or_(

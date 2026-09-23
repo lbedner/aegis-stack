@@ -92,6 +92,30 @@ class TestEngineSelection:
 
         assert granian_calls[0]["respawn_failed_workers"] is False
 
+    def test_granian_reload_kills_a_worker_that_will_not_stop(
+        self, granian_calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Granian's default waits on the old worker forever. A worker whose
+        # websocket handler never returns (an open dashboard session) then
+        # leaves nothing serving the port until the container is restarted.
+        monkeypatch.setattr(settings, "AUTO_RELOAD", True)
+
+        webserver.main()
+
+        timeout = granian_calls[0]["workers_kill_timeout"]
+        assert isinstance(timeout, int) and timeout > 0
+
+    def test_granian_drains_without_a_deadline_in_production(
+        self, granian_calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No reload there: a stop is a deploy, and the container runtime
+        # already bounds it. Cutting in-flight requests short is its call.
+        monkeypatch.setattr(settings, "AUTO_RELOAD", False)
+
+        webserver.main()
+
+        assert granian_calls[0].get("workers_kill_timeout") is None
+
     def test_granian_honors_auto_reload_scoped_to_the_app_package(
         self, granian_calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -135,8 +159,29 @@ class TestLoopSelection:
 
     def test_an_explicit_choice_wins(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "WEBSERVER_LOOP", "rloop")
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: object())
 
         assert loops.resolve_loop() == "rloop"
+
+    def test_a_pinned_loop_that_is_not_installed_is_refused_by_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # rloop is not a dependency. Passing its name through let granian's
+        # worker die on it, so a bench sweep lost every result it had and
+        # `make serve LOOP=rloop` failed inside granian instead of here.
+        monkeypatch.setattr(settings, "WEBSERVER_LOOP", "rloop")
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: None)
+
+        with pytest.raises(ValueError, match="rloop is not installed"):
+            loops.resolve_loop()
+
+    def test_asyncio_never_needs_installing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "WEBSERVER_LOOP", "asyncio")
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: None)
+
+        assert loops.resolve_loop() == "asyncio"
 
     def test_uvicorn_refuses_a_loop_it_cannot_run(
         self, monkeypatch: pytest.MonkeyPatch
@@ -191,6 +236,7 @@ class TestLoopSelection:
     ) -> None:
         monkeypatch.setattr(settings, "WEBSERVER_LOOP", "rloop")
         monkeypatch.setattr(settings, "AUTO_RELOAD", False)
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: object())
 
         webserver.main()
 
@@ -199,8 +245,9 @@ class TestLoopSelection:
 
 @pytest.fixture
 def on_314(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pretend we are on a Python that can run zuvloop."""
+    """Pretend we are on a Python that can run zuvloop, with it installed."""
     monkeypatch.setattr(loops.sys, "version_info", (3, 14, 0))
+    monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: object())
 
 
 class TestZuvloop:
@@ -229,9 +276,7 @@ class TestZuvloop:
     ) -> None:
         # Even on 3.14 with zuvloop installed: it is 0.0.x, so it is opt-in.
         monkeypatch.setattr(settings, "WEBSERVER_LOOP", "auto")
-        monkeypatch.setattr(
-            loops.importlib.util, "find_spec", lambda name: object()
-        )
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: object())
 
         assert loops.resolve_loop() == "uvloop"
 

@@ -19,6 +19,7 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceTransactionTag,
 )
+from app.services.shared.queries import owner_filters
 
 
 async def account_id_by_provider_key(
@@ -28,8 +29,7 @@ async def account_id_by_provider_key(
         FinanceAccount.provider_account_id == account_key,
         FinanceAccount.deleted_at.is_(None),
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceAccount.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceAccount.owner_user_id, owner_user_id))
     return (await db.exec(query)).first()
 
 

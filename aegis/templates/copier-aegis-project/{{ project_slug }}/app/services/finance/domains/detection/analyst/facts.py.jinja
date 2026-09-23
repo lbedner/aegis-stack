@@ -29,6 +29,7 @@ from app.services.finance.domains.detection.analyst.shared import (
 from app.services.finance.domains.detection.insights import pace_day
 from app.services.finance.models import FinanceAnalystSnapshot, FinanceInsight
 from app.services.finance.utils import current_date
+from app.services.shared.queries import stored_owner
 
 
 class SectionCommentary(BaseModel):
@@ -261,7 +262,7 @@ async def save_snapshot(
     One row per owner per day, the same rule the note follows: a forced
     re-run must not leave two versions of one day for tomorrow to diff.
     """
-    store_owner = 0 if owner_user_id is None else owner_user_id
+    store_owner = stored_owner(owner_user_id)
     row = await queries.analyst_snapshot_on(db, store_owner=store_owner, day=day)
     if row is None:
         row = FinanceAnalystSnapshot(owner_user_id=store_owner, as_of_date=day)
@@ -298,7 +299,7 @@ async def snapshot_before(
     report that nothing moved. Notes are not guaranteed daily either, so a
     gap falls back to the last good day rather than giving up.
     """
-    store_owner = 0 if owner_user_id is None else owner_user_id
+    store_owner = stored_owner(owner_user_id)
     row = await queries.analyst_snapshot_before(db, store_owner=store_owner, day=day)
     return None if row is None else (row.as_of_date, _snapshot_to_facts(row))
 
@@ -317,7 +318,7 @@ async def snapshot_series(
     which a one-step delta cannot.
     """
     today = today or current_date()
-    store_owner = 0 if owner_user_id is None else owner_user_id
+    store_owner = stored_owner(owner_user_id)
     rows = await queries.analyst_snapshots_between(
         db,
         store_owner=store_owner,
@@ -403,7 +404,7 @@ async def _note_on(
     db: AsyncSession, *, owner_user_id: int | None, day: date
 ) -> FinanceInsight | None:
     """The note written on a given day, if there is one."""
-    store_owner = 0 if owner_user_id is None else owner_user_id
+    store_owner = stored_owner(owner_user_id)
     return await queries.insight_first_where(
         db,
         [

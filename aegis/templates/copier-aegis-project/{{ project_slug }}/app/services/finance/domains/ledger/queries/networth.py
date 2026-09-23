@@ -23,14 +23,14 @@ from app.services.finance.models import (
     FinanceTransaction,
     FinanceValuation,
 )
+from app.services.shared.queries import owner_filters
 
 
 async def live_accounts_for_owner(
     db: AsyncSession, *, owner_user_id: int | None = None
 ) -> list[FinanceAccount]:
     query = select(FinanceAccount).where(FinanceAccount.deleted_at.is_(None))
-    if owner_user_id is not None:
-        query = query.where(FinanceAccount.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceAccount.owner_user_id, owner_user_id))
     return list((await db.exec(query.order_by(FinanceAccount.id))).all())
 
 
@@ -263,8 +263,7 @@ async def account_rollup(
         .select_from(FinanceAccount)
         .where(FinanceAccount.deleted_at.is_(None))
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceAccount.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceAccount.owner_user_id, owner_user_id))
     assets, liabilities, count = (await db.exec(query)).one()
     return int(assets or 0), int(liabilities or 0), int(count or 0)
 
@@ -284,7 +283,6 @@ async def connection_rollup(
         .select_from(FinanceConnection)
         .where(FinanceConnection.deleted_at.is_(None))
     )
-    if owner_user_id is not None:
-        query = query.where(FinanceConnection.owner_user_id == owner_user_id)
+    query = query.where(*owner_filters(FinanceConnection.owner_user_id, owner_user_id))
     connections, needs_action = (await db.exec(query)).one()
     return int(connections or 0), int(needs_action or 0)

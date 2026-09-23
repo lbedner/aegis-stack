@@ -19,6 +19,7 @@ from app.services.finance.models import (
     FinanceSecurityPrice,
     FinanceTrade,
 )
+from app.services.shared.queries import owner_filters
 
 
 async def security_by_ticker(db: AsyncSession, ticker: str) -> FinanceSecurity | None:
@@ -167,8 +168,7 @@ async def live_holdings_joined(
         FinanceHolding.deleted_at.is_(None),
         FinanceAccount.deleted_at.is_(None),
     ]
-    if owner_user_id is not None:
-        filters.append(FinanceHolding.owner_user_id == owner_user_id)
+    filters.extend(owner_filters(FinanceHolding.owner_user_id, owner_user_id))
     if account_id is not None:
         filters.append(FinanceHolding.account_id == account_id)
     return list(

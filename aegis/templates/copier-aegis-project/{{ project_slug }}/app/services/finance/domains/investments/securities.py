@@ -21,6 +21,7 @@ from app.services.finance.utils import (
     DEFAULT_CURRENCY,
 )
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.shared.queries import stored_owner
 
 # Holdings store quantity as units x 1e8 (``quantity_e8``); prices are scaled
 # integers (``price / 10**price_scale`` = unit price).
@@ -216,7 +217,7 @@ async def upsert_holding(
     holdings value (right for manual entry). Pass ``False`` when a provider
     already supplies an authoritative account balance (e.g. Plaid).
     """
-    holding_owner = 0 if owner_user_id is None else owner_user_id
+    holding_owner = stored_owner(owner_user_id)
     existing = await queries.holding_by_key(
         db, account_id=account_id, security_id=security_id, as_of_date=as_of_date
     )
@@ -287,7 +288,7 @@ async def upsert_trade(
     ``owner_user_id`` is NOT NULL, so standalone (no-auth) rows use the
     ``0`` sentinel — same convention as holdings and import batches.
     """
-    trade_owner = 0 if owner_user_id is None else owner_user_id
+    trade_owner = stored_owner(owner_user_id)
     existing: FinanceTrade | None = None
     if external_id is not None:
         existing = await queries.trade_by_external_id(
@@ -351,7 +352,7 @@ async def list_trades(
     it the All Accounts view showed every brokerage's trades no matter
     what the picker said.
     """
-    trade_owner = 0 if owner_user_id is None else owner_user_id
+    trade_owner = stored_owner(owner_user_id)
     return await queries.trades_feed(
         db,
         trade_owner=trade_owner,

@@ -26,13 +26,19 @@ from app.services.finance.service.base import FinanceServiceBase
 class CategoriesMixin(FinanceServiceBase):
     """The category taxonomy and the suggestions over it."""
 
-    async def resolve_category_alias(self, category_hint: str | None) -> int | None:
-        return await categories.resolve_category_alias(self.db, category_hint)
+    async def resolve_category_alias(
+        self, category_hint: str | None, *, owner_user_id: int | None = None
+    ) -> int | None:
+        return await categories.resolve_category_alias(
+            self.db, category_hint, owner_user_id=owner_user_id
+        )
 
     async def get_or_create_category_from_hint(
-        self, hint: str | None
+        self, hint: str | None, *, owner_user_id: int | None = None
     ) -> FinanceCategory | None:
-        return await categories.get_or_create_category_from_hint(self.db, hint)
+        return await categories.get_or_create_category_from_hint(
+            self.db, hint, owner_user_id=owner_user_id
+        )
 
     async def get_or_create_pfc_category(self, pfc_primary: str) -> FinanceCategory:
         return await categories.get_or_create_pfc_category(self.db, pfc_primary)
@@ -40,8 +46,10 @@ class CategoriesMixin(FinanceServiceBase):
     async def category_names(self, ids: set[int] | list[int]) -> dict[int, str]:
         return await categories.category_names(self.db, ids)
 
-    async def list_categories(self) -> list[FinanceCategory]:
-        return await categories.list_categories(self.db)
+    async def list_categories(
+        self, *, owner_user_id: int | None = None
+    ) -> list[FinanceCategory]:
+        return await categories.list_categories(self.db, owner_user_id=owner_user_id)
 
     async def category_usage(
         self,

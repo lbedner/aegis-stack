@@ -169,12 +169,16 @@ async def ingest_transactions(
 
     async def _category_for(hint: str | None) -> int | None:
         if hint not in category_cache:
-            category_id = await service.resolve_category_alias(hint)
+            category_id = await service.resolve_category_alias(
+                hint, owner_user_id=owner_user_id
+            )
             if category_id is None and hint:
                 # Unknown category names are the USER'S OWN curation (e.g. a
                 # Quicken tree like "Bills & Utilities:Streaming"); dropping
                 # them silently discards it. Create category + alias instead.
-                category = await service.get_or_create_category_from_hint(hint)
+                category = await service.get_or_create_category_from_hint(
+                    hint, owner_user_id=owner_user_id
+                )
                 category_id = category.id if category is not None else None
             category_cache[hint] = category_id
         return category_cache[hint]

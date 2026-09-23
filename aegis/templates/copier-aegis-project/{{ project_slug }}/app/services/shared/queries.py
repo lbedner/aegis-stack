@@ -24,3 +24,14 @@ def stored_owner(owner_user_id: int | None) -> int:
     """The owner a NOT NULL owner column stores: ``0`` for a standalone
     (no auth) install, else the user."""
     return 0 if owner_user_id is None else owner_user_id
+
+
+def visible_to(column: Any, owner_user_id: int | None) -> list[Any]:
+    """Clauses for a table whose NULL-owner rows are shared seeds: the
+    seeds plus this owner's rows, for ``.where(*...)``.
+
+    ``None`` is a standalone install, which sees every row.
+    """
+    if owner_user_id is None:
+        return []
+    return [column.is_(None) | (column == owner_user_id)]

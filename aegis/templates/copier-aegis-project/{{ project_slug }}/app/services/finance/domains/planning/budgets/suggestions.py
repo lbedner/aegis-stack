@@ -117,7 +117,9 @@ async def suggest_budget_lines(
     # is the right test - if bills already cover most of what a
     # category costs, budgeting it too charges the forecast twice; if
     # they cover a sliver, the budget is still the useful number.
-    all_categories = await ledger_queries.all_categories(db)
+    all_categories = await ledger_queries.all_categories(
+        db, owner_user_id=owner_user_id
+    )
     by_name = {c.name: c.id for c in all_categories}
     # A budget line is about money SPENT. Categories carry their own
     # classification, and it is the reliable signal: the
@@ -145,7 +147,9 @@ async def suggest_budget_lines(
         and bool(stream.is_user_confirmed or stream.source == "user")
         and (stream.category_id or by_name.get(inferred.get(stream.id, ""))) is None
     }
-    alias_fallback = await ledger_queries.category_alias_ids(db, fallback_names)
+    alias_fallback = await ledger_queries.category_alias_ids(
+        db, fallback_names, owner_user_id=owner_user_id
+    )
 
     confirmed_categories: set[int] = set()
     for stream in live_streams:
@@ -178,7 +182,10 @@ async def suggest_budget_lines(
         line.category_id
         for line in await queries.budget_lines_with_category(db, budget.id)
     }
-    names = {c.id: c.name for c in await ledger_queries.all_categories(db)}
+    names = {
+        c.id: c.name
+        for c in await ledger_queries.all_categories(db, owner_user_id=owner_user_id)
+    }
 
     picks: list[BudgetSuggestion] = []
     for category_id, months in per_month.items():

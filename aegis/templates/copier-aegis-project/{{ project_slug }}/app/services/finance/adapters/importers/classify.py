@@ -281,7 +281,9 @@ async def plan_transactions(
 
     async def _resolve_category(hint: str | None) -> int | None:
         if hint not in category_cache:
-            category_id = await service.resolve_category_alias(hint)
+            category_id = await service.resolve_category_alias(
+                hint, owner_user_id=owner_user_id
+            )
             if category_id is None and hint:
                 new_category_hints.append(hint)
             category_cache[hint] = category_id

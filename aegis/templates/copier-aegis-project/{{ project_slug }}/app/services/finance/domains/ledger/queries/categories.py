@@ -25,17 +25,20 @@ from app.services.finance.utils import current_date
 from sqlalchemy import and_, func
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.services.shared.queries import owner_filters
+from app.services.shared.queries import owner_clause, owner_filters, visible_to
 
 
 async def category_alias_ids(
-    db: AsyncSession, hints: Iterable[str | None]
+    db: AsyncSession,
+    hints: Iterable[str | None],
+    *,
+    owner_user_id: int | None = None,
 ) -> dict[str, int]:
     """hint -> category id via the alias table, one query for all hints.
 
     Same semantics as the single-hint ``resolve_category_alias``:
-    normalized match, alias-owner precedence via the same ordering.
-    Unmatched hints are absent from the result.
+    normalized match over the seeds plus this owner's aliases, the
+    owner's own winning. Unmatched hints are absent from the result.
     """
     from app.services.finance.utils import normalize_payee
 
@@ -49,8 +52,13 @@ async def category_alias_ids(
                 FinanceCategoryAlias.normalized_alias,
                 FinanceCategoryAlias.category_id,
             )
-            .where(FinanceCategoryAlias.normalized_alias.in_(wanted))
-            .order_by(FinanceCategoryAlias.owner_user_id.desc())
+            .where(
+                FinanceCategoryAlias.normalized_alias.in_(wanted),
+                *visible_to(FinanceCategoryAlias.owner_user_id, owner_user_id),
+            )
+            # nulls_last: Postgres sorts NULL first under DESC, which let
+            # the shared seed beat the owner's own alias there.
+            .order_by(FinanceCategoryAlias.owner_user_id.desc().nulls_last())
         )
     ).all()
     by_normalized: dict[str, int] = {}
@@ -67,28 +75,30 @@ async def category_by_id(db: AsyncSession, category_id: int) -> FinanceCategory 
     return await db.get(FinanceCategory, category_id)
 
 
-async def category_by_slug_global(
-    db: AsyncSession, slug: str
+async def category_by_slug(
+    db: AsyncSession, slug: str, *, owner_user_id: int | None
 ) -> FinanceCategory | None:
-    """The global (owner NULL) category with this slug, or None."""
+    """The category with this slug in exactly one scope: the shared seeds
+    for ``None``, else that owner's own rows."""
     return (
         await db.exec(
             select(FinanceCategory).where(
                 FinanceCategory.slug == slug,
-                FinanceCategory.owner_user_id.is_(None),
+                owner_clause(FinanceCategory.owner_user_id, owner_user_id),
             )
         )
     ).first()
 
 
-async def alias_by_normalized_global(
-    db: AsyncSession, normalized: str
+async def alias_by_normalized(
+    db: AsyncSession, normalized: str, *, owner_user_id: int | None
 ) -> FinanceCategoryAlias | None:
+    """The alias in exactly one scope, as ``category_by_slug``."""
     return (
         await db.exec(
             select(FinanceCategoryAlias).where(
                 FinanceCategoryAlias.normalized_alias == normalized,
-                FinanceCategoryAlias.owner_user_id.is_(None),
+                owner_clause(FinanceCategoryAlias.owner_user_id, owner_user_id),
             )
         )
     ).first()
@@ -107,10 +117,18 @@ async def category_names_by_id(
 
 
 async def all_categories(
-    db: AsyncSession, *, include_archived: bool = True
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    include_archived: bool = True,
 ) -> list[FinanceCategory]:
-    """The full taxonomy, name-sorted, single-table."""
-    query = select(FinanceCategory).order_by(FinanceCategory.name)
+    """The taxonomy this owner sees - the shared seeds plus their own -
+    name-sorted, single-table."""
+    query = (
+        select(FinanceCategory)
+        .where(*visible_to(FinanceCategory.owner_user_id, owner_user_id))
+        .order_by(FinanceCategory.name)
+    )
     if not include_archived:
         query = query.where(FinanceCategory.is_archived == False)  # noqa: E712
     return list((await db.exec(query)).all())

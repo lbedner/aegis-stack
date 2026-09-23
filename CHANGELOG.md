@@ -77,8 +77,11 @@
 
 - **sqlmodel is pinned below 0.0.45**, which rejects every naive UTC
   timestamp the template writes; a fresh project resolved 0.0.46 and failed
-  3,617 tests. The arq worker no longer dies on its own event loop, and the
-  generated suite now sees database locks.
+  3,617 tests. A project generated while 0.0.45+ was installed has
+  revisions naming its `UTCDateTime`; `alembic/env.py` keeps that name
+  resolvable below the pin, so those projects still update and migrate.
+  The arq worker no longer dies on its own event loop, and the generated
+  suite now sees database locks.
 - **`add-service` checks template version compatibility** like `add` and
   `remove` already did, and a foreign key onto a sentinel row gets a
   migration signature, so adding auth to a finance project that has been

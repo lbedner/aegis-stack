@@ -89,3 +89,38 @@ class TestTheArqWorkerOwnsItsLoop:
             "re-imports nothing"
         )
         assert "watchfiles --filter python" in branch
+
+
+class TestTheEntrypointKnowsItIsInAContainer:
+    """Every generated htmx project corrupted its developer's host venv.
+
+    The entrypoint decided it was in a container by ``$DOCKER_CONTAINER``,
+    which each compose service has to remember to set. The dev
+    ``build-static-watcher`` did not, and ``$USER`` is unset in Docker, so
+    it took the "local environment" branch, unset UV_PROJECT_ENVIRONMENT,
+    and ran uv against ``/code/.venv`` - the HOST's venv, through the bind
+    mount. A Linux interpreter was written into it; the host's next uv saw
+    an interpreter that does not exist, rebuilt the venv bare, and pytest,
+    ruff and ty were gone after every ``make serve`` (found in
+    aegis-steward: the watcher's python was ``/code/.venv/bin/python``).
+
+    The container runtime marks every container with a file. That is the
+    signal; the variable stays as an explicit override.
+    """
+
+    def _detection(self) -> str:
+        rendered = _render(_ctx())
+        start = rendered.index("# Configure UV environment")
+        return rendered[start : rendered.index("\nfi\n", start)]
+
+    def test_a_container_is_known_by_the_file_the_runtime_writes(self) -> None:
+        detection = self._detection()
+        assert "/.dockerenv" in detection, (
+            "docker marks every container with /.dockerenv"
+        )
+        assert "/run/.containerenv" in detection, (
+            "podman marks it with /run/.containerenv"
+        )
+
+    def test_the_variable_still_forces_it(self) -> None:
+        assert "DOCKER_CONTAINER" in self._detection()

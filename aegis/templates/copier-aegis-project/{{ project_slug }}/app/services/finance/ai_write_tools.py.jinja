@@ -79,7 +79,9 @@ async def categories() -> dict[str, Any]:
     from app.services.finance.domains.ledger import queries as ledger_queries
 
     async with get_async_session() as session:
-        rows = await ledger_queries.all_categories(session, include_archived=False)
+        rows = await ledger_queries.all_categories(
+            session, owner_user_id=None, include_archived=False
+        )
     return {
         "categories": [
             {"id": row.id, "name": row.name, "classification": row.classification}

@@ -18,6 +18,16 @@
 
 ### Fixed
 
+- **In a stack with auth, a finance category someone creates is theirs.**
+  The category table was designed per owner (a NULL owner is a shared
+  seed), but every writer created shared rows and every reader returned
+  all of them, so one user's typed or imported categories appeared in
+  every other user's picker. Categories and aliases a user creates now
+  carry their owner; pickers, alias resolution, budget suggestions and goal
+  parsing see the seeds plus the caller's own. Alias precedence also sorts
+  NULL owners last, which Postgres had reversed. Stacks without auth are
+  unchanged. Categories created before this stay shared: nothing records
+  who made them.
 - **A granian reload no longer leaves nothing serving the port.** Granian
   waits on a stopping worker forever by default, and a worker holding an
   open dashboard session never finishes stopping. With reload on, a stuck

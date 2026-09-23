@@ -238,7 +238,7 @@ async def parse_budget_goal(
             fraction=fraction,
         )
 
-    category_rows = await categories.list_categories(db)
+    category_rows = await categories.list_categories(db, owner_user_id=owner_user_id)
     matched_category = None
     for category in category_rows:
         leaf = category.name.rsplit(":", 1)[-1].strip()

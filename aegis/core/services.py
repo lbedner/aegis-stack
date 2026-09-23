@@ -1123,6 +1123,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_finance_one_time_bills.py",
                 "tests/services/test_finance_budget_suggestions.py",
                 "tests/services/test_finance_categorize.py",
+                "tests/services/test_finance_category_owner_scope.py",
                 "tests/services/test_finance_declare_recurring.py",
                 "tests/services/test_finance_detection_gates.py",
                 "tests/services/test_finance_payee_aliases.py",

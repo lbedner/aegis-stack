@@ -802,21 +802,27 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT finance_category.id, finance_category.owner_user_id, finance_category.organization_id, finance_category.parent_id, finance_category.name, finance_category.slug, finance_category.classification, finance_category.plaid_pfc_primary, finance_category.plaid_pfc_detailed, finance_category.icon, finance_category.color, finance_category.is_system, finance_category.is_archived, finance_category.sort_order, finance_category.tax_line, finance_category.metadata, finance_category.created_at, finance_category.updated_at FROM finance_category ORDER BY finance_category.name",
-      "file": "app/services/finance/domains/ledger/queries/categories.py",
-      "function": "all_categories"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT finance_category.id, finance_category.owner_user_id, finance_category.organization_id, finance_category.parent_id, finance_category.name, finance_category.slug, finance_category.classification, finance_category.plaid_pfc_primary, finance_category.plaid_pfc_detailed, finance_category.icon, finance_category.color, finance_category.is_system, finance_category.is_archived, finance_category.sort_order, finance_category.tax_line, finance_category.metadata, finance_category.created_at, finance_category.updated_at FROM finance_category WHERE finance_category.id IN (__[POSTCOMPILE_id_1])",
       "file": "app/services/finance/domains/ledger/queries/categories.py",
       "function": "category_names_by_id"
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT finance_category.id, finance_category.owner_user_id, finance_category.organization_id, finance_category.parent_id, finance_category.name, finance_category.slug, finance_category.classification, finance_category.plaid_pfc_primary, finance_category.plaid_pfc_detailed, finance_category.icon, finance_category.color, finance_category.is_system, finance_category.is_archived, finance_category.sort_order, finance_category.tax_line, finance_category.metadata, finance_category.created_at, finance_category.updated_at FROM finance_category WHERE finance_category.owner_user_id IS NULL OR finance_category.owner_user_id = :owner_user_id_1 ORDER BY finance_category.name",
+      "file": "app/services/finance/domains/ledger/queries/categories.py",
+      "function": "all_categories"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_category.id, finance_category.owner_user_id, finance_category.organization_id, finance_category.parent_id, finance_category.name, finance_category.slug, finance_category.classification, finance_category.plaid_pfc_primary, finance_category.plaid_pfc_detailed, finance_category.icon, finance_category.color, finance_category.is_system, finance_category.is_archived, finance_category.sort_order, finance_category.tax_line, finance_category.metadata, finance_category.created_at, finance_category.updated_at FROM finance_category WHERE finance_category.slug = :slug_1 AND finance_category.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/ledger/queries/categories.py",
+      "function": "category_by_slug"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT finance_category.id, finance_category.owner_user_id, finance_category.organization_id, finance_category.parent_id, finance_category.name, finance_category.slug, finance_category.classification, finance_category.plaid_pfc_primary, finance_category.plaid_pfc_detailed, finance_category.icon, finance_category.color, finance_category.is_system, finance_category.is_archived, finance_category.sort_order, finance_category.tax_line, finance_category.metadata, finance_category.created_at, finance_category.updated_at FROM finance_category WHERE finance_category.slug = :slug_1 AND finance_category.owner_user_id IS NULL",
       "file": "app/services/finance/domains/ledger/queries/categories.py",
-      "function": "category_by_slug_global"
+      "function": "category_by_slug"
     },
     {
       "kind": "repeated_statement",
@@ -832,13 +838,25 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT finance_category_alias.id, finance_category_alias.owner_user_id, finance_category_alias.category_id, finance_category_alias.alias_text, finance_category_alias.normalized_alias, finance_category_alias.source, finance_category_alias.created_at FROM finance_category_alias WHERE finance_category_alias.normalized_alias = :normalized_alias_1 AND finance_category_alias.owner_user_id IS NULL",
+      "label": "SELECT finance_category_alias.id, finance_category_alias.owner_user_id, finance_category_alias.category_id, finance_category_alias.alias_text, finance_category_alias.normalized_alias, finance_category_alias.source, finance_category_alias.created_at FROM finance_category_alias WHERE finance_category_alias.normalized_alias = :normalized_alias_1 AND finance_category_alias.owner_user_id = :owner_user_id_1",
       "file": "app/services/finance/domains/ledger/queries/categories.py",
-      "function": "alias_by_normalized_global"
+      "function": "alias_by_normalized"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT finance_category_alias.normalized_alias, finance_category_alias.category_id FROM finance_category_alias WHERE finance_category_alias.normalized_alias IN (__[POSTCOMPILE_normalized_alias_1]) ORDER BY finance_category_alias.owner_user_id DESC",
+      "label": "SELECT finance_category_alias.id, finance_category_alias.owner_user_id, finance_category_alias.category_id, finance_category_alias.alias_text, finance_category_alias.normalized_alias, finance_category_alias.source, finance_category_alias.created_at FROM finance_category_alias WHERE finance_category_alias.normalized_alias = :normalized_alias_1 AND finance_category_alias.owner_user_id IS NULL",
+      "file": "app/services/finance/domains/ledger/queries/categories.py",
+      "function": "alias_by_normalized"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_category_alias.normalized_alias, finance_category_alias.category_id FROM finance_category_alias WHERE finance_category_alias.normalized_alias IN (__[POSTCOMPILE_normalized_alias_1]) AND (finance_category_alias.owner_user_id IS NULL OR finance_category_alias.owner_user_id = :owner_user_id_1) ORDER BY finance_category_alias.owner_user_id DESC NULLS LAST",
+      "file": "app/services/finance/domains/ledger/queries/categories.py",
+      "function": "category_alias_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT finance_category_alias.normalized_alias, finance_category_alias.category_id FROM finance_category_alias WHERE finance_category_alias.normalized_alias IN (__[POSTCOMPILE_normalized_alias_1]) ORDER BY finance_category_alias.owner_user_id DESC NULLS LAST",
       "file": "app/services/finance/domains/ledger/queries/categories.py",
       "function": "category_alias_ids"
     },

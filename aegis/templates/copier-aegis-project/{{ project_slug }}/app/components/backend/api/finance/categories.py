@@ -54,6 +54,7 @@ async def list_categories(
 async def create_category(
     body: CategoryCreate,
     service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> CategoryOption:
     """Create a category by name, or return the one that already matches.
 
@@ -66,7 +67,9 @@ async def create_category(
     201 either way. The caller wants a usable category id, not a race
     between two people typing the same name.
     """
-    category = await service.get_or_create_category_from_hint(body.name)
+    category = await service.get_or_create_category_from_hint(
+        body.name, owner_user_id=owner_user_id
+    )
     if category is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -79,6 +82,7 @@ async def create_category(
 @router.get("/categories/options", response_model=CategoryOptionListResponse)
 async def list_category_options(
     service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> CategoryOptionListResponse:
     """id + name for every category, no usage aggregation - for pickers.
 
@@ -86,7 +90,7 @@ async def list_category_options(
     whole transaction history to compute stats a picker doesn't show;
     this is the plain, cheap version of the same list.
     """
-    categories = await service.list_categories()
+    categories = await service.list_categories(owner_user_id=owner_user_id)
     return CategoryOptionListResponse(
         items=[CategoryOption(id=c.id, name=c.name) for c in categories]
     )

@@ -43,6 +43,12 @@
 - **`select_field` works in a plain form.** The htmx dropdown bound its
   value with `x-model` only, so a `<form hx-post>` never sent it. Pass
   `name=` and it posts through a hidden input.
+- **Installing a plugin with a dashboard card no longer fails `make check`.**
+  The generated card render test graded every discovered card against a
+  table of the framework's own cards, and a plugin cannot edit that file,
+  so any plugin card failed on arrival. A card with no recorded count is
+  now treated as a plugin's and skips only the count check; the framework
+  keeps its own cards in the table with a test of its own.
 - **A granian reload no longer leaves nothing serving the port.** Granian
   waits on a stopping worker forever by default, and a worker holding an
   open dashboard session never finishes stopping. With reload on, a stuck

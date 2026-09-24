@@ -123,16 +123,20 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    - `on_change`:    optional Alpine expression to run after selection
    - `placeholder`:  shown when no option matches the current model value
    - `small`:        tighter padding for inline filter chips
+   - `name`:         posts the chosen value under this name, so the field
+                     works inside a plain `<form>` and not only one that
+                     submits by script
 
    ``grouped=true`` renders category headers: ``options`` is then a list of
    ``{label, items: [{value, label}]}`` groups (an empty group label means
    no header, useful to pin an "All" entry at the top). ``panel_class``
    widens the dropdown beyond the trigger (e.g. ``min-w-[13rem]``) so long
    labels don't wrap. #}
-{% macro select_field(model, options, value_attr="value", label_attr="label", on_change="", placeholder="Select…", small=false, grouped=false, panel_class="") %}
+{% macro select_field(model, options, value_attr="value", label_attr="label", on_change="", placeholder="Select…", small=false, grouped=false, panel_class="", name=None) %}
 <div x-data="{ open: false }" class="relative"
      @click.outside="open = false"
      @keydown.escape.window="open = false">
+  {% if name %}<input type="hidden" name="{{ name }}" :value="{{ model }}">{% endif %}
   <button type="button" @click="open = !open"
     class="w-full bg-aegis-bg border rounded {{ 'px-2 py-1 text-xxs' if small else 'px-3 py-2 text-sm' }} text-aegis-text text-left flex items-center justify-between gap-2 hover:border-aegis-muted focus:outline-none transition-colors"
     :class="open ? 'border-aegis-teal' : 'border-aegis-border'">

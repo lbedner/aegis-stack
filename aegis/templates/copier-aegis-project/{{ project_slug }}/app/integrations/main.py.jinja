@@ -14,7 +14,7 @@ try:
 except ImportError:  # observability component not installed
     pass
 else:
-    install_auto_tracing()
+    install_auto_tracing("app.components.frontend")
 
 from app.components.backend.hooks import backend_hooks  # noqa: E402
 from app.components.backend.main import create_backend_app  # noqa: E402

@@ -162,35 +162,38 @@ def _harden_pydantic_ai_result_serializer() -> None:
 {%- endif %}
 
 
-def install_auto_tracing() -> None:
-    """Span every service and frontend function call slower than 10ms.
+# Traced in every process that calls ``install_auto_tracing``.
+SERVICE_MODULES = ("app.services",)
+
+
+def install_auto_tracing(*modules: str) -> None:
+    """Span every call slower than 10ms in the services, plus ``modules``.
 
     The generic answer to "instrument the business logic": Logfire's
     import hook wraps whole module trees, so a scheduled job or an API
     request renders as nested service-function spans with their SQL
     children - no hand-placed decorators. MUST run before the traced
     packages are imported, which is why the app factory module and the
-    scheduler entrypoint call this at the top, before their own app
-    imports.
+    worker and scheduler entrypoints call this at the top, before their
+    own app imports.
 
-    ``app.components.frontend`` is traced too because the UI builds
-    server-side in the SAME event loop as the API: a slow view build
-    blocks every in-flight request, and without spans there that stall
-    is a 4-second hole in the trace with no visible culprit.
+    The web process passes ``app.components.frontend`` because the UI
+    builds server-side in the SAME event loop as the API: a slow view
+    build blocks every in-flight request, and without spans there that
+    stall is a 4-second hole in the trace with no visible culprit. The
+    worker and scheduler never import the UI, so they pass nothing.
     """
     if not configure_logfire():
         return
     import logfire
 
+    traced = [*SERVICE_MODULES, *modules]
     logfire.install_auto_tracing(
-        modules=["app.services", "app.components.frontend"],
+        modules=traced,
         min_duration=0.01,
         check_imported_modules="warn",
     )
-    logger.info(
-        "Logfire: auto-tracing app.services + app.components.frontend "
-        "(>=10ms spans)"
-    )
+    logger.info(f"Logfire: auto-tracing {' + '.join(traced)} (>=10ms spans)")
 
 
 def register_middleware(app: FastAPI) -> None:

@@ -28,6 +28,21 @@
   NULL owners last, which Postgres had reversed. Stacks without auth are
   unchanged. Categories created before this stay shared: nothing records
   who made them.
+- **The webserver is no longer the most throttled container in the stack.**
+  A compose `cpus` limit stops a process for the rest of each period once
+  its share is spent, and the webserver - the one process a person waits
+  on, and a single event loop - was capped at 0.5 while background workers
+  got 1.0. Measured on a running stack it was frozen in 11.8% of periods.
+  It now defaults to 2.0 (override with `WEBSERVER_CPUS`), the scheduler
+  to 0.5, and a test keeps every background container at or below the
+  webserver.
+- **The worker and scheduler stop tracing a UI they never load.**
+  `install_auto_tracing` hardcoded `app.components.frontend`, so every
+  process announced frontend tracing at boot. Only the web process asks
+  for it now.
+- **`select_field` works in a plain form.** The htmx dropdown bound its
+  value with `x-model` only, so a `<form hx-post>` never sent it. Pass
+  `name=` and it posts through a hidden input.
 - **A granian reload no longer leaves nothing serving the port.** Granian
   waits on a stopping worker forever by default, and a worker holding an
   open dashboard session never finishes stopping. With reload on, a stuck

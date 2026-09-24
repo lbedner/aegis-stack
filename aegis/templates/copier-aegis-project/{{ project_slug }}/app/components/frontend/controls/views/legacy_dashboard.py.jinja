@@ -55,6 +55,10 @@ class LegacyDashboardView(BaseView):
         for task in self._tasks:
             task.cancel()
         self._tasks = []
+        # Not a view task: the worker modal owns when it runs.
+        stream = (self.page.data or {}).get("worker_stream")
+        if stream is not None:
+            stream.stop()
         logger.info(
             "legacy_dashboard.on_leave.tasks_cancelled",
             session_id=self.page.session_id,

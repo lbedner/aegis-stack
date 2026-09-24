@@ -1,6 +1,11 @@
 """The background tasks that keep the dashboard current.
 
-All three share one rule set, which is what ``SessionLoops`` is: how
+The dashboard refresh runs for the life of the page. The worker feed - the
+SSE listener and its flush loop - runs only while the worker modal is open
+(``WorkerStream``): nothing else reads those events, and the stream resends
+an absolute baseline on every connect, so connecting on open loses nothing.
+
+All of them share one rule set, which is what ``SessionLoops`` is: how
 long a disconnect is tolerated, which exceptions are fatal, and the
 fact that a fatal one ends ALL of this page's loops rather than the
 one that happened to notice. Pass it in and the loop needs nothing
@@ -109,12 +114,15 @@ async def listen_for_worker_events(
     so the last batch always renders even when the stream goes quiet.
 
     Survives transient page disconnects (Flet session reconnects).
-    Only exits when the session is permanently gone.
+    Only exits when the session is permanently gone or the modal closes.
     """
-    logger.info("SSE: starting worker event listener")
+    # Tagged per session: with several tabs open, untagged lines cannot be
+    # told apart from one tab starting the listener twice.
+    session = page.session_id
+    logger.info("SSE: starting worker event listener", session_id=session)
     while loops.alive():
         try:
-            logger.info("SSE: connecting to /events/worker/stream")
+            logger.info("SSE: connecting to /events/worker/stream", session_id=session)
             async with api_client.stream(
                 "GET",
                 "/events/worker/stream",
@@ -122,7 +130,11 @@ async def listen_for_worker_events(
                     connect=5.0, read=15.0, write=5.0, pool=5.0,
                 ),
             ) as response:
-                logger.info(f"SSE: connected, status={response.status_code}")
+                logger.info(
+                    "SSE: connected",
+                    status=response.status_code,
+                    session_id=session,
+                )
                 async for line in response.aiter_lines():
                     if not loops.alive():
                         return
@@ -154,7 +166,50 @@ async def listen_for_worker_events(
         except Exception as e:
             if await loops.fatal(e):
                 return
-            logger.info(f"SSE: connection error: {e}, reconnecting in 5s")
+            logger.info(
+                "SSE: connection error, reconnecting in 5s",
+                error=str(e),
+                session_id=session,
+            )
             await asyncio.sleep(5)
-    logger.info("SSE: listener exiting (page permanently disconnected)")
+    logger.info(
+        "SSE: listener exiting (page permanently disconnected)", session_id=session
+    )
+
+
+class WorkerStream:
+    """The worker modal's live feed, running only while the modal is open.
+
+    Holds the SSE listener and its flush loop. The modal calls ``start`` on
+    show and ``stop`` on hide; the dashboard view calls ``stop`` on leave.
+    Both loops keep the page's ``SessionLoops`` rules, so a disconnect or a
+    corrupt tree still ends them without anyone calling ``stop``.
+    """
+
+    def __init__(self, loops: SessionLoops, page: ft.Page, api_client: APIClient):
+        self._loops = loops
+        self._page = page
+        self._api_client = api_client
+        self._tasks: list[asyncio.Task[None]] = []
+
+    @property
+    def running(self) -> bool:
+        return any(not task.done() for task in self._tasks)
+
+    def start(self) -> None:
+        """Connect and start rendering; a second call while running is a no-op."""
+        if self.running:
+            return
+        self._tasks = [
+            asyncio.create_task(
+                listen_for_worker_events(self._loops, self._page, self._api_client)
+            ),
+            asyncio.create_task(flush_worker_modal(self._loops, self._page)),
+        ]
+
+    def stop(self) -> None:
+        """Disconnect: cancel both loops."""
+        for task in self._tasks:
+            task.cancel()
+        self._tasks = []
 {%- endif %}

@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The worker modal's live feed connects when the modal opens.** Every
+  dashboard tab used to open `/events/worker/stream` and start a 10 Hz
+  flush loop at page load, then discard every event until someone opened
+  the worker modal - one long-lived stream and Redis subscription per tab.
+  Both now start on show and stop on hide; the stream's per-connect
+  baseline means the counts are the same. Its log lines carry the page's
+  `session_id`, so several tabs no longer read as one listener started
+  twice.
+
 ### Fixed
 
 - **A closed dashboard tab stops polling within a minute, not an hour.**

@@ -1,12 +1,15 @@
 """The corruption detector matches Flet's desynced-tree signature and
 nothing else - background loops key their terminate-vs-retry decision on it."""
 
+from typing import Any
+
 import pytest
 
 from app.components.frontend.core.session_health import (
     BOOT_ID,
     SessionLoops,
     is_tree_corruption,
+    page_is_connected,
     reload_if_server_restarted,
 )
 
@@ -181,3 +184,53 @@ class TestATabThatPredatesThisProcess:
 
         assert await reload_if_server_restarted(page) is False
         assert page.reloaded == []
+
+
+class TestAClosedTabReadsDisconnected:
+    """Flet's disconnect sets an expiry and keeps the connection object.
+
+    ``Page._disconnect`` records ``expires_at`` and fires the event; the
+    connection is only dropped when the session is deleted, an hour later by
+    default. A check on the connection object therefore read a closed tab as
+    connected for that hour, the disconnect grace never started, and every
+    loop kept polling a page nobody had open - which also held a granian
+    worker open across a reload. These drive a real ``Page`` through Flet's
+    own lifecycle rather than a stand-in, so the check cannot drift from it.
+    """
+
+    @staticmethod
+    def _page() -> Any:
+        import asyncio
+        from unittest.mock import MagicMock
+
+        import flet as ft
+
+        return ft.Page(MagicMock(), "session", asyncio.get_running_loop())
+
+    async def test_an_open_tab_is_connected(self) -> None:
+        assert page_is_connected(self._page()) is True
+
+    async def test_a_closed_tab_is_disconnected_immediately(self) -> None:
+        page = self._page()
+        await page._disconnect(3600)
+
+        assert page_is_connected(page) is False
+
+    async def test_a_reconnect_reads_connected_again(self) -> None:
+        from unittest.mock import MagicMock
+
+        page = self._page()
+        await page._disconnect(3600)
+        await page._connect(MagicMock())
+
+        assert page_is_connected(page) is True
+
+    async def test_a_deleted_session_is_disconnected(self) -> None:
+        page = self._page()
+        await page._disconnect(0)
+        page._close()
+
+        assert page_is_connected(page) is False
+
+    def test_no_page_is_disconnected(self) -> None:
+        assert page_is_connected(None) is False

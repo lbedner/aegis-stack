@@ -16,6 +16,7 @@ from collections.abc import Callable
 import flet as ft
 from flet import PageDisconnectedException
 
+from app.components.frontend.core.session_health import page_is_connected
 from app.components.frontend.dashboard.activity_feed import ActivityFeed
 from app.components.frontend.dashboard.card_registry import CardRegistry
 from app.components.frontend.dashboard.cards.card_utils import (
@@ -84,35 +85,8 @@ class SystemDashboard:
             logger.debug("Flet version not available for compatibility logging")
 
     def _is_page_connected(self) -> bool:
-        """
-        Check if the page is still connected.
-
-        Note: This uses Flet's private attribute access as a last resort.
-        This is necessary because Flet doesn't provide a public API for
-        connection status checking. While brittle, this prevents crashes
-        when users navigate away from the dashboard.
-
-        Returns False on any error to fail safely.
-        """
-        try:
-            if self._page is None:
-                return False
-
-            # Attempt to access Flet's private connection attribute
-            # This may break with future Flet versions, but will fail safely
-            if not hasattr(self._page, '_Page__conn'):
-                logger.debug(
-                    "Flet page connection attribute not found - assuming disconnected"
-                )
-                return False
-
-            return self._page._Page__conn is not None
-
-        except (AttributeError, Exception) as e:
-            # If anything goes wrong with connection checking, assume disconnected
-            # This provides defensive behavior against Flet internal changes
-            logger.debug(f"Page connection check failed, assuming disconnected: {e}")
-            return False
+        """Whether the page's tab is still open; see ``page_is_connected``."""
+        return page_is_connected(self._page)
 
     async def update_health_status(
         self,

@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A closed dashboard tab stops polling within a minute, not an hour.**
+  Page loops check whether their tab is still open, and the check read
+  Flet's connection object, which Flet keeps through a disconnect and drops
+  only when the session is reaped, an hour later by default. So the
+  30-second grace never started: a closed tab kept refreshing the dashboard,
+  flushing the worker modal and listening for worker events for that hour,
+  and held a granian worker open across a reload. The check now reads
+  `page.expires_at`, the state Flet itself sets on disconnect and clears on
+  reconnect.
+
 ## [0.13.1] - 2026-09-23
 
 ### Changed

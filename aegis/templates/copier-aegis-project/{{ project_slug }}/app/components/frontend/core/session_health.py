@@ -25,6 +25,19 @@ BOOT_ID_KEY = "aegis.boot_id"
 DISCONNECT_GRACE_SECONDS = 30.0
 
 
+def page_is_connected(page: Any) -> bool:
+    """True while a browser tab holds this page open.
+
+    ``page.expires_at`` is Flet's own connection state: ``_disconnect`` sets
+    it, ``_connect`` clears it, and the session reaper deletes a page once it
+    passes. The connection object is NOT that signal - Flet keeps it through
+    a disconnect and drops it only when the session is deleted, an hour later
+    by default - so reading it kept a closed tab's loops running for that
+    hour, and held a granian worker open across a reload.
+    """
+    return page is not None and page.expires_at is None
+
+
 def is_tree_corruption(exc: BaseException) -> bool:
     """True when the exception signals a desynced Flet control tree."""
     return isinstance(exc, AssertionError) and "_process_remove_command" in str(exc)

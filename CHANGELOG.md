@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-09-23
+
 ### Changed
 
 - **Owner scoping lives in one place.** `get_owner_user_id` was defined
@@ -18,6 +20,28 @@
 
 ### Fixed
 
+- **`make serve` in an htmx project no longer strips the developer's own
+  virtualenv.** The entrypoint decided it was in a container by
+  `$DOCKER_CONTAINER`, which the dev `build-static-watcher` never set, so
+  the watcher ran `uv` against the host's `.venv` through the bind mount:
+  a Linux interpreter went in, and the host's next `uv` rebuilt the venv
+  without pytest, ruff or ty. A container is now recognised by the file
+  its runtime writes into every one (`/.dockerenv`, podman's
+  `/run/.containerenv`); `DOCKER_CONTAINER` still forces it.
+- **On Postgres, chat turns and usage rows are stored again.** asyncpg
+  rejects a timezone-aware value for a `timestamp without time zone`
+  column: a conversation's first turn failed to persist, and
+  `record_usage` swallowed the same error, so the usage ledger recorded
+  nothing, costs read zero and the per-user daily budget never tripped.
+  Both write naive UTC now, through `utcnow()` and a new `as_stored()`.
+  Saving a thread is one membership query instead of one select per
+  message.
+- **Calls routed through a provider are priced.** A model reported as
+  `deepseek-v4.1-flash` never matched the catalog's
+  `openrouter/deepseek/deepseek-v4.1-flash`, so it cost $0.00. The lookup
+  now matches the name exactly or as a whole trailing segment, and the
+  price is cached in the shared cache instead of queried on every turn;
+  the catalog sync clears it.
 - **In a stack with auth, a finance category someone creates is theirs.**
   The category table was designed per owner (a NULL owner is a shared
   seed), but every writer created shared rows and every reader returned

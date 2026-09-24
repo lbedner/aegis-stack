@@ -95,7 +95,7 @@ services:
       resources:
         limits:
           memory: 768M
-          cpus: '0.5'
+          cpus: '${WEBSERVER_CPUS:-2.0}'
 {%- if include_ingress %}
     labels:
       - "traefik.enable=true"
@@ -170,7 +170,7 @@ services:
       resources:
         limits:
           memory: 256M
-          cpus: '0.25'
+          cpus: '0.5'
     profiles:
       - dev
       - prod

@@ -180,6 +180,24 @@ class TestDialogHelpers:
         assert "dialog:close" in fired and fired["toast"]["text"] == "Added Ally."
 
 
+class TestSelectField:
+    """The Alpine dropdown binds with ``x-model`` only, so inside a plain
+    ``<form hx-post>`` the chosen value was never sent."""
+
+    SOURCE = (
+        '{% from "components/macros/form.html" import select_field %}'
+        "{{ select_field('account', 'accounts', name=name) }}"
+    )
+
+    def test_a_named_field_posts_its_value(self) -> None:
+        field = one(render(self.SOURCE, name="account_id"), 'input[type="hidden"]')
+        assert field.get("name") == "account_id"
+        assert field.get(":value") == "account"
+
+    def test_an_unnamed_field_stays_script_only(self) -> None:
+        none(render(self.SOURCE, name=None), 'input[type="hidden"]')
+
+
 class TestRangeChips:
     def test_one_exclusive_radio_row(self) -> None:
         html = render(

@@ -19,7 +19,10 @@ import flet as ft
 import pytest
 
 from app.components.frontend.main import setup_dashboard
-from app.components.frontend.state.session_state import init_session_state
+from app.components.frontend.state.session_state import (
+    get_session_state,
+    init_session_state,
+)
 
 HEALTH: dict[str, Any] = {
     "components": {
@@ -153,3 +156,13 @@ async def test_the_background_loops_are_tracked_for_cancellation(
     never lands there outlives the view."""
     assert booted._tasks
     assert all(isinstance(t, asyncio.Task) for t in booted._tasks)
+
+
+async def test_page_load_opens_no_worker_stream(booted: _StubView) -> None:
+    """The worker feed serves only the worker modal, so it connects when the
+    modal opens. Every tab used to open ``/events/worker/stream`` at load
+    and discard every event until then."""
+    await asyncio.sleep(0)
+    client = get_session_state(booted.page).api_client
+
+    assert not client.stream.called

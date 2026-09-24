@@ -37,6 +37,9 @@ class WorkerDetailDialog(BaseDetailPopup):
         Args:
             component_data: Worker ComponentStatus from health check
         """
+        # Kept for the live feed: ``self.page`` is only set once mounted,
+        # which the first ``show`` can precede.
+        self._feed_page = page
         # Build sections (store references for live updates)
         self._overview = OverviewSection(component_data, page)
         self._queue_health = QueueHealthSection(component_data, page)
@@ -102,6 +105,20 @@ class WorkerDetailDialog(BaseDetailPopup):
             scrollable=False,
             height=self.WORKER_MODAL_HEIGHT,
         )
+
+    def show(self) -> None:
+        """Show, and start the live feed: it only runs while this is open."""
+        super().show()
+        stream = (self._feed_page.data or {}).get("worker_stream")
+        if stream is not None:
+            stream.start()
+
+    def hide(self) -> None:
+        """Hide, and stop the live feed. Every close path ends up here."""
+        super().hide()
+        stream = (self._feed_page.data or {}).get("worker_stream")
+        if stream is not None:
+            stream.stop()
 
     def update_data(self, component_data: ComponentStatus) -> None:
         """Update all sections with fresh data (mutates existing controls)."""

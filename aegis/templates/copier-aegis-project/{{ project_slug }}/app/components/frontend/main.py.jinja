@@ -58,7 +58,7 @@ from .overseer.body import DashboardViews
 from .overseer.chrome import build_chrome, toggle_theme
 from .overseer.loops import auto_refresh
 {%- if include_worker and include_redis %}
-from .overseer.loops import flush_worker_modal, listen_for_worker_events
+from .overseer.loops import WorkerStream
 {%- endif %}
 from .overseer.refresh import refresh_dashboard as refresh_once
 from .theme_manager import ThemeManager
@@ -150,14 +150,13 @@ async def setup_dashboard(view: BaseView) -> None:
         await refresh_dashboard()
     {%- endif %}
 
+{% if include_worker and include_redis %}
+    # The worker feed is created here but not started: the worker modal
+    # starts it on show and stops it on hide, and ``view.on_leave`` stops it.
+    page.data["worker_stream"] = WorkerStream(loops, page, api_client)
+{% endif %}
     # Track tasks on the view so ``view.on_leave`` can cancel them when
     # the router navigates away (e.g. on logout).
-{% if include_worker and include_redis %}
-    view._tasks.append(
-        asyncio.create_task(listen_for_worker_events(loops, page, api_client))
-    )
-    view._tasks.append(asyncio.create_task(flush_worker_modal(loops, page)))
-{% endif %}
     view._tasks.append(
         asyncio.create_task(auto_refresh(loops, refresh_dashboard))
     )

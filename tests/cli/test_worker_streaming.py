@@ -156,14 +156,18 @@ class TestFrontendSSEListener:
     def test_frontend_sse_listener_and_flush(
         self, project_factory: "ProjectFactory"
     ) -> None:
-        """main.py should define listen_for_worker_events and flush_worker_modal."""
+        """The listener and flush ship behind ``WorkerStream``, and the
+        dashboard creates it without starting it: the worker modal starts
+        the feed on open (the generated project's own tests assert that)."""
         project_path = project_factory(components=["worker", "redis"])
-        content = (
-            project_path / "app" / "components" / "frontend" / "main.py"
-        ).read_text()
-        assert "listen_for_worker_events" in content
-        assert "flush_worker_modal" in content
-        assert content.count("create_task") >= 2
+        frontend = project_path / "app" / "components" / "frontend"
+        loops = (frontend / "overseer" / "loops.py").read_text()
+        main = (frontend / "main.py").read_text()
+        assert "async def listen_for_worker_events" in loops
+        assert "async def flush_worker_modal" in loops
+        assert "class WorkerStream" in loops
+        assert "WorkerStream(" in main
+        assert "listen_for_worker_events" not in main
 
     def test_frontend_dispatches_all_event_types(
         self, project_factory: "ProjectFactory"

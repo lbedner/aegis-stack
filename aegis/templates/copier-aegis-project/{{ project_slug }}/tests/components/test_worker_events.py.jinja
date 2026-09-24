@@ -6,6 +6,7 @@ Tests publish_event, EventPublishMiddleware (TaskIQ only), and
 pure helper functions _format_eta and _compute_queue_values.
 """
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -307,4 +308,114 @@ def test_queue_values_failing() -> None:
         )
     )
     assert vals["status_text"] == "Failing"
+
+{%- if include_redis %}
+
+
+# ---------------------------------------------------------------------------
+# Group 5: the worker modal's live feed runs only while the modal is open
+# ---------------------------------------------------------------------------
+#
+# The SSE listener and its 10 Hz flush loop only ever serve the worker
+# modal, yet every tab started both at page load and discarded every event
+# until someone opened the modal. The stream sends an absolute baseline on
+# each connect, so connecting on open loses nothing.
+
+import asyncio  # noqa: E402
+
+from app.components.frontend.overseer import loops as overseer_loops  # noqa: E402
+
+
+@pytest.fixture
+def feed(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    """Stand-ins for the two loops: count starts and cancellations."""
+    calls = {"listen": 0, "flush": 0, "cancelled": 0}
+
+    def _loop(name: str) -> Any:
+        async def run(*_args: Any) -> None:
+            calls[name] += 1
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                calls["cancelled"] += 1
+                raise
+
+        return run
+
+    monkeypatch.setattr(overseer_loops, "listen_for_worker_events", _loop("listen"))
+    monkeypatch.setattr(overseer_loops, "flush_worker_modal", _loop("flush"))
+    return calls
+
+
+def _stream() -> Any:
+    page = MagicMock()
+    page.session_id = "tab-1"
+    return overseer_loops.WorkerStream(MagicMock(), page, MagicMock())
+
+
+async def test_the_feed_does_not_run_until_the_modal_opens(
+    feed: dict[str, int],
+) -> None:
+    stream = _stream()
+    await asyncio.sleep(0)
+
+    assert not stream.running
+    assert feed["listen"] == feed["flush"] == 0
+
+
+async def test_opening_starts_one_listener_and_one_flush(
+    feed: dict[str, int],
+) -> None:
+    stream = _stream()
+    stream.start()
+    stream.start()
+    await asyncio.sleep(0)
+
+    assert stream.running
+    assert feed["listen"] == feed["flush"] == 1
+    stream.stop()
+
+
+async def test_closing_ends_both_and_reopening_starts_again(
+    feed: dict[str, int],
+) -> None:
+    stream = _stream()
+    stream.start()
+    await asyncio.sleep(0)
+    stream.stop()
+    await asyncio.sleep(0)
+
+    assert not stream.running
+    assert feed["cancelled"] == 2
+
+    stream.start()
+    await asyncio.sleep(0)
+    assert feed["listen"] == feed["flush"] == 2
+    stream.stop()
+
+
+def test_the_dialog_drives_the_feed() -> None:
+    """``show`` opens it, and every way of closing goes through ``hide``."""
+    import flet as ft
+
+    from app.components.frontend.dashboard.modals.worker_modal.dialog import (
+        WorkerDetailDialog,
+    )
+
+    calls: list[str] = []
+    page = MagicMock(spec=ft.Page)
+    page.data = {
+        "worker_stream": MagicMock(
+            start=lambda: calls.append("start"), stop=lambda: calls.append("stop")
+        )
+    }
+    dialog = WorkerDetailDialog(
+        ComponentStatus(name="worker", status="healthy", message="ok"), page
+    )
+
+    dialog.show()
+    dialog.hide()
+
+    assert calls == ["start", "stop"]
+{%- endif %}
 {%- endif %}

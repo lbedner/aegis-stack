@@ -128,3 +128,51 @@ def test_orphan_sweep_exports_before_deleting(tmp_path, monkeypatch) -> None:
     assert rows[0]["id"] == "morning_donut_run"
     assert "morning_donut_run" in rows[0]["func"]
     assert rows[0]["kwargs"] == {"n": 1}
+
+
+class TestSchedulerHeartbeat:
+    """The container healthcheck runs this module, so the path and the
+    staleness window live in one place rather than in a compose string."""
+
+    def test_a_fresh_beacon_is_healthy(self, tmp_path, monkeypatch) -> None:
+        from app.components.scheduler import heartbeat
+
+        beacon = tmp_path / "beat"
+        beacon.touch()
+        monkeypatch.setattr(heartbeat, "HEARTBEAT_FILE", beacon)
+
+        assert heartbeat.is_fresh() is True
+
+    def test_a_stale_beacon_is_not(self, tmp_path, monkeypatch) -> None:
+        import os
+        import time
+
+        from app.components.scheduler import heartbeat
+
+        beacon = tmp_path / "beat"
+        beacon.touch()
+        old = time.time() - heartbeat.MAX_AGE_SECONDS - 1
+        os.utime(beacon, (old, old))
+        monkeypatch.setattr(heartbeat, "HEARTBEAT_FILE", beacon)
+
+        assert heartbeat.is_fresh() is False
+
+    def test_a_missing_beacon_is_not(self, tmp_path, monkeypatch) -> None:
+        from app.components.scheduler import heartbeat
+
+        monkeypatch.setattr(heartbeat, "HEARTBEAT_FILE", tmp_path / "never-written")
+
+        assert heartbeat.is_fresh() is False
+
+    def test_running_the_module_exits_by_freshness(self, tmp_path, monkeypatch) -> None:
+        from app.components.scheduler import heartbeat
+
+        monkeypatch.setattr(heartbeat, "HEARTBEAT_FILE", tmp_path / "never-written")
+        with pytest.raises(SystemExit) as stale:
+            heartbeat.main()
+        assert stale.value.code == 1
+
+        (tmp_path / "never-written").touch()
+        with pytest.raises(SystemExit) as fresh:
+            heartbeat.main()
+        assert fresh.value.code == 0

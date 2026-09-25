@@ -444,3 +444,84 @@ class TestStreamToolFrame:
         frame = next(b for b in body.split("\n\n") if b.startswith("event: tool"))
         data = json.loads(frame.split("data: ", 1)[1])
         assert data["label"] == "ledger(months=3)"
+
+
+class TestChatErrorsReachTheClientCorrectly:
+    """``ProviderError`` and ``ConversationError`` subclass ``AIServiceError``,
+    and the handlers caught the base first, so both surfaced as a 503 "AI
+    service error". The catch-all sent the raw exception text to the client
+    (CodeQL py/stack-trace-exposure)."""
+
+    SECRET = "/srv/app/.env token=sk-live-123"
+
+    def _chat_raising(self, exc: Exception) -> Any:
+        return patch(
+            "app.components.backend.api.ai.service.ai_service.chat",
+            new=AsyncMock(side_effect=exc),
+        )
+
+    def test_a_provider_error_is_a_bad_gateway(self, client: TestClient) -> None:
+        from app.services.ai.service import ProviderError
+
+        with self._chat_raising(ProviderError("upstream timed out")):
+            response = client.post("/api/v1/ai/chat", json={"message": "hi"})
+
+        assert response.status_code == 502
+
+    def test_a_conversation_error_is_a_bad_request(self, client: TestClient) -> None:
+        from app.services.ai.service import ConversationError
+
+        with self._chat_raising(ConversationError("no such conversation")):
+            response = client.post("/api/v1/ai/chat", json={"message": "hi"})
+
+        assert response.status_code == 400
+
+    def test_an_unexpected_error_keeps_its_text_server_side(
+        self, client: TestClient
+    ) -> None:
+        with self._chat_raising(RuntimeError(self.SECRET)):
+            response = client.post("/api/v1/ai/chat", json={"message": "hi"})
+
+        assert response.status_code == 500
+        assert self.SECRET not in response.text
+
+    def _stream_raising(self, exc: Exception) -> Any:
+        async def _raise(*_args: Any, **_kwargs: Any) -> Any:
+            raise exc
+            yield  # an async generator, like the real stream
+
+        return patch(
+            "app.components.backend.api.ai.service.ai_service.stream_chat",
+            new=_raise,
+        )
+
+    def test_the_stream_names_a_provider_error(self, client: TestClient) -> None:
+        from app.services.ai.service import ProviderError
+
+        with self._stream_raising(ProviderError("upstream timed out")):
+            body = client.post(
+                "/api/v1/ai/chat/stream", json={"message": "hi", "user_id": "u"}
+            ).text
+
+        assert "AI provider error" in body
+
+    def test_the_stream_keeps_unexpected_text_server_side(
+        self, client: TestClient
+    ) -> None:
+        with self._stream_raising(RuntimeError(self.SECRET)):
+            body = client.post(
+                "/api/v1/ai/chat/stream", json={"message": "hi", "user_id": "u"}
+            ).text
+
+        assert "event: error" in body
+        assert self.SECRET not in body
+
+    def test_health_keeps_unexpected_text_server_side(self, client: TestClient) -> None:
+        with patch(
+            "app.components.backend.api.ai.service.ai_service.get_service_status",
+            new=AsyncMock(side_effect=RuntimeError(self.SECRET)),
+        ):
+            response = client.get("/api/v1/ai/health")
+
+        assert response.json()["status"] == "error"
+        assert self.SECRET not in response.text

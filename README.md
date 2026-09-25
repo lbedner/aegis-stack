@@ -63,7 +63,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 **Components** are infrastructure pieces (database, workers, scheduler, cache). **Services** are business capabilities (auth, AI, payments, comms).
 
-**Don't worry about what you pick today.** Add anything later with a single command, remove what you outgrow, no rework required.
+**Don't worry about what you pick today.** Add anything later with a single command and remove what you outgrow. Where a change touches files you've edited, your edits are merged in, and anything that can't merge cleanly is marked for you to review.
 
 ### Components
 
@@ -188,7 +188,7 @@ aegis update
 | Starter | Add Later? | Remove Later? | Git Conflicts? |
 |-----------|------------|---------------|----------------|
 | **Others** | Locked at init | Manual deletion | High risk |
-| **Aegis Stack** | One command | One command | Auto-handled |
+| **Aegis Stack** | One command | One command | Merged, conflicts marked for review |
 
 <img src="docs/images/aegis-evolution-demo.gif" alt="Component Evolution Demo" width="480">
 

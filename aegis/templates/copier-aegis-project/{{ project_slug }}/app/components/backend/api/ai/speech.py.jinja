@@ -173,13 +173,14 @@ async def voice_chat(
 
     except HTTPException:
         raise
-    except AIServiceError as e:
-        raise HTTPException(status_code=503, detail=f"AI service error: {e}")
+    # ProviderError before AIServiceError when it subclasses it.
     except ProviderError as e:
         raise HTTPException(status_code=502, detail=f"AI provider error: {e}")
-    except Exception as e:
+    except AIServiceError as e:
+        raise HTTPException(status_code=503, detail=f"AI service error: {e}")
+    except Exception:
         logger.exception("Voice chat failed")
-        raise HTTPException(status_code=500, detail=f"Voice chat failed: {e}")
+        raise HTTPException(status_code=500, detail="Voice chat failed") from None
 
 
 @router.post("/transcribe", response_model=TranscriptionResponse)

@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from app.components.backend.api.ai.service import ai_service
+from app.core.log import logger
 
 router = APIRouter()
 
@@ -32,11 +33,13 @@ async def ai_health() -> dict[str, Any]:
             "validation_errors": validation_errors,
         }
 
-    except Exception as e:
+    except Exception:
+        # Logged, not returned: the text can carry paths, keys or SQL.
+        logger.exception("AI health check failed")
         return {
             "service": "ai",
             "status": "error",
-            "error": str(e),
+            "error": "AI service status unavailable",
         }
 
 

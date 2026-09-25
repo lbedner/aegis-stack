@@ -546,6 +546,18 @@ def _prepend_body(name: str, src: str, body: str) -> str:
     return f"{head}{marker}{body}\n{tail}"
 
 
+def _tables_changed(src: str, tables: list[str]) -> list[str]:
+    """The ``tables`` this revision's ``upgrade()`` actually operates on.
+
+    ``cleared_tables`` exists for the revision that adds a column old rows
+    cannot supply. Every later revision of the service inherited the clear,
+    so adding voice - new tables only - emptied the synced LLM catalog
+    (#1259). A table is cleared only when the revision names it.
+    """
+    upgrade = src.partition("def upgrade() -> None:")[2].partition("def downgrade")[0]
+    return [t for t in tables if f'"{t}"' in upgrade or f"'{t}'" in upgrade]
+
+
 def _place_data_statements(
     project_path: Path, services: list[str], written: list[Path]
 ) -> list[Path]:
@@ -575,8 +587,9 @@ def _place_data_statements(
             # Prepended in reverse: clears end up first, then the data.
             if spec.data_sql or spec.data_body:
                 src = _prepend_body(own[0].name, src, _upgrade_body(spec))
-            if spec.cleared_tables:
-                src = _prepend_to_upgrade(own[0].name, src, spec.cleared_tables)
+            touched = _tables_changed(src, spec.cleared_tables)
+            if touched:
+                src = _prepend_to_upgrade(own[0].name, src, touched)
             own[0].write_text(src)
         elif (spec.data_sql or spec.data_body) and not service_has_migration(
             project_path, service

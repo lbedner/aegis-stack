@@ -20,6 +20,25 @@
 
 ### Fixed
 
+- **Startup no longer stamps past a migration that never ran.** Adoption
+  stamped every pending revision whose objects already existed, so
+  APScheduler's job table (built by the scheduler on first boot) proved
+  the scheduler revision ahead of AI revisions that had not run, and the
+  version moved over their DDL. Adoption now stops at the first revision
+  it cannot prove, and startup upgrades one revision at a time, adopting
+  again after each, so a revision is adopted only once the ones before it
+  exist. Order comes from the revision chain, not string comparison.
+- **Only migrations that touch the LLM catalog empty it.** Every AI
+  revision cleared the catalog tables before its DDL, so any AI change
+  (a new voice table) wiped the synced catalog until the next sync. The
+  clear is now emitted only when a revision's upgrade operates on those
+  tables.
+- **The scheduler survives a failed job-store write.** APScheduler 3.x
+  retries loading due jobs but not the write-back after a run; a failed
+  `update_job` (SQLite "database is locked") escaped before the timer was
+  re-armed, so the scheduler never woke again while its process stayed up
+  and Docker never restarted it. A failed pass now logs and retries after
+  `jobstore_retry_interval`.
 - **The scheduler shares the object store again.** Its own `volumes:` list
   replaced the shared one (YAML merge keys never join lists), so it lost
   `storage-data` and every scheduled job ran against a private, empty

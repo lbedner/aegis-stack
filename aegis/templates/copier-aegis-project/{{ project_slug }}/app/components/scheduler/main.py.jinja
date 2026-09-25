@@ -65,6 +65,7 @@ from app.core.config import settings
 from app.core.log import logger
 from app.services.system import activity
 from .heartbeat import is_heartbeat_event, register_heartbeat_job
+from .resilient import ResilientScheduler
 
 {% if scheduler_backend != "memory" %}
 
@@ -158,7 +159,7 @@ def create_scheduler() -> AsyncIOScheduler:
     # (host sleep, container pause, deploy gap). Assumes jobs are idempotent.
     # coalesce=True collapses multiple missed runs into a single catch-up.
     job_defaults = {"misfire_grace_time": None, "coalesce": True}
-    scheduler = AsyncIOScheduler(
+    scheduler = ResilientScheduler(
         jobstores=jobstores,
         job_defaults=job_defaults,
         timezone=settings.SCHEDULER_TIMEZONE,
@@ -170,7 +171,7 @@ def create_scheduler() -> AsyncIOScheduler:
     # (host sleep, container pause, deploy gap). Assumes jobs are idempotent.
     # coalesce=True collapses multiple missed runs into a single catch-up.
     job_defaults = {"misfire_grace_time": None, "coalesce": True}
-    scheduler = AsyncIOScheduler(
+    scheduler = ResilientScheduler(
         job_defaults=job_defaults,
         timezone=settings.SCHEDULER_TIMEZONE,
     )

@@ -12,6 +12,7 @@ from pathlib import Path
 {% endif %}
 
 from app.components.backend.startup.schema_recovery import (
+    _adoptable,
     _create_missing_tables,
     _existing_tables_by_schema,
     _reflect_schema,
@@ -29,14 +30,16 @@ import_all_models()
 {% if database_engine == "postgres" and needs_migrations %}
 def _check_and_stamp_existing_tables() -> None:
     """
-    Detect when tables for a pending migration already exist.
+    Stamp the pending migrations whose objects already exist, oldest first,
+    stopping at the first that cannot prove it (``_adoptable``).
 
     This handles the case where:
     - Project regenerated with -f flag
     - Docker volume persisted with old tables
     - alembic_version is valid but behind (e.g., at 001 when 002 tables exist)
-
-    Fix: If signature table for a migration exists, stamp it as complete.
+    - another process built a later migration's objects first (APScheduler
+      creates its job table on boot), which must not move the version past
+      an earlier migration that never ran
     """
     try:
         from pathlib import Path
@@ -79,26 +82,33 @@ def _check_and_stamp_existing_tables() -> None:
             facts = _reflect_schema(connection)
             current_rev = MigrationContext.configure(connection).get_current_revision()
 
-            # Oldest-first: stamping moves the version pointer, so the
-            # newest match has to land last.
-            for rev in _revisions_oldest_first(script):
-                if current_rev and rev.revision <= current_rev:
-                    continue
+            chain = [rev.revision for rev in _revisions_oldest_first(script)]
+            adopted = _adoptable(
+                chain,
+                current_rev,
+                lambda revision: bool(signatures.get(revision))
+                and _signature_satisfied(signatures[revision], facts, connection),
+            )
 
-                sig = signatures.get(rev.revision)
-                if not sig:
-                    continue
-
-                if _signature_satisfied(sig, facts, connection):
-                    logger.warning(
-                        f"Migration {rev.revision} is already in the schema. "
-                        "Stamping as complete (Docker volume likely persisted)..."
-                    )
-                    command.stamp(alembic_cfg, rev.revision)
-                    logger.info(f"Stamped migration {rev.revision}")
+        if adopted:
+            logger.warning(
+                f"Migrations {', '.join(adopted)} are already in the schema. "
+                "Stamping as complete (Docker volume likely persisted)..."
+            )
+            command.stamp(alembic_cfg, adopted[-1])
+            logger.info(f"Stamped migration {adopted[-1]}")
 
     except Exception as e:
         logger.warning(f"Existing tables check skipped: {e}")
+
+
+def _current_revision() -> str | None:
+    """The revision ``alembic_version`` records, or None on a fresh database."""
+    from alembic.runtime.migration import MigrationContext
+    from app.core.db import db_session
+
+    with db_session(autocommit=False) as session:
+        return MigrationContext.configure(session.connection()).get_current_revision()
 
 
 def _check_and_fix_stale_revision() -> None:
@@ -174,15 +184,25 @@ def _run_migrations() -> bool:
     try:
         from alembic import command
         from alembic.config import Config
+        from alembic.script import ScriptDirectory
 
         # Check for stale revisions first (handles -f regeneration)
         _check_and_fix_stale_revision()
 
-        # Check for pre-existing tables (handles persisted Docker volumes)
-        _check_and_stamp_existing_tables()
-
         alembic_cfg = Config("alembic/alembic.ini")
-        command.upgrade(alembic_cfg, "head")
+        script = ScriptDirectory.from_config(alembic_cfg)
+        head = script.get_current_head()
+
+        # Adopt what already exists, run ONE migration, and ask again: a
+        # migration whose objects another process built (APScheduler's job
+        # table) is adopted once the ones before it have run, instead of
+        # being replayed into "already exists" or stamped past them.
+        # Bounded by the chain's length: each pass moves at least one step.
+        for _ in range(len(list(script.walk_revisions())) + 1):
+            _check_and_stamp_existing_tables()
+            if _current_revision() == head:
+                break
+            command.upgrade(alembic_cfg, "+1")
 
         # Safety net: the recovery above can stamp the DB to head without
         # running a migration whose table is genuinely missing. Backfill any

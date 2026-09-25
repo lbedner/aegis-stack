@@ -251,9 +251,9 @@ class TestCLIInit:
         )
         # Template now instantiates with ``job_defaults`` + ``timezone`` kwargs
         # across multiple lines, so pin on the open-paren rather than an exact
-        # call form — the intent is "AsyncIOScheduler is constructed here,"
+        # call form — the intent is "the scheduler is constructed here,"
         # not "the constructor takes zero arguments."
-        assert "scheduler = AsyncIOScheduler(" in scheduler_content
+        assert "scheduler = ResilientScheduler(" in scheduler_content
         assert "scheduler.add_job(" in scheduler_content
         assert "def create_scheduler()" in scheduler_content
 

@@ -11,6 +11,7 @@ leave the schema stamped-but-incomplete.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, NamedTuple
 
 from app.core.log import logger
@@ -22,9 +23,8 @@ def _existing_tables_by_schema(inspector: Any) -> set[str]:
     non-default schemas, bare otherwise. Without the qualification a table
     in a component schema (e.g. ``scheduler``) reads as missing.
     """
-    from sqlmodel import SQLModel
-
     from sqlalchemy.exc import SQLAlchemyError
+    from sqlmodel import SQLModel
 
     model_schemas = {table.schema for table in SQLModel.metadata.tables.values()}
     existing: set[str] = set()
@@ -186,3 +186,31 @@ def _revisions_oldest_first(script: Any) -> list[Any]:
     revision, undoing every stamp before it (aegis-stack#1123).
     """
     return list(reversed(list(script.walk_revisions())))
+
+
+def _adoptable(
+    chain: list[str], current: str | None, proven: Callable[[str], bool]
+) -> list[str]:
+    """Pending revisions, oldest first, whose objects already exist - up to
+    the first that cannot prove it.
+
+    ``chain`` is the revision ids oldest-first, and position in it is the
+    order: ids are never compared as strings, which breaks on hash ids or
+    past the zero padding. Stopping at the first unproven revision is the
+    point. Stamping a later one past it moved the version over DDL that
+    never ran - APScheduler builds the scheduler's table on first boot, so
+    its revision proved itself ahead of an AI revision that had not run.
+    """
+    if current is None:
+        start = 0
+    elif current in chain:
+        start = chain.index(current) + 1
+    else:
+        # Unknown to this chain: the stale-revision pass owns that case.
+        return []
+    adopted: list[str] = []
+    for revision in chain[start:]:
+        if not proven(revision):
+            break
+        adopted.append(revision)
+    return adopted

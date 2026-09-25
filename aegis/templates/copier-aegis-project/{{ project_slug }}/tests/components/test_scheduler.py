@@ -176,3 +176,44 @@ class TestSchedulerHeartbeat:
         with pytest.raises(SystemExit) as fresh:
             heartbeat.main()
         assert fresh.value.code == 0
+
+
+def _locked_once_store():  # type: ignore[no-untyped-def]
+    """A job store whose first write-back fails, as SQLite does under a
+    concurrent writer ("database is locked")."""
+    from apscheduler.jobstores.memory import MemoryJobStore
+
+    class Store(MemoryJobStore):
+        failed = False
+
+        def update_job(self, job) -> None:  # type: ignore[no-untyped-def]
+            if not self.failed:
+                self.failed = True
+                raise RuntimeError("database is locked")
+            super().update_job(job)
+
+    return Store()
+
+
+async def _runs_after_a_locked_write(scheduler_cls: type[AsyncIOScheduler]) -> int:
+    import asyncio
+
+    runs: list[int] = []
+    scheduler = scheduler_cls(jobstore_retry_interval=0.05)
+    scheduler.add_jobstore(_locked_once_store(), "default")
+    scheduler.add_job(lambda: runs.append(1), "interval", seconds=0.05)
+    scheduler.start()
+    await asyncio.sleep(0.5)
+    scheduler.shutdown(wait=False)
+    return len(runs)
+
+
+@pytest.mark.asyncio
+async def test_a_locked_write_back_does_not_stop_the_scheduler() -> None:
+    """APScheduler 3.x lets a failed ``update_job`` escape ``wakeup()``
+    before the timer is re-armed: the process lives on, the scheduler
+    never wakes again. The plain class documents that; ours keeps firing."""
+    from app.components.scheduler.resilient import ResilientScheduler
+
+    assert await _runs_after_a_locked_write(AsyncIOScheduler) <= 1
+    assert await _runs_after_a_locked_write(ResilientScheduler) > 2

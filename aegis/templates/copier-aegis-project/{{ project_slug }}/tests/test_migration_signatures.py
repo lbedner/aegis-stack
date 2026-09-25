@@ -313,3 +313,44 @@ class TestRevisionOrder:
 
         order = _recovery()._revisions_oldest_first(FakeScript())
         assert [rev.revision for rev in order] == ["001", "002", "003"]
+
+
+class TestAdoptionStopsAtAGap:
+    """Adoption never stamps past a revision that cannot prove it ran.
+
+    APScheduler builds ``apscheduler_jobs`` on its first boot, before any
+    migration, so a later scheduler revision's signature was satisfied while
+    an earlier AI revision's was not. The pass stamped the later one anyway:
+    the version jumped past the AI revision and ``upgrade head`` never ran
+    its DDL, leaving a schema short of columns that claimed to be current
+    (aegis-stack#1258, found in aegis-steward).
+    """
+
+    ORDER = ["036", "037", "038_ai", "039_ai_agents", "040_scheduler"]
+
+    def _adopt(self, current: str | None, proven: set[str]) -> list[str]:
+        return _recovery()._adoptable(
+            self.ORDER, current, lambda rev: rev in proven
+        )
+
+    def test_a_later_proven_revision_behind_a_gap_is_not_stamped(self) -> None:
+        assert self._adopt("037", {"040_scheduler"}) == []
+
+    def test_the_proven_run_up_to_the_first_gap_is_stamped(self) -> None:
+        proven = {"038_ai", "040_scheduler"}
+
+        assert self._adopt("037", proven) == ["038_ai"]
+
+    def test_everything_proven_is_stamped_in_order(self) -> None:
+        proven = {"038_ai", "039_ai_agents", "040_scheduler"}
+
+        assert self._adopt("037", proven) == ["038_ai", "039_ai_agents", "040_scheduler"]
+
+    def test_an_empty_database_starts_from_the_first_revision(self) -> None:
+        assert self._adopt(None, {"036", "037"}) == ["036", "037"]
+
+    def test_order_comes_from_the_chain_not_from_the_ids(self) -> None:
+        """Hash ids, or ids past their padding, do not sort as strings."""
+        chain = ["9", "10", "a1b2"]
+
+        assert _recovery()._adoptable(chain, "9", lambda rev: True) == ["10", "a1b2"]

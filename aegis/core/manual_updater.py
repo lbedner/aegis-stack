@@ -36,6 +36,7 @@ from .component_files import (
     get_component_cleanup_paths,
     get_component_files,
     get_copier_defaults,
+    get_cross_spec_scope,
     get_shared_scope,
     get_template_path,
 )
@@ -557,7 +558,7 @@ class ManualUpdater:
                 shared_files_updated,
                 shared_files_backed_up,
                 shared_files_need_manual_merge,
-            ) = self._regenerate_shared_files(updated_answers)
+            ) = self._regenerate_shared_files(updated_answers, component)
 
             # Cross-spec: the shared cards/__init__.py just regenerated to
             # import ServicesCard if a service is now present — make sure the
@@ -776,7 +777,7 @@ class ManualUpdater:
                 shared_files_updated,
                 shared_files_backed_up,
                 shared_files_need_manual_merge,
-            ) = self._regenerate_shared_files(updated_answers)
+            ) = self._regenerate_shared_files(updated_answers, component)
 
             # Update .copier-answers.yml
             self._save_answers(updated_answers)
@@ -938,7 +939,7 @@ class ManualUpdater:
         spec.post_render(self.project_path, updated_answers)
 
     def _regenerate_shared_files(
-        self, updated_answers: dict[str, Any]
+        self, updated_answers: dict[str, Any], operated: str | None = None
     ) -> tuple[list[str], list[str], list[str]]:
         """
         Regenerate shared template files with updated answers.
@@ -952,8 +953,15 @@ class ManualUpdater:
         diffing, rather than from a hand-maintained file list — see
         ``aegis.core.render_diff`` for the full decision table.
 
+        Other specs' owned files that are on disk join the scope too
+        (``get_cross_spec_scope``): a file finance owns but that branches on
+        ``include_auth`` is re-rendered when auth is added (#1217).
+
         Args:
             updated_answers: Updated Copier answers with component changes
+            operated: The spec being added or removed; its own files are
+                copied or deleted by the caller, not re-rendered here.
+                ``None`` leaves other specs' files out of scope.
 
         Returns:
             Tuple of (updated_files, backed_up_files, need_manual_merge_files)
@@ -975,6 +983,13 @@ class ManualUpdater:
             for p in self._shared_scope
             if p not in OWNED_BUT_SHARED_PATHS or (self.project_path / p).exists()
         ]
+        if operated is not None:
+            scope += get_cross_spec_scope(
+                self._render_diff_engine.discover_paths(),
+                lambda rel: (self.project_path / rel).exists(),
+                operated,
+            )
+            scope = sorted(set(scope))
 
         engine = self._render_diff_engine
         plans = engine.plan(self.answers, updated_answers, paths=scope)
@@ -1445,7 +1460,7 @@ class ManualUpdater:
                 shared_updated,
                 shared_backed_up,
                 shared_manual_merge,
-            ) = self._regenerate_shared_files(updated_answers)
+            ) = self._regenerate_shared_files(updated_answers, spec.name)
 
             # Persist. If the disk cleanup below fails, the answers still
             # reflect reality and a re-run picks up where we left off.
@@ -1560,7 +1575,7 @@ class ManualUpdater:
                 shared_updated,
                 shared_backed_up,
                 shared_manual_merge,
-            ) = self._regenerate_shared_files(updated_answers)
+            ) = self._regenerate_shared_files(updated_answers, spec.name)
             files_modified.extend(shared_updated)
 
             # Persist once regen has its pre-operation baseline. Still

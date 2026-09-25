@@ -71,7 +71,7 @@ class TestAddRemovePluginRoundTrip:
         monkeypatch.setattr(
             ManualUpdater,
             "_regenerate_shared_files",
-            lambda self, ans: ([], [], []),
+            lambda self, ans, *_rest: ([], [], []),
         )
 
         updater = ManualUpdater(fake_project)
@@ -95,7 +95,7 @@ class TestAddRemovePluginRoundTrip:
         monkeypatch.setattr(
             ManualUpdater,
             "_regenerate_shared_files",
-            lambda self, ans: ([], [], []),
+            lambda self, ans, *_rest: ([], [], []),
         )
 
         updater = ManualUpdater(fake_project)
@@ -129,7 +129,7 @@ class TestAddRemovePluginRoundTrip:
         monkeypatch.setattr(
             ManualUpdater,
             "_regenerate_shared_files",
-            lambda self, ans: ([], [], []),
+            lambda self, ans, *_rest: ([], [], []),
         )
 
         updater = ManualUpdater(fake_project)
@@ -151,7 +151,7 @@ class TestAddRemovePluginRoundTrip:
         monkeypatch.setattr(
             ManualUpdater,
             "_regenerate_shared_files",
-            lambda self, ans: ([], [], []),
+            lambda self, ans, *_rest: ([], [], []),
         )
 
         updater = ManualUpdater(fake_project)
@@ -391,7 +391,7 @@ class TestAddPluginRunsMigrationTail:
         monkeypatch.setattr(
             ManualUpdater,
             "_regenerate_shared_files",
-            lambda self, ans: ([], [], []),
+            lambda self, ans, *_rest: ([], [], []),
         )
 
     def test_plugin_with_migrations_bootstraps_generates_and_runs(
@@ -485,7 +485,7 @@ class TestAddPluginEnsuresServicesCard:
         monkeypatch.setattr(
             ManualUpdater,
             "_regenerate_shared_files",
-            lambda self, ans: ([], [], []),
+            lambda self, ans, *_rest: ([], [], []),
         )
         card = fake_project / SERVICES_CARD_FILE
         assert not card.exists()
@@ -509,7 +509,7 @@ class TestAddPluginEnsuresServicesCard:
         monkeypatch.setattr(
             ManualUpdater,
             "_regenerate_shared_files",
-            lambda self, ans: ([], [], []),
+            lambda self, ans, *_rest: ([], [], []),
         )
         card = fake_project / SERVICES_CARD_FILE
         card.parent.mkdir(parents=True, exist_ok=True)

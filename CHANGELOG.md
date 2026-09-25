@@ -20,6 +20,29 @@
 
 ### Fixed
 
+- **A failed `add-service` leaves the project as it found it.** A failure
+  after the first file was written - migration generation, say - left the
+  service's code in the tree, the answers file saying it was enabled, and
+  no schema: the project would not start, and a retry stopped at "already
+  enabled". The command now requires a clean git tree, marks a backup
+  point, and resets to it on any failure, so it can simply be run again.
+- **Adding a service re-renders what other installed services branch on
+  it.** A service's files were copied once and never rendered again, so a
+  template that depends on another service's flag kept its first render:
+  `add-service auth` left the scheduler, worker, blog, comms, insights, AI
+  and htmx routers without the auth guards they render once auth exists,
+  and finance and payment models without their owner keys. Those files now
+  go through the same three-way merge as shared files, and only the ones
+  whose output changes are touched.
+- **Adding auth to an existing finance project creates the owner keys.**
+  Generated together, finance's owner columns reference `user`; added
+  later, none did, and nothing said so. Beyond the models not re-rendering,
+  the generator dropped a new key whose column an index already covered,
+  and routed keys on existing tables to whichever revision ran first. The
+  keys now land in the finance/auth link revision, after the sentinel row
+  they point at, so Postgres accepts rows owned by it; both paths produce
+  the same schema.
+
 - **A closed dashboard tab stops polling within a minute, not an hour.**
   Page loops check whether their tab is still open, and the check read
   Flet's connection object, which Flet keeps through a disconnect and drops

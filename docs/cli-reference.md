@@ -394,8 +394,13 @@ my-project ai providers            # See all available providers
 **Important Notes:**
 
 - Only works with Copier-generated projects (default since v0.2.0)
-- Requires git repository (for change tracking)
+- Requires a git repository with a clean working tree: commit or stash first
+- A failed add is undone: the project is reset to where it started, so the
+  command can simply be run again
 - Services require their dependencies - they will be auto-added
+- Files your other services own are re-rendered when they branch on the one
+  you add (for example, routers gain their auth guards when auth arrives);
+  your own edits are kept through a three-way merge
 - Review changes with `git diff` before committing
 
 See **Generated Project CLI** section below for full command reference.

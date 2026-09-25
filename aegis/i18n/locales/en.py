@@ -505,6 +505,11 @@ MESSAGES: dict[str, str] = {
     ),
     "add_service.success": "Services added successfully!",
     "add_service.failed": "Failed to add services: {error}",
+    "add_service.commit_or_stash": (
+        "Commit or stash your changes before running 'aegis add-service': "
+        "a failed add is undone by resetting to the last commit."
+    ),
+    "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "Auth Service Setup:",
     "add_service.auth_create_users": "   1. Create test users: {cmd}",
     "add_service.auth_view_routes": "   2. View auth routes: {url}",

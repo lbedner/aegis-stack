@@ -79,3 +79,32 @@ class TestAddServiceAuthRegeneratesSharedFrontendFiles:
         assert "from .auth_sessions_tab import AuthSessionsTab" in auth_modal, (
             "auth_modal.py should import AuthSessionsTab"
         )
+
+
+class TestAddServiceAuthGuardsOtherSpecsRouters:
+    """Files other specs own that branch on auth are re-rendered (#1217).
+
+    The scheduler owns its API router, and the router renders an admin
+    guard once auth exists. Owned files were copied once and never
+    rendered again, so adding auth later left "Run Now" and the job list
+    open to anyone - the same gap that left finance without its owner keys.
+    """
+
+    @pytest.mark.slow
+    def test_the_scheduler_api_is_guarded_after_auth_arrives(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        # A persistent scheduler: the job API only ships with one.
+        project_path = project_factory("base_with_scheduler_sqlite")
+        router = project_path / "app/components/backend/api/scheduler.py"
+        assert "_require_admin" not in router.read_text(), (
+            "fixture's scheduler router should render without auth"
+        )
+
+        result = run_aegis_command(
+            "add-service", "auth", "--project-path", str(project_path), "--yes"
+        )
+        assert result.returncode == 0, f"add-service failed: {result.stderr}"
+
+        body = router.read_text()
+        assert "dependencies=[Depends(_require_admin)]" in body, body[:2000]

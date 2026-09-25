@@ -388,6 +388,11 @@ MESSAGES: dict[str, str] = {
     "add_service.migration_failed": ("提示：自动迁移未成功，请手动执行 make migrate"),
     "add_service.success": "服务已添加成功",
     "add_service.failed": "服务添加失败：{error}",
+    "add_service.commit_or_stash": (
+        "Commit or stash your changes before running 'aegis add-service': "
+        "a failed add is undone by resetting to the last commit."
+    ),
+    "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "认证服务配置：",
     "add_service.auth_create_users": "   1. 创建测试用户：{cmd}",
     "add_service.auth_view_routes": "   2. 查看认证路由：{url}",

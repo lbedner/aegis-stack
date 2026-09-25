@@ -465,6 +465,11 @@ MESSAGES: dict[str, str] = {
     ),
     "add_service.success": "서비스 추가 완료!",
     "add_service.failed": "서비스 추가 실패: {error}",
+    "add_service.commit_or_stash": (
+        "Commit or stash your changes before running 'aegis add-service': "
+        "a failed add is undone by resetting to the last commit."
+    ),
+    "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "Auth 서비스 설정:",
     "add_service.auth_create_users": "   1. 테스트 사용자 생성: {cmd}",
     "add_service.auth_view_routes": "   2. 인증 라우트 확인: {url}",

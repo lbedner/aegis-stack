@@ -28,6 +28,12 @@ from ..core.component_utils import (
 )
 from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
+from ..core.copier_updater import (
+    cleanup_backup_tag,
+    create_backup_point,
+    rollback_to_backup,
+    validate_clean_git_tree,
+)
 from ..core.manual_updater import ManualUpdater
 from ..core.migration_generator import (
     MIGRATION_SPECS,
@@ -166,6 +172,13 @@ def add_service_command(
 
     # Verify project is in a git repository (required for Copier updates)
     validate_git_repository(target_path)
+    # A failed add is undone by resetting to a backup point, which is only
+    # safe when there is nothing uncommitted for the reset to take.
+    is_clean, git_message = validate_clean_git_tree(target_path)
+    if not is_clean:
+        brand.error(git_message, err=True)
+        typer.echo(f"   {t('add_service.commit_or_stash')}", err=True)
+        raise typer.Exit(1)
 
     # Parse services (respecting bracket syntax like ai[langchain,sqlite])
     assert services is not None  # Already validated by check above
@@ -352,7 +365,11 @@ def add_service_command(
         include_key = AnswerKeys.include_key(base_component)
         update_data[include_key] = True
 
-    # Add services using ManualUpdater
+    # Add services using ManualUpdater. Everything from here writes, so a
+    # failure anywhere resets to this point: files, the answers file and
+    # conflict markers all go back, and the add can simply be run again.
+    backup_tag = create_backup_point(target_path)
+    succeeded = False
     try:
         updater = ManualUpdater(target_path)
 
@@ -624,6 +641,13 @@ def add_service_command(
             cmd = typer.style(f"{project_slug} ai chat", bold=True)
             typer.echo(t("add_service.ai_test_cli", cmd=cmd))
 
+        succeeded = True
     except Exception as e:
         brand.error(f"\n{t('add_service.failed', error=e)}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
+    finally:
+        if backup_tag and not succeeded:
+            _, message = rollback_to_backup(target_path, backup_tag)
+            typer.echo(f"   {t('add_service.rolled_back', detail=message)}", err=True)
+        if backup_tag:
+            cleanup_backup_tag(target_path, backup_tag)

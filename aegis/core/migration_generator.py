@@ -531,14 +531,19 @@ def _prepend_to_upgrade(name: str, src: str, tables: list[str]) -> str:
     CREATES it on a fresh project: there the clear runs against nothing and
     must not be an error.
     """
+    clears = "\n".join(_CLEAR_TABLE.format(table=t) for t in tables)
+    return _prepend_body(name, src, clears)
+
+
+def _prepend_body(name: str, src: str, body: str) -> str:
+    """Put ``body`` first in ``upgrade()``, ahead of the generated DDL."""
     marker = "def upgrade() -> None:\n"
     if marker not in src:
         raise MigrationGenerationError(
             f"{name}: no upgrade() to anchor data statements"
         )
     head, _, tail = src.partition(marker)
-    clears = "\n".join(_CLEAR_TABLE.format(table=t) for t in tables)
-    return f"{head}{marker}{clears}\n{tail}"
+    return f"{head}{marker}{body}\n{tail}"
 
 
 def _place_data_statements(
@@ -547,10 +552,12 @@ def _place_data_statements(
     """Give every service's ``data_sql`` a revision to run in.
 
     The models decide the DDL; ``data_sql`` is the one thing they cannot
-    describe (a row a new FK points at, #1110). It rides in the revision
-    the run just wrote for its service, or - when the models produced
-    nothing for that service, as ``finance_auth_link`` does now that its
-    FKs are inline in ``finance`` - in a data-only revision written here.
+    describe (a row a new FK points at, #1110). It runs FIRST in the
+    revision the run just wrote for its service - the row has to exist
+    before the key that points at it, which Postgres checks on ``ADD
+    CONSTRAINT`` (#1217) - or, when the models produced nothing for that
+    service (``finance_auth_link`` on a fresh project, where the keys are
+    inline in ``finance``), in a data-only revision written here.
     Each statement must be idempotent: ``aegis update`` can deliver a
     revision to a database that already holds the row.
 
@@ -565,15 +572,11 @@ def _place_data_statements(
         own = [p for p in written if p.name.endswith(f"_{service}.py")]
         if own:
             src = own[0].read_text()
+            # Prepended in reverse: clears end up first, then the data.
+            if spec.data_sql or spec.data_body:
+                src = _prepend_body(own[0].name, src, _upgrade_body(spec))
             if spec.cleared_tables:
                 src = _prepend_to_upgrade(own[0].name, src, spec.cleared_tables)
-            if spec.data_sql or spec.data_body:
-                head, sep, tail = src.rpartition("\n\n\ndef downgrade")
-                if not sep:
-                    raise MigrationGenerationError(
-                        f"{own[0].name}: no downgrade() to anchor data statements"
-                    )
-                src = f"{head}\n{_upgrade_body(spec)}{sep}{tail}"
             own[0].write_text(src)
         elif (spec.data_sql or spec.data_body) and not service_has_migration(
             project_path, service

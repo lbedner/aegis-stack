@@ -62,7 +62,7 @@ aegis remove scheduler --project-path ./my-api
 | Starter | Add Later? | Remove Later? | Git Conflicts? |
 |-----------|------------|---------------|----------------|
 | **Others** | ❌ Locked at init | ❌ Manual deletion | ⚠️ High risk |
-| **Aegis Stack** | ✅ One command | ✅ One command | ✅ Auto-handled |
+| **Aegis Stack** | ✅ One command | ✅ One command | ✅ Merged, conflicts marked for review |
 
 Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](evolving-your-stack.md)** for the complete guide.
 

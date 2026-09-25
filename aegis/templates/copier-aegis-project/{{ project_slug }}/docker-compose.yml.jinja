@@ -21,6 +21,9 @@ x-app: &app
     # merges volume lists across override files by target path, so the
     # dev overlay's code mount adds to this rather than replacing it.
     - storage-data:/data/storage
+{%- if include_scheduler and include_database %}
+    - backup-data:/var/backups/app
+{%- endif %}
   labels:
     logging: "aegis-stack"
 
@@ -130,7 +133,7 @@ services:
     command:
       - scheduler
     healthcheck:
-      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/aegis-scheduler-heartbeat').st_mtime<60 else 1)"]
+      test: ["CMD", "python", "-m", "app.components.scheduler.heartbeat"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -160,12 +163,6 @@ services:
       - DATABASE_BACKUP_DIR=/var/backups/app
 {%- endif %}
     restart: unless-stopped
-{%- if include_database %}
-    volumes:
-      # Named, so the dumps survive container recreation, stay out of the
-      # image build context, and are untouched by the deploy's file rsync.
-      - backup-data:/var/backups/app
-{%- endif %}
     deploy:
       resources:
         limits:

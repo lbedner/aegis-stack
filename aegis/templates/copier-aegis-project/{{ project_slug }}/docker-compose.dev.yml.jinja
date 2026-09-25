@@ -127,6 +127,8 @@ services:
       - .:/code
     command:
       - build-watch
+    healthcheck:
+      disable: true
     profiles:
       - dev
 {%- endif %}

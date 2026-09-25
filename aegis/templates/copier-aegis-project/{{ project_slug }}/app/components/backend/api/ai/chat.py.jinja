@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 from app.services.ai.domains.chat.attachments import ChatAttachment
 from app.core.chat_transcript import tool_label
+from app.core.log import logger
 from app.services.ai.service import (
     AIServiceError,
     ConversationError,
@@ -97,14 +98,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
             response_time_ms=response_time,
         )
 
-    except AIServiceError as e:
-        raise HTTPException(status_code=503, detail=f"AI service error: {e}")
+    # Subclasses before AIServiceError, or their branches never run.
     except ProviderError as e:
         raise HTTPException(status_code=502, detail=f"AI provider error: {e}")
     except ConversationError as e:
         raise HTTPException(status_code=400, detail=f"Conversation error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+    except AIServiceError as e:
+        raise HTTPException(status_code=503, detail=f"AI service error: {e}")
+    except Exception:
+        # Logged, not returned: the text can carry paths, keys or SQL.
+        logger.exception("Chat request failed")
+        raise HTTPException(status_code=500, detail="Unexpected error") from None
 
 
 @router.post("/chat/stream")
@@ -182,17 +186,20 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             complete_data = {"status": "completed", "message": "Stream finished"}
             yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
 
-        except AIServiceError as e:
-            error_data = {"error": "AI service error", "detail": str(e)}
-            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        # Subclasses before AIServiceError, or their branches never run.
         except ProviderError as e:
             error_data = {"error": "AI provider error", "detail": str(e)}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
         except ConversationError as e:
             error_data = {"error": "Conversation error", "detail": str(e)}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
-        except Exception as e:
-            error_data = {"error": "Unexpected error", "detail": str(e)}
+        except AIServiceError as e:
+            error_data = {"error": "AI service error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        except Exception:
+            # Logged, not sent: the text can carry paths, keys or SQL.
+            logger.exception("Chat stream failed")
+            error_data = {"error": "Unexpected error"}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
 
     # Create streaming response with proper SSE headers

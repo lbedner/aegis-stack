@@ -20,6 +20,25 @@
 
 ### Fixed
 
+- **The scheduler shares the object store again.** Its own `volumes:` list
+  replaced the shared one (YAML merge keys never join lists), so it lost
+  `storage-data` and every scheduled job ran against a private, empty
+  `/data/storage`. The backup mount moved onto the shared block, and a test
+  holds every app container to the store and every mounted volume to a
+  declaration.
+- **The scheduler healthcheck runs the heartbeat module.** The beacon path
+  and the 60-second window lived in the module and again in an inline
+  compose string; `python -m app.components.scheduler.heartbeat` now
+  decides. The dev asset watcher no longer inherits an HTTP healthcheck for
+  a server it does not run, so it stops reading unhealthy.
+- **AI chat errors reach the client as what they are, and no further.**
+  `ProviderError` and `ConversationError` subclass `AIServiceError`, and the
+  handlers caught the base first, so both surfaced as a 503. The chat
+  endpoint, its stream, voice chat and `/ai/health` also sent unexpected
+  exceptions' text to the client; it is logged instead. The `ai record`
+  command creates its speech file rather than naming one with
+  `tempfile.mktemp`.
+
 - **A failed `add-service` leaves the project as it found it.** A failure
   after the first file was written - migration generation, say - left the
   service's code in the tree, the answers file saying it was enabled, and

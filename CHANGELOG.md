@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-09-25
+
 ### Changed
 
 - **The worker modal's live feed connects when the modal opens.** Every

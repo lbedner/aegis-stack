@@ -34,66 +34,13 @@ from alembic import command
 from alembic.config import Config
 from alembic.operations import ops
 from alembic.script import ScriptDirectory
+from app.cli.migrate_owners import claimed_by, includes_object
 from app.core.model_registry import import_all_models
 
 import_all_models()
 
 ALEMBIC_INI = Path("alembic/alembic.ini")
 VERSIONS = Path("alembic/versions")
-
-
-# ---------------------------------------------------------------------------
-# Ownership: which service a table belongs to, from where its model lives
-# ---------------------------------------------------------------------------
-
-
-def _owners() -> dict[str, list[str]]:
-    """Map each table key to the service names that may claim it.
-
-    ``app.services.ai.models.agents.tool`` offers ``ai_agents`` then ``ai``;
-    ``app.models.org`` offers ``auth_org`` then ``auth``. The first name in
-    the requested service list wins, so a stack adding ``ai[agents]`` later
-    gets its own ``NNN_ai_agents.py`` while a fresh init folds it into ``ai``.
-    """
-    owners: dict[str, list[str]] = {}
-    for mapper in SQLModel._sa_registry.mappers:
-        parts = mapper.class_.__module__.split(".")
-        if parts[:2] == ["app", "models"]:
-            base, sub = "auth", parts[2:3]
-        elif parts[:2] == ["app", "services"] and "models" in parts:
-            base = parts[2]
-            sub = parts[parts.index("models") + 1 : parts.index("models") + 2]
-        else:
-            continue
-        names = [f"{base}_{sub[0]}", base] if sub else [base]
-        owners[mapper.persist_selectable.key] = names
-    return owners
-
-
-def _sweep_target(all_services: list[str]) -> str:
-    """Which revision of the run takes the tables nobody claims.
-
-    Core tables under ``app/models/`` (``conversation.py``, shipped with
-    ai) belong to no service package. Unclaimed must never mean uncreated,
-    or a foreign key to them fails, so one revision sweeps them up: the
-    first service that has no revision yet, which on ``aegis add`` is the
-    service being added rather than one that shipped long ago.
-    """
-    return next(
-        (s for s in all_services if not any(VERSIONS.glob(f"*_{s}.py"))),
-        all_services[0],
-    )
-
-
-def _claimed_by(service: str, all_services: list[str]) -> set[str]:
-    """Tables ``service`` writes when the run covers ``all_services``."""
-    sweep = _sweep_target(all_services)
-    claimed = set()
-    for table, names in _owners().items():
-        winner = next((n for n in names if n in all_services), sweep)
-        if winner == service:
-            claimed.add(table)
-    return claimed
 
 
 # ---------------------------------------------------------------------------
@@ -205,17 +152,28 @@ def _next_rev_id() -> str:
     return f"{max(existing, default=0) + 1:03d}"
 
 
-def _reflected_column_sets(conn: Connection, table: str, schema: str | None) -> set[frozenset[str]]:
+def _reflected_column_sets(
+    conn: Connection, table: str, schema: str | None, *, foreign_keys: bool = False
+) -> set[frozenset[str]]:
+    """Column sets the database already covers, for ONE kind of object.
+
+    Foreign keys are compared with foreign keys, and indexes with indexes
+    and unique constraints. Pooled, an index on ``owner_user_id`` read as
+    the foreign key auth adds on that column, and the key was dropped.
+    """
     insp = inspect(conn)
     if not insp.has_table(table, schema=schema):
         return set()
+    if foreign_keys:
+        return {
+            frozenset(fk["constrained_columns"])
+            for fk in insp.get_foreign_keys(table, schema=schema)
+        }
     sets: set[frozenset[str]] = set()
     for ix in insp.get_indexes(table, schema=schema):
         sets.add(frozenset(c for c in ix["column_names"] if c))
     for uq in insp.get_unique_constraints(table, schema=schema):
         sets.add(frozenset(uq["column_names"]))
-    for fk in insp.get_foreign_keys(table, schema=schema):
-        sets.add(frozenset(fk["constrained_columns"]))
     return sets
 
 
@@ -314,7 +272,10 @@ def _additive(op: ops.MigrateOperation, conn: Connection) -> bool:
         # would, rather than losing the constraint on every SQLite project.
         if getattr(op, "constraint_name", None) is None:
             op.constraint_name = _conventional_name(op, table.name, cols)
-        return cols not in _reflected_column_sets(conn, table.name, table.schema)
+        is_fk = isinstance(op, ops.CreateForeignKeyOp)
+        return cols not in _reflected_column_sets(
+            conn, table.name, table.schema, foreign_keys=is_fk
+        )
     return False
 
 
@@ -418,13 +379,12 @@ def generate(services: list[str], scratch_dir: Path | None = None) -> list[Path]
     written: list[Path] = []
     with _connection(None, scratch_dir) as conn:
         for service in services:
-            claimed = _claimed_by(service, services)
+            claimed = claimed_by(service, services, VERSIONS)
             signature: dict[str, tuple[str, ...] | None] = {}
             cfg = _config(
                 conn,
-                include_object=lambda obj, name, type_, reflected, _cmp, claimed=claimed: (
-                    not reflected
-                    and (obj if type_ == "table" else obj.table).key in claimed
+                include_object=lambda obj, name, type_, reflected, _cmp, service=service, claimed=claimed: (
+                    includes_object(obj, type_, reflected, service, services, claimed)
                 ),
                 process_revision_directives=_prune(conn, signature),
                 compare_type=False,

@@ -1,0 +1,128 @@
+"""Which revision writes which table, and which writes a table's keys.
+
+``migrate_gen`` writes one revision per service. A table belongs to the
+service whose package holds its model; a key to ``user`` on a table whose
+service has an ``<service>_auth_link`` in the run belongs to that link.
+"""
+{% if include_database %}
+
+from pathlib import Path
+from typing import Any
+
+from sqlmodel import SQLModel
+
+
+# ---------------------------------------------------------------------------
+# Ownership: which service a table belongs to, from where its model lives
+# ---------------------------------------------------------------------------
+
+
+def _owners() -> dict[str, list[str]]:
+    """Map each table key to the service names that may claim it.
+
+    ``app.services.ai.models.agents.tool`` offers ``ai_agents`` then ``ai``;
+    ``app.models.org`` offers ``auth_org`` then ``auth``. The first name in
+    the requested service list wins, so a stack adding ``ai[agents]`` later
+    gets its own ``NNN_ai_agents.py`` while a fresh init folds it into ``ai``.
+    """
+    owners: dict[str, list[str]] = {}
+    for mapper in SQLModel._sa_registry.mappers:
+        parts = mapper.class_.__module__.split(".")
+        if parts[:2] == ["app", "models"]:
+            base, sub = "auth", parts[2:3]
+        elif parts[:2] == ["app", "services"] and "models" in parts:
+            base = parts[2]
+            sub = parts[parts.index("models") + 1 : parts.index("models") + 2]
+        else:
+            continue
+        names = [f"{base}_{sub[0]}", base] if sub else [base]
+        owners[mapper.persist_selectable.key] = names
+    return owners
+
+
+def _sweep_target(all_services: list[str], versions: Path) -> str:
+    """Which revision of the run takes the tables nobody claims.
+
+    Core tables under ``app/models/`` (``conversation.py``, shipped with
+    ai) belong to no service package. Unclaimed must never mean uncreated,
+    or a foreign key to them fails, so one revision sweeps them up: the
+    first service that has no revision yet, which on ``aegis add`` is the
+    service being added rather than one that shipped long ago.
+    """
+    return next(
+        (s for s in all_services if not any(versions.glob(f"*_{s}.py"))),
+        all_services[0],
+    )
+
+
+def claimed_by(service: str, all_services: list[str], versions: Path) -> set[str]:
+    """Tables ``service`` writes when the run covers ``all_services``."""
+    sweep = _sweep_target(all_services, versions)
+    claimed = set()
+    for table, names in _owners().items():
+        winner = next((n for n in names if n in all_services), sweep)
+        if winner == service:
+            claimed.add(table)
+    return claimed
+
+
+def _link_for(table: str, all_services: list[str]) -> str | None:
+    """The ``<service>_auth_link`` revision that owns keys to ``user`` on
+    ``table``, when the run has one.
+
+    Created together with auth, a service's tables carry their owner keys
+    inline and the link writes nothing. Created BEFORE auth, the tables
+    exist without them, and the keys are a change to existing tables that
+    nobody claimed - the service's own revision was written long ago - so
+    they never arrived (#1217). The link runs after auth and after the
+    sentinel row those keys point at, which is where they belong.
+    """
+    names = _owners().get(table)
+    if not names:
+        return None
+    link = f"{names[-1]}_auth_link"
+    return link if link in all_services else None
+
+
+def includes_object(
+    obj: Any,
+    type_: str,
+    reflected: bool,
+    service: str,
+    all_services: list[str],
+    claimed: set[str],
+) -> bool:
+    """Whether ``service``'s revision (which claims ``claimed``) writes this.
+
+    A link revision also VISITS its service's tables: alembic only looks at
+    a table's keys when the table itself is included, so without this the
+    link never saw them. Only the keys to ``user`` pass; the columns and
+    indexes of those tables still belong to the service's own revision.
+    """
+    if reflected:
+        return False
+    table = obj if type_ == "table" else obj.table
+    link = _link_for(table.key, all_services)
+    if type_ == "foreign_key_constraint" and obj.referred_table.name == "user":
+        return service == _owner_key_home(table.key, link, all_services)
+    if type_ == "table" and link == service:
+        return True
+    return table.key in claimed
+
+
+def _owner_key_home(table: str, link: str | None, all_services: list[str]) -> str | None:
+    """The revision that writes a key to ``user`` on an existing table.
+
+    Its link when the run has one, else the table's own service - never the
+    sweep target. ``add-service`` generates auth's revision alone first, and
+    a sweep there put every finance owner key into auth's revision, ahead of
+    the sentinel row they point at. Nobody taking the keys in that run is
+    right: the run with the link picks them up.
+    """
+    if link is not None:
+        return link
+    names = _owners().get(table) or []
+    return next((name for name in names if name in all_services), None)
+{% else %}
+# No database component: no tables to own.
+{% endif %}

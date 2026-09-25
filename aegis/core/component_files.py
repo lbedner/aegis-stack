@@ -6,7 +6,7 @@ components by parsing the Copier template's exclusion rules.
 """
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -516,3 +516,24 @@ def get_shared_scope(all_paths: Iterable[str]) -> list[str]:
     scope = (candidates - owned) | (candidates & OWNED_BUT_SHARED_PATHS)
     scope -= _ENGINE_UNSAFE_PATHS
     return sorted(scope)
+
+
+def get_cross_spec_scope(
+    all_paths: Iterable[str], exists: Callable[[str], bool], operated: str
+) -> list[str]:
+    """Other specs' owned files that are on disk, for an add/remove of ``operated``.
+
+    A spec's files are copied once, when it is added, and never rendered
+    again - so a template that branches on ANOTHER spec's flag kept its
+    first render: ``add-service auth`` left ``finance/models/base.py`` with
+    no owner keys (#1217) and several routers without their auth guards.
+    Handing these to the render-diff engine is safe because it renders each
+    one before and after the operation and touches only those whose output
+    changes; the rest are no-ops. ``exists`` keeps existence manifest-owned:
+    a file not on disk is never created by an unrelated operation.
+    """
+    own = set(get_component_files(operated, full=True))
+    owned = get_all_owned_paths() - own
+    return sorted(
+        p for p in set(all_paths) & owned if p not in _ENGINE_UNSAFE_PATHS and exists(p)
+    )

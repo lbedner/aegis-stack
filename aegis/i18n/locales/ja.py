@@ -480,6 +480,11 @@ MESSAGES: dict[str, str] = {
     ),
     "add_service.success": "サービス追加完了！",
     "add_service.failed": "サービス追加失敗：{error}",
+    "add_service.commit_or_stash": (
+        "Commit or stash your changes before running 'aegis add-service': "
+        "a failed add is undone by resetting to the last commit."
+    ),
+    "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "Auth サービスのセットアップ：",
     "add_service.auth_create_users": "   1. テストユーザーを作成：{cmd}",
     "add_service.auth_view_routes": "   2. 認証ルートを確認：{url}",

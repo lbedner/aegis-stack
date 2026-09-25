@@ -172,8 +172,8 @@ class TestAddServiceFrontendFiles:
         assert not (cards_dir / "database_card.py").exists(), (
             "Base project should not have database_card.py"
         )
-        assert not (modals_dir / "database_modal.py").exists(), (
-            "Base project should not have database_modal.py"
+        assert not (modals_dir / "database_modal").exists(), (
+            "Base project should not have the database_modal package"
         )
 
         # Add auth service (which auto-adds database)
@@ -190,8 +190,8 @@ class TestAddServiceFrontendFiles:
         assert (cards_dir / "database_card.py").exists(), (
             "database_card.py should exist after add-service auth"
         )
-        assert (modals_dir / "database_modal.py").exists(), (
-            "database_modal.py should exist after add-service auth"
+        assert (modals_dir / "database_modal" / "__init__.py").exists(), (
+            "the database_modal package should exist after add-service auth"
         )
 
         # Verify auth frontend files were added
@@ -505,14 +505,11 @@ class TestAddAuthOntoFinance:
         sentinel_at = link.find("standalone@finance.local")
         assert sentinel_at != -1, link
 
-        # Where a revision both writes the sentinel and adds the key that
-        # needs it, the row has to come first. It does not arise on the
-        # add path today - the owner FKs are inline in the finance
-        # revision, which on this path was written before auth existed,
-        # so they never arrive at all (see #DRIFT below) - but the order
-        # is the invariant, and SQLite would not show it either way: it
-        # adds a key by rebuilding the table and does not re-validate the
-        # rows it copies, while Postgres validates on ADD CONSTRAINT.
+        # The link revision both writes the sentinel and adds the keys that
+        # need it (#1217), so the row has to come first. SQLite would not
+        # show a wrong order: it adds a key by rebuilding the table and
+        # does not re-validate the rows it copies, while Postgres validates
+        # on ADD CONSTRAINT.
         fk_at = min(
             (
                 link.find(marker)
@@ -521,6 +518,7 @@ class TestAddAuthOntoFinance:
             ),
             default=-1,
         )
+        assert fk_at != -1, "the link revision carries no owner keys:\n" + link
         if fk_at != -1:
             assert sentinel_at < fk_at, (
                 "the sentinel row is written after the FK that needs it; "
@@ -538,3 +536,33 @@ class TestAddAuthOntoFinance:
         # rows in it.
         db.execute("PRAGMA foreign_keys=ON")
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+
+        # #1217: the keys themselves. Generated as finance + auth, every
+        # owner column references ``user``; finance first and auth later
+        # left all of them without one, so the check above passed on a
+        # database with nothing to check.
+        finance_tables = [
+            name
+            for (name,) in db.execute(
+                "select name from sqlite_master"
+                " where type = 'table' and name like 'finance%'"
+            )
+        ]
+        owned = [
+            name
+            for name in finance_tables
+            if any(
+                col[1] == "owner_user_id"
+                for col in db.execute(f"PRAGMA table_info('{name}')")
+            )
+        ]
+        unlinked = [
+            name
+            for name in owned
+            if not any(
+                fk[2] == "user" and fk[3] == "owner_user_id"
+                for fk in db.execute(f"PRAGMA foreign_key_list('{name}')")
+            )
+        ]
+        assert owned, "no finance table has an owner column"
+        assert not unlinked, f"owner columns with no key to user: {unlinked}"

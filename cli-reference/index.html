@@ -6120,8 +6120,13 @@
 <p><strong>Important Notes:</strong></p>
 <ul>
 <li>Only works with Copier-generated projects (default since v0.2.0)</li>
-<li>Requires git repository (for change tracking)</li>
+<li>Requires a git repository with a clean working tree: commit or stash first</li>
+<li>A failed add is undone: the project is reset to where it started, so the
+  command can simply be run again</li>
 <li>Services require their dependencies - they will be auto-added</li>
+<li>Files your other services own are re-rendered when they branch on the one
+  you add (for example, routers gain their auth guards when auth arrives);
+  your own edits are kept through a three-way merge</li>
 <li>Review changes with <code>git diff</code> before committing</li>
 </ul>
 <p>See <strong>Generated Project CLI</strong> section below for full command reference.</p>

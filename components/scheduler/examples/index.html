@@ -5524,6 +5524,7 @@
 
 <h1 id="scheduler-examples">Scheduler Examples</h1>
 <p>Essential timing patterns and job configuration examples for the scheduler component.</p>
+<p>The examples call <code>scheduler.add_job</code> to show each trigger on its own. In a project, a service job's trigger arguments go in its <code>ServiceJob</code> entry in <code>app/components/scheduler/jobs.py</code> instead (for example <code>{"trigger": "cron", "hour": 6, "minute": 30}</code>), so that with a worker it runs on the worker. See <a href="../#where-jobs-run">Where Jobs Run</a>.</p>
 <h2 id="common-timing-patterns">Common Timing Patterns</h2>
 <h3 id="daily-tasks">Daily Tasks</h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># app/components/scheduler/main.py</span>

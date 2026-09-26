@@ -5426,7 +5426,7 @@
 <h3 id="staleness-detection">Staleness detection</h3>
 <p>Sources are considered stale after 3x their configured interval. A stale source triggers a warning badge on the Insights card in Overseer.</p>
 <h2 id="scheduler-setup">Scheduler Setup</h2>
-<p>For automated collection, include the scheduler component. The collector jobs are registered in <code>app/components/scheduler/main.py</code> and re-applied from code on every scheduler restart, so a normal redeploy is enough to pick them up.</p>
+<p>For automated collection, include the scheduler component. The collector jobs are listed in <code>SERVICE_JOBS</code> (<code>app/components/scheduler/jobs.py</code>), run on the worker when the project has one, and are re-applied from code on every scheduler restart, so a normal redeploy is enough to pick them up.</p>
 <h2 id="database">Database</h2>
 <p>Insights requires the database component. All data is stored in SQLite (default) or PostgreSQL.</p>
 <h3 id="tables-created">Tables created</h3>

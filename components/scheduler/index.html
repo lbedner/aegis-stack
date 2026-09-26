@@ -1901,6 +1901,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#where-jobs-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where Jobs Run
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -5190,6 +5201,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#where-jobs-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where Jobs Run
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -5340,34 +5362,50 @@
 </span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="c1"># Your cleanup logic here</span>
 </span></code></pre></div>
 <h3 id="2-schedule-your-tasks">2. Schedule Your Tasks</h3>
-<p>Add jobs to the scheduler in <code>app/components/scheduler/main.py</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Import your service functions</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.my_tasks</span><span class="w"> </span><span class="kn">import</span> <span class="n">send_daily_report</span><span class="p">,</span> <span class="n">cleanup_temp_files</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_scheduler</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncIOScheduler</span><span class="p">:</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Create and configure the scheduler with all jobs.&quot;&quot;&quot;</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">scheduler</span> <span class="o">=</span> <span class="n">AsyncIOScheduler</span><span class="p">()</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="c1"># Daily report at 9 AM</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="n">send_daily_report</span><span class="p">,</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="n">trigger</span><span class="o">=</span><span class="s2">&quot;cron&quot;</span><span class="p">,</span>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>        <span class="n">hour</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">minute</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>        <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;daily_report&quot;</span><span class="p">,</span>
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Daily Report Generation&quot;</span>
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="p">)</span>
-</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>
-</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="c1"># Clean temp files every 4 hours</span>
-</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
-</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>        <span class="n">cleanup_temp_files</span><span class="p">,</span>
-</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>        <span class="n">trigger</span><span class="o">=</span><span class="s2">&quot;interval&quot;</span><span class="p">,</span>
-</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>        <span class="n">hours</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-2-22"><a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>        <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;temp_cleanup&quot;</span><span class="p">,</span> 
-</span><span id="__span-2-23"><a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Temporary Files Cleanup&quot;</span>
-</span><span id="__span-2-24"><a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>    <span class="p">)</span>
-</span><span id="__span-2-25"><a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>
-</span><span id="__span-2-26"><a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>    <span class="k">return</span> <span class="n">scheduler</span>
+<p>Add an entry to <code>SERVICE_JOBS</code> in <code>app/components/scheduler/jobs.py</code>. It is
+the one list of scheduled jobs; the scheduler schedules every entry.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.my_tasks</span><span class="w"> </span><span class="kn">import</span> <span class="n">send_daily_report</span><span class="p">,</span> <span class="n">cleanup_temp_files</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">SERVICE_JOBS</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ServiceJob</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="c1"># Daily report at 9 AM</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">ServiceJob</span><span class="p">(</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">send_daily_report</span><span class="p">,</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="s2">&quot;daily_report&quot;</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="s2">&quot;Daily Report Generation&quot;</span><span class="p">,</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="p">{</span><span class="s2">&quot;trigger&quot;</span><span class="p">:</span> <span class="s2">&quot;cron&quot;</span><span class="p">,</span> <span class="s2">&quot;hour&quot;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span> <span class="s2">&quot;minute&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="p">),</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="c1"># Clean temp files every 4 hours</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="n">ServiceJob</span><span class="p">(</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>        <span class="n">cleanup_temp_files</span><span class="p">,</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>        <span class="s2">&quot;temp_cleanup&quot;</span><span class="p">,</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="s2">&quot;Temporary Files Cleanup&quot;</span><span class="p">,</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>        <span class="p">{</span><span class="s2">&quot;trigger&quot;</span><span class="p">:</span> <span class="s2">&quot;interval&quot;</span><span class="p">,</span> <span class="s2">&quot;hours&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">},</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="p">),</span>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="p">)</span>
 </span></code></pre></div>
+<p>Each entry is scheduled with <code>max_instances=1</code>, <code>coalesce=True</code> and
+<code>replace_existing=True</code>.</p>
+<h3 id="where-jobs-run">Where Jobs Run</h3>
+<p>With a <a href="../worker/">worker</a> in the project, the scheduler only produces:
+each entry is scheduled as an enqueue of the job's function name onto the
+<code>system</code> queue, and the worker registers the same entry as a task under that
+name and runs it, with the worker's resources, retries and live feed. This
+holds for arq, TaskIQ and Dramatiq alike.</p>
+<ul>
+<li><strong>Timeouts.</strong> A job runs under the system queue's limit (five minutes)
+  unless its entry sets <code>timeout</code> in seconds.</li>
+<li><strong>Run Now.</strong> The dashboard button, the API
+  (<code>POST /api/v1/scheduler/jobs/{id}/run</code>) and <code>tasks trigger</code> repeat the
+  stored call, so a manual run is an enqueue too and never runs inside the
+  webserver. The API response says where the job runs (<code>ran_in</code>).</li>
+<li><strong>Run history.</strong> The Scheduler page times the enqueue; the job's own run
+  time and outcome are on the Worker page.</li>
+<li><strong>The heartbeat stays in the scheduler</strong>, because it proves the
+  scheduler's own loop is alive.</li>
+</ul>
+<p>Without a worker, the scheduler runs each job itself, and Run Now runs it in
+the process that received the request. Adding a worker later moves every
+entry onto it with no change to the list.</p>
 <h2 id="job-management">Job Management</h2>
 <h3 id="listing-jobs">Listing Jobs</h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Get all scheduled jobs</span>
@@ -5393,17 +5431,7 @@
 <ul>
 <li><code>SCHEDULER_TIMEZONE</code> (str, default: <code>"UTC"</code>): IANA timezone name; cron triggers inherit this.</li>
 </ul>
-<p>Code is the source of truth for job schedules. Every restart re-registers each job via <code>replace_existing=True</code>, so editing a trigger in <code>app/components/scheduler/main.py</code> and redeploying is all that's needed to change the schedule. Runtime edits via <code>scheduler.modify_job()</code> do not survive a restart by design.</p>
-<p>Individual jobs can configure their own behavior when defined:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">my_task</span><span class="p">,</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">trigger</span><span class="o">=</span><span class="s2">&quot;interval&quot;</span><span class="p">,</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">hours</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">max_instances</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>      <span class="c1"># Only one instance can run at a time</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">coalesce</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>        <span class="c1"># Coalesce missed runs into one</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">misfire_grace_time</span><span class="o">=</span><span class="mi">30</span> <span class="c1"># Grace time for misfired jobs</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="p">)</span>
-</span></code></pre></div>
+<p>Code is the source of truth for job schedules. Every restart re-registers each job via <code>replace_existing=True</code>, so editing a trigger in <code>app/components/scheduler/jobs.py</code> and redeploying is all that's needed to change the schedule. Runtime edits via <code>scheduler.modify_job()</code> do not survive a restart by design.</p>
 <h2 id="best-practices">Best Practices</h2>
 <ul>
 <li><strong>Keep jobs idempotent</strong> - Safe to run multiple times</li>

@@ -5262,8 +5262,8 @@
 </ul>
 <p>Expanding a row shows the full job ID, the scheduled run time, and the finished time. Failed rows also surface the error message.</p>
 <h2 id="cli">CLI</h2>
-<p>The generated <code>tasks</code> CLI can trigger jobs and inspect their history without the backend running. Unlike the API (which runs the job in the backend and returns immediately), the CLI runs the job in-process and waits for the result, so it composes with scripts and CI.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Run a job now and wait for the outcome</span>
+<p>The generated <code>tasks</code> CLI can trigger jobs and inspect their history without the backend running. With a worker in the project, <code>tasks trigger</code> hands the job to the worker, like the API; without one, it runs the job in-process and waits for the result, so it composes with scripts and CI.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Run a job now (on the worker, if there is one)</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>my-app<span class="w"> </span>tasks<span class="w"> </span>trigger<span class="w"> </span>database_backup
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Aggregate stats for one job</span>
@@ -5278,7 +5278,7 @@
 <h3 id="trigger-a-job">Trigger a Job</h3>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>POST /api/v1/scheduler/jobs/{job_id}/run
 </span></code></pre></div>
-<p>Runs the job immediately in the backend process. The execution is recorded to <code>job_execution</code> the same way a scheduled run is.</p>
+<p>Repeats the job's stored call now, and records it to <code>job_execution</code> the same way a scheduled run is. With a worker in the project that call is an enqueue, so the job runs on the worker, never inside the webserver; without one, it runs in the backend process. The response's <code>ran_in</code> says which (<code>"worker"</code> or <code>"webserver"</code>).</p>
 <p><strong>Responses:</strong></p>
 <table>
 <thead>
@@ -5290,7 +5290,7 @@
 <tbody>
 <tr>
 <td><code>202 Accepted</code></td>
-<td>Job started in the background</td>
+<td>Job handed to the worker, or started in the background</td>
 </tr>
 <tr>
 <td><code>404 Not Found</code></td>

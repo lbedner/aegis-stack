@@ -5407,18 +5407,14 @@
 </span></code></pre></div>
 <h3 id="automatic-backup-job">Automatic Backup Job</h3>
 <p>A daily database backup job is automatically included:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Automatically added when database component is present</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># app/components/scheduler/jobs.py, present with the database component</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">ServiceJob</span><span class="p">(</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">backup_database_job</span><span class="p">,</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">trigger</span><span class="o">=</span><span class="s2">&quot;cron&quot;</span><span class="p">,</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">hour</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">minute</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;database_backup&quot;</span><span class="p">,</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Daily Database Backup&quot;</span><span class="p">,</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="n">max_instances</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">coalesce</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">replace_existing</span><span class="o">=</span><span class="kc">True</span>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="s2">&quot;database_backup&quot;</span><span class="p">,</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="s2">&quot;Daily Database Backup&quot;</span><span class="p">,</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="p">{</span><span class="s2">&quot;trigger&quot;</span><span class="p">:</span> <span class="s2">&quot;cron&quot;</span><span class="p">,</span> <span class="s2">&quot;hour&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;minute&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">timeout</span><span class="o">=</span><span class="n">LONG_RUNNING</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><strong>Backup Job Features:</strong></p>
 <ul>
@@ -5442,24 +5438,19 @@
 </span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">        </span>└─<span class="w"> </span>report_gen:<span class="w"> </span>Weekly<span class="w"> </span>on<span class="w"> </span>Monday<span class="w"> </span>→<span class="w"> </span><span class="k">in</span><span class="w"> </span>3d
 </span></code></pre></div>
 <h2 id="keeping-the-jobstore-in-sync-with-code">Keeping the Jobstore in Sync With Code</h2>
-<p><code>app/components/scheduler/main.py</code> is the source of truth for every job. On each start, <code>create_scheduler()</code> re-registers them all, and with a persistent jobstore the stored rows are reconciled against code three ways:</p>
+<p><code>SERVICE_JOBS</code> in <code>app/components/scheduler/jobs.py</code> is the source of truth for every job. On each start, <code>create_scheduler()</code> re-registers them all, and with a persistent jobstore the stored rows are reconciled against code three ways:</p>
 <ul>
-<li><strong>Changed schedule</strong> - every <code>add_job</code> call passes <code>replace_existing=True</code>, so an edited trigger overwrites the persisted row on the next restart.</li>
+<li><strong>Changed schedule</strong> - every entry is scheduled with <code>replace_existing=True</code>, so an edited trigger overwrites the persisted row on the next restart.</li>
 <li><strong>Removed job</strong> - <code>_drop_unknown_persisted_jobs()</code> deletes persisted rows whose ID is no longer registered in code, so a job you delete stops firing instead of running forever from its stored row.</li>
 <li><strong>Un-importable job</strong> - <code>_cleanup_stale_jobs()</code> drops persisted jobs whose function can no longer be imported, which handles a Docker volume carrying jobs from a previous project configuration.</li>
 </ul>
-<p>To change a schedule, edit the trigger in <code>create_scheduler()</code>, commit, and redeploy:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
+<p>To change a schedule, edit the entry's trigger in <code>SERVICE_JOBS</code>, commit, and redeploy:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">ServiceJob</span><span class="p">(</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">process_daily_reports</span><span class="p">,</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">trigger</span><span class="o">=</span><span class="s2">&quot;cron&quot;</span><span class="p">,</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">hour</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">minute</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;daily_reports&quot;</span><span class="p">,</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Daily Report Generation&quot;</span><span class="p">,</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="n">max_instances</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="n">coalesce</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="n">replace_existing</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="p">)</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="s2">&quot;daily_reports&quot;</span><span class="p">,</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="s2">&quot;Daily Report Generation&quot;</span><span class="p">,</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="p">{</span><span class="s2">&quot;trigger&quot;</span><span class="p">:</span> <span class="s2">&quot;cron&quot;</span><span class="p">,</span> <span class="s2">&quot;hour&quot;</span><span class="p">:</span> <span class="mi">6</span><span class="p">,</span> <span class="s2">&quot;minute&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>Runtime edits via <code>scheduler.modify_job()</code> are not preserved across restarts. This is deliberate: it keeps the deployed configuration aligned with what's committed in git, the same way Alembic migrations and Pydantic settings do. If a knob needs to be tunable without a deploy, expose it as a setting (env var), not a runtime job edit.</p>
 <h2 id="database-schema">Database Schema</h2>

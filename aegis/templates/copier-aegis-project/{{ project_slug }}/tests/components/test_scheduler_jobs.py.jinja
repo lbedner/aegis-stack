@@ -1,0 +1,155 @@
+{%- if include_scheduler %}
+"""Where a scheduled job runs.
+
+With a worker, the scheduler only produces: every service job is scheduled
+as an enqueue of its own name onto the system queue, and a worker runs it
+under the worker's sizing, with its retries and its live feed. The
+heartbeat stays in the scheduler, since it proves the scheduler's own loop
+is alive. Without a worker, the scheduler runs each job itself.
+"""
+
+import logging
+from typing import Any
+
+import pytest
+from apscheduler.job import Job
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from app.components.scheduler.jobs import SERVICE_JOBS, ServiceJob
+from app.components.scheduler.main import _quiet_successful_runs, register_service_jobs
+
+
+def _scheduled() -> dict[str, Job]:
+    scheduler = AsyncIOScheduler()
+    register_service_jobs(scheduler)
+    return {job.id: job for job in scheduler.get_jobs()}
+
+
+def test_every_service_job_is_scheduled() -> None:
+    assert set(_scheduled()) == {job.id for job in SERVICE_JOBS}
+
+
+def test_a_run_that_succeeds_logs_nothing() -> None:
+    """APScheduler logs every run at INFO; the heartbeat alone wrote two
+    lines every 15 seconds. Failures still log."""
+    root = logging.getLogger()
+    previous = root.level
+    root.setLevel(logging.INFO)
+    try:
+        _quiet_successful_runs()
+        executor = logging.getLogger("apscheduler.executors.default")
+        assert not executor.isEnabledFor(logging.INFO)
+        assert executor.isEnabledFor(logging.ERROR)
+    finally:
+        root.setLevel(previous)
+{%- if include_worker %}
+
+
+def test_the_scheduler_only_enqueues() -> None:
+    from app.components.worker.pools import enqueue_task
+
+    scheduled = _scheduled()
+    for job in SERVICE_JOBS:
+        assert scheduled[job.id].func is enqueue_task, job.id
+        assert list(scheduled[job.id].args) == [job.task_name, "system"]
+
+
+def test_every_enqueued_name_is_a_system_task() -> None:
+    """Pins the scheduler's list to the worker's: a name the worker does not
+    register would be enqueued forever and run never."""
+    from app.components.worker.registry import queue_tasks
+
+    missing = {job.task_name for job in SERVICE_JOBS} - set(queue_tasks("system"))
+    assert not missing, f"scheduled but not registered on the worker: {missing}"
+
+
+async def _fake_job() -> None:
+    """A job that records that it ran."""
+    _RAN.append(True)
+
+
+_RAN: list[bool] = []
+_FAKE = ServiceJob(_fake_job, "fake", "Fake", {"trigger": "interval", "hours": 1}, timeout=123)
+{%- if worker_backend == "arq" %}
+
+
+async def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
+    from app.components.worker.tasks.service_jobs import as_task
+
+    _RAN.clear()
+    task = as_task(_FAKE)
+
+    assert task.name == "_fake_job"
+    assert task.timeout_s == 123
+    await task.coroutine({})
+    assert _RAN == [True]
+{%- elif worker_backend == "taskiq" %}
+
+
+async def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
+    from app.components.worker.queues.system import broker
+    from app.components.worker.tasks.service_jobs import as_task
+
+    _RAN.clear()
+    task = as_task(_FAKE, broker)
+
+    assert task.task_name == "_fake_job"
+    assert task.labels["timeout"] == 123
+    await task.original_func()
+    assert _RAN == [True]
+
+
+def test_registering_leaves_the_job_function_alone() -> None:
+    """TaskIQ renames the function it decorates (``__name__`` gains
+    ``__taskiq_original``). The job's function is the scheduler's too, and
+    its name is the task name, so it must never be the one decorated."""
+    from app.components.worker.queues.system import broker
+    from app.components.worker.tasks.service_jobs import as_task
+
+    as_task(_FAKE, broker)
+
+    assert _fake_job.__name__ == "_fake_job"
+    assert _FAKE.task_name == "_fake_job"
+{%- else %}
+
+
+def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
+    from app.components.worker.tasks.service_jobs import as_task
+
+    actor = as_task(_FAKE)
+
+    assert actor.actor_name == "_fake_job"
+    assert actor.queue_name == "system"
+    assert actor.options["time_limit"] == 123_000
+    # Dramatiq wraps an async function to run it on its event loop thread.
+    assert getattr(actor.fn, "__wrapped__", actor.fn) is _fake_job
+{%- endif %}
+{%- else %}
+
+
+def test_without_a_worker_the_scheduler_runs_each_job() -> None:
+    scheduled = _scheduled()
+    for job in SERVICE_JOBS:
+        assert scheduled[job.id].func is job.func, job.id
+{%- endif %}
+{%- if scheduler_backend != "memory" %}
+
+
+async def test_running_a_job_by_hand_passes_its_stored_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A scheduled enqueue is stored with the task name as its argument;
+    "Run Now" calling it bare would fail every time."""
+    from app.services.scheduler import trigger
+
+    monkeypatch.setattr(trigger, "record_job_started", lambda *_: 1)
+    monkeypatch.setattr(trigger, "record_job_finished", lambda *_, **__: None)
+    seen: list[tuple[Any, ...]] = []
+
+    async def job(*args: Any) -> None:
+        seen.append(args)
+
+    assert await trigger.run_triggered_job(job, "id", "Name", ["a_job", "system"])
+    assert seen == [("a_job", "system")]
+{%- endif %}
+{%- endif %}

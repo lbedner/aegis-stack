@@ -78,17 +78,13 @@ def create_scheduler() -> AsyncIOScheduler:
 A daily database backup job is automatically included:
 
 ```python
-# Automatically added when database component is present
-scheduler.add_job(
+# app/components/scheduler/jobs.py, present with the database component
+ServiceJob(
     backup_database_job,
-    trigger="cron",
-    hour=2,
-    minute=0,
-    id="database_backup",
-    name="Daily Database Backup",
-    max_instances=1,
-    coalesce=True,
-    replace_existing=True
+    "database_backup",
+    "Daily Database Backup",
+    {"trigger": "cron", "hour": 2, "minute": 0},
+    timeout=LONG_RUNNING,
 )
 ```
 
@@ -120,25 +116,20 @@ my-app health check --detailed
 
 ## Keeping the Jobstore in Sync With Code
 
-`app/components/scheduler/main.py` is the source of truth for every job. On each start, `create_scheduler()` re-registers them all, and with a persistent jobstore the stored rows are reconciled against code three ways:
+`SERVICE_JOBS` in `app/components/scheduler/jobs.py` is the source of truth for every job. On each start, `create_scheduler()` re-registers them all, and with a persistent jobstore the stored rows are reconciled against code three ways:
 
-- **Changed schedule** - every `add_job` call passes `replace_existing=True`, so an edited trigger overwrites the persisted row on the next restart.
+- **Changed schedule** - every entry is scheduled with `replace_existing=True`, so an edited trigger overwrites the persisted row on the next restart.
 - **Removed job** - `_drop_unknown_persisted_jobs()` deletes persisted rows whose ID is no longer registered in code, so a job you delete stops firing instead of running forever from its stored row.
 - **Un-importable job** - `_cleanup_stale_jobs()` drops persisted jobs whose function can no longer be imported, which handles a Docker volume carrying jobs from a previous project configuration.
 
-To change a schedule, edit the trigger in `create_scheduler()`, commit, and redeploy:
+To change a schedule, edit the entry's trigger in `SERVICE_JOBS`, commit, and redeploy:
 
 ```python
-scheduler.add_job(
+ServiceJob(
     process_daily_reports,
-    trigger="cron",
-    hour=6,
-    minute=0,
-    id="daily_reports",
-    name="Daily Report Generation",
-    max_instances=1,
-    coalesce=True,
-    replace_existing=True,
+    "daily_reports",
+    "Daily Report Generation",
+    {"trigger": "cron", "hour": 6, "minute": 0},
 )
 ```
 

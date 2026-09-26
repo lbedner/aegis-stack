@@ -28,6 +28,7 @@ TEMPLATE_PATHS = [
     FINANCE_MODELS,
     SCHEDULER_API,
     "app/components/scheduler/main.py",
+    "app/components/scheduler/jobs.py",
     "app/services/auth/service.py",
     ".copier-answers.yml",
     "app/core/config.py",
@@ -80,7 +81,7 @@ def test_unowned_and_unsafe_paths_stay_out() -> None:
 
 
 def test_the_old_single_exception_is_covered_by_the_rule() -> None:
-    """``scheduler/main.py`` was hand-listed for exactly this reason."""
+    """The scheduler's files were hand-listed for exactly this reason."""
     scope = get_cross_spec_scope(
         TEMPLATE_PATHS, _on_disk(*OWNED_BUT_SHARED_PATHS), operated="insights"
     )

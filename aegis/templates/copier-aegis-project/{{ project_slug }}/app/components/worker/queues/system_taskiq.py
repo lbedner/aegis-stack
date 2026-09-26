@@ -10,6 +10,7 @@ from taskiq_redis import RedisAsyncResultBackend
 
 from app.components.worker.broker import PausableRedisStreamBroker
 from app.components.worker.middleware import EventPublishMiddleware
+from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.core.config import settings
 from app.core.log import logger
 
@@ -82,3 +83,8 @@ async def extract_document_task(
     from app.services.documents.domains.extraction.jobs import run_extraction_job
 
     return await run_extraction_job(job_id, document_id, owner_user_id, force)
+
+
+# The scheduled service jobs, bound here so the registry sees them as this
+# queue's tasks. The scheduler enqueues them by these names.
+globals().update(service_job_tasks(broker))

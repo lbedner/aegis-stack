@@ -1,11 +1,11 @@
 """
 Scheduler component for {{ project_name }}.
 
-Simple, explicit job scheduling - just import functions and schedule them.
-Add your own jobs by importing service functions and calling scheduler.add_job().
+Schedules the service jobs listed in ``jobs.SERVICE_JOBS``; add yours there.
 """
 
 import asyncio
+import logging
 from typing import Any
 
 from apscheduler.events import (
@@ -26,45 +26,15 @@ from app.services.scheduler.execution_log import (
     record_job_missed,
     record_job_started,
 )
-from app.services.system.backup import backup_database_job
-{% elif include_scheduler and include_database %}
-from app.services.system.backup import backup_database_job
 {% endif %}
-{% if include_ai and ai_backend != "memory" %}
-from app.services.ai.jobs import analyze_sentiment_job, sync_llm_catalog_job
-{% endif %}
-{% if include_auth %}
-from app.services.auth.jobs import cleanup_expired_refresh_tokens_job
-{% endif %}
-{% if include_insights %}
-{% if insights_github %}
-from app.services.insights.jobs import collect_github_events_job, collect_github_stars_job, collect_github_traffic_job
-{% endif %}
-{% if insights_pypi %}
-from app.services.insights.jobs import collect_pypi_job
-{% endif %}
-{% if insights_plausible %}
-from app.services.insights.jobs import collect_plausible_job
-{% endif %}
-{% endif %}
-{% if include_finance %}
-from app.services.finance.jobs import (
-    finance_envelope_credit_job,
-    finance_goal_auto_contribute_job,
-    finance_recompute_snapshots_job,
-)
-{% endif %}
-{% if include_finance and include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-from app.services.finance.jobs import finance_analyst_note_job
-{% endif %}
-{% if include_finance and (finance_plaid or finance_snaptrade) %}
-from app.services.finance.jobs import finance_sync_connections_job
-{% endif %}
-
 from app.core.config import settings
 from app.core.log import logger
+{%- if include_worker %}
+from app.components.worker.pools import enqueue_task
+{%- endif %}
 from app.services.system import activity
 from .heartbeat import is_heartbeat_event, register_heartbeat_job
+from .jobs import SERVICE_JOBS
 from .resilient import ResilientScheduler
 
 {% if scheduler_backend != "memory" %}
@@ -142,8 +112,42 @@ async def _apply_active_model() -> None:
 
 
 {% endif %}
+def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
+    """Schedule every entry in ``SERVICE_JOBS``.
+{%- if include_worker %}
+
+    The scheduler only produces: each job is scheduled as an enqueue of its
+    task name onto the system queue, and a worker runs it. A manual run
+    repeats the stored call, so it lands on the worker too.
+{%- endif %}
+    """
+    for job in SERVICE_JOBS:
+        scheduler.add_job(
+{%- if include_worker %}
+            enqueue_task,
+            args=[job.task_name, "system"],
+{%- else %}
+            job.func,
+{%- endif %}
+            id=job.id,
+            name=job.name,
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+            **job.trigger,
+        )
+
+
+def _quiet_successful_runs() -> None:
+    """APScheduler logs every run at INFO ("Running job", "executed
+    successfully"); the heartbeat alone writes two lines every 15 seconds.
+    Failures still log at ERROR."""
+    logging.getLogger("apscheduler.executors").setLevel(logging.WARNING)
+
+
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the scheduler with all jobs."""
+    _quiet_successful_runs()
 {% if scheduler_backend != "memory" %}
     # Ensure database is initialized before creating jobstore
     init_database()
@@ -180,210 +184,11 @@ def create_scheduler() -> AsyncIOScheduler:
     )
 {% endif %}
 
-    # JOB SCHEDULE CONFIGURATION - code is the source of truth. Every startup
-    # re-registers each job below via ``replace_existing=True``, so editing a
-    # trigger here and redeploying changes the schedule; runtime edits to
-    # persisted jobs do not survive a restart by design.
+    # Code is the source of truth: every startup re-registers each job via
+    # ``replace_existing=True``, so runtime edits to persisted jobs do not
+    # survive a restart by design. Add jobs to ``SERVICE_JOBS`` in .jobs.
     register_heartbeat_job(scheduler)
-
-{% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
-    scheduler.add_job(
-        backup_database_job,
-        trigger="cron",
-        hour=2,
-        minute=0,
-        id="database_backup",
-        name="Daily Database Backup",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-
-{% if include_ai and ai_backend != "memory" %}
-    scheduler.add_job(
-        sync_llm_catalog_job,
-        trigger="interval",
-        hours=6,
-        id="llm_sync",
-        name="LLM Catalog Sync",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        analyze_sentiment_job,
-        trigger="interval",
-        hours=1,
-        id="sentiment_analysis",
-        name="Conversation Sentiment Analysis",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-
-{% if include_insights %}
-{% if insights_github %}
-    scheduler.add_job(
-        collect_github_traffic_job,
-        trigger="cron",
-        hour=12,
-        minute=0,
-        id="insight_github_traffic",
-        name="Insight: GitHub Traffic",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        collect_github_stars_job,
-        trigger="cron",
-        hour=12,
-        minute=0,
-        id="insight_github_stars",
-        name="Insight: GitHub Stars",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        collect_github_events_job,
-        trigger="cron",
-        hour=12,
-        minute=0,
-        id="insight_github_events",
-        name="Insight: GitHub Events",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-
-{% if insights_pypi %}
-    scheduler.add_job(
-        collect_pypi_job,
-        trigger="cron",
-        hour=18,
-        minute=0,
-        id="insight_pypi",
-        name="Insight: PyPI Downloads",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-
-{% if insights_plausible %}
-    scheduler.add_job(
-        collect_plausible_job,
-        trigger="cron",
-        minute=0,
-        id="insight_plausible",
-        name="Insight: Plausible Analytics",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-{% endif %}
-
-{% if include_auth %}
-    # Refresh token cleanup: prune rows whose ``expires_at`` is older
-    # than the retention window. Daily cadence is fine — refresh
-    # tokens live for days/weeks and the table grows by at most one
-    # row per device sign-in.
-    scheduler.add_job(
-        cleanup_expired_refresh_tokens_job,
-        trigger="interval",
-        hours=24,
-        id="auth_refresh_token_cleanup",
-        name="Auth: Refresh Token Cleanup",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-{% if include_finance %}
-    # Net-worth engine: materialize per-account balance + per-user net-worth
-    # snapshots nightly so the net-worth-over-time chart is a cheap range scan.
-    scheduler.add_job(
-        finance_recompute_snapshots_job,
-        trigger="cron",
-        hour=2,
-        id="finance_recompute_snapshots",
-        name="Finance: Recompute Net-Worth Snapshots",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-    # Goals: book toggled-on virtual goals' declared amounts on the 1st.
-    # Idempotent per month, so a missed run caught up later books nothing
-    # twice - the plan saves unless actively paused.
-    scheduler.add_job(
-        finance_goal_auto_contribute_job,
-        trigger="cron",
-        day=1,
-        hour=2,
-        minute=45,
-        id="finance_goal_auto_contribute",
-        name="Finance: Auto-Contribute to Goals",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-
-    # Envelopes: the allowance arrives on its cadence (weekly credits
-    # land Mondays), so the job checks DAILY and the per-period
-    # idempotency inside it decides whether anything books.
-    scheduler.add_job(
-        finance_envelope_credit_job,
-        trigger="cron",
-        hour=2,
-        minute=50,
-        id="finance_envelope_credit",
-        name="Finance: Credit Envelopes",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-{% if include_finance and include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-    # Half an hour behind the rules pass, so the note is written from tonight's
-    # findings rather than last night's.
-    scheduler.add_job(
-        finance_analyst_note_job,
-        trigger="cron",
-        hour=2,
-        minute=30,
-        id="finance_analyst_note",
-        name="Finance: Write Analyst Note",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-{% if include_finance and (finance_plaid or finance_snaptrade) %}
-    # Keep linked banks fresh: pull new transactions/balances a few times a day
-    # so the register isn't stale between logins (webhooks handle the real-time
-    # nudge when a public URL is configured).
-    scheduler.add_job(
-        finance_sync_connections_job,
-        trigger="interval",
-        hours=6,
-        id="finance_sync_connections",
-        name="Finance: Sync Bank Connections",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
-{% endif %}
-
-    # Add your own scheduled jobs here by importing service functions
-    # and calling scheduler.add_job() with your custom business logic
+    register_service_jobs(scheduler)
 
 {% if scheduler_backend != "memory" %}
     # Drop persisted jobs whose ``add_job`` call has been removed from

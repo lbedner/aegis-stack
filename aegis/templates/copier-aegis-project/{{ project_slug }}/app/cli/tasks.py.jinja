@@ -102,7 +102,12 @@ def trigger_job(
 
 
 async def _trigger_job(job_id: str, force: bool) -> bool:
-    """Run a job now, in this process, recording it to execution history."""
+    """Run a job's stored call now, recording it to execution history.
+{%- if include_worker %}
+
+    The stored call is an enqueue, so the job itself runs on the worker.
+{%- endif %}
+    """
     manager = ScheduledTaskManager()
 
     task = await manager.get_task(job_id)
@@ -121,9 +126,13 @@ async def _trigger_job(job_id: str, force: bool) -> bool:
 
     name = task.name or job_id
     rprint(f"[dim]{t('tasks.triggering')}[/dim] {name}")
-    succeeded = await run_triggered_job(func, job_id, name)
+    succeeded = await run_triggered_job(func, job_id, name, task.args)
     if succeeded:
+{%- if include_worker %}
+        rprint(f"[{theme.ACCENT}]{t('tasks.trigger_queued')}[/] {name}")
+{%- else %}
         rprint(f"[{theme.ACCENT}]{t('tasks.trigger_success')}[/] {name}")
+{%- endif %}
     else:
         rprint(f"[{theme.ERROR}]{t('tasks.trigger_failed')}[/] {name}")
     return succeeded

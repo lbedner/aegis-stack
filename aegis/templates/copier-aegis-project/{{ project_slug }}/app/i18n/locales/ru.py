@@ -493,11 +493,6 @@ MESSAGES: dict[str, str] = {
     "tasks.help": "Команды управления запланированными задачами",
     "tasks.help_list": "Показать все запланированные задачи с текущим статусом.",
     # ── Миграции ─────────────────────────────────────────────────────
-    "migrate.table_missing_warning": (
-        "  ВНИМАНИЕ: Таблица '{table}' отсутствует. "
-        "Создайте миграцию вручную: "
-        "alembic revision --autogenerate -m 'add {table}'"
-    ),
     "migrate.no_existing_migrations": "Миграции не найдены. Сначала выполните 'make migrate'.",
     "migrate.checking_schema": "Проверка схемы на соответствие моделям...",
     "migrate.applying_pending": "Применение ожидающих миграций...",

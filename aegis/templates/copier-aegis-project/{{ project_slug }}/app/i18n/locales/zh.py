@@ -506,6 +506,7 @@ MESSAGES: dict[str, str] = {
     "tasks.job_not_runnable": "无法解析任务函数：",
     "tasks.triggering": "正在运行任务：",
     "tasks.trigger_success": "任务执行成功：",
+    "tasks.trigger_queued": "任务已交给 Worker 执行（运行结果在 Worker 页面查看）：",
     "tasks.trigger_failed": "任务执行失败（详情请查看日志或历史记录）：",
     "tasks.no_executions": "该任务尚无执行记录：",
     "tasks.stats_failed": "获取任务统计失败：",
@@ -535,10 +536,6 @@ MESSAGES: dict[str, str] = {
     "tasks.help_statistics": "显示调度器的整体统计（任务总数、运行中和已暂停的任务）。",
     "tasks.help_history": "显示最近的任务执行历史。",
     # ── 迁移 ─────────────────────────────────────────────────────────
-    "migrate.table_missing_warning": (
-        "  警告：表 '{table}' 完全缺失。"
-        "请手动创建迁移：alembic revision --autogenerate -m 'add {table}'"
-    ),
     "migrate.no_existing_migrations": "未找到现有迁移记录，请先运行 'make migrate'。",
     "migrate.checking_schema": "正在检查数据库结构与模型的一致性...",
     "migrate.applying_pending": "正在先执行待处理的迁移...",

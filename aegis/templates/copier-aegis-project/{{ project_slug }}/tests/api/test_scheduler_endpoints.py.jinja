@@ -221,6 +221,44 @@ class TestSchedulerEndpoints:
         assert "detail" in data
 
     @pytest.mark.asyncio
+    async def test_run_now_hands_the_stored_call_over_and_says_where(
+        self, async_client: AsyncClient, auth_headers: dict[str, str]
+    ) -> None:
+        """"Run Now" repeats the stored call - with a worker, an enqueue -
+        rather than running the job inside the webserver."""
+        task = ScheduledTask(
+            job_id="database_backup",
+            name="Daily Database Backup",
+            function="app.services.system.backup:backup_database_job",
+            args=["backup_database_job", "system"],
+            schedule="Cron: hour=2",
+            trigger_type="cron",
+            status="active",
+        )
+        api = "app.components.backend.api.scheduler"
+        with (
+            patch(f"{api}.ScheduledTaskManager") as manager_class,
+            patch(f"{api}.run_triggered_job") as run,
+        ):
+            manager = AsyncMock()
+            manager.get_task.return_value = task
+            manager.is_job_running.return_value = False
+            manager_class.return_value = manager
+
+            response = await async_client.post(
+                "/api/v1/scheduler/jobs/database_backup/run", headers=auth_headers
+            )
+
+        assert response.status_code == 202
+{%- if include_worker %}
+        assert response.json()["ran_in"] == "worker"
+{%- else %}
+        assert response.json()["ran_in"] == "webserver"
+{%- endif %}
+        run.assert_called_once()
+        assert list(run.call_args.args[3]) == ["backup_database_job", "system"]
+
+    @pytest.mark.asyncio
     async def test_scheduler_endpoints_return_proper_content_type(
         self, async_client: AsyncClient
     ) -> None:

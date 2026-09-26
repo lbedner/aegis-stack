@@ -9,7 +9,7 @@ place instead of being duplicated per entry point.
 import importlib
 import inspect
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from starlette.concurrency import run_in_threadpool
@@ -33,10 +33,15 @@ def import_job_function(func_ref: str) -> Callable[..., Any] | None:
 
 
 async def run_triggered_job(
-    func: Callable[..., Any], job_id: str, job_name: str
+    func: Callable[..., Any],
+    job_id: str,
+    job_name: str,
+    args: Sequence[Any] = (),
 ) -> bool:
-    """Run a manually-triggered job and record its execution.
+    """Run a manually-triggered job with its stored ``args`` and record it.
 
+    The stored call is repeated as scheduled: in a stack with a worker that
+    is an enqueue, so the job itself runs on the worker, not in this process.
     Async jobs are awaited; sync jobs go to a threadpool. The run is written
     to the same execution history as scheduled runs, so it shows up in the
     History view. Returns ``True`` on success, ``False`` if the job raised
@@ -45,9 +50,9 @@ async def run_triggered_job(
     execution_id = await run_in_threadpool(record_job_started, job_id, job_name)
     try:
         if inspect.iscoroutinefunction(func):
-            await func()
+            await func(*args)
         else:
-            await run_in_threadpool(func)
+            await run_in_threadpool(func, *args)
         await run_in_threadpool(
             record_job_finished, execution_id, job_id, success=True
         )

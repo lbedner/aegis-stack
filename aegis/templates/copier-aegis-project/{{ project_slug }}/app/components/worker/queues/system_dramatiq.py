@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 # Import broker to ensure it is initialised before actors are registered
 import app.components.worker.broker  # noqa: F401
 import dramatiq
+from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.core.log import logger
 
 
@@ -57,3 +58,8 @@ async def extract_document_task(
     from app.services.documents.domains.extraction.jobs import run_extraction_job
 
     return await run_extraction_job(job_id, document_id, owner_user_id, force)
+
+
+# The scheduled service jobs, bound here so the registry sees them as this
+# queue's tasks. The scheduler enqueues them by these names.
+globals().update(service_job_tasks())

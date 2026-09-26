@@ -493,11 +493,6 @@ MESSAGES: dict[str, str] = {
     "tasks.help": "Befehle zur geplanten Aufgabenverwaltung",
     "tasks.help_list": "Alle geplanten Jobs mit aktuellem Status und Details auflisten.",
     # ── Migrate ──────────────────────────────────────────────────────
-    "migrate.table_missing_warning": (
-        "  WARNUNG: Tabelle '{table}' fehlt komplett. "
-        "Manuelle Migration erstellen mit: "
-        "alembic revision --autogenerate -m 'add {table}'"
-    ),
     "migrate.no_existing_migrations": "Keine vorhandenen Migrationen gefunden. Zuerst 'make migrate' ausführen.",
     "migrate.checking_schema": "Schema gegen Modelle prüfen...",
     "migrate.applying_pending": "Ausstehende Migrationen werden zuerst angewendet...",

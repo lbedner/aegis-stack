@@ -106,6 +106,9 @@ class ScheduledTask(BaseModel):
     job_id: str = Field(..., description="Unique task identifier")
     name: str = Field(..., description="Human-readable task name")
     function: str = Field(..., description="Function reference (module:function)")
+    args: list[Any] = Field(
+        default_factory=list, description="Arguments the job is called with"
+    )
     schedule: str = Field(..., description="Human-readable schedule (e.g., 'Every 5m')")
     trigger_type: Literal["interval", "cron", "date", "unknown"] = Field(
         ..., description="Type of scheduling trigger"

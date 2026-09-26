@@ -179,6 +179,31 @@ class TestScheduledTaskManager:
             assert task.name == "Test Job"
 
     @pytest.mark.asyncio
+    async def test_a_task_carries_the_arguments_its_job_was_stored_with(
+        self, manager: ScheduledTaskManager, mock_job_data: dict[str, Any]
+    ) -> None:
+        """A scheduled enqueue is stored as ``enqueue_task`` plus the task
+        name; running it by hand needs both."""
+        stored = APSchedulerJob(
+            id="test_job_id",
+            next_run_time=None,
+            job_state=pickle.dumps({**mock_job_data, "args": ("a_job", "system")}),
+        )
+        with patch(
+            "app.services.scheduler.scheduled_task_manager.get_async_session"
+        ) as mock_session:
+            mock_session_instance = AsyncMock()
+            mock_session.return_value.__aenter__.return_value = mock_session_instance
+            mock_result = MagicMock()
+            mock_result.first.return_value = stored
+            mock_session_instance.exec.return_value = mock_result
+
+            task = await manager.get_task("test_job_id")
+
+        assert task is not None
+        assert task.args == ["a_job", "system"]
+
+    @pytest.mark.asyncio
     async def test_get_task_not_found(
         self, manager: ScheduledTaskManager
     ) -> None:

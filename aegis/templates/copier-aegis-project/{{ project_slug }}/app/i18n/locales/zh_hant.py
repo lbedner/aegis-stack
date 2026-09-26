@@ -493,10 +493,6 @@ MESSAGES: dict[str, str] = {
     "tasks.help": "定時任務管理命令",
     "tasks.help_list": "列出所有已調度任務及狀態訊息。",
     # ── 遷移 ─────────────────────────────────────────────────────────
-    "migrate.table_missing_warning": (
-        "  警告：表 '{table}' 完全缺失。"
-        "請手動創建遷移：alembic revision --autogenerate -m 'add {table}'"
-    ),
     "migrate.no_existing_migrations": "未找到現有遷移記錄，請先運行 'make migrate'。",
     "migrate.checking_schema": "正在檢查數據庫結構與模型的一致性...",
     "migrate.applying_pending": "正在先執行待處理的遷移...",

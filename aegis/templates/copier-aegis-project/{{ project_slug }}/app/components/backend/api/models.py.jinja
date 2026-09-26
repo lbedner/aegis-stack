@@ -7,7 +7,7 @@ task management, status tracking, and response formatting.
 
 {%- if include_worker or scheduler_backend != "memory" %}
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 {%- endif %}
@@ -359,4 +359,7 @@ class TriggerJobResponse(BaseModel):
     job_id: str = Field(..., description="The triggered job id")
     status: str = Field("triggered", description="Trigger outcome")
     message: str = Field(..., description="Human-readable status")
+    ran_in: Literal["worker", "webserver"] = Field(
+        ..., description="Where the job itself runs"
+    )
 {%- endif %}

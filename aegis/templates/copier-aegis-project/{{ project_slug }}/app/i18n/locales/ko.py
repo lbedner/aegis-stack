@@ -493,11 +493,6 @@ MESSAGES: dict[str, str] = {
     "tasks.help": "예약 작업 관리 명령어",
     "tasks.help_list": "모든 예약된 작업의 현재 상태와 세부 정보를 표시합니다.",
     # ── Migrate ──────────────────────────────────────────────────────
-    "migrate.table_missing_warning": (
-        "  경고: '{table}' 테이블이 누락되어 있습니다. "
-        "수동 마이그레이션을 생성하세요: "
-        "alembic revision --autogenerate -m 'add {table}'"
-    ),
     "migrate.no_existing_migrations": "기존 마이그레이션을 찾을 수 없습니다. 먼저 'make migrate'를 실행하세요.",
     "migrate.checking_schema": "모델 대비 스키마 확인 중...",
     "migrate.applying_pending": "보류 중인 마이그레이션을 먼저 적용합니다...",

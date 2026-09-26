@@ -231,6 +231,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/services/scheduler/execution_log.py",
                 "app/services/scheduler/orphans.py",
                 "tests/components/test_scheduler.py",
+                "tests/components/test_scheduler_jobs.py",
                 "tests/services/test_scheduler_execution_log.py",
                 "tests/services/test_scheduler_executions_read.py",
                 "docs/components/scheduler.md",

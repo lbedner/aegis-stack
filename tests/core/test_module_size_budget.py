@@ -81,7 +81,6 @@ BUDGET: dict[str, int] = {
     # module gained `from __future__ import annotations` because its
     # TYPE_CHECKING-only FastAPI import broke at runtime on 3.13.
     "cli/slash_commands.py.jinja": 579,
-    "components/scheduler/main.py.jinja": 561,
     "services/system/health_db_sqlite.py.jinja": 559,
     "cli/finance.py.jinja": 551,
     "components/backend/api/orgs/router.py.jinja": 534,

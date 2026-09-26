@@ -73,29 +73,27 @@ aegis add scheduler --project-path ./mvp-api
 Now add your daily report:
 
 ```python
-# app/components/scheduler.py
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-def register_jobs(scheduler: AsyncIOScheduler) -> None:
-    """Register all scheduled jobs."""
-
-    # Daily report at 9 AM
-    scheduler.add_job(
-        generate_daily_report,
-        trigger="cron",
-        hour=9,
-        minute=0,
-        id="daily_report",
-        name="Generate Daily Report",
-        replace_existing=True,
-    )
-
+# app/services/reports/jobs.py
 async def generate_daily_report() -> None:
     """Generate and send daily report."""
     # Your logic here
-    pass
+
+
+# app/components/scheduler/jobs.py: add an entry to SERVICE_JOBS
+from app.services.reports.jobs import generate_daily_report
+
+SERVICE_JOBS: tuple[ServiceJob, ...] = (
+    # ...existing entries...
+    ServiceJob(
+        generate_daily_report,
+        "daily_report",
+        "Generate Daily Report",
+        {"trigger": "cron", "hour": 9, "minute": 0},
+    ),
+)
 ```
+
+Without a worker, the scheduler runs the job in its own process. If the project has a worker, the scheduler enqueues the job and the worker runs it instead.
 
 Ship it:
 ```bash

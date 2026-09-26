@@ -212,9 +212,12 @@ async def trigger_scheduled_job(
 ) -> TriggerJobResponse:
     """Manually trigger a scheduled job to run now, in the background.
 
-    The job runs in the backend process and is recorded to execution history
-    like a scheduled run. Returns 202 immediately; poll the executions API
-    for the outcome.
+    Repeats the job's stored call and records it to execution history like a
+    scheduled run.
+{%- if include_worker %} That call is an enqueue, so the job itself runs on
+    the worker, never in the webserver.
+{%- else %} With no worker in this stack, the job runs in this process.
+{%- endif %} Returns 202 immediately.
     """
     try:
         task = await manager.get_task(job_id)
@@ -248,11 +251,19 @@ async def trigger_scheduled_job(
                 },
             )
 
-        background_tasks.add_task(run_triggered_job, func, job_id, task.name)
+        background_tasks.add_task(
+            run_triggered_job, func, job_id, task.name, task.args
+        )
         return TriggerJobResponse(
             job_id=job_id,
             status="triggered",
+{%- if include_worker %}
+            message=f"Job '{task.name}' handed to the worker",
+            ran_in="worker",
+{%- else %}
             message=f"Job '{task.name}' triggered",
+            ran_in="webserver",
+{%- endif %}
         )
 
     except HTTPException:

@@ -333,7 +333,7 @@ docker compose up
 Use the scheduler component with comms:
 
 ```python
-# app/components/scheduler/main.py
+# app/services/digest/jobs.py
 from app.services.comms.email import send_email_simple
 
 async def send_daily_digest() -> None:
@@ -347,12 +347,12 @@ async def send_daily_digest() -> None:
             html=generate_digest_html(user),
         )
 
-# Schedule to run daily at 8am
-scheduler.add_job(
+# app/components/scheduler/jobs.py: daily at 8am
+ServiceJob(
     send_daily_digest,
-    "cron",
-    hour=8,
-    minute=0,
+    "daily_digest",
+    "Daily Digest Email",
+    {"trigger": "cron", "hour": 8, "minute": 0},
 )
 ```
 

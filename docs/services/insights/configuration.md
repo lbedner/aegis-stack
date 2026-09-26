@@ -80,7 +80,7 @@ Sources are considered stale after 3x their configured interval. A stale source 
 
 ## Scheduler Setup
 
-For automated collection, include the scheduler component. The collector jobs are registered in `app/components/scheduler/main.py` and re-applied from code on every scheduler restart, so a normal redeploy is enough to pick them up.
+For automated collection, include the scheduler component. The collector jobs are listed in `SERVICE_JOBS` (`app/components/scheduler/jobs.py`), run on the worker when the project has one, and are re-applied from code on every scheduler restart, so a normal redeploy is enough to pick them up.
 
 ## Database
 

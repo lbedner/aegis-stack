@@ -65,37 +65,55 @@ async def cleanup_temp_files() -> None:
 
 ### 2. Schedule Your Tasks
 
-Add jobs to the scheduler in `app/components/scheduler/main.py`:
+Add an entry to `SERVICE_JOBS` in `app/components/scheduler/jobs.py`. It is
+the one list of scheduled jobs; the scheduler schedules every entry.
 
 ```python
-# Import your service functions
 from app.services.my_tasks import send_daily_report, cleanup_temp_files
 
-def create_scheduler() -> AsyncIOScheduler:
-    """Create and configure the scheduler with all jobs."""
-    scheduler = AsyncIOScheduler()
-    
+SERVICE_JOBS: tuple[ServiceJob, ...] = (
     # Daily report at 9 AM
-    scheduler.add_job(
+    ServiceJob(
         send_daily_report,
-        trigger="cron",
-        hour=9, minute=0,
-        id="daily_report",
-        name="Daily Report Generation"
-    )
-    
+        "daily_report",
+        "Daily Report Generation",
+        {"trigger": "cron", "hour": 9, "minute": 0},
+    ),
     # Clean temp files every 4 hours
-    scheduler.add_job(
+    ServiceJob(
         cleanup_temp_files,
-        trigger="interval",
-        hours=4,
-        id="temp_cleanup", 
-        name="Temporary Files Cleanup"
-    )
-    
-    return scheduler
+        "temp_cleanup",
+        "Temporary Files Cleanup",
+        {"trigger": "interval", "hours": 4},
+    ),
+)
 ```
 
+Each entry is scheduled with `max_instances=1`, `coalesce=True` and
+`replace_existing=True`.
+
+### Where Jobs Run
+
+With a [worker](worker/index.md) in the project, the scheduler only produces:
+each entry is scheduled as an enqueue of the job's function name onto the
+`system` queue, and the worker registers the same entry as a task under that
+name and runs it, with the worker's resources, retries and live feed. This
+holds for arq, TaskIQ and Dramatiq alike.
+
+- **Timeouts.** A job runs under the system queue's limit (five minutes)
+  unless its entry sets `timeout` in seconds.
+- **Run Now.** The dashboard button, the API
+  (`POST /api/v1/scheduler/jobs/{id}/run`) and `tasks trigger` repeat the
+  stored call, so a manual run is an enqueue too and never runs inside the
+  webserver. The API response says where the job runs (`ran_in`).
+- **Run history.** The Scheduler page times the enqueue; the job's own run
+  time and outcome are on the Worker page.
+- **The heartbeat stays in the scheduler**, because it proves the
+  scheduler's own loop is alive.
+
+Without a worker, the scheduler runs each job itself, and Run Now runs it in
+the process that received the request. Adding a worker later moves every
+entry onto it with no change to the list.
 
 ## Job Management
 
@@ -130,21 +148,7 @@ The scheduler uses APScheduler's default settings. Configuration is managed via 
 
 - `SCHEDULER_TIMEZONE` (str, default: `"UTC"`): IANA timezone name; cron triggers inherit this.
 
-Code is the source of truth for job schedules. Every restart re-registers each job via `replace_existing=True`, so editing a trigger in `app/components/scheduler/main.py` and redeploying is all that's needed to change the schedule. Runtime edits via `scheduler.modify_job()` do not survive a restart by design.
-
-Individual jobs can configure their own behavior when defined:
-
-```python
-scheduler.add_job(
-    my_task,
-    trigger="interval",
-    hours=1,
-    max_instances=1,      # Only one instance can run at a time
-    coalesce=True,        # Coalesce missed runs into one
-    misfire_grace_time=30 # Grace time for misfired jobs
-)
-```
-
+Code is the source of truth for job schedules. Every restart re-registers each job via `replace_existing=True`, so editing a trigger in `app/components/scheduler/jobs.py` and redeploying is all that's needed to change the schedule. Runtime edits via `scheduler.modify_job()` do not survive a restart by design.
 
 ## Best Practices
 

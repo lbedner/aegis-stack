@@ -493,11 +493,6 @@ MESSAGES: dict[str, str] = {
     "tasks.help": "スケジュールタスク管理コマンド",
     "tasks.help_list": "全スケジュールジョブの現在のステータスと詳細を一覧表示します。",
     # ── マイグレーション ──────────────────────────────────────────────
-    "migrate.table_missing_warning": (
-        "  警告：テーブル '{table}' が存在しません。"
-        "手動マイグレーションを作成してください："
-        "alembic revision --autogenerate -m 'add {table}'"
-    ),
     "migrate.no_existing_migrations": "既存のマイグレーションがありません。先に 'make migrate' を実行してください。",
     "migrate.checking_schema": "スキーマをモデルと照合中...",
     "migrate.applying_pending": "保留中のマイグレーションを適用中...",

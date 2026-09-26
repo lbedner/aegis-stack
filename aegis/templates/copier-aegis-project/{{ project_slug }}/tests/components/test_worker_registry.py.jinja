@@ -47,8 +47,10 @@ def _defined_tasks(module: Any) -> set[str]:
 
 
 def _defined_tasks(module: Any) -> set[str]:
+    from app.components.worker.registry import task_name
+
     settings = module.WorkerSettings
-    return {fn.__name__ for fn in getattr(settings, "functions", [])}
+    return {task_name(fn) for fn in getattr(settings, "functions", [])}
 {%- endif %}
 
 

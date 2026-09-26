@@ -33,6 +33,7 @@ pytestmark = pytest.mark.xdist_group("generated_stacks")
 DEPS_FILE = "app/components/backend/api/deps.py"
 METRICS_FILE = "app/components/backend/api/metrics.py"
 SCHEDULER_MAIN = "app/components/scheduler/main.py"
+SCHEDULER_JOBS = "app/components/scheduler/jobs.py"
 MIGRATION_SKILL = ".claude/skills/add-model-and-migration/SKILL.md"
 
 
@@ -102,7 +103,7 @@ class TestPromotedWiringFiles:
             "metrics endpoint left unprotected after auth add"
         )
 
-    def test_scheduler_main_gains_insights_jobs(
+    def test_scheduler_jobs_gain_insights_jobs(
         self, project_factory: ProjectFactory
     ) -> None:
         """add-service insights must register its jobs, or collectors
@@ -117,8 +118,8 @@ class TestPromotedWiringFiles:
             }
         )
 
-        assert "insights" in (project / SCHEDULER_MAIN).read_text(), (
-            "scheduler/main.py never registered the insights jobs"
+        assert "insights" in (project / SCHEDULER_JOBS).read_text(), (
+            "scheduler/jobs.py never listed the insights jobs"
         )
 
     def test_scheduler_main_not_created_without_component(
@@ -130,9 +131,10 @@ class TestPromotedWiringFiles:
         updater = ManualUpdater(project)
         updater._regenerate_shared_files({**updater.answers, "include_insights": True})
 
-        assert not (project / SCHEDULER_MAIN).exists(), (
-            "regen materialized a scheduler file in a scheduler-less project"
-        )
+        for path in (SCHEDULER_MAIN, SCHEDULER_JOBS):
+            assert not (project / path).exists(), (
+                f"regen materialized {path} in a scheduler-less project"
+            )
 
 
 class TestGatedOnArrival:

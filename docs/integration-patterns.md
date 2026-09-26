@@ -133,17 +133,24 @@ class WorkerSettings:
 Scheduled jobs call service methods directly:
 
 ```python
-# app/components/scheduler.py
+# app/services/cleanup_service/jobs.py
 from app.services.cleanup_service import CleanupService
 from app.core.db import db_session
 
-async def cleanup_inactive_users():
+async def cleanup_inactive_users() -> None:
     """Scheduled task to cleanup inactive users."""
     with db_session() as session:
         cleanup_service = CleanupService(session)
         await cleanup_service.deactivate_inactive_users(days=90)
 
-scheduler.add_job(cleanup_inactive_users, 'cron', hour=2)
+
+# app/components/scheduler/jobs.py
+ServiceJob(
+    cleanup_inactive_users,
+    "cleanup_inactive_users",
+    "Cleanup Inactive Users",
+    {"trigger": "cron", "hour": 2},
+)
 ```
 
 ### Consistent Behavior
@@ -170,43 +177,38 @@ One service class. Multiple entry points. Consistent behavior.
 
 Sometimes components need to communicate with each other, not just call services.
 
-### Scheduler → Worker
+### Scheduler and Worker
 
-Scheduler can trigger worker tasks for heavy operations:
+The worker is optional. Without one, the scheduler runs each scheduled job
+in its own process, and "Run Now" runs it in the process that received the
+request; that is the right setup for light jobs and small deployments.
 
-```python
-# app/components/scheduler.py
-from app.components.worker.pools import get_queue_pool
-
-async def schedule_daily_reports():
-    """Scheduler triggers worker to generate reports."""
-    pool, _ = await get_queue_pool("system")
-    await pool.enqueue_job("generate_daily_report")
-    await pool.aclose()
-
-# Schedule daily at 2 AM
-scheduler.add_job(schedule_daily_reports, 'cron', hour=2)
-```
-
-Or execute lightweight tasks directly:
+Add a worker and the scheduler hands every scheduled job to it instead:
+each `SERVICE_JOBS` entry is scheduled as an enqueue of the job's name onto
+the `system` queue, and the worker registers the same entry as a task and
+runs it. Nothing to wire by hand; the job function stays a plain service
+function:
 
 ```python
-# app/components/scheduler.py
-from app.services.cleanup_service import CleanupService
-from app.core.db import db_session
+# app/services/reports/jobs.py
+async def generate_daily_report() -> None:
+    """Runs on the worker when there is one, in the scheduler otherwise."""
+    ...
 
-async def cleanup_temp_files():
-    """Fast cleanup - run directly in scheduler."""
-    with db_session() as session:
-        cleanup = CleanupService(session)
-        await cleanup.remove_temp_files()
 
-scheduler.add_job(cleanup_temp_files, 'interval', hours=1)
+# app/components/scheduler/jobs.py
+ServiceJob(
+    generate_daily_report,
+    "daily_report",
+    "Daily Report",
+    {"trigger": "cron", "hour": 2},
+    timeout=LONG_RUNNING,  # past the queue's five minutes
+)
 ```
 
-**When to use Worker vs Direct:**
-- **Direct**: Lightweight tasks (< 1 second), no retry needed
-- **Worker**: Heavy tasks, need retry logic, want queue management
+The worker's resources, retries and live feed apply to scheduled jobs and
+to "Run Now" alike. `SERVICE_JOBS` does not change either way, so a worker
+can be added or removed later without touching the job list.
 
 ### API → Worker
 

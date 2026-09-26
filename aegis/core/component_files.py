@@ -414,15 +414,17 @@ def get_all_owned_paths() -> set[str]:
 
 # Manifest-owned paths whose CONTENT also depends on other specs' answers,
 # not just their own gate — ownership alone can't tell the render-diff
-# engine these need touching. ``app/components/scheduler/main.py``:
-# existence is scheduler-owned (only ever copied when scheduler is
-# selected), but its content also registers OTHER services' jobs
-# (insights, finance, ...). The old ``shared_files.py`` carried this same
-# file under the "no-create" ``_REGEN_EXISTING`` policy for exactly this
-# reason. A single documented exception, not a list that grows — kept
-# honest by ``tests/core/test_component_ownership.py::TestOwnedButSharedPaths``
-# and ``tests/core/test_render_diff_shared_scope.py``.
-OWNED_BUT_SHARED_PATHS: frozenset[str] = frozenset({"app/components/scheduler/main.py"})
+# engine these need touching. The scheduler's two files: existence is
+# scheduler-owned (only ever copied when scheduler is selected), but
+# ``jobs.py`` lists OTHER services' jobs (insights, finance, ...) and
+# ``main.py`` schedules them onto the worker when there is one. The old
+# ``shared_files.py`` carried the scheduler under the "no-create"
+# ``_REGEN_EXISTING`` policy for exactly this reason. One documented
+# exception, not a list that grows — kept honest by
+# ``tests/core/test_component_ownership.py::TestOwnedButSharedPaths``.
+OWNED_BUT_SHARED_PATHS: frozenset[str] = frozenset(
+    {"app/components/scheduler/main.py", "app/components/scheduler/jobs.py"}
+)
 
 # Unowned by any component/service manifest (nothing claims them), but
 # NOT safe for the render-diff engine to render either — the naive

@@ -506,6 +506,7 @@ MESSAGES: dict[str, str] = {
     "tasks.job_not_runnable": "Could not resolve job function:",
     "tasks.triggering": "Running job:",
     "tasks.trigger_success": "Job completed successfully:",
+    "tasks.trigger_queued": "Job handed to the worker (its run shows there):",
     "tasks.trigger_failed": "Job failed (see logs / history for details):",
     "tasks.no_executions": "No executions recorded yet for job:",
     "tasks.stats_failed": "Failed to load job stats:",
@@ -537,11 +538,6 @@ MESSAGES: dict[str, str] = {
     ),
     "tasks.help_history": "Show recent job execution history.",
     # ── Migrate ──────────────────────────────────────────────────────
-    "migrate.table_missing_warning": (
-        "  WARNING: Table '{table}' is missing entirely. "
-        "Create a manual migration with: "
-        "alembic revision --autogenerate -m 'add {table}'"
-    ),
     "migrate.no_existing_migrations": "No existing migrations found. Run 'make migrate' first.",
     "migrate.checking_schema": "Checking schema against models...",
     "migrate.applying_pending": "Applying pending migrations first...",

@@ -27,10 +27,10 @@ Expanding a row shows the full job ID, the scheduled run time, and the finished 
 
 ## CLI
 
-The generated `tasks` CLI can trigger jobs and inspect their history without the backend running. Unlike the API (which runs the job in the backend and returns immediately), the CLI runs the job in-process and waits for the result, so it composes with scripts and CI.
+The generated `tasks` CLI can trigger jobs and inspect their history without the backend running. With a worker in the project, `tasks trigger` hands the job to the worker, like the API; without one, it runs the job in-process and waits for the result, so it composes with scripts and CI.
 
 ```bash
-# Run a job now and wait for the outcome
+# Run a job now (on the worker, if there is one)
 my-app tasks trigger database_backup
 
 # Aggregate stats for one job
@@ -52,13 +52,13 @@ All endpoints require admin authentication.
 POST /api/v1/scheduler/jobs/{job_id}/run
 ```
 
-Runs the job immediately in the backend process. The execution is recorded to `job_execution` the same way a scheduled run is.
+Repeats the job's stored call now, and records it to `job_execution` the same way a scheduled run is. With a worker in the project that call is an enqueue, so the job runs on the worker, never inside the webserver; without one, it runs in the backend process. The response's `ran_in` says which (`"worker"` or `"webserver"`).
 
 **Responses:**
 
 | Status | Meaning |
 |--------|---------|
-| `202 Accepted` | Job started in the background |
+| `202 Accepted` | Job handed to the worker, or started in the background |
 | `404 Not Found` | No job with that ID exists |
 | `409 Conflict` | An instance of this job is already running |
 

@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **With a worker, scheduled jobs run on the worker.** The scheduler ran
+  every job in its own process, and "Run Now" ran it inside the webserver,
+  on the event loop that serves every page and under the webserver's
+  limits. Scheduled jobs are now listed once, in `SERVICE_JOBS`
+  (`app/components/scheduler/jobs.py`). In a stack with a worker, the
+  scheduler enqueues each by name onto the system queue, and the worker
+  registers the same list as tasks: arq, TaskIQ and Dramatiq alike, with
+  a longer timeout for the long jobs. "Run Now" and `tasks trigger` repeat
+  the stored call, so a manual run lands on the worker too, and the API
+  response says where it ran (`ran_in`). The heartbeat stays in the
+  scheduler. The Scheduler page's run history now times the enqueue; the
+  run itself is on the Worker page. Stacks without a worker are unchanged.
+- **Successful scheduled runs no longer log.** APScheduler wrote two INFO
+  lines per run, the heartbeat's alone every 15 seconds. Failures still
+  log.
+
 ## [0.13.2] - 2026-09-25
 
 ### Changed

@@ -493,11 +493,6 @@ MESSAGES: dict[str, str] = {
     "tasks.help": "Comandos de gestión de tareas programadas",
     "tasks.help_list": "Listar todos los trabajos programados con su estado y detalles.",
     # ── Migrate ──────────────────────────────────────────────────────
-    "migrate.table_missing_warning": (
-        "  ADVERTENCIA: Tabla '{table}' no existe. "
-        "Crea una migración manual con: "
-        "alembic revision --autogenerate -m 'add {table}'"
-    ),
     "migrate.no_existing_migrations": "Sin migraciones existentes. Ejecuta 'make migrate' primero.",
     "migrate.checking_schema": "Verificando schema contra modelos...",
     "migrate.applying_pending": "Aplicando migraciones pendientes primero...",

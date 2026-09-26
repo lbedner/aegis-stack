@@ -8,6 +8,7 @@ from typing import Any
 
 import redis.asyncio as aioredis
 from app.components.worker.events import publish_event
+from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.components.worker.tasks.document_tasks import extract_document_task
 from app.components.worker.tasks.simple_system_tasks import (
     cleanup_temp_files,
@@ -31,6 +32,7 @@ class WorkerSettings:
         system_health_check,
         cleanup_temp_files,
         extract_document_task,
+        *service_job_tasks(),
     ]
 
     # arq configuration with improved connection settings

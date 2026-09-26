@@ -395,13 +395,21 @@ class TestSchedulerRegistration:
     """The job has to be registered, or the nightly note simply never happens."""
 
     def test_the_nightly_note_job_is_registered_after_the_rules(self) -> None:
-        from app.components.scheduler import main as scheduler_main
+        from app.components.scheduler.jobs import SERVICE_JOBS
+        from app.services.finance.jobs import (
+            finance_analyst_note_job,
+            finance_recompute_snapshots_job,
+        )
 
-        source = scheduler_main.__file__
-        with open(source) as handle:
-            text = handle.read()
-        assert "finance_analyst_note_job" in text
-        assert 'id="finance_analyst_note"' in text
+        by_func = {job.func: job for job in SERVICE_JOBS}
+        note = by_func[finance_analyst_note_job]
+        rules = by_func[finance_recompute_snapshots_job]
+
+        assert note.id == "finance_analyst_note"
+        assert (note.trigger["hour"], note.trigger.get("minute", 0)) > (
+            rules.trigger["hour"],
+            rules.trigger.get("minute", 0),
+        )
 
 
 class TestFixturesReachTheRegistry:

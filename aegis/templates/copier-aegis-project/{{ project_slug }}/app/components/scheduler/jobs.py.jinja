@@ -1,0 +1,197 @@
+"""The service jobs this project runs on a schedule.
+
+One list, read by the scheduler (which schedules each entry) and, in a stack
+with a worker, by the worker (which registers each as a task named after its
+function). The heartbeat is not here: it belongs to the scheduler itself.
+
+To add a job, add an entry. Code is the source of truth: every scheduler
+start re-registers each entry, so editing a trigger and redeploying changes
+the schedule.
+"""
+
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
+{% if include_scheduler and include_database %}
+from app.services.system.backup import backup_database_job
+{%- endif %}
+{%- if include_ai and ai_backend != "memory" %}
+from app.services.ai.jobs import analyze_sentiment_job, sync_llm_catalog_job
+{%- endif %}
+{%- if include_auth %}
+from app.services.auth.jobs import cleanup_expired_refresh_tokens_job
+{%- endif %}
+{%- if include_insights and insights_github %}
+from app.services.insights.jobs import (
+    collect_github_events_job,
+    collect_github_stars_job,
+    collect_github_traffic_job,
+)
+{%- endif %}
+{%- if include_insights and insights_pypi %}
+from app.services.insights.jobs import collect_pypi_job
+{%- endif %}
+{%- if include_insights and insights_plausible %}
+from app.services.insights.jobs import collect_plausible_job
+{%- endif %}
+{%- if include_finance %}
+from app.services.finance.jobs import (
+    finance_envelope_credit_job,
+    finance_goal_auto_contribute_job,
+    finance_recompute_snapshots_job,
+)
+{%- endif %}
+{%- if include_finance and include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+from app.services.finance.jobs import finance_analyst_note_job
+{%- endif %}
+{%- if include_finance and (finance_plaid or finance_snaptrade) %}
+from app.services.finance.jobs import finance_sync_connections_job
+{%- endif %}
+
+# Seconds a worker lets a long job run, where the queue's own limit (five
+# minutes) is too short. A ceiling, not a measurement.
+LONG_RUNNING = 60 * 60
+
+
+@dataclass(frozen=True)
+class ServiceJob:
+    """A job function and when it runs.
+
+    ``trigger`` is passed to ``scheduler.add_job`` as keyword arguments.
+    ``timeout`` is how long a worker lets it run; None keeps the queue's.
+    """
+
+    func: Callable[[], Awaitable[Any]]
+    id: str
+    name: str
+    trigger: dict[str, Any]
+    timeout: int | None = None
+
+    @property
+    def task_name(self) -> str:
+        """The name the worker registers it under and the scheduler enqueues."""
+        return self.func.__name__
+
+
+SERVICE_JOBS: tuple[ServiceJob, ...] = (
+{%- if include_scheduler and include_database %}
+    ServiceJob(
+        backup_database_job,
+        "database_backup",
+        "Daily Database Backup",
+        {"trigger": "cron", "hour": 2, "minute": 0},
+        timeout=LONG_RUNNING,
+    ),
+{%- endif %}
+{%- if include_ai and ai_backend != "memory" %}
+    ServiceJob(
+        sync_llm_catalog_job,
+        "llm_sync",
+        "LLM Catalog Sync",
+        {"trigger": "interval", "hours": 6},
+        timeout=LONG_RUNNING,
+    ),
+    ServiceJob(
+        analyze_sentiment_job,
+        "sentiment_analysis",
+        "Conversation Sentiment Analysis",
+        {"trigger": "interval", "hours": 1},
+    ),
+{%- endif %}
+{%- if include_insights and insights_github %}
+    ServiceJob(
+        collect_github_traffic_job,
+        "insight_github_traffic",
+        "Insight: GitHub Traffic",
+        {"trigger": "cron", "hour": 12, "minute": 0},
+    ),
+    ServiceJob(
+        collect_github_stars_job,
+        "insight_github_stars",
+        "Insight: GitHub Stars",
+        {"trigger": "cron", "hour": 12, "minute": 0},
+    ),
+    ServiceJob(
+        collect_github_events_job,
+        "insight_github_events",
+        "Insight: GitHub Events",
+        {"trigger": "cron", "hour": 12, "minute": 0},
+    ),
+{%- endif %}
+{%- if include_insights and insights_pypi %}
+    ServiceJob(
+        collect_pypi_job,
+        "insight_pypi",
+        "Insight: PyPI Downloads",
+        {"trigger": "cron", "hour": 18, "minute": 0},
+    ),
+{%- endif %}
+{%- if include_insights and insights_plausible %}
+    ServiceJob(
+        collect_plausible_job,
+        "insight_plausible",
+        "Insight: Plausible Analytics",
+        {"trigger": "cron", "minute": 0},
+    ),
+{%- endif %}
+{%- if include_auth %}
+    # Refresh tokens live for days or weeks and the table grows by at most
+    # one row per device sign-in, so daily is plenty.
+    ServiceJob(
+        cleanup_expired_refresh_tokens_job,
+        "auth_refresh_token_cleanup",
+        "Auth: Refresh Token Cleanup",
+        {"trigger": "interval", "hours": 24},
+    ),
+{%- endif %}
+{%- if include_finance %}
+    # Net-worth engine: materialize per-account balance and per-user
+    # net-worth snapshots nightly, so the chart is a cheap range scan.
+    ServiceJob(
+        finance_recompute_snapshots_job,
+        "finance_recompute_snapshots",
+        "Finance: Recompute Net-Worth Snapshots",
+        {"trigger": "cron", "hour": 2},
+        timeout=LONG_RUNNING,
+    ),
+    # Goals: book toggled-on goals' declared amounts on the 1st. Idempotent
+    # per month, so a missed run caught up later books nothing twice.
+    ServiceJob(
+        finance_goal_auto_contribute_job,
+        "finance_goal_auto_contribute",
+        "Finance: Auto-Contribute to Goals",
+        {"trigger": "cron", "day": 1, "hour": 2, "minute": 45},
+    ),
+    # Envelopes: the allowance arrives on its cadence (weekly credits land
+    # Mondays), so the job checks daily and its per-period idempotency
+    # decides whether anything books.
+    ServiceJob(
+        finance_envelope_credit_job,
+        "finance_envelope_credit",
+        "Finance: Credit Envelopes",
+        {"trigger": "cron", "hour": 2, "minute": 50},
+    ),
+{%- endif %}
+{%- if include_finance and include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+    # Half an hour behind the rules pass, so the note is written from
+    # tonight's findings rather than last night's.
+    ServiceJob(
+        finance_analyst_note_job,
+        "finance_analyst_note",
+        "Finance: Write Analyst Note",
+        {"trigger": "cron", "hour": 2, "minute": 30},
+        timeout=LONG_RUNNING,
+    ),
+{%- endif %}
+{%- if include_finance and (finance_plaid or finance_snaptrade) %}
+    # Keep linked banks fresh between logins; webhooks handle the real-time
+    # nudge when a public URL is configured.
+    ServiceJob(
+        finance_sync_connections_job,
+        "finance_sync_connections",
+        "Finance: Sync Bank Connections",
+        {"trigger": "interval", "hours": 6},
+        timeout=LONG_RUNNING,
+    ),
+{%- endif %}
+)

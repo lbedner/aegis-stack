@@ -61,22 +61,7 @@ class ScheduledTaskManager:
             tasks = []
             for job in jobs:
                 try:
-                    job_data = job.get_job_data()
-                    task = ScheduledTask(
-                        job_id=job.id,
-                        name=job_data.get("name", job.id),
-                        function=job_data.get("func", "unknown"),
-                        schedule=self._format_trigger(job_data.get("trigger")),
-                        trigger_type=self._get_trigger_type(job_data.get("trigger")),
-                        next_run_time=(
-                            datetime.fromtimestamp(job.next_run_time)
-                            if job.next_run_time else None
-                        ),
-                        status="active" if job.next_run_time else "paused",
-                        max_instances=job_data.get("max_instances", 1),
-                        coalesce=job_data.get("coalesce", True),
-                    )
-                    tasks.append(task)
+                    tasks.append(self._task_from(job))
                 except Exception as e:
                     logger.error(f"Error processing job {job.id}: {e}")
                     continue
@@ -103,24 +88,29 @@ class ScheduledTaskManager:
                 return None
 
             try:
-                job_data = job.get_job_data()
-                return ScheduledTask(
-                    job_id=job.id,
-                    name=job_data.get("name", job.id),
-                    function=job_data.get("func", "unknown"),
-                    schedule=self._format_trigger(job_data.get("trigger")),
-                    trigger_type=self._get_trigger_type(job_data.get("trigger")),
-                    next_run_time=(
-                        datetime.fromtimestamp(job.next_run_time)
-                        if job.next_run_time else None
-                    ),
-                    status="active" if job.next_run_time else "paused",
-                    max_instances=job_data.get("max_instances", 1),
-                    coalesce=job_data.get("coalesce", True),
-                )
+                return self._task_from(job)
             except Exception as e:
                 logger.error(f"Error processing job {task_id}: {e}")
                 return None
+
+    def _task_from(self, job: APSchedulerJob) -> ScheduledTask:
+        """A stored APScheduler job as the task CLI/API consumers see."""
+        job_data = job.get_job_data()
+        return ScheduledTask(
+            job_id=job.id,
+            name=job_data.get("name", job.id),
+            function=job_data.get("func", "unknown"),
+            args=list(job_data.get("args", ())),
+            schedule=self._format_trigger(job_data.get("trigger")),
+            trigger_type=self._get_trigger_type(job_data.get("trigger")),
+            next_run_time=(
+                datetime.fromtimestamp(job.next_run_time)
+                if job.next_run_time else None
+            ),
+            status="active" if job.next_run_time else "paused",
+            max_instances=job_data.get("max_instances", 1),
+            coalesce=job_data.get("coalesce", True),
+        )
 
     async def get_statistics(self) -> TaskStatistics:
         """

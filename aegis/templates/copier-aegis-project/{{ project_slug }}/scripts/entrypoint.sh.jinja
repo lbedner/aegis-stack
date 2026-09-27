@@ -53,6 +53,16 @@ elif [ "$run_command" = "scheduler" ]; then
     fi
 {%- if include_worker %}
 elif [ "$run_command" = "worker" ]; then
+    # Jobs one worker process runs at once on a queue, from
+    # Settings.WORKER_QUEUES (app/core/queue_workers.py). Stops the
+    # container if the settings name a queue that does not exist.
+    worker_concurrency() {
+        out=$(uv run python -m app.components.worker.runtime concurrency "$1" 2>&1) || {
+            printf '%s\n' "$out" >&2
+            return 1
+        }
+        printf '%s\n' "$out" | tail -n 1
+    }
 {%- if worker_backend == "taskiq" %}
     # Worker component using TaskIQ
     queue_type="${1:-system}"  # Default to system queue if not specified
@@ -63,6 +73,8 @@ elif [ "$run_command" = "worker" ]; then
 
     # Worker processes (default: 2) - controls parallelism for CPU-bound tasks
     worker_processes="${WORKER_PROCESSES:-2}"
+
+    concurrency=$(worker_concurrency "${queue_type}") || exit 1
 
     # Dev hot-reload caveat: TaskIQ's ``--workers N`` (N>1) uses Python's
     # multiprocessing forkserver, which imports the broker module ONCE
@@ -82,13 +94,14 @@ elif [ "$run_command" = "worker" ]; then
         && uv run python -c "import watchfiles" 2>/dev/null; then
         echo "Starting ${queue_type} taskiq worker with auto-reload (1 process, forkserver disabled)..."
         exec uv run watchfiles --filter python \
-            "taskiq worker ${broker_module} --workers 1 $*" /code/app
+            "taskiq worker ${broker_module} --workers 1 --max-async-tasks ${concurrency} $*" /code/app
     fi
 
     # watchfiles ships via uvicorn[standard] (not guaranteed in every
     # stack shape) - a missing watcher must not stop the worker.
-    echo "Starting ${queue_type} taskiq worker with ${worker_processes} processes..."
-    exec uv run taskiq worker "${broker_module}" --workers "${worker_processes}" "$@"
+    echo "Starting ${queue_type} taskiq worker with ${worker_processes} processes, ${concurrency} jobs each..."
+    exec uv run taskiq worker "${broker_module}" --workers "${worker_processes}" \
+        --max-async-tasks "${concurrency}" "$@"
 {%- elif worker_backend == "dramatiq" %}
     # Worker component using Dramatiq
     queue_type="${1:-system}"  # Default to system queue if not specified
@@ -99,9 +112,9 @@ elif [ "$run_command" = "worker" ]; then
     broker_module="app.components.worker.broker"
     queue_module="app.components.worker.queues.${queue_type}"
 
-    # Worker processes and threads
+    # Worker processes, and threads per process: the queue's concurrency.
     worker_processes="${WORKER_PROCESSES:-2}"
-    worker_threads="${WORKER_THREADS:-8}"
+    worker_threads=$(worker_concurrency "${queue_type}") || exit 1
 
     # Dev hot-reload via dramatiq's built-in ``--watch DIR`` flag.
     # Gated by APP_ENV=dev or WORKER_WATCH=true to match the arq /

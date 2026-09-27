@@ -47,7 +47,7 @@
    what to do about it. Swap it in wherever a table or card grid would
    otherwise render zero rows. #}
 {% macro empty_state(title, hint=None) %}
-<div class="rounded-lg border border-dashed border-aegis-border px-6 py-10 text-center">
+<div data-empty class="rounded-lg border border-dashed border-aegis-border px-6 py-10 text-center">
   <h2 class="text-sm font-medium text-aegis-text">{{ title }}</h2>
   {% if hint %}<p class="mt-1 text-xs text-aegis-muted">{{ hint }}</p>{% endif %}
 </div>

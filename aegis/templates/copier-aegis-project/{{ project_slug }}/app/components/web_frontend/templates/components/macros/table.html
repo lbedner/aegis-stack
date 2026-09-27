@@ -9,20 +9,26 @@
    row's ``currency`` when it has one; ``signed`` adds a leading ``+`` and
    colours by sign, ``toned`` colours by sign without the plus), ``date``,
    ``int`` or ``status`` (the value is
-   ``{"label", "tone"}``, rendered as a ``badge``); ``align`` is ``left``
+   ``{"label", "tone"}``, rendered as a ``badge``); ``render`` is a macro
+   taking the value, for a cell no kind covers; ``align`` is ``left``
    (default) or ``right``. Rows are objects or dicts; a blank value
    renders as a dash. Zero rows render ``empty_state`` instead.
 
    ``row_id`` names each ``<tr>`` (``row_id ~ "-" ~ row.id``) so an action
-   can swap one row back; a ``{% call(row) data_table(...) %}`` block adds
-   an actions column rendered per row. #}
+   can swap one row back; a ``{% call(row) data_table(...) %}`` block, or a
+   macro passed as ``actions``, adds an actions column rendered per row
+   (``actions=none`` leaves it out, so one table serves both cases). ``detail`` is a macro taking the
+   row: each row then gets a toggle and a hidden full-width row under it
+   with that macro's output (the Flet expandable rows). #}
 {% from "components/macros/feedback.html" import empty_state %}
 {% from "components/macros/layout.html" import badge %}
 
 {% macro _cell(row, col) -%}
 {%- set value = row[col.key] if row is mapping else row|attr(col.key) -%}
-{%- if value is none or value == "" -%}
+{%- if value is not defined or value is none or value == "" -%}
 -
+{%- elif col.render -%}
+{{ col.render(value) }}
 {%- elif col.kind == "money" -%}
 {%- set currency = (row["currency"] if row is mapping and "currency" in row else row|attr("currency")) -%}
 {{ "+" if col.signed and value > 0 }}{{ value|money(currency if currency is string else "USD") }}
@@ -50,14 +56,20 @@ text-aegis-text
 {# One row. ``id`` lets an action swap this row back by itself; ``oob``
    marks it as an out-of-band answer (pattern 2); ``actions`` is a macro
    (a call block's ``caller``) rendering the trailing actions cell. #}
-{% macro table_row(columns, row, id=None, oob=False, actions=None) %}
+{% macro table_row(columns, row, id=None, oob=False, actions=None, expandable=False) %}
 {# A row swapped out of band travels wrapped: a bare <tr> at the top
    of a response bound for anything but a table is thrown away by the
    HTML parser, and its cells spill into whatever was being swapped — a
    stray row loose in a dialog. htmx unwraps a template before it swaps,
    so this is the way to send one anywhere. #}
 {% if oob %}<template{% if id %} id="{{ id }}-oob"{% endif %}>{% endif %}
-<tr {% if id %}id="{{ id }}"{% endif %} {% if oob %}hx-swap-oob="outerHTML"{% endif %} class="hover:bg-aegis-border/20 transition-colors">
+<tr {% if id %}id="{{ id }}"{% endif %} {% if oob %}hx-swap-oob="outerHTML"{% endif %} {% if expandable %}@click="open = !open"{% endif %} class="hover:bg-aegis-border/20 transition-colors{{ ' cursor-pointer' if expandable }}">
+  {% if expandable %}
+  <td class="pl-5 pr-0 py-2 w-4">
+    <button type="button" @click.stop="open = !open" aria-expanded="false" :aria-expanded="open.toString()" aria-label="Details"
+            class="text-aegis-muted hover:text-aegis-text"><span aria-hidden="true" class="inline-block transition-transform" :class="open && 'rotate-90'">&rsaquo;</span></button>
+  </td>
+  {% endif %}
   {% for col in columns %}
   <td class="px-5 py-2 whitespace-nowrap {{ 'text-right tabular-nums' if col.align == 'right' else 'text-left' }} {{ _tone(row, col) }}">{{ _cell(row, col) }}</td>
   {% endfor %}
@@ -66,23 +78,36 @@ text-aegis-text
 {% if oob %}</template>{% endif %}
 {% endmacro %}
 
-{% macro data_table(columns, rows, empty="Nothing here yet", row_id=None) %}
+{% macro data_table(columns, rows, empty="Nothing here yet", row_id=None, detail=None, actions=None) %}
+{% set actions = actions or (caller if caller is defined else None) %}
 {% if rows %}
 <div class="overflow-x-auto -mx-5">
   <table class="w-full text-sm">
     <thead>
-      <tr class="text-xxs text-aegis-muted uppercase tracking-wider border-b border-aegis-border">
+      <tr class="text-xxs text-aegis-muted caps border-b border-aegis-border">
+        {% if detail %}<th scope="col"><span class="sr-only">Details</span></th>{% endif %}
         {% for col in columns %}
         <th scope="col" class="px-5 py-2 font-medium {{ 'text-right' if col.align == 'right' else 'text-left' }}">{{ col.label }}</th>
         {% endfor %}
-        {% if caller is defined %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}
+        {% if actions %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}
       </tr>
     </thead>
+    {% if detail %}
+    {% for row in rows %}
+    <tbody x-data="{ open: false }" class="border-b border-aegis-border/60 last:border-0">
+      {{ table_row(columns, row, id=(row_id ~ "-" ~ (row["id"] if row is mapping else row.id)) if row_id else None, actions=actions, expandable=True) }}
+      <tr data-detail x-show="open" x-cloak>
+        <td colspan="{{ columns|length + 1 + (1 if actions else 0) }}" class="px-5 pb-4 pt-2 bg-aegis-border/10">{{ detail(row) }}</td>
+      </tr>
+    </tbody>
+    {% endfor %}
+    {% else %}
     <tbody class="divide-y divide-aegis-border/60">
       {% for row in rows %}
-      {{ table_row(columns, row, id=(row_id ~ "-" ~ (row["id"] if row is mapping else row.id)) if row_id else None, actions=caller if caller is defined else None) }}
+      {{ table_row(columns, row, id=(row_id ~ "-" ~ (row["id"] if row is mapping else row.id)) if row_id else None, actions=actions) }}
       {% endfor %}
     </tbody>
+    {% endif %}
   </table>
 </div>
 {% else %}

@@ -43,10 +43,14 @@ def get_status_color_name(status: ComponentStatusType) -> str:
 
 
 def get_component_title(component_name: str) -> str:
-    """Map component keys to category/title names for modal headers."""
+    """The one name for a component or service, on every surface.
+
+    Components are keyed by name, services as ``service_<name>``. Anything
+    unlisted (a plugin) is title-cased from its key.
+    """
     mapping = {
         "backend": "Server",
-        "frontend": "Frontend",
+        "frontend": "{{ 'Flet Frontend' if include_htmx else 'Frontend' }}",
         {%- if include_htmx %}
         "web_frontend": "Web Frontend",
         {%- endif %}
@@ -70,10 +74,10 @@ def get_component_title(component_name: str) -> str:
         "ollama": "Inference",
         {%- endif %}
         {%- if include_ai %}
-        "service_ai": "AI Service",
+        "service_ai": "AI",
         {%- endif %}
         {%- if include_auth %}
-        "service_auth": "Auth Service",
+        "service_auth": "Authentication",
         {%- endif %}
         {%- if include_blog %}
         "service_blog": "Blog",
@@ -97,7 +101,10 @@ def get_component_title(component_name: str) -> str:
         "ingress": "Ingress",
         {%- endif %}
     }
-    return mapping.get(component_name, component_name.replace("_", " ").title())
+    fallback = (
+        component_name.removeprefix("service_").replace("_", " ").replace("-", " ")
+    )
+    return mapping.get(component_name, fallback.title())
 
 
 def get_component_label(component_name: str) -> str:

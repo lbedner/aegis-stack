@@ -1,12 +1,10 @@
-"""Theming: a theme is a block of CSS variables, nothing else.
-
-Every color a template or script uses is a token defined per
-``[data-theme]`` in ``input.css``; Tailwind's ``aegis.*`` names map onto
-those tokens. These tests keep the single rebrand point single.
-"""
+"""The four Steward-derived themes share one Tailwind/DaisyUI token source."""
 
 from pathlib import Path
 import re
+import json
+import shutil
+import subprocess
 
 from fastapi.testclient import TestClient
 import pytest
@@ -16,7 +14,7 @@ from tests.web.dom import one, select
 WEB = Path("app/components/web_frontend")
 INPUT_CSS = WEB / "static/input.css"
 TAILWIND = Path("tailwind.config.js")
-THEMES = ("aegis", "aegis-light")
+THEMES = ("aegis-dark", "aegis-light", "steward-dark", "steward-light")
 
 HEX = re.compile(r"#[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{3}\b(?![\w-])")
 # Classes that name a literal color rather than a token; they look right
@@ -26,40 +24,43 @@ THEME_BLIND = re.compile(
 )
 
 
-def theme_blocks(css: str) -> dict[str, set[str]]:
-    """Token names declared inside each ``[data-theme="..."]`` block."""
-    blocks: dict[str, set[str]] = {}
-    for match in re.finditer(r'\[data-theme="([\w-]+)"\][^{]*\{([^}]*)\}', css):
-        names = set(re.findall(r"--aegis-[\w-]+", match.group(2)))
-        blocks[match.group(1)] = blocks.get(match.group(1), set()) | names
-    return blocks
+def theme_config() -> dict[str, dict[str, str]]:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not installed")
+    script = (
+        "const M = require('module'); const load = M.prototype.require;"
+        " M.prototype.require = function (id) {"
+        " return id === 'daisyui' ? {} : load.apply(this, arguments); };"
+        " console.log(JSON.stringify(require('./tailwind.config.js').daisyui.themes))"
+    )
+    out = subprocess.run([node, "-e", script], capture_output=True, text=True, check=True).stdout
+    return {name: body for entry in json.loads(out) for name, body in entry.items()}
 
 
 class TestTokens:
-    def test_both_themes_define_the_same_tokens(self) -> None:
-        blocks = theme_blocks(INPUT_CSS.read_text())
-        assert set(blocks) >= set(THEMES)
-        assert blocks["aegis"] == blocks["aegis-light"]
-        assert {"--aegis-bg", "--aegis-card", "--aegis-text", "--aegis-teal"} <= blocks[
-            "aegis"
-        ]
+    def test_all_theme_pairs_share_tokens(self) -> None:
+        themes = theme_config()
+        assert set(themes) == set(THEMES)
+        assert len({frozenset(body) for body in themes.values()}) == 1
+        for body in themes.values():
+            assert len([key for key in body if key.startswith("--aegis-chart-")]) == 8
+        assert themes["aegis-dark"]["--rounded-box"] != themes["steward-dark"]["--rounded-box"]
 
-    def test_chart_ramp_is_a_token_set(self) -> None:
-        blocks = theme_blocks(INPUT_CSS.read_text())
-        ramp = {name for name in blocks["aegis"] if name.startswith("--aegis-chart-")}
-        assert len(ramp) >= 8
-
-    def test_tailwind_colors_reference_the_tokens(self) -> None:
-        """``bg-aegis-card`` and friends keep working; only the values move."""
+    def test_tailwind_colors_read_daisyui_variables(self) -> None:
         config = TAILWIND.read_text()
-        assert "rgb(var(--aegis-${name}) / <alpha-value>)" in config
+        assert 'const daisy = (name) => `oklch(var(--${name}) / <alpha-value>)`' in config
         for name in ("bg", "card", "border", "text", "muted", "teal", "amber", "error"):
-            assert f'{name}: token("{name}")' in config, name
+            assert re.search(rf'{name}: daisy\("[\w-]+"\)', config), name
+        assert '[data-theme' not in INPUT_CSS.read_text()
 
-    def test_daisyui_ships_both_themes(self) -> None:
+    def test_shape_and_voice_tokens(self) -> None:
         config = TAILWIND.read_text()
-        for theme in THEMES:
-            assert re.search(rf'["\']?{theme}["\']?\s*:\s*\{{', config), theme
+        assert 'DEFAULT: "var(--rounded-btn)"' in config
+        assert 'lg: "var(--rounded-box)"' in config
+        css = INPUT_CSS.read_text()
+        assert 'font-size: var(--aegis-scale)' in css
+        assert 'var(--aegis-label-case)' in css
 
 
 class TestNoLiterals:
@@ -101,10 +102,10 @@ class TestSwitching:
         assert one(head, 'script[src*="js/theme"]').get("defer") is None
 
     def test_html_carries_the_default_theme(self, client: TestClient) -> None:
-        assert one(client.get("/").text, "html").get("data-theme") == "aegis"
+        assert one(client.get("/").text, "html").get("data-theme") == "aegis-dark"
 
     def test_navbar_has_a_theme_toggle(self, client: TestClient) -> None:
         toggle = one(
-            client.get("/").text, "button[data-theme-toggle]"
+            client.get("/").text, "summary[data-theme-toggle]"
         )
         assert toggle.get("aria-label")

@@ -16,5 +16,27 @@
   /* Native accent for checkboxes, radios and range inputs. The theme
      blocks in input.css own color-scheme, so native controls follow the
      active theme. */
-  accent-color: rgb(var(--aegis-teal));
+  accent-color: oklch(var(--p));
+}
+
+/* Native progress retains its semantics; these rules make its fill follow
+   the active Aegis theme in Chromium, Safari, and Firefox. */
+.aegis-progress {
+  appearance: none;
+  border: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: oklch(var(--b3));
+}
+.aegis-progress::-webkit-progress-bar {
+  background: oklch(var(--b3));
+  border-radius: 9999px;
+}
+.aegis-progress::-webkit-progress-value {
+  background: currentColor;
+  border-radius: 9999px;
+}
+.aegis-progress::-moz-progress-bar {
+  background: currentColor;
+  border-radius: 9999px;
 }

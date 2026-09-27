@@ -1,0 +1,10 @@
+{% from "components/macros/layout.html" import card, code_block %}
+{% from "components/macros/table.html" import data_table %}
+{% macro migration_detail(row) %}{{ code_block(row.content, row.file_path, lang="python") }}{% endmacro %}
+{% call card("Migrations") %}
+  {{ data_table([
+    {"key": "revision", "label": "Revision"},
+    {"key": "date", "label": "Date"},
+    {"key": "description", "label": "Description"},
+  ], migrations, empty="No migrations found", detail=migration_detail) }}
+{% endcall %}

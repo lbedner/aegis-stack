@@ -85,7 +85,6 @@ BUDGET: dict[str, int] = {
     "cli/finance.py.jinja": 551,
     "components/backend/api/orgs/router.py.jinja": 534,
     "components/backend/api/worker.py.jinja": 528,
-    "components/frontend/dashboard/modals/auth_users_tab.py.jinja": 521,
     "services/system/health_db_postgres.py.jinja": 503,
     "services/ai/domains/voice/stt/providers.py": 491,
     "services/load_test_workloads.py": 456,

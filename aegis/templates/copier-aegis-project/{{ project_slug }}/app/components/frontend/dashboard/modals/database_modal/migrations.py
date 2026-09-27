@@ -1,7 +1,5 @@
 """Migrations: what has been applied, and what it did."""
 
-from datetime import datetime
-
 import flet as ft
 
 from app.components.frontend.controls import (
@@ -13,6 +11,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.controls.markdown import copyable_markdown
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_database
 from app.services.system.models import ComponentStatus
 
 
@@ -20,12 +19,8 @@ def _build_migration_expanded_content(
     migration: dict, is_dark_mode: bool
 ) -> ft.Control:
     """Build expanded content for a migration showing the code."""
-    import re
-
-    content = migration.get("content", "# Migration content not available")
-    file_path = migration.get("file_path", "Unknown")
-
-    content = re.sub(r"\n\s*\n", "\n", content)
+    content = migration["content"]
+    file_path = migration["file_path"]
 
     return ft.Column(
         [
@@ -45,25 +40,12 @@ def _build_migration_expanded_content(
 
 def _build_migration_row(migration: dict, is_dark_mode: bool) -> ExpandableRow:
     """Build expandable row for a single migration."""
-    revision = migration.get("revision", "Unknown")
-    description = migration.get("description", "No description")
-    is_current = migration.get("is_current", False)
-    file_mtime = migration.get("file_mtime", 0)
-
-    try:
-        dt = datetime.fromtimestamp(file_mtime)
-        date_str = dt.strftime("%Y-%m-%d %H:%M")
-    except (ValueError, OSError, OverflowError, TypeError):
-        date_str = "Unknown"
-
-    short_revision = revision[:12] if len(revision) > 12 else revision
-    revision_text = f"{short_revision} (current)" if is_current else short_revision
-    revision_color = Theme.Colors.SUCCESS if is_current else None
+    revision_color = Theme.Colors.SUCCESS if migration["current"] else None
 
     cells = [
-        TableNameText(revision_text, color=revision_color),
-        TableCellText(date_str),
-        TableCellText(description),
+        TableNameText(migration["revision"], color=revision_color),
+        TableCellText(migration["date"]),
+        TableCellText(migration["description"]),
     ]
 
     return ExpandableRow(
@@ -78,7 +60,7 @@ class MigrationsTab(ft.Container):
     def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
         super().__init__()
         metadata = database_component.metadata or {}
-        migrations = metadata.get("migrations", [])
+        migrations = ui_database.migrations(metadata)
         is_dark_mode = page.theme_mode == ft.ThemeMode.DARK
 
         columns = [

@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Any
 
 from app.core.log import logger
+from app.core.queue_workers import concurrency_for
 
 QUEUES_PACKAGE = "app.components.worker.queues"
-DEFAULT_MAX_JOBS = 10
 DEFAULT_TIMEOUT_SECONDS = 300
 
 
@@ -40,20 +40,43 @@ def discover_queues(is_queue: Callable[[str], bool]) -> list[str]:
     is the backend's question, since the answer is a broker for one and a
     settings class for another.
     """
+    queues = []
+    for name in _candidates():
+        if is_queue(name):
+            queues.append(name)
+        else:
+            logger.debug(f"Skipping '{name}' - not a queue for this backend")
+    return sorted(queues)
+
+
+def _candidates() -> list[str]:
+    """The module names in ``queues/``: every file that could be a queue."""
     queues_dir = Path(__file__).parent / "queues"
     if not queues_dir.exists():
         logger.warning(f"Worker queues directory not found: {queues_dir}")
         return []
+    return sorted(f.stem for f in queues_dir.glob("*.py") if f.stem != "__init__")
 
-    queues = []
-    for file in queues_dir.glob("*.py"):
-        if file.stem in ("__init__", "__pycache__"):
-            continue
-        if is_queue(file.stem):
-            queues.append(file.stem)
-        else:
-            logger.debug(f"Skipping '{file.stem}' - not a queue for this backend")
-    return sorted(queues)
+
+def broken_queues() -> dict[str, str]:
+    """Queue files that exist but fail to import, with the error.
+
+    Discovery skips a module it cannot import, which is right for a file
+    that is not a queue for this backend, and wrong when the file is a
+    queue whose imports fail: a missing broker library then reads as a
+    healthy worker with no queues. This tells the two apart.
+    """
+    broken: dict[str, str] = {}
+    for name in _candidates():
+        path = f"{QUEUES_PACKAGE}.{name}"
+        try:
+            importlib.import_module(path)
+        except ModuleNotFoundError as exc:
+            if exc.name != path:
+                broken[name] = str(exc)
+        except Exception as exc:  # noqa: BLE001 - reported, never raised
+            broken[name] = f"{type(exc).__name__}: {exc}"
+    return broken
 
 
 def module_members(queue_name: str, is_task: Callable[[Any], bool]) -> dict[str, Any]:
@@ -80,7 +103,7 @@ def build_metadata(
     queue_name: str,
     task_names: list[str],
     *,
-    max_jobs: int = DEFAULT_MAX_JOBS,
+    max_jobs: int | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     description: str | None = None,
     **backend_fields: Any,
@@ -89,14 +112,15 @@ def build_metadata(
 
     ``functions`` is the same list as ``tasks`` under the name the health
     check has always used. ``backend_fields`` carries what only one
-    backend has - a stream name, a Redis list name.
+    backend has - a stream name, a Redis list name. ``max_jobs`` left out
+    is the queue's concurrency from ``Settings.WORKER_QUEUES``.
     """
     return {
         "queue_name": queue_name,
         "tasks": task_names,
         "task_count": len(task_names),
         "functions": task_names,
-        "max_jobs": max_jobs,
+        "max_jobs": max_jobs if max_jobs is not None else concurrency_for(queue_name),
         "timeout": timeout,
         "description": description or f"{queue_name.replace('_', ' ').title()} worker queue",
         **backend_fields,

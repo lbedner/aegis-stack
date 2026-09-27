@@ -5,7 +5,6 @@ Displays user management table with actions for enabling/disabling and deleting 
 Fetches real data from the /auth/users API endpoint.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
@@ -27,38 +26,7 @@ from app.components.frontend.controls.snack_bar import (
 )
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
-
-
-def _format_relative_time(timestamp_str: str) -> str:
-    """Convert ISO timestamp to relative time (e.g., '2 days ago')."""
-    try:
-        if "T" in timestamp_str:
-            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-        else:
-            return timestamp_str
-
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-
-        now = datetime.now(UTC)
-        diff = now - dt
-
-        seconds = int(diff.total_seconds())
-        if seconds < 0:
-            return "just now"
-        elif seconds < 60:
-            return f"{seconds}s ago" if seconds != 1 else "1s ago"
-        elif seconds < 3600:
-            minutes = seconds // 60
-            return f"{minutes}m ago" if minutes != 1 else "1m ago"
-        elif seconds < 86400:
-            hours = seconds // 3600
-            return f"{hours}h ago" if hours != 1 else "1h ago"
-        else:
-            days = seconds // 86400
-            return f"{days}d ago" if days != 1 else "1d ago"
-    except (ValueError, AttributeError):
-        return timestamp_str
+from app.core.formatting import format_relative_time
 
 
 class UsersTableSection(ft.Container):
@@ -196,7 +164,7 @@ class UsersTableSection(ft.Container):
 {% if include_auth_org %}
                     org_display,
 {% endif %}
-                    _format_relative_time(user.get("created_at", "")),
+                    format_relative_time(user.get("created_at")),
                     action_buttons,
                 ]
             )

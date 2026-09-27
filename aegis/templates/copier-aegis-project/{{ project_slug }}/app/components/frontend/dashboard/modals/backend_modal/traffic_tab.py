@@ -6,6 +6,7 @@ questions off different endpoints.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
@@ -17,6 +18,7 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableRow,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
 
 from ..modal_sections import (
@@ -113,7 +115,6 @@ class TrafficTab(ft.Container):
         children: list[ft.Control] = [ft.Row(summary_cards, spacing=Theme.Spacing.MD)]
 
         if dominant:
-            pct = int(round(float(dominant.get("share", 0.0)) * 100))
             children.append(
                 ft.Container(
                     content=ft.Row(
@@ -121,11 +122,7 @@ class TrafficTab(ft.Container):
                             ft.Icon(
                                 ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.WHITE
                             ),
-                            BodyText(
-                                f"One source is dominating: {dominant.get('ip')} "
-                                f"- {pct}% of traffic "
-                                f"({int(dominant.get('requests', 0)):,} requests)"
-                            ),
+                            BodyText(ui_backend.dominant_source_message(dominant)),
                         ],
                         spacing=Theme.Spacing.SM,
                     ),

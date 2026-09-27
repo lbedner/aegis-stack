@@ -35,13 +35,36 @@ from app.services.auth.service import require_role
 
 router = APIRouter()
 
-# The guard for administering other people's accounts, named once: the web
-# Overseer calls these handlers directly, which skips their Depends, so it
-# declares this same guard on its own routes.
+# Who may see, and who may change, other people's accounts. The guards are
+# for routes. The ``may_*`` checks are for callers that already hold the
+# user, like the web Overseer, which calls these handlers directly and so
+# skips their Depends.
 {%- if include_auth_rbac %}
-require_user_admin = require_role("admin")
+USER_READERS = ("admin", "moderator")
+USER_ADMINS = ("admin",)
+require_user_reader = require_role(*USER_READERS)
+require_user_admin = require_role(*USER_ADMINS)
+
+
+def may_read_users(user: User) -> bool:
+    return user.role in USER_READERS
+
+
+def may_admin_users(user: User) -> bool:
+    return user.role in USER_ADMINS
 {%- else %}
+require_user_reader = get_current_active_user
 require_user_admin = get_current_active_user
+
+
+def may_read_users(user: User) -> bool:
+    """Without roles, any signed-in user may."""
+    return True
+
+
+def may_admin_users(user: User) -> bool:
+    """Without roles, any signed-in user may."""
+    return True
 {%- endif %}
 
 
@@ -55,7 +78,7 @@ class RoleUpdateRequest(BaseModel):
 {% if include_auth_rbac %}
 @router.get("/users", response_model=list[UserResponse])
 async def list_users(
-    current_user: User = Depends(require_role("admin", "moderator")),
+    current_user: User = Depends(require_user_reader),
     user_service: UserService = Depends(get_user_service),
 ) -> list[UserResponse]:
     """List all users. Requires admin or moderator role."""
@@ -64,13 +87,42 @@ async def list_users(
 {% else %}
 @router.get("/users", response_model=list[UserResponse])
 async def list_users(
-    current_user: User = Depends(require_user_admin),
+    current_user: User = Depends(require_user_reader),
     user_service: UserService = Depends(get_user_service),
 ) -> list[UserResponse]:
     """List all users. Requires a signed-in user."""
     users = await user_service.list_users()
     return [UserResponse.model_validate(user) for user in users]
 {% endif %}
+
+
+@router.post(
+    "/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_user(
+    user_data: UserCreate,
+    current_user: User = Depends(require_user_admin),
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Add an account for someone else.
+
+    Unlike ``/register`` it signs nobody in and ignores
+    ``REGISTRATION_ENABLED``: it is how accounts get made while sign-up is
+    closed.
+    """
+    if await user_service.get_user_by_email(user_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
+    user = await user_service.create_user(user_data)
+    await audit.emit(
+        "auth.user_created",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user.id,
+    )
+    return UserResponse.model_validate(user)
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)
@@ -146,7 +198,7 @@ async def update_user(
 @router.patch("/users/{user_id}/deactivate", response_model=UserResponse)
 async def deactivate_user(
     user_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> UserResponse:
@@ -164,7 +216,7 @@ async def deactivate_user(
 @router.patch("/users/{user_id}/activate", response_model=UserResponse)
 async def activate_user(
     user_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> UserResponse:
@@ -183,7 +235,7 @@ async def activate_user(
 async def delete_user(
     user_id: int,
     hard: bool = False,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> None:
@@ -230,7 +282,7 @@ async def delete_user(
 @router.post("/users/{user_id}/restore", response_model=UserResponse)
 async def restore_user(
     user_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> UserResponse:
@@ -263,7 +315,7 @@ async def restore_user(
 async def set_user_role(
     user_id: int,
     body: RoleUpdateRequest,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> UserResponse:

@@ -38,8 +38,6 @@ from app.components.frontend.dashboard.modals.modal_sections.chart_primitives im
 )
 from app.components.frontend.dashboard.modals.modal_sections.formatting import (
     date_cell,
-    format_duration_ms,
-    format_timestamp,
     headline_stat_color,
     ledger_amount_color,
     row_matches,
@@ -58,6 +56,7 @@ from app.components.frontend.dashboard.modals.modal_sections.sections import (
     SectionHeader,
     StatRowsSection,
 )
+from app.core.formatting import format_duration_ms, format_timestamp
 
 __all__ = [
     "BarChartCard",

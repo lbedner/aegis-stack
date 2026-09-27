@@ -26,16 +26,18 @@ Auto-discovered by ``backend_hooks`` because the file lives in
 from __future__ import annotations
 
 import asyncio
-import time
 from collections import Counter
+import time
 from typing import Any
+
+from fastapi import FastAPI, Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 from app.components.backend.security.rate_limit import get_client_ip
 from app.core.config import settings
 from app.core.log import logger
-from fastapi import FastAPI, Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from app.services.system.redis_keys import KeyFamily
 
 _BUCKET_SECONDS = 3600
 # Keep ~24h of hourly buckets; older ones are pruned (memory) or TTL'd (Redis).
@@ -46,6 +48,28 @@ _MAX_SOURCES_PER_BUCKET = 2000
 # Per-bucket read cap when merging the windowed ranking (Redis path); a heavy
 # source is top-of-bucket, so the deep tail can't change the top-N.
 _READ_TOP = 200
+
+# What this monitor keeps in Redis, for the keyspace map (``redis_keys``).
+REDIS_KEYS = (
+    KeyFamily(
+        "traffic:sources:*",
+        "zset",
+        "Traffic sources",
+        "Requests per client IP, one sorted set per hour, kept a day",
+        "Backend traffic monitor",
+        db="CACHE_REDIS_DB",
+        columns=("Source IP", "Requests"),
+    ),
+    KeyFamily(
+        "traffic:total:*",
+        "string",
+        "Traffic totals",
+        "Every request counted per hour, the denominator for source shares",
+        "Backend traffic monitor",
+        db="CACHE_REDIS_DB",
+        columns=("Hour", "Requests"),
+    ),
+)
 
 
 class TrafficMonitor:

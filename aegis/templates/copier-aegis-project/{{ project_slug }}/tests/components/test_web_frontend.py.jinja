@@ -320,16 +320,19 @@ class TestAuthPages:
             settings.AUTH_ENABLED = prior
 
     def test_auth_pages_render(self, async_client_with_db: TestClient) -> None:
+        # Basic auth has no email, so no reset or verification pages.
         for path in (
             "/login",
             "/register",
+{%- if auth_level != "basic" %}
             "/forgot-password",
             "/reset-password",
             "/verify-email",
+{%- endif %}
         ):
             assert async_client_with_db.get(path).status_code == 200, path
 
-    def test_register_signs_in_and_lands_on_verify_pending(
+    def test_register_signs_in_and_lands_where_it_should(
         self, async_client_with_db: TestClient
     ) -> None:
         response = async_client_with_db.post(
@@ -342,7 +345,8 @@ class TestAuthPages:
             follow_redirects=False,
         )
         assert response.status_code == 303
-        assert response.headers["location"] == "/verify-pending"
+        # Basic auth has no verification step to wait on: straight in.
+        assert response.headers["location"] == "{{ '/overseer' if auth_level == 'basic' else '/verify-pending' }}"
         # Cookies must land on the redirect the browser follows, which only
         # works because the handler hands its RedirectResponse to the API
         # handler as the response object.

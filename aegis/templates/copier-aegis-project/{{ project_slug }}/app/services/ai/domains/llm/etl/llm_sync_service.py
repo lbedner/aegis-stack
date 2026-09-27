@@ -202,7 +202,9 @@ class LLMSyncService(UpsertMixin):
         (observed live before deployments/prices/modalities were cached).
         """
         vendors = queries.all_rows(self.session, LLMOrg)
-        self._vendor_cache = {v.name: v for v in vendors}
+        # By slug: it is what the sync looks up and what is unique. A maker
+        # lookup names a row for display ("OpenAI") under the same slug.
+        self._vendor_cache = {v.slug: v for v in vendors}
 
         models = queries.all_rows(self.session, LargeLanguageModel)
         self._model_cache = {m.model_id: m for m in models}

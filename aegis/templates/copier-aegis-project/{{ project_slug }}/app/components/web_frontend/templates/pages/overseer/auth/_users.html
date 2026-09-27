@@ -1,0 +1,33 @@
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
+{% macro user_actions(row) %}
+  {% set toggle = "deactivate" if row.active else "activate" %}
+  <span class="inline-flex gap-2">
+    {{ action("Disable" if row.active else "Enable", hx_dialog(partials ~ "/confirm/" ~ toggle ~ "/" ~ row.id), "warn" if row.active else "default") }}
+    {{ action("Delete", hx_dialog(partials ~ "/confirm/delete/" ~ row.id), "danger") }}
+  </span>
+{% endmacro %}
+{% if not available %}
+{{ empty_state("User management unavailable", "Database backend required for user management.") }}
+{% elif not allowed %}
+{{ empty_state("No access to other accounts", "Your role can't view the user list.") }}
+{% else %}
+{% set here = item.url ~ "/users" %}
+{% call card("Users", users|length ~ " " ~ ("account" if users|length == 1 else "accounts")) %}
+  <div class="flex justify-end gap-2">
+    {% if can_admin %}{{ action("Add user", hx_dialog(partials ~ "/users/new"), "primary") }}{% endif %}
+    {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
+  </div>
+  {% set columns = [
+    {"key": "email", "label": "Email"},
+    {"key": "name", "label": "Name"},
+    {"key": "state", "label": "Status", "kind": "status"},
+    {"key": "verified", "label": "Verification", "kind": "status"},
+    {"key": "created", "label": "Created"},
+    {"key": "last_login", "label": "Last sign-in"},
+  ] %}
+  {{ data_table(columns, users, empty="No users found", actions=user_actions if can_admin else none) }}
+{% endcall %}
+{% endif %}

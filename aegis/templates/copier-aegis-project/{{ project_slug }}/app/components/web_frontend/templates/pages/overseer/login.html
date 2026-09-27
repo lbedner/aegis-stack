@@ -1,0 +1,32 @@
+{% extends "pages/auth/_layout.html" %}
+{% from "components/auth_macros.html" import auth_field, auth_banner %}
+{% from "components/macros/form.html" import submit_button %}
+
+{% block title %}Sign in to Overseer - {{ project_name }}{% endblock %}
+{% block auth_brand %}<span class="text-aegis-teal">●</span> Overseer · {{ project_name }}{% endblock %}
+
+{% block auth_form %}
+<div x-data="loginForm">
+  <h1 class="text-2xl font-semibold text-aegis-text mb-2">Welcome back</h1>
+  <p class="text-sm text-aegis-muted mb-8">Sign in to your dashboard.</p>
+
+  <form action="/overseer/login" method="post" class="space-y-4" @submit="loading = true">
+    {{ auth_banner("error") }}
+    {{ auth_field("email", "Email", type="email", autocomplete="username", placeholder="you@domain.com") }}
+    {% call auth_field("password", "Password", type="password", autocomplete="current-password") %}
+      {% if email_flows_enabled %}
+      <a href="/forgot-password" class="text-xxs text-aegis-muted hover:text-aegis-teal transition-colors">Forgot?</a>
+      {% endif %}
+    {% endcall %}
+    {{ submit_button("Sign in", "Signing in…") }}
+  </form>
+</div>
+{% endblock %}
+
+{% block auth_footer %}
+{% if registration_enabled %}
+New here? <a href="/register?next=/overseer" class="text-aegis-teal hover:text-aegis-text transition-colors">Create an account</a>.
+{% else %}
+<span class="text-aegis-muted">Signups are closed right now.</span>
+{% endif %}
+{% endblock %}

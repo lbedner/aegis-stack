@@ -173,8 +173,8 @@ def create_component_card(
         # Map component names to their stunning card classes
         if component_name == "backend":
             return ServerCard(component_data).build()
-        elif component_name == "frontend":
-            # Frontend is merged into ServerCard, return empty
+        elif component_name in ("frontend", "web_frontend"):
+            # Both frontends are shown through the ServerCard, return empty
             return ft.Container()
 {% if include_worker %}
         elif component_name == "worker":

@@ -1,0 +1,15 @@
+{# The add-user form (dialog body). A 422 re-renders it with ``errors``. #}
+{% from "components/macros/layout.html" import dialog_title %}
+{% from "components/macros/form.html" import field, text_input, password_input, primary_button %}
+{% from "components/macros/feedback.html" import error_banner %}
+{{ dialog_title("Add user", "Creates an active account. Nobody is signed in as it.") }}
+<form {{ hx_dialog_post(partials ~ "/users") }} class="space-y-4">
+  {{ error_banner(errors) }}
+  {% call field("Email") %}{{ text_input("email", form.email, "name@example.com", required=True, autofocus=True) }}{% endcall %}
+  {% call field("Name") %}{{ text_input("full_name", form.full_name, "Optional") }}{% endcall %}
+  {% call field("Password") %}<div class="mt-1">{{ password_input("password", autocomplete="new-password", minlength=8) }}</div>{% endcall %}
+  <div class="flex items-center gap-3">
+    {{ primary_button("Add user", "submit") }}
+    <button type="button" @click="$el.closest('dialog').close()" class="text-xs text-aegis-muted hover:text-aegis-text">Cancel</button>
+  </div>
+</form>

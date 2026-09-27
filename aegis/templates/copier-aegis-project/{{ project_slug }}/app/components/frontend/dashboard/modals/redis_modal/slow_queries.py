@@ -3,61 +3,19 @@
 from datetime import datetime
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
-    H3Text,
     SecondaryText,
 )
-from app.components.frontend.controls.tabs import PulseTabs
+from app.components.frontend.dashboard.modals.redis_modal.constants import (
+    COL_WIDTH_DURATION,
+    COL_WIDTH_SLOWLOG_CMD,
+    COL_WIDTH_TIMESTAMP,
+)
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_redis
 from app.services.system.models import ComponentStatus
-from app.services.system.ui import get_component_subtitle, get_component_title
-
-from ...cards.card_utils import get_status_detail
-from ..base_detail_popup import BaseDetailPopup
-from ..modal_sections import MetricCard
-from app.components.frontend.dashboard.modals.redis_modal.constants import COL_WIDTH_DURATION, COL_WIDTH_SLOWLOG_CMD, COL_WIDTH_TIMESTAMP, SLOWLOG_CRITICAL_MS, SLOWLOG_WARNING_MS
-
-
-def _format_slow_command(command: str) -> tuple[str, str]:
-    """Format a raw SLOWLOG command into a readable (summary, detail) pair.
-
-    Returns:
-        Tuple of (formatted command, tooltip detail).
-    """
-    parts = command.split()
-    if not parts:
-        return command, command
-
-    cmd = parts[0].upper()
-
-    # EVALSHA: show script context instead of raw hash + args
-    if cmd == "EVALSHA" and len(parts) >= 4:
-        # parts: EVALSHA <sha> <numkeys> <key1> ...
-        keys = parts[3 : 3 + int(parts[2])] if parts[2].isdigit() else []
-        key_str = " ".join(keys) if keys else "unknown"
-        return f"EVALSHA (Lua) on {key_str}", command
-
-    # For key-based commands, shorten UUIDs in keys for readability
-    if len(parts) >= 2:
-        formatted_parts = [cmd]
-        for part in parts[1:]:
-            # Shorten UUID segments (8-4-4-4-12 hex pattern)
-            if len(part) > 24 and "-" in part:
-                # Shorten embedded UUIDs but keep prefix
-                segments = part.split(":")
-                shortened = []
-                for seg in segments:
-                    if len(seg) == 36 and seg.count("-") == 4:
-                        shortened.append(f"{seg[:8]}...")
-                    else:
-                        shortened.append(seg)
-                formatted_parts.append(":".join(shortened))
-            else:
-                formatted_parts.append(part)
-        return " ".join(formatted_parts), command
-
-    return command, command
 
 
 class SlowQueryRow(ft.Container):
@@ -83,15 +41,8 @@ class SlowQueryRow(ft.Container):
         except (ValueError, OSError, OverflowError, TypeError):
             timestamp_str = str(timestamp)
 
-        # Color code by duration
-        if duration_ms >= SLOWLOG_CRITICAL_MS:
-            duration_color = Theme.Colors.ERROR
-        elif duration_ms >= SLOWLOG_WARNING_MS:
-            duration_color = Theme.Colors.WARNING
-        else:
-            duration_color = Theme.Colors.SUCCESS
-
-        display_cmd, tooltip_cmd = _format_slow_command(command)
+        duration_color = Theme.Colors.semantic(ui_redis.slowlog_color(duration_ms))
+        display_cmd, tooltip_cmd = ui_redis.slow_command(command), command
 
         self.content = ft.Row(
             [
@@ -233,4 +184,3 @@ class SlowQueriesTab(ft.Container):
                 expand=True,
             )
         self.expand = True
-

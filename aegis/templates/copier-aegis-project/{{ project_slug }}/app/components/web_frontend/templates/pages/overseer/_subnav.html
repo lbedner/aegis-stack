@@ -1,0 +1,30 @@
+{# A component's sub-menu: its name and live status, then its sections in
+   groups. Each link swaps #overseer-main (this menu and the content) and
+   keeps its own URL. The status dot listens for the same SSE event as the
+   main sidebar's dot, so the two never disagree. #}
+<aside id="overseer-subnav" aria-labelledby="overseer-subnav-title"
+       class="w-full md:w-56 md:shrink-0 md:h-screen md:sticky md:top-0 md:overflow-y-auto border-b md:border-b-0 md:border-r border-aegis-border bg-aegis-card">
+  <div class="px-5 py-5 border-b border-aegis-border">
+    <div class="flex items-center justify-between gap-3">
+      <h2 id="overseer-subnav-title" class="text-sm font-semibold text-aegis-text truncate">{{ item.title }}</h2>
+      <span class="inline-flex items-center shrink-0" sse-swap="{{ item.event }}" hx-target="this">
+        {% set health_status = item.status %}{% include "pages/overseer/_status_dot.html" %}
+      </span>
+    </div>
+    {% if subtitle %}<p class="mt-0.5 text-xxs text-aegis-muted truncate">{{ subtitle }}</p>{% endif %}
+  </div>
+  <nav aria-label="{{ item.title }} sections" class="px-3 py-4 space-y-5">
+    {% for heading, sections in page.sections %}
+    <div>
+      {% if heading %}<h3 class="micro-label text-aegis-muted px-3 mb-2">{{ heading }}</h3>{% endif %}
+      <ul class="space-y-0.5">
+        {% for key, label in sections.items() %}
+        {% set url = item.url if key == page.labels|first else item.url ~ "/" ~ key %}
+        <li><a href="{{ url }}" {{ hx_replace(url, "#overseer-main") }} {% if key == current %}aria-current="page"{% endif %}
+               class="nav-link py-1.5">{{ label }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </nav>
+</aside>

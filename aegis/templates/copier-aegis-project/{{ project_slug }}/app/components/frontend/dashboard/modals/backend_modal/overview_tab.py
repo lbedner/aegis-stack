@@ -6,12 +6,14 @@ close it is to its ceiling.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
 
 from ...cards.card_utils import create_progress_indicator
@@ -50,7 +52,6 @@ class OverviewTab(ft.Container):
         total_middleware = metadata.get("total_middleware", 0)
         security_count = metadata.get("security_count", 0)
         deprecated_count = metadata.get("deprecated_count", 0)
-        method_counts = metadata.get("method_counts", {})
 
         # Build metric cards
         metric_cards = [
@@ -86,10 +87,7 @@ class OverviewTab(ft.Container):
                 )
             )
 
-        # Method distribution
-        method_text = ", ".join(
-            [f"{count} {method}" for method, count in method_counts.items()]
-        )
+        method_text = ui_backend.method_summary(metadata)
 
         # Build system metrics
         cpu_data = sub_components.get("cpu")

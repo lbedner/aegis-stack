@@ -1,0 +1,24 @@
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
+{% if not available %}
+{{ empty_state("Active sessions unavailable", "Database backend required for session listing.") }}
+{% else %}
+{% set here = item.url ~ "/sessions" %}
+{% call card("Your sessions", "One per signed-in device") %}
+  <div class="flex justify-end gap-2">
+    {{ action("Sign out everywhere else", hx_dialog(partials ~ "/confirm/revoke-others/all", "disabled" if sessions|length <= 1 else ""), "danger") }}
+    {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
+  </div>
+  {% call(row) data_table([
+    {"key": "source", "label": "Signed in with", "kind": "status"},
+    {"key": "device", "label": "Device"},
+    {"key": "ip", "label": "IP"},
+    {"key": "last_used", "label": "Last used"},
+    {"key": "expires", "label": "Expires", "kind": "date"},
+  ], sessions, empty="No active sessions") %}
+    {{ action("Sign out", hx_dialog(partials ~ "/confirm/revoke/" ~ row.id), "danger") }}
+  {% endcall %}
+{% endcall %}
+{% endif %}

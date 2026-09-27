@@ -21,11 +21,11 @@ from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_scheduler
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import (
-    format_next_run_time,
     format_schedule_human_readable,
     get_status_detail,
 )
@@ -156,20 +156,9 @@ def _build_job_row(task: dict, page: ft.Page) -> ExpandableRow:
     schedule = task.get("schedule", "Unknown schedule")
     status = task.get("status", "active")
 
-    next_run_display = format_next_run_time(next_run)
+    next_run_display, status_text, color_name = ui_scheduler.job_state(status, next_run)
+    status_color = Theme.Colors.semantic(color_name)
     schedule_display = format_schedule_human_readable(schedule)
-
-    # Status dot color and text
-    is_past_due = "Past due" in next_run_display
-    if status != "active":
-        status_color = ft.Colors.ON_SURFACE_VARIANT
-        status_text = "Paused"
-    elif is_past_due:
-        status_color = Theme.Colors.WARNING
-        status_text = "Active"
-    else:
-        status_color = Theme.Colors.SUCCESS
-        status_text = "Active"
 
     cells = [
         ft.Row(

@@ -1,22 +1,20 @@
 """Overview: what the cache is holding and how hard it is working."""
 
-from datetime import datetime
-
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
     SecondaryText,
 )
-from app.components.frontend.controls.tabs import PulseTabs
+from app.components.frontend.dashboard.modals.redis_modal.constants import (
+    STAT_LABEL_WIDTH,
+)
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_redis
 from app.services.system.models import ComponentStatus
-from app.services.system.ui import get_component_subtitle, get_component_title
 
-from ...cards.card_utils import get_status_detail
-from ..base_detail_popup import BaseDetailPopup
 from ..modal_sections import MetricCard
-from app.components.frontend.dashboard.modals.redis_modal.constants import STAT_LABEL_WIDTH
 
 
 class OverviewSection(ft.Container):
@@ -38,20 +36,8 @@ class OverviewSection(ft.Container):
         connected_clients = metadata.get("connected_clients", 0)
         hit_rate = metadata.get("hit_rate_percent", 0.0)
 
-        # Format uptime
-        uptime_seconds = metadata.get("uptime_in_seconds", 0)
-        days = uptime_seconds // 86400
-        hours = (uptime_seconds % 86400) // 3600
-        minutes = (uptime_seconds % 3600) // 60
-        uptime_str = f"{days}d {hours}h {minutes}m"
-
-        # Determine hit rate color
-        if hit_rate >= 90:
-            hit_rate_color = Theme.Colors.SUCCESS
-        elif hit_rate >= 70:
-            hit_rate_color = Theme.Colors.WARNING
-        else:
-            hit_rate_color = Theme.Colors.ERROR
+        uptime_str = ui_redis.uptime(metadata.get("uptime_in_seconds", 0))
+        hit_rate_color = Theme.Colors.semantic(ui_redis.hit_rate_color(hit_rate))
 
         self.content = ft.Row(
             [
@@ -154,4 +140,3 @@ class OverviewTab(ft.Container):
         )
         self.padding = ft.padding.all(Theme.Spacing.SM)
         self.expand = True
-

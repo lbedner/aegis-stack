@@ -6,6 +6,8 @@ bigger the problem; the check used to file both as Info, which is how a
 crash-looping worker read as a blue dot while jobs piled up.
 """
 
+import pytest
+
 from app.services.system.health_worker_rules import queue_status
 from app.services.system.models import ComponentStatusType
 
@@ -78,4 +80,105 @@ def test_only_consumers_seen_lately_count_as_live() -> None:
     ]
     assert live_consumers(consumers) == 1
     assert live_consumers([]) == 0
+
+
+def test_the_oldest_waiting_job_is_the_first_entry_past_the_last_delivered() -> None:
+    """A stream id starts with its arrival time in ms, so its age is free."""
+    from app.services.system.health_worker_rules import last_delivered, stream_age
+
+    groups = [{"name": b"taskiq", "last-delivered-id": b"1790528194881-0"}]
+    assert last_delivered(groups) == "1790528194881-0"
+    assert last_delivered([]) == "0-0"  # never consumed: everything waits
+    assert stream_age(b"1790528194881-3", now_ms=1790528204881) == 10.0
+
+
+class TestBrokenQueues:
+    """A queue file that exists but cannot import is broken, not absent:
+    a missing broker library must not read as a healthy worker with no
+    queues."""
+
+    def test_a_missing_dependency_is_reported_with_its_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.components.worker import queue_discovery
+
+        def fail(name: str) -> None:
+            raise ModuleNotFoundError(
+                "No module named 'taskiq_redis'", name="taskiq_redis"
+            )
+
+        monkeypatch.setattr(queue_discovery.importlib, "import_module", fail)
+        broken = queue_discovery.broken_queues()
+        assert "system" in broken
+        assert "taskiq_redis" in broken["system"]
+
+    def test_a_file_that_is_not_a_module_is_not_broken(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.components.worker import queue_discovery
+
+        def absent(name: str) -> None:
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+
+        monkeypatch.setattr(queue_discovery.importlib, "import_module", absent)
+        assert queue_discovery.broken_queues() == {}
+
+    @pytest.mark.asyncio
+    async def test_the_health_check_says_so(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.components.worker import queue_discovery
+        from app.services.system.health_worker import check_worker_health
+
+        monkeypatch.setattr(
+            queue_discovery,
+            "broken_queues",
+            lambda: {"system": "No module named 'taskiq_redis'"},
+        )
+        status = await check_worker_health()
+        assert status.status == ComponentStatusType.UNHEALTHY
+        assert "system" in status.message and "taskiq_redis" in status.message
+
+
+class TestBackedUp:
+    """A queue whose oldest job has waited past its limit is backed up."""
+
+    def test_an_old_waiting_job_backs_the_queue_up(self) -> None:
+        from app.services.system.health_worker_rules import queue_verdict
+
+        verdict = queue_verdict(
+            worker_alive=True,
+            has_functions=True,
+            waiting=40,
+            oldest_waiting=720,
+            max_wait=300,
+        )
+        assert verdict.status == ComponentStatusType.WARNING
+        assert verdict.state == "backed_up"
+        assert "12m" in verdict.lead
+
+    def test_within_the_limit_is_healthy(self) -> None:
+        from app.services.system.health_worker_rules import queue_verdict
+
+        verdict = queue_verdict(
+            worker_alive=True,
+            has_functions=True,
+            waiting=3,
+            oldest_waiting=20,
+            max_wait=300,
+        )
+        assert verdict.state == "healthy"
+
+    def test_failures_outrank_a_backlog(self) -> None:
+        from app.services.system.health_worker_rules import queue_verdict
+
+        verdict = queue_verdict(
+            worker_alive=True,
+            has_functions=True,
+            waiting=40,
+            failure_rate=30,
+            oldest_waiting=720,
+            max_wait=300,
+        )
+        assert verdict.state == "failing"
 {%- endif %}

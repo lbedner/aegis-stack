@@ -7,14 +7,23 @@ pools_taskiq.py since middleware startup/shutdown run in the worker process,
 not the client process.
 """
 
+import asyncio
+import sys
 from typing import Any
 
 import redis.asyncio as aioredis
+from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
+
+from app.components.worker import runtime
 from app.components.worker.events import publish_event
-from app.components.worker.heartbeat import mark_busy, mark_idle
+from app.components.worker.heartbeat import mark_busy, mark_idle, worker_id
 from app.core.config import settings
 from app.core.log import logger
-from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
+
+
+def _short_name(task_name: str) -> str:
+    """``module.path:func`` -> ``func``, the name enqueue records use."""
+    return task_name.rsplit(":", 1)[-1]
 
 
 def _short_name(task_name: str) -> str:
@@ -27,6 +36,7 @@ class EventPublishMiddleware(TaskiqMiddleware):
 
     _redis: aioredis.Redis | None = None
     _queue_name: str = "unknown"
+    _reporting: asyncio.Task[None] | None = None
 
     def set_queue_name(self, queue_name: str) -> "EventPublishMiddleware":
         """Set the queue name for this middleware instance."""
@@ -48,6 +58,17 @@ class EventPublishMiddleware(TaskiqMiddleware):
             )
             self._redis = aioredis.from_url(redis_url)
             await publish_event(self._redis, "worker.started", self._queue_name)
+            launched = runtime.launch_settings("taskiq", sys.argv)
+            self._reporting = runtime.start_reporting(
+                self._redis,
+                runtime.report(
+                    worker=worker_id(),
+                    queue=self._queue_name,
+                    engine="taskiq",
+                    version=runtime.engine_version("taskiq"),
+                    **launched,
+                ),
+            )
         except Exception as e:
             logger.debug(f"Failed to initialize event publishing: {e}")
 
@@ -59,6 +80,8 @@ class EventPublishMiddleware(TaskiqMiddleware):
         is shutting down, after all in-flight tasks have completed.
         """
         if self._redis:
+            await runtime.stop_reporting(self._redis, self._reporting, worker_id())
+            self._reporting = None
             await publish_event(self._redis, "worker.stopped", self._queue_name)
             await self._redis.aclose()
             self._redis = None

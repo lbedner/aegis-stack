@@ -34,11 +34,24 @@ import threading
 
 import redis as sync_redis
 import redis.asyncio as aioredis
+
 from app.core.log import logger
+from app.services.system.redis_keys import KeyFamily
 
 BUSY_KEY_PREFIX = "worker:"
 BUSY_KEY_SUFFIX = ":busy"
 DEFAULT_TTL_SECONDS = 30
+
+REDIS_KEYS = (
+    KeyFamily(
+        f"{BUSY_KEY_PREFIX}*{BUSY_KEY_SUFFIX}",
+        "string",
+        "Busy workers",
+        "One per worker mid-job, refreshed while it runs; deploys drain on these",
+        "Worker heartbeat",
+        columns=("Worker", "Since"),
+    ),
+)
 
 _worker_id: str | None = None
 _refresh_task: asyncio.Task[None] | None = None
@@ -102,9 +115,7 @@ async def mark_busy(
 
     if _refresh_task is None or _refresh_task.done():
         interval = max(1.0, ttl_seconds / 2)
-        _refresh_task = asyncio.create_task(
-            _refresh_loop(redis, ttl_seconds, interval)
-        )
+        _refresh_task = asyncio.create_task(_refresh_loop(redis, ttl_seconds, interval))
 
 
 async def mark_idle(redis: aioredis.Redis) -> None:

@@ -13,6 +13,7 @@ import pytest
 
 from app.components.web_frontend.filters import cents_to_input, money_to_cents
 from app.components.web_frontend.rendering import templates
+from tests.web.dom import select, text
 
 
 @pytest.fixture
@@ -168,6 +169,27 @@ class TestMarkdown:
         assert "<pre>" in out
         assert "<ul>" in out
 
+    def test_fenced_code_is_highlighted_by_its_language(
+        self, markdown: Callable[..., str]
+    ) -> None:
+        out = markdown("```python\ndef upgrade():\n    pass\n```")
+        keywords = [text(span) for span in select(out, ".highlight pre span.k")]
+        assert "def" in keywords
+        assert "pass" in keywords
+
+    def test_fence_options_never_reach_the_formatter(
+        self, markdown: Callable[..., str]
+    ) -> None:
+        """marko's stock extension feeds ``key=value`` after the language
+        into Pygments; ``full`` would emit a whole document, ``cssfile``
+        would write to disk. Model markdown must not steer either."""
+        out = markdown('```python full=true,title="x"\nx = 1\n```')
+        assert "<html" not in out and "<style" not in out
+
+    def test_code_inside_a_fence_is_escaped(self, markdown: Callable[..., str]) -> None:
+        out = markdown("```html\n<script>alert(1)</script>\n```")
+        assert "<script>" not in out
+
     def test_raw_html_is_shown_not_run(self, markdown: Callable[..., str]) -> None:
         """The model can format, never inject. This is why the renderer
         carries an escaping mixin instead of using marko bare."""
@@ -179,9 +201,7 @@ class TestMarkdown:
     def test_inline_html_is_escaped_too(self, markdown: Callable[..., str]) -> None:
         assert "<img" not in markdown("hello <img src=x onerror=alert(1)> there")
 
-    def test_empty_input_is_not_an_error(
-        self, markdown: Callable[..., str]
-    ) -> None:
+    def test_empty_input_is_not_an_error(self, markdown: Callable[..., str]) -> None:
         assert markdown(None) == ""
         assert markdown("") == ""
 
@@ -192,3 +212,18 @@ class TestMarkdown:
 
         for element in ("h1", "h2", "h3", "ul", "ol", "li", "pre", "table", "a"):
             assert f"[&_{element}]" in PROSE_CLASSES, element
+
+
+class TestHealthTone:
+    @pytest.mark.parametrize(
+        ("state", "tone"),
+        [
+            ("healthy", "ok"),
+            ("warning", "warn"),
+            ("unhealthy", "error"),
+            ("info", "muted"),
+        ],
+    )
+    def test_maps_every_status(self, state: str, tone: str) -> None:
+        tone_of: Callable[[str], str] = templates.env.filters["health_tone"]
+        assert tone_of(state) == tone

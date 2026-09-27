@@ -21,6 +21,7 @@ import time
 import dramatiq
 from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
+from app.services.system.redis_keys import KeyFamily
 # ``_RedisConsumer`` is dramatiq's internal consumer; there is no public
 # base class to subclass for pause support, so we extend it to gate
 # ``__next__`` on the pause flag. The dramatiq pin is capped to < 2.0 so a
@@ -29,6 +30,20 @@ from dramatiq.brokers.redis import RedisBroker, _RedisConsumer
 from dramatiq.middleware import AsyncIO
 from dramatiq.results import Results
 from dramatiq.results.backends.redis import RedisBackend
+
+# What the broker keeps in Redis, for the keyspace map (``redis_keys``).
+# Everything dramatiq writes sits under its namespace.
+REDIS_KEYS = (
+    KeyFamily(
+        "dramatiq:*",
+        "list",
+        "Job queues",
+        "Each queue's messages, delayed and dead-lettered ones, and acks",
+        "Dramatiq broker",
+        columns=("Member", "Value"),
+    ),
+)
+
 
 PAUSE_KEY = "aegis:queue:paused"
 PAUSE_POLL_SECONDS = 1.0

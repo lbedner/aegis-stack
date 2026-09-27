@@ -126,4 +126,5 @@ class TestDisabledAccountOAuth:
         )
         assert response.headers["location"] == "/login?error=disabled"
         assert "set-cookie" not in response.headers
+
 {%- endif %}

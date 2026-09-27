@@ -20,6 +20,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_relative_time
+from app.services.system import ui_worker
 
 from .history_table import (
     FilterOption,
@@ -37,14 +38,6 @@ COL_WIDTH_DURATION = 80
 COL_WIDTH_ENQUEUED = 150
 COL_WIDTH_STATUS = 80
 
-# Status display: api value -> label (dot color derived from _STATUS_COLORS)
-_STATUS_DISPLAY: dict[str, str] = {
-    "enqueued": "Enqueued",
-    "running": "Running",
-    "completed": "Done",
-    "failed": "Failed",
-}
-
 # Status filter options: (label, api_value, color)
 _STATUS_FILTER_OPTIONS: list[FilterOption] = [
     ("All", "all", Theme.Colors.ACCENT),
@@ -57,18 +50,9 @@ _STATUS_FILTER_OPTIONS: list[FilterOption] = [
 def _build_task_row(task: dict[str, str]) -> ExpandableRow:
     """Build a table row for a single task record."""
     status = task.get("status", "unknown")
-    status_label = _STATUS_DISPLAY.get(status, status)
+    status_label, color_name = ui_worker.task_status(status)
     has_error = status == "failed" and task.get("error")
-
-    status_color = (
-        Theme.Colors.ERROR
-        if status == "failed"
-        else Theme.Colors.SUCCESS
-        if status == "completed"
-        else Theme.Colors.INFO
-        if status == "running"
-        else ft.Colors.ON_SURFACE_VARIANT
-    )
+    status_color = Theme.Colors.semantic(color_name)
 
     cells = [
         build_status_dot_cell(status_color),

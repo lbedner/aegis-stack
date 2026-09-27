@@ -16,6 +16,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_auth
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -84,16 +85,8 @@ class ConfigurationSection(ft.Container):
         secret_key_configured = metadata.get("secret_key_configured", False)
         secret_key_length = metadata.get("secret_key_length", 0)
 
-        # Secret key strength assessment
-        if secret_key_length >= 64:
-            key_strength = "Strong"
-            key_strength_color = Theme.Colors.SUCCESS
-        elif secret_key_length >= 32:
-            key_strength = "Moderate"
-            key_strength_color = Theme.Colors.WARNING
-        else:
-            key_strength = "Weak"
-            key_strength_color = Theme.Colors.ERROR
+        key_strength, strength_name = ui_auth.key_strength(secret_key_length)
+        key_strength_color = Theme.Colors.semantic(strength_name)
 
         # Build configuration rows
         config_rows = []
@@ -156,29 +149,12 @@ class SecuritySection(ft.Container):
         """
         super().__init__()
 
-        security_level = metadata.get("security_level", "basic")
         configuration_issues = metadata.get("configuration_issues", [])
 
-        # Security level descriptions
-        security_descriptions = {
-            "high": "Strong security with robust encryption.",
-            "standard": (
-                "Adequate security. Consider RS256/ES256 for better security."
-            ),
-            "basic": ("Minimal security. Improve secret key strength."),
-        }
-
-        security_description = security_descriptions.get(
-            security_level, "Unknown security configuration."
+        security_level, security_description, level_name = ui_auth.security_level(
+            metadata
         )
-
-        # Security level color mapping
-        security_colors = {
-            "high": Theme.Colors.SUCCESS,
-            "standard": Theme.Colors.INFO,
-            "basic": Theme.Colors.WARNING,
-        }
-        security_color = security_colors.get(security_level, Theme.Colors.WARNING)
+        security_color = Theme.Colors.semantic(level_name)
 
         security_rows = []
 

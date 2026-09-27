@@ -105,6 +105,23 @@ def invalidate_status_cache() -> None:
     _status_cache_at = 0.0
 
 
+def last_system_status() -> SystemStatus | None:
+    """Return the last collected snapshot without starting health checks.
+
+    Live pages use this during navigation; their SSE connection owns the
+    periodic collection and broadcasts changes to all viewers.
+    """
+    return _status_cache
+
+
+def registered_health_names() -> dict[str, tuple[str, ...]]:
+    """List installed checks without running the potentially slow probes."""
+    return {
+        "components": tuple(_health_checks),
+        "services": tuple(_service_health_checks),
+    }
+
+
 def register_health_check(
     name: str, check_fn: Callable[[], Awaitable[ComponentStatus]]
 ) -> None:

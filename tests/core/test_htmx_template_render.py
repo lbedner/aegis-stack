@@ -371,10 +371,13 @@ class TestWebFrontendScaffolding:
                 "card",
                 "chart_panel",
                 "chip",
+                "code_block",
                 "confirm",
+                "copy_button",
                 "dialog",
                 "dialog_title",
                 "dropdown",
+                "facts",
                 "figures",
                 "hover_hint",
                 "info_tooltip",
@@ -384,6 +387,9 @@ class TestWebFrontendScaffolding:
                 "popover_panel",
                 "progress",
                 "ranked_rows",
+                "resource_bar",
+                "sidebar_icon",
+                "stat_row",
                 "stat_tile",
                 "stats_strip",
                 "tab_bar",
@@ -515,31 +521,46 @@ class TestNodePipeline:
         assert "./app/components/web_frontend/templates/**/*.html" in source
         assert "./app/components/web_frontend/static/js/**/*.js" in source
 
+    def _tailwind_config(self) -> dict:
+        """tailwind.config.js evaluated in node, with its DaisyUI plugin
+        stubbed: the themes are generated at load, so read what it builds."""
+        import json
+        import shutil
+        import subprocess
+
+        node = shutil.which("node")
+        if node is None:
+            pytest.skip("node not installed")
+        assert node is not None
+        script = (
+            "const Module = require('module'); const load = Module._load;"
+            "Module._load = (r, ...a) => r === 'daisyui' ? {} : load(r, ...a);"
+            f"const c = require({json.dumps(str(self._root() / 'tailwind.config.js'))});"
+            "console.log(JSON.stringify({colors: c.theme.extend.colors.aegis,"
+            " themes: c.daisyui.themes}));"
+        )
+        out = subprocess.run(
+            [node, "-e", script], capture_output=True, text=True, check=True
+        ).stdout
+        return json.loads(out)
+
     def test_tailwind_theme_carries_the_brand_palette(self) -> None:
-        """Colors are tokens: the aegis-* names read CSS variables that the
-        theme blocks in input.css define, so a theme is config, not a
-        class rewrite. DaisyUI mirrors both themes in hex."""
-        source = (self._root() / "tailwind.config.js").read_text()
-        assert "rgb(var(--aegis-${name}) / <alpha-value>)" in source
+        """Colors are tokens: every aegis-* name reads a DaisyUI variable, so
+        a theme is config, not a class rewrite."""
+        colors = self._tailwind_config()["colors"]
         for name in ("bg", "card", "border", "text", "muted", "teal", "amber", "error"):
-            assert f'{name}: token("{name}")' in source, name
-        assert "daisyui" in source
-        assert "aegis:" in source  # the DaisyUI theme name base.html asks for
-        assert '"aegis-light":' in source
+            assert colors[name].startswith("oklch(var(--"), name
 
     def test_theme_blocks_define_the_same_tokens(self) -> None:
-        import re
-
-        css = (_web_frontend_tree() / "static/input.css").read_text()
-        blocks: dict[str, set[str]] = {}
-        for m in re.finditer(r'\[data-theme="([\w-]+)"\][^{]*\{([^}]*)\}', css):
-            blocks.setdefault(m.group(1), set()).update(
-                re.findall(r"--aegis-[\w-]+", m.group(2))
-            )
-        assert blocks["aegis"] == blocks["aegis-light"]
-        assert {"--aegis-bg", "--aegis-card", "--aegis-text", "--aegis-teal"} <= blocks[
-            "aegis"
-        ]
+        """Every generated theme (brand x mode) defines the same tokens."""
+        themes: dict[str, dict] = {}
+        for entry in self._tailwind_config()["themes"]:
+            themes.update(entry)
+        assert {"aegis-dark", "aegis-light"} <= set(themes)
+        keys = {name: set(theme) for name, theme in themes.items()}
+        first = next(iter(keys.values()))
+        assert all(k == first for k in keys.values()), keys
+        assert {"--aegis-scale", "--aegis-label-case"} <= first
 
     def test_no_color_literals_outside_the_tokens(self) -> None:
         """The single rebrand point stays single: no hex and no theme-blind
@@ -566,8 +587,15 @@ class TestNodePipeline:
         assert "theme_toggle()" in html
 
     def test_base_layout_requests_the_daisyui_theme(self) -> None:
+        """The default theme base.html asks for is one tailwind generates."""
+        import re
+
         html = (_web_frontend_tree() / "templates/base.html").read_text()
-        assert 'data-theme="aegis"' in html
+        match = re.search(r'<html[^>]*data-theme="([\w-]+)"', html)
+        assert match, "base.html names no default theme"
+        default = match.group(1)
+        names = {n for entry in self._tailwind_config()["themes"] for n in entry}
+        assert default in names
 
     def test_input_css_pulls_in_tailwind_layers(self) -> None:
         source = (_web_frontend_tree() / "static/input.css").read_text()
@@ -805,8 +833,21 @@ class TestAuthPages:
             "app/components/web_frontend/routes/pages.py.jinja",
             _ctx(include_auth=True),
         )
-        for route in ("/login", "/register", "/logout", "/verify-pending"):
+        for route in ("/login", "/register", "/logout"):
             assert f'"{route}"' in on, route
+
+    def test_verify_pending_comes_with_email_verification(self) -> None:
+        """Basic auth has no verification step, so no page waiting on one."""
+        basic = _render(
+            "app/components/web_frontend/routes/pages.py.jinja",
+            _ctx(include_auth=True, auth_level="basic"),
+        )
+        rbac = _render(
+            "app/components/web_frontend/routes/pages.py.jinja",
+            _ctx(include_auth=True, auth_level="rbac", include_auth_rbac=True),
+        )
+        assert '"/verify-pending"' not in basic
+        assert '"/verify-pending"' in rbac
 
     def test_pages_render_valid_python_both_ways(self) -> None:
         for auth in (False, True):

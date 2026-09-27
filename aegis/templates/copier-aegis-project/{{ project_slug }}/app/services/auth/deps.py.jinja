@@ -78,7 +78,7 @@ async def get_optional_user(
 async def get_verified_user(
     current_user: User = Depends(get_current_active_user),
 ) -> User:
-    """Get the current user, rejecting unverified accounts.
+    """Get the current user, checking email verification where enabled.
 
     Use this for routes that should be unreachable until the user
     confirms their email. ``/auth/me``, ``/auth/logout``,
@@ -87,9 +87,12 @@ async def get_verified_user(
     user can still see their own account state, request a new
     verification email, and sign out.
 
-    Skipped when ``AUTH_ENABLED=False`` so the dev-mode synthetic user
-    (id=0, not a real email) can still hit protected endpoints.
+    Basic auth has no email delivery or verification step. The check is
+    also skipped when ``AUTH_ENABLED=False`` for the dev-mode user.
     """
+{%- if auth_level == "basic" %}
+    return current_user
+{%- else %}
     if not settings.AUTH_ENABLED:
         return current_user
     if not current_user.is_verified:
@@ -98,6 +101,7 @@ async def get_verified_user(
             detail="email_not_verified",
         )
     return current_user
+{%- endif %}
 
 
 async def require_admin(

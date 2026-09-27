@@ -1,0 +1,6 @@
+{% set steps = [
+  ("startup", "Startup hooks", "Step 1: runs once as the process starts", lifecycle.startup),
+  ("middleware", "Middleware stack", "Step 2: wraps every request, outermost first", lifecycle.middleware),
+  ("shutdown", "Shutdown hooks", "Step 3: runs once as the process stops", lifecycle.shutdown),
+] %}
+{% include "pages/overseer/_lifecycle.html" %}

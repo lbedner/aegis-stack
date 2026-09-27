@@ -1,14 +1,19 @@
 {#- aegis: no-backup -#}
 """Worker health for taskiq."""
 {% if include_worker and worker_backend == "taskiq" %}
+import time
 from typing import Any, cast
 
 from app.core.config import settings
 from app.core.log import logger
+from app.core.queue_workers import settings_for
 from app.services.system.health import propagate_status
 from app.services.system.health_worker_rules import (
+    broken_queue_status,
+    last_delivered,
     live_consumers,
     queue_status,
+    stream_age,
     taskiq_group_stats,
 )
 from app.services.system.models import ComponentStatus, ComponentStatusType
@@ -25,6 +30,11 @@ async def check_worker_health() -> ComponentStatus:
         ComponentStatus indicating worker infrastructure health with queue
         sub-components
     """
+    # A queue file that exists but cannot import (a missing broker library)
+    # is an outage, not a worker with no queues.
+    if (broken := broken_queue_status()) is not None:
+        return broken
+
     try:
         import redis.asyncio as aioredis
 
@@ -79,6 +89,21 @@ async def check_worker_health() -> ComponentStatus:
                         await redis_client.xinfo_consumers(stream_name, "taskiq")
                     )
                 queued_jobs = lag
+                # How long the oldest waiting job has waited: a small count
+                # can hide one stuck for an hour. It is the first entry past
+                # the group's last delivered id, and its id is its arrival.
+                oldest_waiting: float | None = None
+                if queued_jobs > 0:
+                    first = await redis_client.xrange(
+                        stream_name,
+                        min=f"({last_delivered(groups_info)}",
+                        max="+",
+                        count=1,
+                    )
+                    if first:
+                        oldest_waiting = stream_age(
+                            first[0][0], int(time.time() * 1000)
+                        )
                 jobs_ongoing = pending_count
                 jobs_completed = (
                     entries_read - jobs_ongoing
@@ -110,10 +135,14 @@ async def check_worker_health() -> ComponentStatus:
 
                 queue_functions = queue_config.get("functions", [])
                 has_functions = len(queue_functions) > 0
+                max_wait = settings_for(queue_type).max_wait_seconds
                 queue_state, lead = queue_status(
                     worker_alive=worker_alive,
                     has_functions=has_functions,
                     waiting=queued_jobs,
+                    failure_rate=failure_rate,
+                    oldest_waiting=oldest_waiting,
+                    max_wait=max_wait,
                 )
                 status_parts = [lead] if lead else []
                 if worker_alive and has_functions:
@@ -134,6 +163,8 @@ async def check_worker_health() -> ComponentStatus:
                     "queue_type": queue_type,
                     "stream_name": stream_name,
                     "queued_jobs": queued_jobs,
+                    "oldest_waiting_seconds": oldest_waiting,
+                    "max_wait_seconds": max_wait,
                     "jobs_ongoing": jobs_ongoing,
                     "jobs_completed": jobs_completed,
                     "jobs_failed": jobs_failed,

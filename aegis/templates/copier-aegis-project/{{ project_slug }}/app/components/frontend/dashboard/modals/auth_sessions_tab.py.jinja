@@ -11,7 +11,6 @@ for the row layout, ``Tag`` for badges, ``ActionMenu`` for per-row
 actions, ``ConfirmDialog`` for confirmation, and theme-driven colours.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
@@ -31,40 +30,14 @@ from app.components.frontend.controls.snack_bar import (
 )
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
-
-
-def _format_relative_time(timestamp_str: str | None) -> str:
-    """Render an ISO timestamp as a relative span. ``None`` -> ``"-"``."""
-    if not timestamp_str:
-        return "-"
-    try:
-        dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-        diff = datetime.now(UTC) - dt
-        seconds = int(diff.total_seconds())
-        if seconds < 0:
-            return "just now"
-        if seconds < 60:
-            return f"{seconds}s ago"
-        if seconds < 3600:
-            return f"{seconds // 60}m ago"
-        if seconds < 86400:
-            return f"{seconds // 3600}h ago"
-        return f"{seconds // 86400}d ago"
-    except (ValueError, AttributeError):
-        return timestamp_str
+from app.core.formatting import format_relative_time
+from app.services.system import ui_auth
 
 
 def _source_label(source: str | None) -> tuple[str, str]:
-    """Map a refresh ``source`` to (label, theme color)."""
-    if source == "password":
-        return "Password", Theme.Colors.INFO
-    if source == "oauth:github":
-        return "GitHub", Theme.Colors.SUCCESS
-    if source == "oauth:google":
-        return "Google", Theme.Colors.SUCCESS
-    return source or "Unknown", Theme.Colors.WARNING
+    """How the session signed in, as (label, theme color)."""
+    label, color = ui_auth.session_source(source)
+    return label, Theme.Colors.semantic(color)
 
 
 class SessionsTableSection(ft.Container):
@@ -123,9 +96,9 @@ class SessionsTableSection(ft.Container):
                     source_tag,
                     ua_display,
                     session.get("ip") or "-",
-                    _format_relative_time(session.get("last_used_at"))
-                    if session.get("last_used_at")
-                    else _format_relative_time(session.get("created_at")),
+                    format_relative_time(
+                        session.get("last_used_at") or session.get("created_at")
+                    ),
                     status_tag,
                     actions,
                 ]

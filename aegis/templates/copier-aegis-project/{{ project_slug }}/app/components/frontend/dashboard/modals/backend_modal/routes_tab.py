@@ -12,6 +12,7 @@ dependency. It is here because both the row and the group ask it.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     ExpandArrow,
@@ -22,6 +23,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.controls.surface_panel import SurfacePanel
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
 
 # Keywords to detect auth dependencies
@@ -290,8 +292,8 @@ class RouteGroupSection(ft.Container):
         self.routes = routes
         self.is_expanded = start_expanded
 
-        # Sort routes by path
-        sorted_routes = sorted(routes, key=lambda r: str(r.get("path", "")))
+        # Already ordered by path (ui_backend.route_groups)
+        sorted_routes = routes
 
         # Build table header
         table_header = ft.Container(
@@ -409,36 +411,20 @@ class RoutesTab(ft.Container):
         """
         super().__init__()
         metadata = backend_component.metadata or {}
-        routes = metadata.get("routes", [])
 
-        # Group routes by their first tag (or "Untagged" if no tags)
-        groups: dict[str, list[dict[str, object]]] = {}
-        for route in routes:
-            tags = route.get("tags", [])
-            # Use first tag, or "Untagged" if no tags
-            group_name = tags[0] if tags else "Untagged"
-            if group_name not in groups:
-                groups[group_name] = []
-            groups[group_name].append(route)
-
-        # Sort groups alphabetically, but put "Untagged" last
-        sorted_group_names = sorted([name for name in groups if name != "Untagged"])
-        if "Untagged" in groups:
-            sorted_group_names.append("Untagged")
+        grouped = ui_backend.route_groups(metadata.get("routes", []))
 
         # Smart collapse: expand all if <=5 groups, collapse all if >5
-        start_expanded = len(groups) <= 5
+        start_expanded = len(grouped) <= 5
 
-        # Create group sections
-        group_sections = []
-        for group_name in sorted_group_names:
-            group_sections.append(
-                RouteGroupSection(
-                    group_name=group_name,
-                    routes=groups[group_name],
-                    start_expanded=start_expanded,
-                )
+        group_sections = [
+            RouteGroupSection(
+                group_name=group_name,
+                routes=routes,
+                start_expanded=start_expanded,
             )
+            for group_name, routes in grouped
+        ]
 
         # Use ListView for virtualization - only renders visible items
         self.content = ft.ListView(

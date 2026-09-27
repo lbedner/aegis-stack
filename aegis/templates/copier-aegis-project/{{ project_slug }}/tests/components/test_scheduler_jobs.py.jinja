@@ -15,7 +15,7 @@ import pytest
 from apscheduler.job import Job
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.components.scheduler.jobs import SERVICE_JOBS, ServiceJob
+from app.components.scheduler.jobs import SERVICE_JOBS{% if include_worker %}, ServiceJob{% endif %}
 from app.components.scheduler.main import _quiet_successful_runs, register_service_jobs
 
 
@@ -152,4 +152,34 @@ async def test_running_a_job_by_hand_passes_its_stored_args(
     assert await trigger.run_triggered_job(job, "id", "Name", ["a_job", "system"])
     assert seen == [("a_job", "system")]
 {%- endif %}
+
+def test_interval_jobs_keep_their_times_across_restarts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every startup re-adds each job. An interval trigger with no start
+    date counts from that moment, so each restart pushed every interval job
+    back a full interval (in dev, a daily job restarted hourly never ran).
+    Anchored to a fixed start, the next run is the same whenever it starts."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.components.scheduler.jobs import ServiceJob
+    import app.components.scheduler.main as scheduler_main
+
+    async def daily() -> None:
+        """A daily chore."""
+
+    monkeypatch.setattr(
+        scheduler_main,
+        "SERVICE_JOBS",
+        (ServiceJob(daily, "daily", "Daily", {"trigger": "interval", "hours": 24}),),
+    )
+    trigger = _scheduled()["daily"].trigger
+    started = [
+        datetime(2026, 9, 26, 22, 0, tzinfo=UTC),
+        datetime(2026, 9, 26, 23, 54, tzinfo=UTC),
+    ]
+    next_runs = {trigger.get_next_fire_time(None, now) for now in started}
+    assert len(next_runs) == 1
+    (next_run,) = next_runs
+    assert next_run - min(started) < timedelta(hours=24, seconds=1)
 {%- endif %}

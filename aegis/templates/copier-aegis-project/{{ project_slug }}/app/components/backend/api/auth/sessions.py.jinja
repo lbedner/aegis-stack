@@ -192,6 +192,14 @@ async def list_sessions(
     current_user = await get_current_user_from_token(token, user_service)
     current_family = await _current_session_family(request, refresh_service)
     rows = await refresh_service.list_sessions(current_user.id)
+    return session_responses(rows, current_family)
+
+
+def session_responses(
+    rows: list[RefreshToken], current_family: str | None
+) -> list[SessionResponse]:
+    """The public view of each session row. Shared with the web Overseer,
+    which cannot see the refresh cookie and so passes no current family."""
     return [
         SessionResponse(
             id=row.family_id,

@@ -9,6 +9,7 @@ from app.components.frontend.controls import (
     TableNameText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_database
 from app.services.system.models import ComponentStatus
 
 from ..modal_sections import MetricCard
@@ -21,45 +22,25 @@ class OverviewTab(ft.Container):
         super().__init__()
         self.page = page
         metadata = database_component.metadata or {}
-        implementation = metadata.get("implementation", "sqlite")
 
-        # Extract metrics
-        table_count = metadata.get("table_count", 0)
-        total_rows = metadata.get("total_rows", 0)
-
-        if implementation == "postgresql":
-            db_size = metadata.get("database_size_human", "Unknown")
-            # Get connections info
-            pg_settings = metadata.get("pg_settings", {})
-            active_connections = metadata.get("active_connections", 0)
-            max_connections = pg_settings.get("max_connections", "?")
-            connections_value = f"{active_connections} / {max_connections}"
-        else:
-            db_size = metadata.get("file_size_human", "0 B")
-            # SQLite: show pool size (no real connections concept)
-            pool_size = metadata.get("connection_pool_size", 1)
-            connections_value = str(pool_size)
+        figures = ui_database.overview(metadata)
 
         # Metric cards row
         metric_cards = ft.Row(
             [
-                MetricCard("Total Tables", str(table_count), Theme.Colors.INFO),
-                MetricCard("Total Rows", f"{total_rows:,}", Theme.Colors.SUCCESS),
-                MetricCard("Database Size", db_size, Theme.Colors.INFO),
-                MetricCard("Connections", connections_value, Theme.Colors.INFO),
+                MetricCard("Total Tables", figures["tables"], Theme.Colors.INFO),
+                MetricCard("Total Rows", figures["rows"], Theme.Colors.SUCCESS),
+                MetricCard("Database Size", figures["size"], Theme.Colors.INFO),
+                MetricCard("Connections", figures["connections"], Theme.Colors.INFO),
             ],
             alignment=ft.MainAxisAlignment.SPACE_AROUND,
         )
 
-        # Statistics section
-        db_url = metadata.get("url", "Unknown")
-        self.db_url_local = self._convert_to_localhost(db_url)
-        pool_size = metadata.get("connection_pool_size", 0)
-        total_indexes = metadata.get("total_indexes", 0)
-        total_foreign_keys = metadata.get("total_foreign_keys", 0)
-        largest_table = metadata.get("largest_table", {})
-        largest_table_name = largest_table.get("name", "None")
-        largest_table_rows = largest_table.get("rows", 0)
+        # Statistics section. The URL keeps its password: it is what the
+        # copy button puts on the clipboard.
+        self.db_url_local = ui_database.display_url(
+            str(metadata.get("url", "Unknown")), hide_password=False
+        )
 
         # Statistics table
         stats_columns = [
@@ -96,16 +77,16 @@ class OverviewTab(ft.Container):
 
         stats_rows: list[list[ft.Control]] = [
             url_row,
-            [TableNameText("Connection Pool Size"), TableCellText(str(pool_size))],
-            [TableNameText("Total Indexes"), TableCellText(str(total_indexes))],
+            [
+                TableNameText("Connection Pool Size"),
+                TableCellText(figures["pool_size"]),
+            ],
+            [TableNameText("Total Indexes"), TableCellText(figures["indexes"])],
             [
                 TableNameText("Total Foreign Keys"),
-                TableCellText(str(total_foreign_keys)),
+                TableCellText(figures["foreign_keys"]),
             ],
-            [
-                TableNameText("Largest Table"),
-                TableCellText(f"{largest_table_name} ({largest_table_rows:,} rows)"),
-            ],
+            [TableNameText("Largest Table"), TableCellText(figures["largest"])],
         ]
 
         stats_table = DataTable(
@@ -126,20 +107,6 @@ class OverviewTab(ft.Container):
         )
         self.padding = ft.padding.all(Theme.Spacing.MD)
         self.expand = True
-
-    def _convert_to_localhost(self, url: str) -> str:
-        """Convert docker service names to localhost in URL."""
-        replacements = {
-            "@db:": "@localhost:",
-            "@postgres:": "@localhost:",
-            "@postgresql:": "@localhost:",
-            "@database:": "@localhost:",
-            "@redis:": "@localhost:",
-        }
-        result = url
-        for old, new in replacements.items():
-            result = result.replace(old, new)
-        return result
 
     def _copy_url(self, _e: ft.ControlEvent) -> None:
         """Copy database URL to clipboard."""

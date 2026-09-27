@@ -1,0 +1,26 @@
+{% from "components/macros/layout.html" import card, chip, stat_row %}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/table.html" import data_table %}
+{% macro job_detail(row) %}
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div class="space-y-1 min-w-0">
+    {% if row.description %}<p class="text-sm italic text-aegis-muted">{{ row.description }}</p>{% endif %}
+    <p class="text-xs text-aegis-muted">Function: <code class="font-mono text-aegis-text">{{ row.function or "unknown" }}</code></p>
+  </div>
+  <div class="flex items-center gap-2">
+    {{ chip("History", False, row.history, hx_replace(row.history, "#overseer-main"), "data-history") }}
+    {{ action("Run now", hx_dialog(partials ~ "/confirm/run/" ~ row.id), "primary") }}
+  </div>
+</div>
+<div data-stats class="mt-3">
+  {% if row.stats %}{{ stat_row(row.stats) }}{% else %}<p class="text-xs text-aegis-muted">No runs yet</p>{% endif %}
+</div>
+{% endmacro %}
+{% call card("Scheduled jobs", jobs|length ~ " " ~ ("job" if jobs|length == 1 else "jobs")) %}
+  {{ data_table([
+    {"key": "name", "label": "Job"},
+    {"key": "next_run", "label": "Next run"},
+    {"key": "schedule", "label": "Schedule"},
+    {"key": "state", "label": "Status", "kind": "status"},
+  ], jobs, empty="No scheduled jobs", detail=job_detail) }}
+{% endcall %}

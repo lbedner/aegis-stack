@@ -174,9 +174,12 @@ nav:
     - Integration: overseer/integration.md
   - Deployment:
     - Getting Started: deployment/index.md
+  - Plugins:
+    - Overview: plugins/index.md
+    - Creating a Plugin: plugins/creating.md
+    - Publishing a Plugin: plugins/publishing.md
   - Reference:
     - CLI Reference: cli-reference.md
-    - Plugins: plugins.md
     - Evolving Your Stack: evolving-your-stack.md
     - Integration Patterns: integration-patterns.md
 

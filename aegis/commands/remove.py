@@ -20,18 +20,10 @@ from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
 from ..core.plugins.compat import reverse_dependents
 from ..core.plugins.discovery import discover_plugins
-from ..core.plugins.spec import PluginSpec
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
 from ..i18n import lazy_t, t
-
-
-def _resolve_plugin_for_remove(name: str) -> PluginSpec | None:
-    """Match a bare plugin name against discovered external plugins."""
-    for plugin in discover_plugins():
-        if plugin.name == name:
-            return plugin
-    return None
+from .add import _resolve_plugin
 
 
 def _uninstall_plugin(
@@ -46,10 +38,13 @@ def _uninstall_plugin(
     ``ManualUpdater.remove_plugin`` and adds a reverse-dependency check
     that the existing ``remove-service`` lacks.
     """
-    plugin_spec = _resolve_plugin_for_remove(name)
-    if plugin_spec is None:
+    # The module name locates the plugin's template tree, so remove can
+    # take out everything add rendered, not only what the manifest lists.
+    resolved = _resolve_plugin(name)
+    if resolved is None:
         brand.error(f"Plugin not found: {name!r}", err=True)
         raise typer.Exit(1)
+    plugin_spec, plugin_module_name = resolved
 
     answers = load_copier_answers(target_path)
 
@@ -88,7 +83,7 @@ def _uninstall_plugin(
         raise typer.Exit(0)
 
     updater = ManualUpdater(target_path)
-    result = updater.remove_plugin(plugin_spec)
+    result = updater.remove_plugin(plugin_spec, plugin_module_name)
 
     if not result.success:
         brand.error(f"\nPlugin remove failed: {result.error_message}", err=True)
@@ -97,9 +92,9 @@ def _uninstall_plugin(
     brand.success(f"\n{t('remove.plugin_success', name=plugin_spec.name)}")
     if plugin_spec.migrations:
         typer.echo(
-            "   Note: plugin database tables remain in your database. "
-            "Run alembic downgrade manually to drop them, or leave them "
-            "in place to preserve data."
+            "   Its tables were exported to <STORAGE_ROOT>/plugin-exports/ and "
+            "dropped; adding the plugin again restores them. A deployed "
+            "database does the same when it applies the new revision."
         )
 
 
@@ -141,11 +136,11 @@ def remove_command(
     This command removes component files and updates project configuration.
     WARNING: This operation deletes files and cannot be easily undone!
 
-    Examples:\\\\n
-        - aegis remove scheduler\\\\n
-        - aegis remove worker,database\\\\n
-        - aegis remove scheduler --project-path ../my-project\\\\n
-        - aegis --verbose remove worker (show detailed file operations)\\\\n
+    Examples:
+        - aegis remove scheduler
+        - aegis remove worker,database
+        - aegis remove scheduler --project-path ../my-project
+        - aegis --verbose remove worker (show detailed file operations)
 
     Note: Core components (backend, frontend) cannot be removed.
 
@@ -177,7 +172,7 @@ def remove_command(
     # forward to the existing remove-service implementation (Phase 2
     # of #771: unify the entry point, defer the implementation-merge).
     if components and "," not in components:
-        if _resolve_plugin_for_remove(components) is not None:
+        if _resolve_plugin(components) is not None:
             _uninstall_plugin(components, target_path, yes, force)
             return
 

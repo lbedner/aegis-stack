@@ -7,6 +7,8 @@ import pytest
 
 from aegis.core.migration_generator import (
     MigrationGenerationError,
+    generate_drop_revision,
+    generate_plugin_migrations,
     generate_revisions,
 )
 
@@ -43,6 +45,48 @@ def test_runs_migrate_gen_in_the_project_venv(
     # the tool's own interpreter pin must not reach the project's resolve
     assert "UV_PYTHON" not in env
     assert written == [versions / "001_auth.py"]
+
+
+def test_the_drop_revision_runs_in_the_project_venv_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``aegis remove <plugin>`` retires its tables through the project's own
+    ``migrate_drop``, under the same invocation ``migrate_gen`` gets."""
+    monkeypatch.setenv("UV_PYTHON", "3.11")
+    versions = _versions(tmp_path)
+
+    def fake_run(cmd: list[str], **_kw: object) -> Mock:
+        (versions / "004_remove_crawl4ai.py").write_text("")
+        return Mock(returncode=0, stderr="", stdout="")
+
+    with patch(
+        "aegis.core.migration_generator.subprocess.run", side_effect=fake_run
+    ) as run:
+        written = generate_drop_revision(tmp_path, "remove_crawl4ai")
+
+    cmd = run.call_args.args[0]
+    assert cmd[:4] == ["uv", "run", "--project", str(tmp_path)]
+    assert cmd[-4:] == ["python", "-m", "app.cli.migrate_drop", "remove_crawl4ai"]
+    assert "UV_PYTHON" not in run.call_args.kwargs["env"]
+    assert written == [versions / "004_remove_crawl4ai.py"]
+
+
+@pytest.mark.parametrize("plugin", [True, False])
+def test_only_a_plugins_revisions_restore_its_data(
+    tmp_path: Path, plugin: bool
+) -> None:
+    """A re-added plugin gets back what its removal exported; a service's
+    revisions never ask."""
+    _versions(tmp_path)
+    run = Mock(return_value=Mock(returncode=0, stderr="", stdout=""))
+    spec = Mock(migrations=[Mock(service_name="crawler")])
+    with patch("aegis.core.migration_generator.subprocess.run", run):
+        if plugin:
+            generate_plugin_migrations(tmp_path, spec)
+        else:
+            generate_revisions(tmp_path, ["crawler"])
+
+    assert ("AEGIS_RESTORE_DATA" in run.call_args.kwargs["env"]) is plugin
 
 
 def test_returns_only_files_this_call_wrote(tmp_path: Path) -> None:
@@ -85,6 +129,36 @@ def test_alembic_pin_matches_the_template(tmp_path: Path) -> None:
     assert f'"{ALEMBIC_PIN}"' in (template / "pyproject.toml.jinja").read_text()
 
 
+@pytest.mark.parametrize(
+    ("migrations", "deps", "pins"),
+    [
+        ([{"service_name": "crawler"}], [], 1),
+        ([], [], 0),
+        # The plugin names alembic itself: that line is the pin.
+        ([{"service_name": "crawler"}], ["alembic>=1.13"], 0),
+    ],
+)
+def test_the_template_pins_alembic_for_a_plugin_with_migrations(
+    migrations: list[dict[str, str]], deps: list[str], pins: int
+) -> None:
+    """A plugin that brings migrations needs alembic, and ``_pin_alembic``
+    used to be the only thing that said so. The pin then lived outside the
+    template, so every later regen read pyproject.toml as hand-edited and
+    merged it (with a backup) instead of re-rendering it."""
+    from jinja2 import Environment, FileSystemLoader
+
+    from aegis.core.component_files import get_copier_defaults, get_template_path
+    from aegis.core.migration_generator import ALEMBIC_PIN
+
+    env = Environment(loader=FileSystemLoader(str(get_template_path())))
+    plugin = {"name": "crawl4ai", "pyproject_deps": deps, "migrations": migrations}
+    rendered = env.get_template("{{ project_slug }}/pyproject.toml.jinja").render(
+        {**get_copier_defaults(), "project_slug": "demo", "_plugins": [plugin]}
+    )
+
+    assert rendered.count(ALEMBIC_PIN) == pins
+
+
 def test_bootstrap_pins_alembic_once(tmp_path: Path) -> None:
     from aegis.core.migration_generator import ALEMBIC_PIN, _pin_alembic
 
@@ -96,6 +170,21 @@ def test_bootstrap_pins_alembic_once(tmp_path: Path) -> None:
         '\n[tool.poe.tasks.migrate]\ncmd = "uv run alembic upgrade head"\n'
     )
     _pin_alembic(tmp_path)
+    _pin_alembic(tmp_path)
+    assert pyproject.read_text().count(ALEMBIC_PIN) == 1
+
+
+def test_an_extra_before_the_pin_does_not_hide_it(tmp_path: Path) -> None:
+    """The dependency list was read up to its first ``]``, which is inside
+    ``uvicorn[standard]``; a pin further down went unseen and a second one
+    was written at the top."""
+    from aegis.core.migration_generator import ALEMBIC_PIN, _pin_alembic
+
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[project]\ndependencies = [\n    "uvicorn[standard]>=0.30",\n'
+        f'    "{ALEMBIC_PIN}",\n]\n'
+    )
     _pin_alembic(tmp_path)
     assert pyproject.read_text().count(ALEMBIC_PIN) == 1
 

@@ -254,7 +254,8 @@ aegis init cron-app --components "scheduler[sqlite]"
 
 ### aegis add
 
-Add components to an existing Aegis Stack project.
+Add components to an existing Aegis Stack project. It also adds an installed
+plugin: `aegis add crawl4ai` (see [Plugins](plugins/index.md)).
 
 **Usage:**
 ```bash
@@ -409,7 +410,10 @@ See **Generated Project CLI** section below for full command reference.
 
 ### aegis remove
 
-Remove components from an existing Aegis Stack project.
+Remove components from an existing Aegis Stack project. It also removes a
+plugin: `aegis remove crawl4ai` takes out every file the plugin added, and
+exports its tables before dropping them, so adding it back restores the data
+(see [Plugins](plugins/index.md#removing-a-plugin-keeps-its-data)).
 
 **Usage:**
 ```bash
@@ -456,6 +460,38 @@ aegis remove --interactive
 - Removing scheduler with SQLite persistence leaves `data/scheduler.db` intact
 - Shared template files are regenerated (backups created automatically)
 - Redis is auto-removed when worker is removed (no standalone functionality)
+
+---
+
+### aegis remove-service
+
+Remove services from an existing Aegis Stack project. The components a
+service needed stay; remove them separately with `aegis remove`.
+
+**Usage:**
+```bash
+aegis remove-service SERVICES [OPTIONS]
+```
+
+**Arguments:**
+
+- `SERVICES` - Comma-separated list of services to remove
+
+**Options:**
+
+- `--interactive, -i` - Use interactive service selection
+- `--project-path, -p PATH` - Path to the Aegis Stack project (default: current directory)
+- `--yes, -y` - Skip confirmation prompt
+- `--force, -f` - Force through version mismatch warnings
+
+**Examples:**
+```bash
+aegis remove-service auth
+aegis remove-service auth,ai
+aegis --verbose remove-service auth  # show each file operation
+```
+
+**Important:** this deletes files. Commit your changes to git first.
 
 ---
 
@@ -583,6 +619,37 @@ aegis deploy-setup [OPTIONS]
 **Examples:**
 ```bash
 aegis deploy-setup
+```
+
+---
+
+### aegis deploy-cd-setup
+
+Wire up GitHub Actions continuous deployment. Generates a dedicated ed25519
+deploy key, installs its public half on the server, pushes the private key,
+host and user to GitHub Actions secrets, and scaffolds
+`.github/workflows/deploy.yml`. Needs the GitHub CLI (`gh auth login`) and an
+`.aegis/deploy.yml` from `aegis deploy-init`.
+
+**Usage:**
+```bash
+aegis deploy-cd-setup [OPTIONS]
+```
+
+**Options:**
+
+- `--repo TEXT`, GitHub repo as `owner/name` (default: detected from the `origin` remote)
+- `--on-tag`, Also deploy on pushes of `v*` tags
+- `--force`, Overwrite existing GitHub secrets and the workflow (rotates the key)
+- `--dry-run`, Print the planned actions without changing anything
+- `--keep-key TEXT`, Copy the generated private key here before cleanup (default: it only lives in GitHub secrets)
+- `--project-path TEXT`, Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-cd-setup
+aegis deploy-cd-setup --on-tag
+aegis deploy-cd-setup --force  # rotate the deploy key
 ```
 
 ---
@@ -780,6 +847,31 @@ aegis deploy-shell --service redis
 
 ---
 
+### aegis deploy-exec
+
+Run a one-off command in a deployed container, non-interactively. The
+scriptable sibling of `deploy-shell`: it streams output and exits with the
+command's own status, so it works under `set -e` and in CI. Put `--` before
+the command so its flags are not read as this CLI's.
+
+**Usage:**
+```bash
+aegis deploy-exec [OPTIONS] -- COMMAND...
+```
+
+**Options:**
+
+- `--service, -s TEXT`, Service to run in (default: `webserver`)
+- `--project-path TEXT`, Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-exec -- alembic current
+aegis deploy-exec --service worker-system -- my-app tasks list
+```
+
+---
+
 ### aegis ingress-enable
 
 Enable TLS (HTTPS) on a project with the ingress component. Configures Let's Encrypt certificates via Traefik.
@@ -801,6 +893,75 @@ aegis ingress-enable [OPTIONS]
 aegis ingress-enable --domain example.com --email admin@example.com
 aegis ingress-enable -d example.com -e admin@example.com -y
 aegis ingress-enable  # interactive prompts
+```
+
+---
+
+## Plugin Commands
+
+Plugins are Python packages that add a capability to a project; see
+[Plugins](plugins/index.md). Install the package with `pip` or `uv`, then add
+it with `aegis add <name>`.
+
+### aegis plugins list
+
+Installed plugins, and whether each can be added to the project.
+
+**Options:**
+
+- `--project-path, -p PATH` - Project to check against (default: the current directory, if it is one)
+- `--verbose, -v` - Show a description column
+
+### aegis plugins info
+
+One plugin in detail: its options, dependencies, files, migrations, the CLI
+it adds, and what adding it would change in this project.
+
+```bash
+aegis plugins info crawl4ai
+aegis plugins info crawl4ai -p ../my-app
+```
+
+### aegis plugins search
+
+Search the plugin directory at [aegis-stack.io/plugins](https://aegis-stack.io/plugins).
+Marks what is already installed and prints the install steps for the rest.
+
+```bash
+aegis plugins search
+aegis plugins search crawl
+```
+
+### aegis plugins update
+
+Re-render a plugin's files after upgrading its package.
+
+**Options:**
+
+- `--all` - Update every plugin in the project
+- `--project-path, -p PATH` - Path to the project (default: current directory)
+- `--yes, -y` - Skip confirmation prompts
+- `--force, -f` - Apply the update even when the new plugin version does not declare support for this aegis-stack version
+
+```bash
+aegis plugins update crawl4ai
+aegis plugins update --all
+```
+
+### aegis plugins create
+
+Scaffold a new `aegis-stack-<name>` package. See
+[Creating a Plugin](plugins/creating.md).
+
+**Options:**
+
+- `--target-dir, -d PATH` - Where to create it (default: current directory)
+- `--author TEXT` - Author for `pyproject.toml` and the README
+- `--description TEXT` - One-line description
+- `--yes, -y` - Skip the confirmation prompt
+
+```bash
+aegis plugins create scraper --author "Your Name" --description "Web scraping"
 ```
 
 ---

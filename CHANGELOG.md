@@ -24,6 +24,53 @@
 - **Successful scheduled runs no longer log.** APScheduler wrote two INFO
   lines per run, the heartbeat's alone every 15 seconds. Failures still
   log.
+- **Backups only where your edits are at stake.** Regenerating a file
+  nobody had edited left a `.backup` beside it (`CLAUDE.md.backup`,
+  `Makefile.backup`, ...) holding nothing but formatting. A file is now
+  backed up only before a merge rewrites a version you changed.
+
+### Added
+
+- **`aegis plugins search` reads the plugin directory** at
+  aegis-stack.io/plugins: what is published, whether it is verified, the
+  `aegis-stack` versions it supports, and how to add it. Installed plugins
+  are marked. It used to say the registry was not available yet.
+- **Plugins have their own docs section** (overview, creating, publishing),
+  the CLI reference covers `aegis plugins`, `remove-service`,
+  `deploy-cd-setup` and `deploy-exec`, and the README mentions plugins.
+
+### Fixed
+
+- **`aegis remove <plugin>` takes out everything `add` put in.** It deleted
+  only what the plugin's manifest listed, so a file the manifest forgot
+  stayed behind: crawl4ai's tests, importing modules just deleted, broke the
+  project's suite. Remove now also deletes what the plugin's template tree
+  rendered, except paths aegis's own templates produce.
+- **Removing a plugin keeps its data, and the project stays consistent.**
+  `aegis remove <plugin>` left the plugin's tables in the database and its
+  revision on disk with no models behind it, so the project's own drift
+  check failed on every project that had removed one. Remove now writes a
+  revision that exports each of the plugin's tables (JSON lines under
+  `STORAGE_ROOT/plugin-exports/`) and drops them; re-adding the plugin
+  recreates them and restores the newest export, loading the columns that
+  still exist and skipping rows the table refuses. Both steps run inside the
+  migrations, so a deployed database does the same when it migrates. The
+  project gains `app/cli/migrate_drop.py` and `app/cli/plugin_data.py`.
+- **A plugin with migrations no longer makes `pyproject.toml` look edited.**
+  Its alembic pin was written outside the template, so every later change
+  merged the file instead of re-rendering it; the template now pins alembic
+  for such a plugin. The pin check also read the dependency list only up to
+  the first `]` (inside `uvicorn[standard]`) and could add a second pin.
+- **`aegis plugins create` names the real file to edit**, not
+  `src/aegis_stack_<name>/plugin.py`.
+- **`aegis plugins info` reports a plugin's project command.** It said
+  "CLI: no" for crawl4ai, which adds `crawl`; it now shows the project CLI
+  and any `aegis` sub-command separately.
+- **`aegis deploy*`, `init` and `remove` help no longer print a literal
+  `\n`** after each example.
+- **The finance analyst test no longer fails as the calendar moves.** The
+  demo seed anchored on the real date while the note was written for a fixed
+  one; once they drifted a month apart the note's cash section went missing.
 
 ## [0.13.2] - 2026-09-25
 

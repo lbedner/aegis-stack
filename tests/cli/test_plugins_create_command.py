@@ -68,6 +68,19 @@ class TestSuccessFlow:
         # Spot-check that the scaffold actually landed.
         assert (tmp_path / "aegis-stack-scraper" / "pyproject.toml").is_file()
 
+    def test_next_steps_name_the_file_that_was_created(self, tmp_path: Path) -> None:
+        """The edit hint used to print ``src/aegis_stack_<name>/plugin.py``
+        with the placeholder never filled in."""
+        result = runner.invoke(
+            plugins_app,
+            ["create", "scraper", "--target-dir", str(tmp_path), "--yes"],
+        )
+        assert result.exit_code == 0
+        plugin_file = "src/aegis_stack_scraper/plugin.py"
+        assert plugin_file in result.output
+        assert (tmp_path / "aegis-stack-scraper" / plugin_file).is_file()
+        assert "<name>" not in result.output
+
     def test_cancellation_creates_nothing(self, tmp_path: Path) -> None:
         # No --yes; simulate the user typing 'n' at the prompt.
         result = runner.invoke(

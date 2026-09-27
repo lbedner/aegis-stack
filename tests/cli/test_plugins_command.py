@@ -7,7 +7,7 @@ Covers:
   compat status when invoked outside an Aegis project.
 * ``plugins info`` — happy path metadata dump, missing-plugin error,
   in-project compat verdict.
-* ``plugins search`` — registry-not-yet-available stub.
+* ``plugins search`` — reads the aegis-stack.io plugin directory.
 * In-tree-vs-external collision  — external plugin claiming an in-tree
   name is soft-skipped from discovery (covered by reusing
   ``plugin_discovery.discover_plugins`` with patched entry points).
@@ -208,17 +208,97 @@ class TestPluginsInfo:
 # ---------------------------------------------------------------------
 
 
-class TestPluginsSearch:
-    def test_search_returns_stub_message(self, runner: CliRunner) -> None:
-        result = runner.invoke(plugins_app, ["search", "anything"])
-        assert result.exit_code == 0
-        assert "not yet available" in result.stdout
-        assert "pip install aegis-stack-<name>" in result.stdout
+def _registry_response(*plugins: dict[str, object]) -> object:
+    """What ``urlopen`` hands back for ``GET /api/v1/plugins``."""
+    import io
+    import json
 
-    def test_search_without_keyword_still_works(self, runner: CliRunner) -> None:
-        result = runner.invoke(plugins_app, ["search"])
+    body = json.dumps({"plugins": list(plugins), "generated_at": "now"}).encode()
+    response = io.BytesIO(body)
+    response.__enter__ = lambda: response  # type: ignore[method-assign]
+    response.__exit__ = lambda *a: None  # type: ignore[method-assign]
+    return response
+
+
+CRAWL4AI = {
+    "name": "aegis-stack-crawl4ai",
+    "install_name": "crawl4ai",
+    "summary": "Web crawling and scraping",
+    "latest_version": "0.1.0",
+    "verified": True,
+    "aegis_version": "aegis-stack>=0.13.1",
+    "detail_url": "/plugins/aegis-stack-crawl4ai",
+}
+
+
+class TestPluginsSearch:
+    """``search`` reads the directory at aegis-stack.io/plugins through its
+    public JSON API, the contract the directory publishes for this command."""
+
+    def test_lists_matches_with_how_to_install_them(self, runner: CliRunner) -> None:
+        seen: list[str] = []
+
+        def fake_urlopen(request: object, timeout: float) -> object:
+            seen.append(request.full_url)  # type: ignore[attr-defined]
+            return _registry_response(CRAWL4AI)
+
+        with (
+            patch("aegis.core.plugins.registry.urlopen", fake_urlopen),
+            _patch_discovery([]),
+        ):
+            result = runner.invoke(plugins_app, ["search", "crawl"])
+
+        assert result.exit_code == 0, result.output
+        assert "q=crawl" in seen[0]
+        assert "crawl4ai" in result.stdout
+        assert "0.1.0" in result.stdout
+        assert "verified" in result.stdout
+        assert "pip install aegis-stack-crawl4ai" in result.stdout
+        assert "aegis add crawl4ai" in result.stdout
+
+    def test_a_plugin_already_installed_says_so(self, runner: CliRunner) -> None:
+        installed = PluginSpec(
+            name="crawl4ai",
+            kind=PluginKind.SERVICE,
+            description="crawler",
+            version="0.1.0",
+            verified=True,
+        )
+        with (
+            patch(
+                "aegis.core.plugins.registry.urlopen",
+                lambda request, timeout: _registry_response(CRAWL4AI),
+            ),
+            _patch_discovery([installed]),
+        ):
+            result = runner.invoke(plugins_app, ["search"])
+
+        assert result.exit_code == 0, result.output
+        assert "installed" in result.stdout
+        assert "pip install aegis-stack-crawl4ai" not in result.stdout
+
+    def test_no_match_is_a_plain_answer(self, runner: CliRunner) -> None:
+        with patch(
+            "aegis.core.plugins.registry.urlopen",
+            lambda request, timeout: _registry_response(),
+        ):
+            result = runner.invoke(plugins_app, ["search", "nothing"])
+
         assert result.exit_code == 0
-        assert "not yet available" in result.stdout
+        assert "No plugins match 'nothing'" in result.stdout
+
+    def test_an_unreachable_directory_fails_cleanly(self, runner: CliRunner) -> None:
+        from urllib.error import URLError
+
+        def offline(request: object, timeout: float) -> object:
+            raise URLError("no route to host")
+
+        with patch("aegis.core.plugins.registry.urlopen", offline):
+            result = runner.invoke(plugins_app, ["search", "crawl"])
+
+        assert result.exit_code == 1
+        assert "aegis-stack.io/plugins" in result.output
+        assert "Traceback" not in result.output
 
 
 # ---------------------------------------------------------------------
@@ -363,6 +443,58 @@ class TestPluginsListEscapesMarkup:
         assert "[scary]" in result.stdout
 
 
+class TestInfoNamesBothCliSurfaces:
+    """A plugin can add a command to the generated project (``cli_name``)
+    and, separately, mount one into ``aegis``. ``info`` used to report only
+    the second, so crawl4ai - which adds ``crawl`` to the project - read as
+    having no CLI at all."""
+
+    def test_a_project_command_is_reported_as_one(self, runner: CliRunner) -> None:
+        ext = PluginSpec(
+            name="crawl4ai",
+            kind=PluginKind.SERVICE,
+            description="crawler",
+            version="0.1.0",
+            verified=False,
+            cli_name="crawl",
+        )
+        with (
+            _patch_discovery([ext]),
+            patch(
+                "aegis.commands.plugins.discover_plugin_cli_apps",
+                side_effect=lambda reserved_names=None: {},
+            ),
+        ):
+            result = runner.invoke(plugins_app, ["info", "crawl4ai"])
+        assert result.exit_code == 0
+        assert "Project CLI: crawl" in result.stdout
+        assert "aegis CLI: none" in result.stdout
+
+    def test_a_mounted_aegis_command_is_reported_as_one(
+        self, runner: CliRunner
+    ) -> None:
+        import typer as _typer
+
+        ext = PluginSpec(
+            name="tools",
+            kind=PluginKind.SERVICE,
+            description="tools",
+            version="0.1.0",
+            verified=False,
+        )
+        with (
+            _patch_discovery([ext]),
+            patch(
+                "aegis.commands.plugins.discover_plugin_cli_apps",
+                side_effect=lambda reserved_names=None: {"tools": _typer.Typer()},
+            ),
+        ):
+            result = runner.invoke(plugins_app, ["info", "tools"])
+        assert result.exit_code == 0
+        assert "Project CLI: none" in result.stdout
+        assert "aegis CLI: aegis tools" in result.stdout
+
+
 class TestInfoCliIndicatorRespectsReserved:
     """Round-3 fix: ``info``'s ``CLI: yes/no`` line must mirror the
     mount-time reserved-name filter, not the raw discovery."""
@@ -397,4 +529,4 @@ class TestInfoCliIndicatorRespectsReserved:
         ):
             result = runner.invoke(plugins_app, ["info", "init"])
         assert result.exit_code == 0
-        assert "CLI: no" in result.stdout
+        assert "aegis CLI: none" in result.stdout

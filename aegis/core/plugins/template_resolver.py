@@ -39,6 +39,8 @@ from __future__ import annotations
 from importlib import resources
 from pathlib import Path
 
+from ..component_files import JINJA_EXTENSION, PROJECT_SLUG_PLACEHOLDER
+
 TEMPLATE_SUBDIR = "templates"
 """Directory name plugins must use for their template tree.
 
@@ -85,3 +87,33 @@ def get_plugin_template_root(plugin_module_name: str) -> Path | None:
     # to ``importlib.resources.as_file`` with a context manager that
     # stays open across the iteration.
     return Path(str(templates))
+
+
+def plugin_tree_files(
+    plugin_module_name: str,
+) -> tuple[Path, list[tuple[Path, Path, bool]]] | None:
+    """Every file a plugin's template tree puts in a project.
+
+    Returns the template root and, per file, ``(source, output, is_template)``
+    where ``output`` is the project-relative path: a template drops its
+    ``.jinja``, a vendored file (a seed, ``py.typed``, an icon) keeps its
+    name. ``None`` when the plugin ships no ``{{ project_slug }}/`` tree.
+
+    One walk for both directions: ``aegis add`` renders these, and
+    ``aegis remove`` deletes them, so a file the plugin's manifest forgot
+    (crawl4ai's tests) cannot be written on add and left behind on remove.
+    """
+    template_root = get_plugin_template_root(plugin_module_name)
+    if template_root is None:
+        return None
+    slug_dir = template_root / PROJECT_SLUG_PLACEHOLDER
+    if not slug_dir.is_dir():
+        return None
+    files: list[tuple[Path, Path, bool]] = []
+    for source in sorted(slug_dir.rglob("*")):
+        if not source.is_file():
+            continue
+        rel = source.relative_to(slug_dir)
+        is_template = source.suffix == JINJA_EXTENSION
+        files.append((source, rel.with_suffix("") if is_template else rel, is_template))
+    return template_root, files

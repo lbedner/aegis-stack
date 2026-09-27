@@ -1,0 +1,77 @@
+"""Write the revision that retires tables no model describes any more.
+
+``aegis remove <plugin>`` deletes the plugin's models; its tables are still
+in every revision before this one. This writes one revision that exports
+each such table (``app.cli.plugin_data``) and then drops it, so replaying
+the revisions reproduces the models again and the rows survive for a
+re-add. "No model describes it" is the drift check's own ``remove_table``,
+so the two cannot disagree about what is orphaned.
+
+Usage:
+    python -m app.cli.migrate_drop MESSAGE
+"""
+{% if include_database %}
+
+import argparse
+from pathlib import Path
+import sys
+from typing import Any
+
+from sqlalchemy import Table
+from sqlmodel import SQLModel
+
+from alembic import command
+from alembic.autogenerate import compare_metadata
+from alembic.runtime.migration import MigrationContext
+from app.cli.migrate_gen import _config, _connection, insert_calls, write_revision
+
+
+def orphaned_tables(conn: Any) -> list[Table]:
+    """Tables the revisions create that no model describes."""
+    ctx = MigrationContext.configure(conn, opts={"include_schemas": True})
+    diffs = compare_metadata(ctx, SQLModel.metadata)
+    return [d[1] for d in diffs if isinstance(d, tuple) and d[0] == "remove_table"]
+
+
+def _table_of(obj: Any, type_: str) -> tuple[str, str | None]:
+    """The table an autogenerate object belongs to: itself, or its table."""
+    table = obj if type_ == "table" else getattr(obj, "table", None)
+    return (table.name, table.schema) if table is not None else ("", None)
+
+
+def generate_drop(message: str, scratch_dir: Path | None = None) -> list[Path]:
+    """One revision exporting and dropping every orphaned table, or none."""
+    with _connection(None, scratch_dir) as conn:
+        command.upgrade(_config(conn), "head")
+        orphans = {(t.name, t.schema) for t in orphaned_tables(conn)}
+        if not orphans:
+            return []
+        cfg = _config(
+            conn,
+            include_object=lambda obj, name, type_, reflected, compare_to: (
+                _table_of(obj, type_) in orphans
+            ),
+            compare_type=False,
+            compare_server_default=False,
+            render_as_batch=True,
+        )
+        written = write_revision(cfg, message)
+    for path in written:
+        insert_calls(path, "export_table", sorted(orphans, key=str))
+    return written
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("message")
+    args = parser.parse_args(argv)
+    for path in generate_drop(args.message):
+        print(path.name)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+{% else %}
+# No database component: no tables to retire.
+{% endif %}

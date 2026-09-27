@@ -58,21 +58,23 @@ class TestAddRemovePluginRoundTrip:
     cleaned, files gone. Mocks out the post-gen hook (``uv sync`` /
     ``make fix``) since the synthetic project isn't a real package."""
 
-    def test_add_writes_plugins_entry(
-        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from aegis_plugin_test.spec import get_spec
-
+    @pytest.fixture(autouse=True)
+    def _synthetic_project(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The synthetic project is not a package and has no shared template
+        files: skip post-gen (``uv sync``, ``make fix``) and shared regen."""
         monkeypatch.setattr(
             ManualUpdater, "run_post_generation_tasks", lambda self: None
         )
-        # Skip shared file regen — synthetic project has no shared
-        # template files; we're only verifying answers + plugin tree.
         monkeypatch.setattr(
             ManualUpdater,
             "_regenerate_shared_files",
             lambda self, ans, *_rest: ([], [], []),
         )
+
+    def test_add_writes_plugins_entry(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aegis_plugin_test.spec import get_spec
 
         updater = ManualUpdater(fake_project)
         result = updater.add_plugin(
@@ -88,15 +90,6 @@ class TestAddRemovePluginRoundTrip:
         self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from aegis_plugin_test.spec import get_spec
-
-        monkeypatch.setattr(
-            ManualUpdater, "run_post_generation_tasks", lambda self: None
-        )
-        monkeypatch.setattr(
-            ManualUpdater,
-            "_regenerate_shared_files",
-            lambda self, ans, *_rest: ([], [], []),
-        )
 
         updater = ManualUpdater(fake_project)
         spec = get_spec()
@@ -118,19 +111,113 @@ class TestAddRemovePluginRoundTrip:
             for p in (updater.answers.get("_plugins") or [])
         )
 
+    def test_remove_takes_every_file_the_tree_rendered(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``add`` renders the plugin's whole template tree; ``remove`` used to
+        delete only what the manifest listed. crawl4ai's manifest omits its
+        tests, so they stayed behind importing deleted modules and broke the
+        project's suite. A file aegis's own templates also produce is shared
+        and stays."""
+        from dataclasses import replace
+
+        from aegis_plugin_test.spec import get_spec
+
+        from aegis.core.file_manifest import FileManifest
+
+        shared = "app/services/test_plugin/py.typed"
+        monkeypatch.setattr(
+            ManualUpdater, "_aegis_template_paths", lambda self: {shared}
+        )
+        # A manifest that forgets most of what the tree renders.
+        spec = replace(
+            get_spec(),
+            files=FileManifest(primary=["app/services/test_plugin/__init__.py"]),
+        )
+        updater = ManualUpdater(fake_project)
+        updater.add_plugin(spec=spec, plugin_module_name="aegis_plugin_test")
+        service_file = fake_project / "app/services/test_plugin/service.py"
+        seed = fake_project / "app/services/test_plugin/seeds/starter.json"
+        assert service_file.exists() and seed.exists()
+
+        result = ManualUpdater(fake_project).remove_plugin(
+            spec, plugin_module_name="aegis_plugin_test"
+        )
+
+        assert result.success
+        assert not service_file.exists()
+        assert not seed.exists()
+        assert (fake_project / shared).exists()
+
+    @pytest.mark.parametrize("has_alembic", [True, False])
+    def test_remove_keeps_alembic_while_migrations_remain(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch, has_alembic: bool
+    ) -> None:
+        """Regen drops alembic from the dependencies once no answer needs it,
+        but the plugin's revisions stay (its tables keep their history). A
+        project with migrations and no alembic fails its own suite."""
+        from aegis_plugin_test.spec import get_spec
+
+        from aegis.core.migration_generator import ALEMBIC_PIN
+
+        updater = ManualUpdater(fake_project)
+        updater.add_plugin(spec=get_spec(), plugin_module_name="aegis_plugin_test")
+        (fake_project / "pyproject.toml").write_text(
+            '[project]\ndependencies = [\n    "fastapi",\n]\n'
+        )
+        if has_alembic:
+            (fake_project / "alembic").mkdir()
+        monkeypatch.setattr(
+            "aegis.core.migration_generator.generate_drop_revision",
+            lambda path, message: [],
+        )
+        monkeypatch.setattr(
+            "aegis.core.post_gen_tasks.run_migrations",
+            lambda path, include_migrations=False: True,
+        )
+
+        result = ManualUpdater(fake_project).remove_plugin(get_spec())
+
+        assert result.success, result.error_message
+        pinned = ALEMBIC_PIN in (fake_project / "pyproject.toml").read_text()
+        assert pinned is has_alembic
+
+    def test_remove_retires_the_plugins_tables(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The revision keeps history consistent (create, then export and
+        drop), so the project's drift check passes and a re-add restores."""
+        from aegis_plugin_test.spec import get_spec
+
+        from aegis.core import migration_generator, post_gen_tasks
+
+        calls: list[str] = []
+        monkeypatch.setattr(
+            migration_generator,
+            "generate_drop_revision",
+            lambda path, message: calls.append(f"drop {message}") or [],
+        )
+        monkeypatch.setattr(
+            post_gen_tasks,
+            "run_migrations",
+            lambda path, include_migrations=False: calls.append("migrate") or True,
+        )
+        updater = ManualUpdater(fake_project)
+        updater.add_plugin(spec=get_spec(), plugin_module_name="aegis_plugin_test")
+        (fake_project / "pyproject.toml").write_text(
+            '[project]\ndependencies = [\n    "fastapi",\n]\n'
+        )
+        (fake_project / "alembic").mkdir()
+        calls.clear()
+
+        ManualUpdater(fake_project).remove_plugin(get_spec())
+
+        assert calls == ["drop remove_test_plugin", "migrate"]
+
     def test_remove_uninstalled_plugin_fails_cleanly(
         self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from aegis_plugin_test.spec import get_spec
-
-        monkeypatch.setattr(
-            ManualUpdater, "run_post_generation_tasks", lambda self: None
-        )
-        monkeypatch.setattr(
-            ManualUpdater,
-            "_regenerate_shared_files",
-            lambda self, ans, *_rest: ([], [], []),
-        )
 
         updater = ManualUpdater(fake_project)
         result = updater.remove_plugin(get_spec())
@@ -144,15 +231,6 @@ class TestAddRemovePluginRoundTrip:
         """Adding the same plugin twice replaces the entry rather than
         duplicating it."""
         from aegis_plugin_test.spec import get_spec
-
-        monkeypatch.setattr(
-            ManualUpdater, "run_post_generation_tasks", lambda self: None
-        )
-        monkeypatch.setattr(
-            ManualUpdater,
-            "_regenerate_shared_files",
-            lambda self, ans, *_rest: ([], [], []),
-        )
 
         updater = ManualUpdater(fake_project)
         spec = get_spec()

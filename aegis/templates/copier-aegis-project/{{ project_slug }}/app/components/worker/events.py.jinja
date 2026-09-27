@@ -18,6 +18,9 @@ from app.core.log import logger
 
 # Redis Stream name for worker events
 WORKER_EVENT_STREAM = "aegis:events:worker"
+# Entries kept, roughly (trimmed with MAXLEN ~, which Redis does cheaply
+# in whole blocks). The dashboard's feed tails new entries only.
+WORKER_EVENT_STREAM_MAXLEN = 10_000
 
 
 _events_redis: "aioredis.Redis | None" = None
@@ -75,7 +78,12 @@ async def publish_event(
             fields[str(k)] = str(v)
 
     try:
-        await redis_client.xadd(WORKER_EVENT_STREAM, fields)
+        await redis_client.xadd(
+            WORKER_EVENT_STREAM,
+            fields,
+            maxlen=WORKER_EVENT_STREAM_MAXLEN,
+            approximate=True,
+        )
     except Exception as e:
         # Never let event publishing failures break worker functionality
         logger.debug(f"Failed to publish worker event: {e}")

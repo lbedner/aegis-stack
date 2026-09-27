@@ -65,4 +65,17 @@ def test_taskiq_group_with_unknown_lag_counts_the_stream() -> None:
 
     groups = [{"name": "taskiq", "consumers": 1, "pending": 0, "entries-read": None, "lag": None}]
     assert taskiq_group_stats(groups, stream_length=5) == (1, 0, 0, 5)
+
+def test_only_consumers_seen_lately_count_as_live() -> None:
+    """Redis keeps a consumer in the group after its process dies (every
+    worker restart leaves one); live ones poll constantly, so idle time
+    tells them apart. Counting the dead inflates the queue's slots."""
+    from app.services.system.health_worker_rules import live_consumers
+
+    consumers = [
+        {"name": "restarted-away", "idle": 69_420},
+        {"name": "running", "idle": 168},
+    ]
+    assert live_consumers(consumers) == 1
+    assert live_consumers([]) == 0
 {%- endif %}

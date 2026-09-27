@@ -335,18 +335,22 @@ class TemplateGenerator:
                     # Handle worker backend-specific dependencies
                     if base_name == ComponentNames.WORKER:
                         if self.worker_backend == WorkerBackends.TASKIQ:
-                            deps.extend(["taskiq>=0.11.11", "taskiq-redis>=1.0.2"])
+                            deps.extend(
+                                ["taskiq>=0.11.11,<0.13", "taskiq-redis>=1.0.2,<2"]
+                            )
                         elif self.worker_backend == WorkerBackends.DRAMATIQ:
-                            deps.append("dramatiq[redis]>=1.17.0")
+                            deps.append("dramatiq[redis]>=1.17.0,<2.0.0")
                         else:
                             deps.extend(spec.pyproject_deps)  # arq deps from spec
                     # Handle database engine-specific dependencies
                     elif base_name == ComponentNames.DATABASE:
                         deps.extend(spec.pyproject_deps)
                         if self.database_engine == StorageBackends.POSTGRES:
-                            deps.extend(["asyncpg>=0.29.0", "psycopg2-binary>=2.9.9"])
+                            deps.extend(
+                                ["asyncpg>=0.29.0,<0.32", "psycopg2-binary>=2.9.9,<3"]
+                            )
                         else:
-                            deps.append("aiosqlite>=0.19.0")
+                            deps.append("aiosqlite>=0.19.0,<0.23")
                     else:
                         deps.extend(spec.pyproject_deps)
 
@@ -519,21 +523,21 @@ class TemplateGenerator:
 
             extras_str = ",".join(pydantic_extras) if pydantic_extras else "openai"
             return [
-                f"pydantic-ai-slim[{extras_str}]>=1.0.10",
-                "httpx>=0.27.0",  # For API providers
+                f"pydantic-ai-slim[{extras_str}]>=1.0.10,<3",
+                "httpx>=0.27.0,<0.29",  # For API providers
             ]
         else:
             # LangChain uses separate packages per provider
-            deps = ["langchain-core>=1.1.0"]
+            deps = ["langchain-core>=1.1.0,<2"]
 
             # Map provider names to LangChain packages
             langchain_packages = {
-                "openai": "langchain-openai>=1.1.0",
-                "anthropic": "langchain-anthropic>=1.2.0",
-                "google": "langchain-google-genai>=4.0.0",
-                "groq": "langchain-groq>=1.1.0",
-                "mistral": "langchain-mistralai>=1.1.0",
-                "cohere": "langchain-cohere>=0.5.0",
+                "openai": "langchain-openai>=1.1.0,<2",
+                "anthropic": "langchain-anthropic>=1.2.0,<2",
+                "google": "langchain-google-genai>=4.0.0,<5",
+                "groq": "langchain-groq>=1.1.0,<2",
+                "mistral": "langchain-mistralai>=1.1.0,<2",
+                "cohere": "langchain-cohere>=0.5.0,<0.7",
             }
 
             for provider in providers:
@@ -542,10 +546,10 @@ class TemplateGenerator:
                     deps.append(langchain_packages[provider])
                 elif (
                     provider in ("public", "pollinations")
-                    and "langchain-openai>=1.1.0" not in deps
+                    and "langchain-openai>=1.1.0,<2" not in deps
                 ):
                     # Keyless providers use OpenAI-compatible endpoints
-                    deps.append("langchain-openai>=1.1.0")
+                    deps.append("langchain-openai>=1.1.0,<2")
 
             return deps
 

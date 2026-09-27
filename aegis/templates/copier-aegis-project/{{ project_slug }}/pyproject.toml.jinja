@@ -19,20 +19,20 @@ dependencies = [
     # Zig event loop for uvicorn, opt-in via WEBSERVER_LOOP=zuvloop. The
     # marker is the gate: wheels start at 3.14, so older environments
     # resolve without it rather than failing to install.
-    "zuvloop>=0.0.17; python_version >= '3.14'",
+    "zuvloop>=0.0.17,<0.1; python_version >= '3.14'",
     "structlog==25.4.0",
-    "pydantic-settings>=2.12.0",
+    "pydantic-settings>=2.12.0,<3",
     "typer==0.16.0",
     # Pin click to avoid yanked versions (typer dependency)
     "click==8.2.1",
     # Rich CLI formatting
     "rich==14.1.0",
     # Interactive prompts with status line support
-    "prompt_toolkit>=3.0.0",
+    "prompt_toolkit>=3.0.0,<4",
     # HTTP client for CLI API calls
     "httpx==0.28.1",
     # Security fix for GHSA-38jv-5279-wg99
-    "urllib3>=2.6.3",
+    "urllib3>=2.6.3,<3",
     # System monitoring
     "psutil==7.0.0",
     # The pastebox upload endpoint (pasted images) is multipart.
@@ -44,12 +44,15 @@ dependencies = [
     "redis==5.0.8",
 {%- endif %}
 {%- if include_storage %}
-    "boto3>=1.35",
+    "boto3>=1.35,<2",
 {%- endif %}
 {%- if include_worker %}
 {%- if worker_backend == "taskiq" %}
-    "taskiq>=0.11.11",
-    "taskiq-redis>=1.0.2",
+    # Capped to < 0.13: taskiq 0.13 dropped ``taskiq.compat.model_dump``,
+    # which taskiq-redis 1.0.x imports, and the taskiq-redis that follows
+    # (1.2+) needs redis 8 while this stack pins redis 5.
+    "taskiq>=0.11.11,<0.13",
+    "taskiq-redis>=1.0.2,<2",
 {%- elif worker_backend == "dramatiq" %}
     # Capped to < 2.0: the pausable broker subclasses dramatiq's private
     # ``_RedisConsumer`` (no public consumer base exists). See broker.py.
@@ -62,23 +65,23 @@ dependencies = [
     # <0.0.45: that release rejects naive datetimes, and every timestamp
     # this project writes is naive UTC (see app/core/time.py).
     "sqlmodel>=0.0.14,<0.0.45",
-    "sqlalchemy>=2.0.0",
+    "sqlalchemy>=2.0.0,<3",
 {%- if database_engine == "postgres" %}
-    "asyncpg>=0.29.0",
-    "psycopg2-binary>=2.9.9",
+    "asyncpg>=0.29.0,<0.32",
+    "psycopg2-binary>=2.9.9,<3",
 {%- else %}
-    "aiosqlite>=0.19.0",
+    "aiosqlite>=0.19.0,<0.23",
 {%- endif %}
-    "greenlet>=1.1.0",
+    "greenlet>=1.1.0,<4",
 {%- endif %}
 {%- if include_cache %}
     "redis[hiredis]==5.0.8",
 {%- endif %}
 {%- if include_observability %}
-    "logfire[fastapi,httpx{%- if include_database %},sqlalchemy{%- endif %}{%- if include_redis %},redis{%- endif %}]",
+    "logfire[fastapi,httpx{%- if include_database %},sqlalchemy{%- endif %}{%- if include_redis %},redis{%- endif %}]<6",
 {%- endif %}
 {%- if include_htmx %}
-    "jinja2>=3.1.0",
+    "jinja2>=3.1.0,<4",
 {%- if not include_ai %}
     # The web frontend's ``markdown`` filter renders it. Pinned here as
     # well as under the AI extra because the filter belongs to the
@@ -89,14 +92,14 @@ dependencies = [
 {%- endif %}
 {%- if include_auth %}
     "python-jose[cryptography]==3.3.0",
-    "bcrypt>=4.0.0",
+    "bcrypt>=4.0.0,<6",
 {%- endif %}
 {%- if include_oauth %}
     # OAuth social login (GitHub + Google) — Authlib drives the flow,
     # itsdangerous backs starlette's SessionMiddleware that stashes the
     # OAuth state + PKCE verifier between /start and /callback.
-    "authlib>=1.7.0",
-    "itsdangerous>=2.1.0",
+    "authlib>=1.7.0,<2",
+    "itsdangerous>=2.1.0,<3",
 {%- endif %}
 {#- A plugin with migrations needs alembic, unless a plugin already names it. #}
 {%- set plugin_deps = _plugins | default([]) | map(attribute="pyproject_deps") | map("join", " ") | join(" ") %}
@@ -111,8 +114,8 @@ dependencies = [
 {#- Tesseract's wrapper and the image decoder it reads through; the
     binary is a system package (see the Dockerfile). A page OCR can read
     never reaches a model. #}
-    "pytesseract>=0.3.13",
-    "pillow>=11",
+    "pytesseract>=0.3.13,<0.4",
+    "pillow>=11,<13",
 {%- endif %}
 {%- if include_ai %}
 {%- if ai_framework == "pydantic-ai" %}
@@ -123,51 +126,51 @@ dependencies = [
 {%- set _mapped_extras = ai_providers | replace("public", "openai") | replace("openrouter", "openai") | replace("ollama", "openai") | replace("mistral", "openai") | replace("cohere", "openai") %}
 {#- Several providers collapse to "openai"; dedupe so the extras list stays clean (e.g. openai + mistral -> [openai], not [openai,openai]). #}
 {%- set pydantic_extras = _mapped_extras.split(",") | map("trim") | unique | join(",") %}
-    "pydantic-ai-slim[{{ pydantic_extras }}]>=1.0.10",
+    "pydantic-ai-slim[{{ pydantic_extras }}]>=1.0.10,<3",
 {#- Code mode: sandboxed Monty execution for agents flagged code_mode.
     The capability only constructs for flagged agent rows, so unflagged
     installs carry the dependency but never touch it. #}
-    "pydantic-ai-harness[codemode]>=0.24.0",
-    "httpx>=0.27.0",
+    "pydantic-ai-harness[codemode]>=0.24.0,<0.37",
+    "httpx>=0.27.0,<0.29",
 {%- else %}
     # LangChain framework dependencies
-    "langchain-core>=1.1.0",
+    "langchain-core>=1.1.0,<2",
 {%- if "openai" in ai_providers or "public" in ai_providers %}
-    "langchain-openai>=1.1.0",
+    "langchain-openai>=1.1.0,<2",
 {%- endif %}
 {%- if "anthropic" in ai_providers %}
-    "langchain-anthropic>=1.2.0",
+    "langchain-anthropic>=1.2.0,<2",
 {%- endif %}
 {%- if "google" in ai_providers %}
-    "langchain-google-genai>=4.0.0",
+    "langchain-google-genai>=4.0.0,<5",
 {%- endif %}
 {%- if "groq" in ai_providers %}
-    "langchain-groq>=1.1.0",
+    "langchain-groq>=1.1.0,<2",
 {%- endif %}
 {%- if "mistral" in ai_providers %}
-    "langchain-mistralai>=1.1.0",
+    "langchain-mistralai>=1.1.0,<2",
 {%- endif %}
 {%- if "cohere" in ai_providers %}
-    "langchain-cohere>=0.5.0",
+    "langchain-cohere>=0.5.0,<0.7",
 {%- endif %}
 {%- endif %}
     "marko==2.1.3",
 {%- endif %}
 {%- if include_comms %}
-    "resend>=2.4.0",
-    "twilio>=9.3.7",
+    "resend>=2.4.0,<3",
+    "twilio>=9.3.7,<10",
 {%- endif %}
 {%- if include_payment %}
-    "stripe>=11.0.0",
+    "stripe>=11.0.0,<16",
 {%- endif %}
 {%- if include_blog %}
-    "python-frontmatter>=1.1.0",
+    "python-frontmatter>=1.1.0,<2",
 {%- endif %}
 {%- if include_finance %}
-    "ofxtools>=0.9.5",
+    "ofxtools>=0.9.5,<2",
 {%- endif %}
 {%- if include_finance and (finance_plaid or finance_snaptrade) %}
-    "cryptography>=42.0.0",  # AES-GCM at-rest encryption for provider credentials
+    "cryptography>=42.0.0,<51",  # AES-GCM at-rest encryption for provider credentials
 {%- endif %}
 {%- if include_finance and finance_snaptrade %}
     # Official client (signs every request with the partner HMAC). Ceiling is
@@ -181,8 +184,8 @@ dependencies = [
 {%- endif %}
 {%- if ai_rag %}
     "chromadb>=0.4.22,<1.0.0",  # Vector store - pin to 0.x for stability
-    "sentence-transformers>=3.0.0",  # Local embeddings
-    "torch>=2.0.0",  # Explicit dep for CPU-only override (see [tool.uv.sources])
+    "sentence-transformers>=3.0.0,<7",  # Local embeddings
+    "torch>=2.0.0,<3",  # Explicit dep for CPU-only override (see [tool.uv.sources])
 {%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for d in p.pyproject_deps %}
@@ -568,9 +571,9 @@ script = "scripts.dev_tasks:status"
 # test dependency used to uninstall pytest.
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
-    "pytest>=9.0.3",
-    "pytest-asyncio>=1.1.0",
+    "httpx>=0.28.1,<0.29",
+    "pytest>=9.0.3,<10",
+    "pytest-asyncio>=1.1.0,<2",
     "ruff==0.12.7",
     "ty==0.0.79",
     "types-psutil==7.0.0.20250801",
@@ -581,19 +584,19 @@ dev = [
     "poethepoet==0.48.0",
 {%- if include_htmx %}
     # DOM assertions for the web test kit (tests/web/dom.py)
-    "lxml>=6.1.3",
-    "cssselect>=1.5.0",
+    "lxml>=6.1.3,<7",
+    "cssselect>=1.5.0,<2",
 {%- endif %}
 {%- if include_database %}
     # N+1 and query-budget detection for the test suite (make check-queries).
     # Built on SQLAlchemy 2.0's do_orm_execute, so it needs a database stack.
-    "queryspy>=0.4.1",
+    "queryspy>=0.4.1,<0.5",
 {%- endif %}
 {%- if include_database and database_engine != 'sqlite' %}
     # Tests use in-memory SQLite for speed/isolation regardless of the
     # production backend, so aiosqlite is required as a test dep even when
     # the app itself runs on Postgres.
-    "aiosqlite>=0.19.0",
+    "aiosqlite>=0.19.0,<0.23",
 {%- endif %}
 {%- if include_worker or include_htmx %}
     # Auto-reload for workers; asset rebuilds for the web frontend watcher
@@ -601,7 +604,7 @@ dev = [
 {%- endif %}
 {%- if include_storage %}
     # A bucket in the test process, so the S3 backend's tests need no server.
-    "moto[s3]>=5.0",
+    "moto[s3]>=5.0,<6",
 {%- endif %}
 ]
 docs = [

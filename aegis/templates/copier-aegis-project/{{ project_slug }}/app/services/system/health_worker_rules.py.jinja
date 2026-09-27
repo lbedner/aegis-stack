@@ -36,6 +36,16 @@ def taskiq_group_stats(
     return 0, 0, 0, stream_length
 
 
+# A live consumer polls the stream every few seconds; one idle this long
+# belongs to a process that has gone (Redis never drops it on its own).
+LIVE_CONSUMER_IDLE_MS = 30_000
+
+
+def live_consumers(consumers: list[dict[str, Any]]) -> int:
+    """How many of a group's consumers (``XINFO CONSUMERS``) are still alive."""
+    return sum(1 for c in consumers if (c.get("idle") or 0) < LIVE_CONSUMER_IDLE_MS)
+
+
 def queue_status(
     *,
     worker_alive: bool,

@@ -150,7 +150,15 @@ async def _finalize_oauth_signin(
     ``provider`` becomes the ``source`` on the refresh-token row
     (``"oauth:github"`` / ``"oauth:google"``), so the active-sessions
     UI can show how each session was created.
+
+    A disabled account is sent back to sign-in with the reason, and gets
+    no cookies: the provider vouched for who they are, not that they may
+    still come in. This tail covers every provider.
     """
+    if not user.is_active:
+        return RedirectResponse(
+            url="/login?error=disabled", status_code=status.HTTP_303_SEE_OTHER
+        )
     await user_service.update_user(
         user.id, last_login=utcnow()
     )

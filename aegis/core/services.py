@@ -343,6 +343,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 # web_frontend tree, so dropping either one removes them.
                 "include_htmx": [
                     "app/components/web_frontend/templates/pages/auth",
+                    "tests/web/test_login_refusals.py",
                     "app/components/web_frontend/templates/components/auth_macros.html",
                     "app/components/web_frontend/static/js/auth.js",
                 ],

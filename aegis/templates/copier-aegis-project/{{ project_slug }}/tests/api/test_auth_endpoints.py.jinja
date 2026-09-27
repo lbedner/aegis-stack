@@ -1139,3 +1139,90 @@ class TestSetUserRole:
         assert evt["target_id"] == target.id
         assert evt["new_role"] == "moderator"
 {% endif %}
+{%- if not include_auth_rbac %}
+
+
+class TestAdminRoutesRequireSignIn:
+    """Without RBAC the user-admin routes still need a signed-in user.
+
+    They carried no guard at all, so anyone who could reach the API could
+    list every account and disable, delete or restore any of them.
+    """
+
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("get", "/api/v1/auth/users"),
+            ("patch", "/api/v1/auth/users/1/deactivate"),
+            ("patch", "/api/v1/auth/users/1/activate"),
+            ("delete", "/api/v1/auth/users/1"),
+            ("post", "/api/v1/auth/users/1/restore"),
+        ],
+    )
+    def test_anonymous_callers_are_refused(
+        self, async_client_with_db: TestClient, method: str, path: str
+    ) -> None:
+        response = getattr(async_client_with_db, method)(path)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_a_signed_in_user_can_deactivate(
+        self, async_client_with_db: TestClient, user_factory
+    ) -> None:
+        me = await user_factory()
+        target = await user_factory()
+        headers = {"Authorization": f"Bearer {create_access_token(data={'sub': me.email})}"}
+
+        response = async_client_with_db.patch(
+            f"/api/v1/auth/users/{target.id}/deactivate", headers=headers
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["is_active"] is False
+{%- endif %}
+
+
+class TestDisabledAccountSignIn:
+    """A disabled account is refused at sign-in, not after it.
+
+    Login never checked ``is_active``: a disabled user with the right
+    password got cookies, a refresh token and a ``last_login`` stamp, and
+    was only bounced by the next request, with no reason given.
+    """
+
+    async def _disabled_user(self, async_db_session: AsyncSession, user_factory):
+        user = await user_factory()
+        user.is_active = False
+        async_db_session.add(user)
+        await async_db_session.commit()
+        return user
+
+    @pytest.mark.asyncio
+    async def test_right_password_is_told_the_account_is_disabled(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ) -> None:
+        user = await self._disabled_user(async_db_session, user_factory)
+        response = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": user.email, "password": _PASSWORD},
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["detail"] == "Account disabled"
+        assert "set-cookie" not in response.headers
+
+    @pytest.mark.asyncio
+    async def test_wrong_password_reveals_nothing(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ) -> None:
+        """Only someone who knows the password learns the account is disabled."""
+        user = await self._disabled_user(async_db_session, user_factory)
+        response = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": user.email, "password": "not-the-password"},
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED

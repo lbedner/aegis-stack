@@ -261,13 +261,19 @@ def _template_version_for_ref(
     return _describe_as_version(target_ref, template_root) or target_ref
 
 
-_PENDING_FILE = Path(".git") / "aegis-update-pending.json"
+_PENDING_FILE = "aegis-update-pending.json"
 
 
 def _pending_path(project_path: Path) -> Path:
-    # Inside .git so it is never committed, yet survives until the user
-    # finishes; a tracked file would dirty the tree the finish step needs.
-    return project_path / _PENDING_FILE
+    """Keep pending state in this checkout's Git directory, including worktrees."""
+    result = subprocess.run(
+        ["git", "-C", str(project_path), "rev-parse", "--git-path", _PENDING_FILE],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    path = Path(result.stdout.strip())
+    return path if path.is_absolute() else project_path / path
 
 
 def _record_pending_update(

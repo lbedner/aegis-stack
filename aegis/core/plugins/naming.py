@@ -2,7 +2,7 @@
 
 A plugin named ``crawl4ai`` ships as the distribution ``aegis-stack-crawl4ai``
 with the import package ``aegis_stack_crawl4ai``. Why this prefix:
-docs/plugins.md, "Naming". Everything that builds either name (the
+docs/plugins/publishing.md, "Naming". Everything that builds either name (the
 scaffold and its templates, install hints, the resolver's missing-package
 list) goes through here; ``tests/core/test_plugin_naming.py`` guards it.
 """

@@ -46,9 +46,20 @@ def _has_something_to_prove(path: Path) -> bool:
 
     A created table, an added column, a new foreign key, an inserted row.
     A revision that only drops or re-indexes leaves nothing to check for,
-    so the re-adoption hook has nothing to do with it either.
+    so the re-adoption hook has nothing to do with it either. Only
+    ``upgrade()`` counts: the downgrade of a revision that drops a removed
+    plugin's tables recreates them, and proves nothing about the upgrade.
     """
-    body = path.read_text()
+    source = path.read_text()
+    upgrade = next(
+        (
+            node
+            for node in ast.parse(source).body
+            if isinstance(node, ast.FunctionDef) and node.name == "upgrade"
+        ),
+        None,
+    )
+    body = ast.get_source_segment(source, upgrade) or "" if upgrade else source
     return any(marker in body for marker in PROVABLE)
 
 

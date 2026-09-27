@@ -1112,9 +1112,9 @@ MESSAGES: dict[str, str] = {
     "plugins.option_choices": "choices:",
     "plugins.option_default": "default:",
     "plugins.option_auto_requires": "(has auto_requires)",
-    "plugins.info_files": "Files: {files}   Migrations: {migrations}   CLI: {cli}",
-    "plugins.cli_yes": "yes",
-    "plugins.cli_no": "no",
+    "plugins.info_files": "Files: {files}   Migrations: {migrations}",
+    "plugins.info_cli": "Project CLI: {project}   aegis CLI: {aegis}",
+    "plugins.cli_none": "none",
     "plugins.section_compat": "Compat",
     # `aegis plugins update`
     "plugins.help_update": (
@@ -1191,19 +1191,20 @@ MESSAGES: dict[str, str] = {
     "plugins.create_success": "Created {count} files under {output}",
     "plugins.create_next_steps_header": "Next steps:",
     "plugins.create_next_steps_confirm_comment": ("confirm the plugin is discovered"),
-    "plugins.create_next_steps_edit_comment": (
-        "Edit src/aegis_stack_<name>/plugin.py to add wiring"
-    ),
+    "plugins.create_next_steps_edit_comment": ("Edit {path} to add wiring"),
     # `aegis plugins search`
-    "plugins.help_search": "Search the official plugin registry.",
+    "plugins.help_search": "Search the aegis-stack.io plugin directory.",
     "plugins.help_arg_search_keyword": "Optional keyword to search for",
-    "plugins.search_not_available": "Plugin registry is not yet available.",
-    "plugins.search_install_hint": (
-        "For now: pip install aegis-stack-<name>, then aegis plugins list."
-    ),
-    "plugins.search_future_keyword": (
-        "Once the registry is live, this command will search for '{keyword}'."
-    ),
+    "plugins.search_failed": "Could not read the plugin directory: {error}",
+    "plugins.search_browse": "Browse it at {url}",
+    "plugins.search_no_results": "No plugins match '{keyword}'.",
+    "plugins.search_empty": "No plugins are listed yet.",
+    "plugins.search_title": "Plugins at {url}",
+    "plugins.search_col_aegis": "Supports",
+    "plugins.search_verified": "verified",
+    "plugins.search_community": "community",
+    "plugins.search_installed": "installed",
+    "plugins.search_install_header": "To add one:",
     # ── Guided setup (aegis init full-screen flow) ──────────
     "guided.welcome.title": "AEGIS STACK",
     "guided.welcome.tagline": "Production-ready Python apps from day one.",

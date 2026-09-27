@@ -298,11 +298,11 @@ def init_command(
     This command creates a complete project structure with your chosen components,
     ensuring all dependencies and configurations are compatible and tested.
 
-    Examples:\\n
-        - aegis init my-app\\n
-        - aegis init my-app --components redis,worker\\n
-        - aegis init my-app --components redis,worker,scheduler,database --no-interactive\\n
-        - aegis init my-app --services auth --no-interactive\\n
+    Examples:
+        - aegis init my-app
+        - aegis init my-app --components redis,worker
+        - aegis init my-app --components redis,worker,scheduler,database --no-interactive
+        - aegis init my-app --services auth --no-interactive
     """  # noqa
 
     # Validate project name first

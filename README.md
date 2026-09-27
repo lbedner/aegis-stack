@@ -98,6 +98,12 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 [Services Docs →](https://docs.aegis-stack.io/services/)
 
+### Plugins
+
+What the built-in services don't cover can come from a plugin: a Python package that adds routes, tables, a CLI and a dashboard card, and goes in and out the same way (`aegis add <name>`, `aegis remove <name>`). Browse them at [aegis-stack.io/plugins](https://aegis-stack.io/plugins) or with `aegis plugins search`, and start your own with `aegis plugins create`.
+
+[Plugins Docs →](https://docs.aegis-stack.io/plugins/)
+
 ## Integrations
 
 Aegis Stack is the orchestration layer. Services and components wire into best-in-class tools you already trust, so you keep your vendor choices and your data.
@@ -243,6 +249,7 @@ When the AI service is enabled, Aegis exposes an additional interface: **Illiana
 
 - **[Overseer](https://docs.aegis-stack.io/overseer/)** - Built-in system dashboard
 - **[Deployment](https://docs.aegis-stack.io/deployment/)** - Deploy with backups, rollback, and health checks
+- **[Plugins](https://docs.aegis-stack.io/plugins/)** - Extend a project with third-party packages, or write your own
 - **[CLI Reference](https://docs.aegis-stack.io/cli-reference/)** - Complete command reference
 - **[Evolving Your Stack](https://docs.aegis-stack.io/evolving-your-stack/)** - Add/remove components as needs change
 - **[Technology Stack](https://docs.aegis-stack.io/technology/)** - Battle-tested technology choices

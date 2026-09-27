@@ -426,23 +426,20 @@ def _cleared_tables_for(service: str) -> list[str]:
     return list(spec.cleared_tables) if spec else []
 
 
-def generate_revisions(
+def _run_in_project(
     project_path: Path,
-    services: list[str],
+    module: str,
+    args: list[str],
+    *,
     python_version: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> list[Path]:
-    """Derive revisions from the project's models, one per service.
+    """Run ``python -m <module> <args>`` in the project's venv.
 
     The models live in the project and import its dependencies, so the
-    generator (``app/cli/migrate_gen.py``) runs in the project's venv via
-    ``uv run --project``; aegis itself never renders a table. A service
-    whose tables are already covered by an earlier revision produces no
-    file, which is what makes re-running this idempotent.
-
-    Returns the revision files this call wrote, in name order.
+    generators run there via ``uv run --project``; aegis itself never renders
+    a table. Returns the revision files the run wrote, in name order.
     """
-    if not services:
-        return []
     versions_dir = get_versions_dir(project_path)
     versions_dir.mkdir(parents=True, exist_ok=True)
     before = set(versions_dir.glob("*.py"))
@@ -453,16 +450,11 @@ def generate_revisions(
     # and must be allowed to resolve its own; inheriting the pin fails the
     # run outright on a project that asks for 3.14.
     env.pop("UV_PYTHON", None)
+    env.update(extra_env or {})
     cmd = ["uv", "run", "--project", str(project_path)]
     if python_version:
         cmd.extend(["--python", python_version])
-    # By environment, not by flag: ``--to-version <older tag>`` hands the
-    # project a migrate_gen that predates this knob, and an unknown argument
-    # is fatal to argparse while an unread variable costs nothing.
-    cleared = sorted({t for name in services for t in _cleared_tables_for(name)})
-    if cleared:
-        env["AEGIS_CLEARED_TABLES"] = ",".join(cleared)
-    cmd.extend(["python", "-m", "app.cli.migrate_gen", *services])
+    cmd.extend(["python", "-m", module, *args])
     result = subprocess.run(
         cmd,
         cwd=project_path,
@@ -473,12 +465,58 @@ def generate_revisions(
     )
     if result.returncode != 0:
         raise MigrationGenerationError(
-            f"migrate_gen failed for {', '.join(services)}:\n"
+            f"{module.rsplit('.', 1)[-1]} failed for {', '.join(args)}:\n"
             f"{result.stderr[-2000:]}{_replay_hint(result.stderr)}"
         )
-    written = sorted(set(versions_dir.glob("*.py")) - before)
+    return sorted(set(versions_dir.glob("*.py")) - before)
+
+
+def generate_revisions(
+    project_path: Path,
+    services: list[str],
+    python_version: str | None = None,
+    *,
+    restore_data: bool = False,
+) -> list[Path]:
+    """Derive revisions from the project's models, one per service.
+
+    A service whose tables are already covered by an earlier revision
+    produces no file, which is what makes re-running this idempotent.
+    ``restore_data`` asks each new revision to load back the latest export
+    of the tables it creates: a re-added plugin gets its rows back.
+
+    Returns the revision files this call wrote, in name order.
+    """
+    if not services:
+        return []
+    extra_env: dict[str, str] = {}
+    # By environment, not by flag: ``--to-version <older tag>`` hands the
+    # project a migrate_gen that predates these knobs, and an unknown
+    # argument is fatal to argparse while an unread variable costs nothing.
+    cleared = sorted({t for name in services for t in _cleared_tables_for(name)})
+    if cleared:
+        extra_env["AEGIS_CLEARED_TABLES"] = ",".join(cleared)
+    if restore_data:
+        extra_env["AEGIS_RESTORE_DATA"] = "1"
+    written = _run_in_project(
+        project_path,
+        "app.cli.migrate_gen",
+        services,
+        python_version=python_version,
+        extra_env=extra_env,
+    )
     written.extend(_place_data_statements(project_path, services, written))
     return sorted(written)
+
+
+def generate_drop_revision(project_path: Path, message: str) -> list[Path]:
+    """The revision retiring tables no model describes any more.
+
+    ``aegis remove <plugin>`` deletes the plugin's models; the project's
+    ``migrate_drop`` then writes one revision that exports each orphaned
+    table and drops it (none when nothing is orphaned).
+    """
+    return _run_in_project(project_path, "app.cli.migrate_drop", [message])
 
 
 _DATA_REVISION = '''"""{description}
@@ -654,7 +692,7 @@ def generate_plugin_migrations(
     """
     del context
     names = [m.service_name for m in getattr(plugin_spec, "migrations", None) or []]
-    return generate_revisions(project_path, names)
+    return generate_revisions(project_path, names, restore_data=True)
 
 
 def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
@@ -896,7 +934,9 @@ def _pin_alembic(project_path: Path) -> None:
         return
     head, _, tail = content.partition(marker)
     # Only the dependency list decides: every database project also names
-    # alembic in its poe tasks further down the file.
-    if "alembic" in tail[: tail.index("]")]:
+    # alembic in its poe tasks further down the file. The list closes on a
+    # line of its own; a ``]`` inside it belongs to an extra
+    # (``uvicorn[standard]``), not to the list.
+    if "alembic" in tail.partition("\n]")[0]:
         return
     pyproject.write_text(f'{head}{marker}    "{ALEMBIC_PIN}",\n{tail}')

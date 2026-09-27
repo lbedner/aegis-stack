@@ -879,9 +879,9 @@ def deploy_init_command(
 
     Creates .aegis/deploy.yml with server connection settings.
 
-    Examples:\\n
-        - aegis deploy-init --host 192.168.1.100\\n
-        - aegis deploy-init --host myserver.com --user deploy\\n
+    Examples:
+        - aegis deploy-init --host 192.168.1.100
+        - aegis deploy-init --host myserver.com --user deploy
     """
     project_name = _get_project_name(project_path)
     project_root = _get_project_root(project_path)
@@ -936,9 +936,9 @@ def deploy_setup_command(
     Installs Docker, configures firewall, and prepares the server.
     Run this once on a fresh server before deploying.
 
-    Examples:\\n
-        - aegis deploy-setup\\n
-        - aegis deploy-setup --public-key ~/.ssh/id_ed25519.pub\\n
+    Examples:
+        - aegis deploy-setup
+        - aegis deploy-setup --public-key ~/.ssh/id_ed25519.pub
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1091,11 +1091,11 @@ def deploy_command(
     queue is paused so in-flight jobs finish cleanly before workers
     restart. Skips DB migrations — use the standard path for those.
 
-    Examples:\\n
-        - aegis deploy\\n
-        - aegis deploy --no-build\\n
-        - aegis deploy --no-backup --no-health-check\\n
-        - aegis deploy --rolling\\n
+    Examples:
+        - aegis deploy
+        - aegis deploy --no-build
+        - aegis deploy --no-backup --no-health-check
+        - aegis deploy --rolling
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1237,8 +1237,8 @@ def deploy_backup_command(
     Snapshots application files and optionally the database
     on the remote server.
 
-    Examples:\\n
-        - aegis deploy-backup\\n
+    Examples:
+        - aegis deploy-backup
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1276,8 +1276,8 @@ def deploy_backups_command(
 
     Shows timestamps, sizes, and whether a database dump is included.
 
-    Examples:\\n
-        - aegis deploy-backups\\n
+    Examples:
+        - aegis deploy-backups
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1339,9 +1339,9 @@ def deploy_rollback_command(
     Restores application files and database from a backup snapshot.
     Uses the latest backup if no specific timestamp is provided.
 
-    Examples:\\n
-        - aegis deploy-rollback\\n
-        - aegis deploy-rollback --backup 2026-03-10_183045\\n
+    Examples:
+        - aegis deploy-rollback
+        - aegis deploy-rollback --backup 2026-03-10_183045
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1400,10 +1400,10 @@ def deploy_logs_command(
     """
     View logs from the deployed application.
 
-    Examples:\\n
-        - aegis deploy-logs\\n
-        - aegis deploy-logs --no-follow\\n
-        - aegis deploy-logs --service webserver\\n
+    Examples:
+        - aegis deploy-logs
+        - aegis deploy-logs --no-follow
+        - aegis deploy-logs --service webserver
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1428,8 +1428,8 @@ def deploy_status_command(
     """
     Check the status of deployed services.
 
-    Examples:\\n
-        - aegis deploy-status\\n
+    Examples:
+        - aegis deploy-status
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1452,8 +1452,8 @@ def deploy_stop_command(
     """
     Stop all deployed services.
 
-    Examples:\\n
-        - aegis deploy-stop\\n
+    Examples:
+        - aegis deploy-stop
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1481,8 +1481,8 @@ def deploy_restart_command(
     """
     Restart all deployed services.
 
-    Examples:\\n
-        - aegis deploy-restart\\n
+    Examples:
+        - aegis deploy-restart
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1513,9 +1513,9 @@ def deploy_shell_command(
     """
     Open a shell in a deployed container.
 
-    Examples:\\n
-        - aegis deploy-shell\\n
-        - aegis deploy-shell --service redis\\n
+    Examples:
+        - aegis deploy-shell
+        - aegis deploy-shell --service redis
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1556,9 +1556,9 @@ def deploy_exec_command(
     and CI. Put ``--`` before the command so its flags are not parsed as
     this CLI's.
 
-    Examples:\\n
-        - aegis deploy-exec -- alembic current\\n
-        - aegis deploy-exec --service worker-system -- myapp jobs list\\n
+    Examples:
+        - aegis deploy-exec -- alembic current
+        - aegis deploy-exec --service worker-system -- myapp jobs list
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -1847,10 +1847,10 @@ def deploy_cd_setup_command(
     Requires the GitHub CLI (gh) authenticated via 'gh auth login', and an
     .aegis/deploy.yml from a prior 'aegis deploy-init'.
 
-    Examples:\\n
-        - aegis deploy-cd-setup\\n
-        - aegis deploy-cd-setup --on-tag\\n
-        - aegis deploy-cd-setup --force  # rotate existing key\\n
+    Examples:
+        - aegis deploy-cd-setup
+        - aegis deploy-cd-setup --on-tag
+        - aegis deploy-cd-setup --force  # rotate existing key
     """
     import os
     import shutil

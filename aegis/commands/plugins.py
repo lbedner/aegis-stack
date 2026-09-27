@@ -14,8 +14,8 @@ Commands:
 * ``aegis plugins info``   detailed view of one plugin: options,
                             migrations, files, CLI surface, and (in a
                             project) what adding it would do.
-* ``aegis plugins search``  registry search — stub until #773 ships
-                            the official registry.
+* ``aegis plugins search``  searches the directory at aegis-stack.io
+                            (``core.plugins.registry``).
 
 There is intentionally no ``aegis plugins install``. Putting an external
 plugin's bytes on disk is ``pip install aegis-stack-<name>`` (or ``uv
@@ -38,7 +38,7 @@ from ..constants import AnswerKeys
 from ..core.components import COMPONENTS
 from ..core.plugins.compat import CompatStatus, check_compat
 from ..core.plugins.discovery import discover_plugin_cli_apps, discover_plugins
-from ..core.plugins.naming import dist_name
+from ..core.plugins.naming import dist_name, package_name
 from ..core.plugins.spec import PluginKind, PluginSpec
 from ..core.services import SERVICES
 from ..i18n import lazy_t, t
@@ -344,12 +344,17 @@ def plugins_info_command(
     file_count = len(spec.files.primary) if spec.files else 0
     migration_count = len(spec.migrations)
     lines.append(
+        "  " + t("plugins.info_files", files=file_count, migrations=migration_count)
+    )
+    # Two different surfaces: the command the plugin adds to the generated
+    # project (``cli_name``), and a sub-app mounted into ``aegis`` itself.
+    none = t("plugins.cli_none")
+    lines.append(
         "  "
         + t(
-            "plugins.info_files",
-            files=file_count,
-            migrations=migration_count,
-            cli=t("plugins.cli_yes") if has_cli else t("plugins.cli_no"),
+            "plugins.info_cli",
+            project=_escape(spec.cli_name) if spec.cli_name else none,
+            aegis=f"aegis {_escape(name)}" if has_cli else none,
         )
     )
 
@@ -693,7 +698,8 @@ def plugins_create_command(
     typer.echo(
         f"   aegis plugins list   # {t('plugins.create_next_steps_confirm_comment')}"
     )
-    typer.echo(f"   # {t('plugins.create_next_steps_edit_comment')}")
+    spec_file = f"src/{package_name(name)}/plugin.py"
+    typer.echo(f"   # {t('plugins.create_next_steps_edit_comment', path=spec_file)}")
 
 
 # ---------------------------------------------------------------------
@@ -705,13 +711,61 @@ def plugins_create_command(
 def plugins_search_command(
     keyword: str = typer.Argument("", help=lazy_t("plugins.help_arg_search_keyword")),
 ) -> None:
-    """Search the official plugin registry.
+    """Search the plugin directory at aegis-stack.io.
 
-    Stub until ticket #773 ships the official registry. Until then,
-    plugin authors instruct users to ``pip install aegis-stack-<name>``
-    directly.
+    Lists what is published, marks what is already installed here, and
+    says how to add the rest. Installing stays ``pip``'s job.
     """
-    brand.warn(t("plugins.search_not_available"))
-    typer.echo(t("plugins.search_install_hint"))
-    if keyword:
-        typer.echo(t("plugins.search_future_keyword", keyword=keyword))
+    from rich.console import Console
+    from rich.table import Table
+
+    from ..core.plugins.registry import SITE_URL, RegistryError, search_registry
+
+    directory = f"{SITE_URL}/plugins"
+    try:
+        found = search_registry(keyword)
+    except RegistryError as e:
+        brand.error(t("plugins.search_failed", error=e), err=True)
+        typer.echo(t("plugins.search_browse", url=directory), err=True)
+        raise typer.Exit(1) from None
+
+    if not found:
+        typer.echo(
+            t("plugins.search_no_results", keyword=keyword)
+            if keyword
+            else t("plugins.search_empty")
+        )
+        return
+
+    installed = {spec.name for spec in discover_plugins()}
+    table = Table(title=t("plugins.search_title", url=directory), expand=False)
+    table.add_column("", style="bold", no_wrap=True)
+    table.add_column(t("plugins.col_name"), no_wrap=True)
+    table.add_column(t("plugins.col_version"), no_wrap=True)
+    table.add_column(t("plugins.col_status"), no_wrap=True)
+    table.add_column(t("plugins.search_col_aegis"), no_wrap=True)
+    table.add_column(t("plugins.col_description"))
+    for plugin in found:
+        here = plugin.install_name in installed
+        table.add_row(
+            "\u2713" if here else "\u00b7",
+            _escape(plugin.install_name),
+            _escape(plugin.latest_version),
+            t(
+                "plugins.search_verified"
+                if plugin.verified
+                else "plugins.search_community"
+            )
+            + (f", {t('plugins.search_installed')}" if here else ""),
+            _escape(plugin.aegis_version),
+            _escape(plugin.summary),
+        )
+    Console().print(table)
+
+    to_add = [p for p in found if p.install_name not in installed]
+    if to_add:
+        typer.echo("\n" + t("plugins.search_install_header"))
+        for plugin in to_add:
+            typer.echo(
+                f"   pip install {plugin.name}  &&  aegis add {plugin.install_name}"
+            )

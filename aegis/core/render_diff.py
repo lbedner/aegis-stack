@@ -119,8 +119,9 @@ class FilePolicy(str, Enum):
     header comment on the template's first line."""
 
     DEFAULT = "default"
-    """No annotation. Overwrite while pristine (with backup), 3-way merge
-    once diverged — the behavior every other file gets."""
+    """No annotation. Overwrite while pristine, 3-way merge once diverged
+    (backing up the user's version first) — the behavior every other file
+    gets."""
 
     USER_OWNED = "user-owned"
     """Create once; never regenerate, merge, or delete afterward — even if
@@ -135,7 +136,7 @@ class FilePolicy(str, Enum):
     custom build steps are not, and a merge could mangle them)."""
 
     NO_BACKUP = "no-backup"
-    """Overwrite like DEFAULT, but skip the ``.backup`` copy — for
+    """Like DEFAULT, but a merge skips the ``.backup`` copy — for
     derived/transient content nobody hand-edits (health dispatchers,
     db-init hooks)."""
 
@@ -532,6 +533,16 @@ class RenderDiffEngine:
                 continue
 
             if p.action == FileAction.OVERWRITE:
+                # Pristine: nothing of the user's is in this file, so a copy
+                # would preserve only formatting. No backup.
+                assert p.content is not None
+                self._write(output_path, p.content, p.rel_path)
+                result.overwritten.append(p.rel_path)
+                continue
+
+            if p.action == FileAction.MERGE:
+                # The user edited this file; keep their version before the
+                # merge rewrites it.
                 assert p.content is not None
                 if (
                     backup
@@ -543,12 +554,6 @@ class RenderDiffEngine:
                     )
                     shutil.copy(output_path, backup_path)
                     result.backed_up.append(p.rel_path)
-                self._write(output_path, p.content, p.rel_path)
-                result.overwritten.append(p.rel_path)
-                continue
-
-            if p.action == FileAction.MERGE:
-                assert p.content is not None
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_text(p.content)
                 if p.conflict:

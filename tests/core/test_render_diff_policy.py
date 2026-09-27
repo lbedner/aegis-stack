@@ -190,26 +190,16 @@ class TestWarnIfDivergedPolicy:
 
 
 class TestNoBackupPolicy:
-    def test_overwrite_skips_backup_file(self, engine: RenderDiffEngine) -> None:
+    def test_a_merge_skips_the_backup_file(self, engine: RenderDiffEngine) -> None:
         (engine.project_path / "derived.py").write_text(
-            engine._render("derived.py", {"label": "old"})
+            engine._render("derived.py", {"label": "old"}) + "EXTRA = 1\n"
         )
         plans = engine.plan({"label": "old"}, {"label": "new"})
-        result = engine.apply(plans, backup=True)
+        result = engine.apply(plans)
 
-        assert "derived.py" in result.overwritten
+        assert "derived.py" in result.merged + result.conflicts
         assert "derived.py" not in result.backed_up
         assert not (engine.project_path / "derived.py.backup").exists()
-
-    def test_default_policy_still_backs_up(self, engine: RenderDiffEngine) -> None:
-        (engine.project_path / "plain.py").write_text(
-            engine._render("plain.py", {"label": "old"})
-        )
-        plans = engine.plan({"label": "old"}, {"label": "new"})
-        result = engine.apply(plans, backup=True)
-
-        assert "plain.py" in result.overwritten
-        assert "plain.py" in result.backed_up
 
 
 class TestInvalidAnnotationFailsLoudly:

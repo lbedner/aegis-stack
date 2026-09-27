@@ -324,16 +324,36 @@ class TestApply:
         assert "gated.py" in result.deleted
         assert not (engine.project_path / "gated.py").exists()
 
-    def test_apply_backs_up_before_overwrite(self, engine: RenderDiffEngine) -> None:
+    def test_overwriting_a_pristine_file_leaves_no_backup(
+        self, engine: RenderDiffEngine
+    ) -> None:
+        """Pristine means nothing of the user's is in the file, so a backup
+        of it preserves only formatting. It used to leave CLAUDE.md.backup,
+        Makefile.backup and friends in the root of an untouched project."""
         (engine.project_path / "plain.py").write_text(
             engine._render("plain.py", {"label": "old"})
         )
         plans = engine.plan({"label": "old"}, {"label": "new"})
-        result = engine.apply(plans, backup=True)
+        result = engine.apply(plans)
 
         assert "plain.py" in result.overwritten
+        assert "plain.py" not in result.backed_up
+        assert not (engine.project_path / "plain.py.backup").exists()
+
+    def test_a_merge_backs_up_the_users_version_first(
+        self, engine: RenderDiffEngine
+    ) -> None:
+        """A merge rewrites a file the user edited; that version is the one
+        worth keeping a copy of."""
+        mine = engine._render("plain.py", {"label": "old"}) + "EXTRA = 1\n"
+        (engine.project_path / "plain.py").write_text(mine)
+        plans = engine.plan({"label": "old"}, {"label": "new"})
+        assert {p.rel_path: p.action for p in plans}["plain.py"] == FileAction.MERGE
+
+        result = engine.apply(plans)
+
         assert "plain.py" in result.backed_up
-        assert (engine.project_path / "plain.py.backup").exists()
+        assert (engine.project_path / "plain.py.backup").read_text() == mine
 
     def test_apply_reports_preserved_diverged_delete(
         self, engine: RenderDiffEngine

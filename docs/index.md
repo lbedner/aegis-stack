@@ -89,6 +89,10 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 | **[Insights](services/insights/index.md)** | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | 🧪 **Experimental** |
 | **[Payment](services/payment/index.md)** | Stripe checkout, subscriptions, refunds, disputes | 🧪 **Experimental** |
 
+### Plugins
+
+What the built-in services don't cover can come from a [plugin](plugins/index.md): a Python package that adds routes, tables, a CLI and a dashboard card, and goes in and out the same way (`aegis add <name>`, `aegis remove <name>`). Browse them at [aegis-stack.io/plugins](https://aegis-stack.io/plugins) or with `aegis plugins search`.
+
 ## See It In Action
 
 ### System Health Dashboard
@@ -109,6 +113,7 @@ Rich terminal output showing detailed component status, health metrics, and syst
 - **[CLI Reference](cli-reference.md)** - Complete command reference
 - **[Components](components/index.md)** - Deep dive into available components
 - **[Services](services/index.md)** - Business services (auth, AI)
+- **[Plugins](plugins/index.md)** - Extend a project with third-party packages, or write your own
 - **[About](about.md)** - The philosophy and vision behind Aegis Stack
 - **[Evolving Your Stack](evolving-your-stack.md)** - Add/remove components as needs change
 - **[Technology Stack](technology.md)** - Battle-tested technology choices

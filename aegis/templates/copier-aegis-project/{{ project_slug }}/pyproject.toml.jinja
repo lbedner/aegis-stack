@@ -98,7 +98,10 @@ dependencies = [
     "authlib>=1.7.0",
     "itsdangerous>=2.1.0",
 {%- endif %}
-{%- if include_auth or include_payment or include_insights or include_blog or include_documents or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend != "memory") %}
+{#- A plugin with migrations needs alembic, unless a plugin already names it. #}
+{%- set plugin_deps = _plugins | default([]) | map(attribute="pyproject_deps") | map("join", " ") | join(" ") %}
+{%- set plugin_needs_alembic = (_plugins | default([]) | selectattr("migrations") | list) and "alembic" not in plugin_deps %}
+{%- if include_auth or include_payment or include_insights or include_blog or include_documents or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend != "memory") or plugin_needs_alembic %}
     "alembic==1.16.5",
 {%- endif %}
 {%- if include_documents %}

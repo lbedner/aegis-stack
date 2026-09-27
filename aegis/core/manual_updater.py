@@ -42,7 +42,7 @@ from .component_files import (
 )
 from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.composer import PLUGINS_ANSWER_KEY
-from .plugins.template_resolver import get_plugin_template_root
+from .plugins.template_resolver import plugin_tree_files
 from .render_diff import FilePolicy, RenderDiffEngine, build_template_env
 from .template_cleanup import run_ruff_on_text
 from .verbosity import verbose_print
@@ -1221,16 +1221,10 @@ class ManualUpdater:
         directory. Zipped wheels are not supported today — see
         ``aegis.core.plugins.template_resolver`` for the rationale.
         """
-        template_root = get_plugin_template_root(plugin_module_name)
-        if template_root is None:
+        tree = plugin_tree_files(plugin_module_name)
+        if tree is None:
             return PluginRenderResult()
-
-        # Plugin templates mirror aegis-stack's: every file is nested
-        # under ``{{ project_slug }}/`` so the rendered path is naturally
-        # rooted at the project tree.
-        project_slug_dir = template_root / PROJECT_SLUG_PLACEHOLDER
-        if not project_slug_dir.is_dir():
-            return PluginRenderResult()
+        template_root, files = tree
 
         plugin_env = build_template_env(template_root)
         backup_root = (
@@ -1246,16 +1240,7 @@ class ManualUpdater:
         # not written, not reported, no warning - and a plain
         # ``__init__.py`` that never landed left a namespace package that
         # imported fine and had no ``__file__``.
-        for source_file in sorted(project_slug_dir.rglob("*")):
-            if not source_file.is_file():
-                continue
-            rel_inside_slug = source_file.relative_to(project_slug_dir)
-            is_template = source_file.suffix == JINJA_EXTENSION
-            # A rendered file drops the ``.jinja``; a vendored one is
-            # already named what it should be called.
-            out_rel = (
-                rel_inside_slug.with_suffix("") if is_template else rel_inside_slug
-            )
+        for source_file, out_rel, is_template in files:
             out_path = self.project_path / out_rel
 
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1406,7 +1391,9 @@ class ManualUpdater:
         shutil.copy2(out_path, backup_path)
         return True
 
-    def remove_plugin(self, spec: Any) -> UpdateResult:
+    def remove_plugin(
+        self, spec: Any, plugin_module_name: str | None = None
+    ) -> UpdateResult:
         """Uninstall a plugin from the project.
 
         Mirror of :meth:`add_plugin`:
@@ -1416,7 +1403,8 @@ class ManualUpdater:
         2. Regenerate shared template files so the plugin's wiring no
            longer appears in routes / cards / modals / etc.
         3. Apply :class:`FileManifest` cleanup to remove the plugin's
-           own files from the project tree.
+           own files from the project tree, then delete whatever else its
+           template tree rendered (``plugin_module_name`` locates it).
         4. Run post-generation tasks (``uv sync`` to drop deps).
 
         Migrations are intentionally NOT rolled back — matches the
@@ -1427,7 +1415,9 @@ class ManualUpdater:
         Returns an :class:`UpdateResult`. ``success=False`` with a
         clear error message if the plugin isn't currently installed.
         """
+        from . import migration_generator, post_gen_tasks
         from .file_manifest import apply_cleanup_path, iter_cleanup_paths
+        from .migration_generator import _pin_alembic
 
         files_deleted: list[str] = []
         try:
@@ -1470,12 +1460,26 @@ class ManualUpdater:
             # with ``selected=False`` walks the manifest as if the
             # plugin were never selected, yielding everything to
             # delete.
-            for rel_path in iter_cleanup_paths(spec, selected=False):
-                target = self.project_path / rel_path
-                if not target.exists():
+            for rel_path in [
+                *iter_cleanup_paths(spec, selected=False),
+                *self._plugin_tree_paths(plugin_module_name),
+            ]:
+                if not (self.project_path / rel_path).exists():
                     continue
                 apply_cleanup_path(self.project_path, rel_path)
                 files_deleted.append(rel_path)
+            # The plugin's revisions stay, so history stays consistent: one
+            # more revision exports its tables and drops them, and a re-add
+            # restores from that export. The regen above drops alembic once
+            # no answer needs it; these revisions still do.
+            if (self.project_path / "alembic").is_dir():
+                _pin_alembic(self.project_path)
+                migration_generator.generate_drop_revision(
+                    self.project_path, f"remove_{spec.name}"
+                )
+                post_gen_tasks.run_migrations(
+                    self.project_path, include_migrations=True
+                )
 
             self.run_post_generation_tasks()
 
@@ -1494,6 +1498,26 @@ class ManualUpdater:
                 success=False,
                 error_message=str(e),
             )
+
+    def _aegis_template_paths(self) -> set[str]:
+        """Every path aegis's own templates can produce."""
+        return set(self._render_diff_engine.discover_paths())
+
+    def _plugin_tree_paths(self, plugin_module_name: str | None) -> list[str]:
+        """Every path the plugin's tree renders that aegis's own templates don't.
+
+        ``add`` renders the whole tree, but the manifest is hand-kept: a
+        file it forgets (crawl4ai's tests) would outlive the remove and
+        import modules just deleted. A path aegis's own templates also
+        produce is shared, and stays.
+        """
+        if plugin_module_name is None:
+            return []
+        tree = plugin_tree_files(plugin_module_name)
+        if tree is None:
+            return []
+        shared = self._aegis_template_paths()
+        return [str(out) for _, out, _ in tree[1] if str(out) not in shared]
 
     def add_plugin(
         self,

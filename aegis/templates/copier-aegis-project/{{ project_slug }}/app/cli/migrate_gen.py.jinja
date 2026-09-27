@@ -35,6 +35,7 @@ from alembic.config import Config
 from alembic.operations import ops
 from alembic.script import ScriptDirectory
 from app.cli.migrate_owners import claimed_by, includes_object
+from app.cli.plugin_data import SCRATCH
 from app.core.model_registry import import_all_models
 
 import_all_models()
@@ -103,6 +104,7 @@ def _connection(url: str | None, scratch_dir: Path | None) -> Iterator[Connectio
         if scratch_url is not None:
             # NullPool: the connection is really closed before the drop.
             with create_engine(scratch_url, poolclass=NullPool).connect() as conn:
+                conn.info[SCRATCH] = True
                 yield conn
             return
 {% endif %}
@@ -128,6 +130,9 @@ def _connection(url: str | None, scratch_dir: Path | None) -> Iterator[Connectio
             return clause, multiparams, params
 
         with engine.connect() as conn:
+            # Revisions that export or restore a removed plugin's rows skip
+            # a scratch replay (``app.cli.plugin_data``).
+            conn.info[SCRATCH] = True
             yield conn
 
 
@@ -337,7 +342,7 @@ def _signature(kept: list[Any]) -> tuple[str, ...] | None:
     return None
 
 
-def _prune(conn: Connection, signature: dict[str, tuple[str, ...] | None]) -> Callable[..., None]:
+def _prune(conn: Connection, signature: dict[str, Any]) -> Callable[..., None]:
     def process(_ctx: Any, _rev: Any, directives: list[Any]) -> None:
         script = directives[0]
         kept = [op for op in script.upgrade_ops.ops if _additive(op, conn)]
@@ -368,6 +373,9 @@ def _prune(conn: Connection, signature: dict[str, tuple[str, ...] | None]) -> Ca
             if not isinstance(op, ops.ExecuteSQLOp)
         ]
         signature["value"] = _signature(kept)
+        signature["created"] = [
+            (op.table_name, op.schema) for op in kept if isinstance(op, ops.CreateTableOp)
+        ]
         if not kept:
             directives[:] = []
 
@@ -380,7 +388,7 @@ def generate(services: list[str], scratch_dir: Path | None = None) -> list[Path]
     with _connection(None, scratch_dir) as conn:
         for service in services:
             claimed = claimed_by(service, services, VERSIONS)
-            signature: dict[str, tuple[str, ...] | None] = {}
+            signature: dict[str, Any] = {}
             cfg = _config(
                 conn,
                 include_object=lambda obj, name, type_, reflected, _cmp, service=service, claimed=claimed: (
@@ -392,13 +400,14 @@ def generate(services: list[str], scratch_dir: Path | None = None) -> list[Path]
                 render_as_batch=True,
             )
             command.upgrade(cfg, "head")
-            before = set(VERSIONS.glob("*.py"))
-            command.revision(
-                cfg, message=service, autogenerate=True, rev_id=_next_rev_id()
-            )
-            new_files = sorted(set(VERSIONS.glob("*.py")) - before)
+            new_files = write_revision(cfg, service)
             for path in new_files:
                 _stamp_signature(path, signature.get("value"))
+                if os.environ.get("AEGIS_RESTORE_DATA"):
+                    # A re-added plugin gets back what its removal exported.
+                    insert_calls(
+                        path, "restore_table", signature.get("created", []), at_end=True
+                    )
             written.extend(new_files)
         command.upgrade(_config(conn), "head")
     return written
@@ -414,6 +423,33 @@ def _stamp_signature(path: Path, signature: tuple[str, ...] | None) -> None:
         return
     head, _, tail = body.partition(anchor)
     path.write_text(f"{head}{anchor}aegis_stamp_signature = {signature!r}\n{tail}")
+
+
+def write_revision(cfg: Config, message: str) -> list[Path]:
+    """Autogenerate one revision; return the files it wrote (none if empty)."""
+    before = set(VERSIONS.glob("*.py"))
+    command.revision(cfg, message=message, autogenerate=True, rev_id=_next_rev_id())
+    return sorted(set(VERSIONS.glob("*.py")) - before)
+
+
+def insert_calls(
+    path: Path, func: str, tables: list[tuple[str, str | None]], *, at_end: bool = False
+) -> None:
+    """Call ``app.cli.plugin_data.<func>`` on each table in ``upgrade()``.
+
+    First (``export_table``, before a drop) or last (``restore_table``, after
+    a create).
+    """
+    if not tables:
+        return
+    calls = [f"{func}(op.get_bind(), {name!r}, {schema!r})" for name, schema in tables]
+    lines = [f"from app.cli.plugin_data import {func}", "", *calls]
+    body = path.read_text()
+    head, sep, rest = body.partition("def upgrade() -> None:\n")
+    code, sep2, tail = rest.partition("\n\ndef downgrade")
+    block = "".join(f"    {line}\n" if line else "\n" for line in lines)
+    code = f"{code.rstrip()}\n\n{block}" if at_end else f"{block}\n{code}"
+    path.write_text(f"{head}{sep}{code}{sep2}{tail}")
 
 
 def main(argv: list[str] | None = None) -> int:

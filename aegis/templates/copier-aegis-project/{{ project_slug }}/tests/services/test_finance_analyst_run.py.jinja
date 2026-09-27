@@ -31,6 +31,17 @@ NOTE_TEXT = "Your spending is up in one category this month. Nothing else moved.
 
 
 @pytest.fixture(autouse=True)
+def _seed_on_the_notes_day(monkeypatch):
+    """The demo seed anchors on the real clock; every note here is written
+    for 2026-07-20. Once the calendar drifted far enough, the seeded bills
+    fell outside the note's window and its cash section vanished."""
+    monkeypatch.setattr(
+        "app.services.finance.seeds.demo_seed.seed.current_date",
+        lambda: date(2026, 7, 20),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _clean_agent_cache():
     """``resolve_agent`` memoizes per process; tests must not inherit rows."""
     invalidate_agent_cache()

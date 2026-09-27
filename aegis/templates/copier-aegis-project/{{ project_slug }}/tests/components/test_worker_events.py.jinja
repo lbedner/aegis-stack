@@ -11,7 +11,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.components.worker.events import WORKER_EVENT_STREAM, publish_event
+from app.components.worker.events import (
+    WORKER_EVENT_STREAM,
+    WORKER_EVENT_STREAM_MAXLEN,
+    publish_event,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +36,18 @@ async def test_publish_event_calls_xadd() -> None:
     assert fields["type"] == "job.started"
     assert fields["queue"] == "system"
     assert "timestamp" in fields
+
+
+@pytest.mark.asyncio
+async def test_publish_event_caps_the_stream() -> None:
+    """The stream is trimmed as it grows, so it cannot fill Redis: the SSE
+    feed tails new entries only, and nothing reads history past the cap."""
+    redis = AsyncMock()
+    await publish_event(redis, "job.started", "system")
+
+    kwargs = redis.xadd.call_args.kwargs
+    assert kwargs["maxlen"] == WORKER_EVENT_STREAM_MAXLEN
+    assert kwargs["approximate"] is True
 
 
 @pytest.mark.asyncio
@@ -133,6 +149,34 @@ async def test_post_execute_failed() -> None:
 
     fields = mw._redis.xadd.call_args[0][1]
     assert fields["type"] == "job.failed"
+
+@pytest.mark.asyncio
+async def test_history_files_each_job_under_its_queue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A job spawned with ``.kiq()`` has no enqueue record, so the middleware
+    creates it; without a queue it lands in no queue's history, and that
+    queue's counts (busy, completed) never see it."""
+    from app.components.worker import task_history
+
+    started, finished = AsyncMock(), AsyncMock()
+    monkeypatch.setattr(task_history, "record_task_started", started)
+    monkeypatch.setattr(task_history, "record_task_finished", finished)
+    mw = EventPublishMiddleware().set_queue_name("load_test")
+    mw._redis = AsyncMock()
+    message = MagicMock()
+    message.task_id = "task-9"
+    message.task_name = "app.components.worker.queues.load_test:cpu_intensive_task"
+    result = MagicMock()
+    result.is_err = False
+
+    await mw.pre_execute(message)
+    await mw.post_execute(message, result)
+
+    for recorded in (started, finished):
+        assert recorded.call_args.kwargs["queue_name"] == "load_test"
+        assert recorded.call_args.kwargs["task_name"] == "cpu_intensive_task"
+
 {%- elif worker_backend == "dramatiq" %}
 
 # ---------------------------------------------------------------------------

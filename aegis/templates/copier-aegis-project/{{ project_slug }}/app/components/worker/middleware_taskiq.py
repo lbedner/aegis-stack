@@ -17,6 +17,11 @@ from app.core.log import logger
 from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 
 
+def _short_name(task_name: str) -> str:
+    """``module.path:func`` -> ``func``, the name enqueue records use."""
+    return task_name.rsplit(":", 1)[-1]
+
+
 class EventPublishMiddleware(TaskiqMiddleware):
     """Publishes worker lifecycle events to a Redis Stream."""
 
@@ -76,7 +81,12 @@ class EventPublishMiddleware(TaskiqMiddleware):
             # Record task started in history
             from app.components.worker.task_history import record_task_started
 
-            await record_task_started(self._redis, message.task_id)
+            await record_task_started(
+                self._redis,
+                message.task_id,
+                task_name=_short_name(message.task_name),
+                queue_name=self._queue_name,
+            )
         return message
 
     async def post_execute(
@@ -106,5 +116,7 @@ class EventPublishMiddleware(TaskiqMiddleware):
                 message.task_id,
                 success=not result.is_err,
                 error=error_msg,
+                task_name=_short_name(message.task_name),
+                queue_name=self._queue_name,
             )
             await mark_idle(self._redis)

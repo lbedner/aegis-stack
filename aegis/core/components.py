@@ -284,7 +284,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         ),
         # <0.0.45: that release rejects naive datetimes, and every timestamp
         # this template writes is naive UTC (see app/core/time.py).
-        pyproject_deps=["sqlmodel>=0.0.14,<0.0.45", "sqlalchemy>=2.0.0"],
+        pyproject_deps=["sqlmodel>=0.0.14,<0.0.45", "sqlalchemy>=2.0.0,<3"],
         # Note: async driver (aiosqlite or asyncpg) selected based on database_type in copier.yml
         template_files=["app/core/db.py"],
         marker_path="app/core/db.py",
@@ -341,7 +341,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             "byte copy, never a migration."
         ),
         docker_services=["seaweedfs"],
-        pyproject_deps=["boto3>=1.35"],
+        pyproject_deps=["boto3>=1.35,<2"],
         marker_path="app/components/storage",
         files=FileManifest(
             primary=[
@@ -392,7 +392,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             "adapts to whichever components you enable, so you can see "
             "what production is actually doing."
         ),
-        pyproject_deps=["logfire[fastapi,httpx]"],
+        pyproject_deps=["logfire[fastapi,httpx]<6"],
         template_files=["app/components/backend/middleware/logfire_tracing.py"],
         marker_path="app/components/backend/middleware/logfire_tracing.py",
         files=FileManifest(
@@ -417,7 +417,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             "webserver alongside the Flet dashboard at /dashboard. Ships a "
             "generic landing page ready to grow into your own pages."
         ),
-        pyproject_deps=["jinja2>=3.1.0"],
+        pyproject_deps=["jinja2>=3.1.0,<4"],
         # The htmx tree renders under app/components/web_frontend; the
         # directory is the on-disk marker. Docker watcher services and
         # docs_path land with the asset pipeline and the docs page.

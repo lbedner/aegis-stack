@@ -260,7 +260,7 @@ SERVICES: dict[str, ServiceSpec] = {
         # Order matches the legacy render for byte-parity.
         pyproject_deps=[
             "python-jose[cryptography]==3.3.0",
-            "bcrypt>=4.0.0",
+            "bcrypt>=4.0.0,<6",
             # Order matches the legacy pyproject.toml.jinja template's
             # block order so the plugin-renderer / legacy parity test
             # (test_pyproject_deps_parity) keeps passing.
@@ -629,8 +629,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         pyproject_deps=[
-            "resend>=2.4.0",
-            "twilio>=9.3.7",
+            "resend>=2.4.0,<3",
+            "twilio>=9.3.7,<10",
             "email-validator==2.2.0",
         ],
         template_files=[
@@ -751,7 +751,7 @@ SERVICES: dict[str, ServiceSpec] = {
             ),
         ],
         pyproject_deps=[
-            "httpx>=0.27.0",  # HTTP client for API collectors
+            "httpx>=0.27.0,<0.29",  # HTTP client for API collectors
         ],
         template_files=[
             "app/services/insights/",
@@ -852,7 +852,7 @@ SERVICES: dict[str, ServiceSpec] = {
         migrations=[PAYMENT_MIGRATION, PAYMENT_AUTH_LINK_MIGRATION],
         pyproject_deps=[
             "alembic==1.16.5",
-            "stripe>=11.0.0",
+            "stripe>=11.0.0,<16",
         ],
         template_files=[
             "app/services/payment/",
@@ -940,7 +940,7 @@ SERVICES: dict[str, ServiceSpec] = {
             # endpoint, is core now - the pastebox ships it.)
             # YAML-frontmatter parser used by the export/import pipeline
             # (see app/services/blog/serialization.py).
-            "python-frontmatter>=1.1.0",
+            "python-frontmatter>=1.1.0,<2",
         ],
         template_files=[
             "app/services/blog/",
@@ -1040,7 +1040,7 @@ SERVICES: dict[str, ServiceSpec] = {
         # tickets. ``ofxtools`` backs the OFX/QFX importer, which every
         # finance stack ships. ``aegis add-service finance`` bootstraps
         # alembic itself, so no alembic pin is needed here.
-        pyproject_deps=["ofxtools>=0.9.5"],
+        pyproject_deps=["ofxtools>=0.9.5,<2"],
         template_files=[
             "app/services/finance/",
             "app/components/backend/api/finance/",

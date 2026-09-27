@@ -102,4 +102,28 @@ class TestOAuthConnectionsRequireAuth:
     def test_disconnect_unauthenticated(self, client: TestClient):
         response = client.delete("/api/v1/auth/oauth/connections/github")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestDisabledAccountOAuth:
+    """OAuth sign-in refuses a disabled account like the password form does."""
+
+    @pytest.mark.asyncio
+    async def test_disabled_account_is_sent_back_with_the_reason(self) -> None:
+        from app.components.backend.api.auth.oauth import _finalize_oauth_signin
+        from app.models.user import User
+        from starlette.requests import Request
+
+        class Untouched:
+            """Neither service may be used for a refused sign-in."""
+
+            def __getattr__(self, name: str) -> None:
+                raise AssertionError(f"touched {name}")
+
+        request = Request({"type": "http", "session": {}, "headers": [], "method": "GET", "path": "/"})
+        user = User(id=1, email="off@example.com", hashed_password="x", is_active=False)
+        response = await _finalize_oauth_signin(
+            request, user, Untouched(), Untouched(), provider="github"
+        )
+        assert response.headers["location"] == "/login?error=disabled"
+        assert "set-cookie" not in response.headers
 {%- endif %}

@@ -126,11 +126,13 @@ async def login_submit(
             audit=audit,
             _rate_limit=None,
         )
-    except HTTPException:
+    except HTTPException as exc:
         # The API answers wrong-password and locked-account with the same 401
-        # so neither reveals whether the email exists. Keep that property:
-        # one message, one destination.
-        return RedirectResponse(url="/login?error=invalid", status_code=303)
+        # so neither reveals whether the email exists; keep that as one
+        # message. Its 403 comes only after a correct password, for a
+        # disabled account, so saying so reveals nothing new.
+        reason = "disabled" if exc.status_code == 403 else "invalid"
+        return RedirectResponse(url=f"/login?error={reason}", status_code=303)
     return redirect
 
 

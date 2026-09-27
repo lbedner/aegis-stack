@@ -200,6 +200,19 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # A disabled account is refused here, after the password check, so only
+    # someone who already knows the password learns that it is disabled.
+    if not user.is_active:
+        await audit.emit(
+            "auth.login_disabled",
+            actor_email=form_data.username,
+            actor_id=user.id,
+            ip_address=ip_address,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled"
+        )
+
     # Successful login — reset failed attempts
     await user_service.reset_login_attempts(user.id)
 

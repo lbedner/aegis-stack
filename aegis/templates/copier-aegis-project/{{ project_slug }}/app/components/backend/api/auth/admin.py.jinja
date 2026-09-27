@@ -1,7 +1,7 @@
 """Administering other people's accounts.
 
 Two complete variants: with RBAC every route is role-guarded, and
-without it they are plain. The gate is the one that was already
+without it every route needs a signed-in user. The gate is the one that was already
 here - the whole block moved with it.
 """
 
@@ -35,6 +35,15 @@ from app.services.auth.service import require_role
 
 router = APIRouter()
 
+# The guard for administering other people's accounts, named once: the web
+# Overseer calls these handlers directly, which skips their Depends, so it
+# declares this same guard on its own routes.
+{%- if include_auth_rbac %}
+require_user_admin = require_role("admin")
+{%- else %}
+require_user_admin = get_current_active_user
+{%- endif %}
+
 
 {% if include_auth_rbac %}
 class RoleUpdateRequest(BaseModel):
@@ -55,9 +64,10 @@ async def list_users(
 {% else %}
 @router.get("/users", response_model=list[UserResponse])
 async def list_users(
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
 ) -> list[UserResponse]:
-    """List all users."""
+    """List all users. Requires a signed-in user."""
     users = await user_service.list_users()
     return [UserResponse.model_validate(user) for user in users]
 {% endif %}
@@ -291,34 +301,46 @@ async def set_user_role(
 @router.patch("/users/{user_id}/deactivate", response_model=UserResponse)
 async def deactivate_user(
     user_id: int,
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> UserResponse:
-    """Deactivate a user account."""
+    """Deactivate a user account. Requires a signed-in user."""
     user = await user_service.deactivate_user(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    await audit.emit("auth.user_deactivated", target_type="user", target_id=user_id)
+    await audit.emit(
+        "auth.user_deactivated",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
+    )
     return UserResponse.model_validate(user)
 
 
 @router.patch("/users/{user_id}/activate", response_model=UserResponse)
 async def activate_user(
     user_id: int,
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> UserResponse:
-    """Activate a user account."""
+    """Activate a user account. Requires a signed-in user."""
     user = await user_service.activate_user(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    await audit.emit("auth.user_activated", target_type="user", target_id=user_id)
+    await audit.emit(
+        "auth.user_activated",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
+    )
     return UserResponse.model_validate(user)
 
 
@@ -326,10 +348,11 @@ async def activate_user(
 async def delete_user(
     user_id: int,
     hard: bool = False,
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> None:
-    """Delete a user.
+    """Delete a user. Requires a signed-in user.
 
     Default is a soft delete (``deleted_at`` set, row preserved). Pass
     ``?hard=true`` for permanent removal.
@@ -345,6 +368,7 @@ async def delete_user(
         )
     await audit.emit(
         "auth.user_hard_deleted" if hard else "auth.user_deleted",
+        actor_id=current_user.id,
         target_type="user",
         target_id=user_id,
     )
@@ -353,10 +377,11 @@ async def delete_user(
 @router.post("/users/{user_id}/restore", response_model=UserResponse)
 async def restore_user(
     user_id: int,
+    current_user: User = Depends(require_user_admin),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> UserResponse:
-    """Clear ``deleted_at`` on a soft-deleted user.
+    """Clear ``deleted_at`` on a soft-deleted user. Requires a signed-in user.
 
     Returns 409 if another live user has claimed the same email since
     the soft delete.
@@ -373,7 +398,10 @@ async def restore_user(
             detail="User not found or not deleted",
         )
     await audit.emit(
-        "auth.user_restored", target_type="user", target_id=user_id
+        "auth.user_restored",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
     )
     return UserResponse.model_validate(restored)
 {% endif %}

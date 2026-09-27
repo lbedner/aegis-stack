@@ -127,6 +127,8 @@ document.addEventListener('alpine:init', () => {
           this.error = 'Incorrect email or password.';
         } else if (err === 'locked') {
           this.error = 'Account temporarily locked after too many failed attempts. Try again shortly.';
+        } else if (err === 'disabled') {
+          this.error = 'This account has been disabled. Contact an administrator to restore access.';
         }
       },
   }));

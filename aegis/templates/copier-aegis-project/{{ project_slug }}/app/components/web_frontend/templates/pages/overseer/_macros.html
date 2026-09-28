@@ -1,0 +1,18 @@
+{# Pieces shared by Overseer pages. #}
+{% from "components/macros/layout.html" import card, facts %}
+
+{# An HTTP verb, set in the mono label voice. #}
+{% macro method_tag(method) %}
+<span data-method class="inline-block font-mono text-xxs font-semibold px-1.5 py-0.5 rounded border border-aegis-border {{ 'text-aegis-teal' if method == 'GET' else 'text-error' if method == 'DELETE' else 'text-aegis-amber' }}">{{ method }}</span>
+{% endmacro %}
+
+{# The "Current status" card every component page shows. ``extra`` rows
+   go between the health check and the registered name. #}
+{% macro status_card(component, name, extra=[]) %}
+{% call card("Current status") %}
+  {{ facts([("State", component.status.value|title), ("Health check", "%.1f ms"|format(component.response_time_ms) if component.response_time_ms is not none else none)] + extra + [("Registered as", name)]) }}
+{% endcall %}
+{% endmacro %}
+
+{# A column's cell renderer for data_table: a row's HTTP method(s). #}
+{% macro method_cell(value) %}{% for method in (value if value is not string else [value]) %}{{ method_tag(method) }}{% endfor %}{% endmacro %}

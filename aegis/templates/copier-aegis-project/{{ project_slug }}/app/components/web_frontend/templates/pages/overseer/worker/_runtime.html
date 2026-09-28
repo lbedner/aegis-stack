@@ -1,0 +1,23 @@
+{% from "components/macros/layout.html" import card, facts %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% if misnamed %}
+<p data-misnamed class="mb-4 rounded border border-aegis-error/40 bg-aegis-error/10 px-3 py-2 text-xs text-error">WORKER_QUEUES names queues that do not exist: <span class="font-mono">{{ misnamed|join(", ") }}</span>. Workers refuse to start until it is fixed.</p>
+{% endif %}
+{% if not runtime %}
+{{ empty_state("No worker has reported yet", "Each worker process reports what it runs with when it starts, and refreshes that while it lives. Start or restart a worker to see it here.") }}
+{% else %}
+<div class="grid gap-4 xl:grid-cols-2">
+  {% for w in runtime %}
+  <section data-runtime="{{ w.worker }}" class="bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-4 min-w-0">
+    <header class="flex items-baseline justify-between gap-3">
+      <h3 class="font-mono text-sm font-semibold text-aegis-text truncate">{{ w.worker }}</h3>
+      <span class="font-mono text-xxs text-aegis-muted">{{ w.queue }}</span>
+    </header>
+    {{ facts(w.facts) }}
+    {% if w.mismatch %}
+    <p data-mismatch class="rounded border border-aegis-amber/40 bg-aegis-amber/10 px-3 py-2 text-xs text-aegis-amber">{{ w.mismatch }}</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endif %}

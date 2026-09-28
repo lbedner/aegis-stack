@@ -24,7 +24,7 @@
 {% macro auth_field(name, label, type="text", autocomplete=None, required=True, minlength=None, placeholder="") %}
 <div>
   <div class="flex items-baseline justify-between mb-2">
-    <label class="block text-xxs text-aegis-muted uppercase tracking-wider">{{ label }}</label>
+    <label class="block text-xxs text-aegis-muted caps">{{ label }}</label>
     {% if caller is defined %}{{ caller() }}{% endif %}
   </div>
   {% if type == "password" %}

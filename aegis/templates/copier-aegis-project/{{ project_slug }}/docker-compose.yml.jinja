@@ -196,7 +196,6 @@ services:
       - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}
 {%- elif worker_backend == "dramatiq" %}
       - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}
-      - WORKER_THREADS=${LOAD_TEST_WORKER_THREADS:-8}
 {%- endif %}
       - WORKER_TIMEOUT_SECONDS=${LOAD_TEST_WORKER_TIMEOUT:-60}
       - WORKER_MAX_TRIES=${LOAD_TEST_WORKER_MAX_TRIES:-1}
@@ -238,7 +237,6 @@ services:
       - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}
 {%- elif worker_backend == "dramatiq" %}
       - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}
-      - WORKER_THREADS=${SYSTEM_WORKER_THREADS:-4}
 {%- endif %}
       - WORKER_TIMEOUT_SECONDS=${SYSTEM_WORKER_TIMEOUT:-1800}
       - WORKER_MAX_TRIES=${SYSTEM_WORKER_MAX_TRIES:-5}
@@ -278,7 +276,7 @@ services:
   redis:
     image: redis:7-alpine
     hostname: redis
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 64mb --maxmemory-policy volatile-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

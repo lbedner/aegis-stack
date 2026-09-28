@@ -64,6 +64,13 @@ async def get_current_user_from_token(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user"
         )
 
+    # Release the lookup's transaction before the handler runs. On SQLite it
+    # holds the write lock from BEGIN, and the request keeps this session to
+    # the end, so any other session the handler opens (a service with its
+    # own) waited it out and failed "database is locked". Nothing is pending
+    # yet, and the user stays loaded (expire_on_commit=False).
+    await user_service.db.commit()
+
     return user
 
 {% if include_auth_rbac %}

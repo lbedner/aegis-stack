@@ -85,7 +85,8 @@ class TestAuthEndpoints:
         assert data["email"] == user_data["email"]
         assert data["full_name"] == user_data["full_name"]
         assert data["is_active"] is True
-        assert data["is_verified"] is False
+        # Basic auth has no email verification, so sign-ups start verified.
+        assert data["is_verified"] {{ "is True" if auth_level == "basic" else "is False" }}
         assert "id" in data
         assert "created_at" in data
         # Ensure password is not returned
@@ -1181,6 +1182,83 @@ class TestAdminRoutesRequireSignIn:
 {%- endif %}
 
 
+class TestCreateUser:
+    """POST /api/v1/auth/users: an administrator adds an account without
+    signing in as it (unlike /register, which signs the new user in)."""
+
+    BODY = {
+        "email": "new.person@example.com",
+        "password": "a-long-password",
+        "full_name": "New Person",
+    }
+
+    async def _admin_headers(
+        self, async_db_session: AsyncSession, user_factory
+    ) -> dict[str, str]:
+        admin = await user_factory()
+{%- if include_auth_rbac %}
+        admin.role = "admin"
+        async_db_session.add(admin)
+        await async_db_session.commit()
+{%- endif %}
+        return {"Authorization": f"Bearer {create_access_token(data={'sub': admin.email})}"}
+
+    def test_anonymous_callers_are_refused(
+        self, async_client_with_db: TestClient
+    ) -> None:
+        response = async_client_with_db.post("/api/v1/auth/users", json=self.BODY)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_creates_an_account_that_can_sign_in(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ) -> None:
+        headers = await self._admin_headers(async_db_session, user_factory)
+        response = async_client_with_db.post(
+            "/api/v1/auth/users", json=self.BODY, headers=headers
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["email"] == self.BODY["email"]
+        assert response.json()["is_active"] is True
+        assert "set-cookie" not in response.headers  # the admin stays themselves
+
+        login = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": self.BODY["email"], "password": self.BODY["password"]},
+        )
+        assert login.status_code == status.HTTP_200_OK
+
+    @pytest.mark.asyncio
+    async def test_duplicate_email_is_refused(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ) -> None:
+        headers = await self._admin_headers(async_db_session, user_factory)
+        async_client_with_db.post("/api/v1/auth/users", json=self.BODY, headers=headers)
+        again = async_client_with_db.post(
+            "/api/v1/auth/users", json=self.BODY, headers=headers
+        )
+        assert again.status_code == status.HTTP_400_BAD_REQUEST
+{%- if include_auth_rbac %}
+
+    @pytest.mark.asyncio
+    async def test_non_admin_is_forbidden(
+        self, async_client_with_db: TestClient, user_factory
+    ) -> None:
+        user = await user_factory()
+        headers = {"Authorization": f"Bearer {create_access_token(data={'sub': user.email})}"}
+        response = async_client_with_db.post(
+            "/api/v1/auth/users", json=self.BODY, headers=headers
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+{%- endif %}
+
+
 class TestDisabledAccountSignIn:
     """A disabled account is refused at sign-in, not after it.
 
@@ -1226,3 +1304,20 @@ class TestDisabledAccountSignIn:
             data={"username": user.email, "password": "not-the-password"},
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+@pytest.mark.asyncio
+async def test_resolving_the_user_releases_the_database(
+    async_db_session: AsyncSession, user_factory
+) -> None:
+    """Looking up the signed-in user must not hold its transaction for the
+    rest of the request. On SQLite every transaction takes the write lock
+    at BEGIN, so a handler that then opened another session (the scheduler's
+    Run now, the Overseer pages) waited it out and failed "database is locked"."""
+    from app.services.auth.service import get_current_user_from_token
+
+    user = await user_factory()
+    token = create_access_token(data={"sub": user.email})
+    resolved = await get_current_user_from_token(token, UserService(async_db_session))
+
+    assert resolved.email == user.email
+    assert not async_db_session.in_transaction()

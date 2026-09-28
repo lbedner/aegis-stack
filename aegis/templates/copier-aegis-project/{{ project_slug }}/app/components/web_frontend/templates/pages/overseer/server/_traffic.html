@@ -1,0 +1,29 @@
+{% from "components/macros/layout.html" import card, stats_strip, stat_row %}
+{% from "components/macros/feedback.html" import empty_state, error_banner %}
+{% from "components/macros/table.html" import data_table %}
+{% macro source_detail(row) %}
+{{ stat_row([("Share", row.share_detail), ("Requests", "{:,}".format(row.requests or 0))]) }}
+{% endmacro %}
+{% set sources = traffic.get("sources") or [] %}
+{% set total = traffic.get("total_requests") or 0 %}
+{% if not total and not sources %}
+{{ empty_state("No traffic recorded yet", "Source IPs show up here once requests come in.") }}
+{% else %}
+{% set store = traffic.get("backend", "memory") %}
+<div class="space-y-4">
+  {{ stats_strip([
+    {"label": "Requests / " ~ traffic.get("window_hours", 24) ~ "h", "value": "{:,}".format(total)},
+    {"label": "Source IPs", "value": sources|length},
+    {"label": "Store", "value": store|title, "caption": none if store == "redis" else "Per process, resets on restart"},
+  ]) }}
+  {{ error_banner([traffic.dominant_message] if traffic.dominant_message else []) }}
+  {% if store != "redis" %}<p class="text-xs text-aegis-muted">Counts are held in memory. Add the Redis component for cross-process counts that survive a restart.</p>{% endif %}
+  {% call card("Top source IPs") %}
+    {{ data_table([
+      {"key": "ip", "label": "Source IP"},
+      {"key": "requests", "label": "Requests", "kind": "int", "align": "right"},
+      {"key": "share_pct", "label": "Share", "align": "right"},
+    ], sources, empty="No source IPs recorded in this window", detail=source_detail) }}
+  {% endcall %}
+</div>
+{% endif %}

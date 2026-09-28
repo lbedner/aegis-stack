@@ -26,42 +26,24 @@ rebuilds CSS on template changes.
 
 ## The single rebrand point
 
-A theme is one block of CSS variables in `static/input.css`, keyed by
-`[data-theme]`:
+The stack uses the appearance system from Aegis Steward. Theme controls
+voice and shape (`aegis` or `steward`); mode controls the palette (`dark`,
+`light`, or the system preference). The four resolved DaisyUI themes are
+`aegis-dark`, `aegis-light`, `steward-dark`, and `steward-light`.
 
-```css
-[data-theme="aegis"] {
-  color-scheme: dark;
-  --aegis-bg: 9 11 13;        /* page background */
-  --aegis-card: 17 20 24;     /* card / surface */
-  --aegis-border: 39 44 54;
-  --aegis-text: 238 241 244;
-  --aegis-muted: 126 138 154;
-  --aegis-teal: 23 204 191;   /* brand accent */
-  --aegis-amber: 245 158 11;
-  --aegis-error: 239 68 68;
-  --aegis-scrim: 0 0 0;
-  --aegis-chart-1: 23 204 191; /* ... a ramp of eight */
-}
-```
+`tailwind.config.js` is the single source for palettes, shapes, light-mode
+tints, and chart colors. Its `PALETTES`, `SHAPES`, and `TINTS` tables generate
+the four themes. Tailwind's `aegis-*` utilities read DaisyUI's active color
+variables, so a color is defined once. `static/input.css` supplies shared
+components and applies the theme's scale and label style. `static/js/charts.js`
+reads the same color variables.
 
-`tailwind.config.js` maps the `aegis-*` color names onto those variables
-(`rgb(var(--aegis-bg) / <alpha-value>)`), so the utilities used throughout
-the templates (`bg-aegis-card`, `text-aegis-teal`, `border-aegis-border`)
-follow whatever theme is on `<html data-theme>`. Values are RGB triplets so
-opacity modifiers like `bg-aegis-teal/10` keep working.
-
-Two themes ship, `aegis` (dark) and `aegis-light`. To add one, add a block
-with the same token set; a test holds the shipped blocks to parity. To
-rebrand, edit the values. The DaisyUI theme list in `tailwind.config.js`
-mirrors each theme in hex so DaisyUI's own component classes (`btn`,
-`card`, `alert`) match.
-
-`static/js/theme.js` runs synchronously in `<head>`, ahead of the
-stylesheet, so a stored choice is applied before first paint; it exposes
-`toggleTheme()`, and the `theme_toggle()` macro in
-`components/macros/layout.html` is the button. Default is `aegis`, set on
-`<html>` in `base.html`.
+`static/js/theme.js` applies the stored theme and mode before the stylesheet
+paints. It exposes `appearance()` and `setAppearance(key, value)` to the
+`theme_toggle()` macro in `components/macros/layout.html`, which appears on
+navigation and auth pages. System mode follows `prefers-color-scheme`. The
+default is `aegis-dark`, set on `<html>` in `base.html`. Existing
+`aegis-light` preferences are migrated to theme `aegis`, mode `light`.
 
 Nothing else names a color. A test fails on any hex literal, and on any
 theme-blind class such as `text-white` or `bg-black`, in templates or
@@ -91,7 +73,7 @@ Three places styling can live, in order of preference:
    It ships with `[x-cloak]{display:none}` (hides elements until Alpine
    initializes them, preventing a flash of unstyled content on htmx swaps)
    and the native `accent-color`, read from the theme's token.
-   `color-scheme` lives with each theme block in `input.css`.
+   `color-scheme` lives with each generated DaisyUI theme in `tailwind.config.js`.
 
 ## Linting
 

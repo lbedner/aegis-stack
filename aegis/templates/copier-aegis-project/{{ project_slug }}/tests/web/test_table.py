@@ -127,3 +127,75 @@ class TestCellKinds:
         html = render(columns, [{"balance": -100}])
         cell = one(html, "tbody td")
         assert text(cell) == "-$1.00" and "text-error" in cell.get("class")
+
+
+class TestDetailRows:
+    SOURCE = (
+        '{% from "components/macros/table.html" import data_table %}'
+        '{% macro more(row) %}<p class="more">{{ row.name }} detail</p>{% endmacro %}'
+        "{{ data_table(columns, rows, detail=more) }}"
+    )
+
+    def _render(self) -> str:
+        rows = [
+            Row(date(2026, 7, 15), "Coffee", -450),
+            Row(date(2026, 7, 16), "Tea", -300),
+        ]
+        return templates.env.from_string(self.SOURCE).render(columns=COLUMNS, rows=rows)
+
+    def test_each_row_carries_a_hidden_detail_row(self) -> None:
+        html = self._render()
+        details = select(html, "tr[data-detail]")
+        assert [text(one(d, ".more")) for d in details] == [
+            "Coffee detail",
+            "Tea detail",
+        ]
+        assert all(d.get("x-show") == "open" for d in details)
+        assert one(details[0], "td").get("colspan") == str(len(COLUMNS) + 1)
+
+    def test_a_button_toggles_the_detail(self) -> None:
+        html = self._render()
+        buttons = select(html, "tbody button[aria-expanded]")
+        assert len(buttons) == 2
+        assert buttons[0].get("aria-expanded") == "false"
+
+    def test_without_detail_there_is_no_toggle(self) -> None:
+        html = render(COLUMNS, [Row(date(2026, 7, 15), "Coffee", -450)])
+        none(html, "tr[data-detail]")
+        none(html, "button[aria-expanded]")
+
+
+class TestRenderedCells:
+    def test_a_column_macro_renders_the_cell(self) -> None:
+        source = (
+            '{% from "components/macros/table.html" import data_table %}'
+            '{% macro shout(value) %}<b class="shout">{{ value|upper }}</b>{% endmacro %}'
+            '{{ data_table([{"key": "name", "label": "Name", "render": shout}], rows) }}'
+        )
+        html = templates.env.from_string(source).render(rows=[{"name": "tea"}])
+        assert text(one(html, "td b.shout")) == "TEA"
+
+
+class TestActionsArgument:
+    """Actions can be passed as a macro, so one table serves viewers with and
+    without them instead of being written twice."""
+
+    SOURCE = (
+        '{% from "components/macros/table.html" import data_table %}'
+        '{% macro verbs(row) %}<button class="verb">{{ row.name }}</button>{% endmacro %}'
+        "{{ data_table(columns, rows, actions=verbs if show else none) }}"
+    )
+
+    def _render(self, show: bool) -> str:
+        rows = [Row(date(2026, 7, 15), "Coffee", -450)]
+        return templates.env.from_string(self.SOURCE).render(
+            columns=COLUMNS, rows=rows, show=show
+        )
+
+    def test_a_macro_adds_the_actions_column(self) -> None:
+        assert text(one(self._render(True), "td button.verb")) == "Coffee"
+
+    def test_none_leaves_it_out(self) -> None:
+        html = self._render(False)
+        none(html, "button.verb")
+        assert len(select(html, "thead th")) == len(COLUMNS)

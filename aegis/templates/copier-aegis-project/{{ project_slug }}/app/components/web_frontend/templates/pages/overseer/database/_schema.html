@@ -1,0 +1,12 @@
+{% from "components/macros/layout.html" import card, code_block %}
+{% from "components/macros/table.html" import data_table %}
+{% macro table_detail(row) %}{{ code_block(row.sql, lang="sql") }}{% endmacro %}
+{% call card("Tables", tables|length ~ " in this database") %}
+  {{ data_table([
+    {"key": "name", "label": "Table"},
+    {"key": "rows", "label": "Rows", "kind": "int", "align": "right"},
+    {"key": "columns", "label": "Columns", "kind": "int", "align": "right"},
+    {"key": "indexes", "label": "Indexes", "kind": "int", "align": "right"},
+    {"key": "foreign_keys", "label": "FKs", "kind": "int", "align": "right"},
+  ], tables, empty="No tables found", detail=table_detail) }}
+{% endcall %}

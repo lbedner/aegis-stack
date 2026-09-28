@@ -15,12 +15,25 @@ import redis.asyncio as aioredis
 
 from app.core.config import settings
 from app.core.log import logger
+from app.services.system.redis_keys import KeyFamily
 
 # Redis Stream name for worker events
 WORKER_EVENT_STREAM = "aegis:events:worker"
 # Entries kept, roughly (trimmed with MAXLEN ~, which Redis does cheaply
 # in whole blocks). The dashboard's feed tails new entries only.
 WORKER_EVENT_STREAM_MAXLEN = 10_000
+
+# What the worker keeps in Redis, for the keyspace map (``redis_keys``).
+REDIS_KEYS = (
+    KeyFamily(
+        WORKER_EVENT_STREAM,
+        "stream",
+        "Worker events",
+        "Job and worker lifecycle events, fanned out to the browser over SSE",
+        "Worker events",
+        columns=("Entry", "Event"),
+    ),
+)
 
 
 _events_redis: "aioredis.Redis | None" = None

@@ -117,3 +117,13 @@ class TestFormatBytes:
         assert format_bytes(9_400_000) == "9.0 MB"
         assert format_bytes(222_298_112) == "212.0 MB"
         assert format_bytes(3 * 1024**3) == "3.0 GB"
+
+
+def test_format_span_reads_in_its_two_largest_units() -> None:
+    from app.core.formatting import format_span
+
+    assert format_span(8) == "8s"
+    assert format_span(125) == "2m 5s"
+    assert format_span(3720) == "1h 2m"
+    assert format_span(90061) == "1d 1h"
+    assert format_span(None) is None

@@ -1,0 +1,9 @@
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% call card("Settings") %}
+  {{ data_table([
+    {"key": "setting", "label": "Setting"},
+    {"key": "value", "label": "Value"},
+    {"key": "category", "label": "Category"},
+  ], settings, empty="No settings available") }}
+{% endcall %}

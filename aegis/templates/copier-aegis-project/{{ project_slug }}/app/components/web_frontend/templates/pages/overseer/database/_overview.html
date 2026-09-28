@@ -1,0 +1,16 @@
+{% from "components/macros/layout.html" import card, stats_strip, copy_button, facts %}
+<div class="space-y-4">
+  {{ stats_strip([
+    {"label": "Total tables", "value": overview.tables},
+    {"label": "Total rows", "value": overview.rows},
+    {"label": "Database size", "value": overview.size},
+    {"label": "Connections", "value": overview.connections},
+  ], id="database-figures") }}
+  {% call card("Statistics") %}
+    {% set url %}<span id="database-url" class="inline-flex items-center gap-2 min-w-0"><code class="font-mono text-xs truncate">{{ overview.url }}</code>{{ copy_button(overview.url) }}</span>{% endset %}
+    {{ facts([
+      ("Database URL", url), ("Connection pool size", overview.pool_size), ("Total indexes", overview.indexes),
+      ("Total foreign keys", overview.foreign_keys), ("Largest table", overview.largest),
+    ]) }}
+  {% endcall %}
+</div>

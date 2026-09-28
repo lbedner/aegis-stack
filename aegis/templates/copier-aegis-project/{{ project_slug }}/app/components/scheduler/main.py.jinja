@@ -4,6 +4,7 @@ Scheduler component for {{ project_name }}.
 Schedules the service jobs listed in ``jobs.SERVICE_JOBS``; add yours there.
 """
 
+from datetime import datetime
 import asyncio
 import logging
 from typing import Any
@@ -112,6 +113,15 @@ async def _apply_active_model() -> None:
 
 
 {% endif %}
+# Interval jobs count from this fixed start, not from when the process
+# started. Every startup re-adds each job, and an interval with no start date
+# counts from that moment, so each restart pushed every interval job back a
+# full interval (a daily job restarted more than daily never ran). Anchored,
+# runs land on fixed boundaries: every 24h at midnight, every 6h at 00/06/12/
+# 18, hourly on the hour, in the scheduler's timezone.
+INTERVAL_ANCHOR = datetime(2000, 1, 1)
+
+
 def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
     """Schedule every entry in ``SERVICE_JOBS``.
 {%- if include_worker %}
@@ -122,6 +132,9 @@ def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
 {%- endif %}
     """
     for job in SERVICE_JOBS:
+        trigger = dict(job.trigger)
+        if trigger.get("trigger") == "interval":
+            trigger.setdefault("start_date", INTERVAL_ANCHOR)
         scheduler.add_job(
 {%- if include_worker %}
             enqueue_task,
@@ -134,7 +147,7 @@ def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
             max_instances=1,
             coalesce=True,
             replace_existing=True,
-            **job.trigger,
+            **trigger,
         )
 
 

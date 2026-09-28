@@ -7,7 +7,10 @@ from typing import Any, cast
 from app.core.config import settings
 from app.core.log import logger
 from app.services.system.health import propagate_status
-from app.services.system.health_worker_rules import queue_status
+from app.services.system.health_worker_rules import (
+    broken_queue_status,
+    queue_status,
+)
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 
@@ -22,6 +25,11 @@ async def check_worker_health() -> ComponentStatus:
         ComponentStatus indicating worker infrastructure health with queue
         sub-components
     """
+    # A queue file that exists but cannot import (a missing broker library)
+    # is an outage, not a worker with no queues.
+    if (broken := broken_queue_status()) is not None:
+        return broken
+
     try:
         import redis.asyncio as aioredis
 

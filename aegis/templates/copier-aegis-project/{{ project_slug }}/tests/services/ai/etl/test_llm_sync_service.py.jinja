@@ -570,6 +570,52 @@ def _chat_model(model_id: str, provider: str = "openai") -> LiteLLMModel:
     )
 
 
+def _run_sync(session: Session, models: dict[str, LiteLLMModel]) -> SyncResult:
+    """A full sync of ``models`` (LiteLLM only). A fresh service per call,
+    the way every real caller constructs one - a warm in-process cache
+    would hide missing preloads."""
+    service = LLMSyncService(session)
+    with (
+        patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm,
+        patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter,
+    ):
+        mock_litellm.return_value = models
+        mock_openrouter.return_value = []
+
+        import asyncio
+
+        return asyncio.run(service.sync(mode_filter="chat", dry_run=False))
+
+
+class TestAnOrgAlreadyOnFile:
+    """An org can exist before the first catalog sync: discovering a local
+    Ollama model looks up its maker, and ``gpt-oss`` is made by OpenAI -
+    a row with slug ``openai`` and the registry's name, ``OpenAI``. The
+    sync found orgs by name and created them by slug, so it missed that
+    row, inserted a second ``openai``, and the unique slug failed every
+    model after it: a catalog of local models only, forever."""
+
+    def test_the_sync_serves_from_the_existing_row(
+        self, sync_db_session: Session
+    ) -> None:
+        sync_db_session.add(LLMOrg(slug="openai", name="OpenAI", source="huggingface"))
+        sync_db_session.flush()
+
+        result = _run_sync(
+            sync_db_session, {"openai/gpt-4o": _chat_model("openai/gpt-4o")}
+        )
+
+        assert result.models_added == 1
+        orgs = sync_db_session.exec(
+            select(LLMOrg).where(LLMOrg.slug == "openai")
+        ).all()
+        assert len(orgs) == 1
+
+
 class _StatementCounter:
     """Counts statements hitting the database through the sync engine."""
 
@@ -601,23 +647,7 @@ class TestLLMSyncServiceQueryBatching:
     """
 
     def _sync(self, session: Session, models: dict[str, LiteLLMModel]) -> SyncResult:
-        # A fresh service per call, the way every real caller constructs
-        # one - a warm in-process cache would hide missing preloads.
-        service = LLMSyncService(session)
-        with (
-            patch.object(
-                service.litellm_client, "fetch_models", new_callable=AsyncMock
-            ) as mock_litellm,
-            patch.object(
-                service.openrouter_client, "fetch_models", new_callable=AsyncMock
-            ) as mock_openrouter,
-        ):
-            mock_litellm.return_value = models
-            mock_openrouter.return_value = []
-
-            import asyncio
-
-            return asyncio.run(service.sync(mode_filter="chat", dry_run=False))
+        return _run_sync(session, models)
 
     def test_no_change_resync_cost_is_independent_of_catalog_size(
         self, sync_db_engine: Engine, sync_db_session: Session

@@ -107,6 +107,21 @@ window.fetchAuth = fetchAuth;
 
 // Auth page components. Each page's x-data names one of these; Alpine
 // calls init() itself where a component defines one.
+// Live streams (htmx SSE). An EventSource cannot refresh an expired session:
+// once the access token lapses its reconnects are refused and a live page
+// silently stops updating. On a stream error, probe the session through
+// fetchAuth, which refreshes on 401 (or sends a dead session to /login); the
+// SSE extension's next retry then connects. One probe per burst, since every
+// retry fires an error of its own.
+const STREAM_PROBE_INTERVAL_MS = 10000;
+let _lastStreamProbe = 0;
+document.addEventListener('htmx:sseError', () => {
+  const now = Date.now();
+  if (now - _lastStreamProbe < STREAM_PROBE_INTERVAL_MS) return;
+  _lastStreamProbe = now;
+  fetchAuth('/api/v1/auth/me').catch(() => {});
+});
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('loginForm', () => ({
       loading: false,

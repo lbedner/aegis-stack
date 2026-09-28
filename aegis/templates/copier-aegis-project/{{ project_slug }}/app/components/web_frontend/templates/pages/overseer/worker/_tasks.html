@@ -1,0 +1,36 @@
+{% from "components/macros/layout.html" import card, chip, stat_row %}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/table.html" import data_table, pager as pager_links %}
+{% macro task_detail(row) %}
+<div class="space-y-3">
+  {% if row.description %}<p class="text-sm italic text-aegis-muted">{{ row.description }}</p>{% endif %}
+  {% if row.error %}
+  <div class="space-y-1">
+    <p class="text-xs font-semibold text-error">Error details</p>
+    <pre class="code-block">{{ row.error }}</pre>
+  </div>
+  {% endif %}
+  {{ stat_row([("Job ID", row.job_id), ("Started", row.started), ("Finished", row.finished)]) }}
+</div>
+{% endmacro %}
+{% call card("Task history", "Newest first") %}
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-4">
+      <nav aria-label="Filter by queue" class="flex flex-wrap items-center gap-2">
+        {% for label, active, url in queue_filters %}{{ chip(label, active, url, hx_replace(url, "#overseer-main")) }}{% endfor %}
+      </nav>
+      <nav aria-label="Filter by status" class="flex flex-wrap items-center gap-2">
+        {% for label, active, url in status_filters %}{{ chip(label, active, url, hx_replace(url, "#overseer-main")) }}{% endfor %}
+      </nav>
+    </div>
+    {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
+  </div>
+  {{ data_table([
+    {"key": "name", "label": "Task"},
+    {"key": "queue", "label": "Queue"},
+    {"key": "duration", "label": "Duration", "align": "right"},
+    {"key": "enqueued", "label": "Enqueued"},
+    {"key": "state", "label": "Status", "kind": "status"},
+  ], tasks, empty="No task history yet", detail=task_detail) }}
+  {{ pager_links(pager, "#overseer-main") }}
+{% endcall %}

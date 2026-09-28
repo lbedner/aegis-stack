@@ -62,7 +62,15 @@ def setup_logging() -> None:
     if settings.APP_ENV == "dev":
         formatter = structlog.stdlib.ProcessorFormatter(
             # The final processor formats the log entry for console output.
-            processor=structlog.dev.ConsoleRenderer(colors=True),
+            # No locals: structlog's default renders every frame's
+            # variables, and a pydantic-ai agent is thousands of lines,
+            # formatted while the request waits.
+            processor=structlog.dev.ConsoleRenderer(
+                colors=True,
+                exception_formatter=structlog.dev.RichTracebackFormatter(
+                    show_locals=False
+                ),
+            ),
         )
     else:
         formatter = structlog.stdlib.ProcessorFormatter(

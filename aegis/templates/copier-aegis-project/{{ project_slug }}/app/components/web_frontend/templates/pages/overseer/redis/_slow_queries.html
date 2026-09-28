@@ -1,0 +1,10 @@
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% macro mono(value) %}<code class="font-mono text-xs text-aegis-text">{{ value }}</code>{% endmacro %}
+{% call card("Slow log", "Slowest first. Yellow from 100ms, red from a second.") %}
+  {{ data_table([
+    {"key": "duration", "label": "Duration", "kind": "status"},
+    {"key": "command", "label": "Command", "render": mono},
+    {"key": "when", "label": "When"},
+  ], slow, empty="No slow commands logged") }}
+{% endcall %}

@@ -5,6 +5,8 @@ Split out of one 659-line module. Fifty-six call sites import from
 none of them changed.
 """
 
+from app.core.formatting import format_next_run_time, format_schedule_human_readable
+
 from .layout import (
     create_header_row,
     create_metric_container,
@@ -27,7 +29,6 @@ from .status import (
     get_status_colors,
     get_status_detail,
 )
-from .timing import format_next_run_time, format_schedule_human_readable
 
 __all__ = [
     "PROVIDER_COLORS",

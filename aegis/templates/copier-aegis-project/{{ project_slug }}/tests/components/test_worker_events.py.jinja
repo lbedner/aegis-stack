@@ -177,6 +177,40 @@ async def test_history_files_each_job_under_its_queue(
         assert recorded.call_args.kwargs["queue_name"] == "load_test"
         assert recorded.call_args.kwargs["task_name"] == "cpu_intensive_task"
 
+
+@pytest.mark.asyncio
+async def test_the_worker_reports_what_it_runs_with(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Startup reports the flags taskiq really got; shutdown clears it."""
+    from app.components.worker import middleware, runtime
+
+    started: dict[str, Any] = {}
+    stopped: list[str] = []
+
+    def start(redis: Any, fields: dict[str, Any]) -> None:
+        started.update(fields)
+
+    async def stop(redis: Any, task: Any, worker: str) -> None:
+        stopped.append(worker)
+
+    monkeypatch.setattr(middleware.aioredis, "from_url", lambda *_a, **_k: AsyncMock())
+    monkeypatch.setattr(runtime, "start_reporting", start)
+    monkeypatch.setattr(runtime, "stop_reporting", stop)
+    monkeypatch.setattr(
+        middleware.sys,
+        "argv",
+        ["taskiq", "worker", "q:broker", "--workers", "1", "--max-async-tasks", "50"],
+    )
+    mw = EventPublishMiddleware().set_queue_name("load_test")
+
+    await mw.startup()
+    assert started["engine"] == "taskiq" and started["queue"] == "load_test"
+    assert started["processes"] == 1 and started["concurrency"] == 50
+
+    await mw.shutdown()
+    assert stopped == [started["worker"]]
+
 {%- elif worker_backend == "dramatiq" %}
 
 # ---------------------------------------------------------------------------
@@ -236,6 +270,67 @@ def test_after_process_message_failed() -> None:
 
     fields = mw._redis.xadd.call_args[0][1]
     assert fields["type"] == "job.failed"
+
+
+def test_the_worker_reports_what_it_runs_with(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Boot reports the threads and processes dramatiq really got."""
+    from app.components.worker import middleware, runtime
+
+    published: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        runtime, "publish_runtime_sync", lambda _redis, fields: published.append(fields)
+    )
+    monkeypatch.setattr(middleware.redis, "from_url", lambda *_a, **_k: MagicMock())
+    monkeypatch.setattr(
+        middleware.sys,
+        "argv",
+        ["dramatiq", "app.broker", "app.q", "--processes", "2", "--threads", "15"],
+    )
+    worker = MagicMock()
+    worker.consumer_whitelist = {"system"}
+    mw = EventPublishMiddleware()
+    mw.before_worker_boot(MagicMock(), worker)
+    mw._stop_event.set()
+
+    (fields,) = published
+    assert fields["engine"] == "dramatiq" and fields["queue"] == "system"
+    assert fields["processes"] == 2 and fields["concurrency"] == 15
+{%- else %}
+
+
+@pytest.mark.asyncio
+async def test_the_worker_reports_what_it_runs_with(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Startup reports arq's max_jobs, which comes from the settings."""
+    from app.components.worker import runtime
+    from app.components.worker.queues import system
+
+    started: dict[str, Any] = {}
+    monkeypatch.setattr(system.aioredis, "from_url", lambda *_a, **_k: AsyncMock())
+    monkeypatch.setattr(
+        runtime, "start_reporting", lambda _redis, fields: started.update(fields)
+    )
+    await system.WorkerSettings.on_startup({})
+
+    assert started["engine"] == "arq" and started["queue"] == "system"
+    assert started["concurrency"] == system.WorkerSettings.max_jobs
+
+
+def test_max_jobs_comes_from_the_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Read when the queue module loads, so reload it under a known value."""
+    import importlib
+
+    from app.components.worker.queues import system
+    from app.core.config import settings
+    from app.core.queue_workers import QueueWorker
+
+    monkeypatch.setattr(settings, "WORKER_QUEUES", {"system": QueueWorker(concurrency=4)})
+    try:
+        assert importlib.reload(system).WorkerSettings.max_jobs == 4
+    finally:
+        monkeypatch.undo()
+        importlib.reload(system)
 {%- endif %}
 
 
@@ -313,12 +408,12 @@ def test_queue_values_online() -> None:
 
 
 def test_queue_values_active() -> None:
-    """Alive worker with ongoing jobs should show Active / blue."""
+    """Alive worker with ongoing jobs should show Active / amber."""
     vals = _compute_queue_values(
         _make_queue_status(worker_alive=True, jobs_ongoing=3)
     )
     assert vals["status_text"] == "Active"
-    assert vals["status_color"] == Theme.Colors.INFO
+    assert vals["status_color"] == Theme.Colors.WARNING
 
 
 def test_queue_values_offline() -> None:
@@ -333,9 +428,9 @@ def test_queue_values_degraded() -> None:
     vals = _compute_queue_values(
         _make_queue_status(
             worker_alive=True,
-            jobs_completed=90,
-            jobs_failed=10,
-            failure_rate_percent=10.0,
+            jobs_completed=85,
+            jobs_failed=15,
+            failure_rate_percent=15.0,
         )
     )
     assert vals["status_text"] == "Degraded"
@@ -346,9 +441,9 @@ def test_queue_values_failing() -> None:
     vals = _compute_queue_values(
         _make_queue_status(
             worker_alive=True,
-            jobs_completed=75,
-            jobs_failed=25,
-            failure_rate_percent=25.0,
+            jobs_completed=70,
+            jobs_failed=30,
+            failure_rate_percent=30.0,
         )
     )
     assert vals["status_text"] == "Failing"

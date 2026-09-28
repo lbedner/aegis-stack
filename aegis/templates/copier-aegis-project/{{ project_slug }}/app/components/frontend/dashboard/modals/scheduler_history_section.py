@@ -20,6 +20,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_relative_time
+from app.services.system import ui_scheduler
 
 from .history_table import (
     FilterOption,
@@ -36,14 +37,6 @@ COL_WIDTH_DURATION = 80
 COL_WIDTH_STARTED = 150
 COL_WIDTH_STATUS = 80
 
-# Status display: api value -> label (the dot color comes from _STATUS_COLORS)
-_STATUS_DISPLAY: dict[str, str] = {
-    "running": "Running",
-    "success": "Success",
-    "failed": "Failed",
-    "missed": "Missed",
-}
-
 _STATUS_FILTER_OPTIONS: list[FilterOption] = [
     ("All", "all", Theme.Colors.ACCENT),
     ("Success", "success", Theme.Colors.SUCCESS),
@@ -52,20 +45,13 @@ _STATUS_FILTER_OPTIONS: list[FilterOption] = [
     ("Missed", "missed", Theme.Colors.WARNING),
 ]
 
-_STATUS_COLORS: dict[str, str] = {
-    "success": Theme.Colors.SUCCESS,
-    "failed": Theme.Colors.ERROR,
-    "running": Theme.Colors.INFO,
-    "missed": Theme.Colors.WARNING,
-}
-
 
 def _build_execution_row(record: dict[str, Any]) -> ExpandableRow:
     """Build a table row for a single execution record."""
     status = record.get("status", "unknown")
-    status_label = _STATUS_DISPLAY.get(status, status)
+    status_label, color_name = ui_scheduler.execution_status(status)
     has_error = status == "failed" and record.get("error_message")
-    status_color = _STATUS_COLORS.get(status, ft.Colors.ON_SURFACE_VARIANT)
+    status_color = Theme.Colors.semantic(color_name)
 
     cells = [
         build_status_dot_cell(status_color),

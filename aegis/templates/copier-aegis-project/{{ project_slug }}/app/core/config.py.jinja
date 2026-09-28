@@ -8,8 +8,9 @@ from environment variables for easy configuration in different environments.
 
 from typing import Any, Literal
 
-from pydantic import model_validator
+from pydantic import {% if include_worker %}Field, {% endif %}model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+{% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
 {%- for p in _plugins | default([]) %}
 {%- for s in p.wiring.settings_mixins %}
 from {{ s.module }} import {{ s.symbol }}
@@ -183,11 +184,9 @@ class Settings(
 {%- endif %}
 
     # Authentication settings
-{%- if include_auth %}
-    AUTH_ENABLED: bool = True  # Auth service included; set false in .env to bypass for local dev
-{%- else %}
-    AUTH_ENABLED: bool = False  # Auth service not included; dev user is synthesized
-{%- endif %}
+    # Without the auth service (or set false in .env) a dev user is synthesized
+    AUTH_ENABLED: bool = {{ include_auth }}
+    AUTH_LEVEL: str = "{{ auth_level if include_auth else 'none' }}"
     DEV_USER_ROLE: str = "admin"  # Role for synthetic dev user when AUTH_ENABLED=false
     # Email allowlist for ``require_admin`` — gates operator-only routes
     # (refund actions, dispute review, aggregate revenue charts, etc.).
@@ -298,7 +297,9 @@ class Settings(
 {% endif %}
 
 {% if include_worker %}
-    # arq worker settings (shared across all workers)
+    # Worker settings; per-queue ones are modelled in app/core/queue_workers.py
+    WORKER_QUEUES: dict[str, QueueWorker] = Field(default_factory=DEFAULT_QUEUES.copy)
+    WORKER_QUEUE_DEFAULT: QueueWorker = QueueWorker()
     WORKER_KEEP_RESULT_SECONDS: int = 3600  # Keep job results for 1 hour
     WORKER_MAX_TRIES: int = 3
 {%- if worker_backend == "taskiq" %}
@@ -320,9 +321,6 @@ class Settings(
     # Task history retention (Redis Hashes auto-expire after this)
     TASK_HISTORY_TTL_SECONDS: int = 86400  # 24 hours
 
-    # PURE ARQ IMPLEMENTATION - NO CONFIGURATION NEEDED!
-    # Worker configuration comes from individual WorkerSettings classes
-    # in app/components/worker/queues/ - just import and use as arq intended!
 {% endif %}
 
 {% if include_database %}

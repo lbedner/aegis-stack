@@ -11,97 +11,25 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.controls.markdown import copyable_markdown
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_database
 from app.services.system.models import ComponentStatus
 
 
-def _build_table_expanded_content(table_schema: dict, is_dark_mode: bool) -> ft.Control:
-    """Build expanded content showing table schema as CREATE TABLE SQL."""
-    name = table_schema.get("name", "Unknown")
-    columns = table_schema.get("columns", [])
-    indexes = table_schema.get("indexes", [])
-    foreign_keys = table_schema.get("foreign_keys", [])
-
-    lines: list[str] = []
-    lines.append(f"CREATE TABLE IF NOT EXISTS {name} (")
-
-    col_definitions: list[str] = []
-    pk_columns: list[str] = []
-
-    for col in columns:
-        col_name = col.get("name", "?")
-        col_type = col.get("type", "?")
-        nullable = col.get("nullable", True)
-        pk = col.get("primary_key", False)
-
-        col_def = f"    {col_name} {col_type}"
-        if not nullable:
-            col_def += " NOT NULL"
-        col_definitions.append(col_def)
-
-        if pk:
-            pk_columns.append(col_name)
-
-    if col_definitions:
-        for i, col_def in enumerate(col_definitions):
-            if i < len(col_definitions) - 1 or pk_columns:
-                lines.append(col_def + ",")
-            else:
-                lines.append(col_def)
-
-    if pk_columns:
-        lines.append(f"    PRIMARY KEY ({', '.join(pk_columns)})")
-
-    lines.append(");")
-
-    if indexes:
-        lines.append("")
-        lines.append("-- Indexes")
-        for idx in indexes:
-            idx_name = idx.get("name", "?")
-            idx_cols = idx.get("columns", [])
-            unique = idx.get("unique", False)
-            unique_str = "UNIQUE " if unique else ""
-            cols_str = ", ".join(idx_cols)
-            lines.append(f"CREATE {unique_str}INDEX {idx_name} ON {name} ({cols_str});")
-
-    if foreign_keys:
-        lines.append("")
-        lines.append("-- Foreign Keys")
-        for fk in foreign_keys:
-            fk_col = fk.get("column", "?")
-            ref_table = fk.get("referred_table", "?")
-            ref_col = fk.get("referred_column", "?")
-            lines.append(f"-- {fk_col} REFERENCES {ref_table}({ref_col})")
-
-    schema_text = "\n".join(lines)
-
-    # The fences are for display; the clipboard gets the statement.
-    return copyable_markdown(
-        f"```sql\n{schema_text}\n```",
-        copy_text=schema_text,
-        dark=is_dark_mode,
-    )
-
-
-def _build_table_row(table_schema: dict, is_dark_mode: bool) -> ExpandableRow:
-    """Build expandable row for a single table."""
-    name = table_schema.get("name", "Unknown")
-    rows = table_schema.get("rows", 0)
-    columns = table_schema.get("columns", [])
-    indexes = table_schema.get("indexes", [])
-    foreign_keys = table_schema.get("foreign_keys", [])
-
+def _build_table_row(table: dict, is_dark_mode: bool) -> ExpandableRow:
+    """One table: its counts, expanding to its CREATE TABLE statement."""
     cells = [
-        TableNameText(name),
-        TableCellText(f"{rows:,}"),
-        TableCellText(str(len(columns))),
-        TableCellText(str(len(indexes))),
-        TableCellText(str(len(foreign_keys))),
+        TableNameText(table["name"]),
+        TableCellText(f"{table['rows']:,}"),
+        TableCellText(str(table["columns"])),
+        TableCellText(str(table["indexes"])),
+        TableCellText(str(table["foreign_keys"])),
     ]
-
+    # The fences are for display; the clipboard gets the statement.
     return ExpandableRow(
         cells=cells,
-        expanded_content=_build_table_expanded_content(table_schema, is_dark_mode),
+        expanded_content=copyable_markdown(
+            f"```sql\n{table['sql']}\n```", copy_text=table["sql"], dark=is_dark_mode
+        ),
     )
 
 
@@ -111,7 +39,6 @@ class SchemaTab(ft.Container):
     def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
         super().__init__()
         metadata = database_component.metadata or {}
-        table_schemas = metadata.get("table_schemas", [])
         is_dark_mode = page.theme_mode == ft.ThemeMode.DARK
 
         columns = [
@@ -122,7 +49,7 @@ class SchemaTab(ft.Container):
             DataTableColumn("FKs", width=50, alignment="right"),
         ]
 
-        rows = [_build_table_row(t, is_dark_mode) for t in table_schemas]
+        rows = [_build_table_row(t, is_dark_mode) for t in ui_database.tables(metadata)]
 
         table = ExpandableDataTable(
             columns=columns,

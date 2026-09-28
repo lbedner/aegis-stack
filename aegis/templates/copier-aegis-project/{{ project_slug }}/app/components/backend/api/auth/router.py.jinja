@@ -14,9 +14,13 @@ from app.services.auth.deps import get_invite_service
 {% endif %}
 from app.components.backend.api.deps import (
     login_rate_limit,
+{% if auth_level != "basic" %}
     password_reset_rate_limit,
+{% endif %}
     register_rate_limit,
+{% if auth_level != "basic" %}
     resend_verification_rate_limit,
+{% endif %}
 )
 from app.components.backend.security.rate_limit import (
     get_client_ip,
@@ -38,18 +42,29 @@ from app.models.org import AcceptInviteRequest, InviteResponse
 {% endif %}
 from app.models.refresh_token import RefreshToken, SessionResponse
 from app.models.user import (
+{% if auth_level != "basic" %}
     EmailVerifyRequest,
+{% endif %}
+{% if auth_level != "basic" %}
     PasswordResetConfirm,
     PasswordResetRequest,
+{% endif %}
+{% if auth_level != "basic" %}
     ResendVerificationResponse,
+{% endif %}
+{% if auth_level != "basic" %}
     StatusMessage,
+{% endif %}
     TokenResponse,
     User,
     UserCreate,
     UserResponse,
 )
 from app.services.auth.service import get_current_user_from_token
-from app.services.auth.deps import get_current_active_user, get_session_token
+from app.services.auth.deps import get_session_token
+{% if auth_level != "basic" %}
+from app.services.auth.deps import get_current_active_user
+{% endif %}
 from app.services.auth.refresh_tokens import RefreshService
 from app.components.backend.api.auth import admin, sessions
 from app.components.backend.api.auth.sessions import _session_metadata
@@ -104,8 +119,10 @@ async def register(
     # Create new user
     user = await user_service.create_user(user_data)
 
+{% if auth_level != "basic" %}
     # Create email verification token
     await user_service.create_email_verification_token(user.id)
+{% endif %}
 {% if include_auth_org %}
 
     # Accept any pending org invites for this email
@@ -240,6 +257,7 @@ async def login(
     return TokenResponse(access_token=access_token)
 
 
+{% if auth_level != "basic" %}
 @router.post("/password-reset/request", response_model=StatusMessage)
 async def request_password_reset(
     request: Request,
@@ -274,8 +292,10 @@ async def confirm_password_reset(
         )
     await audit.emit("auth.password_reset_confirmed")
     return StatusMessage(detail="Password has been reset successfully")
+{% endif %}
 
 
+{% if auth_level != "basic" %}
 @router.post("/verify-email", response_model=StatusMessage)
 async def verify_email(
     body: EmailVerifyRequest,
@@ -323,6 +343,7 @@ async def resend_verification(
     await user_service.create_email_verification_token(current_user.id)
     await audit.emit("auth.resend_verification.sent", actor_id=current_user.id)
     return ResendVerificationResponse(status="sent")
+{% endif %}
 
 
 
@@ -335,10 +356,6 @@ async def get_current_user(
     """Get current authenticated user."""
     user = await get_current_user_from_token(token, user_service)
     return UserResponse.model_validate(user)
-
-
-
-
 
 
 

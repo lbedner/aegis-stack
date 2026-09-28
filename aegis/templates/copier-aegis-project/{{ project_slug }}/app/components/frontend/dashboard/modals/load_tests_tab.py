@@ -25,6 +25,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_relative_time
+from app.services.system import ui_backend
 
 from .modal_sections import MetricCard
 
@@ -118,21 +119,11 @@ class LoadTestsTab(ft.Container):
 
     @staticmethod
     def _build_summary_cards(runs: list[dict[str, Any]]) -> list[ft.Control]:
-        total_runs = len(runs)
-
-        def _metric(run: dict, *path: str, default: float = 0.0) -> float:
-            obj: Any = run
-            for key in path:
-                if not isinstance(obj, dict):
-                    return default
-                obj = obj.get(key)
-            return float(obj) if isinstance(obj, int | float) else default
-
-        throughputs = [_metric(r, "metrics", "overall_throughput") for r in runs]
-        p95s = [_metric(r, "metrics", "latency_ms_p95") for r in runs]
-        failures = sum(int(_metric(r, "metrics", "tasks_failed")) for r in runs)
-        avg_throughput = sum(throughputs) / total_runs if total_runs else 0.0
-        avg_p95 = sum(p95s) / total_runs if total_runs else 0.0
+        summary = ui_backend.load_test_summary(runs)
+        total_runs = summary["runs"]
+        avg_throughput = summary["throughput"]
+        avg_p95 = summary["p95"]
+        failures = summary["failures"]
 
         return [
             MetricCard(

@@ -1,0 +1,44 @@
+{% from "components/macros/layout.html" import card, chip, stat_row %}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/table.html" import data_table, pager as pager_links %}
+{% macro execution_detail(row) %}
+<div class="space-y-3">
+  {% if row.error %}
+  <div class="space-y-1">
+    <p class="text-xs font-semibold text-error">Error details</p>
+    <pre class="code-block">{{ row.error }}</pre>
+  </div>
+  {% endif %}
+  {{ stat_row([("Job ID", row.job_id), ("Scheduled", row.scheduled), ("Finished", row.finished)]) }}
+</div>
+{% endmacro %}
+{% if not history_available %}
+{{ empty_state("No execution history", "Execution history needs a persistent scheduler backend (sqlite or postgres). This scheduler keeps its jobs in memory.") }}
+{% else %}
+{% call card("Execution history", "Newest first") %}
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <nav aria-label="Filter by status" class="flex flex-wrap items-center gap-2">
+        {% for key, (label, url) in filters.items() %}
+        {{ chip(label, key == status, url, hx_replace(url, "#overseer-main")) }}
+        {% endfor %}
+      </nav>
+      {% if job %}
+      <span data-job-filter class="flex items-center gap-2 text-xs text-aegis-muted">
+        Only <span class="text-aegis-text font-semibold">{{ job.name }}</span>
+        {{ chip("All jobs", False, job.clear_url, hx_replace(job.clear_url, "#overseer-main")) }}
+      </span>
+      {% endif %}
+    </div>
+    {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
+  </div>
+  {{ data_table([
+    {"key": "job", "label": "Job"},
+    {"key": "duration", "label": "Duration", "align": "right"},
+    {"key": "started", "label": "Started"},
+    {"key": "state", "label": "Status", "kind": "status"},
+  ], executions, empty="No execution history available", detail=execution_detail) }}
+  {{ pager_links(pager, "#overseer-main") }}
+{% endcall %}
+{% endif %}

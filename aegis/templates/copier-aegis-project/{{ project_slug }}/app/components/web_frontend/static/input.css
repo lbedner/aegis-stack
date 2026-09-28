@@ -1,74 +1,224 @@
-/* Tailwind source entry.
- *
- * Compiled into static/dist/app.css by the Tailwind CLI (`make
- * build-static`, the dev watcher service, or the Docker css-build stage).
- * base.html loads the compiled output, never this file.
- */
-
+/* Tailwind and DaisyUI share Steward's four theme definitions in tailwind.config.js. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /* THEMES: the single rebrand point.
-   *
-   * A theme is one block of tokens. tailwind.config.js maps the aegis-*
-   * color names onto these variables, so `bg-aegis-card` follows whatever
-   * theme is on <html data-theme>. Values are RGB triplets so Tailwind's
-   * opacity modifiers (`bg-aegis-teal/10`) keep working. Add a theme by
-   * adding a block with the same token set (tests/web/test_theme.py
-   * holds the two shipped blocks to parity); switch with theme.js. */
-  :root,
-  [data-theme="aegis"] {
-    color-scheme: dark;
-    --aegis-bg: 9 11 13; /* page background */
-    --aegis-card: 17 20 24; /* card / surface */
-    --aegis-border: 39 44 54; /* borders, dividers */
-    --aegis-text: 238 241 244; /* primary text */
-    --aegis-muted: 126 138 154; /* secondary text */
-    --aegis-teal: 23 204 191; /* brand accent */
-    --aegis-amber: 245 158 11; /* warning / highlight */
-    --aegis-error: 239 68 68;
-    --aegis-scrim: 0 0 0; /* behind modals and drawers */
-    /* Chart ramp, in draw order; cycles past eight. */
-    --aegis-chart-1: 23 204 191;
-    --aegis-chart-2: 139 92 246;
-    --aegis-chart-3: 245 158 11;
-    --aegis-chart-4: 59 130 246;
-    --aegis-chart-5: 236 72 153;
-    --aegis-chart-6: 16 185 129;
-    --aegis-chart-7: 249 115 22;
-    --aegis-chart-8: 6 182 212;
-  }
-
-  [data-theme="aegis-light"] {
-    color-scheme: light;
-    --aegis-bg: 246 247 249;
-    --aegis-card: 255 255 255;
-    --aegis-border: 222 226 232;
-    --aegis-text: 17 20 24;
-    --aegis-muted: 90 100 115;
-    --aegis-teal: 13 148 136;
-    --aegis-amber: 217 119 6;
-    --aegis-error: 220 38 38;
-    --aegis-scrim: 0 0 0;
-    --aegis-chart-1: 13 148 136;
-    --aegis-chart-2: 124 58 237;
-    --aegis-chart-3: 217 119 6;
-    --aegis-chart-4: 37 99 235;
-    --aegis-chart-5: 219 39 119;
-    --aegis-chart-6: 5 150 105;
-    --aegis-chart-7: 234 88 12;
-    --aegis-chart-8: 8 145 178;
-  }
+  html { font-size: var(--aegis-scale); }
 }
 
 @layer components {
-  /* Project-level classes live here.
-   *
-   * Reach for this layer when a pattern repeats across templates and a
-   * Jinja macro would be overkill; it keeps the class list in the markup
-   * short without inventing a component. Anything here can still be
-   * overridden by a utility class at the call site, because utilities are
-   * emitted after this layer. */
+  /* The desktop Overseer rail keeps its icons and accessible link names.
+     Theme.js sets this before the stylesheet paints, so reloads do not flash
+     the expanded sidebar. Mobile keeps the full-width navigation. */
+  @media (min-width: 768px) {
+    [data-overseer-sidebar="rail"] #overseer-sidebar { width: 4rem; }
+    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-row {
+      justify-content: center;
+      padding-left: 0;
+      padding-right: 0;
+    }
+    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-hide {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-none { display: none; }
+    /* The rail shows icons only; status lives on the wide sidebar and the
+       page's sub-menu. */
+    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-status { display: none; }
+    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-appearance,
+    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-appearance summary {
+      width: 100%;
+    }
+  }
+
+  /* The main sidebar only flags trouble: a healthy entry shows no dot (the
+     screen-reader status stays). The sub-menu and pages keep every dot. */
+  #overseer-sidebar .status-dot:not([data-tone="warn"]):not([data-tone="error"]) {
+    display: none;
+  }
+
+  /* A sidebar link, in either sidebar. The current page is marked by
+     ``aria-current``, so markup never repeats the active/idle recipe. */
+  .nav-link {
+    @apply flex items-center gap-3 rounded-lg px-3 text-sm shadow-none transition-colors text-aegis-muted hover:text-aegis-text hover:bg-aegis-border/20;
+  }
+  .nav-link[aria-current="page"] {
+    @apply bg-aegis-teal/10 text-aegis-text font-semibold;
+  }
+
+  /* The scheduler clock (Overseer > Scheduler > Overview), ported from the
+     landing page's. Positions are % of the dial, set inline by the server;
+     colours are the theme's teal, so every theme and mode draws it. */
+  .clock {
+    @apply relative aspect-square w-full max-w-[470px] shrink-0 cursor-grab select-none rounded-full border border-aegis-teal/20 text-aegis-teal outline-none lg:max-w-[560px];
+    touch-action: none; /* drags turn the hand instead of scrolling the page */
+    box-shadow: inset 0 0 90px color-mix(in oklab, currentColor 7%, transparent);
+  }
+  .clock__band {
+    @apply absolute rounded-full border border-dashed border-aegis-muted/30;
+    inset: 18%; /* 50% - ui_scheduler.BAND */
+  }
+  /* Lit when a job runs more than hourly: too many runs for dots, so the
+     band itself carries them, slowly turning. */
+  .clock__band--live {
+    @apply border-solid border-aegis-teal/40;
+    border-width: 2px;
+    box-shadow: 0 0 14px color-mix(in oklab, currentColor 25%, transparent),
+      inset 0 0 14px color-mix(in oklab, currentColor 12%, transparent);
+    background: repeating-conic-gradient(from 0deg, transparent 0 7deg, color-mix(in oklab, currentColor 10%, transparent) 7deg 8deg);
+    mask: radial-gradient(farthest-side, transparent calc(100% - 10px), #000 calc(100% - 10px));
+    animation: clock-band 60s linear infinite;
+  }
+  .clock__bandjob { @apply absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-aegis-teal/60 bg-aegis-teal/30; }
+  .clock__tick { @apply absolute h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-aegis-muted/40; }
+  /* Major ticks are short bars, so nothing on the ring but a job is a dot. */
+  .clock__tick--major { @apply h-[3px] w-[12px] rounded-sm bg-aegis-text/55; }
+  .clock__hour { @apply absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-mono text-xs font-semibold text-aegis-text/70; }
+  /* A timed job's slot: the whole dial, turned to the job's angle. Its dot
+     and its run's arc are drawn at the top, so moving the job (clock.js)
+     only changes --angle. Slots sit above the hand, so a job firing right
+     now never hides under it. */
+  .clock__slot { @apply pointer-events-none absolute inset-0 z-10; transform: rotate(var(--angle)); }
+  .clock__job {
+    @apply pointer-events-auto absolute left-1/2 top-[2.3%] h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-aegis-teal/60 bg-aegis-teal/25 p-0 outline-none transition-transform;
+  }
+  .clock__job:focus-visible { @apply ring-2 ring-aegis-teal/60 ring-offset-2 ring-offset-aegis-bg; }
+  .clock__job--next { animation: clock-next 2.4s ease-in-out infinite; }
+  .clock__hand {
+    @apply absolute bottom-1/2 left-1/2 w-[3px] origin-bottom;
+    height: 47%;
+    background: linear-gradient(to top, currentColor, transparent);
+    box-shadow: 0 0 12px color-mix(in oklab, currentColor 50%, transparent);
+    animation: clock-sweep 86400s linear infinite;
+  }
+  .clock__hand::after {
+    @apply absolute -left-1 -top-[5px] h-[11px] w-[11px] rounded-full bg-current;
+    content: "";
+    box-shadow: 0 0 12px currentColor;
+  }
+  .clock__hub { @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center; }
+  .clock--dragging, .clock--dragging .clock__job { @apply cursor-grabbing; }
+  /* Hovering (or focusing) a job says it can be picked: the dot grows and
+     glows, its legend row lights up, and the hub previews it. */
+  .clock__slot[data-state="hover"] { @apply z-20; }
+  .clock__slot[data-state="hover"] .clock__job { @apply scale-[1.35] border-aegis-teal bg-aegis-teal/50; box-shadow: 0 0 14px currentColor; animation: none; }
+  .clock__row[data-state="hover"] { @apply bg-aegis-border/20; }
+  .clock__row[data-state="hover"] [data-job] { @apply text-aegis-teal; }
+  /* The picked job and anything its run would now overlap. */
+  .clock__slot[data-state="selected"] { @apply z-20; }
+  .clock__slot[data-state="selected"] .clock__job { @apply scale-125 border-aegis-teal bg-aegis-teal; box-shadow: 0 0 18px currentColor; animation: none; }
+  .clock__slot[data-state="conflict"] .clock__job { @apply border-aegis-amber bg-aegis-amber/40 text-aegis-amber; box-shadow: 0 0 14px currentColor; }
+  .clock__row { @apply rounded-md px-2 py-1 -mx-2 transition-colors hover:bg-aegis-border/20; }
+  .clock__row[data-state="selected"] { @apply bg-aegis-teal/10; }
+  .clock__row[data-state="selected"] [data-job] { @apply text-aegis-teal; }
+  .clock__row[data-state="conflict"] [data-job] { @apply text-aegis-amber; }
+  .clock__arcs { @apply pointer-events-none absolute inset-0 h-full w-full overflow-visible; }
+  .clock__arc { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; opacity: 0.85; }
+  /* Last-run colours for arcs and legend dots (ui_scheduler.run_color). */
+  .clock__arc--green, .clock__litdot--green { @apply text-aegis-teal; }
+  .clock__arc--yellow, .clock__litdot--yellow { @apply text-aegis-amber; }
+  .clock__arc--red, .clock__litdot--red { @apply text-aegis-error; }
+  .clock__arc--blue, .clock__litdot--blue { @apply text-aegis-accent; }
+  .clock__litdot--green, .clock__litdot--yellow, .clock__litdot--red, .clock__litdot--blue {
+    border-color: currentColor;
+    background: color-mix(in oklab, currentColor 45%, transparent);
+  }
+  .clock__litdot { @apply h-3 w-3 shrink-0 rounded-full border border-aegis-teal/50 bg-aegis-teal/30; }
+  .clock__litdot--next { @apply bg-aegis-teal; box-shadow: 0 0 10px currentColor; color: inherit; }
+
+  /* Source shown by code_block(): plain, or Pygments-highlighted HTML from
+     the markdown filter (``.highlight pre``). Token colours come from the
+     theme, so every theme and mode highlights in its own palette. */
+  pre.code-block,
+  .code-block pre {
+    @apply text-xs font-mono leading-relaxed text-aegis-text bg-aegis-bg border border-aegis-border rounded p-3 overflow-x-auto whitespace-pre;
+  }
+  .code-block .highlight :is(.k, .kc, .kd, .kn, .kp, .kr, .ow) { @apply text-aegis-teal; }
+  .code-block .highlight :is(.s, .s1, .s2, .sa, .sb, .sd, .se, .si, .dl) { @apply text-aegis-amber; }
+  .code-block .highlight :is(.c, .c1, .cm, .cs, .ch) { @apply text-aegis-muted italic; }
+  .code-block .highlight :is(.nf, .nc, .fm, .nd) { @apply font-semibold; }
+
+  .micro-label {
+    @apply text-xxs;
+    text-transform: var(--aegis-label-case);
+    letter-spacing: var(--aegis-label-tracking);
+  }
+  .caps {
+    text-transform: var(--aegis-label-case);
+    letter-spacing: var(--aegis-label-tracking);
+  }
+  .chip {
+    @apply inline-block text-xs px-2 py-0.5 rounded border border-aegis-border text-aegis-muted whitespace-nowrap transition-colors hover:border-aegis-muted hover:text-aegis-text;
+  }
+  .chip[aria-pressed="true"] {
+    @apply border-aegis-teal bg-aegis-teal/10 text-aegis-text font-semibold;
+  }
+
+  /* Redis keyspace map (Overseer > Cache > Overview): a cell per key,
+     shaded by the family that owns it; a family touched in the last few
+     seconds glows, a picked one is outlined. */
+  .keyspace { @apply grid grid-cols-7 gap-2 sm:gap-3; }
+  .keyspace__cell {
+    @apply aspect-[5/3] rounded-md border border-aegis-border/60 bg-aegis-border/15 transition-all duration-500;
+  }
+  .keyspace__cell[data-shade="0"], .keyspace__swatch[data-shade="0"], .worker-share > [data-shade="0"], .worker-swatch[data-shade="0"] { @apply border-aegis-teal/50 bg-aegis-teal/45; }
+  .keyspace__cell[data-shade="1"], .keyspace__swatch[data-shade="1"], .worker-share > [data-shade="1"], .worker-swatch[data-shade="1"] { @apply border-aegis-teal/40 bg-aegis-teal/30; }
+  .keyspace__cell[data-shade="2"], .keyspace__swatch[data-shade="2"], .worker-share > [data-shade="2"], .worker-swatch[data-shade="2"] { @apply border-aegis-teal/30 bg-aegis-teal/20; }
+  .keyspace__cell[data-shade="3"], .keyspace__swatch[data-shade="3"], .worker-share > [data-shade="3"], .worker-swatch[data-shade="3"] { @apply border-aegis-teal/25 bg-aegis-teal/10; }
+  .keyspace__cell[data-shade="unclaimed"], .keyspace__swatch[data-shade="unclaimed"] { @apply border-aegis-amber/50 bg-aegis-amber/25; }
+  .keyspace__cell[data-active="true"] { @apply border-aegis-teal bg-aegis-teal/70 text-aegis-teal; animation: keyspace-live 2.4s ease-in-out infinite; }
+  .keyspace__cell[data-selected="true"] { @apply ring-2 ring-aegis-text/70 ring-offset-2 ring-offset-aegis-card; }
+  .keyspace__row {
+    @apply flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-aegis-border/20;
+  }
+  .keyspace__row[data-selected="true"] { @apply bg-aegis-teal/10; }
+  .keyspace__swatch { @apply h-4 w-6 shrink-0 rounded border border-aegis-border; }
+  /* Worker queues (Overseer > Worker > Overview), read left to right:
+     jobs waiting (a pile of blocks), running (a cell per job it can run at
+     once, lit while busy), done; then the backlog's line over time. */
+  .worker-flow { @apply grid gap-4 lg:grid-cols-[minmax(0,2fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-start; }
+  .worker-flow__arrow { @apply hidden self-center text-aegis-muted lg:block; }
+  .worker-stage { @apply flex min-w-0 flex-col gap-2; }
+  .worker-stage__head { @apply flex items-baseline justify-between gap-3 text-xxs caps text-aegis-muted; }
+  .worker-stage__head strong { @apply text-2xl font-semibold normal-case tracking-normal tabular-nums text-aegis-text; }
+  .worker-stage__note { @apply text-xxs tabular-nums text-aegis-muted; }
+  .worker-pile { @apply grid grid-cols-[repeat(20,minmax(0,1fr))] gap-1; }
+  .worker-pile > span { @apply aspect-square rounded-sm border border-aegis-border/50 bg-aegis-border/10 transition-colors duration-500; }
+  .worker-pile > span[data-lit] { @apply border-aegis-text/40 bg-aegis-text/25; }
+  .worker-slots { @apply grid grid-cols-10 gap-1; }
+  .worker-slot { @apply aspect-square rounded-sm border border-aegis-border/60 bg-aegis-border/15 transition-colors duration-500; }
+  .worker-slot[data-busy="true"] { @apply border-aegis-teal bg-aegis-teal/70 text-aegis-teal; animation: keyspace-live 2.4s ease-in-out infinite; }
+  .worker-outcome, .worker-share { @apply flex h-2 w-full overflow-hidden rounded-full bg-aegis-border/30; }
+  .worker-outcome > [data-ok] { @apply h-full bg-aegis-teal/60 transition-all duration-500; }
+  .worker-outcome > [data-failed] { @apply h-full bg-aegis-error/70 transition-all duration-500; }
+  .worker-share { @apply h-3 gap-0.5 bg-transparent; }
+  .worker-share > span { @apply h-full rounded-sm border transition-all duration-500; }
+  .worker-spark { @apply h-7 w-48 shrink-0 overflow-visible text-aegis-teal sm:w-60; }
+  .worker-spark polyline { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .worker-swatch { @apply inline-block h-3 w-4 rounded-sm border border-aegis-border; }
+  .keyspace__swatch[data-active="true"] { @apply text-aegis-teal; animation: keyspace-live 2.4s ease-in-out infinite; }
+}
+
+/* The scheduler clock's hand: one turn per real day (see .clock__hand). */
+@keyframes clock-sweep {
+  from { transform: translateX(-50%) rotate(0deg); }
+  to { transform: translateX(-50%) rotate(360deg); }
+}
+/* The live band's slow turn. */
+@keyframes clock-band { to { transform: rotate(360deg); } }
+/* The next job to fire breathes. */
+@keyframes clock-next {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 16px 2px currentColor; }
+}
+
+/* A key family the app is writing right now. */
+@keyframes keyspace-live {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 14px 1px currentColor; }
 }

@@ -4,12 +4,15 @@ Registered on the environment by ``rendering.py``. Amounts arrive from the
 finance service as integer minor units with a currency code.
 """
 
-import html
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+import html
 from typing import Any
 
 from markupsafe import Markup
+
+from app.services.system.models import ComponentStatusType
+from app.services.system.ui import get_status_color_name
 
 # Symbols for the codes a household ledger actually sees; anything else
 # shows its code.
@@ -109,12 +112,22 @@ def money_to_cents(raw: str | None) -> int | None:
 # inject markup. The mixin is registered LAST so it sits first in the
 # renderer's MRO, ahead of GFM's own tag filter.
 #
+# Fenced code is highlighted by Pygments (already installed with rich) for
+# its language, or a guess without one. marko's own codehilite extension is
+# not used: it passes ``key=value`` pairs from the fence line to Pygments'
+# formatter, which lets model markdown turn on ``full`` or ``cssfile``. The
+# formatter here takes no options from the text.
+#
 # Built once at import: marko compiles its parser and renderer per
 # ``Markdown()``, and a chat thread renders one of these per message.
 def _safe_markdown() -> Any:
     from marko import Markdown
     from marko.ext.gfm import GFM
     from marko.helpers import MarkoExtension
+    from pygments import highlight
+    from pygments.formatters import HtmlFormatter
+    from pygments.lexers import get_lexer_by_name, guess_lexer
+    from pygments.util import ClassNotFound
 
     class EscapeHTML:
         def render_html_block(self, element: Any) -> str:
@@ -123,7 +136,22 @@ def _safe_markdown() -> Any:
         def render_inline_html(self, element: Any) -> str:
             return html.escape(element.children)
 
-    return Markdown(extensions=[GFM, MarkoExtension(renderer_mixins=[EscapeHTML])])
+    class Highlight:
+        def render_fenced_code(self, element: Any) -> str:
+            code = element.children[0].children
+            try:
+                lexer = (
+                    get_lexer_by_name(element.lang)
+                    if element.lang
+                    else guess_lexer(code)
+                )
+            except ClassNotFound:
+                lexer = guess_lexer(code)
+            return highlight(code, lexer, HtmlFormatter())
+
+    return Markdown(
+        extensions=[GFM, MarkoExtension(renderer_mixins=[Highlight, EscapeHTML])]
+    )
 
 
 _MARKDOWN = _safe_markdown()
@@ -161,10 +189,31 @@ PROSE_CLASSES = (
 )
 
 
+# The web's badge tones for the shared semantic colours
+# (``get_status_color_name``, ``ui_auth``), so a state reads the same here
+# as on the CLI and the Flet dashboard.
+_TONE_BY_COLOR = {"green": "ok", "yellow": "warn", "red": "error"}
+
+
+def color_tone(color: str) -> str:
+    """The badge tone (ok, warn, error, muted) for a semantic colour name."""
+    return _TONE_BY_COLOR.get(color, "muted")
+
+
+def health_tone(state: str) -> str:
+    """The badge tone for a health status value."""
+    try:
+        return color_tone(get_status_color_name(ComponentStatusType(state)))
+    except ValueError:
+        return "muted"
+
+
 FILTERS: dict[str, Callable[..., str]] = {
     "money": money,
     "cents_to_input": cents_to_input,
     "short_date": short_date,
     "pct": pct,
     "markdown": markdown,
+    "health_tone": health_tone,
+    "color_tone": color_tone,
 }

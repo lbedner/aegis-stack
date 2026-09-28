@@ -77,8 +77,10 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 </label>
 {% endmacro %}
 
-{% macro search_input(name, value=None, placeholder="Search") %}
-<input type="search" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
+{# A stable id lets htmx restore focus when a search result replaces the form. #}
+{% macro search_input(name, value=None, placeholder="Search", autofocus=False, attrs="") %}
+<input type="search" id="search-{{ name }}" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
+       {% if autofocus %}autofocus{% endif %} {{ attrs|safe }}
        aria-label="{{ placeholder }}" class="{{ _control_classes }} min-w-[12rem]">
 {% endmacro %}
 
@@ -86,7 +88,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    under it (pattern 1's 422 re-render passes field errors here). #}
 {% macro field(label, error=None) %}
 <div class="space-y-1">
-  <label class="block text-xxs text-aegis-muted uppercase tracking-wider">{{ label }}
+  <label class="block text-xxs text-aegis-muted caps">{{ label }}
     {{ caller() }}
   </label>
   {% if error %}<p class="text-xs text-error">{{ error }}</p>{% endif %}
@@ -159,7 +161,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
     <template x-for="_grp in {{ options }}" :key="_grp.label">
       <div>
         <div x-show="_grp.label"
-             class="px-2 pt-2 pb-0.5 text-xxs uppercase tracking-wider text-aegis-muted/60"
+             class="px-2 pt-2 pb-0.5 text-xxs caps text-aegis-muted/60"
              x-text="_grp.label"></div>
         <template x-for="_opt in _grp.items" :key="_opt.{{ value_attr }}">
           <button type="button"
@@ -225,7 +227,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {% macro or_divider() %}
 <div class="flex items-center gap-3 my-5">
   <div class="flex-1 h-px bg-aegis-border/60"></div>
-  <span class="text-xxs text-aegis-muted/70 uppercase tracking-wider">or</span>
+  <span class="text-xxs text-aegis-muted/70 caps">or</span>
   <div class="flex-1 h-px bg-aegis-border/60"></div>
 </div>
 {% endmacro %}
@@ -255,5 +257,5 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    button uses. #}
 {% macro action(label, attrs, tone="default", vals=None) %}
 {% set tones = {"default": "border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted", "primary": "border-aegis-teal text-aegis-text hover:bg-aegis-teal/10", "danger": "border-aegis-error/40 text-error hover:border-aegis-error", "warn": "border-aegis-amber/40 text-aegis-text hover:border-aegis-amber"} %}
-<button type="button" {{ attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} class="px-2.5 py-1 text-xs rounded border whitespace-nowrap transition-colors {{ tones.get(tone, tones['default']) }}">{{ label }}</button>
+<button type="button" {{ attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} class="px-2.5 py-1 text-xs rounded border whitespace-nowrap transition-colors disabled:opacity-40 disabled:pointer-events-none {{ tones.get(tone, tones['default']) }}">{{ label }}</button>
 {% endmacro %}

@@ -1,0 +1,17 @@
+{% from "components/macros/layout.html" import chip %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% if not lifecycle %}
+{{ empty_state("No queues", "A queue's hooks and tasks show here once a worker registers it.") }}
+{% else %}
+<div class="space-y-4">
+  <nav aria-label="Queue" class="flex flex-wrap items-center gap-2">
+    {% for name, active, url in queue_links %}{{ chip(name, active, url, hx_replace(url, "#overseer-main")) }}{% endfor %}
+  </nav>
+  {% set steps = [
+    ("startup", "Startup", "Step 1: runs once as the worker process starts", lifecycle.startup),
+    ("jobs", "Job processing", "Step 2: around every job on " ~ queue ~ ", hooks first and last", lifecycle.jobs),
+    ("shutdown", "Shutdown", "Step 3: runs once as the worker stops", lifecycle.shutdown),
+  ] %}
+  {% include "pages/overseer/_lifecycle.html" %}
+</div>
+{% endif %}

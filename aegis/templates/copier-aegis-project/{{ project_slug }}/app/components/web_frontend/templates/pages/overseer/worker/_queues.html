@@ -1,0 +1,85 @@
+{# The worker's queues, re-sent over SSE when they change: totals, a card
+   per queue read left to right (waiting, running, done, then how the
+   backlog is trending) and each queue's share of the waiting and finished
+   work. #}
+{% from "components/macros/layout.html" import stats_strip, card, badge %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% set w = worker %}
+{% macro shares(key, total, label) %}
+<div data-bar="{{ key }}" class="space-y-1.5">
+  <div class="flex items-baseline justify-between text-xxs caps text-aegis-muted"><span>{{ label }}</span><span class="tabular-nums normal-case tracking-normal">{{ "{:,}".format(total) }}</span></div>
+  <div class="worker-share">
+    {% for q in w.queues %}{% set share = q[key ~ "_share"] %}
+    {% if share %}<span data-share="{{ share }}" data-shade="{{ loop.index0 % 4 }}" style="width: {{ share }}%" title="{{ q.name }}: {{ share }}%"></span>{% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+<div class="space-y-4">
+  {{ stats_strip([
+    {"label": "Running", "value": w.busy ~ " / " ~ w.slots, "caption": w.busy_pct ~ "% of capacity"},
+    {"label": "Waiting", "value": "{:,}".format(w.queued), "caption": "across " ~ w.queues|length ~ (" queue" if w.queues|length == 1 else " queues")},
+    {"label": "Completed", "value": "{:,}".format(w.completed), "caption": (w.success ~ "% succeeded") if w.success is not none else "no runs yet", "tone": "ok" if w.success_color == "green" else none},
+    {"label": "Failed", "value": "{:,}".format(w.failed), "tone": "error" if w.failed else none},
+  ], id="worker-figures") }}
+  <div id="worker-queues" class="space-y-4">
+    {% for q in w.queues %}
+    {% set cells = [q.slots, 40]|min %}
+    {% set lit = ((q.busy_pct * cells / 100)|round(0, "ceil")|int) if q.busy else 0 %}
+    {% set finished = q.completed + q.failed %}
+    <section data-queue="{{ q.name }}" class="bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-5 min-w-0">
+      <header class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h3 class="font-mono text-sm font-semibold text-aegis-text">{{ q.name }}</h3>
+          {% if q.description %}<p class="text-xs text-aegis-muted truncate">{{ q.description }}</p>{% endif %}
+        </div>
+        <span data-state data-tone="{{ q.tone }}">{{ badge(q.state ~ (" · " ~ q.detail if q.detail else ""), q.tone) }}</span>
+      </header>
+      <div class="worker-flow">
+        <div data-waiting class="worker-stage">
+          <div class="worker-stage__head"><span>Waiting</span><strong>{{ "{:,}".format(q.queued) }}</strong></div>
+          <div class="worker-pile">{% for i in range(40) %}<span {% if i < q.pile.lit %}data-lit{% endif %}></span>{% endfor %}</div>
+          <p class="worker-stage__note">{% if q.pile.per_block > 1 %}1 block ≈ {{ "{:,}".format(q.pile.per_block) }} jobs{% else %}each block is a job{% endif %}{% if q.oldest %} · <span class="text-aegis-text">oldest {{ q.oldest }}</span>{% endif %}</p>
+        </div>
+        <span class="worker-flow__arrow" aria-hidden="true">&rarr;</span>
+        <div class="worker-stage">
+          <div class="worker-stage__head"><span>Running</span><strong>{{ q.busy }}</strong></div>
+          <div class="worker-slots">{% for i in range(cells) %}<span class="worker-slot" {% if i < lit %}data-busy="true"{% endif %}></span>{% endfor %}</div>
+          <p class="worker-stage__note">{{ q.busy }} of {{ q.slots }} at once · {{ q.busy_pct }}% of capacity</p>
+        </div>
+        <span class="worker-flow__arrow" aria-hidden="true">&rarr;</span>
+        <div data-outcome class="worker-stage">
+          <div class="worker-stage__head"><span>Done</span><strong>{{ "{:,}".format(q.completed) }}</strong></div>
+          <div class="worker-outcome">{% if finished %}<span data-ok style="width: {{ (q.completed / finished * 100)|round(1) }}%"></span><span data-failed style="width: {{ (q.failed / finished * 100)|round(1) }}%"></span>{% endif %}</div>
+          <p class="worker-stage__note">{{ "{:,}".format(q.failed) }} failed{% if q.success is not none %} · <span class="{{ 'text-error' if q.success_tone == 'error' else ('text-aegis-amber' if q.success_tone == 'warn' else 'text-aegis-teal') }}">{{ q.success }}%</span>{% endif %}{% if q.rate %} · {{ q.rate }} jobs/s{% endif %}</p>
+        </div>
+      </div>
+      <div data-trend class="flex flex-wrap items-end justify-between gap-3 border-t border-aegis-border/60 pt-4">
+        <div class="flex items-end gap-3 min-w-0">
+          <svg class="worker-spark" viewBox="0 0 240 28" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{ q.spark }}" /></svg>
+          <span class="text-xxs caps text-aegis-muted whitespace-nowrap">Waiting, last 5 min</span>
+        </div>
+        <span class="text-xs tabular-nums {{ 'text-aegis-teal' if q.drain == 'caught up' else 'text-aegis-text' }}">{{ q.drain }}</span>
+      </div>
+      <p class="font-mono text-xxs text-aegis-muted">{{ q.consumers }} {{ "consumer" if q.consumers == 1 else "consumers" }}{% if q.timeout %} · {{ q.timeout }}s timeout{% endif %}{% if q.stream %} · {{ q.stream }}{% endif %}</p>
+    </section>
+    {% else %}
+    {% if w.problem %}
+    <p data-problem class="rounded-lg border border-aegis-error/40 bg-aegis-error/10 px-4 py-3 text-sm text-error">{{ w.problem }}</p>
+    {% else %}
+    {{ empty_state("No queues reporting", "Queues appear here once a worker is running and has registered them.") }}
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% if w.queues %}
+  {% call card("Share of the work", "Each queue's part of what is waiting and of what has finished", id="worker-distribution") %}
+    <div class="space-y-4">
+      {{ shares("backlog", w.queued, "Waiting") }}
+      {{ shares("work", w.completed + w.failed, "Finished") }}
+      <div class="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-aegis-muted">
+        {% for q in w.queues %}<span class="flex items-center gap-2"><span class="worker-swatch" data-shade="{{ loop.index0 % 4 }}"></span><span class="font-mono text-aegis-text">{{ q.name }}</span></span>{% endfor %}
+      </div>
+    </div>
+  {% endcall %}
+  {% endif %}
+</div>

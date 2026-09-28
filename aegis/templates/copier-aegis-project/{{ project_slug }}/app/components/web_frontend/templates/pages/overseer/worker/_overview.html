@@ -1,0 +1,3 @@
+<div id="worker-live" hx-ext="sse" sse-connect="{{ queues_events }}">
+  <div sse-swap="{{ queues_event }}" hx-target="this">{% include "pages/overseer/worker/_queues.html" %}</div>
+</div>

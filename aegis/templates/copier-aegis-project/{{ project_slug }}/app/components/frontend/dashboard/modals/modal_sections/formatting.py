@@ -5,41 +5,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 import flet as ft
+
 from app.components.frontend.controls import (
     StatusDot,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-
-
-def format_duration_ms(duration_ms: int | float | str | None) -> str:
-    """Format milliseconds to human-readable duration (e.g., '1.2s', '3m 45s')."""
-    if not duration_ms:
-        return "\u2014"
-    try:
-        ms = float(duration_ms)
-        if ms < 1000:
-            return f"{ms:.0f}ms"
-        s = ms / 1000
-        if s < 60:
-            return f"{s:.1f}s"
-        m = int(s // 60)
-        s = s % 60
-        return f"{m}m {s:.0f}s"
-    except (ValueError, TypeError):
-        return "\u2014"
-
-
-def format_timestamp(iso_str: str | None) -> str:
-    """Format ISO timestamp for display (HH:MM:SS)."""
-    if not iso_str:
-        return "\u2014"
-    try:
-        from datetime import datetime
-
-        dt = datetime.fromisoformat(iso_str)
-        return dt.strftime("%H:%M:%S")
-    except (ValueError, TypeError):
-        return "\u2014"
 
 
 def headline_stat_color(cents: int) -> str:

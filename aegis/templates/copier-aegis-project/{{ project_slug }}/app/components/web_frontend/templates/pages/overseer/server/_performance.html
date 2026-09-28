@@ -1,0 +1,33 @@
+{% from "components/macros/layout.html" import card, stats_strip, stat_row %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/_macros.html" import method_cell %}
+{% macro endpoint_detail(row) %}
+{{ stat_row([("Min ms", row.min_ms), ("Median ms", row.median_ms), ("Max ms", row.max_ms), ("p99 ms", row.p99_ms), ("Last request", row.last)]) }}
+{% endmacro %}
+{% if not summary.get("total_requests") or not endpoints %}
+{{ empty_state("No requests recorded yet", "Metrics are kept in memory for the life of the process. Hit a few endpoints, then reload this tab.") }}
+{% else %}
+{% set slowest = summary.get("slowest_endpoint") %}
+<div class="space-y-4">
+  {{ stats_strip([
+    {"label": "Requests", "value": "{:,}".format(summary.total_requests)},
+    {"label": "Tracked endpoints", "value": summary.get("tracked_endpoints", 0)},
+    {"label": "Avg ms", "value": "%.1f"|format(summary.get("avg_ms") or 0)},
+    {"label": "p95 ms", "value": "%.1f"|format(summary.get("p95_ms") or 0), "caption": ("Slowest: " ~ slowest.endpoint ~ " at " ~ "%.1f"|format(slowest.get("avg_ms") or 0) ~ " ms avg") if slowest is mapping and slowest.get("endpoint") else none},
+  ]) }}
+  {% call card("Endpoints", "Since process start") %}
+    {{ data_table([
+      {"key": "method", "label": "Method", "render": method_cell},
+      {"key": "path", "label": "Path"},
+      {"key": "count", "label": "Requests", "kind": "int", "align": "right"},
+      {"key": "avg_ms", "label": "Avg ms", "align": "right"},
+      {"key": "median_ms", "label": "Median", "align": "right"},
+      {"key": "p95_ms", "label": "p95", "align": "right"},
+      {"key": "p99_ms", "label": "p99", "align": "right"},
+      {"key": "max_ms", "label": "Max", "align": "right"},
+      {"key": "last", "label": "Last request"},
+    ], endpoints, empty="No endpoints recorded", detail=endpoint_detail) }}
+  {% endcall %}
+</div>
+{% endif %}

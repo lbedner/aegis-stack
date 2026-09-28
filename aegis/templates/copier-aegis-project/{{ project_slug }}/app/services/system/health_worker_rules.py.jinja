@@ -7,9 +7,16 @@ where they came from, and neither does the arithmetic that reads a
 consumer group.
 """
 {% if include_worker %}
-from typing import Any
+from typing import Any, NamedTuple
 
-from app.services.system.models import ComponentStatusType
+from app.core.formatting import format_span
+
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+
+# Failure rates (%) past which a live queue is degraded, then failing.
+FAILURE_RATE_WARNING = 10
+FAILURE_RATE_UNHEALTHY = 25
 
 
 def taskiq_group_stats(
@@ -36,6 +43,39 @@ def taskiq_group_stats(
     return 0, 0, 0, stream_length
 
 
+def last_delivered(groups: list[dict[str, Any]]) -> str:
+    """The ``taskiq`` group's last delivered stream id; ``0-0`` when nothing
+    has consumed the stream yet, so every entry is still waiting."""
+    for group in groups:
+        name = group.get("name", b"")
+        if (name.decode() if isinstance(name, bytes) else name) == "taskiq":
+            last = group.get("last-delivered-id", b"0-0")
+            return last.decode() if isinstance(last, bytes) else str(last)
+    return "0-0"
+
+
+def stream_age(entry_id: bytes | str, now_ms: int) -> float:
+    """Seconds since a stream entry arrived: its id starts with that time."""
+    text = entry_id.decode() if isinstance(entry_id, bytes) else entry_id
+    return round((now_ms - int(text.split("-", 1)[0])) / 1000, 1)
+
+def broken_queue_status() -> ComponentStatus | None:
+    """An unhealthy worker status naming every queue that fails to import,
+    or None when they all import."""
+    from app.components.worker import queue_discovery
+
+    broken = queue_discovery.broken_queues()
+    if not broken:
+        return None
+    detail = "; ".join(f"{name}: {error}" for name, error in sorted(broken.items()))
+    return ComponentStatus(
+        name="worker",
+        status=ComponentStatusType.UNHEALTHY,
+        message=f"Worker queues failed to import: {detail}",
+        metadata={"broken_queues": broken},
+    )
+
+
 # A live consumer polls the stream every few seconds; one idle this long
 # belongs to a process that has gone (Redis never drops it on its own).
 LIVE_CONSUMER_IDLE_MS = 30_000
@@ -46,34 +86,56 @@ def live_consumers(consumers: list[dict[str, Any]]) -> int:
     return sum(1 for c in consumers if (c.get("idle") or 0) < LIVE_CONSUMER_IDLE_MS)
 
 
-def queue_status(
+class Verdict(NamedTuple):
+    """A queue's health, the phrase its message leads with, and its state."""
+
+    status: ComponentStatusType
+    lead: str
+    state: str  # no_tasks, offline, failing, degraded, backed_up, healthy
+
+
+def queue_verdict(
     *,
     worker_alive: bool,
     has_functions: bool,
     waiting: int,
     failure_rate: float = 0.0,
-) -> tuple[ComponentStatusType, str]:
-    """What one worker queue's state means, for every backend alike.
+    oldest_waiting: float | None = None,
+    max_wait: float | None = None,
+) -> Verdict:
+    """What one worker queue's state means, for every backend and every view.
 
     A queue nobody consumes is a problem: with work waiting it is an
     outage (UNHEALTHY), idle it is a warning. Info is only for a queue
     with no functions registered, which cannot have a consumer that
-    matters. A live consumer is healthy until failures pile up.
-
-    Returns the status and the phrase the queue's message leads with.
+    matters. A live consumer is healthy until failures pile up, or until
+    its oldest waiting job has waited past ``max_wait``.
     """
     if not has_functions:
-        return ComponentStatusType.INFO, "configured - no functions defined"
+        return Verdict(ComponentStatusType.INFO, "configured - no functions defined", "no_tasks")
     if not worker_alive:
         if waiting > 0:
-            return (
+            return Verdict(
                 ComponentStatusType.UNHEALTHY,
                 f"no worker consuming, {waiting} waiting",
+                "offline",
             )
-        return ComponentStatusType.WARNING, "no worker consuming"
-    if failure_rate > 25:
-        return ComponentStatusType.UNHEALTHY, f"{failure_rate:.1f}% failing"
-    if failure_rate > 10:
-        return ComponentStatusType.WARNING, f"{failure_rate:.1f}% failing"
-    return ComponentStatusType.HEALTHY, ""
+        return Verdict(ComponentStatusType.WARNING, "no worker consuming", "offline")
+    if failure_rate > FAILURE_RATE_UNHEALTHY:
+        return Verdict(ComponentStatusType.UNHEALTHY, f"{failure_rate:.1f}% failing", "failing")
+    if failure_rate > FAILURE_RATE_WARNING:
+        return Verdict(ComponentStatusType.WARNING, f"{failure_rate:.1f}% failing", "degraded")
+    if oldest_waiting is not None and max_wait and oldest_waiting > max_wait:
+        return Verdict(
+            ComponentStatusType.WARNING,
+            f"backed up, oldest waiting {format_span(oldest_waiting)}",
+            "backed_up",
+        )
+    return Verdict(ComponentStatusType.HEALTHY, "", "healthy")
+
+
+def queue_status(**facts: Any) -> tuple[ComponentStatusType, str]:
+    """``queue_verdict``'s status and lead, for the health checks."""
+    verdict = queue_verdict(**facts)
+    return verdict.status, verdict.lead
 {% endif %}

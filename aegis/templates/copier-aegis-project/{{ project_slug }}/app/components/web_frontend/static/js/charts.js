@@ -7,13 +7,15 @@
    swap into a chart page still works. */
 
 const CHART_JS = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js';
-const RAMP = 8; // --aegis-chart-1 .. -8 in input.css; cycles past that
+const RAMP = 8; // --aegis-chart-1 .. -8 in tailwind.config.js; cycles past that
 
 // Colors come from the active theme's tokens, read at mount time so a
 // theme switch repaints charts in the new palette.
 function token(name, alpha) {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return alpha === undefined ? `rgb(${value})` : `rgb(${value} / ${alpha})`;
+  return name.startsWith('--aegis-chart-')
+    ? value
+    : (alpha === undefined ? `oklch(${value})` : `oklch(${value} / ${alpha})`);
 }
 function rampColor(i) {
   return token(`--aegis-chart-${(i % RAMP) + 1}`);
@@ -43,7 +45,7 @@ function money(value) {
 }
 
 function datasets(kind, data) {
-  const tail = token('--aegis-muted'); // "Other" reads as tail, never as a category
+  const tail = token('--n'); // "Other" reads as tail, never as a category
   return data.series.map((series, i) => (series.points ? markers(series) : {
     label: series.label,
     data: series.values,
@@ -51,9 +53,9 @@ function datasets(kind, data) {
       kind === 'doughnut'
         ? data.labels.map((label, j) => (label === 'Other' ? tail : rampColor(j)))
         : kind === 'line'
-          ? token('--aegis-teal', 0.15)
+          ? token('--p', 0.15)
           : rampColor(i),
-    borderColor: kind === 'line' ? token('--aegis-teal') : undefined,
+    borderColor: kind === 'line' ? token('--p') : undefined,
     borderWidth: kind === 'doughnut' ? 0 : 2,
     fill: kind === 'line',
     tension: 0.3,
@@ -70,8 +72,8 @@ function markers(series) {
     showLine: false,
     pointRadius: 4,
     pointHoverRadius: 6,
-    pointBackgroundColor: token('--aegis-error'),
-    pointBorderColor: token('--aegis-error'),
+    pointBackgroundColor: token('--er'),
+    pointBorderColor: token('--er'),
     spanGaps: false,
   };
 }
@@ -93,8 +95,8 @@ function build(Chart, canvas) {
   const kind = canvas.dataset.chart;
   const existing = Chart.getChart(canvas);
   if (existing) existing.destroy();
-  const muted = token('--aegis-muted');
-  const grid = token('--aegis-border');
+  const muted = token('--n');
+  const grid = token('--b3');
   const axes = {
     x: { ticks: { color: muted }, grid: { color: grid } },
     y: { ticks: { color: muted, callback: (v) => money(v) }, grid: { color: grid } },

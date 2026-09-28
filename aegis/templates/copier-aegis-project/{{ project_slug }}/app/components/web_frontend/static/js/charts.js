@@ -44,6 +44,12 @@ function money(value) {
   return `${value < 0 ? '-' : ''}$${abs}`;
 }
 
+// Axis ticks and tooltips: plain numbers unless the data says
+// ``"format": "money"``, so a generic chart never reads as dollars.
+function formatValue(value, format) {
+  return format === 'money' ? money(value) : Number(value).toLocaleString();
+}
+
 function datasets(kind, data) {
   const tail = token('--n'); // "Other" reads as tail, never as a category
   return data.series.map((series, i) => (series.points ? markers(series) : {
@@ -99,7 +105,7 @@ function build(Chart, canvas) {
   const grid = token('--b3');
   const axes = {
     x: { ticks: { color: muted }, grid: { color: grid } },
-    y: { ticks: { color: muted, callback: (v) => money(v) }, grid: { color: grid } },
+    y: { ticks: { color: muted, callback: (v) => formatValue(v, data.format) }, grid: { color: grid } },
   };
   new Chart(canvas, {
     type: kind,
@@ -117,7 +123,7 @@ function build(Chart, canvas) {
           callbacks: {
             label: (ctx) => {
               const value = kind === 'doughnut' ? ctx.parsed : ctx.parsed.y;
-              return `${ctx.dataset.label ? `${ctx.dataset.label}: ` : ''}${money(value)}`;
+              return `${ctx.dataset.label ? `${ctx.dataset.label}: ` : ''}${formatValue(value, data.format)}`;
             },
           },
         },
@@ -138,6 +144,10 @@ function mount(root) {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => mount(document));
-document.body.addEventListener('htmx:afterSettle', (event) => mount(event.detail.elt));
-document.addEventListener('theme-changed', () => mount(document));
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => mount(document));
+  document.body.addEventListener('htmx:afterSettle', (event) => mount(event.detail.elt));
+  document.addEventListener('theme-changed', () => mount(document));
+}
+
+if (typeof module !== 'undefined') module.exports = { formatValue };

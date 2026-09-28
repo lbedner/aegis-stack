@@ -8,7 +8,6 @@ not one of those two answers lives in ``queue_discovery``.
 from typing import Any
 
 from app.components.worker import queue_discovery as discovery
-from app.core.log import logger
 
 
 def get_broker(queue_name: str) -> Any:
@@ -104,5 +103,3 @@ __all__ = [
     "queue_tasks",
     "validate_queue_name",
 ]
-
-logger.debug("TaskIQ queue registry ready")

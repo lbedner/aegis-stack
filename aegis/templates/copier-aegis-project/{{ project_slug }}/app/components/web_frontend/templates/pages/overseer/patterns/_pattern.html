@@ -1,0 +1,59 @@
+{# A backend pattern: its shape as a strip of steps (how many of the
+   instances a step applies to follow it; a step that is only counted,
+   like Current user, shows how many it applies to), its rules and how well they hold, one
+   clean instance's source, and every instance found in the app. #}
+{% from "components/macros/layout.html" import badge, card, code_block, progress %}
+<div class="space-y-6">
+  <p class="text-sm text-aegis-muted max-w-3xl">{{ pattern.summary }}</p>
+
+  <ol id="pattern-steps" aria-label="{{ pattern.title }} steps" class="flex flex-wrap items-stretch gap-2">
+    {% for step in steps %}
+    <li data-step class="flex items-center gap-2">
+      <div class="h-full min-w-[9rem] max-w-[13rem] bg-aegis-card border border-aegis-border rounded-lg px-4 py-3 space-y-1">
+        <p data-step-label class="text-sm font-semibold text-aegis-text">{{ step.label }}</p>
+        <p class="text-xxs text-aegis-muted">{{ step.detail }}</p>
+        {% if step.followed is not none %}
+        <p data-step-count class="pt-1 text-xs tabular-nums"><span class="font-semibold {{ 'text-aegis-teal' if step.followed == step.applicable else 'text-aegis-amber' }}">{{ step.followed }}</span><span class="text-aegis-muted"> of {{ step.applicable }}</span></p>
+        {{ progress(step.followed / step.applicable if step.applicable else 1, "ok" if step.followed == step.applicable else "warn", label=step.label ~ " conformance") }}
+        {% elif step.applicable != total %}
+        <p data-step-count class="pt-1 text-xs tabular-nums text-aegis-muted"><span class="font-semibold text-aegis-text">{{ step.applicable }}</span> routes</p>
+        {% endif %}
+      </div>
+      {% if not loop.last %}<span aria-hidden="true" class="text-aegis-muted">&rarr;</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+
+  {% call card("Rules", id="pattern-rules") %}
+  <ul class="divide-y divide-aegis-border/60">
+    {% for rule in rules %}
+    <li data-rule class="py-3 first:pt-0 last:pb-0 space-y-1.5">
+      <div class="flex flex-wrap items-baseline justify-between gap-3">
+        <span class="text-sm font-medium text-aegis-text">{{ rule.title }}
+          <span class="ml-2 text-xxs">{{ badge("Enforced", "accent") if rule.enforced else badge("Advisory", "muted") }}</span></span>
+        <span data-followed class="text-xs tabular-nums text-aegis-muted">{{ rule.followed }} of {{ rule.applicable }} follow</span>
+      </div>
+      <p data-why class="text-xs text-aegis-muted">{{ rule.why }}</p>
+      {{ progress(rule.followed / rule.applicable if rule.applicable else 1, "ok" if not rule.violations else "warn", label=rule.title) }}
+      {% if rule.violations %}
+      <ul class="flex flex-wrap gap-1.5 pt-1">
+        {% for instance in rule.violations %}<li><code class="text-xxs font-mono px-1.5 py-0.5 rounded border border-aegis-amber/40 text-aegis-text">{{ instance.label }}</code></li>{% endfor %}
+      </ul>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endcall %}
+
+  {% if canonical %}
+  {% call card("Canonical example", canonical.label, id="pattern-canonical") %}
+  <p data-source-file class="text-xxs font-mono text-aegis-muted">{{ canonical.path }}</p>
+  {{ code_block(canonical.code, lang="python") }}
+  {% endcall %}
+  {% endif %}
+
+  <section id="pattern-instances" aria-labelledby="pattern-instances-title" class="space-y-3">
+    <h2 id="pattern-instances-title" class="text-sm font-semibold text-aegis-text">Every instance <span class="ml-1 text-xs font-normal text-aegis-muted">{{ total }}</span></h2>
+    {% include "pages/overseer/patterns/_instances_route.html" if pattern.key == "route" else "pages/overseer/patterns/_instances_grouped.html" %}
+  </section>
+</div>

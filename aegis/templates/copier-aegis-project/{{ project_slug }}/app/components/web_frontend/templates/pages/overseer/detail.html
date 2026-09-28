@@ -1,6 +1,4 @@
 {% extends "pages/overseer/_shell.html" %}
-{% from "components/macros/layout.html" import card, facts %}
-{% from "pages/overseer/_macros.html" import status_card %}
 {% block title %}{{ item.title }} · Overseer - {{ project_name }}{% endblock %}
 {% block overseer_subnav %}{% if page is defined %}{% include "pages/overseer/_subnav.html" %}{% endif %}{% endblock %}
 {% block overseer_content %}
@@ -8,16 +6,6 @@
 {% include "pages/overseer/_section.html" %}
 {% else %}
 {% set title, component = item.title, item.component %}{% include "pages/overseer/_header.html" %}
-<div class="grid gap-4 lg:grid-cols-2">
-  {{ status_card(item.component, item.name) }}
-  {% if item.details %}
-  {% call card("Details") %}{{ facts(item.details) }}{% endcall %}
-  {% endif %}
-  {% if item.component.sub_components %}
-  {% call card("Checks") %}
-    {{ facts(item.checks) }}
-  {% endcall %}
-  {% endif %}
-</div>
+{% include "pages/overseer/_status.html" %}
 {% endif %}
 {% endblock %}

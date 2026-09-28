@@ -1,0 +1,14 @@
+{# The generic status page's body: status, details and checks. #}
+{% from "components/macros/layout.html" import card, facts %}
+{% from "pages/overseer/_macros.html" import status_card %}
+<div class="grid gap-4 lg:grid-cols-2">
+  {{ status_card(item.component, item.name) }}
+  {% if item.details %}
+  {% call card("Details") %}{{ facts(item.details) }}{% endcall %}
+  {% endif %}
+  {% if item.component.sub_components %}
+  {% call card("Checks") %}
+    {{ facts(item.checks) }}
+  {% endcall %}
+  {% endif %}
+</div>

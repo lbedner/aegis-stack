@@ -14,9 +14,11 @@ from app.services.system.models import ComponentStatus
 from . import (
     overseer_auth,
     overseer_database,
+    overseer_patterns,
     overseer_redis,
     overseer_scheduler,
     overseer_server,
+    overseer_web_frontend,
     overseer_worker,
 )
 from .overseer_nav import SectionRequest
@@ -41,8 +43,16 @@ class SectionedPage(NamedTuple):
 
 
 SECTIONED_PAGES: dict[tuple[str, str], SectionedPage] = {
+    ("patterns", "patterns"): SectionedPage(
+        "patterns", overseer_patterns.SECTIONS, overseer_patterns.section_context
+    ),
     ("components", "backend"): SectionedPage(
         "server", overseer_server.SECTIONS, overseer_server.section_context, live=True
+    ),
+    ("components", "web_frontend"): SectionedPage(
+        "web_frontend",
+        overseer_web_frontend.SECTIONS,
+        overseer_web_frontend.section_context,
     ),
     ("services", "auth"): SectionedPage(
         "auth", overseer_auth.SECTIONS, overseer_auth.section_context

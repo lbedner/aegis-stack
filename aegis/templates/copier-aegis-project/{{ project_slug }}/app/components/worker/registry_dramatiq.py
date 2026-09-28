@@ -10,7 +10,6 @@ from typing import Any
 import dramatiq
 
 from app.components.worker import queue_discovery as discovery
-from app.core.log import logger
 
 
 def _is_queue(queue_name: str) -> bool:
@@ -84,5 +83,3 @@ __all__ = [
     "queue_tasks",
     "validate_queue_name",
 ]
-
-logger.debug("Dramatiq queue registry ready")

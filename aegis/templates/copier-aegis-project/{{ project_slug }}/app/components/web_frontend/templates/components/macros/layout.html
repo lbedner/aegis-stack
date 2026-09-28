@@ -13,6 +13,7 @@
 {% macro sidebar_icon(name) %}
 {% set paths = {
   "overview": "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5Z",
+  "patterns": "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M17 14v6 M14 17h6",
   "backend": "M4 4h16v7H4z M4 13h16v7H4z M8 7.5h.01 M8 16.5h.01 M12 7.5h6 M12 16.5h6",
   "web_frontend": "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01 M12 6.5h.01",
   "frontend": "M3 4h18v14H3z M8 21h8 M12 18v3",
@@ -104,7 +105,8 @@
    a JSON data block; static/js/charts.js mounts Chart.js over every
    ``canvas[data-chart]`` on load and after each htmx settle. Data shape:
    ``{"labels": [...], "series": [{"label": ..., "values": [...]}],
-   "slices": [{"categories": [...]}]}`` (``slices`` only for drilldowns).
+   "slices": [{"categories": [...]}], "format": "money"}`` (``slices`` only
+   for drilldowns; numbers are plain unless ``format`` is ``money``).
    ``drilldown`` is the URL a slice click loads into the dialog; the
    slice's categories are appended as ``category=`` params. #}
 {% macro chart_panel(id, title, kind, data, drilldown=None, subtitle=None) %}

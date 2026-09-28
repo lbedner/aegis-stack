@@ -47,7 +47,7 @@ def _endpoint_rows(endpoints: dict[str, dict[str, Any]]) -> list[dict[str, Any]]
     return rows
 
 
-def _route_rows(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def route_rows(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """One table row per route: badges for auth and deprecation."""
     return [
         route
@@ -114,7 +114,7 @@ async def section_context(
         return overview_context(backend)
     if section == "routes":
         groups = [
-            (name, _route_rows(routes))
+            (name, route_rows(routes))
             for name, routes in ui_backend.route_groups(metadata.get("routes") or [])
         ]
         return {"route_groups": groups, "groups_open": len(groups) <= 5}

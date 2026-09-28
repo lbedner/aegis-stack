@@ -861,6 +861,9 @@ MESSAGES: dict[str, str] = {
     # 帮助文本
     "docs.help": "查看已安装组件和服务的文档链接",
     "docs.help_show": "查看已安装组件和服务的文档链接",
+    "patterns.help": "查看应用的构建方式：模式与宏",
+    "patterns.help_show": "输出从代码中检测到的模式和宏目录，动手开发前先读一读",
+    "patterns.opt_format": "输出格式：markdown 或 json",
     # ── 压力测试 ──────────────────────────────────────────────────────
     # 帮助文本
     "loadtest.help": "Worker 性能压力测试相关命令",

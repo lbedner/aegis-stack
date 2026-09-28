@@ -5,12 +5,13 @@ left rail limited to components and services actually in the project,
 including plugin-provided entries.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha1
 from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.routing import BaseRoute
 
 from app.models.user import User
 from app.services.system.health import last_system_status, registered_health_names
@@ -62,6 +63,8 @@ class SectionRequest:
     db: AsyncSession
     query: Mapping[str, str]
     path: str
+    # The app's routes, for pages that describe the app itself.
+    routes: Sequence[BaseRoute] = ()
 
 
 @dataclass(frozen=True)

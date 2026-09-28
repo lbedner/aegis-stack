@@ -25,7 +25,7 @@ from app.components.web_frontend.routes.partials import (
 from app.components.web_frontend.routes.partials import (
     overseer_redis as overseer_redis_partials,
 )
-from app.components.web_frontend import overseer_redis, overseer_worker
+from app.components.web_frontend import overseer_patterns, overseer_redis, overseer_worker
 from app.components.web_frontend.overseer_events import health_events
 from app.components.web_frontend.rendering import render, templates
 from app.core.audit import AuditEmitter, get_audit
@@ -186,6 +186,21 @@ def _event_stream(events: AsyncIterator[str]) -> StreamingResponse:
     )
 
 
+@router.get("/overseer/patterns", response_class=HTMLResponse, include_in_schema=False)
+@router.get("/overseer/patterns/{section}", response_class=HTMLResponse, include_in_schema=False)
+async def overseer_patterns_page(
+    request: Request,
+    section: str = "",
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """How this app is built: its patterns, found in its own code."""
+    labels = list(SECTIONED_PAGES[("patterns", "patterns")].labels)
+    if section and section not in labels[1:]:
+        raise HTTPException(status_code=404)
+    return await _overseer_detail(request, "patterns", "patterns", user, db, section or labels[0])
+
+
 @router.get("/overseer/{group}/{name}", response_class=HTMLResponse, include_in_schema=False)
 async def overseer_detail(
     request: Request,
@@ -233,14 +248,14 @@ async def _overseer_detail(
         return RedirectResponse(url="/overseer/login", status_code=303)
     status = last_system_status()
     navigation = build_navigation(status)
-    item = find_item(navigation, group, name)
+    item = overseer_patterns.ITEM if group == "patterns" else find_item(navigation, group, name)
     if item is None:
         raise HTTPException(status_code=404)
     context = {"user": user, "navigation": navigation, "status": status, "item": item}
     if page := SECTIONED_PAGES.get((group, name)):
         context |= {"page": page, "current": section}
         context |= await page.context(
-            section, item.component, SectionRequest(user, db, request.query_params, request.url.path)
+            section, item.component, SectionRequest(user, db, request.query_params, request.url.path, request.app.routes)
         )
     return render(
         request,

@@ -5774,9 +5774,21 @@ macro per control. Import what you need:</p>
 <p><code>chart_panel(id, title, kind, data)</code> renders a canvas plus a JSON block;
 <code>static/js/charts.js</code> mounts Chart.js over every <code>canvas[data-chart]</code> on
 load and after each htmx settle, loading Chart.js on first use and reading
-its palette from the theme tokens. <code>dialog()</code> is mounted once by the base
+its palette from the theme tokens. Axis ticks and tooltips are plain
+numbers unless <code>data</code> carries <code>"format": "money"</code>. <code>dialog()</code> is mounted once by the base
 layout; a swap into <code>#dialog-body</code> opens it (pattern for any modal: <code>hx-get</code>
 the body into that target).</p>
+<p>To see every macro rendered, open <strong>Overseer &gt; Patterns</strong> and pick Layout,
+Feedback, Forms or Tables under Frontend. Each macro shows its signature and
+the comment above it (read from the macro file), a live preview, and the
+call that produced it. The examples live in <code>web_frontend/macro_catalog.py</code>;
+a new public macro fails <code>tests/web/test_overseer_patterns.py</code> until it has
+one there. The same page's Backend group shows the app's patterns detected
+from the running code: routes (<code>app/services/system/patterns.py</code>), services
+and their session handling (<code>app/services/system/service_patterns.py</code>) and,
+with the worker installed, worker tasks on any engine
+(<code>app/components/worker/patterns.py</code>). <code>&lt;project&gt; patterns</code> prints the same
+report for an agent to read before building.</p>
 <h3 id="a-table-page">A table page</h3>
 <p>Declare the columns, hand over the rows the service already returns, and
 let <code>kind</code> do the formatting. Nobody writes a <code>&lt;table&gt;</code> by hand.</p>

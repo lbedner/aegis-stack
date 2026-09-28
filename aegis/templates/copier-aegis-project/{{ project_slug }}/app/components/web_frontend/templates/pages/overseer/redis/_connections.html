@@ -1,0 +1,20 @@
+{% from "components/macros/layout.html" import card, facts %}
+{% from "components/macros/table.html" import data_table %}
+{% macro mono(value) %}<code class="font-mono text-xs text-aegis-text">{{ value }}</code>{% endmacro %}
+<div class="grid gap-4 lg:grid-cols-3">
+  {% call card("Connection", None, id="redis-connection") %}
+    {{ facts(connection) }}
+  {% endcall %}
+  <div class="lg:col-span-2">
+    {% call card("Clients", clients|length ~ " connected") %}
+      {{ data_table([
+        {"key": "id", "label": "ID"},
+        {"key": "addr", "label": "Address", "render": mono},
+        {"key": "age", "label": "Age (s)", "align": "right"},
+        {"key": "idle", "label": "Idle (s)", "align": "right"},
+        {"key": "db", "label": "DB", "align": "right"},
+        {"key": "cmd", "label": "Last command", "render": mono},
+      ], clients, empty="No clients connected") }}
+    {% endcall %}
+  </div>
+</div>

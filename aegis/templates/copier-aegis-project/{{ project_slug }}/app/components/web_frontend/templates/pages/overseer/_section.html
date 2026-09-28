@@ -1,0 +1,15 @@
+{# The content beside a sub-menu: the current section's title and its
+   partial, ``<folder>/_<section>.html``. A ``live`` page's Overview is
+   re-sent over SSE as ``<folder>-overview``. #}
+{% from "components/macros/layout.html" import page_header %}
+{% set component = item.component %}
+{# A page whose numbers are live says ``header_message: None`` so the header,
+   rendered once, cannot show a count the stream has moved past. #}
+{% set message = header_message if header_message is defined else component.message %}
+{% call page_header(page.labels[current], message if current == "overview" else none) %}{% endcall %}
+{% set partial = "pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ ".html" %}
+{% if page.live and current == "overview" %}
+<div id="{{ page.folder }}-overview" sse-swap="{{ page.folder }}-overview" hx-target="this">{% include partial %}</div>
+{% else %}
+{% include partial %}
+{% endif %}

@@ -11,7 +11,7 @@ IMPORT = (
     '{% from "components/macros/layout.html" '
     "import card, stat_tile, chart_panel, dialog, badge, menu_item, dropdown, "
     "confirm, progress, page_header, figures, stats_strip, ranked_rows, "
-    "tab_bar, tab_item, chip %}"
+    "tab_bar, tab_item, chip, facts, stat_row %}"
 )
 
 
@@ -125,7 +125,9 @@ class TestDropdown:
 
 class TestConfirm:
     def test_destructive_verb_and_a_way_out(self) -> None:
-        html = render('{{ confirm("Remove Savings?", "It goes away.", "/accounts/3") }}')
+        html = render(
+            '{{ confirm("Remove Savings?", "It goes away.", "/accounts/3") }}'
+        )
         button = one(html, '[hx-delete="/accounts/3"]')
         assert button.get("hx-swap") == "none"
         assert "Savings" in text(one(html, "h2"))
@@ -149,8 +151,10 @@ class TestStatTileExtras:
 
 class TestProgress:
     def test_native_progress_clamped_to_the_unit_interval(self) -> None:
-        assert one(render('{{ progress(0.25) }}'), "progress").get("value") == "0.25"
-        assert one(render('{{ progress(1.7, "error") }}'), "progress").get("value") == "1"
+        assert one(render("{{ progress(0.25) }}"), "progress").get("value") == "0.25"
+        assert (
+            one(render('{{ progress(1.7, "error") }}'), "progress").get("value") == "1"
+        )
 
 
 class TestPageHeader:
@@ -243,3 +247,19 @@ class TestTabsAndChips:
         )
         assert "bg-aegis-teal/10" not in idle.get("class")
         assert idle.get("class").startswith("text-xs px-2 py-0.5")
+
+
+class TestFacts:
+    def test_label_value_pairs_skip_blank_values(self) -> None:
+        html = render(
+            '{{ facts([("State", "Healthy"), ("Note", none), ("Tags", ["a", "b"])]) }}'
+        )
+        assert [text(dt) for dt in select(html, "dt")] == ["State", "Tags"]
+        assert [text(dd) for dd in select(html, "dd")] == ["Healthy", "a, b"]
+
+
+class TestStatRow:
+    def test_label_over_value_figures(self) -> None:
+        html = render('{{ stat_row([("p95 ms", "4.2"), ("Clients", 3)]) }}')
+        assert [text(dt) for dt in select(html, "dt")] == ["p95 ms", "Clients"]
+        assert [text(dd) for dd in select(html, "dd")] == ["4.2", "3"]

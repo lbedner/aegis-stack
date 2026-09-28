@@ -166,10 +166,10 @@ REDIS_DB=0
 
     ```bash
     WORKER_PROCESSES=1                  # Number of OS processes
-    WORKER_THREADS=8                    # Threads per process
+    WORKER_QUEUES='{"system": {"concurrency": 8}}'  # Threads per process
     ```
 
-    The `WORKER_PROCESSES` x `WORKER_THREADS` formula determines total concurrency. For I/O-bound async actors, increasing threads is usually sufficient. For CPU-bound work, increase processes to utilize multiple cores.
+    `WORKER_PROCESSES` x the queue's concurrency (`WORKER_QUEUES`, used as dramatiq's threads) determines total concurrency. For I/O-bound async actors, increasing threads is usually sufficient. For CPU-bound work, increase processes to utilize multiple cores.
 
 === "TaskIQ"
 
@@ -213,7 +213,7 @@ When running CLI commands locally (outside Docker), the system automatically use
     ```bash
     ENVIRONMENT=production
     WORKER_PROCESSES=4                  # Match CPU count
-    WORKER_THREADS=8                    # Per-process threads
+    WORKER_QUEUES='{"system": {"concurrency": 8}}'  # Per-process threads
     REDIS_URL=redis://redis-prod:6379
     REDIS_DB=1
     REDIS_PASSWORD=your-secure-password
@@ -285,7 +285,6 @@ When running CLI commands locally (outside Docker), the system automatically use
           - DOCKER_CONTAINER=1
           - WORKER_QUEUE_TYPE=system
           - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}
-          - WORKER_THREADS=${SYSTEM_WORKER_THREADS:-4}
           - WORKER_TIMEOUT_SECONDS=1800
           - REDIS_URL=redis://redis:6379
         depends_on:
@@ -302,7 +301,6 @@ When running CLI commands locally (outside Docker), the system automatically use
           - DOCKER_CONTAINER=1
           - WORKER_QUEUE_TYPE=load_test
           - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}
-          - WORKER_THREADS=${LOAD_TEST_WORKER_THREADS:-8}
           - WORKER_TIMEOUT_SECONDS=60
           - REDIS_URL=redis://redis:6379
         depends_on:
@@ -409,7 +407,7 @@ When running CLI commands locally (outside Docker), the system automatically use
     Dramatiq's concurrency model is explicit:
 
     ```python
-    # Total concurrent messages = WORKER_PROCESSES x WORKER_THREADS
+    # Total concurrent messages = WORKER_PROCESSES x the queue's concurrency (threads)
     # Example: 2 processes x 8 threads = 16 concurrent messages per container
     ```
 
@@ -417,21 +415,21 @@ When running CLI commands locally (outside Docker), the system automatically use
 
     ```bash
     WORKER_PROCESSES=1
-    WORKER_THREADS=32    # Async actors spend most time awaiting I/O
+    WORKER_QUEUES='{"system": {"concurrency": 32}}'  # Async actors spend most time awaiting I/O
     ```
 
     **CPU-bound workloads**: increase processes.
 
     ```bash
     WORKER_PROCESSES=4   # One per CPU core
-    WORKER_THREADS=4     # Fewer threads per process
+    WORKER_QUEUES='{"system": {"concurrency": 4}}'  # Fewer threads per process
     ```
 
     **Mixed workloads**: balanced.
 
     ```bash
     WORKER_PROCESSES=2
-    WORKER_THREADS=8
+    WORKER_QUEUES='{"system": {"concurrency": 8}}'
     ```
 
     ### Horizontal Scaling
@@ -474,6 +472,37 @@ When running CLI commands locally (outside Docker), the system automatically use
 
 ---
 
+## Concurrency per Queue
+
+How many jobs one worker process runs at once is a per-queue setting, the
+same for every backend:
+
+```python
+# app/core/config.py
+WORKER_QUEUES: dict[str, QueueWorker]  # {"load_test": QueueWorker(concurrency=50), "system": QueueWorker(concurrency=15)}
+WORKER_QUEUE_DEFAULT: QueueWorker      # any queue not listed (concurrency 10)
+```
+
+Override it from the environment as JSON:
+
+```bash
+WORKER_QUEUES='{"load_test": {"concurrency": 100}}'
+```
+
+| Backend | Where the value goes |
+|---|---|
+| taskiq | `--max-async-tasks` (entrypoint) |
+| dramatiq | `--threads` (entrypoint) |
+| arq | `WorkerSettings.max_jobs` |
+
+`QueueWorker` rejects unknown fields and non-positive values when settings
+load, and a queue name that matches no queue stops the worker at startup.
+The total a queue can run at once is its concurrency times its processes
+(`WORKER_PROCESSES`). Each worker reports what it runs with, shown in
+Overseer under Worker > Runtime.
+
+---
+
 ## Redis Configuration
 
 ### Connection Settings
@@ -499,7 +528,7 @@ redis:
   command: >
     redis-server
     --maxmemory 512mb
-    --maxmemory-policy allkeys-lru
+    --maxmemory-policy volatile-lru
     --save 900 1
     --save 300 10
     --save 60 10000
@@ -508,6 +537,12 @@ redis:
     - redis-data:/data
     - ./redis.conf:/usr/local/etc/redis/redis.conf
 ```
+
+Keep the eviction policy `volatile-*`, never `allkeys-*`. Redis holds the
+job streams next to the cache: `allkeys-lru` evicts any key when memory
+runs out, so queued jobs silently disappear. `volatile-lru` only evicts
+keys that already expire (cache entries, job results, task records), and
+once none are left Redis refuses the write instead of dropping work.
 
 ---
 
@@ -541,16 +576,16 @@ redis:
 
     ### Process/Thread Tuning
 
-    The `WORKER_PROCESSES` x `WORKER_THREADS` formula determines total concurrency:
+    `WORKER_PROCESSES` x the queue's concurrency (`WORKER_QUEUES`, used as dramatiq's threads) determines total concurrency:
 
     ```bash
     # I/O-bound: more threads, fewer processes
     WORKER_PROCESSES=1
-    WORKER_THREADS=16
+    WORKER_QUEUES='{"system": {"concurrency": 16}}'
 
     # CPU-bound: more processes (one per core), fewer threads
     WORKER_PROCESSES=4
-    WORKER_THREADS=4
+    WORKER_QUEUES='{"system": {"concurrency": 4}}'
     ```
 
     ### Actor-Level Tuning

@@ -8,6 +8,7 @@ any of them.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     ExpandableRow,
@@ -19,19 +20,8 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.components.worker.registry import (
     get_queue_metadata,
 )
+from app.services.system import ui_worker
 from app.services.system.models import ComponentStatus
-
-# Worker health status thresholds
-FAILURE_RATE_CRITICAL_THRESHOLD = 20  # % - Red status (failing)
-
-
-FAILURE_RATE_WARNING_THRESHOLD = 5  # % - Yellow status (degraded)
-
-
-SUCCESS_RATE_HEALTHY_THRESHOLD = 95  # % - Green display
-
-
-SUCCESS_RATE_WARNING_THRESHOLD = 80  # % - Yellow display
 
 
 def _build_queue_expanded_content(queue_name: str) -> ft.Control:
@@ -164,55 +154,15 @@ def _compute_queue_values(
     queued_jobs, jobs_ongoing, jobs_completed, jobs_failed,
     success_rate, rate_color.
     """
-    metadata = queue_component.metadata or {}
-    worker_alive = metadata.get("worker_alive", False)
-    queued_jobs = metadata.get("queued_jobs", 0)
-    jobs_ongoing = metadata.get("jobs_ongoing", 0)
-    jobs_completed = metadata.get("jobs_completed", 0)
-    jobs_failed = metadata.get("jobs_failed", 0)
-    failure_rate = metadata.get("failure_rate_percent", 0.0)
-    has_job_history = (jobs_completed + jobs_failed) > 0
-
-    # Determine status icon and color (matching card behavior)
-    message = queue_component.message or ""
-    if not worker_alive:
-        if "no functions" in message.lower():
-            # No tasks defined
-            status_color = ft.Colors.GREY_600
-            status_text = "No Tasks"
-        else:
-            # Offline - problem
-            status_color = Theme.Colors.ERROR
-            status_text = "Offline"
-    elif failure_rate > FAILURE_RATE_CRITICAL_THRESHOLD:
-        # Failing
-        status_color = Theme.Colors.ERROR
-        status_text = "Failing"
-    elif failure_rate > FAILURE_RATE_WARNING_THRESHOLD:
-        # Degraded
-        status_color = Theme.Colors.WARNING
-        status_text = "Degraded"
-    elif jobs_ongoing > 0:
-        # Active - processing
-        status_color = Theme.Colors.INFO
-        status_text = "Active"
-    else:
-        # Healthy
-        status_color = Theme.Colors.SUCCESS
-        status_text = "Online"
-
-    # Success rate display with color coding
-    success_rate: float | None = (
-        (100 - failure_rate) if (worker_alive and has_job_history) else None
-    )
-    if success_rate is None:
-        rate_color = ft.Colors.ON_SURFACE_VARIANT
-    elif success_rate >= SUCCESS_RATE_HEALTHY_THRESHOLD:
-        rate_color = Theme.Colors.SUCCESS
-    elif success_rate >= SUCCESS_RATE_WARNING_THRESHOLD:
-        rate_color = Theme.Colors.WARNING
-    else:
-        rate_color = Theme.Colors.ERROR
+    view = ui_worker.queue_view(queue_component)
+    status_color = Theme.Colors.semantic(view["color"])
+    status_text = view["state"]
+    queued_jobs = view["queued"]
+    jobs_ongoing = view["busy"]
+    jobs_completed = view["completed"]
+    jobs_failed = view["failed"]
+    success_rate: float | None = view["success"]
+    rate_color = Theme.Colors.semantic(view["success_color"])
 
     return {
         "status_color": status_color,

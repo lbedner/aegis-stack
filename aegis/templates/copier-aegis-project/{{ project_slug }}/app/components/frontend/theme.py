@@ -124,6 +124,18 @@ class AegisTheme:
         PRIMARY_DARK = DarkColorPalette.ACCENT
         PRIMARY_LIGHT = DarkColorPalette.ACCENT
 
+        @classmethod
+        def semantic(cls, name: str) -> str:
+            """A shared semantic colour name (green, blue, yellow, red, grey, as
+            ``get_status_color_name`` and ``ui_auth`` return) in this theme."""
+            return {
+                "green": cls.SUCCESS,
+                "blue": cls.INFO,
+                "yellow": cls.WARNING,
+                "red": cls.ERROR,
+                "grey": ft.Colors.ON_SURFACE_VARIANT,
+            }.get(name, cls.WARNING)
+
     class Typography:
         """Typography scale and weights."""
 

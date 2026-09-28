@@ -1,0 +1,18 @@
+{% from "components/macros/layout.html" import card, stats_strip, facts, badge %}
+<div class="space-y-4">
+  {{ stats_strip([
+    {"label": "Total users", "value": overview.users},
+    {"label": "JWT algorithm", "value": overview.algorithm},
+    {"label": "Token expiry", "value": overview.expiry},
+  ], id="auth-figures") }}
+  <div class="grid gap-4 lg:grid-cols-2">
+    {% call card("Configuration") %}
+      {% set strength %}{% if overview.strength %}{{ badge(overview.strength.label, overview.strength.tone) }}{% endif %}{% endset %}
+      {{ facts([("Secret key", overview.key), ("Key strength", strength if overview.strength else none)]) }}
+    {% endcall %}
+    {% call card("Security") %}
+      {% set level %}{{ badge(overview.level.label, overview.level.tone) }}{% endset %}
+      {{ facts([("Security level", level), ("Meaning", overview.description), ("Issues", overview.issues)]) }}
+    {% endcall %}
+  </div>
+</div>

@@ -6,6 +6,7 @@ breakdown behind its average.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
@@ -18,6 +19,7 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableRow,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
 
 from ..modal_sections import (
@@ -157,13 +159,9 @@ class PerformanceTab(ft.Container):
             DataTableColumn("Avg ms", width=90, alignment="right"),
             DataTableColumn("p95 ms", width=90, alignment="right"),
         ]
-        sorted_items = sorted(
-            endpoints.items(),
-            key=lambda kv: int((kv[1] or {}).get("count", 0) or 0),
-            reverse=True,
-        )
         table_rows = [
-            self._build_endpoint_row(key, stats) for key, stats in sorted_items
+            self._build_endpoint_row(method, path, stats)
+            for method, path, stats in ui_backend.endpoints_by_traffic(endpoints)
         ]
         table = ExpandableDataTable(
             columns=columns,
@@ -187,17 +185,15 @@ class PerformanceTab(ft.Container):
         self._body.padding = None
 
     @staticmethod
-    def _build_endpoint_row(key: str, stats: dict) -> ExpandableRow:
+    def _build_endpoint_row(method: str, path: str, stats: dict) -> ExpandableRow:
         """Collapsed: method / path / count / avg / p95. Expanded: full stats."""
-        stats = stats or {}
-        method, _, path = key.partition(" ")
         count = int(stats.get("count", 0) or 0)
         avg_ms = float(stats.get("avg_ms", 0.0) or 0.0)
         p95_ms = float(stats.get("p95_ms", 0.0) or 0.0)
 
         cells = [
             MethodBadge(method),
-            path or key,
+            path,
             str(count),
             f"{avg_ms:.1f}",
             f"{p95_ms:.1f}",

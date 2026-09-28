@@ -2,8 +2,29 @@
 
 from typing import Any
 
+from app.services.system.redis_keys import KeyFamily
+
 _TASK_KEY_PREFIX = "aegis:task:"
 _QUEUE_INDEX_PREFIX = "aegis:tasks:queue:"
+
+REDIS_KEYS = (
+    KeyFamily(
+        f"{_TASK_KEY_PREFIX}*",
+        "hash",
+        "Task history",
+        "One record per job: status, timings, result or error; expires on its own",
+        "Worker task history",
+        columns=("Field", "Value"),
+    ),
+    KeyFamily(
+        f"{_QUEUE_INDEX_PREFIX}*",
+        "zset",
+        "Task index",
+        "Each queue's job ids by time, the order the history lists them in",
+        "Worker task history",
+        columns=("Job id", "Timestamp"),
+    ),
+)
 
 
 def resolve_task_docstring(task_name: str) -> str:

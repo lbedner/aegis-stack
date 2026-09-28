@@ -6,7 +6,9 @@ hardcoded, so a stack that installs an extra middleware shows it.
 """
 
 import flet as ft
+
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
 
 from ..modal_sections import (
@@ -28,95 +30,28 @@ class LifecycleTab(ft.Container):
             backend_component: ComponentStatus containing backend data
         """
         super().__init__()
-        metadata = backend_component.metadata or {}
-        lifecycle = metadata.get("lifecycle", {})
+        steps = ui_backend.lifecycle(backend_component.metadata or {})
 
         # Create shared inspector panel
         self.inspector = LifecycleInspector()
 
-        # Get middleware stack and hooks
-        middleware_stack = metadata.get("middleware_stack", [])
-        startup_hooks = lifecycle.get("startup_hooks", [])
-        shutdown_hooks = lifecycle.get("shutdown_hooks", [])
-
-        # Build startup hook cards
-        startup_cards = []
-        for hook in startup_hooks:
-            name = str(hook.get("name", "unknown"))
-            module = str(hook.get("module", ""))
-            description = str(hook.get("description", ""))
-
-            # Build details with description if available
-            details: dict[str, object] = {}
-            if description:
-                details["Description"] = description
-            if module:
-                details["Module"] = module
-
-            startup_cards.append(
+        def cards(key: str, section: str) -> list[LifecycleCard]:
+            return [
                 LifecycleCard(
-                    name=name,
-                    subtitle=module,
-                    section="Startup Hooks",
-                    details=details if details else None,
+                    name=entry["name"],
+                    subtitle=entry["module"],
+                    section=section,
+                    details=entry["details"] or None,
+                    badge="Security" if entry["security"] else None,
+                    badge_color=ft.Colors.AMBER if entry["security"] else None,
                     inspector=self.inspector,
                 )
-            )
+                for entry in steps[key]
+            ]
 
-        # Build middleware cards
-        middleware_cards = []
-        for mw in middleware_stack:
-            type_name = str(mw.get("type", "Unknown"))
-            module = str(mw.get("module", ""))
-            is_security = bool(mw.get("is_security", False))
-            config = mw.get("config", {})
-            mw_description = str(mw.get("description", "") or "")
-
-            # Build details dict - description first, then config
-            mw_details: dict[str, object] = {}
-            if mw_description:
-                mw_details["Description"] = mw_description
-            if module:
-                mw_details["Module"] = module
-            if isinstance(config, dict):
-                for key, value in config.items():
-                    mw_details[key] = value
-
-            middleware_cards.append(
-                LifecycleCard(
-                    name=type_name,
-                    subtitle=module,
-                    section="Middleware Stack",
-                    details=mw_details,
-                    badge="Security" if is_security else None,
-                    badge_color=ft.Colors.AMBER if is_security else None,
-                    inspector=self.inspector,
-                )
-            )
-
-        # Build shutdown hook cards
-        shutdown_cards = []
-        for hook in shutdown_hooks:
-            name = str(hook.get("name", "unknown"))
-            module = str(hook.get("module", ""))
-            description = str(hook.get("description", ""))
-
-            # Build details with description if available
-            hook_details: dict[str, object] = {}
-            if description:
-                hook_details["Description"] = description
-            if module:
-                hook_details["Module"] = module
-
-            shutdown_cards.append(
-                LifecycleCard(
-                    name=name,
-                    subtitle=module,
-                    section="Shutdown Hooks",
-                    details=hook_details if hook_details else None,
-                    inspector=self.inspector,
-                )
-            )
+        startup_cards = cards("startup", "Startup Hooks")
+        middleware_cards = cards("middleware", "Middleware Stack")
+        shutdown_cards = cards("shutdown", "Shutdown Hooks")
 
         # Build flow sections with step numbers
         startup_section = FlowSection(

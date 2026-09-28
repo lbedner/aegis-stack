@@ -9,7 +9,7 @@
 {% from "components/macros/feedback.html" import toast_region %}
 {% from "components/macros/layout.html" import theme_toggle, dialog %}
 <!DOCTYPE html>
-<html lang="en" data-theme="aegis">
+<html lang="en" data-theme="aegis-dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -64,6 +64,7 @@
     <a href="/" class="text-sm font-semibold text-aegis-teal tracking-wide">{{ project_name }}</a>
     <div class="flex items-center gap-2">
       {{ theme_toggle() }}
+      {% if auth_enabled %}<a href="/overseer" class="text-xs text-aegis-muted border border-aegis-border rounded px-3 py-1 hover:text-aegis-text hover:border-aegis-muted">Overseer</a>{% endif %}
       <a href="/dashboard" class="text-xs text-aegis-muted border border-aegis-border rounded px-3 py-1 hover:text-aegis-text hover:border-aegis-muted">Dashboard</a>
     </div>
   </div>

@@ -8,7 +8,9 @@ patterns.
 from typing import Any
 
 import redis.asyncio as aioredis
+from app.components.worker import runtime
 from app.components.worker.events import publish_event
+from app.components.worker.heartbeat import worker_id
 from app.components.worker.tasks.load_tasks import (
     cpu_intensive_task,
     failure_testing_task,
@@ -20,6 +22,7 @@ from app.components.worker.tasks.system_tasks import (
 )
 from app.core.config import settings
 from app.core.log import logger
+from app.core.queue_workers import concurrency_for
 from arq.connections import RedisSettings
 from arq.constants import result_key_prefix
 from arq.jobs import deserialize_result
@@ -54,7 +57,7 @@ class WorkerSettings:
         conn_retry_delay=settings.REDIS_CONN_RETRY_DELAY,
     )
     queue_name = "arq:queue:load_test"
-    max_jobs = 50  # High concurrency for load testing
+    max_jobs = concurrency_for("load_test")  # Settings.WORKER_QUEUES
     job_timeout = 60  # Quick tasks
     keep_result = 60  # Short TTL — load test results are fire-and-forget
     max_tries = settings.WORKER_MAX_TRIES
@@ -72,6 +75,17 @@ class WorkerSettings:
             ctx["events_redis"] = aioredis.from_url(redis_url)
             ctx["worker_queue_name"] = "load_test"
             await publish_event(ctx["events_redis"], "worker.started", "load_test")
+            ctx["runtime_reporting"] = runtime.start_reporting(
+                ctx["events_redis"],
+                runtime.report(
+                    worker=worker_id(),
+                    queue="load_test",
+                    engine="arq",
+                    version=runtime.engine_version("arq"),
+                    processes=1,
+                    concurrency=WorkerSettings.max_jobs,
+                ),
+            )
         except Exception as e:
             logger.debug(f"Failed to initialize event publishing: {e}")
 
@@ -79,6 +93,9 @@ class WorkerSettings:
     async def on_shutdown(ctx: dict[str, Any]) -> None:
         """Publish worker.stopped event on worker shutdown."""
         if "events_redis" in ctx:
+            await runtime.stop_reporting(
+                ctx["events_redis"], ctx.get("runtime_reporting"), worker_id()
+            )
             await publish_event(ctx["events_redis"], "worker.stopped", "load_test")
             await ctx["events_redis"].aclose()
 

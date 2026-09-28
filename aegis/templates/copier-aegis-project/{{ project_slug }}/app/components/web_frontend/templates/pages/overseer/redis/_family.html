@@ -1,0 +1,29 @@
+{% from "components/macros/layout.html" import stat_row %}
+{% from "components/macros/table.html" import data_table %}
+<section id="redis-family" class="lg:col-span-2 bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0 space-y-4">
+  <div>
+    <h3 class="text-base font-semibold text-aegis-text">{{ family.name }}</h3>
+    <p class="font-mono text-xxs text-aegis-muted">{{ family.pattern }} · {{ family.kind }} · db {{ family.db }}</p>
+  </div>
+  <p data-purpose class="text-sm text-aegis-text">{{ family.purpose }}</p>
+  <p class="text-xs text-aegis-muted">Written by <span class="text-aegis-text">{{ family.owner }}</span></p>
+  {{ stat_row([
+    ("Keys", family.count),
+    ("Memory", family.memory|filesizeformat),
+    ("TTL", family.ttl_label or "none"),
+    ("Last touched", (family.idle_label ~ " ago") if family.idle_label else "-"),
+  ]) }}
+  {% if peek and peek.key %}
+  <div class="space-y-2">
+    <p class="text-xxs caps text-aegis-muted">Newest key <span class="font-mono normal-case tracking-normal text-aegis-text">{{ peek.key }}</span></p>
+    {{ data_table([
+      {"key": "a", "label": peek.columns[0]},
+      {"key": "b", "label": peek.columns[1], "align": "right"},
+    ], peek.rows, empty="Empty") }}
+  </div>
+  {% elif peek and peek.error %}
+  <p class="text-xs text-error">Could not read it: {{ peek.error }}</p>
+  {% else %}
+  <p class="text-xs text-aegis-muted">No keys to show yet.</p>
+  {% endif %}
+</section>

@@ -23,9 +23,12 @@
 
   {# -------- LEFT: form -------- #}
   <div class="flex flex-col px-6 sm:px-12 lg:px-16 py-8">
-    <a href="/" class="text-sm font-semibold text-aegis-text tracking-wide mb-auto">
-      {{ project_name }}
-    </a>
+    <div class="flex items-start justify-between gap-3 mb-auto">
+      <a href="/" class="text-sm font-semibold text-aegis-text tracking-wide">
+        {% block auth_brand %}{{ project_name }}{% endblock %}
+      </a>
+      {{ theme_toggle() }}
+    </div>
 
     <div class="w-full max-w-sm mx-auto my-16">
       {% block auth_form %}{% endblock %}

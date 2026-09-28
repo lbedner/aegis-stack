@@ -12,13 +12,17 @@ the client process.
 """
 
 import contextlib
+import sys
 import threading
+from typing import Any
 
 import dramatiq
 import redis
-from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync
+from app.components.worker import runtime
+from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync, worker_id
 from app.core.config import settings
 from app.core.log import logger
+from app.services.system.redis_keys import KeyFamily
 
 # Redis Stream name for worker events (must match events.py)
 WORKER_EVENT_STREAM = "aegis:events:worker"
@@ -56,6 +60,18 @@ def _sync_publish(
         logger.debug(f"Failed to publish worker event: {e}")
 
 
+REDIS_KEYS = (
+    KeyFamily(
+        "dramatiq:heartbeat:*",
+        "string",
+        "Queue heartbeats",
+        "One per consumed queue while a worker runs, 30s TTL",
+        "Dramatiq worker events",
+        columns=("Key", "Value"),
+    ),
+)
+
+
 class EventPublishMiddleware(dramatiq.Middleware):
     """Publishes worker lifecycle events to a Redis Stream."""
 
@@ -66,6 +82,7 @@ class EventPublishMiddleware(dramatiq.Middleware):
     _queue_names: set[str] = set()
     _heartbeat_thread: threading.Thread | None = None
     _stop_event: threading.Event = threading.Event()
+    _runtime_reports: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Worker lifecycle hooks
@@ -82,6 +99,8 @@ class EventPublishMiddleware(dramatiq.Middleware):
                             "alive",
                             ex=self.HEARTBEAT_TTL,
                         )
+                for fields in self._runtime_reports:
+                    runtime.publish_runtime_sync(self._redis, fields)
 
     def before_worker_boot(
         self, broker: dramatiq.Broker, worker: dramatiq.Worker
@@ -107,6 +126,21 @@ class EventPublishMiddleware(dramatiq.Middleware):
                     "alive",
                     ex=self.HEARTBEAT_TTL,
                 )
+
+            # Report what this process runs with (refreshed with the heartbeat)
+            launched = runtime.launch_settings("dramatiq", sys.argv)
+            self._runtime_reports = [
+                runtime.report(
+                    worker=worker_id(),
+                    queue=queue_name,
+                    engine="dramatiq",
+                    version=runtime.engine_version("dramatiq"),
+                    **launched,
+                )
+                for queue_name in self._queue_names
+            ]
+            for fields in self._runtime_reports:
+                runtime.publish_runtime_sync(self._redis, fields)
 
             # Start background heartbeat thread
             self._stop_event.clear()
@@ -135,6 +169,8 @@ class EventPublishMiddleware(dramatiq.Middleware):
             for queue_name in self._queue_names:
                 _sync_publish(self._redis, "worker.stopped", queue_name)
                 self._redis.delete(f"dramatiq:heartbeat:{queue_name}")
+            with contextlib.suppress(Exception):
+                self._redis.delete(runtime.runtime_key(worker_id()))
             self._redis.close()
             self._redis = None
 

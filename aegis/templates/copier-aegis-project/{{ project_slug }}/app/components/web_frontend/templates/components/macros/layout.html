@@ -5,6 +5,39 @@
        {% from "components/macros/layout.html" import card, stat_tile, dialog, dropdown %}
 #}
 {% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/form.html" import action %}
+
+
+{# Navigation icons share one outline style. Unknown plugin entries use the
+   four-square icon, so every installed item has an icon. #}
+{% macro sidebar_icon(name) %}
+{% set paths = {
+  "overview": "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5Z",
+  "backend": "M4 4h16v7H4z M4 13h16v7H4z M8 7.5h.01 M8 16.5h.01 M12 7.5h6 M12 16.5h6",
+  "web_frontend": "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01 M12 6.5h.01",
+  "frontend": "M3 4h18v14H3z M8 21h8 M12 18v3",
+  "database": "M4 6c0-2 16-2 16 0v12c0 2-16 2-16 0V6z M4 6c0 2 16 2 16 0 M4 12c0 2 16 2 16 0",
+  "worker": "M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.6 5.6l2.1 2.1 M16.3 16.3l2.1 2.1 M18.4 5.6l-2.1 2.1 M7.7 16.3l-2.1 2.1 M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
+  "scheduler": "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 7v5l3 2",
+  "cache": "M13 2 5 13h6l-1 9 9-12h-6l1-8Z",
+  "storage": "M4 4h16v4H4z M5 8v12h14V8 M10 12h4",
+  "ingress": "M3 7h16 M15 3l4 4-4 4 M21 17H5 M9 13l-4 4 4 4",
+  "observability": "M3 20V4 M3 20h18 M6 15l4-4 3 2 5-6 M16 7h2v2",
+  "ollama": "M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2L12 2z M19 18v4 M17 20h4",
+  "auth": "M5 10h14v11H5z M8 10V7a4 4 0 0 1 8 0v3 M12 14v3",
+  "ai": "M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2L12 2z M19 18v4 M17 20h4",
+  "comms": "M4 4h16v12H9l-5 4V4z M7 8h10 M7 12h7",
+  "documents": "M6 3h9l4 4v14H6z M15 3v5h4 M9 12h7 M9 16h7",
+  "insights": "M3 20h18 M5 17v-5h3v5 M11 17V7h3v10 M17 17V4h3v13",
+  "payment": "M3 5h18v14H3z M3 10h18 M7 15h4",
+  "finance": "M12 3c5 0 9 2 9 4s-4 4-9 4-9-2-9-4 4-4 9-4z M3 7v5c0 2 4 4 9 4s9-2 9-4V7 M3 12v5c0 2 4 4 9 4s9-2 9-4v-5",
+  "blog": "M5 4h11l3 3v13H5z M15 4v4h4 M8 12h8 M8 16h5",
+  "default": "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"
+} %}
+<svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+     aria-hidden="true" focusable="false"><path d="{{ paths.get(name, paths.default) }}"/></svg>
+{% endmacro %}
 
 
 
@@ -21,7 +54,7 @@
   {% if title %}
   <header class="flex items-baseline justify-between gap-3">
     <h2 id="{{ card_id }}-title" class="text-sm font-semibold text-aegis-text">{{ title }}</h2>
-    {% if subtitle %}<p class="text-xxs text-aegis-muted uppercase tracking-wider">{{ subtitle }}</p>{% endif %}
+    {% if subtitle %}<p class="text-xxs text-aegis-muted caps">{{ subtitle }}</p>{% endif %}
   </header>
   {% endif %}
   {{ caller() }}
@@ -34,7 +67,7 @@
    healthy number is coloured, colour stops meaning anything. #}
 {% macro stat_tile(label, value, negative=False, caption=None, attrs="") %}
 <div {{ attrs|safe }} class="bg-aegis-card border border-aegis-border rounded-lg px-5 py-4{% if attrs %} cursor-pointer hover:border-aegis-muted transition-colors{% endif %}">
-  <dt class="text-xxs text-aegis-muted uppercase tracking-wider">{{ label }}</dt>
+  <dt class="text-xxs text-aegis-muted caps">{{ label }}</dt>
   <dd class="mt-1 text-2xl font-semibold tabular-nums {{ 'text-error' if negative else 'text-aegis-text' }}">{{ value }}</dd>
   {% if caption %}<dd class="mt-1 text-xxs text-aegis-muted">{{ caption }}</dd>{% endif %}
 </div>
@@ -42,9 +75,28 @@
 
 
 {# A thin native progress bar; ``tone`` colours it (see badge). #}
-{% macro progress(ratio, tone="ok") %}
-{% set tones = {"ok": "accent-aegis-teal", "warn": "accent-aegis-amber", "error": "accent-aegis-error", "muted": "accent-aegis-muted"} %}
-<progress value="{{ [1, [0, ratio]|max]|min }}" max="1" class="w-full h-1 {{ tones.get(tone, 'accent-aegis-teal') }}"></progress>
+{% macro progress(ratio, tone="ok", label=None, size="h-1") %}
+{% set tones = {"ok": "text-aegis-teal", "warn": "text-aegis-amber", "error": "text-aegis-error", "muted": "text-aegis-muted"} %}
+<progress value="{{ [1, [0, ratio]|max]|min }}" max="1" {% if label %}aria-label="{{ label }}"{% endif %} class="aegis-progress w-full {{ size }} {{ tones.get(tone, 'text-aegis-teal') }}"></progress>
+{% endmacro %}
+
+
+{# A reusable current-use meter. The caller supplies the resource's detail
+   text; health thresholds already determine the metric's status and tone. #}
+{% macro resource_bar(label, metric, detail="") %}
+{% set percent = metric.metadata.get("percent_used") if metric else none %}
+<div class="space-y-2">
+  <div class="flex items-baseline justify-between gap-3">
+    <span class="text-sm font-medium text-aegis-text">{{ label }}</span>
+    {% if percent is number %}<span class="text-sm font-semibold tabular-nums text-aegis-text">{{ "%.1f"|format(percent) }}%</span>
+    {% else %}<span class="text-xs text-aegis-muted">Checking…</span>{% endif %}
+  </div>
+  {% if percent is number %}
+    {% set tone = metric.status.value|health_tone %}
+    {{ progress(percent / 100, tone, label ~ " usage", "h-2") }}
+  {% else %}<div class="h-2 w-full rounded bg-aegis-border" aria-hidden="true"></div>{% endif %}
+  {% if detail and percent is number %}<p class="text-xs text-aegis-muted">{{ detail }}</p>{% endif %}
+</div>
 {% endmacro %}
 
 
@@ -76,8 +128,12 @@
    app shell, outside ``#app-content``. #}
 {% macro dialog() %}
 <dialog id="dialog"
-        @close="$el.querySelector('#dialog-body').innerHTML = ''"
-        class="bg-aegis-card text-aegis-text border border-aegis-border rounded-lg shadow-2xl p-0 w-full max-w-2xl
+        x-data="{}"
+        @close="if (!$el.open) $el.querySelector('#dialog-body').innerHTML = ''"
+        @keydown.escape="$el.close()"
+        @click="if ($event.target === $el) $el.close()"
+        class="bg-aegis-card text-aegis-text border border-aegis-border rounded-lg shadow-2xl p-0 w-full max-w-md
+               has-[[data-card=table]]:w-fit has-[[data-card=table]]:max-w-[calc(100vw-2rem)]
                backdrop:bg-aegis-scrim/60 backdrop:backdrop-blur-sm">
   <div class="flex justify-end px-3 pt-3">
     <button type="button" aria-label="Close" @click="$el.closest('dialog').close()"
@@ -92,16 +148,27 @@
 {% endmacro %}
 
 
-{# Switches between the theme blocks in static/input.css (see
-   static/js/theme.js). Drop it into any navbar or sidebar. #}
-{% macro theme_toggle() %}
-<button type="button" data-theme-toggle aria-label="Switch theme" @click="toggleTheme()"
-        class="inline-flex items-center justify-center w-8 h-8 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-       stroke-width="1.5" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
-    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
-  </svg>
-</button>
+{# Steward's theme and mode chooser, shared by navbars and auth pages. #}
+{% macro theme_toggle(placement="down", rail=False) %}
+<details class="relative {{ 'overseer-rail-appearance' if rail else '' }}" x-data="{ ...appearance() }" @click.outside="$el.removeAttribute('open')">
+  <summary data-theme-toggle aria-label="Appearance" class="list-none cursor-pointer select-none inline-flex items-center justify-center h-8 px-3 rounded border border-aegis-border text-xs text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors {{ 'overseer-rail-row gap-2' if rail else '' }}">
+    {% if rail %}<svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v2 M12 19v2 M3 12h2 M19 12h2 M5.6 5.6 7 7 M17 17l1.4 1.4 M18.4 5.6 17 7 M7 17l-1.4 1.4 M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg><span class="overseer-rail-hide">Appearance</span>{% else %}Appearance{% endif %}
+  </summary>
+  <div class="absolute {{ 'left-0 bottom-full mb-1' if placement == 'up' else 'right-0 top-full mt-1 w-64 shadow-lg' }} z-50 bg-aegis-card border border-aegis-border rounded-lg p-3 space-y-3" {% if placement == "up" %}style="width: min(16rem, calc(100vw - 2rem));"{% endif %}>
+    {% for key, legend, choices in [("theme", "Theme", [("aegis", "Aegis"), ("steward", "Steward")]), ("mode", "Mode", [("dark", "Dark"), ("light", "Light"), ("system", "System")])] %}
+    <fieldset>
+      <legend class="micro-label text-aegis-muted mb-1">{{ legend }}</legend>
+      <div class="flex gap-1">
+        {% for value, label in choices %}
+        <button type="button" data-set-{{ key }}="{{ value }}" :aria-pressed="{{ key }} === '{{ value }}'"
+                @click="{{ key }} = '{{ value }}'; setAppearance('{{ key }}', '{{ value }}')"
+                class="chip flex-1">{{ label }}</button>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+  </div>
+</details>
 {% endmacro %}
 
 
@@ -203,7 +270,9 @@
 
 
 {# A confirmation as dialog body: what will happen, one destructive
-   action (``method`` is delete or post to ``url``), and a way out. The
+   action (``method`` is the htmx verb for ``url``: delete, post, patch;
+   ``attrs`` rides on its button; ``tone`` is the ``action`` tone, danger
+   unless the action is not destructive), and a way out. The
    action's response closes the dialog and navigates or swaps as it sees
    fit; nothing swaps here (hx-swap="none"). #}
 {# A dialog's heading: what this is, and the one line under it.
@@ -221,7 +290,7 @@
 {%- set under = subtitle or facts or caller is defined %}
 <h2 class="text-lg font-semibold text-aegis-text {{ "mb-1" if under else "mb-4" }}">{{ title }}</h2>
 {%- if facts %}
-<p class="text-aegis-muted text-xxs uppercase tracking-wider mb-4">{{ facts }}</p>
+<p class="text-aegis-muted text-xxs caps mb-4">{{ facts }}</p>
 {%- elif subtitle %}
 <p class="text-xs text-aegis-muted mb-4">{{ subtitle }}</p>
 {%- elif caller is defined %}
@@ -230,11 +299,11 @@
 {% endmacro %}
 
 
-{% macro confirm(title, body, url, label="Remove", method="delete") %}
+{% macro confirm(title, body, url, label="Remove", method="delete", attrs="", tone="danger") %}
 {{ dialog_title(title, body) }}
 <div class="flex items-center gap-3">
-  <button type="button" {% if method == "delete" %}hx-delete="{{ url }}"{% else %}hx-post="{{ url }}"{% endif %} hx-swap="none"
-          class="px-4 py-2 rounded text-sm border border-aegis-error/40 text-error hover:border-aegis-error transition-colors">{{ label }}</button>
+  {% set verb %}hx-{{ method }}="{{ url }}" hx-swap="none" {{ attrs|safe }}{% endset %}
+  {{ action(label, verb, tone) }}
   <button type="button" @click="$el.closest('dialog').close()" class="text-xs text-aegis-muted hover:text-aegis-text">Cancel</button>
 </div>
 {% endmacro %}
@@ -282,7 +351,7 @@
        hover fill is only found by the mouse already on it. The mark is
        for ``explain`` alone, not for any clickable cell - a cell that
        filters a list is not offering to define a word. #}
-    <dt class="text-xxs text-aegis-muted uppercase tracking-wider flex items-center gap-1.5"><span class="truncate">{{ cell.label }}</span>
+    <dt class="text-xxs text-aegis-muted caps flex items-center gap-1.5"><span class="truncate">{{ cell.label }}</span>
       {% if cell.explain %}<span aria-hidden="true" class="inline-flex shrink-0 w-3.5 h-3.5 rounded-full border border-current items-center justify-center text-xxs leading-none opacity-50 group-hover:opacity-100 transition-opacity">?</span>{% endif %}
     </dt>
     <dd class="mt-1 text-2xl font-semibold tabular-nums {{ 'text-error' if cell.tone == 'error' else ('text-aegis-teal' if cell.tone == 'ok' else 'text-aegis-text') }}">{{ cell.value }}</dd>
@@ -329,4 +398,50 @@
 {% macro chip(label, active=False, href="", hx="", extra="") %}
 <a href="{{ href }}" {{ hx|safe }} {{ extra|safe }} {% if active %}aria-current="page"{% endif %}
    class="text-xs px-2 py-0.5 rounded border whitespace-nowrap transition-colors {{ 'border-aegis-teal bg-aegis-teal/10 text-aegis-text font-semibold' if active else 'border-aegis-border text-aegis-muted hover:border-aegis-muted hover:text-aegis-text' }}">{{ label }}</a>
+{% endmacro %}
+
+{# Copy ``value`` to the clipboard and confirm with a toast. The value
+   rides in a data attribute, so it is escaped like any other markup. #}
+{% macro copy_button(value, label="Copy") %}
+<button type="button" data-copy="{{ value }}"
+        @click="navigator.clipboard.writeText($el.dataset.copy).then(() => $dispatch('toast', { text: 'Copied to clipboard', tone: 'ok' }))"
+        class="shrink-0 text-xxs caps px-2 py-0.5 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">{{ label }}</button>
+{% endmacro %}
+
+{# A block of source (SQL, Python) with a copy button. ``caption`` is a
+   line above it, such as the file it came from. ``lang`` renders it as a
+   fenced block through the ``markdown`` filter, so it is highlighted for
+   that language; the copy button always takes the plain text. #}
+{% macro code_block(text, caption=None, lang=None) %}
+<div class="space-y-2 min-w-0">
+  <div class="flex items-center justify-between gap-3">
+    <p class="text-xxs text-aegis-muted truncate">{{ caption or "" }}</p>{{ copy_button(text) }}
+  </div>
+  {% if lang %}
+  <div class="code-block">{{ ("````" ~ lang ~ "\n" ~ text ~ "\n````")|markdown }}</div>
+  {% else %}
+  <pre class="code-block">{{ text }}</pre>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Label/value rows: a component's status, an expanded row's details. ``rows`` are (label, value)
+   pairs; empty values are skipped. #}
+{% macro facts(rows) %}
+<dl class="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-2 text-xs">
+  {% for label, value in rows if value not in (none, "", [], {}) %}
+  <dt class="text-aegis-muted">{{ label }}</dt>
+  <dd class="text-aegis-text break-words min-w-0">{{ value if value is string else value|join(", ") if value is iterable and value is not mapping else value }}</dd>
+  {% endfor %}
+</dl>
+{% endmacro %}
+
+{# A wrapping row of label-over-value figures, the Flet detail row.
+   ``items`` are (label, value) pairs. #}
+{% macro stat_row(items) %}
+<dl class="flex flex-wrap gap-x-8 gap-y-3 text-sm">
+  {% for label, value in items %}
+  <div><dt class="text-xxs text-aegis-muted caps">{{ label }}</dt><dd class="mt-0.5 tabular-nums text-aegis-text">{{ value }}</dd></div>
+  {% endfor %}
+</dl>
 {% endmacro %}

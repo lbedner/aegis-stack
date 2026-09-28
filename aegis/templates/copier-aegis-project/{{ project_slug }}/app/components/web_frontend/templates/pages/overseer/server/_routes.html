@@ -1,0 +1,35 @@
+{% from "components/macros/layout.html" import facts %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/_macros.html" import method_cell %}
+{% macro route_detail(row) %}
+{{ facts([
+  ("Endpoint", row.name), ("Summary", row.summary), ("Description", row.description),
+  ("Path params", row.path_params), ("Dependencies", row.dependencies), ("Response", row.response_model),
+]) }}
+{% endmacro %}
+{% if route_groups %}
+<div class="space-y-4">
+  {% for name, routes in route_groups %}
+  <details data-route-group {% if groups_open %}open{% endif %} class="group/g bg-aegis-card border border-aegis-border rounded-lg px-5">
+    <summary class="list-none cursor-pointer select-none py-3 flex items-center gap-3">
+      <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/g:rotate-90">&rsaquo;</span>
+      <h2 class="text-sm font-semibold text-aegis-text">{{ name }}</h2>
+      <span class="text-xs text-aegis-muted">{{ routes|length }} {{ "route" if routes|length == 1 else "routes" }}</span>
+      {% if routes|selectattr("auth")|list %}<span class="text-xxs caps text-aegis-amber">Protected</span>{% endif %}
+    </summary>
+    <div class="border-t border-aegis-border">
+      {{ data_table([
+        {"key": "methods", "label": "Method", "render": method_cell},
+        {"key": "path", "label": "Path"},
+        {"key": "auth", "label": "Auth", "kind": "status"},
+        {"key": "state", "label": "Status", "kind": "status"},
+        {"key": "summary", "label": "Summary"},
+      ], routes, detail=route_detail) }}
+    </div>
+  </details>
+  {% endfor %}
+</div>
+{% else %}
+{{ empty_state("No routes found", "Route metadata appears once the first health snapshot completes.") }}
+{% endif %}

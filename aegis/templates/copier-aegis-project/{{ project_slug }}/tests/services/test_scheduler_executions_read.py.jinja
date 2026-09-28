@@ -160,4 +160,85 @@ async def test_is_job_running_false_when_latest_finished(
         ],
     )
     assert await manager.is_job_running("j1") is False
+
+async def test_list_executions_reads_on_a_session_it_is_given(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A caller already holding a session (a web request) passes it in: on
+    SQLite a second session would wait on the first's write lock and fail
+    with "database is locked"."""
+
+    @asynccontextmanager
+    async def _refuse():
+        raise AssertionError("opened a second session")
+        yield
+
+    monkeypatch.setattr(stm, "get_async_session", _refuse)
+    await _seed(
+        async_db_session,
+        [{"job_id": "j1", "job_name": "J1", "started_at": _BASE, "status": "success"}],
+    )
+
+    records, total = await ScheduledTaskManager().list_executions(
+        session=async_db_session
+    )
+
+    assert total == 1
+    assert records[0]["job_id"] == "j1"
+
+async def test_stats_for_many_jobs_come_from_one_query(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The clock needs every job's stats at once; one ``IN`` query, on the
+    caller's session, not one query per job."""
+
+    @asynccontextmanager
+    async def _refuse():
+        raise AssertionError("opened a second session")
+        yield
+
+    monkeypatch.setattr(stm, "get_async_session", _refuse)
+    await _seed(
+        async_db_session,
+        [
+            {
+                "job_id": "a",
+                "job_name": "A",
+                "started_at": _BASE,
+                "status": "success",
+                "duration_ms": 1000,
+            },
+            {
+                "job_id": "a",
+                "job_name": "A",
+                "started_at": _BASE + timedelta(hours=1),
+                "status": "failed",
+                "duration_ms": 3000,
+            },
+            {
+                "job_id": "b",
+                "job_name": "B",
+                "started_at": _BASE,
+                "status": "success",
+                "duration_ms": 500,
+            },
+        ],
+    )
+    statements: list[str] = []
+    real_exec = async_db_session.exec
+
+    async def counting_exec(statement, *args, **kwargs):
+        statements.append(str(statement))
+        return await real_exec(statement, *args, **kwargs)
+
+    monkeypatch.setattr(async_db_session, "exec", counting_exec)
+    stats = await ScheduledTaskManager().get_jobs_stats(
+        ["a", "b", "never"], session=async_db_session
+    )
+
+    assert len(statements) == 1
+    assert stats["a"]["avg_duration_ms"] == 2000
+    assert stats["a"]["last_run"]["status"] == "failed"
+    assert stats["b"]["total_runs"] == 1
+    assert stats["never"]["total_runs"] == 0
 {% endif %}

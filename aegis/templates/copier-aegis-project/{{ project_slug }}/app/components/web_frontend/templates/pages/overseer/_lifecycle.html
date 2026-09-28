@@ -1,0 +1,18 @@
+{# A process's lifecycle as numbered steps, each a table of what runs there
+   (Server: hooks and middleware; Worker: a queue's hooks and tasks).
+   ``steps``: (key, title, subtitle, rows); a row is {name, role, module,
+   details}, ``role`` a status cell or none. #}
+{% from "components/macros/layout.html" import card, facts %}
+{% from "components/macros/table.html" import data_table %}
+{% macro entry_detail(row) %}{{ facts(row.details.items()|list) }}{% endmacro %}
+<div class="space-y-4">
+  {% for key, title, subtitle, rows in steps %}
+  {% call card(title, subtitle, id="lifecycle-" ~ key) %}
+    {{ data_table([
+      {"key": "name", "label": "Name"},
+      {"key": "role", "label": "Role", "kind": "status"},
+      {"key": "module", "label": "Module"},
+    ], rows, empty="No " ~ title|lower ~ " registered", detail=entry_detail) }}
+  {% endcall %}
+  {% endfor %}
+</div>

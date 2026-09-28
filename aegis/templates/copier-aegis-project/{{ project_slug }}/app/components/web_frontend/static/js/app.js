@@ -32,8 +32,36 @@ function toast(text, tone) {
 // responseHandling rules in base.html); they surface here as one error
 // toast instead of a silently unchanged page.
 document.body.addEventListener('htmx:responseError', (event) => {
+  if (event.detail.elt.dataset.apiDone !== undefined) return; // told below
   toast(`Request failed (${event.detail.xhr.status})`, 'error');
 });
+
+// A button that calls the JSON API directly (the Overseer's Authentication
+// actions) says what it did in `data-api-done`. The API answers with JSON,
+// not HTML, so nothing swaps: on success the dialog closes, the toast
+// shows, and the page's main area is re-requested to show the change; on
+// failure the API's own `detail` is the toast.
+document.body.addEventListener('htmx:afterRequest', (event) => {
+  const done = event.detail.elt.dataset.apiDone;
+  if (done === undefined) return;
+  if (!event.detail.successful) {
+    toast(apiDetail(event.detail.xhr), 'error');
+    return;
+  }
+  document.body.dispatchEvent(new Event('dialog:close'));
+  toast(done, 'ok');
+  htmx.ajax('GET', window.location.pathname, {
+    target: '#overseer-main', select: '#overseer-main', swap: 'outerHTML',
+  });
+});
+
+function apiDetail(xhr) {
+  try {
+    const detail = JSON.parse(xhr.responseText).detail;
+    if (typeof detail === 'string') return detail;
+  } catch (_) { /* not JSON */ }
+  return `Request failed (${xhr.status})`;
+}
 document.body.addEventListener('htmx:sendError', () => {
   toast('Network error. Check the connection and try again.', 'error');
 });

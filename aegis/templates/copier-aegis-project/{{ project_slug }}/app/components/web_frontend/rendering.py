@@ -7,6 +7,7 @@ a full page inside the page layout and a bare fragment for htmx.
 
 import json
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
@@ -29,6 +30,9 @@ templates.env.globals["project_description"] = settings.PROJECT_DESCRIPTION
 # selected.
 templates.env.globals["auth_enabled"] = settings.AUTH_ENABLED
 templates.env.globals["registration_enabled"] = settings.REGISTRATION_ENABLED
+templates.env.globals["email_flows_enabled"] = (
+    settings.AUTH_ENABLED and settings.AUTH_LEVEL != "basic"
+)
 templates.env.filters.update(FILTERS)
 
 
@@ -47,8 +51,7 @@ def hx_dialog(url: str, extra: str = "") -> Markup:
     Saying ``innerHTML`` here costs nothing and cannot be borrowed
     against, and it fixes every opener at once."""
     return Markup(
-        f'hx-get="{escape(url)}" hx-target="#dialog-body" '
-        f'hx-swap="innerHTML" {extra}'
+        f'hx-get="{escape(url)}" hx-target="#dialog-body" hx-swap="innerHTML" {extra}'
     )
 
 
@@ -83,6 +86,48 @@ def hx_replace(url: str, target: str, oob: str | None = None) -> Markup:
     return Markup(" ".join(f'{k}="{escape(v)}"' for k, v in attrs.items()))
 
 
+def status_cell(label: str, tone: str) -> dict[str, str]:
+    """A ``data_table`` status cell (rendered as a ``badge``); ``tone`` is ok,
+    warn, error, muted or accent."""
+    return {"label": label, "tone": tone}
+
+
+def with_query(path: str, **params: str | None) -> str:
+    """``path`` with the given query parameters, leaving out empty ones."""
+    query = urlencode({k: v for k, v in params.items() if v})
+    return f"{path}?{query}" if query else path
+
+
+def page_number(raw: str | None) -> int:
+    """A ``?page=`` value as a page number, 1 when missing or not a number."""
+    try:
+        return max(1, int(raw or 1))
+    except ValueError:
+        return 1
+
+
+def pager(
+    path: str, page: int, page_size: int, total: int, **params: str
+) -> dict[str, Any] | None:
+    """The ``pager`` macro's ``{start, end, total, prev, next}`` for ``page``
+    (1-based) of ``total`` items, or None when everything fits on one page.
+    ``params`` ride along on the previous/next links (filters, say)."""
+    if total <= page_size:
+        return None
+
+    def link(number: int) -> str:
+        return f"{path}?{urlencode({**params, 'page': number})}"
+
+    start = (page - 1) * page_size
+    return {
+        "start": start + 1 if total else 0,
+        "end": min(start + page_size, total),
+        "total": total,
+        "prev": link(page - 1) if page > 1 else None,
+        "next": link(page + 1) if start + page_size < total else None,
+    }
+
+
 templates.env.globals["hx_replace"] = hx_replace
 templates.env.globals["hx_dialog"] = hx_dialog
 templates.env.globals["hx_dialog_post"] = hx_dialog_post
@@ -108,6 +153,7 @@ def render(
     name: str,
     context: dict[str, Any] | None = None,
     status_code: int = 200,
+    page_layout: str = PAGE_LAYOUT,
 ) -> Response:
     """Render page template ``name`` for either render path.
 
@@ -116,7 +162,7 @@ def render(
     so a view has one URL and one template. ``Vary`` tells caches the two
     bodies differ. ``status_code`` is for validation re-renders (422).
     """
-    layout = FRAGMENT_LAYOUT if wants_fragment(request) else PAGE_LAYOUT
+    layout = FRAGMENT_LAYOUT if wants_fragment(request) else page_layout
     response = templates.TemplateResponse(
         request=request,
         name=name,

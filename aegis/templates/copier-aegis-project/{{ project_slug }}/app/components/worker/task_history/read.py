@@ -51,8 +51,8 @@ async def _pipeline_get_records(redis: Any, job_ids: list[str]) -> list[dict[str
     return tasks
 
 
-async def _pipeline_get_statuses(redis: Any, job_ids: list[str]) -> list[str | None]:
-    """Fetch only the status field for multiple tasks in one pipeline."""
+async def get_task_statuses(redis: Any, job_ids: list[str]) -> list[str | None]:
+    """Each task's status (None once its record has expired), in one pipeline."""
     if not job_ids:
         return []
     pipe = redis.pipeline(transaction=False)
@@ -88,7 +88,7 @@ async def get_queue_stats(
             return {"running": 0, "completed": 0, "failed": 0, "total": 0}
 
         all_ids = [j if isinstance(j, str) else j.decode() for j in all_ids_raw]
-        statuses = await _pipeline_get_statuses(redis, all_ids)
+        statuses = await get_task_statuses(redis, all_ids)
 
         counts = {"running": 0, "completed": 0, "failed": 0, "total": len(all_ids)}
         for s in statuses:
@@ -131,7 +131,7 @@ async def list_tasks_by_queue(
                 all_ids_raw = await redis.zrange(index_key, 0, -1)
 
             all_ids = [j if isinstance(j, str) else j.decode() for j in all_ids_raw]
-            statuses = await _pipeline_get_statuses(redis, all_ids)
+            statuses = await get_task_statuses(redis, all_ids)
             matching_ids = [
                 jid for jid, s in zip(all_ids, statuses, strict=False) if s == status
             ]

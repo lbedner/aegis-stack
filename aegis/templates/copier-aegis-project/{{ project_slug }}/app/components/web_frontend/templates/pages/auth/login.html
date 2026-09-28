@@ -26,7 +26,9 @@
     {{ auth_field("email", "Email", type="email", autocomplete="username", placeholder="you@domain.com") }}
 
     {% call auth_field("password", "Password", type="password", autocomplete="current-password", placeholder="••••••••") %}
+      {% if email_flows_enabled %}
       <a href="/forgot-password" class="text-xxs text-aegis-muted hover:text-aegis-teal transition-colors">Forgot?</a>
+      {% endif %}
     {% endcall %}
 
     {{ submit_button("Sign in", "Signing in…") }}

@@ -14,6 +14,7 @@ from taskiq_redis import RedisAsyncResultBackend
 from app.components.worker.broker import PausableRedisStreamBroker
 from app.components.worker.events import publish_event
 from app.components.worker.middleware import EventPublishMiddleware
+from app.components.worker.task_history import get_task_statuses
 from app.core.config import settings
 from app.core.log import logger
 from app.services.load_test_workloads import (
@@ -171,10 +172,13 @@ async def load_test_orchestrator(
         logger.info(f"All {tasks_sent} tasks enqueued")
 
         # Monitor task completion
+        # The ceiling is generous on purpose: a run that stops making progress
+        # is already cut off after 30s, and a big CPU run can take many minutes.
         completion_result = await _monitor_task_completion(
-            task_handles=task_handles,
+            redis=events_redis,
+            task_ids=[str(h.task_id) for h in task_handles],
             expected_tasks=tasks_sent,
-            timeout_seconds=300,
+            timeout_seconds=3600,
         )
 
         end_time = datetime.now(UTC)
@@ -217,16 +221,22 @@ async def load_test_orchestrator(
 
 
 async def _monitor_task_completion(
-    task_handles: list[Any],
+    redis: Any,
+    task_ids: list[str],
     expected_tasks: int,
     timeout_seconds: int = 300,
     poll_interval: float = 2.0,
 ) -> dict[str, Any]:
     """
-    Monitor task completion using TaskIQ result backend.
+    Count the spawned tasks as they finish, from their task-history records.
+
+    Not the result backend: it keeps a result for 60 seconds, so on a longer
+    run every early finisher would have lost its result before it was
+    checked. Each poll reads every task's status in one pipeline.
 
     Args:
-        task_handles: List of AsyncTaskiqTask handles
+        redis: Client for the task history
+        task_ids: The spawned tasks' ids
         expected_tasks: Number of tasks expected to complete
         timeout_seconds: Maximum time to wait
         poll_interval: How often to check for completion
@@ -240,34 +250,11 @@ async def _monitor_task_completion(
     last_progress_time = start_monitor
     last_completed = 0
 
-    completed_ids: set[str] = set()
-
     try:
         while True:
-            # Check each task handle for completion
-            for handle in task_handles:
-                task_id = str(handle.task_id)
-                if task_id in completed_ids:
-                    continue
-
-                # Check if result is ready
-                try:
-                    is_ready = await handle.is_ready()
-                    if is_ready:
-                        completed_ids.add(task_id)
-                        # Check if it succeeded or failed
-                        try:
-                            result = await handle.get_result()
-                            if result.is_err:
-                                tasks_failed += 1
-                            else:
-                                tasks_completed += 1
-                        except Exception:
-                            # If we can't get result, count as completed
-                            tasks_completed += 1
-                except Exception:
-                    # Handle not ready or error checking
-                    pass
+            statuses = await get_task_statuses(redis, task_ids)
+            tasks_completed = statuses.count("completed")
+            tasks_failed = statuses.count("failed")
 
             tasks_done = tasks_completed + tasks_failed
             elapsed = (datetime.now(UTC) - start_monitor).total_seconds()

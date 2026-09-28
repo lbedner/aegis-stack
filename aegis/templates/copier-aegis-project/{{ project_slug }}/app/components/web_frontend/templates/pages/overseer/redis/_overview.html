@@ -1,0 +1,13 @@
+{% from "components/macros/layout.html" import stats_strip %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="redis-figures") }}
+  <div x-data="{ selected: null }" class="grid gap-4 lg:grid-cols-5">
+    <section id="redis-keyspace" hx-ext="sse" sse-connect="{{ keyspace_events }}"
+             class="lg:col-span-3 bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0">
+      <div sse-swap="{{ keyspace_event }}" hx-target="this">{% include "pages/overseer/redis/_keyspace.html" %}</div>
+    </section>
+    <section id="redis-family" class="lg:col-span-2 bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0 flex items-center justify-center">
+      <p class="text-xs text-aegis-muted text-center max-w-[16rem]">Pick a family to see what it is for and what its newest key holds.</p>
+    </section>
+  </div>
+</div>

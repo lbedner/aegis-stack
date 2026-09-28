@@ -10,6 +10,44 @@ from typing import Any
 
 from app.components.worker import queue_discovery as discovery
 from app.core.log import logger
+from app.services.system.redis_keys import KeyFamily
+
+
+# What arq keeps in Redis, for the keyspace map (``redis_keys``).
+REDIS_KEYS = (
+    KeyFamily(
+        "arq:queue*",
+        "zset",
+        "Job queues",
+        "Each queue's waiting job ids by run time, and its health-check key",
+        "arq",
+        columns=("Job id", "Run at"),
+    ),
+    KeyFamily(
+        "arq:job:*",
+        "string",
+        "Queued jobs",
+        "A waiting job's pickled call, until a worker takes it",
+        "arq",
+        columns=("Key", "Value"),
+    ),
+    KeyFamily(
+        "arq:result:*",
+        "string",
+        "Job results",
+        "A finished job's result, kept WORKER_KEEP_RESULT_SECONDS",
+        "arq",
+        columns=("Key", "Value"),
+    ),
+    KeyFamily(
+        "arq:*",
+        "string",
+        "Job bookkeeping",
+        "In-progress and retry markers and the abort set",
+        "arq",
+        columns=("Key", "Value"),
+    ),
+)
 
 
 def get_worker_settings(queue_name: str) -> Any:
@@ -87,7 +125,7 @@ def get_queue_metadata(queue_name: str) -> dict[str, Any]:
     return discovery.build_metadata(
         getattr(settings_class, "queue_name", f"arq:queue:{queue_name}"),
         list(queue_tasks(queue_name)),
-        max_jobs=getattr(settings_class, "max_jobs", discovery.DEFAULT_MAX_JOBS),
+        max_jobs=getattr(settings_class, "max_jobs", None),
         timeout=getattr(
             settings_class, "job_timeout", discovery.DEFAULT_TIMEOUT_SECONDS
         ),

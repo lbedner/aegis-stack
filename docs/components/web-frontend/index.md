@@ -16,6 +16,7 @@ webserver process:
    │                                                │
    │   /            htmx pages (Jinja2 templates)   │
    │   /dashboard   Flet Overseer dashboard         │
+   │   /overseer    server-rendered Overseer page   │
    │   /api/v1/...  FastAPI routes                  │
    │   /static/...  fingerprinted assets            │
    │   /health      component health                │
@@ -45,6 +46,30 @@ Either way you get a styled landing page at `/`, the Overseer dashboard
 untouched at `/dashboard`, and a `web_frontend` entry in `/health`. Removal is
 symmetric: `aegis remove htmx` deletes the component tree and regenerates the
 shared files that referenced it.
+
+For the first server-rendered Overseer page, include basic auth:
+
+```bash
+aegis init my-app --components htmx --services 'auth[basic]'
+```
+
+Open `/overseer/login` to sign in. The form uses the shared auth and form
+macros and delegates to the existing auth endpoint. A successful sign-in
+opens the protected `/overseer` page, which is the starting point for the
+server-rendered dashboard.
+
+Basic auth has no email verification step. New registrations are ready
+immediately and the registration form redirects to `/overseer`. Email based
+password reset is also absent from basic auth because this configuration has
+no mail delivery; signed-in password changes remain available.
+
+The shared `feedback`, `form`, `layout`, and `table` macro files were compared
+with aegis-pulse and aegis-steward before adding this page. Pulse's shared
+`feedback`, `form`, and `table` macros already match the template. The generic
+updates brought in from those projects are the dialog behavior, stable search
+field ID, and empty-state marker. Steward's account, bill, matter, import,
+register, and chat macros depend on its own routes and data, so they remain
+in that application.
 
 ## What ships
 
@@ -111,6 +136,7 @@ back to unhashed asset paths and pages render immediately. Run
   the htmx conventions, and two rules that are load-bearing.
 - [Styling and theming](styling.md): the DaisyUI theme and the one place
   brand colors live.
+- [Live updates](live-updates.md): snapshots, SSE, and shared health sampling.
 - [Asset pipeline](asset-pipeline.md): fingerprinting, the manifest, cache
   policy, and the dev watcher loop.
 - [Auth pages](auth-pages.md): what you get when the project also selects

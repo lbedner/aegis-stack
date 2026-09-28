@@ -80,6 +80,9 @@ class UserService(
             full_name=user_data.full_name,
             hashed_password=hashed_password,
             is_active=True,
+{%- if auth_level == "basic" %}
+            is_verified=True,
+{%- endif %}
 {%- if include_auth_rbac %}
             role="admin" if is_first_user else "user",
 {%- endif %}

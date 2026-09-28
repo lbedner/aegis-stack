@@ -1,0 +1,52 @@
+{# The keyspace map, re-sent over SSE when it changes. ``selected`` belongs
+   to the Alpine scope outside, so a picked family stays picked. #}
+{% set k = keyspace %}
+<div class="flex items-baseline justify-between gap-3">
+  <h2 class="text-xxs caps tracking-[0.3em] text-aegis-muted">Keyspace</h2>
+  <span class="text-xxs text-aegis-muted tabular-nums">{{ "{:,}".format(k.total) }} {{ "key" if k.total == 1 else "keys" }}{% if k.cells and k.total > k.cells|length %} · 1 cell ≈ {{ "{:,}".format((k.total / k.cells|length)|round|int) }} keys{% endif %}{% if k.estimated %} · counts estimated from a sample{% endif %}</span>
+</div>
+{% if k.error %}
+<p data-empty class="mt-4 text-xs text-error">Redis could not be read: {{ k.error }}</p>
+{% else %}
+{% if not k.total %}<p data-empty class="mt-2 text-xs text-aegis-muted">Nothing stored yet. Cells light up as the app writes keys.</p>{% endif %}
+<div class="keyspace mt-4" role="img" aria-label="{{ k.total }} keys by owner">
+  {% for c in k.cells %}
+  {% set family = k.families[c] if c is number else none %}
+  <span class="keyspace__cell"
+        {% if c is not none %}data-family="{{ c }}" data-shade="{{ 'unclaimed' if c == 'unclaimed' else c % 4 }}" :data-selected='selected === {{ c|tojson }}'{% endif %}
+        {% if family and family.active %}data-active="true"{% endif %}></span>
+  {% endfor %}
+</div>
+<div class="mt-5 space-y-1">
+  {% for f in k.families %}
+  <button type="button" data-legend
+          hx-get="{{ partials }}/family/{{ f.id }}" hx-target="#redis-family" hx-swap="outerHTML"
+          @click="selected = {{ f.id }}" :data-selected="selected === {{ f.id }}"
+          class="keyspace__row{% if not f.count %} opacity-60{% endif %}">
+    <span class="keyspace__swatch" data-shade="{{ f.id % 4 }}" {% if f.active %}data-active="true"{% endif %}></span>
+    <span class="min-w-0 flex-1 text-left">
+      <span class="block text-sm font-semibold text-aegis-text truncate">{{ f.name }}</span>
+      <span class="block font-mono text-xxs text-aegis-muted truncate">{{ f.pattern }} · {{ f.kind }} · db {{ f.db }}{% if f.ttl_label %} · {{ f.ttl_label }} TTL{% endif %}</span>
+    </span>
+    <span class="shrink-0 text-right">
+      {% if f.count %}
+      <span class="block text-sm tabular-nums text-aegis-text">{{ "~" if k.estimated }}{{ "{:,}".format(f.count) }} {{ "key" if f.count == 1 else "keys" }}</span>
+      <span class="block text-xxs text-aegis-muted tabular-nums">{{ f.memory|filesizeformat }}{% if f.idle_label %} · {{ "live" if f.active else f.idle_label ~ " ago" }}{% endif %}</span>
+      {% else %}
+      <span class="block text-xxs text-aegis-muted">no keys yet</span>
+      {% endif %}
+    </span>
+  </button>
+  {% endfor %}
+  {% if k.unclaimed and k.unclaimed.count %}
+  <button type="button" data-legend @click="selected = 'unclaimed'" :data-selected="selected === 'unclaimed'" class="keyspace__row">
+    <span class="keyspace__swatch" data-shade="unclaimed"></span>
+    <span class="min-w-0 flex-1 text-left">
+      <span class="block text-sm font-semibold text-aegis-text">Unclaimed</span>
+      <span class="block font-mono text-xxs text-aegis-muted truncate">{{ k.unclaimed.samples|join(", ") }}</span>
+    </span>
+    <span class="shrink-0 text-right text-sm tabular-nums text-aegis-amber">{{ "~" if k.estimated }}{{ "{:,}".format(k.unclaimed.count) }} {{ "key" if k.unclaimed.count == 1 else "keys" }}</span>
+  </button>
+  {% endif %}
+</div>
+{% endif %}

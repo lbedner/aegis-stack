@@ -6,6 +6,7 @@ and the full update workflow.
 """
 
 import json
+import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -14,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from aegis.commands.update import _load_pending_update, _record_pending_update
 from aegis.core.copier_manager import is_copier_project
 from aegis.core.template_cleanup import SyncResult
 
@@ -59,6 +61,46 @@ class TestUpdateCommandBasics:
 
         assert not result.success
         assert "not generated with copier" in result.stderr.lower()
+
+
+def test_pending_update_in_linked_worktree(tmp_path: Path) -> None:
+    """A linked worktree's .git pointer must not be treated as a directory."""
+    repo = tmp_path / "repo"
+    linked = tmp_path / "linked"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "initial",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-qb", "linked", str(linked)],
+        check=True,
+    )
+
+    _record_pending_update(
+        linked,
+        target_ref="v0.13.0",
+        template_root=repo,
+        backup_tag="backup",
+    )
+
+    assert _load_pending_update(linked) == {
+        "target_ref": "v0.13.0",
+        "template_root": str(repo),
+        "backup_tag": "backup",
+    }
 
 
 class TestUpdateCommandGitValidation:

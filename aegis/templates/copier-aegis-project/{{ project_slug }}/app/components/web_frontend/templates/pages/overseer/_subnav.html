@@ -7,9 +7,9 @@
   <div class="px-5 py-5 border-b border-aegis-border">
     <div class="flex items-center justify-between gap-3">
       <h2 id="overseer-subnav-title" class="text-sm font-semibold text-aegis-text truncate">{{ item.title }}</h2>
-      <span class="inline-flex items-center shrink-0" sse-swap="{{ item.event }}" hx-target="this">
+      {% if item.status %}<span class="inline-flex items-center shrink-0" sse-swap="{{ item.event }}" hx-target="this">
         {% set health_status = item.status %}{% include "pages/overseer/_status_dot.html" %}
-      </span>
+      </span>{% endif %}
     </div>
     {% if subtitle %}<p class="mt-0.5 text-xxs text-aegis-muted truncate">{{ subtitle }}</p>{% endif %}
   </div>

@@ -863,6 +863,9 @@ MESSAGES: dict[str, str] = {
     # Help text
     "docs.help": "Show documentation links",
     "docs.help_show": "Display documentation links for installed components and services.",
+    "patterns.help": "Show how this app is built: its patterns and macros",
+    "patterns.help_show": "Print the patterns detected in this app's code, and the macro catalog, as a brief to read before building.",
+    "patterns.opt_format": "Output format: markdown or json",
     # ── Load Test ────────────────────────────────────────────────────
     # Help text
     "loadtest.help": "Load testing commands for worker performance analysis",

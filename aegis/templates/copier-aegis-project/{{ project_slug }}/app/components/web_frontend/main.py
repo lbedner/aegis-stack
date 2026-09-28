@@ -9,14 +9,22 @@ Route modules import from those: full-page handlers live in
 """
 
 from fastapi import APIRouter
+from fastapi.routing import APIRoute
 
 
 def create_web_frontend_app() -> APIRouter:
-    """Create the web frontend router with page and partial routes."""
+    """Create the web frontend router with page and partial routes.
+
+    None of them belong in the API's OpenAPI schema. Each is tagged
+    ``overseer`` or ``web``, so route lists group them apart from the API.
+    """
     router = APIRouter()
 
     from app.components.web_frontend.routes.pages import router as pages_router
 
-    router.include_router(pages_router)
+    router.include_router(pages_router, include_in_schema=False)
+    for route in router.routes:
+        if isinstance(route, APIRoute):
+            route.tags = ["overseer" if "/overseer" in route.path else "web"]
 
     return router

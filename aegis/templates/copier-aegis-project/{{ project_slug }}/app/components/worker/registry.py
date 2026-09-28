@@ -177,5 +177,3 @@ __all__ = [
     "task_name",
     "validate_queue_name",
 ]
-
-logger.debug("arq queue registry ready")

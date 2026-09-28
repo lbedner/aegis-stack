@@ -187,9 +187,22 @@ macro per control. Import what you need:
 `chart_panel(id, title, kind, data)` renders a canvas plus a JSON block;
 `static/js/charts.js` mounts Chart.js over every `canvas[data-chart]` on
 load and after each htmx settle, loading Chart.js on first use and reading
-its palette from the theme tokens. `dialog()` is mounted once by the base
+its palette from the theme tokens. Axis ticks and tooltips are plain
+numbers unless `data` carries `"format": "money"`. `dialog()` is mounted once by the base
 layout; a swap into `#dialog-body` opens it (pattern for any modal: `hx-get`
 the body into that target).
+
+To see every macro rendered, open **Overseer > Patterns** and pick Layout,
+Feedback, Forms or Tables under Frontend. Each macro shows its signature and
+the comment above it (read from the macro file), a live preview, and the
+call that produced it. The examples live in `web_frontend/macro_catalog.py`;
+a new public macro fails `tests/web/test_overseer_patterns.py` until it has
+one there. The same page's Backend group shows the app's patterns detected
+from the running code: routes (`app/services/system/patterns.py`), services
+and their session handling (`app/services/system/service_patterns.py`) and,
+with the worker installed, worker tasks on any engine
+(`app/components/worker/patterns.py`). `<project> patterns` prints the same
+report for an agent to read before building.
 
 ### A table page
 

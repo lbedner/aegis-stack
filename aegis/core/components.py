@@ -181,6 +181,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/components/test_worker_redis_keys.py",
                 "tests/components/test_load_test_monitor.py",
                 "tests/components/test_worker_runtime.py",
+                "app/components/worker/patterns.py",
+                "tests/components/test_worker_patterns.py",
                 "tests/services/test_ui_worker.py",
                 "tests/web/test_overseer_worker.py",
                 "app/core/queue_workers.py",

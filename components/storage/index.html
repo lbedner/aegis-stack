@@ -5303,6 +5303,7 @@
 <li><strong>A SeaweedFS service</strong> in the compose stack, S3 port only, with a named volume, enough to exercise the bucket path locally. Its web UI and native APIs are an operator tool; nothing in the app calls them.</li>
 <li><strong>Presigned URLs</strong>: a time-limited link straight to an object, for handing a browser a file without proxying it. The filesystem backend returns <code>None</code> and serves through the app instead.</li>
 <li><strong>A health check, card and modal</strong>: backend, endpoint, bucket, reachability, and object counts when the documents service is present.</li>
+<li><strong>An Overseer page</strong> (htmx frontend): the bucket at a glance, and a browser over every bucket with download, upload and delete. The app's own bucket is read-only there.</li>
 </ul>
 <p>Nothing names a vendor. Production points <code>S3_ENDPOINT_URL</code> and the credentials at AWS, a Garage box, or any other S3-compatible store, and the code is unchanged.</p>
 <h2 id="the-one-decision-everything-rests-on">The One Decision Everything Rests On</h2>

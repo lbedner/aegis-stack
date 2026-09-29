@@ -1,0 +1,83 @@
+{# A file browser over the object store: the buckets, then one level of a
+   bucket at a time. Folders are the common prefixes a "/" delimiter
+   returns; S3 has no real folders. Writable buckets (every one but the
+   app's own) take uploads into the open folder, and delete one file from
+   its row menu or the checked ones at once. #}
+{% from "components/macros/layout.html" import card, menu_item %}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/table.html" import data_table %}
+{% macro entry(value) -%}
+{%- set glyphs = {
+  "bucket": "M4 7h16l-1.5 12.5a1 1 0 0 1-1 .9h-11a1 1 0 0 1-1-.9L4 7z M3 7h18 M9 11h6",
+  "folder": "M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-11z",
+  "file": "M6 3h8l4 4v14H6z M14 3v4h4",
+} -%}
+<span class="inline-flex items-center gap-2 min-w-0">
+  <svg class="h-4 w-4 shrink-0 {{ 'text-aegis-teal' if value.kind != 'file' else 'text-aegis-muted' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ glyphs[value.kind] }}"/></svg>
+  {%- if value.url %}<a href="{{ value.url }}" {{ hx_replace(value.url, "#overseer-main") }} class="text-aegis-text hover:text-aegis-teal truncate">{{ value.label }}</a>
+  {%- else %}<span class="font-mono text-xs text-aegis-text truncate">{{ value.label }}</span>{% endif -%}
+</span>
+{%- endmacro %}
+{# Ticks or clears every file on this level; shows a dash when only some
+   are ticked. No ``name``, so it is never counted as a selected file. #}
+{% macro pick_all() -%}
+<input type="checkbox" aria-label="Select every file" class="accent-aegis-teal"
+       :checked="total > 0 && selected === total" :indeterminate="selected > 0 && selected < total"
+       @change="$el.closest('[x-data]').querySelectorAll('input[name=key]').forEach((box) => box.checked = $el.checked)">
+{%- endmacro %}
+{% macro pick(value) -%}
+{%- if value.key %}<input type="checkbox" name="key" value="{{ value.key }}" aria-label="Select {{ value.key }}" class="accent-aegis-teal">{% endif -%}
+{%- endmacro %}
+{# The row's options, out of the way until the row is hovered or focused. #}
+{% macro file_actions(row) -%}
+{%- if row.download %}
+<details data-row-menu class="relative inline-block text-left opacity-0 group-hover:opacity-100 focus-within:opacity-100 open:opacity-100 transition-opacity"
+         @click.outside="$el.removeAttribute('open')">
+  <summary aria-label="Options" class="list-none cursor-pointer select-none px-2 py-0.5 rounded text-aegis-muted hover:text-aegis-text hover:bg-aegis-border/30">&hellip;</summary>
+  <ul role="menu" class="absolute right-0 top-full mt-1 z-30 min-w-[9rem] bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-1">
+    <li><a href="{{ row.download }}" download @click="$el.closest('details').removeAttribute('open')"
+           class="block px-3 py-1.5 text-sm text-aegis-text hover:bg-aegis-border/30 rounded transition-colors">Download</a></li>
+    {% if row.delete %}{{ menu_item("Delete", hx_dialog(row.delete), danger=True) }}{% endif %}
+  </ul>
+</details>
+{%- endif -%}
+{%- endmacro %}
+<div x-data="{ selected: 0, total: 0 }" x-init="total = $el.querySelectorAll('input[name=key]').length"
+     @change="selected = $el.querySelectorAll('input[name=key]:checked').length">
+<div id="storage-toolbar" class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <nav id="storage-crumbs" aria-label="Location" class="flex flex-wrap items-center gap-1.5 text-sm">
+    {% for crumb in browse.crumbs %}
+    <a href="{{ crumb.url }}" {{ hx_replace(crumb.url, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-text">{{ crumb.label }}</a>
+    <span class="text-aegis-muted" aria-hidden="true">/</span>
+    {% endfor %}
+    <span aria-current="location" class="font-medium text-aegis-text">{{ browse.current }}</span>
+  </nav>
+  {% if browse.writable and not browse.error %}
+  <div class="flex items-center gap-2">
+    <span x-show="selected > 0" x-cloak class="inline-flex items-center gap-2">
+      <span class="text-xs text-aegis-muted"><span x-text="selected"></span> selected</span>
+      {{ action("Delete selected", hx_dialog(browse.bulk_delete_url, 'hx-include="[name=\'key\']:checked"'), "danger") }}
+    </span>
+    <form id="storage-upload" hx-post="{{ browse.upload_url }}" hx-encoding="multipart/form-data" hx-swap="none" class="flex items-center">
+      <input type="hidden" name="bucket" value="{{ browse.bucket }}">
+      <input type="hidden" name="prefix" value="{{ browse.prefix }}">
+      <input id="storage-upload-file" type="file" name="file" required class="sr-only" @change="$el.form.requestSubmit()">
+      <label for="storage-upload-file" class="inline-flex items-center cursor-pointer px-2.5 py-1 text-xs leading-normal rounded border border-aegis-teal text-aegis-text hover:bg-aegis-teal/10 transition-colors">Upload</label>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% if browse.error %}
+<p role="alert" class="text-xs text-error bg-aegis-error/5 border border-aegis-error/40 rounded px-3 py-2">{{ browse.error }}</p>
+{% else %}
+{% call card(None, id="storage-browse") %}
+  {{ data_table(
+    ([{"key": "pick", "label": "", "render": pick, "header": pick_all}] if browse.writable else []) + [
+    {"key": "name", "label": "Name", "render": entry},
+    {"key": "size", "label": "Size", "align": "right"},
+    {"key": "modified", "label": "Modified"},
+  ], browse.rows, actions=file_actions, empty=("Nothing here" if browse.crumbs else "No buckets these credentials can see")) }}
+  {% if browse.truncated %}<p class="text-xxs text-aegis-muted">Showing the first 1,000 entries at this level.</p>{% endif %}
+{% endcall %}
+{% endif %}
+</div>

@@ -127,3 +127,18 @@ def test_format_span_reads_in_its_two_largest_units() -> None:
     assert format_span(3720) == "1h 2m"
     assert format_span(90061) == "1d 1h"
     assert format_span(None) is None
+
+
+class TestSafeFilename:
+    """A name bound for Content-Disposition cannot end the header or the
+    quoted value: a newline there is header injection."""
+
+    def test_line_breaks_quotes_and_backslashes_are_dropped(self) -> None:
+        from app.core.formatting import safe_filename
+
+        assert safe_filename('bad"\r\nSet-Cookie: x\\.pdf') == "badSet-Cookie: x.pdf"
+
+    def test_an_empty_result_falls_back(self) -> None:
+        from app.core.formatting import safe_filename
+
+        assert safe_filename('\r\n"', fallback="download") == "download"

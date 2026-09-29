@@ -93,6 +93,53 @@ class S3Storage:
             ExpiresIn=expires_seconds,
         )
 
+    async def list_objects(self, limit: int) -> tuple[list[dict[str, Any]], bool]:
+        """Up to ``limit`` objects (key, size, last modified), and whether
+        the bucket holds more. Paged, never unbounded: a big bucket is
+        sampled, the same as the Redis keyspace."""
+        return await asyncio.to_thread(self._list, limit)
+
+    async def buckets(self) -> list[dict[str, Any]]:
+        """Every bucket these credentials can see, by name."""
+        return await asyncio.to_thread(self._buckets)
+
+    async def browse(
+        self, bucket: str, prefix: str, limit: int = 1000
+    ) -> dict[str, Any]:
+        """One level of ``bucket`` under ``prefix``: its folders (the common
+        prefixes a ``/`` delimiter returns; S3 has no real folders) and its
+        files, capped at ``limit`` entries."""
+        return await asyncio.to_thread(self._browse, bucket, prefix, limit)
+
+    # -- by bucket and key, for the Overseer's browser ---------------------
+    # Unlike ``put``, the caller names the key and the bucket.
+
+    async def fetch(self, bucket: str, key: str) -> tuple[bytes, str | None] | None:
+        """An object's bytes and content type, or None if there is none."""
+        return await asyncio.to_thread(self._fetch, bucket, key)
+
+    async def upload(
+        self, bucket: str, key: str, data: bytes, content_type: str | None
+    ) -> None:
+        extra = {"ContentType": content_type} if content_type else {}
+        await asyncio.to_thread(
+            self._client.put_object, Bucket=bucket, Key=key, Body=data, **extra
+        )
+
+    async def remove_many(self, bucket: str, keys: list[str]) -> None:
+        """Delete every key, a thousand per request (the S3 limit)."""
+        for start in range(0, len(keys), 1000):
+            batch = [{"Key": key} for key in keys[start : start + 1000]]
+            await asyncio.to_thread(
+                self._client.delete_objects,
+                Bucket=bucket,
+                Delete={"Objects": batch, "Quiet": True},
+            )
+
+    async def remove(self, bucket: str, key: str) -> bool:
+        """Delete an object; False if it was not there."""
+        return await asyncio.to_thread(self._remove, bucket, key)
+
     async def reachable(self) -> bool:
         """Can we reach the bucket? A bucket that does not exist yet is
         created here, the same as on first put: an empty store is healthy,
@@ -128,6 +175,84 @@ class S3Storage:
         if self.endpoint_url is None and self.region != "us-east-1":
             return {"CreateBucketConfiguration": {"LocationConstraint": self.region}}
         return {}
+
+    def _list(self, limit: int) -> tuple[list[dict[str, Any]], bool]:
+        self._ensure_bucket()
+        found: list[dict[str, Any]] = []
+        pages = self._client.get_paginator("list_objects_v2").paginate(
+            Bucket=self.bucket, PaginationConfig={"PageSize": min(limit, 1000)}
+        )
+        for page in pages:
+            for item in page.get("Contents", []):
+                if len(found) == limit:
+                    return found, True
+                found.append(
+                    {
+                        "key": item["Key"],
+                        "size": item["Size"],
+                        "modified": item.get("LastModified"),
+                    }
+                )
+        return found, False
+
+    def _buckets(self) -> list[dict[str, Any]]:
+        listed = self._client.list_buckets().get("Buckets", [])
+        return sorted(
+            ({"name": b["Name"], "created": b.get("CreationDate")} for b in listed),
+            key=lambda b: b["name"],
+        )
+
+    def _browse(self, bucket: str, prefix: str, limit: int) -> dict[str, Any]:
+        folders: list[str] = []
+        files: list[dict[str, Any]] = []
+        pages = self._client.get_paginator("list_objects_v2").paginate(
+            Bucket=bucket,
+            Prefix=prefix,
+            Delimiter="/",
+            PaginationConfig={"PageSize": min(limit, 1000)},
+        )
+        for page in pages:
+            entries = [("folder", p["Prefix"]) for p in page.get("CommonPrefixes", [])]
+            entries += [("file", item) for item in page.get("Contents", [])]
+            for kind, entry in entries:
+                if len(folders) + len(files) == limit:
+                    return {"folders": folders, "files": files, "truncated": True}
+                if kind == "folder":
+                    folders.append(entry)
+                elif entry["Key"] != prefix:
+                    files.append(
+                        {
+                            "key": entry["Key"],
+                            "size": entry["Size"],
+                            "modified": entry.get("LastModified"),
+                        }
+                    )
+        return {"folders": folders, "files": files, "truncated": False}
+
+    def _missing(self, exc: Exception) -> bool:
+        code = str(getattr(exc, "response", {}).get("Error", {}).get("Code", ""))
+        return code in ("404", "NoSuchKey", "NotFound")
+
+    def _fetch(self, bucket: str, key: str) -> tuple[bytes, str | None] | None:
+        # ponytail: reads the whole object into memory; stream it if the
+        # browser ever serves files bigger than a few hundred MB.
+        try:
+            reply = self._client.get_object(Bucket=bucket, Key=key)
+        except self._client.exceptions.ClientError as exc:
+            if self._missing(exc):
+                return None
+            raise
+        return reply["Body"].read(), reply.get("ContentType")
+
+    def _remove(self, bucket: str, key: str) -> bool:
+        try:
+            self._client.head_object(Bucket=bucket, Key=key)
+        except self._client.exceptions.ClientError as exc:
+            if self._missing(exc):
+                return False
+            raise
+        self._client.delete_object(Bucket=bucket, Key=key)
+        return True
 
     def _put(self, key: str, data: bytes, content_type: str | None) -> None:
         self._ensure_bucket()

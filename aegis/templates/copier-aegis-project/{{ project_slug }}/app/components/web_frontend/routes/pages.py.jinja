@@ -25,6 +25,9 @@ from app.components.web_frontend.routes.partials import (
 from app.components.web_frontend.routes.partials import (
     overseer_redis as overseer_redis_partials,
 )
+from app.components.web_frontend.routes.partials import (
+    overseer_storage as overseer_storage_partials,
+)
 from app.components.web_frontend import overseer_patterns, overseer_redis, overseer_worker
 from app.components.web_frontend.overseer_events import health_events
 from app.components.web_frontend.rendering import render, templates
@@ -152,6 +155,7 @@ async def _authenticate_overseer_stream(
 router.include_router(overseer_auth_partials.router)
 router.include_router(overseer_scheduler_partials.router)
 router.include_router(overseer_redis_partials.router)
+router.include_router(overseer_storage_partials.router)
 
 
 @router.get("/overseer/events", include_in_schema=False)

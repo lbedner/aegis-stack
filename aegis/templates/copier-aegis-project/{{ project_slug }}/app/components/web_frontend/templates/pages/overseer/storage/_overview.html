@@ -1,0 +1,25 @@
+{# The app's bucket at a glance: how much it holds, at what sizes, and how
+   the app reaches it. Browse opens any bucket folder by folder. #}
+{% from "components/macros/layout.html" import card, stats_strip, facts, ranked_rows %}
+{% from "components/macros/feedback.html" import empty_state %}
+<div class="space-y-4">
+  {{ stats_strip([
+    {"label": "Objects", "value": bucket.count},
+    {"label": "Stored", "value": bucket.stored},
+    {"label": "Largest", "value": bucket.largest},
+    {"label": "Last write", "value": bucket.latest},
+  ], id="storage-figures") }}
+  {% if bucket.error %}
+  <p role="alert" class="text-xs text-error bg-aegis-error/5 border border-aegis-error/40 rounded px-3 py-2">{{ bucket.error }}</p>
+  {% endif %}
+  <div class="grid gap-4 lg:grid-cols-2">
+    {% call card("Sizes", id="storage-sizes") %}
+      {% if bucket.empty %}
+      {{ empty_state("The bucket is empty", "Documents and chat attachments are stored here once those services are installed.") }}
+      {% elif not bucket.error %}
+      {{ ranked_rows(bucket.bands) }}
+      {% endif %}
+    {% endcall %}
+    {% call card("Connection") %}{{ facts(connection) }}{% endcall %}
+  </div>
+</div>

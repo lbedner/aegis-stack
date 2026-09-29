@@ -17,6 +17,7 @@ Object storage for the files an application keeps: chat attachments, documents, 
 - **A SeaweedFS service** in the compose stack, S3 port only, with a named volume, enough to exercise the bucket path locally. Its web UI and native APIs are an operator tool; nothing in the app calls them.
 - **Presigned URLs**: a time-limited link straight to an object, for handing a browser a file without proxying it. The filesystem backend returns `None` and serves through the app instead.
 - **A health check, card and modal**: backend, endpoint, bucket, reachability, and object counts when the documents service is present.
+- **An Overseer page** (htmx frontend): the bucket at a glance, and a browser over every bucket with download, upload and delete. The app's own bucket is read-only there.
 
 Nothing names a vendor. Production points `S3_ENDPOINT_URL` and the credentials at AWS, a Garage box, or any other S3-compatible store, and the code is unchanged.
 

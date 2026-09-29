@@ -64,13 +64,20 @@ The backend creates the bucket on first use if it is missing, so a fresh dev sta
 seaweedfs:
   image: chrislusf/seaweedfs:4.45
   command: server -s3 -dir=/data -ip=seaweedfs -ip.bind=0.0.0.0 -master.volumeSizeLimitMB=1024
+  environment:
+    - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY:-aegis}
+    - AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY:-aegis-secret}
 ```
+
+SeaweedFS takes the app's own `S3_ACCESS_KEY` and `S3_SECRET_KEY` as its admin identity, so it answers only to those credentials. Without an identity it treats every request as anonymous: any key is accepted, and listing buckets returns nothing, because an anonymous caller owns none. With auth on, `/` answers 403, so the healthcheck probes `/healthz`.
 
 Only the S3 port is published, and the data lives in a named volume that survives `make restart` and is removed by `make clean`. It is a dev dependency: production points the same settings at a real store and does not run this service.
 
 ## Health
 
 The dashboard's storage card reports the backend in use, the endpoint, the bucket, whether it is reachable, and object counts when the documents service is present. A store that cannot be reached shows as unhealthy there rather than failing at the moment someone uploads a file.
+
+With the htmx frontend and auth, the Overseer's **Storage** page shows the app's bucket (object count, bytes stored, largest object, a size histogram and the connection) and a **Browse** section: every bucket the credentials can see, folder by folder, with download, upload into the open folder, and delete (one file from its row menu, or the checked ones at once). S3 has no folders; the browser draws the common prefixes a `/` delimiter returns, as every console does. The app's own bucket is read-only there: its keys are content hashes that database rows point at, so only the app writes it.
 
 ## Next Steps
 

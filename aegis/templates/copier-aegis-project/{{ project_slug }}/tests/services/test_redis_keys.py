@@ -129,3 +129,23 @@ class FakeRedis:
         return [
             self.idle[key] if op == "idle" else answers[op] for op, key in self.calls
         ]
+
+
+def test_the_shared_cache_claims_its_database_after_traffic() -> None:
+    """The cache's entries have no family of their own (their names are
+    whatever services choose), so the cache claims the rest of its
+    database; traffic's counters, declared first, keep theirs."""
+    from app.services.system import redis_keys
+
+    cache_db = [f for f in redis_keys.families() if f.db == "CACHE_REDIS_DB"]
+    names = [f.name for f in cache_db]
+    assert names[-1] == "Shared cache" and cache_db[-1].pattern == "*"
+    groups, unclaimed = redis_keys.group_keys(
+        cache_db, ["insights:project:7", "traffic:total:2026-09-28"]
+    )
+    claimed = {cache_db[i].name: keys for i, keys in groups.items()}
+    assert claimed["Shared cache"] == ["insights:project:7"]
+    assert unclaimed == []
+    assert "Shared cache" not in [
+        cache_db[i].name for i, keys in groups.items() if "traffic:total:2026-09-28" in keys
+    ]

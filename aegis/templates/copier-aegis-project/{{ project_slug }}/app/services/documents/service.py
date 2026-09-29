@@ -284,6 +284,10 @@ class DocumentService:
         """Tags for a page of documents in one query, never one per row."""
         return await queries.tags_for_many(self.db, document_ids)
 
+    async def titles(self, document_ids: set[int]) -> dict[int, str]:
+        """Titles for a set of documents in one query, never one per row."""
+        return await queries.titles(self.db, document_ids)
+
     async def tags_for(self, document_id: int) -> list[str]:
         return await queries.tags_for(self.db, document_id)
 

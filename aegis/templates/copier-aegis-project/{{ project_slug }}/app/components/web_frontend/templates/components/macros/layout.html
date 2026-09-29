@@ -132,8 +132,6 @@
 <dialog id="dialog"
         x-data="{}"
         @close="if (!$el.open) $el.querySelector('#dialog-body').innerHTML = ''"
-        @keydown.escape="$el.close()"
-        @click="if ($event.target === $el) $el.close()"
         class="bg-aegis-card text-aegis-text border border-aegis-border rounded-lg shadow-2xl p-0 w-full max-w-md
                has-[[data-card=table]]:w-fit has-[[data-card=table]]:max-w-[calc(100vw-2rem)]
                backdrop:bg-aegis-scrim/60 backdrop:backdrop-blur-sm">
@@ -148,6 +146,48 @@
   <div id="dialog-body" class="px-6 pb-6"></div>
 </dialog>
 {% endmacro %}
+
+
+{# A brand mark before a name: the icon on a light tile when there is one
+   (served from a cached URL, not inlined, so the browser fetches it once),
+   else the initial letter. The letter rides a data attribute, not text, so
+   the cell's text stays just the name. The tile is light in every theme:
+   plenty of logos are drawn dark on transparency, invisible on a dark
+   surface. #}
+{% macro avatar(name, icon_url=None) %}
+{% if icon_url %}
+<span class="inline-flex shrink-0 w-5 h-5 rounded-full brand-tile items-center justify-center overflow-hidden align-middle" aria-hidden="true"><img src="{{ icon_url }}" alt="" width="14" height="14" loading="lazy" class="w-3.5 h-3.5 object-contain"></span>
+{% else %}
+<span data-avatar="{{ (name or "?")|trim|first|upper }}" class="inline-flex shrink-0 w-5 h-5 rounded-full bg-aegis-border/60 text-aegis-muted text-xxs font-semibold items-center justify-center align-middle before:content-[attr(data-avatar)]" aria-hidden="true"></span>
+{% endif %}
+{% endmacro %}
+
+
+{# The one drawer: one item of a list, sliding in from the right over the
+   page. Non-modal, so the list stays clickable and rows can be walked
+   without closing it. A list says which item is open with
+   ``drawer_sync`` and app.js does the rest; mounted once by the app shell,
+   beside the modal. #}
+{% macro drawer() %}
+<dialog id="drawer" aria-label="Details"
+        class="aegis-drawer fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-full sm:w-[40rem] max-w-full p-0 overflow-y-auto
+               bg-aegis-card text-aegis-text border-l border-aegis-border shadow-2xl">
+  <div class="sticky top-0 z-10 flex justify-end px-3 pt-3 bg-aegis-card">
+    <button type="button" aria-label="Close" data-drawer-close
+            class="text-aegis-muted/70 hover:text-aegis-text transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+  <div id="drawer-body" class="px-6 pb-6"></div>
+</dialog>
+{% endmacro %}
+
+{# Which drawer a list has open: ``url`` loads into it, or none closes it.
+   ``param`` is the query parameter that holds the open item, dropped from
+   the address when the drawer is closed. #}
+{% macro drawer_sync(url, param) %}<div hidden data-drawer-sync data-drawer-url="{{ url or '' }}" data-drawer-param="{{ param }}"></div>{% endmacro %}
 
 
 {# Steward's theme and mode chooser, shared by navbars and auth pages. #}
@@ -433,7 +473,7 @@
 <dl class="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-2 text-xs">
   {% for label, value in rows if value not in (none, "", [], {}) %}
   <dt class="text-aegis-muted">{{ label }}</dt>
-  <dd class="text-aegis-text break-words min-w-0">{{ value if value is string else value|join(", ") if value is iterable and value is not mapping else value }}</dd>
+  <dd class="text-aegis-text break-words min-w-0">{{ value|docstring if value is string else value|join(", ") if value is iterable and value is not mapping else value }}</dd>
   {% endfor %}
 </dl>
 {% endmacro %}

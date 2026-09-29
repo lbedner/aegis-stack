@@ -129,6 +129,39 @@ class TestCellKinds:
         assert text(cells[0]) == "+$2.50" and "text-aegis-teal" in cells[0].get("class")
         assert text(cells[1]) == "-$2.50" and "text-error" in cells[1].get("class")
 
+    def test_code_is_monospace(self) -> None:
+        columns = [{"key": "key", "label": "Key", "kind": "code"}]
+        assert text(one(render(columns, [{"key": "cache:user:1"}]), "td code")) == (
+            "cache:user:1"
+        )
+
+    def test_a_link_opens_its_item_in_the_target(self) -> None:
+        columns = [
+            {"key": "title", "label": "Title", "kind": "link", "target": "#main"}
+        ]
+        link = one(
+            render(columns, [{"title": {"label": "Lease", "url": "/d?id=1"}}]), "td a"
+        )
+        assert text(link) == "Lease" and link.get("href") == "/d?id=1"
+        assert link.get("hx-target") == "#main"
+
+    def test_a_wrapping_column_wraps(self) -> None:
+        columns = [{"key": "rule", "label": "Rule", "wrap": True}]
+        cell = one(render(columns, [{"rule": "Host(`a`) && Path(`/b`)"}]), "tbody td")
+        assert "whitespace-normal" in cell.get("class")
+
+    def test_an_avatar_shows_the_brand_mark_before_the_name(self) -> None:
+        columns = [{"key": "name", "label": "Provider", "kind": "avatar"}]
+        html = render(columns, [{"name": "Anthropic", "icon_url": "/icons/anthropic"}])
+        assert one(html, "td img").get("src") == "/icons/anthropic"
+        assert text(one(html, "td")) == "Anthropic"
+
+    def test_without_a_mark_the_avatar_is_the_initial(self) -> None:
+        columns = [{"key": "name", "label": "Provider", "kind": "avatar"}]
+        html = render(columns, [{"name": "groq", "icon_url": None}])
+        assert one(html, "td [data-avatar]").get("data-avatar") == "G"
+        assert not select(html, "td img")
+
     def test_toned_money_colours_without_the_plus(self) -> None:
         columns = [
             {"key": "balance", "label": "Balance", "kind": "money", "toned": True}

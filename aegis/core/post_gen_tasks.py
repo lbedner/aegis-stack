@@ -464,7 +464,9 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/llm/llm_service.py")
         remove_file(project_path, "app/services/ai/domains/llm/catalog.py")
         remove_file(project_path, "app/services/ai/domains/llm/queries.py")
-        remove_file(project_path, "app/services/ai/domains/llm/provider_management.py")
+        # provider_management stays: provider readiness, .env writes and SDK
+        # installs touch no table, and `ai providers` / `add-provider` /
+        # `use-provider` need it on the memory backend too.
         # Remove persistence-related tests
         remove_dir(project_path, "tests/services/ai/etl")
         remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
@@ -472,7 +474,6 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Prints catalog rows; imports sqlmodel + the llm tables removed above.
         remove_file(project_path, "tests/services/ai/test_model_id_display.py")
         remove_file(project_path, "tests/services/ai/test_llm_service.py")
-        remove_file(project_path, "tests/services/ai/test_provider_management.py")
         # Remove LLM CLI and API (catalog management needs database)
         remove_file(project_path, "app/cli/llm.py")
         remove_file(project_path, "app/cli/llm_rendering.py")

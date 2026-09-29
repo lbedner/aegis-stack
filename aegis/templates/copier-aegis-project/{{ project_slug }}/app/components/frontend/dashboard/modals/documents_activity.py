@@ -8,8 +8,6 @@ One SSE feed keeps the table current; nothing here polls a document.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
@@ -18,138 +16,14 @@ from app.components.frontend.controls import DataTable, DataTableColumn, Seconda
 from app.components.frontend.controls.busy_bar import busy_bar
 from app.components.frontend.controls.jobs import follow_jobs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.documents.domains.extraction.activity import (
+    ActivityRow,
+    activity_rows,
+    document_id_of,
+)
 
-from .documents_pages import API, extraction_summary
+from .documents_pages import API
 from .modal_sections import EmptyStatePlaceholder, status_dot
-
-JOB_PREFIX = "documents-extract:"
-# A job still "Queued..." this long has no worker picking it up; say so
-# rather than showing a bar that moves and a word that does not.
-QUEUED_TOO_LONG_SECONDS = 60
-
-
-@dataclass
-class ActivityRow:
-    job_id: str
-    document_id: int
-    title: str
-    detail: str
-    running: bool
-    failed: bool
-    queued: bool
-    stalled: bool
-    incomplete: bool
-    when: str
-    started_at: str
-
-
-def _document_id(job: dict[str, Any]) -> int | None:
-    name = str(job.get("name") or "")
-    if not name.startswith(JOB_PREFIX):
-        return None
-    try:
-        return int(name[len(JOB_PREFIX) :])
-    except ValueError:
-        return None
-
-
-def _is_queued(job: dict[str, Any]) -> bool:
-    """Whether the job is still waiting: no worker has reported on it yet.
-
-    The label is the report. Until one arrives it reads "Queued...", and a
-    job nobody has picked up is not a job in progress, however long the
-    store has been holding it open.
-    """
-    return str(job.get("label") or "Queued...").startswith("Queued")
-
-
-def _started(job: dict[str, Any]) -> datetime | None:
-    """When the job was created, or None when the record predates the field."""
-    try:
-        started = datetime.fromisoformat(str(job.get("started_at") or ""))
-    except ValueError:
-        return None
-    return started if started.tzinfo else started.replace(tzinfo=UTC)
-
-
-def age_label(started_at: str, now: datetime) -> str:
-    """How long ago, in the coarsest unit that still says something.
-
-    Relative rather than a clock time: the table renders on the server, so
-    a printed hour would be the container's, not the reader's.
-    """
-    started = _started({"started_at": started_at})
-    if started is None:
-        return ""
-    seconds = int((now - started).total_seconds())
-    if seconds < 45:
-        return "just now"
-    if seconds < 3600:
-        return f"{max(1, seconds // 60)}m ago"
-    if seconds < 86400:
-        return f"{seconds // 3600}h ago"
-    return f"{seconds // 86400}d ago"
-
-
-def _queued_for(job: dict[str, Any], now: datetime) -> int | None:
-    """Seconds a job has sat queued, or None when that cannot be known."""
-    if not _is_queued(job):
-        return None
-    started = _started(job)
-    if started is None:
-        return None
-    return int((now - started).total_seconds())
-
-
-def activity_rows(
-    jobs: list[dict[str, Any]], titles: dict[int, str], *, now: datetime | None = None
-) -> list[ActivityRow]:
-    """Extraction jobs as rows: the document's title, and one sentence for
-    where it is. Other services' jobs are not this tab's business."""
-    now = now or datetime.now(UTC)
-    rows: list[ActivityRow] = []
-    for job in jobs:
-        document_id = _document_id(job)
-        if document_id is None:
-            continue
-        status = job.get("status")
-        queued = False
-        stalled = False
-        incomplete = False
-        if status == "running":
-            detail = str(job.get("label") or "Queued...")
-            queued = _is_queued(job)
-            waited = _queued_for(job, now)
-            if waited is not None and waited >= QUEUED_TOO_LONG_SECONDS:
-                detail = f"Queued for {waited // 60}m, no worker has picked it up"
-                stalled = True
-        elif status == "done":
-            result = job.get("result") or {}
-            detail = extraction_summary(result)
-            # Finished is not the same as done with it: a page a model
-            # refused is left unread, and the run reports that quietly.
-            incomplete = int(result.get("unread") or 0) > 0
-        else:
-            detail = str(job.get("error") or "Failed")
-        rows.append(
-            ActivityRow(
-                job_id=str(job.get("job_id")),
-                document_id=document_id,
-                title=titles.get(document_id, f"Document {document_id}"),
-                detail=detail,
-                running=status == "running",
-                failed=status == "failed",
-                queued=queued,
-                stalled=stalled,
-                incomplete=incomplete,
-                when=age_label(str(job.get("started_at") or ""), now),
-                started_at=str(job.get("started_at") or ""),
-            )
-        )
-    # Newest first: two runs of the same document are only tellable apart
-    # by when they ran.
-    rows.sort(key=lambda r: r.started_at, reverse=True)
-    return rows
 
 
 class ActivityTab(ft.Container):
@@ -207,7 +81,7 @@ class ActivityTab(ft.Container):
         before = self._jobs.get(job_id, {}).get("status")
         self._jobs[job_id] = snapshot
         self._render()
-        document_id = _document_id(snapshot)
+        document_id = document_id_of(snapshot)
         if (
             before == "running"
             and snapshot.get("status") != "running"

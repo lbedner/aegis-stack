@@ -47,12 +47,6 @@ async def load_objects() -> dict[str, Any]:
     return {"error": None, "objects": objects, "truncated": truncated}
 
 
-def _ago(when: Any) -> str:
-    return format_relative_time(
-        when.isoformat() if hasattr(when, "isoformat") else when
-    )
-
-
 def _band(size: int) -> str:
     return next(label for bound, label in SIZE_BANDS if bound is None or size < bound)
 
@@ -73,7 +67,7 @@ def summarize(listing: dict[str, Any]) -> dict[str, Any]:
         "count": f"{len(objects):,}{floor}",
         "stored": format_bytes(total) + floor,
         "largest": format_bytes(max((o["size"] for o in objects), default=0)),
-        "latest": _ago(latest) if latest else "-",
+        "latest": format_relative_time(latest) if latest else "-",
         "empty": not objects and listing["error"] is None,
         "bands": [
             {
@@ -137,7 +131,9 @@ def _level_rows(
         {
             "name": {"label": f["key"][len(prefix) :], "url": None, "kind": "file"},
             "size": format_bytes(f["size"]),
-            "modified": _ago(f["modified"]) if f.get("modified") else None,
+            "modified": format_relative_time(f["modified"])
+            if f.get("modified")
+            else None,
         }
         | _file_links(bucket, f["key"], can_write)
         | {"pick": {"key": f["key"] if can_write else None}}
@@ -170,7 +166,9 @@ async def browse_view(query: Mapping[str, str], path: str) -> dict[str, Any]:
                         "url": _link(path, bucket=b["name"]),
                         "kind": "bucket",
                     },
-                    "modified": _ago(b["created"]) if b.get("created") else None,
+                    "modified": format_relative_time(b["created"])
+                    if b.get("created")
+                    else None,
                 }
                 for b in await store.buckets()
             ]

@@ -1,0 +1,15 @@
+{# One channel's card: set up or not, where it sends from, and, when not,
+   the settings it is missing in the service's own words. #}
+{% from "components/macros/layout.html" import card, badge, facts %}
+<div data-channel="{{ ch.key }}">
+{% call card(ch.title, ch.provider) %}
+  <div>{{ badge(ch.badge.label, ch.badge.tone) }}</div>
+  {% if ch.configured %}
+  {{ facts([("Sends from", ch.sender)]) }}
+  {% else %}
+  <ul class="space-y-1.5 text-xs text-aegis-muted list-disc pl-4">
+    {% for line in ch.missing %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+{% endcall %}
+</div>

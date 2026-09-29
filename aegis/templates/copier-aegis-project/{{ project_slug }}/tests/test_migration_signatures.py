@@ -12,8 +12,8 @@ shipped unsigned and did exactly this.
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
+import re
 
 import pytest
 
@@ -251,7 +251,7 @@ class TestSchemaReflection:
         conn.execute(sa.text('CREATE TABLE "user" (id INTEGER PRIMARY KEY)'))
         conn.execute(
             sa.text(
-                'CREATE TABLE account (id INTEGER PRIMARY KEY, '
+                "CREATE TABLE account (id INTEGER PRIMARY KEY, "
                 'owner_user_id INTEGER REFERENCES "user"(id), nickname TEXT)'
             )
         )
@@ -340,9 +340,7 @@ class TestAdoptionStopsAtAGap:
     ORDER = ["036", "037", "038_ai", "039_ai_agents", "040_scheduler"]
 
     def _adopt(self, current: str | None, proven: set[str]) -> list[str]:
-        return _recovery()._adoptable(
-            self.ORDER, current, lambda rev: rev in proven
-        )
+        return _recovery()._adoptable(self.ORDER, current, lambda rev: rev in proven)
 
     def test_a_later_proven_revision_behind_a_gap_is_not_stamped(self) -> None:
         assert self._adopt("037", {"040_scheduler"}) == []
@@ -355,7 +353,11 @@ class TestAdoptionStopsAtAGap:
     def test_everything_proven_is_stamped_in_order(self) -> None:
         proven = {"038_ai", "039_ai_agents", "040_scheduler"}
 
-        assert self._adopt("037", proven) == ["038_ai", "039_ai_agents", "040_scheduler"]
+        assert self._adopt("037", proven) == [
+            "038_ai",
+            "039_ai_agents",
+            "040_scheduler",
+        ]
 
     def test_an_empty_database_starts_from_the_first_revision(self) -> None:
         assert self._adopt(None, {"036", "037"}) == ["036", "037"]
@@ -365,3 +367,37 @@ class TestAdoptionStopsAtAGap:
         chain = ["9", "10", "a1b2"]
 
         assert _recovery()._adoptable(chain, "9", lambda rev: True) == ["10", "a1b2"]
+
+
+def _create(table: str) -> object:
+    import sqlalchemy as sa
+
+    from alembic.operations import ops
+
+    return ops.CreateTableOp(table, [sa.Column("id", sa.Integer, primary_key=True)])
+
+
+@pytest.fixture
+def gen() -> object:
+    """The revision generator; a stack without a database renders a stub."""
+    pytest.importorskip("alembic", reason="no database component in this stack")
+    return pytest.importorskip("app.cli.migrate_gen")
+
+
+def test_the_signature_is_the_services_own_table_never_a_swept_one(
+    gen: object,
+) -> None:
+    """A project older than a component's own migration hands that
+    component's tables to whichever service is added next (the sweep).
+    Signed by one of those tables, the revision would be stamped as done
+    on boot, because the table already exists, and its own tables never
+    created."""
+    kept = [_create("apscheduler_jobs"), _create("blog_post")]
+    assert gen._signature(kept, own_tables={"blog_post"}) == ("table", "blog_post")
+
+
+def test_a_revision_with_no_table_of_its_own_still_signs(gen: object) -> None:
+    assert gen._signature([_create("apscheduler_jobs")], own_tables=set()) == (
+        "table",
+        "apscheduler_jobs",
+    )

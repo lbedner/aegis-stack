@@ -1,0 +1,14 @@
+{% from "pages/overseer/ingress/_macros.html" import named %}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% if error %}{% include "pages/overseer/ingress/_error.html" %}{% else %}
+{% call card(None, id="ingress-middlewares") %}
+  {{ data_table([
+    {"key": "name", "label": "Middleware", "render": named},
+    {"key": "type", "label": "Type"},
+    {"key": "settings", "label": "Settings", "kind": "code"},
+    {"key": "used_by", "label": "Used by"},
+    {"key": "state", "label": "Status", "kind": "status"},
+  ], rows, empty="No middlewares") }}
+{% endcall %}
+{% endif %}

@@ -13,7 +13,6 @@ from app.core.log import logger
 # Re-exported: callers have always reached the catalog readers through
 # this module, and moving them out did not move their address.
 from app.services.ai.domains.llm.etl import queries
-from app.services.ai.domains.llm.queries import invalidate_price_cache
 from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMClient
 from app.services.ai.domains.llm.etl.clients.openrouter_client import (
     OpenRouterClient,
@@ -25,6 +24,7 @@ from app.services.ai.domains.llm.etl.mappers.llm_mapper import (
     is_cloud_syncable,
     merge_model_data,
 )
+from app.services.ai.domains.llm.etl.provider_marks import attach_provider_marks
 from app.services.ai.domains.llm.etl.queries import (  # noqa: F401
     CatalogStats,
     catalog_is_populated,
@@ -36,6 +36,7 @@ from app.services.ai.domains.llm.etl.upserts import UpsertMixin
 from app.services.ai.domains.llm.etl.vendor_metadata import (
     VENDOR_METADATA as VENDOR_METADATA,
 )
+from app.services.ai.domains.llm.queries import invalidate_price_cache
 from app.services.ai.models.llm import (
     Direction,
     LargeLanguageModel,
@@ -185,6 +186,7 @@ class LLMSyncService(UpsertMixin):
             # Prices are memoized in the shared cache for the recording
             # path; a sync is the only thing that changes them.
             await invalidate_price_cache()
+            await attach_provider_marks(self.session)
 
         logger.info(
             f"Sync complete: {result.vendors_added} vendors added, "

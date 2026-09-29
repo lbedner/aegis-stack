@@ -10,9 +10,13 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from app.services.ai.config import api_key_env
-from app.services.ai.models import PROVIDERS, AIProvider
+from app.services.ai.models import PROVIDERS, AIProvider, ProviderCapabilities
+from app.services.ai.models.provider_names import KEYLESS_PROVIDERS, provider_label
 
 # Provider to pydantic-ai-slim extras mapping
 # Note: mistral, cohere, ollama, public, and pollinations use the
@@ -320,3 +324,60 @@ __all__ = [
     "get_valid_provider_names",
     "mask_api_key",
 ]
+
+
+class ProviderReadiness(BaseModel):
+    """Whether one provider can be used right now, and why not."""
+
+    model_config = ConfigDict(frozen=True)
+
+    provider: AIProvider
+    label: str
+    installed: bool
+    keyless: bool
+    has_key: bool
+    current: bool
+    env_var: str | None
+    key_url: str | None
+    capabilities: ProviderCapabilities
+
+    @property
+    def status(self) -> str:
+        """``not_installed``, ``needs_key`` or ``ready``."""
+        if not self.installed:
+            return "not_installed"
+        if not self.keyless and not self.has_key:
+            return "needs_key"
+        return "ready"
+
+
+def provider_readiness(settings: Any) -> list[ProviderReadiness]:
+    """Every provider, in declaration order, as it stands under ``settings``:
+    the ``ai providers`` table and the Overseer's Providers page read this."""
+    current = str(getattr(settings, "AI_PROVIDER", "") or "").lower()
+    rows = []
+    for provider, spec in PROVIDERS.items():
+        keyless = provider in KEYLESS_PROVIDERS
+        rows.append(
+            ProviderReadiness(
+                provider=provider,
+                label=provider_label(provider),
+                installed=check_provider_dependency_installed(provider.value),
+                keyless=keyless,
+                has_key=keyless or bool(getattr(settings, spec.env_var, None)),
+                current=provider.value == current,
+                env_var=None if keyless else spec.env_var,
+                key_url=spec.key_url,
+                capabilities=spec.capabilities,
+            )
+        )
+    return rows
+
+
+def usable_providers(settings: Any) -> list[str]:
+    """The providers this install can call right now: SDK installed, and
+    keyed where a key is needed. The catalog's "usable" filter and the
+    Overseer's Catalog read this."""
+    return [
+        r.provider.value for r in provider_readiness(settings) if r.status == "ready"
+    ]

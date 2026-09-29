@@ -1,0 +1,17 @@
+{% from "components/macros/layout.html" import card, stats_strip, ranked_rows, chip %}
+{% from "components/macros/feedback.html" import empty_state %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="documents-figures") }}
+  <div class="grid gap-4 lg:grid-cols-2">
+    {% call card("By kind") %}
+      {% if kinds %}{{ ranked_rows(kinds) }}{% else %}{{ empty_state("Nothing on file yet", "Add a document from the Documents section.") }}{% endif %}
+    {% endcall %}
+    {% call card("Most used tags") %}
+      {% if tags %}
+      <div class="flex flex-wrap gap-1.5">
+        {% for label, count in tags %}{% set url = list_url ~ "?tag=" ~ label|urlencode %}{{ chip(label ~ " " ~ count, False, url, hx_replace(url, "#overseer-main")) }}{% endfor %}
+      </div>
+      {% else %}<p class="text-xs text-aegis-muted">No tags yet.</p>{% endif %}
+    {% endcall %}
+  </div>
+</div>

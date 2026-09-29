@@ -13,8 +13,9 @@ services:
       # Host port auto-selected by `make serve` (WEBSERVER_HOST_PORT);
       # falls back to PORT for a raw `docker compose up`.
       - "${WEBSERVER_HOST_PORT:-${PORT:-8000}}:${PORT:-8000}"
-{%- if include_finance and finance_plaid %}
     environment:
+      - WATCHFILES_FORCE_POLLING=true
+{%- if include_finance and finance_plaid %}
       - PLAID_TUNNEL_METRICS_URL=http://plaid-tunnel:20241
 {%- endif %}
 {%- if include_ingress and ingress_tls %}
@@ -28,7 +29,7 @@ services:
       - "traefik.http.routers.webserver-admin.entrypoints=web"
       - "traefik.http.routers.webserver-admin.service=webserver"
       - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist"
-      - "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-0.0.0.0/0}"
+      - "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
 {%- endif %}
 {%- if include_scheduler %}
 

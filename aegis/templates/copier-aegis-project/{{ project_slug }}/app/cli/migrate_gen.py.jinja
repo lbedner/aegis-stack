@@ -34,7 +34,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.operations import ops
 from alembic.script import ScriptDirectory
-from app.cli.migrate_owners import claimed_by, includes_object
+from app.cli.migrate_owners import claimed_by, includes_object, own_tables
 from app.cli.plugin_data import SCRATCH
 from app.core.model_registry import import_all_models
 
@@ -308,17 +308,26 @@ def _qualified(table: str, schema: str | None) -> str:
     return f"{schema}.{table}" if schema else table
 
 
-def _signature(kept: list[Any]) -> tuple[str, ...] | None:
+def _signature(
+    kept: list[Any], own_tables: set[str] | frozenset[str] = frozenset()
+) -> tuple[str, ...] | None:
     """The object whose existence proves this revision ran.
 
     The startup hook stamps instead of replaying DDL when it finds this,
     which is how a database that outlived its ``alembic_version`` row is
     re-adopted. Created table first, then an added column, then a new
     foreign key - the three shapes a revision can take.
+
+    The service's own tables (``own_tables``) come first. A project older
+    than a component's own migration sweeps that component's tables into
+    the next service added; signed by one of them, the revision would be
+    stamped as done on boot, because the table already exists, and the
+    service's own tables never created.
     """
     flat: list[Any] = []
     for op in kept:
         flat.extend(op.ops if isinstance(op, ops.ModifyTableOps) else [op])
+    flat.sort(key=lambda op: getattr(op, "table_name", None) not in own_tables)
     for op in flat:
         if isinstance(op, ops.CreateTableOp):
             return ("table", _qualified(op.table_name, op.schema))
@@ -342,7 +351,10 @@ def _signature(kept: list[Any]) -> tuple[str, ...] | None:
     return None
 
 
-def _prune(conn: Connection, signature: dict[str, Any]) -> Callable[..., None]:
+def _prune(
+    conn: Connection, signature: dict[str, Any],
+    own: set[str] | frozenset[str] = frozenset(),
+) -> Callable[..., None]:
     def process(_ctx: Any, _rev: Any, directives: list[Any]) -> None:
         script = directives[0]
         kept = [op for op in script.upgrade_ops.ops if _additive(op, conn)]
@@ -372,7 +384,7 @@ def _prune(conn: Connection, signature: dict[str, Any]) -> Callable[..., None]:
             for op in reversed(script.upgrade_ops.ops)
             if not isinstance(op, ops.ExecuteSQLOp)
         ]
-        signature["value"] = _signature(kept)
+        signature["value"] = _signature(kept, own)
         signature["created"] = [
             (op.table_name, op.schema) for op in kept if isinstance(op, ops.CreateTableOp)
         ]
@@ -394,7 +406,7 @@ def generate(services: list[str], scratch_dir: Path | None = None) -> list[Path]
                 include_object=lambda obj, name, type_, reflected, _cmp, service=service, claimed=claimed: (
                     includes_object(obj, type_, reflected, service, services, claimed)
                 ),
-                process_revision_directives=_prune(conn, signature),
+                process_revision_directives=_prune(conn, signature, own_tables(service)),
                 compare_type=False,
                 compare_server_default=False,
                 render_as_batch=True,

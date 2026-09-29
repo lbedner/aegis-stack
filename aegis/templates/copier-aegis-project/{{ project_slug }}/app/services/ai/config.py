@@ -15,6 +15,7 @@ from .models import (
     ProviderConfig,
     get_provider_capabilities,
 )
+from .models.provider_names import KEYLESS_PROVIDERS
 
 
 def _resolve_provider(value: object) -> AIProvider:
@@ -67,9 +68,7 @@ def _resolve_effort(value: object) -> str | None:
 # Where each provider's key lives, from the one place a provider is
 # described. It was a map of its own; a provider named here and nowhere
 # else would have gone unnoticed until somebody selected it.
-API_KEY_ENV: dict[AIProvider, str] = {
-    p: spec.env_var for p, spec in PROVIDERS.items()
-}
+API_KEY_ENV: dict[AIProvider, str] = {p: spec.env_var for p, spec in PROVIDERS.items()}
 
 
 def api_key_env(provider: AIProvider) -> str:
@@ -103,7 +102,7 @@ class AIServiceConfig(BaseModel):
     rag_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
 
     @classmethod
-    def from_settings(cls, settings: Any) -> "AIServiceConfig":
+    def from_settings(cls, settings: Any) -> AIServiceConfig:
         """Create configuration from main application settings."""
         return cls(
             enabled=getattr(settings, "AI_ENABLED", True),
@@ -155,14 +154,9 @@ class AIServiceConfig(BaseModel):
             errors.append(f"Unsupported provider: {self.provider}")
 
         # Check API key requirement (keyless providers don't need API keys)
-        local_providers = {
-            AIProvider.PUBLIC,
-            AIProvider.OLLAMA,
-            AIProvider.POLLINATIONS,
-        }
         provider_config = self.get_provider_config(settings)
 
-        if self.provider not in local_providers and not provider_config.api_key:
+        if self.provider not in KEYLESS_PROVIDERS and not provider_config.api_key:
             errors.append(
                 f"Missing API key for {self.provider} provider. "
                 f"Set {self.provider.upper()}_API_KEY environment variable."

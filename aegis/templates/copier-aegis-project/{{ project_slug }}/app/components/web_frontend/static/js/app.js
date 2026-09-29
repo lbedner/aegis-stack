@@ -76,9 +76,124 @@ document.body.addEventListener('htmx:afterSwap', (event) => {
     if (dialog && !dialog.open) dialog.showModal();
   }
 });
+// The one drawer. A list renders a ``drawer_sync`` marker naming what is
+// open, so the address bar is the state: a row click navigates the list
+// with ``?document=12``, a reload or a shared link opens the same item,
+// and a list without one (after a delete, say) closes it. Closing drops
+// the parameter from the address without a request.
+function syncDrawer(root) {
+  const marker = root.querySelector && root.querySelector('[data-drawer-sync]');
+  const drawer = document.getElementById('drawer');
+  if (!drawer) return;
+  if (!marker) {
+    // Another section took the page: its item is not this one.
+    const page = root.id === 'overseer-main' || (root.querySelector && root.querySelector('#overseer-main'));
+    if (page && drawer.open) drawer.close();
+    return;
+  }
+  drawer.dataset.param = marker.dataset.drawerParam;
+  const url = marker.dataset.drawerUrl;
+  if (!url) {
+    if (drawer.open) drawer.close();
+    return;
+  }
+  htmx.ajax('GET', url, { target: '#drawer-body', swap: 'innerHTML' })
+    .then(() => { if (!drawer.open) drawer.show(); });
+}
+document.body.addEventListener('htmx:load', (event) => syncDrawer(event.detail.elt));
+
+// Light dismiss for the drawer and the modal. A click outside or Escape
+// closes the panel; a click on a row that opens another item switches to
+// it; typed-but-unsaved work holds the panel open with a toast. The X and
+// Cancel still close on purpose. A form inside a panel is dirty once
+// typed in, and clean again when it saves or the panel reloads.
+function outsideClick(panel, target) {
+  if (!panel.open || panel.contains(target)) return 'ignore';
+  if (target.closest('dialog[open]')) return 'ignore'; // the modal, over the drawer
+  if (panel.dataset.dirty) return 'hold';
+  const param = panel.dataset.param;
+  const opensItem = `[href*="${param}="], [hx-get*="${param}="]`; // a row, "New post"
+  return param && target.closest(opensItem) ? 'ignore' : 'close';
+}
+function dismiss(panel) {
+  if (panel.dataset.dirty) {
+    toast('Unsaved changes: save or close', 'warn');
+    return false;
+  }
+  panel.close();
+  return true;
+}
+function markClean(panel) {
+  if (panel) delete panel.dataset.dirty;
+}
+document.addEventListener('click', (event) => {
+  const drawer = document.getElementById('drawer');
+  const modal = document.getElementById('dialog');
+  if (event.target.closest('[data-drawer-close]')) {
+    markClean(drawer);
+    drawer.close();
+    return;
+  }
+  if (modal && modal.open) {
+    if (event.target === modal) dismiss(modal); // the backdrop
+    return;
+  }
+  if (!drawer) return;
+  const verdict = outsideClick(drawer, event.target);
+  if (verdict === 'close') drawer.close();
+  if (verdict === 'hold') {
+    event.preventDefault();
+    event.stopPropagation();
+    dismiss(drawer);
+  }
+}, true);
+document.addEventListener('keydown', (event) => {
+  const drawer = document.getElementById('drawer');
+  const modal = document.getElementById('dialog');
+  if (event.key !== 'Escape' || (modal && modal.open)) return; // its cancel, below
+  if (drawer && drawer.open) dismiss(drawer);
+});
+// A modal's Escape arrives as ``cancel``; unsaved work cancels the cancel.
+document.addEventListener('cancel', (event) => {
+  if (event.target.id !== 'dialog' || !event.target.dataset.dirty) return;
+  event.preventDefault();
+  dismiss(event.target);
+}, true);
+document.addEventListener('input', (event) => {
+  const panel = event.target.closest && event.target.closest('#drawer, #dialog');
+  if (panel && event.target.closest('form')) panel.dataset.dirty = '1';
+});
+document.body.addEventListener('htmx:afterRequest', (event) => {
+  const form = event.detail.elt.closest && event.detail.elt.closest('form');
+  if (!event.detail.successful || !form) return;
+  let said = {};
+  try { said = JSON.parse(event.detail.xhr.getResponseHeader('HX-Trigger') || '{}'); } catch { said = {}; }
+  if (said.toast && said.toast.tone === 'error') return; // refused: still unsaved
+  markClean(form.closest('#drawer, #dialog'));
+});
+document.body.addEventListener('htmx:afterSwap', (event) => {
+  const id = event.detail.target.id;
+  if (id === 'drawer-body' || id === 'dialog-body') markClean(event.detail.target.closest('dialog'));
+});
+// ``close`` does not bubble; the capture phase still sees it.
+document.addEventListener('close', (event) => {
+  const drawer = event.target;
+  if (drawer.id === 'dialog') markClean(drawer);
+  if (drawer.id !== 'drawer') return;
+  markClean(drawer);
+  drawer.querySelector('#drawer-body').innerHTML = '';
+  const url = new URL(window.location.href);
+  if (drawer.dataset.param && url.searchParams.has(drawer.dataset.param)) {
+    url.searchParams.delete(drawer.dataset.param);
+    history.replaceState(history.state, '', url);
+  }
+}, true);
 // Sent as HX-Trigger-After-Settle (rendering.close_dialog), so it lands
 // after the response's own swap has finished with #dialog-body.
 document.body.addEventListener('dialog:close', () => {
   const dialog = document.getElementById('dialog');
   if (dialog && dialog.open) dialog.close();
 });
+
+// The dismissal rules, for the node tests (tests/web/test_app_js.py).
+if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss };

@@ -1,0 +1,14 @@
+{% from "components/macros/layout.html" import card, stats_strip %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
+<div class="space-y-4">
+  {{ stats_strip(figures[:4], id="blog-figures") }}
+  {% call card("Latest posts", figures[4].value ~ " tags") %}
+    {{ data_table([
+      {"key": "title", "label": "Title", "kind": "link", "target": "#overseer-main"},
+      {"key": "status", "label": "Status", "kind": "status"},
+      {"key": "updated", "label": "Updated"},
+    ], recent, empty="No posts yet") }}
+    <div>{{ action("New post", hx_replace(new_post_url, "#overseer-main"), "primary") }}</div>
+  {% endcall %}
+</div>

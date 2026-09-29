@@ -1,0 +1,10 @@
+{# A router's or middleware's name with its posture warnings beside it:
+   "should it run like this?", kept apart from the status column's "is it
+   running?". #}
+{% macro named(value) -%}
+<span class="inline-flex flex-wrap items-center gap-2">{{ value.label }}
+  {%- for warning in value.warnings %}
+  <span data-warning data-tone="{{ warning.tone }}" class="text-xxs px-1.5 py-0.5 rounded border border-aegis-amber/50 text-aegis-amber whitespace-nowrap">{{ warning.label }}</span>
+  {%- endfor %}
+</span>
+{%- endmacro %}

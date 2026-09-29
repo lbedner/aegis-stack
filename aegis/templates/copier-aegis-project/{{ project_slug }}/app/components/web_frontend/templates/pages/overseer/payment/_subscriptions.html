@@ -1,0 +1,18 @@
+{# Who is billed for what, and when it renews or ends. Cancelling stops
+   the renewal; the customer keeps the period they paid for. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
+{% macro row_actions(row) -%}
+{% if row.cancel_url %}<span class="flex justify-end">{{ action("Cancel", hx_dialog(row.cancel_url), "danger") }}</span>{% endif %}
+{%- endmacro %}
+<div class="mb-4">{% with chips_label = "Status" %}{% include "pages/overseer/_chips.html" %}{% endwith %}</div>
+{% call card(None, id="payment-subscriptions") %}
+  {{ data_table([
+    {"key": "customer", "label": "Customer"},
+    {"key": "plan", "label": "Plan"},
+    {"key": "status", "label": "Status", "kind": "status"},
+    {"key": "ends", "label": "Period"},
+    {"key": "updated", "label": "Updated"},
+  ], rows, actions=row_actions, empty="No subscriptions here") }}
+{% endcall %}

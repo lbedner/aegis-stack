@@ -1,0 +1,12 @@
+{# Every WebSocket and event stream, open and recently closed. The chips
+   filter by state and kind; the figures and table below refresh over SSE
+   while the page is open. A row opens its timeline in the drawer. #}
+{% from "components/macros/layout.html" import drawer_sync %}
+<div class="flex flex-wrap items-center gap-4 mb-4">
+  {% with chips = state_chips, chips_label = "State" %}{% include "pages/overseer/_chips.html" %}{% endwith %}
+  {% with chips = kind_chips, chips_label = "Kind" %}{% include "pages/overseer/_chips.html" %}{% endwith %}
+</div>
+<div id="connections-live" hx-ext="sse" sse-connect="{{ events_url }}">
+  <div sse-swap="server-connections" hx-target="this">{% include "pages/overseer/server/_connections_table.html" %}</div>
+</div>
+{{ drawer_sync(open_drawer, drawer_param) }}

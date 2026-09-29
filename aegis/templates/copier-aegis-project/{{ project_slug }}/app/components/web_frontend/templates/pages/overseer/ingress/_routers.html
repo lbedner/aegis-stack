@@ -1,0 +1,19 @@
+{% from "pages/overseer/ingress/_macros.html" import named %}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{# Rules run long; they wrap instead of pushing the table off the page. #}
+{% if error %}{% include "pages/overseer/ingress/_error.html" %}{% else %}
+{% call card(None, id="ingress-routers") %}
+  {{ data_table([
+    {"key": "name", "label": "Router", "render": named},
+    {"key": "rule", "label": "Rule", "kind": "code"},
+    {"key": "priority", "label": "Priority", "align": "right"},
+    {"key": "service", "label": "Service"},
+    {"key": "middlewares", "label": "Middlewares", "wrap": True},
+    {"key": "entrypoints", "label": "Entrypoints"},
+    {"key": "tls", "label": "TLS"},
+    {"key": "provider", "label": "Provider"},
+    {"key": "state", "label": "Status", "kind": "status"},
+  ], rows, empty="No routers") }}
+{% endcall %}
+{% endif %}

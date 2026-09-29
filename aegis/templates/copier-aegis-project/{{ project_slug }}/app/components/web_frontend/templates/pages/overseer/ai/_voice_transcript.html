@@ -1,0 +1,3 @@
+{# A transcription's text, under the upload form. #}
+<div id="ai-voice-transcript" class="rounded border border-aegis-border bg-aegis-bg p-3 text-sm text-aegis-text whitespace-pre-wrap">{{ result.text or "Nothing was heard." }}</div>
+{% if result.language %}<p class="mt-1 text-xxs text-aegis-muted">Language: {{ result.language }}</p>{% endif %}

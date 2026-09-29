@@ -1,0 +1,30 @@
+{# One post in the drawer: a new draft, or the open post. The slug is the
+   published URL, so it is set once, on create, and shown after. #}
+{% from "components/macros/layout.html" import badge, dialog_title %}
+{% from "components/macros/form.html" import action, field, text_input, textarea, primary_button %}
+{{ dialog_title(post.title if post else "New post") }}
+<form hx-post="{{ save_url }}" hx-swap="none" class="space-y-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <span class="flex items-center gap-3 text-xs text-aegis-muted">
+      {% if post %}{{ badge(status.label, status.tone) }}<span class="font-mono">/blog/{{ post.slug }}</span>
+      {% else %}New draft{% endif %}
+    </span>
+    {% if post %}
+    <span class="flex items-center gap-2">
+      {% if post.status == "published" %}
+      {{ action("Archive", 'hx-post="' ~ partials ~ '/posts/' ~ post.id ~ '/archive" hx-swap="none" data-api-done="Archived"', "danger") }}
+      {% else %}
+      {{ action("Publish", 'hx-post="' ~ partials ~ '/posts/' ~ post.id ~ '/publish" hx-swap="none" data-api-done="Published"', "primary") }}
+      {% endif %}
+    </span>
+    {% endif %}
+  </div>
+  {% call field("Title") %}{{ text_input("title", post.title if post else "", required=True, autofocus=(not post)) }}{% endcall %}
+  {% if not post %}
+  {% call field("Slug") %}{{ text_input("slug", "", placeholder="From the title when blank") }}{% endcall %}
+  {% endif %}
+  {% call field("Excerpt") %}{{ text_input("excerpt", post.excerpt if post else "", placeholder="One line for cards and the meta description") }}{% endcall %}
+  {% call field("Tags") %}{{ text_input("tags", tags, placeholder="Comma or space separated") }}{% endcall %}
+  {% call field("Content") %}{{ textarea("content", post.content if post else "", rows=20, placeholder="Markdown") }}{% endcall %}
+  {{ primary_button("Save" if post else "Create draft", type="submit") }}
+</form>

@@ -19,6 +19,13 @@ class TestFormatRelativeTime:
         assert format_relative_time("") == "—"
         assert format_relative_time(None) == "—"
 
+    def test_takes_a_datetime_as_well_as_iso_text(self):
+        """Model columns are datetimes; callers pass them as they are."""
+        aware = datetime(2026, 5, 19, 11, 55, tzinfo=UTC)
+        naive = datetime(2026, 5, 19, 9, 0)
+        assert format_relative_time(aware, now=NOW) == "5 minutes ago"
+        assert format_relative_time(naive, now=NOW) == "3 hours ago"
+
     def test_just_now_under_one_minute(self):
         ts = "2026-05-19T11:59:30+00:00"  # 30s before NOW
         assert format_relative_time(ts, now=NOW) == "just now"

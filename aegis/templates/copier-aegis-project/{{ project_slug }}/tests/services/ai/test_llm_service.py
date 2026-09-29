@@ -754,3 +754,35 @@ class TestGetModelInfo:
         assert details is not None
         assert details.input_price is None
         assert details.output_price is None
+
+
+async def test_the_catalog_can_start_at_a_release_date(async_db_session) -> None:
+    """``released_after`` keeps dated models from that day on; undated ones
+    have no date to compare, so a window leaves them out."""
+    from datetime import date
+
+    from app.services.ai.domains.llm import queries
+    from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
+
+    org = LLMOrg(slug="acme", name="acme")
+    async_db_session.add(org)
+    await async_db_session.flush()
+    for model_id, released in (
+        ("old", date(2024, 1, 1)),
+        ("new", date(2026, 6, 1)),
+        ("undated", None),
+    ):
+        async_db_session.add(
+            LargeLanguageModel(
+                model_id=model_id,
+                title=model_id,
+                served_by_org_id=org.id,
+                released_on=released,
+                context_window=1000,
+            )
+        )
+    await async_db_session.commit()
+    rows = await queries.catalog_models(
+        async_db_session, released_after=date(2026, 1, 1)
+    )
+    assert [r.model_id for r in rows] == ["new"]

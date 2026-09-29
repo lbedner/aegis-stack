@@ -9,6 +9,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 import flet as ft
+
 from app.components.frontend.controls.tabs import PulseTabs
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -16,6 +17,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 from ...cards.card_utils import get_status_detail
 from ..base_detail_popup import BaseDetailPopup
 from ..load_tests_tab import LoadTestsTab
+from .cache_tab import CacheTab
 from .lifecycle_tab import LifecycleTab
 from .overview_tab import OverviewTab
 from .performance_tab import PerformanceTab
@@ -68,6 +70,8 @@ class BackendDetailDialog(BaseDetailPopup):
                 load_tests_tab = LoadTestsTab()
             with _span("overseer.modal.backend.traffic_tab"):
                 traffic_tab = TrafficTab(backend_component)
+            with _span("overseer.modal.backend.cache_tab"):
+                cache_tab = CacheTab()
 
             tabs = PulseTabs(
                 selected_index=0,
@@ -76,6 +80,7 @@ class BackendDetailDialog(BaseDetailPopup):
                     ft.Tab(text="Routes", content=routes_tab),
                     ft.Tab(text="Performance", content=performance_tab),
                     ft.Tab(text="Traffic", content=traffic_tab),
+                    ft.Tab(text="Cache", content=cache_tab),
                     ft.Tab(text="Lifecycle", content=lifecycle_tab),
                     ft.Tab(text="Load Tests", content=load_tests_tab),
                 ],

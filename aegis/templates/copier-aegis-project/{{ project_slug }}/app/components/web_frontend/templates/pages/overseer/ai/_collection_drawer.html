@@ -1,0 +1,15 @@
+{# One collection in the drawer: the files it indexed and the chunks each
+   became, and deleting it. #}
+{% from "components/macros/layout.html" import card, dialog_title %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
+<div class="space-y-4">
+  {{ dialog_title(name, facts=(files|length) ~ " files") }}
+  <div>{{ action("Delete collection", delete, "danger") }}</div>
+  {% call card("Files", id="ai-collection-files") %}
+    {{ data_table([
+      {"key": "source", "label": "Source", "kind": "code"},
+      {"key": "chunks", "label": "Chunks", "kind": "int", "align": "right"},
+    ], files, empty="No files in this collection") }}
+  {% endcall %}
+</div>

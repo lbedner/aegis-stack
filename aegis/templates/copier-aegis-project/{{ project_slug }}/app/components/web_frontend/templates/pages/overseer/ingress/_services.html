@@ -1,0 +1,20 @@
+{% from "components/macros/layout.html" import card, badge %}
+{% from "components/macros/table.html" import data_table %}
+{% macro servers(list) -%}
+<span class="flex flex-col gap-1">
+  {%- for server in list %}
+  <span data-server="{{ server.url }}" class="inline-flex items-center gap-2"><code class="font-mono text-xs">{{ server.url }}</code>{{ badge(server.state.label, server.state.tone) }}</span>
+  {%- endfor %}
+</span>
+{%- endmacro %}
+{% if error %}{% include "pages/overseer/ingress/_error.html" %}{% else %}
+{% call card(None, id="ingress-services") %}
+  {{ data_table([
+    {"key": "name", "label": "Service"},
+    {"key": "servers", "label": "Servers", "render": servers},
+    {"key": "used_by", "label": "Used by"},
+    {"key": "provider", "label": "Provider"},
+    {"key": "state", "label": "Status", "kind": "status"},
+  ], rows, empty="No services") }}
+{% endcall %}
+{% endif %}

@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_storage
 from app.components.web_frontend.overseer_nav import page_url
-from app.components.web_frontend.rendering import dialog, navigate, with_toast
+from app.components.web_frontend.rendering import dialog, go_to
 from app.core.formatting import safe_filename
 from app.core.storage import get_storage
 from app.models.user import User
@@ -123,10 +123,8 @@ async def upload(
     if not name:
         raise HTTPException(status_code=422, detail="The file needs a name.")
     await store.upload(bucket, prefix + name, await file.read(), file.content_type)
-    response = Response(status_code=200)
-    navigate(
-        response,
+    return go_to(
         f"{BROWSE_PAGE}?{urlencode({'bucket': bucket, 'prefix': prefix})}",
+        f"Uploaded {name}",
         target="#overseer-main",
     )
-    return with_toast(response, f"Uploaded {name}")

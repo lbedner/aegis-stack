@@ -1,0 +1,43 @@
+{# The model catalog: search it, narrow it to what this install can call,
+   and open a model in the drawer (where it can be made the active one). #}
+{% from "components/macros/layout.html" import card, drawer_sync %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import search_input %}
+<div class="flex flex-wrap items-center gap-4 mb-4">
+  <form hx-get="{{ catalog_url }}" hx-target="#overseer-main" hx-select="#overseer-main" hx-swap="outerHTML" hx-push-url="true"
+        hx-trigger="keyup changed delay:250ms from:input[name=q], search, change from:input[name=vendor] delay:400ms"
+        class="flex flex-wrap items-center gap-3">
+    {{ search_input("q", q, placeholder="Search models") }}
+    {# Kept across the list's swaps (hx-preserve), so the menu stays open
+       while several vendors are ticked. #}
+    <details id="ai-vendor-picker" hx-preserve class="relative">
+      <summary class="list-none cursor-pointer text-xs px-2.5 py-1 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text">Vendors{% if vendor_count %}: {{ vendor_count }}{% endif %}</summary>
+      <div class="absolute z-20 mt-1 w-64 max-h-80 overflow-y-auto rounded-lg border border-aegis-border bg-aegis-card shadow-xl p-2 space-y-0.5">
+        {% for v in vendor_options %}
+        <label class="flex items-center gap-2 px-2 py-1 rounded text-sm hover:bg-aegis-border/30 cursor-pointer">
+          <input type="checkbox" name="vendor" value="{{ v.name }}" {% if v.checked %}checked{% endif %} class="checkbox checkbox-xs">
+          <span class="flex-1 truncate">{{ v.label }}</span>
+          <span class="text-xxs text-aegis-muted tabular-nums">{{ "{:,}".format(v.count) }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </details>
+    {% if usable %}<input type="hidden" name="usable" value="1">{% endif %}
+    {% if released %}<input type="hidden" name="released" value="{{ released }}">{% endif %}
+  </form>
+  {% with chips_label = "Models" %}{% include "pages/overseer/_chips.html" %}{% endwith %}
+  {% with chips = released_chips, chips_label = "Released" %}{% include "pages/overseer/_chips.html" %}{% endwith %}
+</div>
+{% call card(None, id="ai-catalog") %}
+  {{ data_table([
+    {"key": "model", "label": "Model", "kind": "link", "target": "#overseer-main", "mark": True},
+    {"key": "id", "label": "ID", "kind": "code"},
+    {"key": "vendor", "label": "Vendor"},
+    {"key": "context", "label": "Context", "kind": "int", "align": "right"},
+    {"key": "input", "label": "In / 1M", "align": "right"},
+    {"key": "output", "label": "Out / 1M", "align": "right"},
+    {"key": "released", "label": "Released"},
+  ], rows, empty="No models match") }}
+  {% if rows|length >= limit %}<p class="text-xxs text-aegis-muted px-1">The first {{ limit }}; search to narrow.</p>{% endif %}
+{% endcall %}
+{{ drawer_sync(open_drawer, drawer_param) }}

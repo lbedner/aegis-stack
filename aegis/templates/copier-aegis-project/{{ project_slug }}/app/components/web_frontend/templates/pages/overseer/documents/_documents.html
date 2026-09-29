@@ -1,0 +1,29 @@
+{# Everything on file, newest first, narrowed by search, kind and tag. A
+   row opens its document in the drawer; the address holds which. #}
+{% from "components/macros/layout.html" import card, drawer_sync %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import search_input, select %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <form hx-get="{{ path }}" hx-target="#overseer-main" hx-select="#overseer-main" hx-swap="outerHTML" hx-push-url="true"
+        hx-trigger="keyup changed delay:250ms from:input[name=q], change from:select, search" class="flex flex-wrap items-center gap-3">
+    {{ search_input("q", q, placeholder="Search titles") }}
+    {{ select("kind", kind_options, kind, blank="All kinds", label="Kind") }}
+    {% if tag %}<input type="hidden" name="tag" value="{{ tag }}"><span class="text-xs text-aegis-muted">tag: {{ tag }}</span>{% endif %}
+  </form>
+  <form id="documents-upload" hx-post="{{ upload_url }}" hx-encoding="multipart/form-data" hx-swap="none" class="flex items-center">
+    <input type="hidden" name="kind" value="other">
+    <input id="documents-upload-file" type="file" name="file" required class="sr-only" @change="$el.form.requestSubmit()">
+    <label for="documents-upload-file" class="inline-flex items-center cursor-pointer px-2.5 py-1 text-xs leading-normal rounded border border-aegis-teal text-aegis-text hover:bg-aegis-teal/10 transition-colors">Add a document</label>
+  </form>
+</div>
+{% call card(None, id="documents-list") %}
+  {{ data_table([
+    {"key": "title", "label": "Title", "kind": "link", "target": "#overseer-main"},
+    {"key": "kind", "label": "Kind"},
+    {"key": "dated", "label": "Dated"},
+    {"key": "pages", "label": "Pages", "kind": "int", "align": "right"},
+    {"key": "size", "label": "Size", "align": "right"},
+    {"key": "tags", "label": "Tags"},
+  ], rows, empty="Nothing on file here") }}
+{% endcall %}
+{{ drawer_sync(open_drawer, drawer_param) }}

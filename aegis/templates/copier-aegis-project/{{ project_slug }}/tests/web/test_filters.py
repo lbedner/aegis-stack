@@ -227,3 +227,30 @@ class TestHealthTone:
     def test_maps_every_status(self, state: str, tone: str) -> None:
         tone_of: Callable[[str], str] = templates.env.filters["health_tone"]
         assert tone_of(state) == tone
+
+
+class TestDocstringFacts:
+    """Detail rows show docstrings (middleware, hooks, tasks); their RST
+    ``literals`` read as code, not as doubled backticks."""
+
+    def _render(self, value: object) -> str:
+        macro = templates.env.from_string(
+            '{% from "components/macros/layout.html" import facts %}'
+            "{{ facts([('Description', value)]) }}"
+        )
+        return macro.render(value=value)
+
+    def test_double_backticks_become_code(self) -> None:
+        html = self._render("Pure ASGI (not ``BaseHTTPMiddleware``): fast.")
+        assert "``" not in html
+        assert [text(c) for c in select(html, "dd code")] == ["BaseHTTPMiddleware"]
+
+    def test_markup_values_render_as_given(self) -> None:
+        from markupsafe import Markup
+
+        html = self._render(Markup('<code id="url">sqlite:///x</code>'))
+        assert text(select(html, "dd #url")[0]) == "sqlite:///x"
+
+    def test_the_rest_is_still_escaped(self) -> None:
+        html = self._render("<b>``x``</b>")
+        assert not select(html, "dd b") and "&lt;b&gt;" in html

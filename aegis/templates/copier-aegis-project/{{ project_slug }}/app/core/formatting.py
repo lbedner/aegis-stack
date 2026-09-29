@@ -78,9 +78,13 @@ def _coarse_age(seconds: float) -> str:
 
 
 def format_relative_time(
-    iso_str: str | None, *, now: datetime | None = None, coarse: bool = False
+    iso_str: str | datetime | None,
+    *,
+    now: datetime | None = None,
+    coarse: bool = False,
 ) -> str:
-    """Format an ISO timestamp as a relative duration ("3 minutes ago").
+    """Format an ISO timestamp (or a datetime) as a relative duration
+    ("3 minutes ago").
 
     Returns ``"—"`` for empty input. Sub-minute durations render as
     ``"just now"``. Anything a day or older falls back to a short
@@ -102,8 +106,11 @@ def format_relative_time(
     if not iso_str:
         return "—"
     try:
-        ts = iso_str.replace("Z", "+00:00") if "Z" in iso_str else iso_str
-        dt = datetime.fromisoformat(ts)
+        if isinstance(iso_str, datetime):
+            dt = iso_str
+        else:
+            ts = iso_str.replace("Z", "+00:00") if "Z" in iso_str else iso_str
+            dt = datetime.fromisoformat(ts)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=UTC)
         now_dt = now if now is not None else datetime.now(UTC)

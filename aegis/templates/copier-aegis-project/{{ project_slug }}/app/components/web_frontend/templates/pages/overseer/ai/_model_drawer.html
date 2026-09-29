@@ -1,0 +1,16 @@
+{# One catalog model in the drawer: what it is and costs, and a button to
+   make it the model the app answers with (a stored choice, live at once). #}
+{% from "components/macros/layout.html" import badge, card, dialog_title, facts as fact_list %}
+{% from "components/macros/form.html" import primary_button %}
+<div class="space-y-4">
+  {{ dialog_title(info.title or info.model_id) }}
+  {% if current %}
+  <div>{{ badge("The active model", "ok") }}</div>
+  {% else %}
+  <form hx-post="{{ use_url }}" hx-swap="none" data-use-model>
+    <input type="hidden" name="model_id" value="{{ info.model_id }}">
+    {{ primary_button("Use this model", "submit") }}
+  </form>
+  {% endif %}
+  {% call card("Details", id="ai-model-facts") %}{{ fact_list(facts) }}{% endcall %}
+</div>

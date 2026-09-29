@@ -8,6 +8,12 @@
 }
 
 @layer components {
+  /* A brand mark's tile (the avatar macro): light in every theme, since
+     plenty of logos are dark on transparency. */
+  .brand-tile {
+    background-color: rgb(255 255 255 / 0.95);
+  }
+
   /* The desktop Overseer rail keeps its icons and accessible link names.
      Theme.js sets this before the stylesheet paints, so reloads do not flash
      the expanded sidebar. Mobile keeps the full-width navigation. */

@@ -322,7 +322,11 @@ class TestQueuesStream:
         async def worker() -> ComponentStatus:
             return WORKER
 
+        async def no_reports() -> list[Any]:
+            return []  # the workers' own reports live in Redis; none here
+
         monkeypatch.setattr(overseer_worker, "load_worker", worker)
+        monkeypatch.setattr(overseer_worker, "load_runtime", no_reports)
         monkeypatch.setattr(overseer_worker, "QUEUES_INTERVAL_SECONDS", 0)
         frames = [f async for f in overseer_worker.queues_events(max_frames=3)]
         events = [f for f in frames if f.startswith("event:")]

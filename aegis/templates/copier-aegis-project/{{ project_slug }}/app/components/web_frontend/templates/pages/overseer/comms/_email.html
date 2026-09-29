@@ -1,0 +1,5 @@
+<div class="grid gap-4 lg:grid-cols-2">
+  {% set ch = channel %}{% include "pages/overseer/comms/_channel.html" %}
+  {% set form_id, route, label, input_type, placeholder = "comms-test-email", "test-email", "Send to", "email", "you@example.com" %}
+  {% include "pages/overseer/comms/_test_form.html" %}
+</div>

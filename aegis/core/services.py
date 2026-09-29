@@ -380,6 +380,36 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/overseer_storage.py",
                     "app/components/web_frontend/routes/partials/overseer_storage.py",
                     "tests/web/test_overseer_storage.py",
+                    "app/components/web_frontend/overseer_ingress.py",
+                    "tests/web/test_overseer_ingress.py",
+                    "app/components/web_frontend/overseer_ai.py",
+                    "app/components/web_frontend/overseer_ai_catalog.py",
+                    "app/components/web_frontend/overseer_ai_common.py",
+                    "app/components/web_frontend/overseer_ai_rag.py",
+                    "app/components/web_frontend/overseer_ai_voice.py",
+                    "app/components/web_frontend/overseer_ai_agents.py",
+                    "app/components/web_frontend/routes/partials/overseer_ai.py",
+                    "tests/web/test_overseer_ai.py",
+                    "tests/web/test_overseer_ai_agents.py",
+                    "tests/web/test_overseer_ai_rag.py",
+                    "tests/web/test_overseer_ai_voice.py",
+                    "app/components/web_frontend/overseer_connections.py",
+                    "app/components/web_frontend/routes/partials/overseer_server.py",
+                    # Service pages live in the Overseer, so they go with auth
+                    # as well as with their own service (either one missing
+                    # removes them).
+                    "app/components/web_frontend/overseer_blog.py",
+                    "app/components/web_frontend/routes/partials/overseer_blog.py",
+                    "tests/web/test_overseer_blog.py",
+                    "app/components/web_frontend/overseer_documents.py",
+                    "app/components/web_frontend/routes/partials/overseer_documents.py",
+                    "tests/web/test_overseer_documents.py",
+                    "app/components/web_frontend/overseer_comms.py",
+                    "app/components/web_frontend/routes/partials/overseer_comms.py",
+                    "tests/web/test_overseer_comms.py",
+                    "app/components/web_frontend/overseer_payment.py",
+                    "app/components/web_frontend/routes/partials/overseer_payment.py",
+                    "tests/web/test_overseer_payment.py",
                     "app/components/web_frontend/templates/components/auth_macros.html",
                     "app/components/web_frontend/static/js/auth.js",
                 ],
@@ -567,6 +597,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_chat_completer.py",
                 "tests/cli/test_llm_cli.py",
                 "tests/cli/test_ai_cli_registration.py",
+                "tests/cli/test_ai_provider_commands.py",
                 "tests/cli/test_agents_cli.py",
                 "tests/cli/test_ai_streaming_gate.py",
                 "tests/cli/test_slash_commands.py",
@@ -609,6 +640,22 @@ SERVICES: dict[str, ServiceSpec] = {
                     # off, rendering a dead RAG tab (issue #814). The modal's
                     # ``_HAS_RAG`` import guard handles its absence.
                     "app/components/frontend/dashboard/modals/rag_tab",
+                ],
+                # The Overseer's AI page, only where the htmx frontend is
+                # (auth brings the Overseer itself).
+                "include_htmx": [
+                    "app/components/web_frontend/overseer_ai.py",
+                    "app/components/web_frontend/overseer_ai_catalog.py",
+                    "app/components/web_frontend/overseer_ai_common.py",
+                    "app/components/web_frontend/overseer_ai_rag.py",
+                    "app/components/web_frontend/overseer_ai_voice.py",
+                    "app/components/web_frontend/overseer_ai_agents.py",
+                    "app/components/web_frontend/routes/partials/overseer_ai.py",
+                    "app/components/web_frontend/templates/pages/overseer/ai",
+                    "tests/web/test_overseer_ai.py",
+                    "tests/web/test_overseer_ai_agents.py",
+                    "tests/web/test_overseer_ai_rag.py",
+                    "tests/web/test_overseer_ai_voice.py",
                 ],
                 "ai_voice": [
                     "app/components/backend/api/voice",
@@ -686,6 +733,16 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/cards/comms_card.py",
                 "app/components/frontend/dashboard/modals/comms_modal",
             ],
+            extras={
+                # The Overseer's Comms page, only where the htmx frontend is
+                # (auth brings the Overseer itself).
+                "include_htmx": [
+                    "app/components/web_frontend/overseer_comms.py",
+                    "app/components/web_frontend/routes/partials/overseer_comms.py",
+                    "app/components/web_frontend/templates/pages/overseer/comms",
+                    "tests/web/test_overseer_comms.py",
+                ],
+            },
         ),
     ),
     "insights": ServiceSpec(
@@ -917,6 +974,16 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/cards/payment_card.py",
                 "app/components/frontend/dashboard/modals/payment_modal",
             ],
+            extras={
+                # The Overseer's Payment page, only where the htmx frontend
+                # is (auth brings the Overseer itself).
+                "include_htmx": [
+                    "app/components/web_frontend/overseer_payment.py",
+                    "app/components/web_frontend/routes/partials/overseer_payment.py",
+                    "app/components/web_frontend/templates/pages/overseer/payment",
+                    "tests/web/test_overseer_payment.py",
+                ],
+            },
         ),
     ),
     "blog": ServiceSpec(
@@ -998,6 +1065,17 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/cards/blog_card.py",
                 "app/components/frontend/dashboard/modals/blog_modal",
             ],
+            extras={
+                # The Overseer's Blog page, only where the htmx frontend is.
+                # (It sits inside the Overseer, which auth brings; without
+                # auth the page's tests skip on the missing Overseer.)
+                "include_htmx": [
+                    "app/components/web_frontend/overseer_blog.py",
+                    "app/components/web_frontend/routes/partials/overseer_blog.py",
+                    "app/components/web_frontend/templates/pages/overseer/blog",
+                    "tests/web/test_overseer_blog.py",
+                ],
+            },
         ),
     ),
     "finance": ServiceSpec(
@@ -1298,6 +1376,16 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_job_store.py",
                 "tests/components/frontend/test_follow_job.py",
             ],
+            extras={
+                # The Overseer's Documents page, only where the htmx
+                # frontend is (auth brings the Overseer itself).
+                "include_htmx": [
+                    "app/components/web_frontend/overseer_documents.py",
+                    "app/components/web_frontend/routes/partials/overseer_documents.py",
+                    "app/components/web_frontend/templates/pages/overseer/documents",
+                    "tests/web/test_overseer_documents.py",
+                ],
+            },
         ),
     ),
 }

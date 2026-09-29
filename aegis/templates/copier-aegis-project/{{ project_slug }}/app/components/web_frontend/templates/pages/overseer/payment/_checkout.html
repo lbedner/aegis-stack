@@ -1,0 +1,22 @@
+{# A checkout link for one catalog price, the page a customer would be
+   sent to. A recurring price makes a subscription (always one seat). #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/form.html" import field, select, text_input, primary_button %}
+<div class="grid gap-4 lg:grid-cols-2">
+  {% call card("New checkout", "Stripe-hosted", id="payment-checkout") %}
+    {% if missing %}
+    <p class="text-sm text-aegis-muted">Checkout needs a Stripe key. Set <code class="font-mono text-aegis-teal">{{ missing }}</code> in .env and restart.</p>
+    {% elif not prices %}
+    <p class="text-sm text-aegis-muted">The Stripe account has no active prices. Add a product with a price in the Stripe dashboard.</p>
+    {% else %}
+    <form hx-post="{{ partials }}/checkout" hx-target="#payment-checkout-result" hx-swap="innerHTML" class="space-y-4">
+      {% call field("Price") %}{{ select("price", prices, blank=None, block=True) }}{% endcall %}
+      {% call field("Quantity") %}{{ text_input("quantity", "1") }}{% endcall %}
+      {% call field("Success URL") %}{{ text_input("success_url", None, success_url) }}{% endcall %}
+      {% call field("Cancel URL") %}{{ text_input("cancel_url", None, cancel_url) }}{% endcall %}
+      {{ primary_button("Create checkout", "submit") }}
+    </form>
+    {% endif %}
+  {% endcall %}
+  <div id="payment-checkout-result"></div>
+</div>

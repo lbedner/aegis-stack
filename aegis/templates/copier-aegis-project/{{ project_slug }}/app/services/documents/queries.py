@@ -165,6 +165,19 @@ async def tags_for_many(
     return grouped
 
 
+async def titles(db: AsyncSession, document_ids: set[int]) -> dict[int, str]:
+    """Titles for a set of documents in ONE query, retired ones included
+    (a finished run still names what it read)."""
+    if not document_ids:
+        return {}
+    rows = (
+        await db.exec(
+            select(Document.id, Document.title).where(Document.id.in_(document_ids))  # type: ignore[union-attr]
+        )
+    ).all()
+    return {doc_id: title for doc_id, title in rows if doc_id is not None}
+
+
 async def tags_for(db: AsyncSession, document_id: int) -> list[str]:
     rows = (
         await db.exec(

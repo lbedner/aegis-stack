@@ -1,0 +1,10 @@
+{% from "components/macros/layout.html" import card, chart_panel, facts, stats_strip %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="payment-figures") }}
+  <div class="grid gap-4 lg:grid-cols-3">
+    <div class="lg:col-span-2">{{ chart_panel("payment-revenue", "Revenue", "line", revenue, subtitle="Running total, last 30 days") }}</div>
+    {% call card("Provider", "Connected" if provider.healthy else "Disconnected", id="payment-provider") %}
+      {{ facts(provider.facts) }}
+    {% endcall %}
+  </div>
+</div>

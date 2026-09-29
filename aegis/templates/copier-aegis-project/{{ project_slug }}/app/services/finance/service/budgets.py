@@ -203,10 +203,11 @@ class BudgetsMixin(FinanceServiceBase):
         )
 
     async def parse_budget_goal(
-        self, *, owner_user_id: int | None, text: str
+        self, *, owner_user_id: int | None, text: str, today: date | None = None
     ) -> GoalParseResponse:
         return await budgets.parse_budget_goal(
             self.db,
             owner_user_id=owner_user_id,
             text=text,
+            today=today,
         )

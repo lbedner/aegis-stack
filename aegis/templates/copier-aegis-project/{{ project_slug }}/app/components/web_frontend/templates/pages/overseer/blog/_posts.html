@@ -1,0 +1,31 @@
+{# Every post, filtered by status; a row opens its editor in the drawer.
+   Publish and archive answer with ``data-api-done``: the toast says what
+   happened and the page reloads where it was, filter and all. #}
+{% from "components/macros/layout.html" import card, chip, drawer_sync %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
+{% macro row_actions(row) -%}
+<span class="flex items-center justify-end gap-2">
+  {% if row.is_published %}
+  {{ action("Archive", 'hx-post="' ~ partials ~ '/posts/' ~ row.id ~ '/archive" hx-swap="none" data-api-done="Archived"', "danger") }}
+  {% else %}
+  {{ action("Publish", 'hx-post="' ~ partials ~ '/posts/' ~ row.id ~ '/publish" hx-swap="none" data-api-done="Published"', "primary") }}
+  {% endif %}
+</span>
+{%- endmacro %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <nav aria-label="Status" class="flex items-center gap-1.5">
+    {% for c in chips %}{{ chip(c.label, c.active, c.url, hx_replace(c.url, "#overseer-main")) }}{% endfor %}
+  </nav>
+  {{ action("New post", hx_replace(new_post_url, "#overseer-main"), "primary") }}
+</div>
+{% call card(None, id="blog-posts") %}
+  {{ data_table([
+    {"key": "title", "label": "Title", "kind": "link", "target": "#overseer-main"},
+    {"key": "status", "label": "Status", "kind": "status"},
+    {"key": "tags", "label": "Tags"},
+    {"key": "updated", "label": "Updated"},
+    {"key": "published", "label": "Published"},
+  ], rows, actions=row_actions, empty="No posts here") }}
+{% endcall %}
+{{ drawer_sync(open_drawer, drawer_param) }}

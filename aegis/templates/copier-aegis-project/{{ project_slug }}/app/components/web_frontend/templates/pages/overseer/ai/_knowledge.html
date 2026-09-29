@@ -1,0 +1,25 @@
+{# The RAG index: how it is set up, anything misconfigured, and each
+   collection (a row opens its files in the drawer). #}
+{% from "components/macros/layout.html" import card, drawer_sync, facts, stats_strip %}
+{% from "components/macros/table.html" import data_table %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="ai-rag-figures") }}
+  {% if problems %}
+  {% call card("Configuration problems", id="ai-rag-problems") %}
+  <ul class="space-y-1 text-sm text-error">{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+  {% endcall %}
+  {% endif %}
+  <div class="grid gap-4 lg:grid-cols-3">
+    <div class="lg:col-span-2">
+    {% call card("Collections", id="ai-collections") %}
+      {{ data_table([
+        {"key": "name", "label": "Collection", "kind": "link", "target": "#overseer-main"},
+        {"key": "chunks", "label": "Chunks", "kind": "int", "align": "right"},
+        {"key": "documents", "label": "Documents", "kind": "int", "align": "right"},
+      ], rows, empty="Nothing indexed yet") }}
+    {% endcall %}
+    </div>
+    {% call card("Setup", id="ai-rag-setup") %}{{ facts(setup) }}{% endcall %}
+  </div>
+</div>
+{{ drawer_sync(open_drawer, drawer_param) }}

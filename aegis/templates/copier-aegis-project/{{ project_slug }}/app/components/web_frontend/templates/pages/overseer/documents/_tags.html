@@ -1,0 +1,10 @@
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% set rows = [] %}
+{% for label, count in tags %}{% set url = list_url ~ "?tag=" ~ label|urlencode %}{% set _ = rows.append({"label": {"label": label, "url": url}, "count": count}) %}{% endfor %}
+{% call card(None, id="documents-tags") %}
+  {{ data_table([
+    {"key": "label", "label": "Tag", "kind": "link", "target": "#overseer-main"},
+    {"key": "count", "label": "Documents", "kind": "int", "align": "right"},
+  ], rows, empty="No tags yet") }}
+{% endcall %}

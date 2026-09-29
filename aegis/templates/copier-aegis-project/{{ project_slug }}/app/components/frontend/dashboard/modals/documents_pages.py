@@ -30,23 +30,6 @@ def has_unread_pages(rows: list[dict[str, Any]]) -> bool:
     return not rows or any(row.get("status") != "read" for row in rows)
 
 
-def extraction_summary(result: dict[str, Any]) -> str:
-    """What the snackbar says when a run lands.
-
-    "Extracted", not "read": reading is what a person does to the page
-    afterwards, and the count here is of pages this run took text out of.
-    A run that missed some says so against the total, since "5 extracted"
-    alone hides the two it could not do.
-    """
-    extracted = int(result.get("read") or 0)
-    missed = int(result.get("unread") or 0)
-    if extracted == 0 and missed == 0:
-        return "Already extracted"
-    if missed == 0:
-        return f"{extracted} pages extracted" if extracted != 1 else "1 page extracted"
-    return f"{extracted} of {extracted + missed} pages extracted"
-
-
 class PagesStrip(ft.Row):
     """One tile per extracted page; empty until extraction has run."""
 

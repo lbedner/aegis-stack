@@ -278,3 +278,16 @@ def format_span(seconds: float | None) -> str | None:
         if len(parts) == 2:
             break
     return " ".join(parts)
+
+
+# Anything that could end a header line or a quoted filename.
+_UNSAFE_FILENAME = re.compile(r'[\r\n"\\]+')
+
+
+def safe_filename(name: str, fallback: str = "document") -> str:
+    """A name safe inside ``Content-Disposition: ...; filename="..."``.
+
+    The name is often user input (a document title, an object key), so a
+    stray newline there is header injection, not a formatting nuisance.
+    """
+    return _UNSAFE_FILENAME.sub("", name).strip() or fallback

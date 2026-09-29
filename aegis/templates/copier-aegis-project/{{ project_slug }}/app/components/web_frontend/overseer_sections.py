@@ -18,6 +18,7 @@ from . import (
     overseer_redis,
     overseer_scheduler,
     overseer_server,
+    overseer_storage,
     overseer_web_frontend,
     overseer_worker,
 )
@@ -65,6 +66,9 @@ SECTIONED_PAGES: dict[tuple[str, str], SectionedPage] = {
     ),
     ("components", "cache"): SectionedPage(
         "redis", overseer_redis.SECTIONS, overseer_redis.section_context
+    ),
+    ("components", "storage"): SectionedPage(
+        "storage", overseer_storage.SECTIONS, overseer_storage.section_context
     ),
     ("components", "worker"): SectionedPage(
         "worker", overseer_worker.SECTIONS, overseer_worker.section_context

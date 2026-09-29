@@ -178,6 +178,20 @@ class TestAssetFingerprinting:
         assert "css/app.css" in manifest
 
 
+class TestBuildWatchPolls:
+    """The watcher polls the source trees rather than waiting on
+    filesystem events: on a Docker Desktop bind mount, edits made on the
+    host do not reliably raise inotify events in the container, so an
+    event-driven watcher silently serves stale JS."""
+
+    def test_the_watcher_polls(self) -> None:
+        from watchdog.observers.polling import PollingObserver
+
+        from app.components.web_frontend import build_watch
+
+        assert issubclass(build_watch.OBSERVER, PollingObserver)
+
+
 class TestBuildWatchSourceFilter:
     """The watcher must react to sources and ignore its own output — the
     difference between a working watcher and an infinite rebuild loop."""

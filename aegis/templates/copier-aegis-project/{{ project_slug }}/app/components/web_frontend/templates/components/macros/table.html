@@ -10,7 +10,9 @@
    colours by sign, ``toned`` colours by sign without the plus), ``date``,
    ``int`` or ``status`` (the value is
    ``{"label", "tone"}``, rendered as a ``badge``); ``render`` is a macro
-   taking the value, for a cell no kind covers; ``align`` is ``left``
+   taking the value, for a cell no kind covers; ``header`` is a macro
+   rendering the column's heading in place of ``label`` (a select-all
+   checkbox, say); ``align`` is ``left``
    (default) or ``right``. Rows are objects or dicts; a blank value
    renders as a dash. Zero rows render ``empty_state`` instead.
 
@@ -63,7 +65,7 @@ text-aegis-text
    stray row loose in a dialog. htmx unwraps a template before it swaps,
    so this is the way to send one anywhere. #}
 {% if oob %}<template{% if id %} id="{{ id }}-oob"{% endif %}>{% endif %}
-<tr {% if id %}id="{{ id }}"{% endif %} {% if oob %}hx-swap-oob="outerHTML"{% endif %} {% if expandable %}@click="open = !open"{% endif %} class="hover:bg-aegis-border/20 transition-colors{{ ' cursor-pointer' if expandable }}">
+<tr {% if id %}id="{{ id }}"{% endif %} {% if oob %}hx-swap-oob="outerHTML"{% endif %} {% if expandable %}@click="open = !open"{% endif %} class="group hover:bg-aegis-border/20 transition-colors{{ ' cursor-pointer' if expandable }}">
   {% if expandable %}
   <td class="pl-5 pr-0 py-2 w-4">
     <button type="button" @click.stop="open = !open" aria-expanded="false" :aria-expanded="open.toString()" aria-label="Details"
@@ -87,7 +89,7 @@ text-aegis-text
       <tr class="text-xxs text-aegis-muted caps border-b border-aegis-border">
         {% if detail %}<th scope="col"><span class="sr-only">Details</span></th>{% endif %}
         {% for col in columns %}
-        <th scope="col" class="px-5 py-2 font-medium {{ 'text-right' if col.align == 'right' else 'text-left' }}">{{ col.label }}</th>
+        <th scope="col" class="px-5 py-2 font-medium {{ 'text-right' if col.align == 'right' else 'text-left' }}">{{ col.header() if col.header else col.label }}</th>
         {% endfor %}
         {% if actions %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}
       </tr>

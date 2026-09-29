@@ -50,7 +50,9 @@ document.body.addEventListener('htmx:afterRequest', (event) => {
   }
   document.body.dispatchEvent(new Event('dialog:close'));
   toast(done, 'ok');
-  htmx.ajax('GET', window.location.pathname, {
+  // The whole URL: a page's state (a filter, the open folder) lives in
+  // its query string.
+  htmx.ajax('GET', window.location.pathname + window.location.search, {
     target: '#overseer-main', select: '#overseer-main', swap: 'outerHTML',
   });
 });

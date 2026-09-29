@@ -299,10 +299,13 @@ services:
     image: chrislusf/seaweedfs:4.45
     hostname: seaweedfs
     command: server -s3 -dir=/data -ip=seaweedfs -ip.bind=0.0.0.0 -master.volumeSizeLimitMB=1024
+    environment:
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY:-aegis}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY:-aegis-secret}
     volumes:
       - seaweedfs-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8333/"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8333/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -34,6 +34,15 @@ def render(columns: list[dict], rows: list, **kwargs: object) -> str:
 
 
 class TestDataTable:
+    def test_a_column_may_render_its_own_header(self) -> None:
+        template = templates.env.from_string(
+            '{% from "components/macros/table.html" import data_table %}'
+            '{% macro box() %}<input type="checkbox" data-all>{% endmacro %}'
+            '{{ data_table([{"key": "name", "label": "Name", "header": box}], rows) }}'
+        )
+        html = template.render(rows=[{"name": "Coffee"}])
+        assert select(html, "thead th input[data-all]")
+
     def test_headers_come_from_the_column_labels(self) -> None:
         html = render(COLUMNS, [Row(date(2026, 7, 15), "Coffee", -450)])
         assert [text(th) for th in select(html, "thead th")] == [

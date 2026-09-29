@@ -7,8 +7,34 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Finance tests no longer depend on the date they run.** They seeded
+  fixed dates while the service reckoned "today" (its 30- and 90-day
+  windows, the budget month, what is overdue) from the real clock, so the
+  suite failed on dates nobody chose: two tests broke on 2026-09-27 and
+  2026-09-30, and moving the clock forward broke up to 19. The test
+  conftest now pins the finance calendar to one day
+  (`@pytest.mark.real_clock` opts out); the service, its API and the
+  provider syncs read the date only through `current_date`, which the
+  guard now enforces for the UTC forms too; and tests that drive finance
+  code date things by the same clock. Swept all 1,440 finance tests with
+  the clock moved to month ends, a leap day and 2030: all pass.
+
 ### Changed
 
+- **App containers run their program directly, and the webserver shuts
+  down cleanly.** Every app container started as `uv run entrypoint.sh`
+  wrapping `uv run <program>`: two idle `uv` processes per container and a
+  lock check each on every start, although the image is synced at build.
+  The entrypoint now `exec`s each role's program from the venv, under
+  `init: true` (tini) to reap children and pass signals on; in dev one
+  `uv sync --frozen` still lands a dependency added on the host. Measured on
+  a generated stack: about 25 MB less per app container (scheduler and
+  workers 108 MB to 83 MB, webserver 248 MB to 221 MB). The webserver's
+  branch also lacked `exec`, so `docker stop` killed it by signal (exit
+  143) before its shutdown hooks ran; it now exits 0 after "Application
+  shutdown complete".
 - **With a worker, scheduled jobs run on the worker.** The scheduler ran
   every job in its own process, and "Run Now" ran it inside the webserver,
   on the event loop that serves every page and under the webserver's

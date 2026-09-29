@@ -24,6 +24,7 @@ from app.services.finance.models.investments import (
 )
 from app.services.finance.models.reference import FinanceCurrency
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 from tests.services._finance_factories import (
     seed_account,
     seed_category,
@@ -68,7 +69,7 @@ async def test_ledger_monthly_detail_reports_cashflow(
     svc: FinanceService, session: AsyncSession
 ) -> None:
     account = await seed_account(svc)
-    today = date.today()
+    today = current_date()
     await seed_txn(svc, account.id, 250_00, today)
     await seed_txn(svc, account.id, -100_00, today)
 
@@ -86,7 +87,7 @@ async def test_ledger_transactions_detail_lists_line_items(
 ) -> None:
     account = await seed_account(svc)
     category = await seed_category(session, "Coffee")
-    today = date.today()
+    today = current_date()
     await seed_txn(
         svc, account.id, -4_50, today, name="Starbucks", category_id=category.id
     )
@@ -109,7 +110,7 @@ async def test_ledger_transactions_use_the_curated_payee(
     the raw bank descriptor - what the register shows is what the AI sees.
     A renamed payee was invisible to the assistant's searches."""
     account = await seed_account(svc)
-    today = date.today()
+    today = current_date()
     txn = await seed_txn(
         svc, account.id, -108_50, today, name="NON-CHASE ATM WITHDRAW XX2488"
     )
@@ -143,7 +144,7 @@ async def test_accounts_returns_the_full_balance_sheet(
             owner_user_id=1,
             account_id=brokerage.id,
             security_id=security.id,
-            as_of_date=date.today(),
+            as_of_date=current_date(),
             quantity_e8=4 * 10**8,
             price=100_00,
         )
@@ -241,7 +242,7 @@ async def test_accounts_uses_register_balance_when_none_was_written(
     real balance is the transaction sum - the same rule the accounts tab
     renders. A liability's balance reads negative (amount owed)."""
     checking = await seed_account(svc)
-    today = date.today()
+    today = current_date()
     await seed_txn(svc, checking.id, 250_00, today)
     await seed_txn(svc, checking.id, -100_00, today)
     await seed_account(
@@ -271,7 +272,7 @@ async def test_accounts_carries_upcoming_scheduled_flows(
         svc,
         name="Eleanor Care",
         expected_amount=2_200_00,
-        next_expected_date=date.today() + timedelta(days=9),
+        next_expected_date=current_date() + timedelta(days=9),
         account_id=checking.id,
     )
     await seed_stream(
@@ -279,7 +280,7 @@ async def test_accounts_carries_upcoming_scheduled_flows(
         name="NYS Deposit",
         direction="inflow",
         expected_amount=1_004_93,
-        next_expected_date=date.today() + timedelta(days=60),
+        next_expected_date=current_date() + timedelta(days=60),
         account_id=checking.id,
     )
     await session.commit()
@@ -290,7 +291,7 @@ async def test_accounts_carries_upcoming_scheduled_flows(
     assert entry["upcoming"] == [
         {
             "name": "Eleanor Care",
-            "date": (date.today() + timedelta(days=9)).isoformat(),
+            "date": (current_date() + timedelta(days=9)).isoformat(),
             "amount_cents": -2_200_00,
         }
     ]

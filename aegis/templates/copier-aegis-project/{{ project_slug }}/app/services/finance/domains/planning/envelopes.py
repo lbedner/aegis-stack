@@ -15,15 +15,16 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from app.core.time import utcnow
+from pydantic import BaseModel, ConfigDict, Field
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.services.finance.domains.ledger import accounts, valuations
 from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.domains.planning import queries
 from app.services.finance.models import (
     FinanceAccount,
 )
-from pydantic import BaseModel, ConfigDict, Field
-from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.finance.utils import current_date
 
 ENVELOPE_ACCOUNT_TYPE = "envelope"
 ENVELOPE_CADENCES = ("weekly", "monthly")
@@ -160,7 +161,7 @@ async def walk_envelope(
     await valuations.upsert_valuation(
         db,
         account_id=account_id,
-        as_of_date=when or utcnow().date(),
+        as_of_date=when or current_date(),
         value=(account.current_balance or 0) + delta,
         owner_user_id=owner_user_id,
         source=source,

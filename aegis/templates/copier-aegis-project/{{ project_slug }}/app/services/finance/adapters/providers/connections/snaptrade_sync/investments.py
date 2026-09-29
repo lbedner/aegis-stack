@@ -10,11 +10,11 @@ from datetime import date
 import logging
 from typing import Any
 
-from app.core.time import utcnow
 from app.services.finance.adapters.providers.connections import snaptrade_mapping
 from app.services.finance.constants import Provider
 from app.services.finance.models import FinanceConnection
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ async def _apply_snaptrade_positions(
             owner_user_id=owner_user_id,
             account_id=account_id,
             security_id=security.id,
-            as_of_date=utcnow().date(),
+            as_of_date=current_date(),
             quantity_e8=round(units * 10**8),
             price=price_cents,
             cost_basis=(

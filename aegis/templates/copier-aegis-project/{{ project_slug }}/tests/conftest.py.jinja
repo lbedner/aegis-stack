@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator
 
@@ -88,6 +89,32 @@ def _known_owner_rows() -> list[Any]:
     ]
 {%- endif %}
 
+{%- if include_finance %}
+
+
+# Every test runs on one fixed calendar day for finance. The service reads
+# "today" through ``utils.current_date`` (its 30- and 90-day windows, the
+# month it budgets, what counts as overdue), and tests seed dates either
+# fixed or relative to that same clock. On the real clock, fixed seeds
+# drift out of those windows as the calendar moves and a green suite goes
+# red on a date nobody chose. ``@pytest.mark.real_clock`` opts a test out.
+FINANCE_TODAY = datetime(2026, 9, 29, 12, 0)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers", "real_clock: the test reads the real clock, not the finance calendar"
+    )
+
+
+@pytest.fixture(autouse=True)
+def _finance_calendar(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if request.node.get_closest_marker("real_clock"):
+        return
+    monkeypatch.setattr("app.services.finance.utils.utcnow", lambda: FINANCE_TODAY)
+{%- endif %}
 
 # Swap the module-level ``cache`` singleton to the in-memory dict
 # backend for the whole test session. The Redis-backed singleton

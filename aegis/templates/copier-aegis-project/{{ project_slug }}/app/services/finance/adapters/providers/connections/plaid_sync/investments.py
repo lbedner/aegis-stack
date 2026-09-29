@@ -14,12 +14,12 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.time import utcnow
 from app.services.finance.constants import Provider
 from app.services.finance.models import (
     FinanceConnection,
 )
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +183,7 @@ async def _apply_holdings(
             owner_user_id=owner_user_id,
             account_id=account_id,
             security_id=security_id,
-            as_of_date=date.fromisoformat(as_of) if as_of else utcnow().date(),
+            as_of_date=date.fromisoformat(as_of) if as_of else current_date(),
             quantity_e8=round((holding.get("quantity") or 0) * 10**8),
             price=round(price * 100) if price is not None else None,
             cost_basis=round(cost * 100) if cost is not None else None,

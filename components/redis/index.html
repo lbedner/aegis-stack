@@ -12,31 +12,31 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://docs.aegis-stack.io/services/finance/accounts/">
+        <link rel="canonical" href="https://docs.aegis-stack.io/components/redis/">
       
       
-        <link rel="prev" href="../">
+        <link rel="prev" href="../worker/extras/load-testing/">
       
       
-        <link rel="next" href="../bills/">
+        <link rel="next" href="../ingress/">
       
       
         
       
       
-      <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
+      <link rel="icon" href="../../images/aegis_stack_layered_shield.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Accounts and the Register - Aegis Stack</title>
+        <title>Redis - Aegis Stack</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,11 +55,11 @@
       
     
     
-      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../../stylesheets/custom.css">
+      <link rel="stylesheet" href="../../stylesheets/custom.css">
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -72,7 +72,7 @@
     plausible.init()
   </script>
 
-   <link href="../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+   <link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
     html.glightbox-open { overflow: initial; height: 100%; }
     .gslide-title { margin-top: 0px; user-select: text; }
     .gslide-desc { color: #666; user-select: text; }
@@ -81,7 +81,7 @@
     .gdesc-inner { font-size: 0.75rem; }
     body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
     body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
-    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../assets/javascripts/glightbox.min.js"></script></head>
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../assets/javascripts/glightbox.min.js"></script></head>
   
   
     
@@ -100,7 +100,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#accounts-and-the-register" class="md-skip">
+        <a href="#redis" class="md-skip">
           Skip to content
         </a>
       
@@ -114,9 +114,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -133,7 +133,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Accounts and the Register
+              Redis
             
           </span>
         </div>
@@ -248,7 +248,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../.." class="md-tabs__link">
+        <a href="../.." class="md-tabs__link">
           
   
   
@@ -268,31 +268,11 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../about/" class="md-tabs__link">
+        <a href="../../about/" class="md-tabs__link">
           
   
   
   Origin Story
-
-        </a>
-      </li>
-    
-  
-
-      
-        
-  
-  
-  
-  
-    
-    
-      <li class="md-tabs__item">
-        <a href="../../../components/" class="md-tabs__link">
-          
-  
-  
-  Components
 
         </a>
       </li>
@@ -310,7 +290,27 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../" class="md-tabs__link">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Components
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../services/" class="md-tabs__link">
           
   
   
@@ -330,7 +330,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../overseer/" class="md-tabs__link">
+        <a href="../../overseer/" class="md-tabs__link">
           
   
   
@@ -350,7 +350,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../deployment/" class="md-tabs__link">
+        <a href="../../deployment/" class="md-tabs__link">
           
   
   
@@ -370,7 +370,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../plugins/" class="md-tabs__link">
+        <a href="../../plugins/" class="md-tabs__link">
           
   
   
@@ -390,7 +390,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../cli-reference/" class="md-tabs__link">
+        <a href="../../cli-reference/" class="md-tabs__link">
           
   
   
@@ -424,9 +424,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     Aegis Stack
@@ -503,7 +503,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -531,7 +531,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../installation/" class="md-nav__link">
+      <a href="../../installation/" class="md-nav__link">
         
   
   
@@ -616,7 +616,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../about/" class="md-nav__link">
+      <a href="../../about/" class="md-nav__link">
         
   
   
@@ -644,7 +644,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../technology/" class="md-nav__link">
+      <a href="../../technology/" class="md-nav__link">
         
   
   
@@ -672,7 +672,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../process/" class="md-nav__link">
+      <a href="../../process/" class="md-nav__link">
         
   
   
@@ -704,24 +704,29 @@
       
   
   
+    
   
   
+  
     
     
     
     
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -739,7 +744,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -757,7 +762,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -835,7 +840,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/" class="md-nav__link">
+      <a href="../backend/" class="md-nav__link">
         
   
   
@@ -913,7 +918,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/middleware/" class="md-nav__link">
+      <a href="../backend/middleware/" class="md-nav__link">
         
   
   
@@ -941,7 +946,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/middleware/performance/" class="md-nav__link">
+      <a href="../backend/middleware/performance/" class="md-nav__link">
         
   
   
@@ -977,7 +982,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/lifecycle/" class="md-nav__link">
+      <a href="../backend/lifecycle/" class="md-nav__link">
         
   
   
@@ -1005,7 +1010,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/routes/" class="md-nav__link">
+      <a href="../backend/routes/" class="md-nav__link">
         
   
   
@@ -1033,7 +1038,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/cache/" class="md-nav__link">
+      <a href="../backend/cache/" class="md-nav__link">
         
   
   
@@ -1061,7 +1066,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/serving/" class="md-nav__link">
+      <a href="../backend/serving/" class="md-nav__link">
         
   
   
@@ -1089,7 +1094,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/auth/" class="md-nav__link">
+      <a href="../backend/auth/" class="md-nav__link">
         
   
   
@@ -1117,7 +1122,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/load-testing/" class="md-nav__link">
+      <a href="../backend/load-testing/" class="md-nav__link">
         
   
   
@@ -1203,7 +1208,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/database/" class="md-nav__link">
+      <a href="../database/" class="md-nav__link">
         
   
   
@@ -1231,7 +1236,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/database/neon/" class="md-nav__link">
+      <a href="../database/neon/" class="md-nav__link">
         
   
   
@@ -1367,7 +1372,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/" class="md-nav__link">
+      <a href="../frontend/" class="md-nav__link">
         
   
   
@@ -1395,7 +1400,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/architecture/" class="md-nav__link">
+      <a href="../frontend/architecture/" class="md-nav__link">
         
   
   
@@ -1423,7 +1428,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/routing/" class="md-nav__link">
+      <a href="../frontend/routing/" class="md-nav__link">
         
   
   
@@ -1451,7 +1456,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/state/" class="md-nav__link">
+      <a href="../frontend/state/" class="md-nav__link">
         
   
   
@@ -1479,7 +1484,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/api-client/" class="md-nav__link">
+      <a href="../frontend/api-client/" class="md-nav__link">
         
   
   
@@ -1507,7 +1512,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/events/" class="md-nav__link">
+      <a href="../frontend/events/" class="md-nav__link">
         
   
   
@@ -1535,7 +1540,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/example/" class="md-nav__link">
+      <a href="../frontend/example/" class="md-nav__link">
         
   
   
@@ -1621,7 +1626,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/" class="md-nav__link">
+      <a href="../web-frontend/" class="md-nav__link">
         
   
   
@@ -1649,7 +1654,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/templates-and-partials/" class="md-nav__link">
+      <a href="../web-frontend/templates-and-partials/" class="md-nav__link">
         
   
   
@@ -1677,7 +1682,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/styling/" class="md-nav__link">
+      <a href="../web-frontend/styling/" class="md-nav__link">
         
   
   
@@ -1705,7 +1710,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/asset-pipeline/" class="md-nav__link">
+      <a href="../web-frontend/asset-pipeline/" class="md-nav__link">
         
   
   
@@ -1733,7 +1738,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/auth-pages/" class="md-nav__link">
+      <a href="../web-frontend/auth-pages/" class="md-nav__link">
         
   
   
@@ -1827,7 +1832,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/" class="md-nav__link">
+      <a href="../scheduler/" class="md-nav__link">
         
   
   
@@ -1855,7 +1860,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/examples/" class="md-nav__link">
+      <a href="../scheduler/examples/" class="md-nav__link">
         
   
   
@@ -1883,7 +1888,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/cli/" class="md-nav__link">
+      <a href="../scheduler/cli/" class="md-nav__link">
         
   
   
@@ -1911,7 +1916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/persistence/" class="md-nav__link">
+      <a href="../scheduler/persistence/" class="md-nav__link">
         
   
   
@@ -1939,7 +1944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/running-jobs/" class="md-nav__link">
+      <a href="../scheduler/running-jobs/" class="md-nav__link">
         
   
   
@@ -2025,7 +2030,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/" class="md-nav__link">
+      <a href="../storage/" class="md-nav__link">
         
   
   
@@ -2053,7 +2058,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/configuration/" class="md-nav__link">
+      <a href="../storage/configuration/" class="md-nav__link">
         
   
   
@@ -2081,7 +2086,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/examples/" class="md-nav__link">
+      <a href="../storage/examples/" class="md-nav__link">
         
   
   
@@ -2167,7 +2172,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/" class="md-nav__link">
+      <a href="../worker/" class="md-nav__link">
         
   
   
@@ -2195,7 +2200,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/configuration/" class="md-nav__link">
+      <a href="../worker/configuration/" class="md-nav__link">
         
   
   
@@ -2223,7 +2228,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/jobs/" class="md-nav__link">
+      <a href="../worker/jobs/" class="md-nav__link">
         
   
   
@@ -2251,7 +2256,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/examples/" class="md-nav__link">
+      <a href="../worker/examples/" class="md-nav__link">
         
   
   
@@ -2329,7 +2334,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/extras/load-testing/" class="md-nav__link">
+      <a href="../worker/extras/load-testing/" class="md-nav__link">
         
   
   
@@ -2370,10 +2375,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../components/redis/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Redis
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -2389,6 +2421,70 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-get" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What you get
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logical-databases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logical databases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#memory-and-eviction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Memory and eviction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#seeing-what-is-in-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Seeing what is in it
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2401,7 +2497,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/ingress/" class="md-nav__link">
+      <a href="../ingress/" class="md-nav__link">
         
   
   
@@ -2429,7 +2525,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/observability/" class="md-nav__link">
+      <a href="../observability/" class="md-nav__link">
         
   
   
@@ -2461,29 +2557,24 @@
       
   
   
-    
   
   
-  
     
     
     
     
       
-        
-        
-      
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
   
@@ -2501,7 +2592,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2519,7 +2610,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../" class="md-nav__link">
+      <a href="../../services/" class="md-nav__link">
         
   
   
@@ -2597,7 +2688,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/" class="md-nav__link">
+      <a href="../../services/ai/" class="md-nav__link">
         
   
   
@@ -2625,7 +2716,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/illiana/" class="md-nav__link">
+      <a href="../../services/ai/illiana/" class="md-nav__link">
         
   
   
@@ -2653,7 +2744,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/agents/" class="md-nav__link">
+      <a href="../../services/ai/agents/" class="md-nav__link">
         
   
   
@@ -2681,7 +2772,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/memory-modules/" class="md-nav__link">
+      <a href="../../services/ai/memory-modules/" class="md-nav__link">
         
   
   
@@ -2709,7 +2800,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/llm-catalog/" class="md-nav__link">
+      <a href="../../services/ai/llm-catalog/" class="md-nav__link">
         
   
   
@@ -2737,7 +2828,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/rag/" class="md-nav__link">
+      <a href="../../services/ai/rag/" class="md-nav__link">
         
   
   
@@ -2765,7 +2856,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/cost-tracking/" class="md-nav__link">
+      <a href="../../services/ai/cost-tracking/" class="md-nav__link">
         
   
   
@@ -2793,7 +2884,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/voice/" class="md-nav__link">
+      <a href="../../services/ai/voice/" class="md-nav__link">
         
   
   
@@ -2821,7 +2912,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/engines/" class="md-nav__link">
+      <a href="../../services/ai/engines/" class="md-nav__link">
         
   
   
@@ -2849,7 +2940,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/providers/" class="md-nav__link">
+      <a href="../../services/ai/providers/" class="md-nav__link">
         
   
   
@@ -2877,7 +2968,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/api/" class="md-nav__link">
+      <a href="../../services/ai/api/" class="md-nav__link">
         
   
   
@@ -2905,7 +2996,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/integration/" class="md-nav__link">
+      <a href="../../services/ai/integration/" class="md-nav__link">
         
   
   
@@ -2933,7 +3024,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/cli/" class="md-nav__link">
+      <a href="../../services/ai/cli/" class="md-nav__link">
         
   
   
@@ -2961,7 +3052,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/examples/" class="md-nav__link">
+      <a href="../../services/ai/examples/" class="md-nav__link">
         
   
   
@@ -3047,7 +3138,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/" class="md-nav__link">
+      <a href="../../services/auth/" class="md-nav__link">
         
   
   
@@ -3075,7 +3166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/levels/" class="md-nav__link">
+      <a href="../../services/auth/levels/" class="md-nav__link">
         
   
   
@@ -3103,7 +3194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/api/" class="md-nav__link">
+      <a href="../../services/auth/api/" class="md-nav__link">
         
   
   
@@ -3131,7 +3222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/integration/" class="md-nav__link">
+      <a href="../../services/auth/integration/" class="md-nav__link">
         
   
   
@@ -3159,7 +3250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/cli/" class="md-nav__link">
+      <a href="../../services/auth/cli/" class="md-nav__link">
         
   
   
@@ -3187,7 +3278,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/examples/" class="md-nav__link">
+      <a href="../../services/auth/examples/" class="md-nav__link">
         
   
   
@@ -3273,7 +3364,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/" class="md-nav__link">
+      <a href="../../services/blog/" class="md-nav__link">
         
   
   
@@ -3301,7 +3392,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/api/" class="md-nav__link">
+      <a href="../../services/blog/api/" class="md-nav__link">
         
   
   
@@ -3329,7 +3420,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/dashboard/" class="md-nav__link">
+      <a href="../../services/blog/dashboard/" class="md-nav__link">
         
   
   
@@ -3357,7 +3448,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/cli/" class="md-nav__link">
+      <a href="../../services/blog/cli/" class="md-nav__link">
         
   
   
@@ -3385,7 +3476,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/examples/" class="md-nav__link">
+      <a href="../../services/blog/examples/" class="md-nav__link">
         
   
   
@@ -3471,7 +3562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/" class="md-nav__link">
+      <a href="../../services/documents/" class="md-nav__link">
         
   
   
@@ -3499,7 +3590,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/api/" class="md-nav__link">
+      <a href="../../services/documents/api/" class="md-nav__link">
         
   
   
@@ -3527,7 +3618,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/extraction/" class="md-nav__link">
+      <a href="../../services/documents/extraction/" class="md-nav__link">
         
   
   
@@ -3555,7 +3646,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/dashboard/" class="md-nav__link">
+      <a href="../../services/documents/dashboard/" class="md-nav__link">
         
   
   
@@ -3641,7 +3732,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/" class="md-nav__link">
+      <a href="../../services/comms/" class="md-nav__link">
         
   
   
@@ -3669,7 +3760,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/setup/" class="md-nav__link">
+      <a href="../../services/comms/setup/" class="md-nav__link">
         
   
   
@@ -3697,7 +3788,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/api/" class="md-nav__link">
+      <a href="../../services/comms/api/" class="md-nav__link">
         
   
   
@@ -3725,7 +3816,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/cli/" class="md-nav__link">
+      <a href="../../services/comms/cli/" class="md-nav__link">
         
   
   
@@ -3753,7 +3844,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/examples/" class="md-nav__link">
+      <a href="../../services/comms/examples/" class="md-nav__link">
         
   
   
@@ -3786,8 +3877,6 @@
                 
   
   
-    
-  
   
   
     
@@ -3798,11 +3887,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_7" >
         
           
           <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
@@ -3823,7 +3912,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3841,7 +3930,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../services/finance/" class="md-nav__link">
         
   
   
@@ -3866,37 +3955,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Accounts and the Register
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../services/finance/accounts/" class="md-nav__link">
         
   
   
@@ -3912,137 +3974,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#accounts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Accounts
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Accounts">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#liabilities-and-properties" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Liabilities and Properties
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-register" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The Register
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="The Register">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#splits" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Splits
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tags" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tags
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#payees" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Payees
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#categories" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Categories
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#net-worth-over-time" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Net Worth Over Time
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#related" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Related
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -4055,7 +3986,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../bills/" class="md-nav__link">
+      <a href="../../services/finance/bills/" class="md-nav__link">
         
   
   
@@ -4083,7 +4014,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../projected/" class="md-nav__link">
+      <a href="../../services/finance/projected/" class="md-nav__link">
         
   
   
@@ -4111,7 +4042,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../budget/" class="md-nav__link">
+      <a href="../../services/finance/budget/" class="md-nav__link">
         
   
   
@@ -4139,7 +4070,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../review/" class="md-nav__link">
+      <a href="../../services/finance/review/" class="md-nav__link">
         
   
   
@@ -4167,7 +4098,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../investments/" class="md-nav__link">
+      <a href="../../services/finance/investments/" class="md-nav__link">
         
   
   
@@ -4195,7 +4126,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../imports/" class="md-nav__link">
+      <a href="../../services/finance/imports/" class="md-nav__link">
         
   
   
@@ -4223,7 +4154,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../chat/" class="md-nav__link">
+      <a href="../../services/finance/chat/" class="md-nav__link">
         
   
   
@@ -4251,7 +4182,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/" class="md-nav__link">
+      <a href="../../services/finance/api/" class="md-nav__link">
         
   
   
@@ -4279,7 +4210,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/" class="md-nav__link">
+      <a href="../../services/finance/cli/" class="md-nav__link">
         
   
   
@@ -4365,7 +4296,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/" class="md-nav__link">
+      <a href="../../services/insights/" class="md-nav__link">
         
   
   
@@ -4393,7 +4324,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/data-sources/" class="md-nav__link">
+      <a href="../../services/insights/data-sources/" class="md-nav__link">
         
   
   
@@ -4421,7 +4352,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/cli/" class="md-nav__link">
+      <a href="../../services/insights/cli/" class="md-nav__link">
         
   
   
@@ -4449,7 +4380,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/dashboard/" class="md-nav__link">
+      <a href="../../services/insights/dashboard/" class="md-nav__link">
         
   
   
@@ -4477,7 +4408,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/configuration/" class="md-nav__link">
+      <a href="../../services/insights/configuration/" class="md-nav__link">
         
   
   
@@ -4505,7 +4436,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../insights/examples/" class="md-nav__link">
+      <a href="../../services/insights/examples/" class="md-nav__link">
         
   
   
@@ -4591,7 +4522,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/" class="md-nav__link">
+      <a href="../../services/payment/" class="md-nav__link">
         
   
   
@@ -4619,7 +4550,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/setup/" class="md-nav__link">
+      <a href="../../services/payment/setup/" class="md-nav__link">
         
   
   
@@ -4647,7 +4578,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/dashboard/" class="md-nav__link">
+      <a href="../../services/payment/dashboard/" class="md-nav__link">
         
   
   
@@ -4675,7 +4606,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/api/" class="md-nav__link">
+      <a href="../../services/payment/api/" class="md-nav__link">
         
   
   
@@ -4703,7 +4634,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/cli/" class="md-nav__link">
+      <a href="../../services/payment/cli/" class="md-nav__link">
         
   
   
@@ -4731,7 +4662,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/examples/" class="md-nav__link">
+      <a href="../../services/payment/examples/" class="md-nav__link">
         
   
   
@@ -4824,7 +4755,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/" class="md-nav__link">
+      <a href="../../overseer/" class="md-nav__link">
         
   
   
@@ -4852,7 +4783,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/story/" class="md-nav__link">
+      <a href="../../overseer/story/" class="md-nav__link">
         
   
   
@@ -4880,7 +4811,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/integration/" class="md-nav__link">
+      <a href="../../overseer/integration/" class="md-nav__link">
         
   
   
@@ -4965,7 +4896,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../deployment/" class="md-nav__link">
+      <a href="../../deployment/" class="md-nav__link">
         
   
   
@@ -5050,7 +4981,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/" class="md-nav__link">
+      <a href="../../plugins/" class="md-nav__link">
         
   
   
@@ -5078,7 +5009,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/creating/" class="md-nav__link">
+      <a href="../../plugins/creating/" class="md-nav__link">
         
   
   
@@ -5106,7 +5037,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/publishing/" class="md-nav__link">
+      <a href="../../plugins/publishing/" class="md-nav__link">
         
   
   
@@ -5191,7 +5122,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../cli-reference/" class="md-nav__link">
+      <a href="../../cli-reference/" class="md-nav__link">
         
   
   
@@ -5219,7 +5150,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../evolving-your-stack/" class="md-nav__link">
+      <a href="../../evolving-your-stack/" class="md-nav__link">
         
   
   
@@ -5247,7 +5178,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../integration-patterns/" class="md-nav__link">
+      <a href="../../integration-patterns/" class="md-nav__link">
         
   
   
@@ -5302,77 +5233,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#accounts" class="md-nav__link">
+  <a href="#what-you-get" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Accounts
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Accounts">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#liabilities-and-properties" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Liabilities and Properties
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-register" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The Register
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="The Register">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#splits" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Splits
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tags" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tags
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#payees" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Payees
+        What you get
       
     </span>
   </a>
@@ -5380,10 +5244,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#categories" class="md-nav__link">
+  <a href="#logical-databases" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Categories
+        Logical databases
       
     </span>
   </a>
@@ -5391,10 +5255,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#net-worth-over-time" class="md-nav__link">
+  <a href="#memory-and-eviction" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Net Worth Over Time
+        Memory and eviction
       
     </span>
   </a>
@@ -5402,10 +5266,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#related" class="md-nav__link">
+  <a href="#seeing-what-is-in-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Related
+        Seeing what is in it
       
     </span>
   </a>
@@ -5433,68 +5297,46 @@
   
 
 
-<h1 id="accounts-and-the-register">Accounts and the Register</h1>
-<p>The recorded past: what you hold, what you owe, and every movement between them. This is the <code>ledger</code> domain and the <strong>Accounts</strong> tab that shows it.</p>
-<p><a class="glightbox" href="../../../images/finance_accounts.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Accounts and the register" src="../../../images/finance_accounts.png" /></a></p>
-<h2 id="accounts">Accounts</h2>
-<p>An account is a balance with a type and a classification. The type decides how it behaves; the classification decides which side of net worth it lands on.</p>
-<p>Four types count as <strong>cash</strong>: <code>checking</code>, <code>savings</code>, <code>cash</code>, <code>money_market</code>. That set is shared by the balance projection, the liquidity rules and the analyst snapshot, so "cash on hand" means the same thing on every surface that says it.</p>
-<p>Accounts come from three places, and they mix freely:</p>
+<h1 id="redis">Redis</h1>
+<p>An in-memory store the rest of the stack builds on: the worker's job queues, the shared <a href="../backend/cache/">cache</a>, the traffic monitor's counters, and the health snapshot.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>redis
+</span></code></pre></div>
+<h2 id="what-you-get">What you get</h2>
 <ul>
-<li><strong>Manual</strong> - typed in, carrying a balance you update or a valuation series you record. A house is an account.</li>
-<li><strong>Imported</strong> - created by a file import when the statement names an account the ledger does not have.</li>
-<li><strong>Connected</strong> - opened by a provider connection and refreshed on sync.</li>
+<li><strong>A Redis 7 service</strong> in the compose stack (<code>redis:7-alpine</code>).</li>
+<li><strong>Settings:</strong> <code>REDIS_URL</code> (default <code>redis://redis:6379</code>, the compose service), <code>REDIS_URL_LOCAL</code> for CLI commands run on the host, <code>REDIS_DB</code> and <code>CACHE_REDIS_DB</code>.</li>
+<li><strong>An Overseer page</strong> (Components &gt; Cache) with a keyspace map: every key grouped into the family that owns it, what each family is for, and how much room it takes.</li>
 </ul>
-<p>Balances follow one display rule: the authoritative <code>current_balance</code> when a real balance write happened, otherwise the sum of the register. One rule, shared by the projection walk and the budget outlook, so "today's balance" can never mean two things on two tabs.</p>
-<h3 id="liabilities-and-properties">Liabilities and Properties</h3>
-<p>A liability balance is negative. A credit card carries its terms in a <code>liability</code> detail row when the source reports them, which is what lets the projection know a statement balance from a minimum payment.</p>
-<p>A property is an account with a valuation series rather than a balance: each <code>finance_valuation</code> row is a point in time, and net worth reads the latest. An account can also be marked as <em>secured by</em> another, which is how a mortgage knows which house it is against.</p>
-<h2 id="the-register">The Register</h2>
-<p>Transactions are the fact table. Three properties are worth knowing before anything else:</p>
-<p><strong>Amounts are sign-normalized integer cents.</strong> Negative is an outflow. <code>raw_amount</code> keeps whatever the provider actually delivered, so normalization is never lossy.</p>
-<p><strong>Re-importing is safe.</strong> Every row carries a dedupe identity: a stable provider id where one exists, a content hash where it does not. Importing an overlapping statement twice does not double your spending, and the overlap is detected rather than guessed at.</p>
-<p><strong>Rows link to each other.</strong> Self-referencing keys thread a pending charge to the posted one that replaced it, a duplicate to its canonical row, one side of a transfer to the other, and a reversal to what it reversed. A transfer is two rows that know about each other, not one row with a special type, which is why transfers can be excluded from spending without deleting anything.</p>
-<h3 id="splits">Splits</h3>
-<p>A split carves one purchase into category lines: <em>"$25 of the Target run was food"</em>.</p>
-<p>The parent row is never touched. Its amount, category, payee and import identity stay exactly as recorded, so re-imports still dedupe and account math still balances. The split adds child rows and flips a flag, and category reporting swaps the parent for its lines.</p>
-<p>Parts arrive as positive magnitudes, because that is what you actually know, and any unclaimed difference becomes a remainder line under the parent's own category automatically. You state the parts you are sure of; the ledger keeps the rest honest.</p>
-<h3 id="tags">Tags</h3>
-<p>Tags are the label axis <strong>orthogonal</strong> to categories. A row keeps its natural category (Software, Meals) and wears tags like <code>Business</code> on top.</p>
-<p>Without them, "what did my business cost" forces a parallel tree of business-flavoured categories, and every transaction has to pick a side. With them, one lens rolls up without disturbing the other.</p>
-<h2 id="payees">Payees</h2>
-<p>The name on a statement is not the name of who you paid. <code>SQ *COFFEE 4155551</code> and <code>Hudson Valley Grounded</code> may be the same merchant.</p>
-<p>A merchant row is the curated name; transactions point at it. Merchants can be <strong>merged</strong>, which reassigns every transaction from one to the other, and <strong>payee groups</strong> collect several merchants under one heading for reporting.</p>
-<p>The <strong>No payee</strong> sub-tab in Review exists because a transaction with no merchant is invisible to every payee-shaped question, and the fix is one assignment rather than a rule.</p>
-<h2 id="categories">Categories</h2>
-<p>Categories are a tree with <strong>aliases</strong>: the names a source app uses map onto yours, so a Quicken import does not arrive as a second parallel taxonomy.</p>
-<p>"Uncategorized" is deliberately not just a null check. A row is uncategorized either by having no category at all, or by carrying one of the names a source app uses to mean it did not classify: <code>uncategorized</code>, <code>unclassified</code>, <code>other income</code>, <code>misc</code>, <code>miscellaneous</code>. Checking only for null reports zero uncategorized on a Quicken import that has over a thousand of them.</p>
-<h2 id="net-worth-over-time">Net Worth Over Time</h2>
-<p>History cannot be derived after the fact, so snapshots start on day one.</p>
-<p>The snapshot engine materializes a per-account-per-day row and a per-user-per-day row, which turns the net-worth chart into an indexed range scan rather than a recompute. It reads balances and valuations only, never transactions: manual accounts follow their valuation series, and accounts with only a current balance carry that value forward. The job is bounded to a 35-day window by default so it never scans deep history.</p>
-<p>Backfill or repair the series with <code>finance recompute-snapshots</code>; see <a href="../cli/">CLI Commands</a>.</p>
-<h2 id="related">Related</h2>
+<h2 id="logical-databases">Logical databases</h2>
 <table>
 <thead>
 <tr>
-<th>Topic</th>
-<th>Description</th>
+<th>Database</th>
+<th>Setting</th>
+<th>Holds</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><a href="../imports/">Importing and Connections</a></td>
-<td>where transactions come from</td>
+<td><code>0</code></td>
+<td><code>REDIS_DB</code></td>
+<td>The worker's queues and job state, the health snapshot</td>
 </tr>
 <tr>
-<td><a href="../review/">Review</a></td>
-<td>uncategorized rows, missing payees</td>
-</tr>
-<tr>
-<td><a href="../api/">API Reference</a></td>
-<td>the accounts and register endpoints</td>
+<td><code>1</code></td>
+<td><code>CACHE_REDIS_DB</code></td>
+<td>The shared cache and the traffic monitor's counters</td>
 </tr>
 </tbody>
 </table>
+<p>Keeping the cache in its own database means <code>cache.clear()</code> empties the cache without touching the queues.</p>
+<h2 id="memory-and-eviction">Memory and eviction</h2>
+<p>The dev service caps memory at 64 MB with <code>--maxmemory-policy volatile-lru</code>: under pressure, Redis evicts only keys that already expire (cache entries, job results, task records), least recently used first. Keys with no expiry, such as queued jobs, are never evicted; once nothing evictable is left, Redis refuses the write instead of silently dropping work. <code>allkeys-lru</code> would evict queued jobs, and a guard test keeps it out of the template.</p>
+<h2 id="seeing-what-is-in-it">Seeing what is in it</h2>
+<ul>
+<li><strong>Components &gt; Cache</strong> in the Overseer: the whole keyspace by family, the connection, and slow queries. The shared cache's entries show as one family, <strong>Shared cache</strong>, since services name their own keys.</li>
+<li><strong>Server &gt; Cache</strong>: the shared cache's families, sizes and hit rates. See <a href="../backend/cache/">Cache</a>.</li>
+</ul>
 
 
 
@@ -5567,16 +5409,16 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js"></script>
       
-        <script src="../../../javascripts/mermaid-config.js"></script>
+        <script src="../../javascripts/mermaid-config.js"></script>
       
-        <script src="../../../javascripts/feedback.js"></script>
+        <script src="../../javascripts/feedback.js"></script>
       
     
   <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});

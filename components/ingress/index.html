@@ -15,7 +15,7 @@
         <link rel="canonical" href="https://docs.aegis-stack.io/components/ingress/">
       
       
-        <link rel="prev" href="../worker/extras/load-testing/">
+        <link rel="prev" href="../redis/">
       
       
         <link rel="next" href="../observability/">
@@ -1018,6 +1018,34 @@
     
   
     Routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backend/cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cache
   
 
     
@@ -2338,6 +2366,34 @@
           </ul>
         </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../redis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Redis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -5504,25 +5560,27 @@
 <h2 id="admin-endpoint-protection">Admin Endpoint Protection</h2>
 <p>Sensitive endpoints are protected by an IP allowlist middleware. By default, these paths are restricted:</p>
 <ul>
-<li><code>/dashboard</code> - Overseer frontend</li>
+<li><code>/dashboard</code> - the Flet dashboard</li>
 <li><code>/docs</code> - FastAPI Swagger UI</li>
 <li><code>/redoc</code> - FastAPI ReDoc</li>
 <li><code>/openapi.json</code> - OpenAPI schema</li>
 </ul>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Docker labels on webserver service</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist&quot;</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-0.0.0.0/0}&quot;</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}&quot;</span>
 </span></code></pre></div>
-<p>Set <code>ADMIN_IP_ALLOWLIST</code> in your <code>.env</code> to restrict access:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Allow only your IP</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">ADMIN_IP_ALLOWLIST</span><span class="o">=</span><span class="m">203</span>.0.113.50/32
+<p>The default admits loopback and the private ranges only, so these paths are closed to the public internet until you open them on purpose. Local development still reaches them: Docker hands Traefik your browser's requests from a <code>172.x</code> gateway address, which the default covers.</p>
+<p>Set <code>ADMIN_IP_ALLOWLIST</code> in your <code>.env</code> to change who gets in:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Default: this machine and private networks</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">ADMIN_IP_ALLOWLIST</span><span class="o">=</span><span class="m">127</span>.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Allow a subnet</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nv">ADMIN_IP_ALLOWLIST</span><span class="o">=</span><span class="m">10</span>.0.0.0/8
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Only your office IP</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nv">ADMIN_IP_ALLOWLIST</span><span class="o">=</span><span class="m">203</span>.0.113.50/32
 </span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Default: allow all (development)</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Everyone, including the public internet (think twice)</span>
 </span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="nv">ADMIN_IP_ALLOWLIST</span><span class="o">=</span><span class="m">0</span>.0.0.0/0
 </span></code></pre></div>
+<p>The Overseer's Ingress page tags an allowlist that admits every address as <strong>allows all</strong>.</p>
 <h2 id="environment-variables">Environment Variables</h2>
 <table>
 <thead>
@@ -5545,7 +5603,7 @@
 </tr>
 <tr>
 <td><code>ADMIN_IP_ALLOWLIST</code></td>
-<td><code>0.0.0.0/0</code></td>
+<td>loopback and private ranges</td>
 <td>CIDR range(s) allowed to access admin endpoints</td>
 </tr>
 <tr>

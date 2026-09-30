@@ -241,3 +241,36 @@ class TestActionsArgument:
         html = self._render(False)
         none(html, "button.verb")
         assert len(select(html, "thead th")) == len(COLUMNS)
+
+
+def test_a_group_row_heads_the_rows_it_holds() -> None:
+    """A row marked ``group`` reads as a heading (``data-group``) and the
+    ``child`` rows under it are indented, so a total and its parts share
+    one table and one set of columns."""
+    columns = [{"key": "name", "label": "Name"}, {"key": "n", "label": "N"}]
+    html = render(
+        columns,
+        [
+            {"name": "Chat", "n": 3, "group": True},
+            {"name": "stream", "n": 2, "child": True},
+            {"name": "plain", "n": 1, "child": True},
+        ],
+    )
+    rows = select(html, "tbody tr")
+    assert rows[0].get("data-group") is not None
+    assert all(r.get("data-group") is None for r in rows[1:])
+    assert "pl-10" in select(rows[1], "td")[0].get("class")
+    assert "pl-10" not in select(rows[0], "td")[0].get("class")
+
+
+def test_an_avatar_comes_in_sizes() -> None:
+    """One mark macro at every size the kit draws a brand at (a footer's
+    tiny tile, a table's, a group heading's), never a hand-copied tile."""
+    template = templates.env.from_string(
+        '{% from "components/macros/layout.html" import avatar %}'
+        '{{ avatar("OpenAI", "/i/openai", size="xs") }}|{{ avatar("Groq", size="lg") }}'
+    )
+    tiny, big = template.render().split("|")
+    assert "w-3.5 h-3.5" in one(tiny, "span").get("class")
+    assert one(tiny, "img").get("src") == "/i/openai"
+    assert "w-7 h-7" in one(big, "[data-avatar]").get("class")

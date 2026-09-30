@@ -1,0 +1,36 @@
+{# The chat beside whatever Overseer page is open: a floating button opens a
+   panel that fetches the chat surface on first open and keeps it across
+   page swaps. On the AI page's Chat section the page IS the surface, so
+   the panel empties and the button steps aside (``chatDrawer`` in
+   static/js/chat.js). No @click.stop on the panel: it would swallow the
+   delegated clicks chat.js listens for on the document. #}
+{% from "components/macros/chat.html" import chat_toolbar %}
+<div x-data="chatDrawer('{{ chat_path }}')" @htmx:after-settle.window="settled()">
+  <button type="button" id="chat-fab" x-show="!onChat && !open" x-cloak @click="show()"
+          class="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full border border-aegis-teal bg-aegis-card text-aegis-teal text-sm pl-4 pr-5 py-2.5 shadow-lg hover:bg-aegis-teal/10 transition-colors"
+          aria-label="Open chat">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h8M8 14h5m-9 6.5 2.6-2H18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v14.5Z"/></svg>
+    Chat
+  </button>
+  <template x-teleport="body">
+    <div x-show="open" x-cloak @keydown.escape.window="open = false" class="fixed inset-0 z-50 flex justify-end">
+      <div class="absolute inset-0 bg-aegis-scrim/40 backdrop-blur-sm" @click="open = false" aria-hidden="true"></div>
+      <div role="dialog" aria-label="Chat" x-show="open"
+           x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+           x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
+           class="relative w-full sm:w-[34rem] h-full flex flex-col overflow-hidden bg-aegis-card border-l border-aegis-border shadow-2xl">
+        <div class="shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-b border-aegis-border">
+          <span class="text-sm font-semibold text-aegis-text">Chat</span>
+          <div class="flex items-center gap-2">
+            {{ chat_toolbar(chat_path) }}
+            <button type="button" @click="open = false" aria-label="Close" class="text-aegis-muted hover:text-aegis-text p-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+        {# The surface's bubble insets are page-scale; a narrow panel trims them. #}
+        <div id="chat-drawer-body" x-ref="body" class="flex-1 min-h-0 min-w-0 px-5 py-3 [&_.pl-24]:pl-4 [&_.pr-24]:pr-4"></div>
+      </div>
+    </div>
+  </template>
+</div>

@@ -154,11 +154,20 @@
    the cell's text stays just the name. The tile is light in every theme:
    plenty of logos are drawn dark on transparency, invisible on a dark
    surface. #}
-{% macro avatar(name, icon_url=None) %}
+{# ``size``: ``xs`` a footer's tiny tile, ``sm`` a table row's, ``lg`` a
+   group heading's. Each is (tile, mark, letter, mark px), spelled out so
+   Tailwind sees every class. #}
+{% set _avatar_sizes = {
+  "xs": ("w-3.5 h-3.5", "w-2.5 h-2.5", "text-[8px]", 10),
+  "sm": ("w-5 h-5", "w-3.5 h-3.5", "text-xxs", 14),
+  "lg": ("w-7 h-7", "w-5 h-5", "text-xs", 20),
+} %}
+{% macro avatar(name, icon_url=None, size="sm") %}
+{% set tile, mark, letter, px = _avatar_sizes[size] %}
 {% if icon_url %}
-<span class="inline-flex shrink-0 w-5 h-5 rounded-full brand-tile items-center justify-center overflow-hidden align-middle" aria-hidden="true"><img src="{{ icon_url }}" alt="" width="14" height="14" loading="lazy" class="w-3.5 h-3.5 object-contain"></span>
+<span class="inline-flex shrink-0 {{ tile }} rounded-full brand-tile items-center justify-center overflow-hidden align-middle" aria-hidden="true"><img src="{{ icon_url }}" alt="" width="{{ px }}" height="{{ px }}" loading="lazy" class="{{ mark }} object-contain"></span>
 {% else %}
-<span data-avatar="{{ (name or "?")|trim|first|upper }}" class="inline-flex shrink-0 w-5 h-5 rounded-full bg-aegis-border/60 text-aegis-muted text-xxs font-semibold items-center justify-center align-middle before:content-[attr(data-avatar)]" aria-hidden="true"></span>
+<span data-avatar="{{ (name or "?")|trim|first|upper }}" class="inline-flex shrink-0 {{ tile }} rounded-full bg-aegis-border/60 text-aegis-muted {{ letter }} font-semibold items-center justify-center align-middle before:content-[attr(data-avatar)]" aria-hidden="true"></span>
 {% endif %}
 {% endmacro %}
 
@@ -445,8 +454,8 @@
 {# Copy ``value`` to the clipboard and confirm with a toast. The value
    rides in a data attribute, so it is escaped like any other markup. #}
 {% macro copy_button(value, label="Copy") %}
+{# app.js copies it (the one copier, with the plain-http fallback). #}
 <button type="button" data-copy="{{ value }}"
-        @click="navigator.clipboard.writeText($el.dataset.copy).then(() => $dispatch('toast', { text: 'Copied to clipboard', tone: 'ok' }))"
         class="shrink-0 text-xxs caps px-2 py-0.5 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">{{ label }}</button>
 {% endmacro %}
 

@@ -5,6 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 
+def within(column: Any, start: Any | None, end: Any | None) -> list[Any]:
+    """Clauses keeping ``column`` in ``[start, end)``, for ``.where(*...)``:
+    a row at ``end`` is the next window's, so adjacent windows never count
+    it twice. An open end (``None``) is no bound."""
+    clauses = []
+    if start is not None:
+        clauses.append(column >= start)
+    if end is not None:
+        clauses.append(column < end)
+    return clauses
+
+
 def owner_clause(column: Any, owner_user_id: int | None) -> Any:
     """Match one owner's rows; a NULL owner is the standalone (no auth)
     install, so ``owner_user_id=None`` means ``IS NULL``, not "no filter"."""

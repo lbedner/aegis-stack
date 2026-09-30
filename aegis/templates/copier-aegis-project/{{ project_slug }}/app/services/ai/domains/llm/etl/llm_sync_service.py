@@ -20,6 +20,7 @@ from app.services.ai.domains.llm.etl.clients.openrouter_client import (
 )
 from app.services.ai.domains.llm.etl.lab_resolver import attach_labs
 from app.services.ai.domains.llm.etl.mappers.llm_mapper import (
+    CATALOG_MODES,
     MergedLLMData,
     is_cloud_syncable,
     merge_model_data,
@@ -87,8 +88,8 @@ class LLMSyncService(UpsertMixin):
         """Sync LLM catalog from public APIs or local sources.
 
         Args:
-            mode_filter: Filter by mode ("chat", "embedding", "all", None).
-                        None defaults to "chat".
+            mode_filter: One mode ("chat", "realtime", ...), "all", or None
+                for the kinds the app uses (CATALOG_MODES).
             source: Data source - "cloud" (OpenRouter/LiteLLM), "ollama", or "all".
             dry_run: If True, don't commit changes to database.
 
@@ -121,18 +122,18 @@ class LLMSyncService(UpsertMixin):
         """Sync LLM catalog from cloud APIs (OpenRouter/LiteLLM).
 
         Args:
-            mode_filter: Filter by mode ("chat", "embedding", "all", None).
+            mode_filter: One mode, "all", or None (CATALOG_MODES).
             dry_run: If True, don't commit changes to database.
 
         Returns:
             SyncResult with counts and any errors.
         """
         result = SyncResult()
-        mode_filter = mode_filter or "chat"
+        # None keeps the kinds the app uses (chat and the voice kinds);
+        # "all" keeps everything the source lists.
+        modes = (mode_filter,) if mode_filter else CATALOG_MODES
 
-        logger.info(
-            f"Starting LLM catalog sync (mode={mode_filter}, dry_run={dry_run})"
-        )
+        logger.info(f"Starting LLM catalog sync (modes={modes}, dry_run={dry_run})")
 
         # Fetch from both sources
         try:
@@ -155,8 +156,8 @@ class LLMSyncService(UpsertMixin):
 
         # Filter by mode
         if mode_filter != "all":
-            merged = [m for m in merged if m.mode == mode_filter]
-            logger.info(f"Filtered to {len(merged)} models with mode={mode_filter}")
+            merged = [m for m in merged if m.mode in modes]
+            logger.info(f"Filtered to {len(merged)} models with modes={modes}")
 
         # Local-runner rows are the local sync's business, not the cloud
         # catalog's - see is_cloud_syncable.
@@ -399,7 +400,7 @@ class LLMSyncService(UpsertMixin):
 
 async def sync_llm_catalog(
     session: Session,
-    mode: str = "chat",
+    mode: str | None = None,
     source: str = "cloud",
     dry_run: bool = False,
 ) -> SyncResult:
@@ -409,7 +410,8 @@ async def sync_llm_catalog(
 
     Args:
         session: Database session.
-        mode: Mode filter ("chat", "embedding", "all").
+        mode: One mode ("chat", "realtime", ...), "all", or None for the
+            kinds the app uses (chat and the voice kinds).
         source: Data source - "cloud", "ollama", or "all".
         dry_run: If True, don't commit changes.
 

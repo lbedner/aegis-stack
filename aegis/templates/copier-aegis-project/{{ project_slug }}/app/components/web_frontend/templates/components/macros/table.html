@@ -14,7 +14,9 @@
    ``{"label", "url"}``; the link replaces ``target``, default
    ``#app-content``, the way a list's row opens its item), ``avatar`` (the
    row's ``icon_url`` brand mark, or the initial, before the name); ``wrap`` lets a
-   long text cell wrap instead of running on; ``render`` is a macro
+   long text cell wrap instead of running on. A row marked ``group`` reads as a
+   heading and the ``child`` rows after it are indented (a total and its
+   parts under one set of columns); ``render`` is a macro
    taking the value, for a cell no kind covers; ``header`` is a macro
    rendering the column's heading in place of ``label`` (a select-all
    checkbox, say); ``align`` is ``left``
@@ -81,7 +83,11 @@ text-aegis-text
    stray row loose in a dialog. htmx unwraps a template before it swaps,
    so this is the way to send one anywhere. #}
 {% if oob %}<template{% if id %} id="{{ id }}-oob"{% endif %}>{% endif %}
-<tr {% if id %}id="{{ id }}"{% endif %} {% if oob %}hx-swap-oob="outerHTML"{% endif %} {% if expandable %}@click="open = !open"{% endif %} class="group hover:bg-aegis-border/20 transition-colors{{ ' cursor-pointer' if expandable }}">
+{# A ``group`` row heads the ``child`` rows after it (a total and its parts,
+   one set of columns); either flag rides on the row itself. #}
+{% set heading = row is mapping and row.get("group") %}
+{% set indented = row is mapping and row.get("child") %}
+<tr {% if id %}id="{{ id }}"{% endif %} {% if oob %}hx-swap-oob="outerHTML"{% endif %} {% if expandable %}@click="open = !open"{% endif %} {% if heading %}data-group{% endif %} class="group hover:bg-aegis-border/20 transition-colors{{ ' cursor-pointer' if expandable }}{{ ' font-semibold bg-aegis-border/10' if heading }}">
   {% if expandable %}
   <td class="pl-5 pr-0 py-2 w-4">
     <button type="button" @click.stop="open = !open" aria-expanded="false" :aria-expanded="open.toString()" aria-label="Details"
@@ -89,7 +95,7 @@ text-aegis-text
   </td>
   {% endif %}
   {% for col in columns %}
-  <td class="px-5 py-2 {{ 'whitespace-normal' if col.wrap else 'whitespace-nowrap' }} {{ 'text-right tabular-nums' if col.align == 'right' else 'text-left' }} {{ _tone(row, col) }}">{{ _cell(row, col) }}</td>
+  <td class="{{ 'pl-10 pr-5' if indented and loop.first else 'px-5' }} py-2 {{ 'whitespace-normal' if col.wrap else 'whitespace-nowrap' }} {{ 'text-right tabular-nums' if col.align == 'right' else 'text-left' }} {{ _tone(row, col) }}">{{ _cell(row, col) }}</td>
   {% endfor %}
   {% if actions %}<td class="px-2 py-2 text-right">{{ actions(row) }}</td>{% endif %}
 </tr>

@@ -13,12 +13,13 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls.buttons import BaseIconButton
-from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDialog
+from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.text import SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.log import logger
+from app.core.model_picker import model_label
 from app.core.sse import stream_sse_post
 
 from .attachments_ui import AttachmentsMixin, attachment_payload
@@ -26,7 +27,6 @@ from .components import PendingChangeBatchCard, components_from_trace
 from .history_ui import HistoryMixin
 from .message import ChatMessageBubble
 from .model_picker import ModelChipMixin
-from .models import model_label
 from .stream import (
     StreamAccumulator,
     narration_note,

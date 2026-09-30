@@ -17,6 +17,7 @@ from app.core.storage import get_storage
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .overseer_nav import SectionRequest
+from .rendering import ranked
 
 SECTIONS = ((None, {"overview": "Overview", "browse": "Browse"}),)
 
@@ -61,7 +62,6 @@ def summarize(listing: dict[str, Any]) -> dict[str, Any]:
     for o in objects:
         counts[_band(o["size"])][0] += 1
         counts[_band(o["size"])][1] += o["size"]
-    most = max((n for n, _ in counts.values()), default=0)
     return {
         "error": listing["error"],
         "count": f"{len(objects):,}{floor}",
@@ -69,15 +69,18 @@ def summarize(listing: dict[str, Any]) -> dict[str, Any]:
         "largest": format_bytes(max((o["size"] for o in objects), default=0)),
         "latest": format_relative_time(latest) if latest else "-",
         "empty": not objects and listing["error"] is None,
-        "bands": [
-            {
-                "label": label,
-                "count": f"{n:,}",
-                "value": format_bytes(size),
-                "ratio": n / most if most else 0,
-            }
-            for label, (n, size) in counts.items()
-        ],
+        "bands": ranked(
+            [
+                {
+                    "label": label,
+                    "count": f"{n:,}",
+                    "value": format_bytes(size),
+                    "n": n,
+                }
+                for label, (n, size) in counts.items()
+            ],
+            by="n",
+        ),
     }
 
 

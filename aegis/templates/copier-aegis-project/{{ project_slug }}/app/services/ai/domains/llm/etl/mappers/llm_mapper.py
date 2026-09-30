@@ -217,7 +217,7 @@ def _generate_title(model_id: str) -> str:
         # Handle version numbers and common abbreviations
         if part.isdigit() or part.replace(".", "").isdigit():
             title_parts.append(part)
-        elif part.lower() in ("ai", "llm", "xl", "xxl"):
+        elif part.lower() in ("ai", "llm", "xl", "xxl", "gpt", "tts"):
             title_parts.append(part.upper())
         else:
             title_parts.append(part.capitalize())
@@ -248,7 +248,19 @@ def _modalities_from_litellm(model: LiteLLMModel) -> tuple[list[str], list[str]]
     if model.mode == "image_generation":
         output_mods = ["image"]
 
-    return input_mods, output_mods
+    # Voice kinds say what they hear and speak by their mode; the
+    # capability flags are chat-model flags and often absent on them.
+    return VOICE_MODALITIES.get(model.mode, (input_mods, output_mods))
+
+
+# The kinds of model the catalog keeps (see LargeLanguageModel.mode): chat,
+# and the voice kinds calls, transcription and speech run on.
+VOICE_MODALITIES: dict[str, tuple[list[str], list[str]]] = {
+    "realtime": (["text", "audio"], ["text", "audio"]),
+    "audio_transcription": (["audio"], ["text"]),
+    "audio_speech": (["text"], ["audio"]),
+}
+CATALOG_MODES = ("chat", *VOICE_MODALITIES)
 
 
 def merge_single_model(

@@ -1,0 +1,13 @@
+{# Costs > Breakdown: every action with its cost and share, under the
+   feature it pays for. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% call card("All actions", "grouped by the feature they pay for", id="ai-cost-breakdown") %}
+  {{ data_table([
+    {"key": "name", "label": "Action"},
+    {"key": "cost", "label": "Cost", "align": "right"},
+    {"key": "calls", "label": "Requests", "kind": "int", "align": "right"},
+    {"key": "avg", "label": "Avg / request", "align": "right"},
+    {"key": "share", "label": "Share", "align": "right"},
+  ], rows, empty="Nothing spent this month") }}
+{% endcall %}

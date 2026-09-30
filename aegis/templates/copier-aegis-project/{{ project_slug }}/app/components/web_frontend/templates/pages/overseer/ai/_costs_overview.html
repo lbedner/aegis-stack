@@ -1,0 +1,14 @@
+{# Costs > Overview: a month in figures, a daily chart, and where the money
+   went (by feature, model calls against voice, by model). #}
+{% from "components/macros/layout.html" import card, chart_panel, ranked_rows, stats_strip %}
+{{ stats_strip(figures, id="ai-cost-figures") }}
+{{ chart_panel("ai-cost-daily", "Daily spend", "bar", daily, subtitle=month_label) }}
+<div class="grid gap-4 lg:grid-cols-3">
+  <div class="lg:col-span-2">
+    {% call card("Cost by feature", "each agent's calls together, ranked by spend", id="ai-cost-features") %}
+      {% if features %}{{ ranked_rows(features) }}{% else %}<p class="text-sm text-aegis-muted">Nothing spent this month.</p>{% endif %}
+    {% endcall %}
+  </div>
+  {% call card("Where it went", id="ai-cost-split") %}{{ ranked_rows(split) }}{% endcall %}
+</div>
+{{ chart_panel("ai-cost-models", "Cost by model", "doughnut", models) }}

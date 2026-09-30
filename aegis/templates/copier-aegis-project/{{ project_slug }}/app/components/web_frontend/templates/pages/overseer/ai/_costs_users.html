@@ -1,0 +1,13 @@
+{# Costs > Users: who the month's spend was on, a known user by name. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% call card("Top spenders", month_label, id="ai-cost-users") %}
+  {{ data_table([
+    {"key": "rank", "label": "#"},
+    {"key": "user", "label": "User"},
+    {"key": "spend", "label": "Spend", "align": "right"},
+    {"key": "calls", "label": "Requests", "kind": "int", "align": "right"},
+    {"key": "avg", "label": "Avg / request", "align": "right"},
+    {"key": "top", "label": "Top feature"},
+  ], rows, empty="Nothing spent this month") }}
+{% endcall %}

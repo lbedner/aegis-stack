@@ -348,7 +348,7 @@ MESSAGES: dict[str, str] = {
     "llm.help_current": "Show current LLM configuration from .env, enriched with catalog data.",
     "llm.help_use": "Switch to a different LLM model. Updates AI_MODEL in .env.",
     "llm.help_info": "Show detailed information about a specific LLM model.",
-    "llm.opt_mode": "Mode filter: 'chat', 'embedding', or 'all'",
+    "llm.opt_mode": "One mode ('chat', 'realtime', 'embedding', ...) or 'all' (default: chat and voice)",
     "llm.opt_source": "Data source: 'cloud' (OpenRouter/LiteLLM), 'ollama', or 'all'",
     "llm.opt_dry_run": "Preview changes without modifying the database",
     "llm.opt_refresh": "Truncate all LLM tables before syncing (full refresh)",

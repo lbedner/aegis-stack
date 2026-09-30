@@ -717,3 +717,31 @@ class TestTheLedgerRowIsStoredNaive:
         )
 
         assert row.timestamp.tzinfo is None
+
+
+async def test_recent_models_are_newest_first_each_once(
+    async_db_session: AsyncSession,
+) -> None:
+    """The chat picker leads with the models last used: from the usage
+    ledger, most recent first, each model once."""
+    from datetime import timedelta
+
+    from app.services.ai.domains.llm.queries import recent_model_ids
+
+    now = datetime.now(UTC)
+    for model_id, minutes_ago in (("a", 30), ("b", 20), ("a", 10), ("c", 40)):
+        async_db_session.add(
+            LLMUsage(
+                model_id=model_id,
+                user_id="u",
+                input_tokens=1,
+                output_tokens=1,
+                total_cost=0.0,
+                success=True,
+                action="chat",
+                timestamp=now - timedelta(minutes=minutes_ago),
+            )
+        )
+    await async_db_session.commit()
+
+    assert await recent_model_ids(async_db_session, 2) == ["a", "b"]

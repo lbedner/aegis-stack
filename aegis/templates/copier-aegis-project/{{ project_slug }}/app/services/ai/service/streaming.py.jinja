@@ -351,12 +351,6 @@ class StreamingMixin(ChatMixin):
             await merge_staged_readings(
                 user_id, staged_readings, legacy=conversation.metadata.get("readings")
             )
-            # Finalize conversation (update metadata and save)
-            await self._finalize_conversation(
-                conversation, response_time_ms, is_streaming=True
-            )
-
-            # Yield final streaming message
 {% if ai_backend != "memory" %}
             # Calculate cost for status line
             input_tokens = stream_usage.get("input_tokens", 0)
@@ -386,6 +380,16 @@ class StreamingMixin(ChatMixin):
 {% endif %}
             if tool_trace:
                 final_metadata["tool_trace"] = tool_trace
+            # What the final frame reports is what the message keeps, so a
+            # conversation reopened from history shows the same model and
+            # cost the live turn did.
+            ai_message.metadata.update(final_metadata)
+
+            # Finalize conversation (update metadata and save)
+            await self._finalize_conversation(
+                conversation, response_time_ms, is_streaming=True
+            )
+
             yield StreamingMessage(
                 content=final_content,
                 is_final=True,

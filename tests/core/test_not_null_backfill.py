@@ -73,13 +73,28 @@ class TestBackfillingAnAddedColumn:
         # SQLModel's default is Python-side and the database never sees it.
         assert column.server_default is not None
 
+    def test_the_column_survives_the_copy_alembic_makes(self) -> None:
+        """Autogenerate copies every column it renders. A bare ``text()``
+        assigned to ``server_default`` is not a ``DefaultClause`` and the
+        copy dies on it (``'TextClause' object has no attribute '_copy'``),
+        which is how adding ``large_language_model.mode`` broke."""
+        gen = _generator_module()
+        column = sa.Column("mode", sa.String(32), nullable=False, default="chat")
+
+        gen["_backfill_not_null"](_add_column(column))
+
+        default = column._copy().server_default
+        assert isinstance(default, sa.DefaultClause)
+        assert str(default.arg) == "'chat'"
+
     def test_a_string_default_is_quoted_and_escaped(self) -> None:
         gen = _generator_module()
         column = sa.Column("label", sa.String(), nullable=False, default="it's")
 
         gen["_backfill_not_null"](_add_column(column))
 
-        assert str(column.server_default) == "'it''s'"
+        assert isinstance(column.server_default, sa.DefaultClause)
+        assert str(column.server_default.arg) == "'it''s'"
 
     def test_a_nullable_column_is_left_alone(self) -> None:
         gen = _generator_module()

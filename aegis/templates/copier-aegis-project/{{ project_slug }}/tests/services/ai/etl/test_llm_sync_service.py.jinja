@@ -788,3 +788,66 @@ def test_sync_service_requires_database() -> None:
     pass
 {% endif %}
 
+
+def _litellm(model_id: str, mode: str) -> LiteLLMModel:
+    return LiteLLMModel(
+        model_id=model_id,
+        provider="openai",
+        mode=mode,
+        max_tokens=8192,
+        max_input_tokens=None,
+        max_output_tokens=None,
+        input_cost_per_token=0.000001,
+        output_cost_per_token=0.000002,
+        supports_function_calling=False,
+        supports_parallel_function_calling=False,
+        supports_vision=False,
+        supports_audio_input=False,
+        supports_audio_output=False,
+        supports_reasoning=False,
+        supports_response_schema=False,
+        supports_system_messages=True,
+        supports_prompt_caching=False,
+        deprecation_date=None,
+    )
+
+
+def test_the_default_sync_keeps_chat_and_voice_models(
+    sync_db_session: Session,
+) -> None:
+    """Chat plus the voice kinds (realtime, transcription, speech) land in
+    the catalog, each marked with its mode; embeddings stay out. A voice
+    model says what it hears and speaks by its mode."""
+    import asyncio
+
+    service = LLMSyncService(sync_db_session)
+    fetched = {
+        "openai/gpt-4o": _litellm("openai/gpt-4o", "chat"),
+        "openai/gpt-realtime": _litellm("openai/gpt-realtime", "realtime"),
+        "openai/whisper-1": _litellm("openai/whisper-1", "audio_transcription"),
+        "openai/tts-1": _litellm("openai/tts-1", "audio_speech"),
+        "openai/text-embedding-3-small": _litellm(
+            "openai/text-embedding-3-small", "embedding"
+        ),
+    }
+    with (
+        patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm,
+        patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter,
+    ):
+        mock_litellm.return_value = fetched
+        mock_openrouter.return_value = []
+        asyncio.run(service.sync(dry_run=False))
+
+    modes = {
+        m.model_id: m.mode for m in sync_db_session.exec(select(LargeLanguageModel))
+    }
+    assert modes == {
+        "openai/gpt-4o": "chat",
+        "openai/gpt-realtime": "realtime",
+        "openai/whisper-1": "audio_transcription",
+        "openai/tts-1": "audio_speech",
+    }

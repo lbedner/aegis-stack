@@ -238,7 +238,11 @@ def _backfill_not_null(op: ops.AddColumnOp) -> None:
             "fill it with. Give the field a default, make it optional, or clear "
             "the table in the service's pre_data_sql."
         )
-    column.server_default = default
+    # A DefaultClause, as ``Column(server_default=...)`` would make: a bare
+    # text() here breaks the copy autogenerate takes of every column.
+    from sqlalchemy.schema import DefaultClause
+
+    DefaultClause(default)._set_parent_with_dispatch(column)
 
 
 def _additive(op: ops.MigrateOperation, conn: Connection) -> bool:

@@ -161,8 +161,18 @@
   .chip {
     @apply inline-block text-xs px-2 py-0.5 rounded border border-aegis-border text-aegis-muted whitespace-nowrap transition-colors hover:border-aegis-muted hover:text-aegis-text;
   }
-  .chip[aria-pressed="true"] {
+  .chip[aria-pressed="true"],
+  .peer:checked ~ .chip {
     @apply border-aegis-teal bg-aegis-teal/10 text-aegis-text font-semibold;
+  }
+
+  /* The chat's copy button answers a click: a clipboard write leaves no
+     trace, so the icon becomes a tick and pops for a beat. */
+  [data-copy] {
+    @apply transition duration-200;
+  }
+  [data-copy][data-copied] {
+    @apply opacity-100 text-aegis-teal scale-125;
   }
 
   /* Redis keyspace map (Overseer > Cache > Overview): a cell per key,
@@ -227,4 +237,11 @@
 @keyframes keyspace-live {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
   50% { box-shadow: 0 0 14px 1px currentColor; }
+}
+
+/* One conditional for "not now": an element the page toggles with
+   ``hidden`` (the chat's Stop button, its jump button) must stay hidden
+   even when a display utility on it says otherwise. */
+[hidden] {
+  display: none !important;
 }

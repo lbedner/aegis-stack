@@ -97,7 +97,9 @@ class TestOneClientForEveryOpenAICompatibleProvider:
     @pytest.mark.parametrize(
         "provider", [AIProvider.MISTRAL, AIProvider.COHERE, AIProvider.OPENROUTER]
     )
-    def test_each_one_actually_builds(self, provider: AIProvider) -> None:
+    def test_each_one_actually_builds(
+        self, provider: AIProvider, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """The regression guard: construction, not just configuration."""
         from app.core.config import settings
         from app.services.ai.config import get_ai_config
@@ -106,8 +108,10 @@ class TestOneClientForEveryOpenAICompatibleProvider:
         config = get_ai_config(settings)
         config.provider = provider
         config.model = "a-model"
-        object.__setattr__(
-            settings, PROVIDERS[provider].env_var, "test-key-not-used"
+        # Undone after the test: the settings object is shared, and a key
+        # left on it makes the provider "usable" for every test after.
+        monkeypatch.setitem(
+            settings.__dict__, PROVIDERS[provider].env_var, "test-key-not-used"
         )
 
         model, name = model_for(config, settings)
@@ -115,7 +119,7 @@ class TestOneClientForEveryOpenAICompatibleProvider:
         assert name == "a-model"
         assert type(model).__name__ == "OpenAIChatModel"
 
-    def test_the_key_rides_the_client_not_the_environment(self) -> None:
+    def test_the_key_rides_the_client_not_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A stack can hold a real OpenAI key AND an OpenRouter one;
         stamping OPENAI_API_KEY would let the last one built answer for
         both."""
@@ -125,11 +129,11 @@ class TestOneClientForEveryOpenAICompatibleProvider:
         from app.services.ai.config import get_ai_config
         from app.services.ai.domains.llm.providers import model_for
 
-        os.environ["OPENAI_API_KEY"] = "the-real-openai-key"
+        monkeypatch.setenv("OPENAI_API_KEY", "the-real-openai-key")
         config = get_ai_config(settings)
         config.provider = AIProvider.OPENROUTER
         config.model = "deepseek/deepseek-chat"
-        object.__setattr__(settings, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
+        monkeypatch.setitem(settings.__dict__, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
 
         model_for(config, settings)
 
@@ -146,7 +150,7 @@ class TestOpenRouterOnLangChain:
     native clients rather than being quietly rerouted.
     """
 
-    def test_it_builds_through_the_openai_client(self) -> None:
+    def test_it_builds_through_the_openai_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from app.core.config import settings
         from app.services.ai.config import get_ai_config
         from app.services.ai.domains.llm.providers import get_llm
@@ -154,25 +158,25 @@ class TestOpenRouterOnLangChain:
         config = get_ai_config(settings)
         config.provider = AIProvider.OPENROUTER
         config.model = "deepseek/deepseek-chat"
-        object.__setattr__(settings, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
+        monkeypatch.setitem(settings.__dict__, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
 
         llm = get_llm(config, settings)
 
         assert type(llm).__name__ == "ChatOpenAI"
         assert str(llm.openai_api_base).startswith("https://openrouter.ai")
 
-    def test_the_key_rides_the_client_not_the_environment(self) -> None:
+    def test_the_key_rides_the_client_not_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import os
 
         from app.core.config import settings
         from app.services.ai.config import get_ai_config
         from app.services.ai.domains.llm.providers import get_llm
 
-        os.environ["OPENAI_API_KEY"] = "the-real-openai-key"
+        monkeypatch.setenv("OPENAI_API_KEY", "the-real-openai-key")
         config = get_ai_config(settings)
         config.provider = AIProvider.OPENROUTER
         config.model = "deepseek/deepseek-chat"
-        object.__setattr__(settings, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
+        monkeypatch.setitem(settings.__dict__, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
 
         get_llm(config, settings)
 

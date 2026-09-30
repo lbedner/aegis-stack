@@ -1,0 +1,4 @@
+{# A turn's two bubbles, appended to the thread when the composer posts. #}
+{% from "components/macros/chat.html" import user_bubble, streaming_bubble %}
+{{ user_bubble(text, attachment_names=attachment_names) }}
+{{ streaming_bubble(text, conversation_id, assistant) }}

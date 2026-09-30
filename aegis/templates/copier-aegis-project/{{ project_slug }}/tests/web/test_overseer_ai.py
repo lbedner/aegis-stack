@@ -108,7 +108,7 @@ def test_sections(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
     html = _get(_client(app, monkeypatch))
     from app.components.web_frontend.overseer_ai import PERSISTED
 
-    activity = ["Usage", "Sentiment"] if PERSISTED else []
+    activity = ["Usage", "Costs", "Sentiment"] if PERSISTED else []
     from app.components.web_frontend.overseer_ai_common import HAS_RAG
 
     agents = ["Agents", "Memory"] if PERSISTED else []
@@ -119,6 +119,7 @@ def test_sections(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
     catalog = ["Catalog"] if PERSISTED else []
     assert [text(a) for a in select(html, "#overseer-subnav nav a")] == [
         "Overview",
+        "Chat",
         *activity,
         *agents,
         *knowledge,
@@ -264,7 +265,8 @@ def test_usage_totals_for_the_window(
         text(one(cell, "dt")): text(select(cell, "dd")[0])
         for cell in select(_get(client, "usage"), "#ai-usage-figures > div")
     }
-    assert figures["Requests"] == "40" and figures["Cost"] == "$2.50"
+    assert figures["Requests"] == "40"
+    assert "Cost" not in figures  # the money lives in Costs
     assert figures["Success rate"] == "97.5%"
 
 
@@ -360,6 +362,30 @@ def test_sentiment_says_when_scoring_is_off(
 
 
 @persisted
+async def test_usage_rows_wear_their_vendors_mark(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    async_client_with_db: TestClient,
+    async_db_session: Any,
+) -> None:
+    """By model and each recent call carry the vendor's logo; a model the
+    catalog cannot place keeps the initial."""
+    from app.services.ai.models.llm.llm_org import LLMOrg
+
+    async_db_session.add(LLMOrg(slug="anthropic", name="Anthropic", icon_b64=PNG_B64))
+    await async_db_session.commit()
+    _client(app, monkeypatch)
+    _usage(monkeypatch)
+    html = _get(async_client_with_db, "usage")
+    by_model = select(html, "#ai-models tbody tr")
+    mark = "/partials/overseer/ai/icons/anthropic"
+    assert one(by_model[0], "img").get("src") == mark
+    assert select(by_model[1], "[data-avatar]")
+    recent = select(html, "#ai-recent tbody tr")[0]
+    assert one(recent, "img").get("src") == mark
+
+
+@persisted
 async def test_a_provider_wears_its_labs_mark(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
@@ -407,7 +433,11 @@ async def test_the_icon_route_serves_the_mark_cached(
     )
 
 
-def _catalog(monkeypatch: pytest.MonkeyPatch, seen: list[Any] | None = None) -> None:
+def _catalog(
+    monkeypatch: pytest.MonkeyPatch,
+    seen: list[Any] | None = None,
+    vendors: list[Any] | None = [],  # noqa: B006 - None: read the real ones
+) -> None:
     from app.components.web_frontend import overseer_ai_catalog
     from app.services.ai.domains.llm.catalog import LLMListResult
 
@@ -439,9 +469,29 @@ def _catalog(monkeypatch: pytest.MonkeyPatch, seen: list[Any] | None = None) -> 
                 output_price=0.6,
                 released_on=None,
             ),
+            LLMListResult(
+                model_id="openai/gpt-realtime",
+                title="GPT Realtime",
+                vendor="openai",
+                family=None,
+                color="#10A37F",
+                context_window=32_000,
+                input_price=None,
+                output_price=None,
+                released_on=None,
+                mode="realtime",
+            ),
         ]
 
     monkeypatch.setattr(overseer_ai_catalog, "list_models", list_models)
+
+    if vendors is None:
+        return
+
+    async def catalog_vendors(db: Any) -> list[Any]:
+        return vendors
+
+    monkeypatch.setattr(overseer_ai_catalog, "catalog_vendors", catalog_vendors)
 
 
 @persisted
@@ -455,6 +505,46 @@ def test_the_catalog_lists_models_with_prices(
     assert "200,000" in text(rows[0])
     assert "gpt-4o-mini" in text(rows[1]) and "openai/gpt" not in text(rows[1])
     assert one(rows[0], "img").get("src") == "/partials/overseer/ai/icons/Anthropic"
+
+
+@persisted
+def test_the_catalog_lists_every_kind_of_model(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A place to look: chat and voice models alike, each saying its kind."""
+    seen: list[Any] = []
+    client = _client(app, monkeypatch)
+    _catalog(monkeypatch, seen)
+    rows = select(_get(client, "catalog"), "#ai-catalog tbody tr")
+    assert seen[-1]["mode"] is None
+    assert "Chat" in text(rows[0]) and "Realtime" in text(rows[2])
+
+
+@persisted
+def test_a_voice_model_is_not_offered_for_chat(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def get_model_info(model_id: str) -> Any:
+        return SimpleNamespace(
+            model_id=model_id,
+            title="GPT Realtime",
+            description="",
+            vendor="openai",
+            context_window=32_000,
+            streamable=False,
+            enabled=True,
+            released_on=None,
+            input_price=None,
+            output_price=None,
+            modalities=["text", "audio"],
+            mode="realtime",
+        )
+
+    client = _client(app, monkeypatch)
+    monkeypatch.setattr(overseer_ai_catalog, "get_model_info", get_model_info)
+    drawer = client.get("/partials/overseer/ai/models/drawer?model=gpt-realtime").text
+    assert not select(drawer, "form[data-use-model]")
+    assert "Realtime" in text(one(drawer, "#ai-model-facts"))
 
 
 @persisted
@@ -487,6 +577,7 @@ def test_a_model_opens_in_the_drawer_with_use(
             input_price=0.15,
             output_price=0.6,
             modalities=["text", "image"],
+            mode="chat",
         )
 
     client = _client(app, monkeypatch)
@@ -592,19 +683,45 @@ def test_usable_and_chosen_vendors_meet(
 
 
 @persisted
+async def test_the_catalog_reads_its_vendors_on_the_request_session(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    async_client_with_db: TestClient,
+    async_db_session: Any,
+) -> None:
+    """The vendor counts go through the request's own session. Opened on a
+    second session after the request's has taken SQLite's write lock (the
+    logo lookup takes it), they wait out the busy timeout and fail with
+    "database is locked"."""
+    from app.services.ai.models.llm.llm_org import LLMOrg
+
+    async_db_session.add(LLMOrg(slug="anthropic", name="Anthropic", icon_b64=PNG_B64))
+    await async_db_session.commit()
+    _client(app, monkeypatch)
+    _catalog(monkeypatch, vendors=None)  # the real vendor read
+    labels = [
+        text(label)
+        for label in select(
+            _get(async_client_with_db, "catalog"), "#ai-vendor-picker label"
+        )
+    ]
+    assert any("Anthropic" in label for label in labels)
+
+
+@persisted
 def test_the_vendor_picker_lists_the_catalogs_vendors(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client = _client(app, monkeypatch)
     _catalog(monkeypatch)
-    monkeypatch.setattr(
-        overseer_ai_catalog,
-        "catalog_vendors",
-        lambda: [
+
+    async def catalog_vendors(db: Any) -> list[Any]:
+        return [
             SimpleNamespace(name="openrouter", model_count=483),
             SimpleNamespace(name="anthropic", model_count=12),
-        ],
-    )
+        ]
+
+    monkeypatch.setattr(overseer_ai_catalog, "catalog_vendors", catalog_vendors)
     labels = [
         text(label)
         for label in select(_get(client, "catalog"), "#ai-vendor-picker label")

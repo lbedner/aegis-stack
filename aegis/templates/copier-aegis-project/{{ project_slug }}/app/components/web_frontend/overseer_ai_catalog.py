@@ -8,7 +8,7 @@ persistence backend, which is the only place the catalog lives.
 from datetime import date, timedelta
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 from app.core.config import settings
 from app.services.ai.domains.llm.provider_management import usable_providers
@@ -17,6 +17,7 @@ from .overseer_ai_common import (
     PARTIALS,
     dollars,
     get_current_config,
+    icon_url,
     label,
     per_million,
     section_url,
@@ -33,6 +34,13 @@ RELEASED = {
     "all": ("All time", None),
 }
 MODEL_PARAM = "model"
+# A model's kind (LargeLanguageModel.mode) as the page says it.
+KINDS = {
+    "chat": "Chat",
+    "realtime": "Realtime",
+    "audio_transcription": "Transcription",
+    "audio_speech": "Speech",
+}
 
 
 async def list_models(**filters: Any) -> list[Any]:
@@ -49,12 +57,12 @@ async def get_model_info(model_id: str) -> Any:
     return await info(model_id)
 
 
-def catalog_vendors() -> list[Any]:
-    """Every vendor in the catalog with its model count (a persistence
-    backend's module)."""
+async def catalog_vendors(db: Any) -> list[Any]:
+    """Every vendor in the catalog with its model count, on the request's
+    session (a persistence backend's module)."""
     from app.services.ai.domains.llm.llm_service import list_vendors
 
-    return list_vendors()
+    return await list_vendors(session=db)
 
 
 def _vendor_filter(chosen: list[str], usable: bool) -> list[str] | None:
@@ -66,11 +74,11 @@ def _vendor_filter(chosen: list[str], usable: bool) -> list[str] | None:
     return [v for v in chosen if v in callable_now] if chosen else callable_now
 
 
-def _vendor_options(chosen: list[str]) -> list[dict[str, Any]]:
+def _vendor_options(chosen: list[str], vendors: list[Any]) -> list[dict[str, Any]]:
     """The vendor picker: every catalog vendor, most models first, and a
     picked vendor the catalog no longer lists (still ticked, so it can be
     unticked)."""
-    listed = sorted(catalog_vendors(), key=lambda v: -v.model_count)
+    listed = sorted(vendors, key=lambda v: -v.model_count)
     names = {v.name for v in listed}
     listed += [SimpleNamespace(name=n, model_count=0) for n in chosen if n not in names]
     return [
@@ -99,6 +107,7 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
         vendors=_vendor_filter(chosen, usable),
         limit=CATALOG_LIMIT,
         released_after=date.today() - reach if reach else None,
+        mode=None,  # a place to look: every kind, each saying which
     )
     from app.services.ai.domains.llm.queries import org_icons
 
@@ -119,7 +128,7 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
             if model.vendor in marked
             else None
         )
-        return f"{PARTIALS}/icons/{quote(key, safe='')}" if key else None
+        return icon_url(key) if key else None
 
     return drawer_state(
         MODEL_PARAM,
@@ -148,7 +157,7 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
             for key, (label, _) in RELEASED.items()
         ],
         "released": filters["released"],
-        "vendor_options": _vendor_options(chosen),
+        "vendor_options": _vendor_options(chosen, await catalog_vendors(db)),
         "vendor_count": len(chosen),
         "rows": [
             {
@@ -158,6 +167,7 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
                 },
                 "icon_url": icon(m),
                 "id": m.display_id,
+                "kind": KINDS.get(m.mode, m.mode),
                 "vendor": label(m.vendor),
                 "context": m.context_window or None,
                 "input": dollars(m.input_price),
@@ -179,10 +189,12 @@ async def model_context(model_id: str) -> dict[str, Any] | None:
     return {
         "info": info,
         "current": current.model == info.model_id,
-        "use_url": f"{PARTIALS}/models/use",
+        # Only a chat model can be the model the app answers with.
+        "use_url": f"{PARTIALS}/models/use" if info.mode == "chat" else None,
         "facts": [
             ("Description", info.description or None),
             ("Vendor", label(info.vendor)),
+            ("Kind", KINDS.get(info.mode, info.mode)),
             ("Model ID", info.model_id),
             (
                 "Context window",

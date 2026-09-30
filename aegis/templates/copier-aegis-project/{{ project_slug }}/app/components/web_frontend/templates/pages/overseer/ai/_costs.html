@@ -1,0 +1,11 @@
+{# Costs: the money view beside Usage, in four tabs. The tab row and, where
+   the tab reads a month, the month row are shared; each tab's body is its
+   own partial, ``_costs_<tab>.html``. #}
+{% from "components/macros/layout.html" import tab_bar, tab_item %}
+{% call tab_bar("Costs views", id="ai-cost-tabs") %}
+  {% for t in tabs %}{{ tab_item(t.label, t.active, t.url, hx_replace(t.url, "#overseer-main")) }}{% endfor %}
+{% endcall %}
+<div class="space-y-4">
+  {% if chips %}<div id="ai-cost-months">{% with chips_label = "Month" %}{% include "pages/overseer/_chips.html" %}{% endwith %}</div>{% endif %}
+  {% include "pages/overseer/ai/_costs_" ~ tab ~ ".html" %}
+</div>

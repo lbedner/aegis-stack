@@ -206,7 +206,7 @@ async def get_vendors(
     list is cut to callable vendors and enriched with brand icons.
     """
     try:
-        results: list[VendorListResult] = list_vendors()
+        results: list[VendorListResult] = await list_vendors()
         icons: dict[str, str] = {}
         if usable:
             allowed = _usable_vendor_names()
@@ -225,14 +225,14 @@ async def get_vendors(
 
 
 @router.get("/modalities", response_model=list[ModalityResponse])
-def get_modalities() -> list[ModalityResponse]:
+async def get_modalities() -> list[ModalityResponse]:
     """
     List all modalities with model counts.
 
     Returns modalities sorted alphabetically.
     """
     try:
-        results: list[ModalityListResult] = list_modalities()
+        results: list[ModalityListResult] = await list_modalities()
         return [
             ModalityResponse(modality=m.modality, model_count=m.model_count)
             for m in results

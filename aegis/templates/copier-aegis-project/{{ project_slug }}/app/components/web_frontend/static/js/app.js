@@ -28,6 +28,46 @@ function toast(text, tone) {
   window.dispatchEvent(new CustomEvent('toast', { detail: { text, tone } }));
 }
 
+// The one copier: any ``data-copy`` button puts its text on the clipboard.
+// navigator.clipboard exists only in a secure context, which a stack served
+// over plain http to anything but localhost is not, so the old execCommand
+// path keeps every copy button working on a LAN address.
+function copyText(text) {
+  if (navigator.clipboard) return navigator.clipboard.writeText(text);
+  const box = document.createElement('textarea');
+  box.value = text;
+  box.setAttribute('readonly', '');
+  box.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+  document.body.appendChild(box);
+  box.select();
+  const ok = document.execCommand('copy');
+  box.remove();
+  return ok ? Promise.resolve() : Promise.reject(new Error('copy refused'));
+}
+// The clipboard says nothing back, so the button does: one with a tick of
+// its own (the chat's) shows it for a beat; any other says so in a toast.
+const COPIED_MS = 1200;
+function showCopied(button, on) {
+  button.querySelector('[data-copy-idle]')?.classList.toggle('hidden', on);
+  button.querySelector('[data-copy-done]')?.classList.toggle('hidden', !on);
+  if (on) button.dataset.copied = 'true';
+  else delete button.dataset.copied;
+}
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-copy]');
+  if (!button || !button.dataset.copy) return;
+  const ticks = button.querySelector('[data-copy-done]');
+  copyText(button.dataset.copy).then(
+    () => {
+      if (!ticks) return toast('Copied to clipboard', 'ok');
+      showCopied(button, true);
+      clearTimeout(button._settle);
+      button._settle = setTimeout(() => showCopied(button, false), COPIED_MS);
+    },
+    () => toast('Could not copy - select the text instead', 'error'),
+  );
+});
+
 // Server and network failures never swap (see the htmx-config
 // responseHandling rules in base.html); they surface here as one error
 // toast instead of a silently unchanged page.

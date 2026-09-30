@@ -15,7 +15,7 @@ from typing import Any
 
 from sqlalchemy import Integer, case, func
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, or_, select
+from sqlmodel import col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.models.llm import (
@@ -26,7 +26,7 @@ from app.services.ai.models.llm import (
     LLMPrice,
     LLMUsage,
 )
-from app.services.shared.queries import owner_clause
+from app.services.shared.queries import owner_clause, within
 
 # --- Catalog -----------------------------------------------------------
 
@@ -178,6 +178,7 @@ async def catalog_models(
     include_disabled: bool = False,
     limit: int | None = None,
     released_after: date | None = None,
+    mode: str | None = "chat",
 ) -> list[LargeLanguageModel]:
     """Catalog rows newest-first with both orgs loaded.
 
@@ -203,6 +204,8 @@ async def catalog_models(
                 LargeLanguageModel.title.ilike(f"%{pattern}%"),
             )
         )
+    if mode:
+        stmt = stmt.where(LargeLanguageModel.mode == mode)
     if vendor:
         stmt = stmt.where(LLMOrg.name.ilike(f"%{vendor}%"))
     if vendors is not None:
@@ -244,31 +247,35 @@ async def latest_prices_by_llm_ids(
     return latest
 
 
-def vendor_model_counts(session: Session) -> Sequence[tuple[str, int]]:
+async def vendor_model_counts(session: AsyncSession) -> Sequence[tuple[str, int]]:
     """(org name, models served) for every org, name-sorted.
 
     Two keys point at ``llm_org`` (who made a model, who serves it); this
-    is the SERVING surface, so the join says so.
+    is the SERVING surface, so the join says so. Chat models only: the
+    counts sit beside chat listings, which offer no voice kind.
     """
-    return session.exec(
+    result = await session.exec(
         select(LLMOrg.name, func.count(LargeLanguageModel.id))
         .join(
             LargeLanguageModel,
-            LargeLanguageModel.served_by_org_id == LLMOrg.id,
+            (LargeLanguageModel.served_by_org_id == LLMOrg.id)
+            & (LargeLanguageModel.mode == "chat"),
             isouter=True,
         )
         .group_by(LLMOrg.id)
         .order_by(LLMOrg.name)
-    ).all()
+    )
+    return result.all()
 
 
-def modality_model_counts(session: Session) -> Sequence[tuple[str, int]]:
+async def modality_model_counts(session: AsyncSession) -> Sequence[tuple[str, int]]:
     """(modality, distinct models) for every modality, name-sorted."""
-    return session.exec(
+    result = await session.exec(
         select(LLMModality.modality, func.count(func.distinct(LLMModality.llm_id)))
         .group_by(LLMModality.modality)
         .order_by(LLMModality.modality)
-    ).all()
+    )
+    return result.all()
 
 
 async def orgs_named(session: AsyncSession, names: Iterable[str]) -> Sequence[LLMOrg]:
@@ -280,12 +287,13 @@ async def orgs_named(session: AsyncSession, names: Iterable[str]) -> Sequence[LL
 async def models_served_by(
     session: AsyncSession, org_ids: Iterable[int]
 ) -> Sequence[LargeLanguageModel]:
-    """Every model the given orgs serve, with prices, deployments and
+    """Every chat model the given orgs serve, with prices, deployments and
     modalities loaded - the catalog context's one fetch."""
     return (
         await session.exec(
             select(LargeLanguageModel)
             .where(LargeLanguageModel.served_by_org_id.in_(list(org_ids)))
+            .where(LargeLanguageModel.mode == "chat")
             .options(
                 selectinload(LargeLanguageModel.llm_prices),
                 selectinload(LargeLanguageModel.deployments),
@@ -326,11 +334,7 @@ def _usage_window(
 ) -> Any:
     if user_id:
         stmt = stmt.where(LLMUsage.user_id == user_id)
-    if start_time:
-        stmt = stmt.where(LLMUsage.timestamp >= start_time)
-    if end_time:
-        stmt = stmt.where(LLMUsage.timestamp <= end_time)
-    return stmt
+    return stmt.where(*within(LLMUsage.timestamp, start_time, end_time))
 
 
 async def usage_totals(
@@ -474,3 +478,16 @@ async def org_icons(session: AsyncSession, keys: Iterable[str]) -> dict[str, str
             if key in wanted and icon:
                 found[key] = icon
     return found
+
+
+async def recent_model_ids(session: AsyncSession, limit: int) -> list[str]:
+    """The models most recently used, newest first, each once: from the
+    usage ledger."""
+    last = func.max(LLMUsage.timestamp)
+    rows = await session.exec(
+        select(LLMUsage.model_id)
+        .group_by(col(LLMUsage.model_id))
+        .order_by(last.desc())
+        .limit(limit)
+    )
+    return list(rows.all())

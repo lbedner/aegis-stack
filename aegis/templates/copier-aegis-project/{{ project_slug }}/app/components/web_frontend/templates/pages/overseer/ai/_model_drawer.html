@@ -6,7 +6,7 @@
   {{ dialog_title(info.title or info.model_id) }}
   {% if current %}
   <div>{{ badge("The active model", "ok") }}</div>
-  {% else %}
+  {% elif use_url %}
   <form hx-post="{{ use_url }}" hx-swap="none" data-use-model>
     <input type="hidden" name="model_id" value="{{ info.model_id }}">
     {{ primary_button("Use this model", "submit") }}

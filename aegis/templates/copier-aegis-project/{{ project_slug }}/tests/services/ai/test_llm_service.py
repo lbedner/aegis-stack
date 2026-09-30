@@ -3,6 +3,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,6 +18,7 @@ from app.services.ai.domains.llm.llm_service import (
     list_vendors,
     set_active_model,
 )
+from app.services.ai.models import AIProvider
 from app.services.ai.models.llm import (
     Direction,
     LargeLanguageModel,
@@ -238,24 +240,30 @@ def sample_modalities(
 # =============================================================================
 
 
+@pytest.mark.asyncio
 class TestListVendors:
     """Tests for list_vendors() function."""
 
-    def test_empty_catalog(self, llm_session: Session, llm_db_engine: Engine) -> None:
+    async def test_empty_catalog(self, mock_async_session) -> None:
         """Should return empty list when no vendors exist."""
-        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
-            results = list_vendors()
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
+            results = await list_vendors()
         assert results == []
 
-    def test_vendors_with_model_counts(
+    async def test_vendors_with_model_counts(
         self,
-        llm_session: Session,
-        llm_db_engine: Engine,
+        mock_async_session,
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should return vendors with correct model counts."""
-        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
-            results = list_vendors()
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
+            results = await list_vendors()
 
         assert len(results) == 2
         # Results should be sorted alphabetically
@@ -264,36 +272,45 @@ class TestListVendors:
         assert results[1].name == "openai"
         assert results[1].model_count == 2
 
-    def test_vendor_without_models(
-        self, llm_session: Session, llm_db_engine: Engine, anthropic_vendor: LLMOrg
+    async def test_vendor_without_models(
+        self, mock_async_session, anthropic_vendor: LLMOrg
     ) -> None:
         """Should include vendors with zero models."""
-        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
-            results = list_vendors()
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
+            results = await list_vendors()
 
         assert len(results) == 1
         assert results[0].name == "anthropic"
         assert results[0].model_count == 0
 
 
+@pytest.mark.asyncio
 class TestListModalities:
     """Tests for list_modalities() function."""
 
-    def test_empty_catalog(self, llm_session: Session, llm_db_engine: Engine) -> None:
+    async def test_empty_catalog(self, mock_async_session) -> None:
         """Should return empty list when no modalities exist."""
-        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
-            results = list_modalities()
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
+            results = await list_modalities()
         assert results == []
 
-    def test_modalities_with_counts(
+    async def test_modalities_with_counts(
         self,
-        llm_session: Session,
-        llm_db_engine: Engine,
+        mock_async_session,
         sample_modalities: list[LLMModality],
     ) -> None:
         """Should return modalities with distinct model counts."""
-        with patch("app.services.ai.domains.llm.llm_service.engine", llm_db_engine):
-            results = list_modalities()
+        with patch(
+            "app.services.ai.domains.llm.llm_service.get_async_session",
+            mock_async_session,
+        ):
+            results = await list_modalities()
 
         assert len(results) == 2  # text and image
         modality_map = {r.modality: r.model_count for r in results}
@@ -347,6 +364,37 @@ class TestListModels:
         ):
             results = await list_models(pattern="test")
         assert results == []
+
+    async def test_voice_models_are_listed_only_when_asked_for(
+        self,
+        mock_async_session,
+        llm_session: Session,
+        openai_vendor: LLMOrg,
+        sample_models: list[LargeLanguageModel],
+    ) -> None:
+        """The catalog holds voice kinds beside chat models; a chat listing
+        (the default) never offers one, a browse asks for every kind."""
+        llm_session.add(
+            LargeLanguageModel(
+                model_id="gpt-realtime",
+                title="GPT Realtime",
+                description="",
+                context_window=32000,
+                streamable=False,
+                enabled=True,
+                served_by_org_id=openai_vendor.id,
+                mode="realtime",
+            )
+        )
+        llm_session.commit()
+        with patch(
+            "app.services.ai.domains.llm.catalog.get_async_session",
+            mock_async_session,
+        ):
+            chat = await list_models(pattern="gpt")
+            every = await list_models(pattern="gpt", mode=None)
+        assert "gpt-realtime" not in {r.model_id for r in chat}
+        assert "gpt-realtime" in {r.model_id for r in every}
 
     async def test_pattern_filter_model_id(
         self,
@@ -588,6 +636,75 @@ class TestGetCurrentConfig:
 @pytest.mark.asyncio
 class TestSetActiveModel:
     """Tests for set_active_model() async function."""
+
+    @pytest.fixture(autouse=True)
+    def every_provider_usable(self) -> Any:
+        """Every provider keyed, unless a test says otherwise."""
+        with patch(
+            "app.services.ai.domains.llm.llm_service.usable_providers",
+            return_value=[p.value for p in AIProvider],
+        ) as usable:
+            yield usable
+
+    async def test_a_voice_model_is_not_a_chat_model(
+        self,
+        mock_async_session,
+        llm_session: Session,
+        openai_vendor: LLMOrg,
+    ) -> None:
+        """The active model answers chat; a realtime or speech model in the
+        catalog is refused, forced or not by accident."""
+        llm_session.add(
+            LargeLanguageModel(
+                model_id="gpt-realtime",
+                title="GPT Realtime",
+                description="",
+                context_window=32000,
+                streamable=False,
+                enabled=True,
+                served_by_org_id=openai_vendor.id,
+                mode="realtime",
+            )
+        )
+        llm_session.commit()
+        with (
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
+            patch(
+                "app.services.ai.domains.llm.llm_service.update_env_file"
+            ) as mock_update,
+        ):
+            result = await set_active_model("gpt-realtime")
+        assert result.success is False and "realtime" in result.message
+        mock_update.assert_not_called()
+
+    async def test_a_provider_without_a_key_is_refused(
+        self,
+        mock_async_session,
+        sample_models: list[LargeLanguageModel],
+        every_provider_usable: Any,
+    ) -> None:
+        """A model whose provider cannot be called is not made active: every
+        answer after it would fail. ``force`` still overrides."""
+        every_provider_usable.return_value = []
+        with (
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
+            patch(
+                "app.services.ai.domains.llm.llm_service.update_env_file"
+            ) as mock_update,
+        ):
+            result = await set_active_model("claude-sonnet-4-20250514")
+            assert result.success is False
+            assert "Anthropic" in result.message  # names what to fix
+            mock_update.assert_not_called()
+            assert (
+                await set_active_model("claude-sonnet-4-20250514", force=True)
+            ).success
 
     async def test_model_exists(
         self,

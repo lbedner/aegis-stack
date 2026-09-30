@@ -20,7 +20,7 @@ from ...services.ai.models import (
 
 
 @app.command(help=lazy_t("ai.help_chat"))
-def chat(
+async def chat(
     message: str | None = typer.Argument(None, help=lazy_t("ai.arg_message")),
     stream: bool = typer.Option(
         True, "--stream/--no-stream", help=lazy_t("ai.opt_stream")
@@ -77,7 +77,7 @@ def chat(
             typer.echo(f"{t('shared.error')} {e}", err=True)
             raise typer.Exit(1)
 
-    asyncio.run(run_chat())
+    await run_chat()
 
 
 @app.command(help=lazy_t("ai.help_conversations"))

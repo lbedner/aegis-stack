@@ -1,6 +1,7 @@
-"""Display helpers for the composer's model selector (pure, testable).
+"""Display helpers for a model picker (pure, testable).
 
-The selector itself lives in ``model_picker``; these shape API payloads
+Shared by every surface that lets a person pick the active model (the web
+chat's picker, the Flet panel's): these shape the catalog payloads
 (``/api/v1/llm/current``, ``/api/v1/llm/models``) into what it renders.
 """
 
@@ -73,10 +74,22 @@ def _usd(value: float) -> str:
     return f"${value:g}" if value == int(value) else f"${value:.2f}"
 
 
-def format_price(input_price: float | None, output_price: float | None) -> str:
-    """Per-million-token pricing as ``$in / $out``; blanks stay blank."""
+def is_local_model(model: dict[str, Any]) -> bool:
+    """Does this model run on this machine. Reads either spelling: a catalog
+    row calls it ``vendor``, a finished message's metadata ``provider``.
+    Ollama is the only local vendor the catalog carries."""
+    named = model.get("vendor") or model.get("provider") or ""
+    return str(named).casefold() == "ollama"
+
+
+def format_price(
+    input_price: float | None, output_price: float | None, *, local: bool = False
+) -> str:
+    """Per-million-token pricing as ``$in / $out``. A cloud model with no
+    pricing on file stays blank (unknown is not free); a local model's blank
+    is the answer, so it says Free."""
     if input_price is None and output_price is None:
-        return ""
+        return "Free" if local else ""
     if output_price is None:
         return _usd(input_price or 0.0)
     if input_price is None:

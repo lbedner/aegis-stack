@@ -134,6 +134,7 @@ class UpsertMixin:
                     self._update_if_changed(existing, "family", data.family),
                     self._update_if_changed(existing, "served_by_org_id", vendor.id),
                     self._update_if_changed(existing, "released_on", data.created_at),
+                    self._update_if_changed(existing, "mode", data.mode),
                 ]
             )
 
@@ -154,6 +155,7 @@ class UpsertMixin:
                 enabled=True,
                 color=VENDOR_METADATA.get(data.vendor, {}).get("color", "#6B7280"),
                 family=data.family,
+                mode=data.mode,
                 served_by_org_id=vendor.id,
                 released_on=data.created_at,
             )

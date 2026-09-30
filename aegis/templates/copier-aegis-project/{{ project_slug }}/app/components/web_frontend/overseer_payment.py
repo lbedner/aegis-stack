@@ -34,7 +34,14 @@ from app.services.system.models import ComponentStatus
 
 from .filters import cents_to_input, dollars, money
 from .overseer_nav import SectionRequest, page_url
-from .rendering import drawer_state, page_number, pager, status_cell, with_query
+from .rendering import (
+    chart,
+    drawer_state,
+    page_number,
+    pager,
+    status_cell,
+    with_query,
+)
 
 SECTIONS = (
     (None, {"overview": "Overview"}),
@@ -151,11 +158,8 @@ def _revenue(points: list[dict[str, Any]]) -> dict[str, Any]:
     for point in points:
         running += dollars(point["amount_cents"])
         values.append(round(running, 2))
-    return {
-        "labels": [datetime.fromisoformat(p["date"]).strftime("%b %d") for p in points],
-        "series": [{"label": "Revenue", "values": values}],
-        "format": "money",
-    }
+    labels = [datetime.fromisoformat(p["date"]).strftime("%b %d") for p in points]
+    return chart(labels, "Revenue", values, money=True)
 
 
 async def _overview(service: PaymentService) -> dict[str, Any]:

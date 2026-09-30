@@ -436,6 +436,18 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # without it the model registry walks into an unimportable sqlalchemy.
         remove_file(project_path, "app/services/ai/models/voice_usage.py")
         remove_file(project_path, "tests/services/ai/test_sentiment.py")
+        # The spend reads (the Overseer's Costs) read the usage ledgers.
+        remove_dir(project_path, "app/services/ai/domains/spend")
+        remove_file(project_path, "tests/services/ai/test_spend_queries.py")
+        # ...and so does the Costs section built on them.
+        for costs in ("overseer_ai_costs.py", "overseer_ai_costs_views.py"):
+            remove_file(project_path, f"app/components/web_frontend/{costs}")
+        for tab in ("", "_overview", "_users", "_projections", "_breakdown"):
+            remove_file(
+                project_path,
+                f"app/components/web_frontend/templates/pages/overseer/ai/_costs{tab}.html",
+            )
+        remove_file(project_path, "tests/web/test_overseer_ai_costs.py")
         # Agent registry CLI inspects DB rows.
         remove_file(project_path, "app/cli/agents.py")
         remove_file(project_path, "tests/cli/test_agents_cli.py")

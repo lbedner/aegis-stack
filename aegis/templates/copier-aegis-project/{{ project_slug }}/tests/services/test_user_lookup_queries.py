@@ -43,8 +43,28 @@ class TestUserByIdUsesTheIdentityMap:
         assert await service.get_user_by_id(created.id) is None
 
     @pytest.mark.asyncio
-    async def test_a_missing_user_is_none(
-        self, async_db_session: AsyncSession
-    ) -> None:
+    async def test_a_missing_user_is_none(self, async_db_session: AsyncSession) -> None:
         service = UserService(async_db_session)
         assert await service.get_user_by_id(999_999) is None
+
+
+class TestUsersByIds:
+    @pytest.mark.asyncio
+    async def test_many_users_in_one_query(
+        self, async_db_session: AsyncSession, user_factory
+    ) -> None:
+        """A table of spenders names every row: one IN query, never a
+        lookup per row; deleted and unknown ids are simply absent."""
+        kept = await user_factory()
+        other = await user_factory()
+        gone = await user_factory()
+        service = UserService(async_db_session)
+        await service.delete_user(gone.id)
+
+        with assert_max_queries(1):
+            unknown = max(kept.id, other.id, gone.id) + 1_000
+            found = await service.get_users_by_ids(
+                [kept.id, other.id, gone.id, unknown]
+            )
+        assert set(found) == {kept.id, other.id}
+        assert found[kept.id].email == kept.email

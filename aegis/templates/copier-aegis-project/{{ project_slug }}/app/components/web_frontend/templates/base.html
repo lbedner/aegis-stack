@@ -84,6 +84,7 @@
 
   <script src="{{ static('js/app.js') }}"></script>
   <script src="{{ static('js/charts.js') }}"></script>
+  {% if chat_path is defined %}<script src="{{ static('js/chat.js') }}"></script><script src="{{ static('js/voice.js') }}"></script>{% endif %}
   {% if auth_enabled %}<script src="{{ static('js/auth.js') }}"></script>{% endif %}
   {% block scripts %}{% endblock %}
 </body>

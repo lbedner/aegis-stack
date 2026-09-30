@@ -1,0 +1,12 @@
+{# One tool run, in the modal: the script or the arguments, and the output.
+   The audit of what the assistant did; nothing here is editable. #}
+{% from "components/macros/layout.html" import code_block, dialog_title %}
+{% call dialog_title(run.tool) %}{% if run.failed %}<p class="text-xs text-error mb-4">This run failed.</p>{% endif %}{% endcall %}
+<div class="space-y-4 max-h-[70vh] overflow-y-auto">
+  {% if run.code %}{{ code_block(run.code, "Script", "python") }}{% endif %}
+  {% if run.args %}{{ code_block(run.args, "Arguments", "json") }}{% endif %}
+  {% if run.output %}{{ code_block(run.output, "Output") }}{% endif %}
+  {% if not run.code and not run.args and not run.output %}
+  <p class="text-sm text-aegis-muted">No detail recorded for this call.</p>
+  {% endif %}
+</div>

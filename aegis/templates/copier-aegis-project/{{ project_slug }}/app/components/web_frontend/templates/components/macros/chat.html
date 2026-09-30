@@ -1,0 +1,199 @@
+{# Chat macros: the transcript's one set of bubbles.
+
+   A live turn and a history replay draw the same markup: ``user_bubble``
+   for what was asked, ``streaming_bubble`` while the answer arrives (the
+   script fills its body), ``assistant_bubble`` for a stored, settled
+   message (markdown, the tool trail, the footer). Every hook the scripts
+   read is a data attribute or an id here, never framework scope, which is
+   what lets one macro serve both a history render and the swap at the end
+   of a live turn.
+#}
+{% from "components/macros/icons.html" import icon %}
+{% from "components/macros/layout.html" import avatar %}
+
+{# The chat's buttons: outlined and quiet, so the conversation stays louder
+   than the controls. ``tone`` primary is teal; ``size`` sm or xs. #}
+{% macro button_classes(tone="default", size="sm") -%}
+{% set tones = {"default": "border-aegis-border text-aegis-muted hover:border-aegis-muted hover:text-aegis-text hover:bg-aegis-border/20", "primary": "btn-primary"} %}
+btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, tones["default"]) }}
+{%- endmacro %}
+
+{# The copy button, one definition for both bubbles: ``text`` is what it
+   copies (an answer's markdown source, not its rendered HTML). app.js does
+   the copying; the icon becomes a tick and pops, then settles back, since
+   without it the button looks broken and gets pressed twice. ``extra``
+   carries the bubble's reveal rule. #}
+{% macro copy_button(text, extra="") %}
+<button type="button" data-copy="{{ text }}" aria-label="Copy" title="Copy" class="{{ extra }}">
+  {{ icon("copy", "w-3.5 h-3.5", 1.5, 'data-copy-idle') }}
+  {{ icon("check", "w-3.5 h-3.5 hidden", 2, 'data-copy-done') }}
+</button>
+{% endmacro %}
+
+{# What a voice control is doing, drawn from its data-state (voice.js only
+   sets it): the resting icon (the caller) while idle; recording, a pulsing
+   dot (the mic only, ``record=True``); thinking, a spinner while audio is
+   heard or fetched; speaking, an equalizer while it plays. The control
+   carries ``group relative``; one set of visuals for the mic and every
+   speaker. #}
+{% macro voice_states(size="w-4 h-4", record=False) %}
+<span class="contents group-data-[state=thinking]:hidden group-data-[state=speaking]:hidden">{{ caller() }}</span>
+{% if record %}
+<span data-mic-visual="recording" class="hidden group-data-[state=recording]:flex absolute -top-1 -right-1 w-2.5 h-2.5" aria-hidden="true">
+  <span class="absolute inset-0 rounded-full bg-aegis-error animate-ping"></span>
+  <span class="relative w-2.5 h-2.5 rounded-full bg-aegis-error"></span>
+</span>
+{% endif %}
+{{ icon("spinner", "hidden group-data-[state=thinking]:block " ~ size ~ " animate-spin", 1.5, 'data-mic-visual="thinking"') }}
+<span data-mic-visual="speaking" class="hidden group-data-[state=speaking]:flex items-end gap-0.5 {{ size }}" aria-hidden="true">
+  <span class="w-1 h-full rounded-sm bg-current origin-bottom animate-voice-bar"></span>
+  <span class="w-1 h-full rounded-sm bg-current origin-bottom animate-voice-bar [animation-delay:150ms]"></span>
+  <span class="w-1 h-full rounded-sm bg-current origin-bottom animate-voice-bar [animation-delay:300ms]"></span>
+</span>
+{% endmacro %}
+
+{# Hear an answer: the stored message, said aloud. Same place and weight
+   as the copy button; voice.js plays it, and plays it unasked when the
+   turn began at the microphone. #}
+{% macro speak_button(url, extra="") %}
+<button type="button" data-speak="{{ url }}" data-state="idle" aria-label="Listen" title="Listen" aria-pressed="false" class="group relative {{ extra }} aria-pressed:text-aegis-text data-[state=speaking]:text-aegis-teal">
+  {% call voice_states("w-3.5 h-3.5") %}{{ icon("speaker", "w-3.5 h-3.5") }}{% endcall %}
+</button>
+{% endmacro %}
+
+{% macro user_bubble(text, attachments=None, attachment_names=None) %}
+<li class="flex justify-end pl-24" data-role="user">
+  <div class="max-w-full rounded-lg bg-aegis-teal/15 px-5 py-4 text-base text-aegis-text">
+    <div class="flex items-center gap-2 mb-1.5">
+      <span class="text-sm font-semibold text-aegis-text">You</span>
+      <button type="button" data-replay aria-label="Send this message again" title="Send this message again"
+              class="text-aegis-muted/70 hover:text-aegis-text transition-colors">
+        {{ icon("replay", "w-3.5 h-3.5") }}
+      </button>
+      {{ copy_button(text, "text-aegis-muted/70 hover:text-aegis-text transition-colors") }}
+    </div>
+    <span class="whitespace-pre-wrap" data-text>{{ text }}</span>
+    {% if attachments %}
+    <div class="mt-2 flex flex-wrap gap-2" data-attachments>
+      {% for image in attachments %}
+      <button type="button" data-view-image="{{ image.url }}" title="{{ image.name }}" aria-label="View {{ image.name }}"><img src="{{ image.url }}" alt="{{ image.name }}" width="64" height="64" loading="lazy" class="w-16 h-16 rounded object-cover border border-aegis-border"></button>
+      {% endfor %}
+    </div>
+    {% elif attachment_names %}
+    <p class="mt-1.5 text-xs text-aegis-muted" data-attached>Attached: {{ attachment_names|join(", ") }}</p>
+    {% endif %}
+  </div>
+</li>
+{% endmacro %}
+
+{# The rows under an answer: one per tool call, each opening the run in
+   the modal with what it actually did. #}
+{% set trail_classes = "mt-1 mb-3 space-y-1 text-xs font-mono text-aegis-muted" %}
+{% macro trail_rows(rows) %}
+{% if rows %}
+<ul class="{{ trail_classes }}" data-trail>
+  {% for row in rows %}
+  <li>
+    <button type="button" {{ hx_dialog(row.url) }}
+            class="block max-w-full truncate text-left {{ 'text-error' if row.failed else '' }} hover:text-aegis-text transition-colors"
+            title="{{ 'Expand this failed run' if row.failed else 'Expand this run' }}">{{ row.label }}</button>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}
+
+{# The answer's typography: what the markdown filter emits, styled once. #}
+{% set prose = "text-sm leading-relaxed text-aegis-text [&_p]:my-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:mt-5 [&_h1]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-0.5 [&_strong]:font-semibold [&_code]:font-mono [&_code]:text-xs [&_code]:text-aegis-teal [&_pre]:rounded [&_pre]:bg-aegis-bg [&_pre]:border [&_pre]:border-aegis-border [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre_code]:text-aegis-text [&_table]:my-2 [&_th]:text-left [&_th]:font-medium [&_th]:pr-4 [&_td]:pr-4 [&_td]:py-0.5 [&_a]:text-aegis-teal [&_blockquote]:border-l-2 [&_blockquote]:border-aegis-border [&_blockquote]:pl-3 [&_blockquote]:text-aegis-muted" %}
+
+{# The assistant's name over an answer, in both bubbles. #}
+{% macro assistant_name(assistant) %}<span class="micro-label text-aegis-muted" data-assistant>{{ assistant }}</span>{% endmacro %}
+
+{% macro assistant_bubble(message, assistant) %}
+<li class="pr-24" data-role="assistant" data-message-id="{{ message.id }}">
+  <div class="group/bubble">
+    {# The tool trail folds under the name: a caret shows on hover over the
+       bubble (and stays while open), so the audit is a click away without
+       sitting in the transcript. #}
+    {% if message.trail %}
+    <details class="group/trail mb-1" data-trail-fold>
+      <summary class="list-none cursor-pointer inline-flex items-center gap-1.5 text-aegis-muted">
+        {{ assistant_name(assistant) }}
+        <span class="text-xxs opacity-0 group-hover/bubble:opacity-100 group-open/trail:opacity-100 transition-opacity">{{ message.trail|length }} {{ "step" if message.trail|length == 1 else "steps" }}</span>
+        {{ icon("chevron-down", "w-3 h-3 opacity-0 group-hover/bubble:opacity-100 group-open/trail:opacity-100 group-open/trail:rotate-180 transition", 2) }}
+      </summary>
+      {{ trail_rows(message.trail) }}
+    </details>
+    {% else %}
+    <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant) }}</div>
+    {% endif %}
+    <div class="{{ prose }}" data-body>{{ message.content|markdown }}</div>
+    <div class="mt-2 flex items-center gap-2 text-xxs text-aegis-muted">
+      {% if message.model_icon %}<span data-model-icon class="inline-flex">{{ avatar(message.footer, message.model_icon, size="xs") }}</span>{% endif %}
+      {% if message.footer %}<span data-footer>{{ message.footer }}</span>{% endif %}
+      {{ copy_button(message.content, "opacity-0 group-hover/bubble:opacity-100") }}
+      {% if message.speech %}{{ speak_button(message.speech, "opacity-0 group-hover/bubble:opacity-100 focus:opacity-100 aria-pressed:opacity-100") }}{% endif %}
+    </div>
+  </div>
+</li>
+{% endmacro %}
+
+{# The bubble a live turn streams into. The script reads ``data-text``
+   (what to send) and fills ``data-body`` and ``data-trail``; when the
+   stream completes it swaps this whole element for ``assistant_bubble``
+   rendered from the stored message. #}
+{% macro streaming_bubble(text, conversation_id, assistant) %}
+<li class="pr-24" data-role="assistant" data-stream data-text="{{ text }}" {% if conversation_id %}data-conversation-id="{{ conversation_id }}"{% endif %}>
+  <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant) }}</div>
+  <ul class="{{ trail_classes }}" data-trail hidden></ul>
+  <div class="{{ prose }}" data-body></div>
+  <div class="mt-2 flex items-center gap-2 py-1" data-busy aria-label="Thinking">
+    <span class="flex gap-1">
+      <span class="w-1.5 h-1.5 rounded-full bg-aegis-muted/60 animate-pulse"></span>
+      <span class="w-1.5 h-1.5 rounded-full bg-aegis-muted/60 animate-pulse [animation-delay:.15s]"></span>
+      <span class="w-1.5 h-1.5 rounded-full bg-aegis-muted/60 animate-pulse [animation-delay:.3s]"></span>
+    </span>
+  </div>
+</li>
+{% endmacro %}
+
+{# The chat's two verbs, wherever the surface shows: a fresh thread, and
+   the history dialog. #}
+{% macro chat_toolbar(path) %}
+<div class="flex items-center gap-2">
+  <button type="button" {{ hx_thread(path ~ "/conversations/new") }} class="{{ button_classes('default', 'xs') }} whitespace-nowrap">New conversation</button>
+  <button type="button" {{ hx_dialog(path ~ "/conversations") }} class="{{ button_classes('default', 'xs') }} whitespace-nowrap">History</button>
+</div>
+{% endmacro %}
+
+{# The composer's chips are one button: a label that opens its dialog.
+   ``mark`` names the attribute that says what the chip shows (for scripts
+   and tests), ``value`` its value if any. #}
+{% macro composer_chip(id, label, path, title, mark, value=None, oob=False) %}
+<button type="button" id="{{ id }}" {% if oob %}hx-swap-oob="true"{% endif %} {{ hx_dialog(path) }}
+        title="{{ title }}" aria-label="{{ title }}"
+        class="inline-flex items-center gap-1 text-xs text-aegis-muted hover:text-aegis-text transition-colors whitespace-nowrap">
+  <span {{ mark }}{% if value is not none %}="{{ value }}"{% endif %}>{{ label }}</span>
+  {{ icon("chevron-down", "w-3 h-3", 2) }}
+</button>
+{% endmacro %}
+
+{# The composer's model chip: the active model's id, opening the picker.
+   Re-rendered out of band by a pick. #}
+{% macro model_chip(chip, path, oob=False) %}{{ composer_chip("chat-model", chip.label, path, "Switch the active model", "data-model", chip.model, oob) }}{% endmacro %}
+
+{# One stored message as its bubble: the transcript and the settle swap
+   draw messages through this, so the role switch has one home. #}
+{% macro bubble(message, assistant) %}
+{% if message.role == "user" %}{{ user_bubble(message.content, attachments=message.attachments) }}{% else %}{{ assistant_bubble(message, assistant) }}{% endif %}
+{% endmacro %}
+
+{# The composer's conversation id: in the composer itself, and out of band
+   when a load replaces the thread. #}
+{% macro conversation_field(conversation_id, oob=False) %}
+<input type="hidden" id="chat-conversation" name="conversation_id" value="{{ conversation_id or '' }}"{% if oob %} hx-swap-oob="true"{% endif %}>
+{% endmacro %}
+
+{# The attributes for "load ``url`` into the thread", replacing it: a fresh
+   thread, a conversation picked from history. #}
+{% macro hx_thread(url) %}hx-get="{{ url }}" hx-target="#chat-thread" hx-swap="innerHTML"{% endmacro %}

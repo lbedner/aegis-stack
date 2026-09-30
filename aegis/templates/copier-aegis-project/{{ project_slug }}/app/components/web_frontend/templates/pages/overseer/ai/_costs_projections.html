@@ -1,0 +1,17 @@
+{# Costs > Projections: where the last 90 days' average says the spend is
+   heading, overall and per feature, over a chosen horizon. #}
+{% from "components/macros/layout.html" import card, stats_strip %}
+{% from "components/macros/table.html" import data_table %}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="text-sm text-aegis-muted">{{ basis }}</p>
+  <div id="ai-cost-horizons">{% with chips = horizons, chips_label = "Horizon" %}{% include "pages/overseer/_chips.html" %}{% endwith %}</div>
+</div>
+{{ stats_strip(figures, id="ai-cost-figures") }}
+{% call card("Feature cost forecast", "each feature's daily average, carried forward", id="ai-cost-forecast") %}
+  {{ data_table([
+    {"key": "feature", "label": "Feature"},
+    {"key": "per_day", "label": "Per day", "align": "right"},
+    {"key": "horizon", "label": horizon ~ " months", "align": "right"},
+    {"key": "year", "label": "Year", "align": "right"},
+  ], forecast, empty="Nothing spent in the last 90 days") }}
+{% endcall %}

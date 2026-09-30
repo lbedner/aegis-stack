@@ -275,7 +275,12 @@ class TestLLMPickerGating:
         from app.core.config import settings
 
         monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
-        monkeypatch.setattr(llm_router, "list_vendors", lambda: self._vendor_rows())
+        rows = self._vendor_rows()
+
+        async def list_vendors() -> list[Any]:
+            return rows
+
+        monkeypatch.setattr(llm_router, "list_vendors", list_vendors)
 
         response = client.get("/api/v1/llm/vendors", params={"usable": True})
 
@@ -291,7 +296,12 @@ class TestLLMPickerGating:
         from app.core.config import settings
 
         monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-test")
-        monkeypatch.setattr(llm_router, "list_vendors", lambda: self._vendor_rows())
+        rows = self._vendor_rows()
+
+        async def list_vendors() -> list[Any]:
+            return rows
+
+        monkeypatch.setattr(llm_router, "list_vendors", list_vendors)
 
         async def fake_icons(names: list[str]) -> dict[str, str]:
             return {"openai": "iVBORfake"}

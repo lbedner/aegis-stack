@@ -116,6 +116,18 @@ class UserService(
         user = await self.db.get(User, user_id)
         return None if user is None or user.deleted_at is not None else user
 
+    async def get_users_by_ids(self, user_ids: list[int]) -> dict[int, User]:
+        """``{id: user}`` for the given ids in one query; soft-deleted and
+        unknown ids are absent."""
+        if not user_ids:
+            return {}
+        statement = select(User).where(
+            User.id.in_(user_ids),  # type: ignore[union-attr]
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return {user.id: user for user in result.all() if user.id is not None}
+
     async def update_user(self, user_id: int, **updates) -> User | None:
         """Update user data asynchronously."""
         user = await self.get_user_by_id(user_id)

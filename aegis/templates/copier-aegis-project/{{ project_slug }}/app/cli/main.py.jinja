@@ -5,10 +5,11 @@ Command-line interface for {{ project_slug }} management tasks.
 """
 
 import asyncio
+from collections.abc import Coroutine
 import importlib
 import inspect
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import app.cli._i18n_click  # noqa: F401 — translate Click's built-in --help text
 import click
@@ -16,6 +17,8 @@ import typer
 from app.cli import dns, docs, health, patterns, theme
 from app.i18n import detect_locale, lazy_t, set_locale, t
 from app.i18n.locales import AVAILABLE_LOCALES
+
+T = TypeVar("T")
 
 if TYPE_CHECKING:
     pass
@@ -180,13 +183,25 @@ except ImportError:
 {%- endfor %}
 
 
+async def run_command(command: Coroutine[Any, Any, T]) -> T:
+    """Run an async command, then close the process-shared cache on the same
+    loop: closed after the loop is gone, its Redis pool is torn down by the
+    garbage collector and prints "Event loop is closed" at exit."""
+    from app.core.cache import get_cache
+
+    try:
+        return await command
+    finally:
+        await get_cache().aclose()
+
+
 def main() -> None:
     """Entry point for the CLI application."""
     try:
         result = app(standalone_mode=False)
         # Handle async commands - standalone_mode=False returns coroutines unawaited
         if inspect.iscoroutine(result):
-            asyncio.run(result)
+            asyncio.run(run_command(result))
     except click.exceptions.UsageError as e:
         # Show help automatically on usage errors instead of just "try --help"
         if e.ctx is not None:

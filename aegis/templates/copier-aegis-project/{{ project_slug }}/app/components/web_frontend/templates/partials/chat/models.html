@@ -1,0 +1,64 @@
+{# The model picker, in the modal: ONE list of the models this install can
+   call, grouped by vendor and searched in one box; the recently used lead
+   it. Kept quiet: teal means exactly one thing, the model in use, and says
+   it once (the check). A search re-requests only the list. #}
+{% from "components/macros/icons.html" import icon %}
+{% from "components/macros/chat.html" import model_chip %}
+{% from "components/macros/layout.html" import avatar, dialog_title %}
+{# One section's rows: a pick posts the model id with the search, so the
+   dialog re-renders in the same view. #}
+{% macro rows(section, picker) %}
+<ul class="pb-2">
+  {% for row in section.rows %}
+  <li>
+    <form hx-post="{{ picker.path }}" hx-target="#dialog-body" hx-swap="innerHTML">
+      <input type="hidden" name="q" value="{{ picker.query }}">
+      <button type="submit" name="model_id" value="{{ row.model_id }}" data-model-id="{{ row.model_id }}" {% if row.model_id in picker.active %}aria-current="true"{% endif %}
+              class="w-full flex items-center gap-3 px-2 py-2 rounded text-left hover:bg-aegis-border/20 transition-colors">
+        {% if row.icon_name %}{{ avatar(row.icon_name, row.icon_url) }}{% else %}<span class="w-5 shrink-0"></span>{% endif %}
+        <span class="min-w-0 flex-1">
+          <span class="block text-sm text-aegis-text truncate">{{ row.title }}</span>
+          <span class="block text-xs text-aegis-muted truncate">{{ row.model_id }}</span>
+        </span>
+        {% if row.facts %}<span class="text-xs text-aegis-muted whitespace-nowrap">{{ row.facts }}</span>{% endif %}
+        {% if row.model_id in picker.active %}{{ icon("check", "w-4 h-4 text-aegis-teal shrink-0", 2) }}{% endif %}
+      </button>
+    </form>
+  </li>
+  {% endfor %}
+  {% if section.hidden %}<li class="px-2 py-1.5 text-xs text-aegis-muted" data-more>{{ section.hidden }} more - search to narrow</li>{% endif %}
+</ul>
+{% endmacro %}
+{% if chip_only %}{{ model_chip(chip, path) }}{% else %}
+{% if chip_oob %}{{ model_chip(chip, picker.path, oob=True) }}{% endif %}
+<div id="model-picker">
+  {{ dialog_title("Models", "What the assistant runs on, for the whole app. A pick takes effect on the next message.") }}
+  {# Only the list moves: swapping the search box mid-keystroke takes the
+     caret with it. #}
+  <form hx-get="{{ picker.path }}" hx-target="#model-list" hx-select="#model-list" hx-swap="outerHTML"
+        hx-trigger="input changed delay:200ms from:input[name=q]">
+    <input type="search" name="q" value="{{ picker.query }}" placeholder="Search models" aria-label="Search models" autofocus
+           class="input input-bordered input-sm w-full bg-aegis-bg">
+  </form>
+  <div id="model-list" class="mt-3 h-[60vh] overflow-y-auto divide-y divide-aegis-border/60" data-models>
+    {% if picker.empty %}
+    <p class="py-6 text-sm text-aegis-muted text-center">No models match.</p>
+    {% endif %}
+    {% for section in picker.sections if section.rows %}
+    {% if section.name %}
+    <details class="group">
+      <summary class="list-none cursor-pointer flex items-center gap-3 py-2.5">
+        {{ avatar(section.name, section.icon_url, size="lg") }}
+        <span class="micro-label text-aegis-text flex-1">{{ section.name }}</span>
+        <span class="text-xs text-aegis-muted">{{ section.count }}</span>
+        {{ icon("chevron-down", "w-4 h-4 text-aegis-muted transition-transform group-open:rotate-180", 2) }}
+      </summary>
+      {{ rows(section, picker) }}
+    </details>
+    {% else %}
+    <div {% if section.recent %}data-recent{% endif %}>{{ rows(section, picker) }}</div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}

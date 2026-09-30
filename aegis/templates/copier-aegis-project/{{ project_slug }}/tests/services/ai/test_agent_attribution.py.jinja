@@ -529,6 +529,25 @@ class TestToolUseSurfacing:
         assert "42" in run_code["result"]
         assert [n["tool"] for n in run_code["nested"]] == ["ledger", "accounts"]
 
+    async def test_the_saved_answer_keeps_what_the_final_frame_reported(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """A conversation reopened from history shows the same model and
+        cost the live turn did: the stored message keeps the final frame's
+        metadata."""
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        chunks = [chunk async for chunk in service.stream_chat("hello")]
+
+        final = [chunk for chunk in chunks if chunk.is_final][-1]
+        conversation = await service.get_conversation(final.conversation_id)
+        assert conversation is not None
+        saved = next(m for m in conversation.messages if m.id == final.message_id)
+        for key in ("provider", "model", "cost", "output_tokens"):
+            assert saved.metadata.get(key) == final.metadata.get(key), key
+        assert saved.metadata.get("model")
+
     async def test_pre_tool_narration_is_dropped_from_the_answer(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:

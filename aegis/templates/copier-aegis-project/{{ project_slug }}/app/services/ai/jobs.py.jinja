@@ -17,7 +17,7 @@ async def sync_llm_catalog_job() -> None:
 
     try:
         with Session(engine) as session:
-            result = await sync_llm_catalog(session, mode="chat")
+            result = await sync_llm_catalog(session)
             logger.info(
                 f"LLM catalog sync complete: "
                 f"{result.models_added} added, {result.models_updated} updated"

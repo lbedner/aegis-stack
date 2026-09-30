@@ -127,6 +127,25 @@ def status_cell(label: str, tone: str) -> dict[str, str]:
     return {"label": label, "tone": tone}
 
 
+def ranked(rows: list[dict[str, Any]], by: str) -> list[dict[str, Any]]:
+    """Rows for the ``ranked_rows`` macro: each gains the ``ratio`` of its
+    ``by`` figure to the largest row's, the width of its bar."""
+    top = max((row[by] for row in rows), default=0)
+    return [row | {"ratio": row[by] / top if top else 0} for row in rows]
+
+
+def chart(
+    labels: list[str], label: str, values: list[float], money: bool = False
+) -> dict[str, Any]:
+    """Data for the ``chart_panel`` macro: one labelled series, drawn as
+    dollars when ``money``."""
+    data: dict[str, Any] = {
+        "labels": labels,
+        "series": [{"label": label, "values": values}],
+    }
+    return data | {"format": "money"} if money else data
+
+
 def drawer_state(param: str, url: str | None) -> dict[str, str | None]:
     """What a list hands ``drawer_sync``: the open item's drawer URL (None
     closes it) and the query parameter that holds the item."""

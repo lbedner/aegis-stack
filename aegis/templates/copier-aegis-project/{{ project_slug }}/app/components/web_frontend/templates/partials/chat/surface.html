@@ -1,0 +1,92 @@
+{# THE chat surface: thread, jump button, staged images, composer. The AI
+   page's Chat section includes it and the drawer fetches it; there is one
+   instance on a page at a time (the drawer empties while the Chat section
+   shows), so the ids the scripts and the composer target stay unique.
+   Needs: assistant, chat_path, stream_url, turn_defaults, messages,
+   conversation_id, picker (the catalog is there to pick from), voice (how
+   a spoken turn is heard, or none). #}
+{% from "components/macros/icons.html" import icon, sprite %}
+{% from "components/macros/chat.html" import button_classes, conversation_field, voice_states %}
+{{ sprite() }}
+<div id="chat" class="flex flex-col h-full"
+     data-chat='{{ {"stream": stream_url, "defaults": turn_defaults, "path": chat_path}|tojson }}'>
+  <div class="relative flex-1 min-h-0">
+    <div id="chat-scroll" class="h-full overflow-y-auto pr-2">
+      <ol id="chat-thread" class="space-y-6 pb-6">
+        {% include "partials/chat/transcript.html" %}
+      </ol>
+    </div>
+    <button type="button" id="chat-jump" hidden aria-label="Scroll to latest" title="Scroll to latest"
+            class="absolute right-4 bottom-4 {{ button_classes('default', 'xs') }} rounded-full bg-aegis-card border-aegis-muted/50">
+      {{ icon("chevron-down", "w-4 h-4", 2) }}
+    </button>
+  </div>
+
+  {# Staged images live in the script (they ride the stream request, one
+     turn only); the chips are drawn from that list. #}
+  <div id="chat-attachments" class="shrink-0 [&:not([hidden])]:flex flex-wrap gap-2 pt-3" hidden></div>
+  {# The markup the script clones: a staged image's chip, and the image
+     viewer's body for the modal. Styling lives here, not in JS. #}
+  <template id="chat-chip">
+    <span class="inline-flex items-center gap-2 rounded border border-aegis-border bg-aegis-card pl-1 pr-2 py-1 text-xs text-aegis-text" data-chip>
+      <img src="" alt="" width="28" height="28" title="View full size" class="w-7 h-7 rounded object-cover cursor-pointer" data-view-image>
+      <span data-name></span>
+      <button type="button" title="Remove" aria-label="Remove" class="text-aegis-muted hover:text-aegis-text" data-remove>×</button>
+    </span>
+  </template>
+  <template id="chat-image"><img src="" alt="" width="800" height="600" class="max-h-[75vh] h-auto w-auto max-w-full mx-auto rounded"></template>
+  {% if voice %}
+  {# What the microphone is doing, read out as well as shown. The server's
+     own refusals (nothing heard, transcription down) arrive as text. #}
+  <template id="chat-mic-states">
+    <span>
+      <span data-state="recording">Listening - press the microphone again when you're done.</span>
+      <span data-state="transcribing">Working out what you said...</span>
+      <span data-state="thinking">{{ assistant }} is working on it...</span>
+      <span data-state="speaking">Speaking - press the microphone to interrupt.</span>
+      <span data-state="denied">The microphone is blocked. Allow it for this site, or type instead.</span>
+      <span data-state="unsupported">This browser can't record here. You can type instead.</span>
+      <span data-state="offline">Couldn't reach the app. You can type instead.</span>
+    </span>
+  </template>
+  {% endif %}
+  <p id="chat-mic-status" class="shrink-0 pt-2 text-xs text-aegis-muted empty:hidden" aria-live="polite"></p>
+  {# Composer: the post appends the turn's bubbles; the script takes it from
+     there. Enter sends, Shift+Enter inserts a newline. #}
+  <form id="chat-composer" class="shrink-0 border-t border-aegis-border pt-3 flex flex-wrap items-end gap-2"
+        hx-post="{{ chat_path }}/turns" hx-target="#chat-thread" hx-swap="beforeend"
+        x-data="{ text: '', staged: 0 }" @chat-staged.window="staged = $event.detail"
+        @htmx:after-request="if ($event.detail.successful && $event.detail.elt === $el) { text = ''; $refs.input.style.height = 'auto' }">
+    {{ conversation_field(conversation_id) }}
+    {# The chips are a row of their own above the box: beside it, in the
+       drawer, they took the width the message needs. #}
+    <div class="w-full flex flex-wrap items-center gap-x-4 gap-y-1" data-composer-chips>
+      {% if picker %}<span id="chat-model" hx-get="{{ chat_path }}/models/chip" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></span>{% endif %}
+    </div>
+    {# Not ``required``: a message may be images alone (the route sends the
+       house line); Send stays disabled until there is text or an image. #}
+    <textarea name="message" x-ref="input" x-model="text" rows="1"
+              placeholder="Message {{ assistant }}"
+              @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); if (text.trim() || staged) $el.form.requestSubmit() }"
+              @input="$el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'"
+              class="textarea textarea-bordered textarea-sm bg-aegis-bg flex-1 resize-none max-h-40 leading-relaxed min-h-0 py-3"></textarea>
+    <label class="{{ button_classes('default') }} cursor-pointer" title="Attach images">
+      <input type="file" id="chat-attach" accept="image/png,image/jpeg,image/webp,image/gif" multiple class="sr-only" aria-label="Attach images">
+      {{ icon("paperclip", "w-4 h-4") }}
+    </label>
+    {% if voice %}
+    {# The microphone: records while pressed on, then sends what it heard as
+       the message (static/js/voice.js). data-state is what the assistant is
+       doing; voice_states draws it. #}
+    <button type="button" id="chat-mic" data-state="idle"
+            class="group relative {{ button_classes('default') }} data-[state=recording]:text-error data-[state=recording]:border-error data-[state=speaking]:text-aegis-teal data-[state=speaking]:border-aegis-teal"
+            aria-pressed="false" aria-label="Speak a question" title="Speak a question"
+            data-transcripts="{{ chat_path }}/speech/transcripts" data-say="{{ chat_path }}/speech/say"
+            data-voice='{{ voice|tojson }}'>
+      {% call voice_states(record=True) %}{{ icon("mic", "w-4 h-4") }}{% endcall %}
+    </button>
+    {% endif %}
+    <button type="button" id="chat-stop" hidden class="{{ button_classes('default') }}" aria-label="Stop">Stop</button>
+    <button type="submit" id="chat-send" class="{{ button_classes('primary') }}" aria-label="Send" :disabled="!text.trim() && !staged">Send</button>
+  </form>
+</div>

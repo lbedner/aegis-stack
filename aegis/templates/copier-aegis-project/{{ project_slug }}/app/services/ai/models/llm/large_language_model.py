@@ -35,6 +35,10 @@ class LargeLanguageModel(SQLModel, table=True):
     source_url: str | None = None
     released_on: datetime | None = None
     family: str | None = None
+    # What kind of model it is, in the source catalog's words: "chat", or a
+    # voice kind ("realtime", "audio_transcription", "audio_speech"). A chat
+    # picker lists only "chat"; a voice setting picks its own kind.
+    mode: str = Field(default="chat", max_length=32, index=True)
 
     # Foreign key
     # The two org axes, both pointing at llm_org: who SERVES this model

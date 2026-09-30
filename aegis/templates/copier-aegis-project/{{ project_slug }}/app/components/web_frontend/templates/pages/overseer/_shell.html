@@ -3,7 +3,7 @@
 {% block app_content %}
 <div x-data="{ mobileNav: false, sidebar: appearance().sidebar }" class="min-h-screen md:flex">
   <aside id="overseer-sidebar" aria-label="Overseer navigation"
-         class="w-full md:w-64 lg:w-72 md:shrink-0 md:h-screen md:sticky md:top-0 md:z-30 md:transition-[width] border-b md:border-b-0 md:border-r border-aegis-border bg-aegis-card flex flex-col">
+         class="w-full md:w-64 lg:w-72 md:shrink-0 md:h-screen md:sticky md:top-0 md:z-30 md:transition-[width] border-b md:border-b-0 md:border-r border-aegis-border bg-aegis-bg flex flex-col">
     <div class="overseer-rail-row px-5 py-5 border-b border-aegis-border flex items-center justify-between gap-3">
       <a href="/overseer" hx-get="/overseer" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
          title="Overseer" class="min-w-0 text-sm font-semibold text-aegis-text truncate">
@@ -84,4 +84,5 @@
     </div>
   </div>
 </div>
+{% if chat_path is defined %}{% include "components/chat_drawer.html" %}{% endif %}
 {% endblock %}

@@ -271,3 +271,32 @@ class TestUnknownCommand:
         assert result is not None
         assert result.success is False
         assert "unknown" in (result.message or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_model_refused_for_an_unkeyed_provider_stays_refused(
+    command_handler: SlashCommandHandler, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A catalog model whose provider has no key is not forced through, and
+    the command says why instead of claiming a switch."""
+    llm_service = pytest.importorskip(
+        "app.services.ai.domains.llm.llm_service", reason="no catalog"
+    )
+
+    calls: list[bool] = []
+
+    async def refuse(model_id: str, force: bool = False) -> llm_service.SetModelResult:
+        calls.append(force)
+        return llm_service.SetModelResult(
+            success=False,
+            model_id=model_id,
+            vendor="openai",
+            provider_updated=False,
+            message="OpenAI has no API key. Set OPENAI_API_KEY in .env first.",
+        )
+
+    monkeypatch.setattr(llm_service, "set_active_model", refuse)
+    result = await command_handler._cmd_model(["gpt-6-luna"])
+    assert calls == [False]
+    assert result.success is False
+    assert "OPENAI_API_KEY" in (result.message or "")

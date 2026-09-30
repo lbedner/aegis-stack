@@ -105,3 +105,45 @@ def test_clicking_off_closes_unless_something_is_unsaved() -> None:
         "toasts": 1,
         "clean_closed": True,
     }
+
+
+COPY_HARNESS = """
+const handlers = {};
+const on = (name, fn) => { (handlers[name] ||= []).push(fn); };
+const toasts = [];
+global.window = { location: { pathname: '/', search: '' },
+                  dispatchEvent: (e) => toasts.push(e.detail) };
+global.Event = class { constructor(name) { this.type = name; } };
+global.CustomEvent = class extends global.Event {
+  constructor(name, init) { super(name); this.detail = init && init.detail; }
+};
+global.document = { addEventListener: on, getElementById: () => null,
+                    body: { addEventListener: on, dispatchEvent: () => {} } };
+global.htmx = { ajax: () => {} };
+const written = [];
+// Node ships its own read-only navigator; replace it outright.
+Object.defineProperty(globalThis, 'navigator', {
+  value: { clipboard: { writeText: async (t) => { written.push(t); } } },
+  configurable: true,
+});
+require(APP_JS);
+const button = { dataset: { copy: 'postgres://db' }, querySelector: () => null };
+const target = { closest: (sel) => (sel === '[data-copy]' ? button : null) };
+for (const fn of handlers['click']) fn({ target });
+setTimeout(() => console.log(JSON.stringify({ written, toasts })), 0);
+"""
+
+
+def test_any_copy_button_copies_its_text() -> None:
+    """One copier for the whole app: a ``data-copy`` button's text goes to
+    the clipboard, and a button with no tick of its own says so in a toast."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not installed")
+    script = COPY_HARNESS.replace("APP_JS", json.dumps(str(APP_JS.resolve())))
+    out = subprocess.run(
+        [node, "-e", script], capture_output=True, text=True, check=True
+    )
+    result = json.loads(out.stdout)
+    assert result["written"] == ["postgres://db"]
+    assert result["toasts"][-1]["tone"] == "ok"

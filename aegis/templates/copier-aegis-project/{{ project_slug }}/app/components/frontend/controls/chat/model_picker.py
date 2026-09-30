@@ -24,8 +24,7 @@ from app.components.frontend.controls.text import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-
-from .models import (
+from app.core.model_picker import (
     display_title,
     filter_models,
     format_context_window,

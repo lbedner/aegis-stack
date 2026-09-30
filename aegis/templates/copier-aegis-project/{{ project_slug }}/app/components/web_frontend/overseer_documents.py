@@ -22,7 +22,7 @@ from app.services.system.models import ComponentStatus
 
 from .filters import short_date
 from .overseer_nav import SectionRequest, page_url
-from .rendering import drawer_state, status_cell, with_query
+from .rendering import drawer_state, ranked, status_cell, with_query
 
 SECTIONS = (
     (None, {"overview": "Overview"}),
@@ -82,7 +82,6 @@ def _row(
 async def _overview(service: DocumentService) -> dict[str, Any]:
     summary = await service.summary()
     by_kind = summary.get("by_kind", {})
-    most = max(by_kind.values(), default=0)
     return {
         "figures": [
             {"label": "Documents", "value": summary.get("total", 0)},
@@ -90,10 +89,13 @@ async def _overview(service: DocumentService) -> dict[str, Any]:
             {"label": "Stored", "value": format_bytes(summary.get("bytes", 0))},
             {"label": "Kinds", "value": len(by_kind)},
         ],
-        "kinds": [
-            {"label": kind, "value": f"{n:,}", "ratio": n / most if most else 0}
-            for kind, n in sorted(by_kind.items(), key=lambda kv: -kv[1])
-        ],
+        "kinds": ranked(
+            [
+                {"label": kind, "value": f"{n:,}", "n": n}
+                for kind, n in sorted(by_kind.items(), key=lambda kv: -kv[1])
+            ],
+            by="n",
+        ),
         "tags": (await service.tag_counts())[:10],
     }
 

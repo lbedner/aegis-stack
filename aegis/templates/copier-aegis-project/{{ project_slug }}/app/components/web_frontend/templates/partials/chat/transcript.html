@@ -1,0 +1,17 @@
+{# The thread's messages, and the composer's conversation id out of band
+   when a load replaces the thread (a new conversation carries none: the
+   first frame of its first turn mints one). A long thread shows its latest
+   page; ``earlier`` leads it with the row that brings the page before,
+   swapped in where the row stood (``page``: this IS such a page, so the
+   empty note never shows). #}
+{% from "components/macros/chat.html" import bubble, button_classes, conversation_field %}
+{% if earlier %}
+<li id="chat-earlier" class="flex justify-center">
+  <button type="button" hx-get="{{ earlier }}" hx-target="#chat-earlier" hx-swap="outerHTML" class="{{ button_classes('default', 'xs') }}">Show earlier</button>
+</li>
+{% endif %}
+{% if not messages and not page %}
+<p id="chat-empty" class="text-sm text-aegis-muted py-10 text-center">Ask {{ assistant }} anything.</p>
+{% endif %}
+{% for message in messages %}{{ bubble(message, assistant) }}{% endfor %}
+{% if oob %}{{ conversation_field(conversation_id, oob=True) }}{% endif %}

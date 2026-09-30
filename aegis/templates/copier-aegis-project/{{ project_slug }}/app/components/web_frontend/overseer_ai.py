@@ -11,7 +11,6 @@ gives them a home. Registered only in projects with the AI service (see
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from urllib.parse import quote
 
 from app.components.backend.api.ai.service import ai_service
 from app.core.config import settings
@@ -25,21 +24,26 @@ from app.services.system.models import ComponentStatus
 from .overseer_ai_common import (
     HAS_RAG,
     HAS_VOICE,
-    PARTIALS,
     PERSISTED,
     dollars,
     get_current_config,
     label,
+    mark_urls,
     per_million,
     section_url,
 )
 from .overseer_nav import SectionRequest
-from .rendering import status_cell
+from .rendering import chart, status_cell
 
 SECTIONS = (
-    (None, {"overview": "Overview"}),
+    (None, {"overview": "Overview", "chat": "Chat"}),
     *(
-        (("Activity", {"usage": "Usage", "sentiment": "Sentiment"}),)
+        (
+            (
+                "Activity",
+                {"usage": "Usage", "costs": "Costs", "sentiment": "Sentiment"},
+            ),
+        )
         if PERSISTED
         else ()
     ),
@@ -129,21 +133,11 @@ def _yes(flag: bool) -> str | None:
 
 
 async def _icons(db: Any, rows: list[ProviderReadiness]) -> dict[str, str]:
-    """Each provider's logo URL, where the catalog holds its org's mark. The
-    org is named by the provider's key or its label (``LLM7.io``); only a
-    persistence backend has the catalog."""
-    if not PERSISTED:
-        return {}
-    from app.services.ai.domains.llm.queries import org_icons
-
-    names = {r.provider.value: (r.provider.value, r.label) for r in rows}
-    stored = await org_icons(db, [n for pair in names.values() for n in pair])
-    found = {
-        key: next((n for n in pair if n in stored), None) for key, pair in names.items()
-    }
-    return {
-        key: f"{PARTIALS}/icons/{quote(n, safe='')}" for key, n in found.items() if n
-    }
+    """Each provider's logo URL. The org is named by the provider's key or
+    its label (``LLM7.io``)."""
+    return await mark_urls(
+        db, {r.provider.value: (r.provider.value, r.label) for r in rows}
+    )
 
 
 def _provider_row(row: ProviderReadiness, icon_url: str | None) -> dict[str, Any]:
@@ -177,14 +171,14 @@ async def usage_stats(**window: Any) -> dict[str, Any]:
     return await ai_service.get_usage_stats(**window)
 
 
-def _call(r: dict[str, Any]) -> dict[str, Any]:
+def _call(r: dict[str, Any], icon_url: str | None) -> dict[str, Any]:
     ms = r.get("duration_ms")
     return {
         "when": format_relative_time(r.get("timestamp")),
         "model": r.get("model"),
+        "icon_url": icon_url,
         "action": r.get("action"),
         "tokens": f"{r.get('input_tokens', 0):,} / {r.get('output_tokens', 0):,}",
-        "cost": f"${r.get('cost', 0):,.4f}",
         "outcome": status_cell("Ok", "ok")
         if r.get("success", True)
         else status_cell("Failed", "error"),
@@ -200,13 +194,18 @@ def _call(r: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def _usage(query: dict[str, str]) -> dict[str, Any]:
+async def _usage(db: Any, query: dict[str, str]) -> dict[str, Any]:
     window = query.get("window") if query.get("window") in WINDOWS else DEFAULT_WINDOW
     reach = WINDOWS[window][1]
     stats = await usage_stats(
         start_time=datetime.now(UTC) - reach if reach else None,
         recent_limit=RECENT_CALLS,
     )
+    # Each model's vendor, from the breakdown; the recent calls fall in the
+    # same window, so it places them too. One lookup for both tables.
+    vendor_of = {m["model_id"]: m.get("vendor") for m in stats.get("models", [])}
+    marks = await mark_urls(db, {v: (v,) for v in set(vendor_of.values()) if v})
+    icon_of = {model: marks.get(vendor or "") for model, vendor in vendor_of.items()}
     return {
         "chips": [
             {
@@ -224,21 +223,23 @@ async def _usage(query: dict[str, str]) -> dict[str, Any]:
                 "caption": f"{stats.get('input_tokens', 0):,} in, "
                 f"{stats.get('output_tokens', 0):,} out",
             },
-            {"label": "Cost", "value": dollars(stats.get("total_cost") or 0)},
             {"label": "Success rate", "value": f"{stats.get('success_rate', 100.0)}%"},
         ],
         "models": [
             {
                 "model": m.get("model_title") or m.get("model_id"),
+                "icon_url": icon_of.get(m.get("model_id")),
                 "vendor": label(m.get("vendor") or ""),
                 "requests": m.get("requests", 0),
                 "tokens": m.get("tokens", 0),
-                "cost": dollars(m.get("cost") or 0),
                 "share": f"{m.get('percentage', 0)}%",
             }
             for m in stats.get("models", [])
         ],
-        "recent": [_call(r) for r in stats.get("recent_activity", [])],
+        "recent": [
+            _call(r, icon_of.get(r.get("model")))
+            for r in stats.get("recent_activity", [])
+        ],
     }
 
 
@@ -264,15 +265,11 @@ async def _sentiment() -> dict[str, Any]:
                 "tone": "error" if spread.get("negative") else None,
             },
         ],
-        "chart": {
-            "labels": [s.title() for s in SENTIMENTS],
-            "series": [
-                {
-                    "label": "Conversations",
-                    "values": [spread.get(s, 0) for s in SENTIMENTS],
-                }
-            ],
-        },
+        "chart": chart(
+            [s.title() for s in SENTIMENTS],
+            "Conversations",
+            [spread.get(s, 0) for s in SENTIMENTS],
+        ),
         "negatives": [
             {
                 "summary": n.get("summary"),
@@ -289,9 +286,13 @@ async def section_context(
     if section == "overview":
         return await _overview(ai)
     if section == "usage":
-        return await _usage(dict(req.query))
+        return await _usage(req.db, dict(req.query))
     if section == "sentiment":
         return await _sentiment()
+    if section == "costs":
+        from . import overseer_ai_costs
+
+        return await overseer_ai_costs.section_context(req.db, req.query)
     if section == "agents":
         from . import overseer_ai_agents
 
@@ -306,6 +307,10 @@ async def section_context(
         if section == "knowledge":
             return await overseer_ai_rag.knowledge_context(req.query)
         return await overseer_ai_rag.search_context()
+    if section == "chat":
+        from . import overseer_ai_chat
+
+        return await overseer_ai_chat.surface_context()
     if section == "voice":
         from . import overseer_ai_voice
 

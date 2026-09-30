@@ -350,10 +350,10 @@ class SlashCommandHandler:
         from app.services.ai.domains.llm.llm_service import set_active_model
 
         result = await set_active_model(model)
-
-        if not result.success:
-            # Model not in catalog - try with force
+        if not result.success and result.vendor is None:  # not in catalog: force it
             result = await set_active_model(model, force=True)
+        if not result.success:
+            return CommandResult(success=False, message=result.message)
 
         from dotenv import load_dotenv
         load_dotenv(override=True)

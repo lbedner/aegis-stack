@@ -12,12 +12,12 @@ from fastapi.responses import HTMLResponse, Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.web_frontend import (
-    overseer_ai,
     overseer_ai_agents,
     overseer_ai_catalog,
     overseer_ai_rag,
     overseer_ai_voice,
 )
+from app.components.web_frontend.overseer_ai_common import PARTIALS, PERSISTED
 from app.components.web_frontend.rendering import (
     dialog,
     form_fields,
@@ -29,9 +29,12 @@ from app.core.db import get_async_db
 from app.models.user import User
 from app.services.auth.deps import get_optional_user
 
+from . import overseer_ai_chat
 from .overseer_auth import signed_in
 
-router = APIRouter(prefix=overseer_ai.PARTIALS)
+router = APIRouter(prefix=PARTIALS)
+# The chat surface's fragments, under this page's prefix.
+router.include_router(overseer_ai_chat.router)
 
 
 @router.get("/icons/{slug}")
@@ -44,7 +47,7 @@ async def provider_icon(
     """A provider's mark, for the browser to cache; the page only links to
     one the catalog holds, so a 404 here is a mark since removed."""
     signed_in(user)
-    if not overseer_ai.PERSISTED:
+    if not PERSISTED:
         raise HTTPException(status_code=404)
     from app.services.ai.domains.llm.queries import org_icons
 
@@ -200,7 +203,7 @@ async def fact_form(
         request,
         "pages/overseer/ai/_fact_edit.html",
         fact=await _fact(db, index),
-        url=f"{overseer_ai.PARTIALS}/facts/{index}",
+        url=f"{PARTIALS}/facts/{index}",
     )
 
 
@@ -249,7 +252,7 @@ async def confirm_forget(
         "pages/overseer/_confirm.html",
         title="Forget this fact?",
         body=fact["fact"],
-        url=f"{overseer_ai.PARTIALS}/facts/{index}",
+        url=f"{PARTIALS}/facts/{index}",
         label="Forget",
         method="delete",
         done="Fact forgotten",
@@ -298,7 +301,7 @@ async def confirm_delete_collection(
         "pages/overseer/_confirm.html",
         title=f"Delete {name}?",
         body="Every chunk in it goes; agents stop finding it. The source files stay.",
-        url=f"{overseer_ai.PARTIALS}/collections/{name}",
+        url=f"{PARTIALS}/collections/{name}",
         label="Delete",
         method="delete",
         done="Collection deleted",

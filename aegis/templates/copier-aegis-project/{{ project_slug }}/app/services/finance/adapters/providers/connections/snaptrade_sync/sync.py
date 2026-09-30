@@ -32,6 +32,7 @@ from app.services.finance.adapters.providers.snaptrade import (
 from app.services.finance.constants import Provider
 from app.services.finance.models import FinanceConnection
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ async def sync_snaptrade_connection(
     account_map = await _upsert_snaptrade_accounts(db, service, connection, accounts)
     result.accounts = len(account_map)
 
-    today = utcnow().date()
+    today = current_date()
     last_pull = (
         date.fromisoformat(connection.sync_cursor) if connection.sync_cursor else None
     )

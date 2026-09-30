@@ -6,7 +6,6 @@ from datetime import date
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.time import utcnow
 from app.services.finance.domains.ledger import accounts, valuations
 from app.services.finance.domains.ledger import queries as ledger_queries
 from app.services.finance.domains.planning.goals.meta import (
@@ -22,6 +21,7 @@ from app.services.finance.domains.planning.goals.reads import list_goals
 from app.services.finance.models import (
     FinanceAccount,
 )
+from app.services.finance.utils import current_date
 
 
 async def create_virtual_goal(
@@ -142,7 +142,7 @@ async def contribute_to_goal(
     await valuations.upsert_valuation(
         db,
         account_id=account_id,
-        as_of_date=when or utcnow().date(),
+        as_of_date=when or current_date(),
         value=(account.current_balance or 0) + amount,
         owner_user_id=owner_user_id,
         note="Goal contribution",

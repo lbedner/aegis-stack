@@ -7,7 +7,7 @@ valuation, then writes the daily snapshots the chart reads back.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -18,13 +18,13 @@ from app.services.finance.models import (
     FinanceNetWorthSnapshot,
     FinanceValuation,
 )
-from app.services.finance.utils import DEFAULT_CURRENCY
+from app.services.finance.utils import DEFAULT_CURRENCY, current_date
 
 _DEFAULT_WINDOW_DAYS = 35
 
 
 def _today() -> date:
-    return datetime.now(UTC).date()
+    return current_date()
 
 
 def _balance_points(

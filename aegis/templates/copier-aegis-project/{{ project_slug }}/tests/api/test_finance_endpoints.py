@@ -21,6 +21,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.models import FinanceCategory
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 
 
 @pytest.mark.asyncio
@@ -74,7 +75,7 @@ async def test_overview_composite_matches_granular_endpoints(
         classification="asset",
         current_balance=500_000,
     )
-    today = date.today()
+    today = current_date()
     await service.create_transaction(
         account_id=account.id,
         amount=-12_345,
@@ -420,7 +421,7 @@ async def test_net_worth_series_after_recompute(
 
     from app.services.finance.domains.ledger import networth
 
-    today = datetime.now(UTC).date()
+    today = current_date()
     # House with two valuations; Mortgage as a liability.
     house = authenticated_client.post(
         "/api/v1/finance/accounts",
@@ -869,7 +870,7 @@ async def test_recurring_list_includes_icon_and_staleness(
             # as "overdue != fresh", which reads as a staleness bug
             # rather than an expired fixture. The property being
             # asserted is "a date in the future" - so say that.
-            "next_expected_date": (date.today() + timedelta(days=14)).isoformat(),
+            "next_expected_date": (current_date() + timedelta(days=14)).isoformat(),
         },
     )
 
@@ -950,7 +951,7 @@ async def test_uncategorized_counts_the_source_apps_catchall_too(
             owner_user_id=acting_owner_user_id,
             account_id=account.id,
             amount=-1000,
-            txn_date=date.today(),
+            txn_date=current_date(),
             name=name,
         )
         txn.category_id = category.id if category is not None else None
@@ -989,7 +990,7 @@ async def test_uncategorized_q_filters_by_payee(
             owner_user_id=acting_owner_user_id,
             account_id=account.id,
             amount=-1000,
-            txn_date=date.today(),
+            txn_date=current_date(),
             name=name,
         )
     await async_db_session.commit()
@@ -1024,19 +1025,19 @@ async def test_uncategorized_from_filters_by_date(
         owner_user_id=acting_owner_user_id,
         account_id=account.id,
         amount=-1000,
-        txn_date=date.today() - timedelta(days=60),
+        txn_date=current_date() - timedelta(days=60),
         name="Old Charge",
     )
     await service.create_transaction(
         owner_user_id=acting_owner_user_id,
         account_id=account.id,
         amount=-1000,
-        txn_date=date.today(),
+        txn_date=current_date(),
         name="Recent Charge",
     )
     await async_db_session.commit()
 
-    cutoff = (date.today() - timedelta(days=7)).isoformat()
+    cutoff = (current_date() - timedelta(days=7)).isoformat()
     body = authenticated_client.get(
         "/api/v1/finance/uncategorized", params={"limit": 10, "from": cutoff}
     ).json()
@@ -1072,14 +1073,14 @@ async def test_uncategorized_account_ids_scopes_to_that_account(
         owner_user_id=acting_owner_user_id,
         account_id=checking.id,
         amount=-1000,
-        txn_date=date.today(),
+        txn_date=current_date(),
         name="Checking Charge",
     )
     await service.create_transaction(
         owner_user_id=acting_owner_user_id,
         account_id=savings.id,
         amount=-1000,
-        txn_date=date.today(),
+        txn_date=current_date(),
         name="Savings Charge",
     )
     await async_db_session.commit()
@@ -1117,7 +1118,7 @@ async def test_uncategorized_empty_account_ids_means_nothing(
         owner_user_id=acting_owner_user_id,
         account_id=account.id,
         amount=-1000,
-        txn_date=date.today(),
+        txn_date=current_date(),
         name="Checking Charge",
     )
     await async_db_session.commit()
@@ -1148,7 +1149,7 @@ async def test_categorize_transaction_sets_category(
         owner_user_id=acting_owner_user_id,
         account_id=account.id,
         amount=-1200,
-        txn_date=date.today(),
+        txn_date=current_date(),
         name="Trader Joes",
     )
     await async_db_session.commit()
@@ -1202,7 +1203,7 @@ async def test_auto_categorize_previews_without_writing(
         owner_user_id=acting_owner_user_id,
         account_id=account.id,
         amount=-1500,
-        txn_date=date.today(),
+        txn_date=current_date(),
         name="Trader Joes",
     )
     await async_db_session.commit()
@@ -1251,7 +1252,7 @@ async def test_top_payees_ranks_outflows_and_skips_transfers(
             owner_user_id=acting_owner_user_id,
             account_id=account.id,
             amount=amount,
-            txn_date=date.today(),
+            txn_date=current_date(),
             name=name,
         )
         txn.is_transfer = transfer
@@ -1287,7 +1288,7 @@ async def test_cashflow_splits_income_from_spend_and_skips_transfers(
         account_type="checking",
         classification="asset",
     )
-    today = date.today()
+    today = current_date()
     for amount, transfer in ((500_000, False), (-120_000, False), (-99_999, True)):
         txn = await service.create_transaction(
             owner_user_id=acting_owner_user_id,
@@ -1342,7 +1343,7 @@ async def test_categories_listing_reports_usage_and_keeps_unused(
             owner_user_id=acting_owner_user_id,
             account_id=account.id,
             amount=amount,
-            txn_date=date.today(),
+            txn_date=current_date(),
             name="row",
         )
         txn.category_id = category.id
@@ -1390,7 +1391,7 @@ async def test_recurring_projection_walks_balance_through_schedule(
         current_balance=100_000,  # $1,000
     )
     await service.get_or_create_currency("usd")
-    today = date.today()
+    today = current_date()
     store_owner = 0 if acting_owner_user_id is None else acting_owner_user_id
     for junk_name, junk_direction in (
         ("Dollar General", "outflow"),
@@ -1676,7 +1677,7 @@ async def test_budget_line_round_trip_and_summary(
         owner_user_id=acting_owner_user_id,
         account_id=account.id,
         amount=-6_000,
-        txn_date=date.today().replace(day=1),
+        txn_date=current_date().replace(day=1),
         category_id=groceries.id,
     )
     await async_db_session.commit()

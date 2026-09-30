@@ -121,8 +121,8 @@ class TestAddCommand:
     @pytest.mark.parametrize(
         ("backend", "launcher", "queue_marker"),
         [
-            ("taskiq", "uv run taskiq worker", "broker.task"),
-            ("dramatiq", "uv run dramatiq", "dramatiq.actor"),
+            ("taskiq", '"${RUN[@]}" taskiq worker', "broker.task"),
+            ("dramatiq", '"${RUN[@]}" dramatiq', "dramatiq.actor"),
         ],
     )
     def test_add_worker_with_backend_launches_that_backend(
@@ -202,7 +202,7 @@ class TestAddCommand:
         assert result.success, f"Command failed: {result.stderr}"
 
         entrypoint = (project_path / "scripts/entrypoint.sh").read_text()
-        assert "uv run taskiq worker" in entrypoint
+        assert '"${RUN[@]}" taskiq worker' in entrypoint
         assert "python -m arq" not in entrypoint
 
     def test_add_multiple_components(self, project_factory: ProjectFactory) -> None:

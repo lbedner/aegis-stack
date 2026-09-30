@@ -7,9 +7,7 @@ monthly_need / eta), all precomputed server-side.
 """
 
 from datetime import (
-    UTC,
     date,
-    datetime,
 )
 from typing import Any, Literal
 
@@ -33,6 +31,7 @@ from app.services.finance.schemas import (
     GoalUpdate,
 )
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 from app.services.shared.deps import get_owner_user_id
 
 router = APIRouter()
@@ -133,7 +132,7 @@ async def goal_response(
 
     stored = goal_metadata(account.metadata_)
     assert stored is not None  # callers only pass goal-wearing accounts
-    now = today or datetime.now(UTC).date()
+    now = today or current_date()
     if figures is None:
         figures = await service.goal_month_figures(
             owner_user_id=account.owner_user_id, today=now
@@ -197,7 +196,7 @@ async def preview_goal_target(
 
     scope = scope or []
     figures = await service.goal_month_figures(
-        owner_user_id=owner_user_id, today=datetime.now(UTC).date()
+        owner_user_id=owner_user_id, today=current_date()
     )
     return GoalTargetPreview(
         expenses=figures.expenses_for(tuple(scope)),
@@ -216,7 +215,7 @@ async def list_goals(
     """Every goal, virtual and linked alike (virtual goal accounts are
     hidden from /accounts; this is their front door)."""
     accounts = await service.list_goals(owner_user_id=owner_user_id)
-    today = datetime.now(UTC).date()
+    today = current_date()
     # One fetch of the month's figures for the page: every relative
     # target on it resolves against the same numbers, and the engine
     # below is handed them rather than querying for them again.
@@ -253,7 +252,7 @@ async def create_goal(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
-    today = datetime.now(UTC).date()
+    today = current_date()
     target_amount = await _new_goal_target(
         service, body, owner_user_id=owner_user_id, today=today
     )
@@ -331,7 +330,7 @@ async def update_goal(
         from app.services.finance.domains.planning.allocation import target_for_rule
 
         figures = await service.goal_month_figures(
-            owner_user_id=owner_user_id, today=datetime.now(UTC).date()
+            owner_user_id=owner_user_id, today=current_date()
         )
         stored_target = (
             target_for_rule(

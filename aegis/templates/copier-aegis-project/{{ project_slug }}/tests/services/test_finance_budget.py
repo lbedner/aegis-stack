@@ -16,6 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.finance.constants import PAUSE_INDEFINITE
 from app.services.finance.schemas import BudgetLineResponse, GoalAsk
 from app.services.finance.service import FinanceService
+from app.services.finance.utils import current_date
 from tests.services._finance_factories import seed_account as _account
 from tests.services._finance_factories import seed_category as _category
 from tests.services._finance_factories import seed_stream
@@ -1623,7 +1624,7 @@ class TestOneTimePlansGetTheirOwnGroup:
 class TestTheSummaryClockIsInjectable:
     """budget_summary was the one read API stuck on the real clock - which
     is exactly where the suite's time bombs lived: a pause that expires
-    against date.today() flips assertions on a calendar day, and tests
+    against the real date flips assertions on a calendar day, and tests
     could only dodge it with relative dates. The clock is a parameter
     now; this pins both sides of a pause boundary on fixed days."""
 
@@ -1664,7 +1665,7 @@ class TestOneOffsDoNotBecomeARate:
     def _month_in_window(months_back: int, day: int = 4) -> date:
         """A day inside one of the three FULL months before this one -
         the window the uncovered-spend rate measures."""
-        first = date.today().replace(day=1)
+        first = current_date().replace(day=1)
         month_index = first.month - 1 - months_back
         year = first.year + month_index // 12
         return date(year, month_index % 12 + 1, day)
@@ -1820,7 +1821,7 @@ class TestOneOffsDoNotBecomeARate:
         twelve months' uncovered rows all fall inside the window."""
         account = await _account(svc)
         cat = await _category(async_db_session, "Kids:Toys")
-        old = date.today().replace(day=15)
+        old = current_date().replace(day=15)
         for _ in range(20):
             old = (old.replace(day=1) - timedelta(days=1)).replace(day=15)
         await _txn(svc, account.id, -15_000, old, category_id=cat.id)

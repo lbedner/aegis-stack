@@ -128,4 +128,6 @@ LABEL maintainer="contact@aegis-stack.dev" \
       version="0.1.0" \
       description="Aegis Stack - Production-ready async Python foundation"
 
-ENTRYPOINT ["uv", "run", "/code/scripts/entrypoint.sh"]
+# The entrypoint runs each role's program directly from /opt/venv (already
+# on PATH and synced above), so no ``uv run`` stays resident as its parent.
+ENTRYPOINT ["/code/scripts/entrypoint.sh"]

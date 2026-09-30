@@ -70,61 +70,22 @@ class VendorResponse(BaseModel):
     icon_b64: str | None = None
 
 
-# The vendors the shipped provider layer can actually drive, mapped to
-# the settings field that unlocks each; None means keyless (local).
-# Catalog vendors outside this map cannot be called at all, so a
-# ``usable`` listing never shows them.
-_CALLABLE_VENDORS: dict[str, str | None] = {
-    "ollama": None,
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "google": "GOOGLE_API_KEY",
-    "groq": "GROQ_API_KEY",
-    "mistral": "MISTRAL_API_KEY",
-    "cohere": "COHERE_API_KEY",
-}
-
-# Brand domains, stated outright: the merchant-icon guess would coin
-# "mistral.com" and miss.
-_VENDOR_ICON_DOMAINS: dict[str, str] = {
-    "ollama": "ollama.com",
-    "openai": "openai.com",
-    "anthropic": "anthropic.com",
-    "google": "google.com",
-    "groq": "groq.com",
-    "mistral": "mistral.ai",
-    "cohere": "cohere.com",
-}
-
-
 def _usable_vendor_names() -> set[str]:
     """Vendors whose models the running install can answer with."""
     from app.core.config import settings
+    from app.services.ai.domains.llm.provider_management import usable_providers
 
-    return {
-        vendor
-        for vendor, key in _CALLABLE_VENDORS.items()
-        if key is None or getattr(settings, key, None)
-    }
+    return set(usable_providers(settings))
 
 
 async def _vendor_icons(names: list[str]) -> dict[str, str]:
-    """``{vendor: base64 png}`` via the merchant icon cache; misses
-    resolve on a later request once the background fill lands."""
-{% if include_finance %}
+    """``{vendor: base64 png}`` from the catalog's org marks (filled at
+    sync time from each brand's homepage)."""
     from app.core.db import get_async_session
-    from app.services.finance.domains.ledger.merchant_icon import icons_for_names
+    from app.services.ai.domains.llm.queries import org_icons
 
-    wanted = [n for n in names if n in _VENDOR_ICON_DOMAINS]
-    if not wanted:
-        return {}
     async with get_async_session() as session:
-        return await icons_for_names(
-            session, wanted, domains_by_name=_VENDOR_ICON_DOMAINS
-        )
-{% else %}
-    return {}
-{% endif %}
+        return await org_icons(session, names)
 
 
 class ModelResponse(BaseModel):

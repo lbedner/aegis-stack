@@ -1,0 +1,17 @@
+{# Every transaction, newest first; a row opens it in the drawer, where a
+   succeeded charge can be refunded. #}
+{% from "components/macros/layout.html" import card, drawer_sync %}
+{% from "components/macros/table.html" import data_table, pager as pager_links %}
+<div class="mb-4">{% with chips_label = "Status" %}{% include "pages/overseer/_chips.html" %}{% endwith %}</div>
+{% call card(None, id="payment-transactions") %}
+  {{ data_table([
+    {"key": "id", "label": "#", "kind": "link", "target": "#overseer-main"},
+    {"key": "type", "label": "Type"},
+    {"key": "status", "label": "Status", "kind": "status"},
+    {"key": "amount", "label": "Amount", "kind": "money", "align": "right"},
+    {"key": "description", "label": "Description"},
+    {"key": "created", "label": "Created"},
+  ], rows, empty="No transactions here") }}
+  {{ pager_links(pager, "#overseer-main") }}
+{% endcall %}
+{{ drawer_sync(open_drawer, drawer_param) }}

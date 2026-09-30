@@ -1,0 +1,11 @@
+{# The chunks a search returned (swapped in under the search form). #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% call card("Results", query, id="ai-rag-results") %}
+  {{ data_table([
+    {"key": "rank", "label": "#", "kind": "int"},
+    {"key": "score", "label": "Score", "align": "right"},
+    {"key": "source", "label": "Source", "kind": "code"},
+    {"key": "content", "label": "Text", "wrap": True},
+  ], rows, empty="Nothing matched") }}
+{% endcall %}

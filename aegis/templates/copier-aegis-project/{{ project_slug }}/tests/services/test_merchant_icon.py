@@ -107,7 +107,7 @@ class TestIconStore:
         async def fake_fetch(domains: list[str]) -> dict[str, str | None]:
             return {"netflix.com": "xyz789", "unknowable.com": None}
 
-        monkeypatch.setattr(merchant_icon, "_fetch_domains", fake_fetch)
+        monkeypatch.setattr(merchant_icon, "fetch_icons", fake_fetch)
         await merchant_icon._fill_icons(["netflix.com", "unknowable.com"])
 
         assert merchant_icon._CACHE["netflix.com"] == "xyz789"
@@ -141,7 +141,7 @@ class TestIconStore:
         async def fake_fetch(domains: list[str]) -> dict[str, str | None]:
             return {"lateblooming.com": "found-at-last"}
 
-        monkeypatch.setattr(merchant_icon, "_fetch_domains", fake_fetch)
+        monkeypatch.setattr(merchant_icon, "fetch_icons", fake_fetch)
         await merchant_icon._fill_icons(["lateblooming.com"])
 
         monkeypatch.setattr(merchant_icon, "_CACHE", {})

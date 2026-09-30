@@ -28,6 +28,8 @@ OWNERS = (
     "app.components.worker.broker",
     "app.components.worker.registry",
     "app.components.worker.runtime",
+    # Last: the shared cache claims whatever is left in its database.
+    "app.services.system.ui_cache",
 )
 
 # ponytail: a capped SCAN per database, not a full census; past it, counts

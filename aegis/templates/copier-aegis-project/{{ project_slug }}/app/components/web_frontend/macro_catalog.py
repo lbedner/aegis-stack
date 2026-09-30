@@ -27,7 +27,9 @@ FILES = {
 
 # Macros that act on the whole page (a second #dialog or toast region, an
 # out-of-band swap, a live request) are shown as code only.
-CODE_ONLY = frozenset({"dialog", "confirm", "toast_region", "oob", "pager"})
+CODE_ONLY = frozenset(
+    {"dialog", "drawer", "drawer_sync", "confirm", "toast_region", "oob", "pager"}
+)
 
 # An optional comment directly above ``{% macro name(...) %}``.
 _MACRO = re.compile(
@@ -69,6 +71,16 @@ EXAMPLES: dict[str, dict[str, str]] = {
         "dialog": """
             {# Mounted once by base.html; content arrives via hx_dialog(...). #}
             {{ dialog() }}""",
+        "drawer": """
+            {# Mounted once by base.html; a list opens it with drawer_sync. #}
+            {{ drawer() }}""",
+        "drawer_sync": """
+            {# In a list: the open item's partial, or none to close it. #}
+            {{ drawer_sync("/partials/overseer/documents/12/drawer", "document") }}""",
+        "avatar": """
+            <span class="inline-flex items-center gap-3">
+              {{ avatar("Anthropic") }} {{ avatar("OpenAI") }} {{ avatar("Groq") }}
+            </span>""",
         "theme_toggle": "{{ theme_toggle() }}",
         "modal_scrim": """
             <div x-data="{ open: false }">

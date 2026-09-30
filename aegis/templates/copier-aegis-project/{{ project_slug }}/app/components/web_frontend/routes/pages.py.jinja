@@ -28,7 +28,40 @@ from app.components.web_frontend.routes.partials import (
 from app.components.web_frontend.routes.partials import (
     overseer_storage as overseer_storage_partials,
 )
-from app.components.web_frontend import overseer_patterns, overseer_redis, overseer_worker
+from app.components.web_frontend.routes.partials import (
+    overseer_server as overseer_server_partials,
+)
+{%- if include_blog %}
+from app.components.web_frontend.routes.partials import (
+    overseer_blog as overseer_blog_partials,
+)
+{%- endif %}
+{%- if include_documents %}
+from app.components.web_frontend.routes.partials import (
+    overseer_documents as overseer_documents_partials,
+)
+{%- endif %}
+{%- if include_comms %}
+from app.components.web_frontend.routes.partials import (
+    overseer_comms as overseer_comms_partials,
+)
+{%- endif %}
+{%- if include_payment %}
+from app.components.web_frontend.routes.partials import (
+    overseer_payment as overseer_payment_partials,
+)
+{%- endif %}
+{%- if include_ai %}
+from app.components.web_frontend.routes.partials import (
+    overseer_ai as overseer_ai_partials,
+)
+{%- endif %}
+from app.components.web_frontend import (
+    overseer_connections,
+    overseer_patterns,
+    overseer_redis,
+    overseer_worker,
+)
 from app.components.web_frontend.overseer_events import health_events
 from app.components.web_frontend.rendering import render, templates
 from app.core.audit import AuditEmitter, get_audit
@@ -156,6 +189,22 @@ router.include_router(overseer_auth_partials.router)
 router.include_router(overseer_scheduler_partials.router)
 router.include_router(overseer_redis_partials.router)
 router.include_router(overseer_storage_partials.router)
+router.include_router(overseer_server_partials.router)
+{%- if include_blog %}
+router.include_router(overseer_blog_partials.router)
+{%- endif %}
+{%- if include_documents %}
+router.include_router(overseer_documents_partials.router)
+{%- endif %}
+{%- if include_comms %}
+router.include_router(overseer_comms_partials.router)
+{%- endif %}
+{%- if include_payment %}
+router.include_router(overseer_payment_partials.router)
+{%- endif %}
+{%- if include_ai %}
+router.include_router(overseer_ai_partials.router)
+{%- endif %}
 
 
 @router.get("/overseer/events", include_in_schema=False)
@@ -180,6 +229,17 @@ async def overseer_worker_queues(
 ) -> StreamingResponse:
     """The Worker page's queues, while that page is open."""
     return _event_stream(overseer_worker.queues_events())
+
+
+@router.get(overseer_connections.EVENTS, include_in_schema=False)
+async def overseer_server_connections(
+    request: Request,
+    _authenticated: None = Depends(_authenticate_overseer_stream),
+) -> StreamingResponse:
+    """The Server page's connections table, filters and all, while it is open."""
+    return _event_stream(
+        overseer_connections.connections_events(dict(request.query_params))
+    )
 
 
 def _event_stream(events: AsyncIterator[str]) -> StreamingResponse:

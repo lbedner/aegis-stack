@@ -1,0 +1,18 @@
+{# The refreshed part of Server > Connections: the figures and the table. #}
+{% from "components/macros/layout.html" import card, stats_strip %}
+{% from "components/macros/table.html" import data_table %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="connection-figures") }}
+  {% call card(None, id="server-connections") %}
+    {{ data_table([
+      {"key": "kind", "label": "Kind", "kind": "status"},
+      {"key": "path", "label": "Path", "kind": "link", "target": "#overseer-main"},
+      {"key": "client", "label": "Client"},
+      {"key": "state", "label": "State", "kind": "status"},
+      {"key": "reconnects", "label": "Reconnects", "kind": "int", "align": "right"},
+      {"key": "lasted", "label": "Up for", "align": "right"},
+      {"key": "sent", "label": "Sent", "kind": "int", "align": "right"},
+      {"key": "received", "label": "Received", "kind": "int", "align": "right"},
+    ], rows, empty="No WebSockets or event streams here") }}
+  {% endcall %}
+</div>

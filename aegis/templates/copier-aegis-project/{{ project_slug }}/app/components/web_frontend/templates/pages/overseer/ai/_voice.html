@@ -1,0 +1,43 @@
+{# Voice: what speaks and what listens (set in .env), every voice of the
+   speaking provider with a play button, a sentence spoken in a chosen
+   voice, and a file transcribed. Audio loads only when played. #}
+{% from "components/macros/layout.html" import card, facts %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import field, primary_button %}
+{% macro play(value) %}<audio controls preload="none" src="{{ value }}" class="h-8 w-56"></audio>{% endmacro %}
+<div class="space-y-4">
+  <div class="grid gap-4 lg:grid-cols-2">
+    {% call card("Speaking", "text to speech", id="ai-voice-speaking") %}{{ facts(speaking) }}{% endcall %}
+    {% call card("Listening", "speech to text", id="ai-voice-listening") %}{{ facts(listening) }}{% endcall %}
+  </div>
+  {% call card("Voices", id="ai-voices") %}
+    {{ data_table([
+      {"key": "name", "label": "Voice"},
+      {"key": "tone", "label": "Tone"},
+      {"key": "gender", "label": "Gender"},
+      {"key": "description", "label": "Description", "wrap": True},
+      {"key": "preview", "label": "Listen", "render": play},
+    ], voices, empty="This provider lists no voices") }}
+  {% endcall %}
+  <div class="grid gap-4 lg:grid-cols-2">
+    {% call card("Say something", id="ai-voice-try") %}
+    {# The voice API's preview route speaks any text; the player just points at it. #}
+    <div x-data="{ voice: '{{ current_voice }}', text: '', src: '' }" data-preview-base="{{ preview_base }}" class="space-y-3">
+      {% call field("Voice") %}<select name="voice" x-model="voice" class="select select-sm select-bordered block w-full mt-1">
+        {% for v in voice_options %}<option value="{{ v.id }}" {% if v.id == current_voice %}selected{% endif %}>{{ v.name }}</option>{% endfor %}
+      </select>{% endcall %}
+      {% call field("Text") %}<input type="text" x-model="text" placeholder="Hello from the Overseer" class="input input-sm input-bordered w-full mt-1">{% endcall %}
+      <button type="button" class="px-2.5 py-1 text-xs rounded border border-aegis-teal text-aegis-text hover:bg-aegis-teal/10"
+              @click="src = $el.closest('[data-preview-base]').dataset.previewBase + voice + '?text=' + encodeURIComponent(text || 'Hello from the Overseer')">Speak</button>
+      <audio x-show="src" :src="src" controls autoplay class="w-full"></audio>
+    </div>
+    {% endcall %}
+    {% call card("Transcribe a file", id="ai-voice-transcribe") %}
+    <form hx-post="{{ transcribe_url }}" hx-encoding="multipart/form-data" hx-target="#ai-voice-result" hx-swap="innerHTML" class="space-y-3">
+      <input type="file" name="audio" accept="audio/*" required class="file-input file-input-sm w-full">
+      {{ primary_button("Transcribe", "submit") }}
+    </form>
+    <div id="ai-voice-result" class="mt-3"></div>
+    {% endcall %}
+  </div>
+</div>

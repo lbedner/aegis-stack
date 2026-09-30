@@ -26,6 +26,20 @@ from app.services.ai.models.llm import (
 )
 
 
+@pytest.fixture(autouse=True)
+def no_provider_marks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests are about the catalog sync; the provider-logo step that
+    ends it fetches from the network and has its own tests
+    (``test_provider_marks.py``)."""
+
+    async def skip(session: Session) -> int:
+        return 0
+
+    monkeypatch.setattr(
+        "app.services.ai.domains.llm.etl.llm_sync_service.attach_provider_marks", skip
+    )
+
+
 @pytest.fixture
 def sync_db_engine(engine: Engine) -> Engine:
     """The root conftest's schema-attached engine.

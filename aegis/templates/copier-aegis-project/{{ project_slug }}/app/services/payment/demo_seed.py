@@ -18,10 +18,10 @@ Run via the generated project's CLI:
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 import hashlib
 import logging
 import string
-from datetime import datetime, timedelta
 
 from sqlalchemy import delete
 from sqlmodel import select
@@ -48,7 +48,6 @@ logger = logging.getLogger(__name__)
 # Marker stored on every fake customer's ``metadata_`` so the sentinel
 # check doesn't depend on any specific opaque ID.
 _FAKE_MARKER_KEY = "_aegis_fake"
-
 
 
 def _ago(days: int = 0, hours: int = 0, minutes: int = 0) -> datetime:
@@ -324,9 +323,11 @@ async def seed_fake_data(
         current_period_start=_ago(days=20),
         current_period_end=_ahead(days=10),
     )
+    # Diana, not Alice: one active-or-trialing subscription per customer
+    # (``uq_payment_subscription_active_per_customer``).
     add_sub(
-        "alice_enterprise_trial",
-        customer_id=alice.id,
+        "diana_enterprise_trial",
+        customer_id=diana.id,
         plan_name="Enterprise",
         status=SubscriptionStatus.TRIALING,
         current_period_start=_ago(days=3),

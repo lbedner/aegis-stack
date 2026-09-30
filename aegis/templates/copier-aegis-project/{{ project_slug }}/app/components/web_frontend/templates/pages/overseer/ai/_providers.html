@@ -1,0 +1,19 @@
+{# Every provider and what it needs: the SDK installed, and a key where it
+   takes one (named by its setting). The same answer ``ai providers``
+   prints. Keys are set in .env for now. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% macro get_key(value) %}<a href="{{ value.url }}" target="_blank" rel="noopener" class="text-aegis-teal hover:underline">{{ value.label }}</a>{% endmacro %}
+{% call card(None, id="ai-providers") %}
+  {{ data_table([
+    {"key": "name", "label": "Provider", "kind": "avatar"},
+    {"key": "status", "label": "Status", "kind": "status"},
+    {"key": "key", "label": "Key setting", "kind": "code"},
+    {"key": "key_set", "label": "Key set"},
+    {"key": "free", "label": "Free tier"},
+    {"key": "streaming", "label": "Streaming"},
+    {"key": "tools", "label": "Tools"},
+    {"key": "vision", "label": "Vision"},
+    {"key": "get_key", "label": "", "render": get_key},
+  ], rows, empty="No providers") }}
+{% endcall %}

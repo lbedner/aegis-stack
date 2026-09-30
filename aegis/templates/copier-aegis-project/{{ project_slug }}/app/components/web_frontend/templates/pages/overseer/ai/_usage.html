@@ -1,0 +1,29 @@
+{# What the AI service has spent for the chosen window: totals, each
+   model's share, and the recent calls (a call expands to its detail). #}
+{% from "components/macros/layout.html" import card, facts, stats_strip %}
+{% from "components/macros/table.html" import data_table %}
+{% macro call_detail(row) %}{{ facts(row.detail) }}{% endmacro %}
+<div class="space-y-4">
+  <div>{% with chips_label = "Window" %}{% include "pages/overseer/_chips.html" %}{% endwith %}</div>
+  {{ stats_strip(figures, id="ai-usage-figures") }}
+  {% call card("By model", id="ai-models") %}
+    {{ data_table([
+      {"key": "model", "label": "Model"},
+      {"key": "vendor", "label": "Vendor"},
+      {"key": "requests", "label": "Requests", "kind": "int", "align": "right"},
+      {"key": "tokens", "label": "Tokens", "kind": "int", "align": "right"},
+      {"key": "cost", "label": "Cost", "align": "right"},
+      {"key": "share", "label": "Share", "align": "right"},
+    ], models, empty="No model calls in this window") }}
+  {% endcall %}
+  {% call card("Recent calls", id="ai-recent") %}
+    {{ data_table([
+      {"key": "when", "label": "When"},
+      {"key": "model", "label": "Model"},
+      {"key": "action", "label": "Action"},
+      {"key": "tokens", "label": "Tokens in / out", "align": "right"},
+      {"key": "cost", "label": "Cost", "align": "right"},
+      {"key": "outcome", "label": "Outcome", "kind": "status"},
+    ], recent, empty="No calls in this window", detail=call_detail) }}
+  {% endcall %}
+</div>

@@ -1,0 +1,17 @@
+{# Ask the index a question and see the chunks it hands back, ranked, with
+   the score and source of each: what an agent would retrieve. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/form.html" import field, select, text_input, primary_button %}
+{% call card("Search", id="ai-rag-search") %}
+  {% if collections %}
+  <form hx-post="{{ search_url }}" hx-target="#ai-rag-answer" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+    <div class="w-48">{% call field("Collection") %}{{ select("collection", collections, blank=None, block=True) }}{% endcall %}</div>
+    <div class="flex-1 min-w-64">{% call field("Question") %}{{ text_input("query", None, "What does the index know about...", required=True) }}{% endcall %}</div>
+    <div class="w-36">{% call field("Results") %}{{ select("top_k", top_k, "5", blank=None, block=True) }}{% endcall %}</div>
+    {{ primary_button("Search", "submit") }}
+  </form>
+  {% else %}
+  <p class="text-sm text-aegis-muted">Nothing is indexed yet, so there is nothing to search.</p>
+  {% endif %}
+{% endcall %}
+<div id="ai-rag-answer" class="mt-4"></div>

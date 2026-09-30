@@ -9,11 +9,11 @@ one.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TypeVar
 
-from sqlmodel import Session, SQLModel, func, select
+from sqlmodel import Session, SQLModel, col, func, select
 
 from app.services.ai.models.llm import (
     LargeLanguageModel,
@@ -39,6 +39,15 @@ def llm_by_model_id(session: Session, model_id: str) -> LargeLanguageModel | Non
 
 def org_by_slug(session: Session, slug: str) -> LLMOrg | None:
     return session.exec(select(LLMOrg).where(LLMOrg.slug == slug)).first()
+
+
+def orgs_without_marks(session: Session, slugs: Iterable[str]) -> Sequence[LLMOrg]:
+    """The named orgs that have no logo yet (the provider marks fill)."""
+    return session.exec(
+        select(LLMOrg).where(
+            col(LLMOrg.slug).in_(set(slugs)), col(LLMOrg.icon_b64).is_(None)
+        )
+    ).all()
 
 
 def org_role(session: Session, org_id: int, role: str) -> LLMOrgRole | None:

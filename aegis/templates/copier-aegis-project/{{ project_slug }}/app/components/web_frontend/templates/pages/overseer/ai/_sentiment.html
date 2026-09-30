@@ -1,0 +1,25 @@
+{# How conversations felt, scored by the sentiment job: the spread, the
+   average, and the latest conversations that went badly. #}
+{% from "components/macros/layout.html" import card, chart_panel, stats_strip %}
+{% from "components/macros/feedback.html" import empty_state %}
+<div id="ai-sentiment" class="space-y-4">
+  {% if not enabled %}
+  {{ empty_state("Sentiment scoring is off", "Set AI_SENTIMENT_ENABLED=true to score conversations.") }}
+  {% elif not total %}
+  {{ empty_state("Nothing scored yet", "Conversations are scored by the sentiment job after they go quiet.") }}
+  {% else %}
+  {{ stats_strip(figures, id="ai-sentiment-figures") }}
+  <div class="grid gap-4 lg:grid-cols-2">
+    {{ chart_panel("ai-sentiment", "Sentiment", "doughnut", chart) }}
+    {% call card("Recent negatives", id="ai-negatives") %}
+      {% if negatives %}
+      <ul class="space-y-3 text-sm">
+        {% for n in negatives %}
+        <li><p class="text-aegis-text">{{ n.summary or "No summary" }}</p><p class="text-xxs text-aegis-muted">{{ n.when }}</p></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="text-xs text-aegis-muted">None lately.</p>{% endif %}
+    {% endcall %}
+  </div>
+  {% endif %}
+</div>

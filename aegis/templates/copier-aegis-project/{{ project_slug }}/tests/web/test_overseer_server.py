@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.web_frontend import overseer_server
+from app.components.web_frontend import overseer_connections, overseer_server
 from app.services.system.models import ComponentStatus
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import sign_in, status_with
@@ -87,6 +87,8 @@ class TestSections:
             "Overview",
             "Performance",
             "Traffic",
+            "Cache",
+            "Connections",
             "Load Tests",
             "Routes",
             "Lifecycle",
@@ -301,3 +303,210 @@ class TestLoadTests:
 
         monkeypatch.setattr(overseer_server, "list_recent_runs", broken)
         one(_get(signed_in, "load-tests"), "[data-empty]")
+
+
+class TestCache:
+    """What is in the cache, by family: how much room each takes and
+    whether it earns it."""
+
+    def _view(self) -> dict[str, Any]:
+        from app.core.cache import CacheEntry, CacheStats
+        from app.services.system import ui_cache
+
+        return {"error": None} | ui_cache.summarize(
+            "redis",
+            [
+                CacheEntry("insights:project:1", 4000, 200),
+                CacheEntry("llm:price:gpt-4o", 100, 50),
+            ],
+            False,
+            {"insights:project": CacheStats(hits=3, misses=1, sets=1)},
+        )
+
+    def _serve(self, monkeypatch: pytest.MonkeyPatch, view: dict[str, Any]) -> None:
+        from app.services.system import ui_cache
+
+        async def load() -> dict[str, Any]:
+            return view
+
+        monkeypatch.setattr(ui_cache, "load", load)
+
+    def test_families_rank_by_room_with_hit_rates(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch, self._view())
+        rows = select(_get(signed_in, "cache"), "#cache-families tbody tr")
+        assert text(select(rows[0], "td")[0]) == "insights:project"
+        assert "75.0%" in text(rows[0])
+
+    def test_the_largest_keys_are_listed(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch, self._view())
+        first = select(_get(signed_in, "cache"), "#cache-largest tbody tr")[0]
+        assert "insights:project:1" in text(first)
+
+    def test_an_unreadable_cache_says_why(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch, {"error": "redis down", "backend": "redis"})
+        assert "redis down" in text(one(_get(signed_in, "cache"), "[role=alert]"))
+
+
+class TestConnections:
+    """Every WebSocket and event stream, open and recently closed: where it
+    goes, who holds it, its state, and a timeline in the drawer. The table
+    refreshes itself while the page is open."""
+
+    PAGE = "/overseer/components/backend/connections"
+
+    def _records(self) -> list[dict[str, Any]]:
+        from datetime import UTC, datetime, timedelta
+
+        now = datetime.now(UTC)
+
+        def record(
+            rid: str, kind: str, path: str, state: str, **extra: Any
+        ) -> dict[str, Any]:
+            return {
+                "id": rid,
+                "kind": kind,
+                "path": path,
+                "client": "172.18.0.1",
+                "agent": "Firefox",
+                "first_opened": now - timedelta(hours=2),
+                "opened_at": now - timedelta(minutes=5),
+                "closed_at": None if state == "up" else now - timedelta(minutes=1),
+                "state": state,
+                "ended": None if state == "up" else "client went away",
+                "reconnects": 0,
+                "sent": 40,
+                "received": 12,
+                "events": [(now - timedelta(hours=2), "connected", None)],
+            } | extra
+
+        return [
+            record(
+                "ws1",
+                "websocket",
+                "/dashboard/ws",
+                "up",
+                reconnects=2,
+                events=[
+                    (now - timedelta(hours=2), "connected", None),
+                    (now - timedelta(hours=1), "dropped", "client went away"),
+                    (now - timedelta(hours=1), "reconnected", "after 3s"),
+                ],
+            ),
+            record("sse1", "sse", "/overseer/events", "reconnecting"),
+            record("sse2", "sse", "/api/v1/jobs/events", "closed"),
+        ]
+
+    def _serve(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        records = self._records()
+
+        async def history() -> list[dict[str, Any]]:
+            return records
+
+        async def find(rid: str) -> dict[str, Any] | None:
+            return next((r for r in records if r["id"] == rid), None)
+
+        monkeypatch.setattr(overseer_connections, "history", history)
+        monkeypatch.setattr(overseer_connections, "find", find)
+
+    def _paths(self, html: str) -> list[str]:
+        return [
+            text(select(r, "td")[1])
+            for r in select(html, "#server-connections tbody tr")
+        ]
+
+    def test_open_is_the_default_and_counts_reconnecting(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch)
+        assert self._paths(_get(signed_in, "connections")) == [
+            "/dashboard/ws",
+            "/overseer/events",
+        ]
+
+    def test_the_filters_narrow_by_state_and_kind(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch)
+        closed = signed_in.get(f"{self.PAGE}?state=closed").text
+        assert self._paths(closed) == ["/api/v1/jobs/events"]
+        sockets = signed_in.get(f"{self.PAGE}?state=all&kind=websocket").text
+        assert self._paths(sockets) == ["/dashboard/ws"]
+
+    def test_a_row_shows_its_state_and_reconnects(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch)
+        first = select(_get(signed_in, "connections"), "#server-connections tbody tr")[
+            0
+        ]
+        assert "Up" in text(first) and "WebSocket" in text(first)
+        assert text(select(first, "td")[4]) == "2"
+
+    def test_the_figures_count_each_state(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch)
+        figures = {
+            text(one(cell, "dt")): text(select(cell, "dd")[0])
+            for cell in select(
+                _get(signed_in, "connections"), "#connection-figures > div"
+            )
+        }
+        assert (figures["Up"], figures["Reconnecting"], figures["Closed"]) == (
+            "1",
+            "1",
+            "1",
+        )
+
+    def test_a_connection_opens_its_timeline_in_the_drawer(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch)
+        link = one(
+            select(_get(signed_in, "connections"), "#server-connections tbody tr")[0],
+            "a",
+        )
+        assert "connection=ws1" in link.get("href")
+        drawer = signed_in.get("/partials/overseer/server/connections/ws1/drawer")
+        assert drawer.status_code == 200, drawer.text
+        steps = [text(li) for li in select(drawer.text, "#connection-timeline li")]
+        assert len(steps) == 3 and "reconnected" in steps[2] and "after 3s" in steps[2]
+
+    def test_the_table_refreshes_itself_with_its_filters(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch)
+        live = one(signed_in.get(f"{self.PAGE}?state=closed").text, "#connections-live")
+        assert live.get("sse-connect").startswith(overseer_connections.EVENTS)
+        assert "state=closed" in live.get("sse-connect")
+
+    async def test_a_frame_is_the_filtered_table(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch)
+        [frame] = [
+            f
+            async for f in overseer_connections.connections_events(
+                {"state": "closed"}, max_frames=1
+            )
+        ]
+        assert frame.startswith(f"event: {overseer_connections.EVENT}")
+        assert "/api/v1/jobs/events" in frame and "/dashboard/ws" not in frame
+
+    def test_the_stream_needs_a_signed_in_user(self, client: TestClient) -> None:
+        assert client.get(overseer_connections.EVENTS).status_code == 401
+
+    def test_nothing_remembered_says_so(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def history() -> list[dict[str, Any]]:
+            return []
+
+        monkeypatch.setattr(overseer_connections, "history", history)
+        one(_get(signed_in, "connections"), "[data-empty]")

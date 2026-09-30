@@ -442,7 +442,13 @@ class TestAccountScoping:
         assert stats.income_count == 2
 
 
+JULY_END = date(2026, 7, 31)
+
+
 class TestParseBudgetGoal:
+    """The 90-day lookback reads an injected day, never the real clock:
+    July purchases fell out of the window on the calendar, not the code."""
+
     @pytest.mark.asyncio
     async def test_matches_payee_with_default_fifty_percent(
         self, svc: FinanceService
@@ -454,7 +460,7 @@ class TestParseBudgetGoal:
             )
 
         result = await svc.parse_budget_goal(
-            owner_user_id=1, text="I wanna cut back on Starbucks"
+            owner_user_id=1, today=JULY_END, text="I wanna cut back on Starbucks"
         )
         assert result.matched is True
         assert result.target_type == "payee"
@@ -474,7 +480,7 @@ class TestParseBudgetGoal:
             await _txn(svc, checking.id, -1_000, date(2026, 7, day), name="Starbucks")
 
         result = await svc.parse_budget_goal(
-            owner_user_id=1, text="cut Starbucks to 30%"
+            owner_user_id=1, today=JULY_END, text="cut Starbucks to 30%"
         )
         assert result.matched is True
         assert result.fraction == 0.30
@@ -496,7 +502,7 @@ class TestParseBudgetGoal:
             )
 
         result = await svc.parse_budget_goal(
-            owner_user_id=1, text="I need to cut back on groceries"
+            owner_user_id=1, today=JULY_END, text="I need to cut back on groceries"
         )
         assert result.matched is True
         assert result.target_type == "category"
@@ -507,7 +513,7 @@ class TestParseBudgetGoal:
         self, svc: FinanceService
     ) -> None:
         result = await svc.parse_budget_goal(
-            owner_user_id=1, text="something entirely unrelated"
+            owner_user_id=1, today=JULY_END, text="something entirely unrelated"
         )
         assert result.matched is False
         assert result.category_id is None

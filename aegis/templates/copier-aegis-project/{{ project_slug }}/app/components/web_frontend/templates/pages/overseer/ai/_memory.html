@@ -1,0 +1,29 @@
+{# What agents are handed: the memory modules they opt into (a row opens
+   its editor and a preview of what it renders) and the facts saved about
+   the user, corrected or forgotten here. #}
+{% from "components/macros/layout.html" import card, drawer_sync %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
+{% macro fact_actions(row) -%}
+<span class="flex items-center justify-end gap-2">{{ action("Correct", row.edit) }}{{ action("Forget", row.forget, "danger") }}</span>
+{%- endmacro %}
+<div class="space-y-4">
+  {% call card("Memory modules", id="ai-modules") %}
+    {{ data_table([
+      {"key": "name", "label": "Module", "kind": "link", "target": "#overseer-main"},
+      {"key": "category", "label": "Category"},
+      {"key": "source", "label": "Content", "kind": "code"},
+      {"key": "priority", "label": "Priority", "kind": "int", "align": "right"},
+      {"key": "tokens", "label": "Tokens", "kind": "int", "align": "right"},
+      {"key": "state", "label": "State", "kind": "status"},
+    ], modules, empty="No memory modules") }}
+  {% endcall %}
+  {% call card("Saved facts", "what the user told it", id="ai-facts") %}
+    {{ data_table([
+      {"key": "fact", "label": "Fact", "wrap": True},
+      {"key": "category", "label": "Category"},
+      {"key": "saved", "label": "Saved"},
+    ], facts, actions=fact_actions, empty="Nothing saved yet") }}
+  {% endcall %}
+</div>
+{{ drawer_sync(open_drawer, drawer_param) }}

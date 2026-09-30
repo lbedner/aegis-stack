@@ -150,7 +150,46 @@ class TestTriggers:
 class TestLocation:
     def test_reads_where_a_navigating_response_sends_the_page(self) -> None:
         class Response:
-            headers = {"HX-Location": '{"path": "/accounts/3", "target": "#app-content"}'}
+            headers = {
+                "HX-Location": '{"path": "/accounts/3", "target": "#app-content"}'
+            }
 
         assert location(Response()) == "/accounts/3"
 
+
+class TestWithQuery:
+    """A link that keeps a list's filters: empty ones dropped, a
+    multi-select's values repeated."""
+
+    def test_drops_empty_values(self) -> None:
+        from app.components.web_frontend.rendering import with_query
+
+        assert with_query("/p", q="haiku", usable=None) == "/p?q=haiku"
+        assert with_query("/p", q="") == "/p"
+
+    def test_repeats_a_list(self) -> None:
+        from app.components.web_frontend.rendering import with_query
+
+        assert with_query("/p", vendor=["openai", "anthropic"]) == (
+            "/p?vendor=openai&vendor=anthropic"
+        )
+
+
+class TestFormNumber:
+    """An editor's optional number: blank is unset, a number is a number,
+    anything else is an error that names the field."""
+
+    def test_blank_is_none_and_numbers_parse(self) -> None:
+        from app.components.web_frontend.rendering import form_number
+
+        assert form_number("", "Priority") is None
+        assert form_number(" 5 ", "Priority") == 5
+        assert form_number("0.3", "Temperature", float) == 0.3
+
+    def test_a_non_number_names_the_field(self) -> None:
+        import pytest
+
+        from app.components.web_frontend.rendering import form_number
+
+        with pytest.raises(ValueError, match="Priority must be a whole number"):
+            form_number("high", "Priority")

@@ -7,7 +7,7 @@
    ``render()`` in rendering.py and the two layouts under layouts/).
 #}
 {% from "components/macros/feedback.html" import toast_region %}
-{% from "components/macros/layout.html" import theme_toggle, dialog %}
+{% from "components/macros/layout.html" import theme_toggle, dialog, drawer %}
 <!DOCTYPE html>
 <html lang="en" data-theme="aegis-dark">
 <head>
@@ -80,6 +80,7 @@
 
   {{ toast_region() }}
   {{ dialog() }}
+  {{ drawer() }}
 
   <script src="{{ static('js/app.js') }}"></script>
   <script src="{{ static('js/charts.js') }}"></script>

@@ -1,0 +1,16 @@
+{# The agent registry: each agent's category, model pin and state; a row
+   opens its definition in the drawer. #}
+{% from "components/macros/layout.html" import card, drawer_sync %}
+{% from "components/macros/table.html" import data_table %}
+{% call card(None, id="ai-agents") %}
+  {{ data_table([
+    {"key": "name", "label": "Agent", "kind": "link", "target": "#overseer-main"},
+    {"key": "slug", "label": "Slug", "kind": "code"},
+    {"key": "category", "label": "Category"},
+    {"key": "model", "label": "Model", "kind": "code"},
+    {"key": "state", "label": "State", "kind": "status"},
+    {"key": "tools", "label": "Tools", "kind": "int", "align": "right"},
+    {"key": "modules", "label": "Modules", "kind": "int", "align": "right"},
+  ], rows, empty="No agents in the registry") }}
+{% endcall %}
+{{ drawer_sync(open_drawer, drawer_param) }}

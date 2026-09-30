@@ -1,0 +1,19 @@
+{# One connection in the drawer: what it is, and its timeline of opens,
+   drops and reconnects. #}
+{% from "components/macros/layout.html" import badge, card, dialog_title, facts as fact_list %}
+<div class="space-y-4">
+  {{ dialog_title(record.path) }}
+  <div class="flex items-center gap-3">{{ badge(kind.label, kind.tone) }}{{ badge(state.label, state.tone) }}</div>
+  {% call card("Details") %}{{ fact_list(facts) }}{% endcall %}
+  {% call card("Timeline", (timeline|length) ~ " events") %}
+  <ol id="connection-timeline" class="space-y-2 text-sm">
+    {% for step in timeline %}
+    <li class="flex items-baseline gap-3">
+      <span class="font-mono text-xs text-aegis-muted tabular-nums">{{ step.when }}</span>
+      <span class="{{ 'text-error' if step.what == 'dropped' else 'text-aegis-text' }}">{{ step.what }}</span>
+      {% if step.detail %}<span class="text-xs text-aegis-muted">{{ step.detail }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% endcall %}
+</div>

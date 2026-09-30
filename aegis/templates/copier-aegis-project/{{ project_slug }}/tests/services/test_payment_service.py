@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.services.payment.constants import (
     DisputeStatus,
     ProviderKeys,
@@ -20,7 +22,6 @@ from app.services.payment.models import (
     PaymentSubscription,
     PaymentTransaction,
 )
-from app.services.payment.service import PaymentService
 from app.services.payment.providers.base import (
     CheckoutResult,
     CustomerResult,
@@ -28,7 +29,7 @@ from app.services.payment.providers.base import (
     RefundResult,
     WebhookEvent,
 )
-from sqlmodel.ext.asyncio.session import AsyncSession
+from app.services.payment.service import PaymentService
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1853,3 +1854,13 @@ class TestGetRevenueTimeseries:
         service = PaymentService(async_db_session)
         series = await service.get_revenue_timeseries(days=0)
         assert len(series) == 1
+
+
+async def test_the_demo_seed_loads(async_db_session: AsyncSession) -> None:
+    """``payment seed`` fills every UI state without breaking the one
+    active-or-trialing subscription per customer rule."""
+    from app.services.payment.demo_seed import seed_fake_data
+
+    provider = await PaymentService(async_db_session).get_or_create_provider()
+    made = await seed_fake_data(async_db_session, provider)
+    assert made["subscriptions"] and made["transactions"] and made["disputes"]

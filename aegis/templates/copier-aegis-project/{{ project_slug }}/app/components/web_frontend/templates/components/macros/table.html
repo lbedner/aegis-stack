@@ -8,8 +8,13 @@
    ``kind`` is ``text`` (default), ``money`` (minor units, honours the
    row's ``currency`` when it has one; ``signed`` adds a leading ``+`` and
    colours by sign, ``toned`` colours by sign without the plus), ``date``,
-   ``int`` or ``status`` (the value is
-   ``{"label", "tone"}``, rendered as a ``badge``); ``render`` is a macro
+   ``int``, ``status`` (the value is
+   ``{"label", "tone"}``, rendered as a ``badge``), ``code`` (monospace,
+   wrapping: a key, a rule, a command) or ``link`` (the value is
+   ``{"label", "url"}``; the link replaces ``target``, default
+   ``#app-content``, the way a list's row opens its item), ``avatar`` (the
+   row's ``icon_url`` brand mark, or the initial, before the name); ``wrap`` lets a
+   long text cell wrap instead of running on; ``render`` is a macro
    taking the value, for a cell no kind covers; ``header`` is a macro
    rendering the column's heading in place of ``label`` (a select-all
    checkbox, say); ``align`` is ``left``
@@ -23,7 +28,7 @@
    row: each row then gets a toggle and a hidden full-width row under it
    with that macro's output (the Flet expandable rows). #}
 {% from "components/macros/feedback.html" import empty_state %}
-{% from "components/macros/layout.html" import badge %}
+{% from "components/macros/layout.html" import avatar, badge %}
 
 {% macro _cell(row, col) -%}
 {%- set value = row[col.key] if row is mapping else row|attr(col.key) -%}
@@ -40,6 +45,17 @@
 {{ value|short_date }}
 {%- elif col.kind == "int" -%}
 {{ "{:,}".format(value) }}
+{%- elif col.kind == "avatar" -%}
+{%- set icon_url = row["icon_url"] if row is mapping and "icon_url" in row else row|attr("icon_url") -%}
+<span class="inline-flex items-center gap-2">{{ avatar(value, icon_url if icon_url is string else None) }}<span>{{ value }}</span></span>
+{%- elif col.kind == "code" -%}
+<code class="font-mono text-xs whitespace-normal break-words">{{ value }}</code>
+{%- elif col.kind == "link" -%}
+{%- set link -%}<a href="{{ value.url }}" {{ hx_replace(value.url, col.target or "#app-content") }} class="text-aegis-text hover:text-aegis-teal">{{ value.label }}</a>{%- endset -%}
+{%- if col.mark -%}
+{%- set icon_url = row["icon_url"] if row is mapping and "icon_url" in row else row|attr("icon_url") -%}
+<span class="inline-flex items-center gap-2">{{ avatar(value.label, icon_url if icon_url is string else None) }}{{ link }}</span>
+{%- else -%}{{ link }}{%- endif -%}
 {%- else -%}
 {{ value }}
 {%- endif -%}
@@ -73,7 +89,7 @@ text-aegis-text
   </td>
   {% endif %}
   {% for col in columns %}
-  <td class="px-5 py-2 whitespace-nowrap {{ 'text-right tabular-nums' if col.align == 'right' else 'text-left' }} {{ _tone(row, col) }}">{{ _cell(row, col) }}</td>
+  <td class="px-5 py-2 {{ 'whitespace-normal' if col.wrap else 'whitespace-nowrap' }} {{ 'text-right tabular-nums' if col.align == 'right' else 'text-left' }} {{ _tone(row, col) }}">{{ _cell(row, col) }}</td>
   {% endfor %}
   {% if actions %}<td class="px-2 py-2 text-right">{{ actions(row) }}</td>{% endif %}
 </tr>

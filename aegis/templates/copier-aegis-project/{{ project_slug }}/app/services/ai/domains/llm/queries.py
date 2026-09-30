@@ -10,7 +10,7 @@ says which. Statement builders only - no business logic, no writes.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import Integer, case, func
@@ -177,10 +177,13 @@ async def catalog_models(
     modality: str | None = None,
     include_disabled: bool = False,
     limit: int | None = None,
+    released_after: date | None = None,
 ) -> list[LargeLanguageModel]:
     """Catalog rows newest-first with both orgs loaded.
 
     ``vendor`` is a substring match, ``vendors`` an exact whitelist.
+    ``released_after`` keeps models released on or after that day; an
+    undated model has nothing to compare, so a window leaves it out.
     ``limit`` caps the SQL result; a caller capping per vendor leaves it
     unset, since a global cap under newest-first ordering would let one
     vendor's fresh catalog starve the others.
@@ -208,6 +211,8 @@ async def catalog_models(
         stmt = stmt.join(
             LLMModality, LargeLanguageModel.id == LLMModality.llm_id
         ).where(LLMModality.modality == modality)
+    if released_after is not None:
+        stmt = stmt.where(col(LargeLanguageModel.released_on) >= released_after)
     if not include_disabled:
         stmt = stmt.where(LargeLanguageModel.enabled == True)  # noqa: E712
     stmt = stmt.order_by(
@@ -448,3 +453,24 @@ async def spend_since(
         .where(LLMUsage.timestamp >= since)
     )
     return float(row.one())
+
+
+async def org_icons(session: AsyncSession, keys: Iterable[str]) -> dict[str, str]:
+    """The stored logo of each named org that has one, in one query, keyed
+    by whichever of its slug or name was asked for: a provider is named by
+    its key (``anthropic``), a lab by its display name (``Meta Llama``)."""
+    wanted = set(keys)
+    if not wanted:
+        return {}
+    rows = await session.exec(
+        select(LLMOrg.slug, LLMOrg.name, LLMOrg.icon_b64).where(
+            or_(col(LLMOrg.slug).in_(wanted), col(LLMOrg.name).in_(wanted)),
+            col(LLMOrg.icon_b64).is_not(None),
+        )
+    )
+    found: dict[str, str] = {}
+    for slug, name, icon in rows.all():
+        for key in (slug, name):
+            if key in wanted and icon:
+                found[key] = icon
+    return found

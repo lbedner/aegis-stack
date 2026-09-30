@@ -14,6 +14,7 @@ from starlette.responses import Response
 from app.components.web_frontend.rendering import (
     close_dialog,
     dialog_done,
+    go_to,
     hx_dialog,
     hx_dialog_post,
     navigate,
@@ -131,6 +132,21 @@ class TestNavigate:
         close would never fire; the plain trigger is processed first."""
         response = navigate(Response(), "/accounts/3")
         assert json.loads(response.headers["HX-Trigger"]) == {"dialog:close": None}
+
+
+class TestGoTo:
+    def test_replaces_the_target_with_its_twin_from_the_page(self) -> None:
+        """The page answers with its whole shell; swapping that into the
+        target nests a second sidebar inside the first. Selecting the
+        target out of the answer is the ``hx_replace`` recipe."""
+        response = go_to("/overseer/services/blog/posts", "Saved", "#overseer-main")
+        assert json.loads(response.headers["HX-Location"]) == {
+            "path": "/overseer/services/blog/posts",
+            "target": "#overseer-main",
+            "select": "#overseer-main",
+            "swap": "outerHTML",
+        }
+        assert triggers(response)["toast"]["text"] == "Saved"
 
 
 class TestOobMacro:

@@ -1,0 +1,9 @@
+{# The link a new checkout answers with, swapped in beside the form. #}
+{% from "components/macros/layout.html" import card, copy_button %}
+{% call card("Checkout created", price, id="payment-checkout-link") %}
+  <div class="flex items-center gap-2 min-w-0">
+    <a href="{{ result.checkout_url }}" target="_blank" rel="noopener" class="text-sm text-aegis-teal underline truncate">{{ result.checkout_url }}</a>
+    {{ copy_button(result.checkout_url) }}
+  </div>
+  <p class="text-xxs text-aegis-muted font-mono">{{ result.session_id }}</p>
+{% endcall %}

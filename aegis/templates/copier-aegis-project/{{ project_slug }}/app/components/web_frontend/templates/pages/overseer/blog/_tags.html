@@ -1,0 +1,17 @@
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action, text_input, primary_button %}
+{% macro tag_actions(row) -%}
+<span class="flex justify-end">{{ action("Delete", hx_dialog(row.delete_url), "danger") }}</span>
+{%- endmacro %}
+<form hx-post="{{ create_url }}" hx-swap="none" class="flex flex-wrap items-end gap-3 mb-4 max-w-md">
+  <div class="flex-1">{{ text_input("name", "", placeholder="New tag", required=True) }}</div>
+  {{ primary_button("Add tag", type="submit") }}
+</form>
+{% call card(None, id="blog-tags") %}
+  {{ data_table([
+    {"key": "name", "label": "Tag"},
+    {"key": "slug", "label": "Slug"},
+    {"key": "created", "label": "Created"},
+  ], tags, actions=tag_actions, empty="No tags yet") }}
+{% endcall %}

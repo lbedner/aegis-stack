@@ -1,0 +1,15 @@
+{# Whether the AI service is set up and what it has done: usage, the model
+   in effect and where that choice comes from, and anything misconfigured. #}
+{% from "components/macros/layout.html" import card, facts, stats_strip %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="ai-figures") }}
+  {% if problems %}
+  {% call card("Configuration problems", id="ai-problems") %}
+  <ul class="space-y-1 text-sm text-error">{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+  {% endcall %}
+  {% endif %}
+  <div class="grid gap-4 lg:grid-cols-2">
+    {% call card("Active model", id="ai-model") %}{{ facts(model) }}{% endcall %}
+    {% call card("Service", id="ai-service") %}{{ facts(service) }}{% endcall %}
+  </div>
+</div>

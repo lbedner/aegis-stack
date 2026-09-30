@@ -55,6 +55,12 @@ def _sweep_target(all_services: list[str], versions: Path) -> str:
     )
 
 
+def own_tables(service: str) -> set[str]:
+    """Tables whose models belong to ``service`` itself, as opposed to the
+    ones a sweep hands it. The revision's stamp signature comes from these."""
+    return {table for table, names in _owners().items() if service in names}
+
+
 def claimed_by(service: str, all_services: list[str], versions: Path) -> set[str]:
     """Tables ``service`` writes when the run covers ``all_services``."""
     sweep = _sweep_target(all_services, versions)

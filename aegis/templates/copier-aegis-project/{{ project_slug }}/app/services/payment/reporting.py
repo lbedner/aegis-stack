@@ -1,5 +1,6 @@
 """Revenue over time, and where the account stands right now."""
 
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
@@ -81,6 +82,20 @@ class ReportingMixin(PaymentServiceBase):
             series.append({"date": key, "amount_cents": totals.get(key, 0)})
         return series
 
+    async def get_customers(
+        self, ids: Iterable[int | None]
+    ) -> dict[int, PaymentCustomer]:
+        """The customers behind a list of rows, by id, in one query."""
+        wanted = {i for i in ids if i is not None}
+        if not wanted:
+            return {}
+        result = await self.db.exec(
+            select(PaymentCustomer).where(
+                PaymentCustomer.id.in_(wanted)  # type: ignore[attr-defined]
+            )
+        )
+        return {c.id: c for c in result.all() if c.id is not None}
+
     async def get_status_summary(
         self, provider_health: ProviderHealth | None = None
     ) -> PaymentStatusSummary:
@@ -145,17 +160,9 @@ class ReportingMixin(PaymentServiceBase):
         # Enrich each subscription row with its customer's display name /
         # email so the Subscriptions tab can render a "Customer" column
         # without a per-row round-trip. Batch-fetch the customers once.
-        customer_ids = {
-            s.customer_id for s in recent_subscriptions_raw if s.customer_id is not None
-        }
-        customers_by_id: dict[int, PaymentCustomer] = {}
-        if customer_ids:
-            cust_result = await self.db.exec(
-                select(PaymentCustomer).where(
-                    PaymentCustomer.id.in_(customer_ids)  # type: ignore[attr-defined]
-                )
-            )
-            customers_by_id = {c.id: c for c in cust_result.all() if c.id is not None}
+        customers_by_id = await self.get_customers(
+            s.customer_id for s in recent_subscriptions_raw
+        )
 
         recent_subscriptions: list[dict[str, Any]] = []
         for s in recent_subscriptions_raw[:10]:

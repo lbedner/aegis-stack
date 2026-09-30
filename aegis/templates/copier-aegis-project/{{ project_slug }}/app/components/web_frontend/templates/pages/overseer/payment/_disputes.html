@@ -1,0 +1,15 @@
+{# Chargebacks and fraud warnings. An open one has an evidence deadline;
+   it turns red three days out. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+<div class="mb-4">{% with chips_label = "Status" %}{% include "pages/overseer/_chips.html" %}{% endwith %}</div>
+{% call card(None, id="payment-disputes") %}
+  {{ data_table([
+    {"key": "id", "label": "#"},
+    {"key": "transaction", "label": "Transaction"},
+    {"key": "status", "label": "Status", "kind": "status"},
+    {"key": "reason", "label": "Reason"},
+    {"key": "amount", "label": "Amount", "kind": "money", "align": "right"},
+    {"key": "due", "label": "Evidence due", "kind": "status"},
+  ], rows, empty="No disputes here") }}
+{% endcall %}

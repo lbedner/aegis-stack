@@ -6,6 +6,8 @@ this module is what the picker and a chat turn ask of the catalog.
 
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel
 
 from app.core.db import get_async_session
@@ -61,6 +63,7 @@ async def list_models(
     modality: str | None = None,
     limit: int = 50,
     include_disabled: bool = False,
+    released_after: date | None = None,
 ) -> list[LLMListResult]:
     """List LLM models from catalog with optional filtering.
 
@@ -74,6 +77,7 @@ async def list_models(
         modality: Filter by modality (text, vision, audio, etc.)
         limit: Maximum number of results to return
         include_disabled: Include disabled models in results
+        released_after: Only models released on or after this day
 
     Returns:
         List of LLMListResult with model summary data
@@ -89,6 +93,7 @@ async def list_models(
             modality=modality,
             include_disabled=include_disabled,
             limit=None if vendors else limit,
+            released_after=released_after,
         )
         if vendors:
             models = _capped_per_vendor(models, limit)

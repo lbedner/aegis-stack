@@ -177,7 +177,11 @@ async def budget_month_outlook(
 
 
 async def parse_budget_goal(
-    db: AsyncSession, *, owner_user_id: int | None, text: str
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None,
+    text: str,
+    today: date | None = None,
 ) -> GoalParseResponse:
     """Deterministic (not LLM-backed) reading of a natural-language
     goal: "I wanna cut back on Starbucks" -> a payee match against the
@@ -192,7 +196,7 @@ async def parse_budget_goal(
     percent_match = re.search(r"(\d+)\s*%", text)
     fraction = int(percent_match.group(1)) / 100 if percent_match else 0.5
 
-    cutoff = current_date() - timedelta(days=90)
+    cutoff = (today or current_date()) - timedelta(days=90)
     filters = planning_queries.spend_filters(owner_user_id, cutoff)
     txn_rows = await queries.outflow_tuples(
         db, owner_user_id=owner_user_id, start=cutoff

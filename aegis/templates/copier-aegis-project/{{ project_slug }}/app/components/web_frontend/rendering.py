@@ -5,6 +5,8 @@ here. ``render`` is the one-route-two-paths rule: the same handler serves
 a full page inside the page layout and a bare fragment for htmx.
 """
 
+from base64 import b64decode
+from hashlib import sha1
 import json
 from typing import Any
 from urllib.parse import urlencode
@@ -86,15 +88,61 @@ def hx_replace(url: str, target: str, oob: str | None = None) -> Markup:
     return Markup(" ".join(f'{k}="{escape(v)}"' for k, v in attrs.items()))
 
 
+def image_response(
+    request: Request, icon_b64: str, media_type: str = "image/png"
+) -> Response:
+    """A stored base64 image served for the browser to cache: a day's
+    ``max-age`` and an ETag of its bytes, so a revalidation is a 304 and a
+    changed image is fetched fresh. For icon routes (``<img src=...>``)."""
+    etag = '"' + sha1(icon_b64.encode(), usedforsecurity=False).hexdigest()[:16] + '"'
+    headers = {"Cache-Control": "public, max-age=86400", "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(b64decode(icon_b64), media_type=media_type, headers=headers)
+
+
+async def form_fields(request: Request) -> dict[str, str]:
+    """A form post's fields as text, for an editor with more fields than a
+    handler's signature should spell out."""
+    return {key: str(value) for key, value in (await request.form()).items()}
+
+
+def form_number(raw: str | None, label: str, kind: type = int) -> Any:
+    """An optional number from a form field: blank is None, anything else
+    must parse as ``kind`` (``int`` or ``float``) or it is a ``ValueError``
+    naming the field, which a handler turns into its error toast."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        return kind(text)
+    except ValueError:
+        noun = "a whole number" if kind is int else "a number"
+        raise ValueError(f"{label} must be {noun}.") from None
+
+
 def status_cell(label: str, tone: str) -> dict[str, str]:
     """A ``data_table`` status cell (rendered as a ``badge``); ``tone`` is ok,
     warn, error, muted or accent."""
     return {"label": label, "tone": tone}
 
 
-def with_query(path: str, **params: str | None) -> str:
-    """``path`` with the given query parameters, leaving out empty ones."""
-    query = urlencode({k: v for k, v in params.items() if v})
+def drawer_state(param: str, url: str | None) -> dict[str, str | None]:
+    """What a list hands ``drawer_sync``: the open item's drawer URL (None
+    closes it) and the query parameter that holds the item."""
+    return {"open_drawer": url, "drawer_param": param}
+
+
+def with_query(path: str, **params: str | list[str] | None) -> str:
+    """``path`` with the given query parameters, leaving out empty ones; a
+    list (a multi-select's picks) repeats its key once per value."""
+    pairs = [
+        (key, value)
+        for key, given in params.items()
+        for value in (given if isinstance(given, list) else [given])
+        if value
+    ]
+    query = urlencode(pairs)
     return f"{path}?{query}" if query else path
 
 
@@ -221,6 +269,12 @@ def with_toast(response: Response, text: str, tone: str = "ok") -> Response:
     return trigger(response, "toast", {"text": text, "tone": tone})
 
 
+def toast_response(text: str, tone: str = "ok") -> Response:
+    """An action's whole answer when the page stays as it is: a toast.
+    An error toast leaves a form holding what was typed."""
+    return with_toast(Response(status_code=200), text, tone)
+
+
 def close_dialog(response: Response) -> Response:
     """Close the one modal from a successful in-dialog action (pattern 4).
 
@@ -231,17 +285,37 @@ def close_dialog(response: Response) -> Response:
     return trigger(response, "dialog:close", header="HX-Trigger-After-Settle")
 
 
-def navigate(response: Response, path: str, target: str = "#app-content") -> Response:
+def navigate(
+    response: Response,
+    path: str,
+    target: str = "#app-content",
+    select: str | None = None,
+) -> Response:
     """Send the browser to ``path`` the htmx way: a GET with HX-Request
     swapped into ``target`` and pushed to the URL bar (``HX-Location``).
-    The usual close of a dialog form that made something new.
+    The usual close of a dialog form that made something new. ``select``
+    takes that element out of the answer and swaps it for ``target``
+    whole, for a page that answers with more than the target holds.
 
     Closes the dialog with the plain trigger: htmx follows HX-Location
     instead of swapping this response, so nothing after-settle would ever
     fire, and nothing swaps into the dialog that could re-open it.
     """
-    response.headers["HX-Location"] = json.dumps({"path": path, "target": target})
+    location = {"path": path, "target": target}
+    if select:
+        location |= {"select": select, "swap": "outerHTML"}
+    response.headers["HX-Location"] = json.dumps(location)
     return trigger(response, "dialog:close")
+
+
+def go_to(path: str, toast: str, target: str) -> Response:
+    """Replace ``target`` with the same element from ``path`` and say what
+    happened: the ``hx_replace`` recipe, for a region inside a page (the
+    Overseer's main area). Swapping the whole answer in would nest the
+    page's shell, sidebar and all, inside the target."""
+    response = Response(status_code=200)
+    navigate(response, path, target=target, select=target)
+    return with_toast(response, toast)
 
 
 def dialog_done(path: str, toast: str) -> Response:

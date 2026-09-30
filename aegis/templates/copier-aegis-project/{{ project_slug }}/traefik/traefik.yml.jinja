@@ -39,6 +39,10 @@ providers:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
     network: {{ project_slug }}_default
+    # The provider watches the whole Docker daemon, and every generated stack
+    # names its router and service "webserver": without this, another stack
+    # running on the same machine joins this one's load balancer.
+    constraints: "Label(`com.docker.compose.project`, `{{ project_slug }}`)"
 
 {%- if ingress_tls %}
 

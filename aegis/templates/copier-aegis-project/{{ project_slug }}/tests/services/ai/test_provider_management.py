@@ -1,11 +1,11 @@
 """Tests for AI provider management utilities."""
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.ai.models import AIProvider
 from app.services.ai.domains.llm.provider_management import (
     PROVIDER_API_KEY_URLS,
     PROVIDER_DEPENDENCIES,
@@ -21,6 +21,7 @@ from app.services.ai.domains.llm.provider_management import (
     update_env_file,
     validate_provider_name,
 )
+from app.services.ai.models import PROVIDERS, AIProvider
 
 
 class TestProviderDependencies:
@@ -82,14 +83,18 @@ class TestCheckProviderDependencyInstalled:
 class TestGetMissingDependency:
     """Tests for getting missing dependency package name."""
 
-    @patch("app.services.ai.domains.llm.provider_management.check_provider_dependency_installed")
+    @patch(
+        "app.services.ai.domains.llm.provider_management.check_provider_dependency_installed"
+    )
     def test_returns_package_when_not_installed(self, mock_check: MagicMock) -> None:
         """Returns package name when dependency is not installed."""
         mock_check.return_value = False
         result = get_missing_dependency("google")
         assert result == "pydantic-ai-slim[google]"
 
-    @patch("app.services.ai.domains.llm.provider_management.check_provider_dependency_installed")
+    @patch(
+        "app.services.ai.domains.llm.provider_management.check_provider_dependency_installed"
+    )
     def test_returns_none_when_installed(self, mock_check: MagicMock) -> None:
         """Returns None when dependency is already installed."""
         mock_check.return_value = True
@@ -315,3 +320,53 @@ class TestMaskApiKey:
         """Empty key returns empty mask."""
         result = mask_api_key("")
         assert result == ""
+
+
+class TestProviderReadiness:
+    """One answer to "can this provider be used right now", shared by the
+    CLI's ``ai providers`` table and the Overseer's AI > Providers page."""
+
+    @pytest.fixture(autouse=True)
+    def installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Every SDK present, so the key is the only variable."""
+        from app.services.ai.domains.llm import provider_management
+
+        monkeypatch.setattr(
+            provider_management, "check_provider_dependency_installed", lambda p: True
+        )
+
+    def _rows(self, **env: str | None) -> dict[str, Any]:
+        from types import SimpleNamespace
+
+        from app.services.ai.domains.llm.provider_management import provider_readiness
+
+        keys = {spec.env_var: None for spec in PROVIDERS.values()} | env
+        settings = SimpleNamespace(AI_PROVIDER="anthropic", **keys)
+        return {r.provider.value: r for r in provider_readiness(settings)}
+
+    def test_a_keyed_provider_is_ready_only_with_its_key(self) -> None:
+        rows = self._rows(ANTHROPIC_API_KEY="sk-ant-x")
+        assert rows["anthropic"].status == "ready" and rows["anthropic"].current
+        assert rows["openai"].status == "needs_key"
+
+    def test_a_missing_sdk_is_not_installed_whatever_the_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services.ai.domains.llm import provider_management
+
+        monkeypatch.setattr(
+            provider_management, "check_provider_dependency_installed", lambda p: False
+        )
+        assert self._rows(ANTHROPIC_API_KEY="sk-ant-x")["anthropic"].status == (
+            "not_installed"
+        )
+
+    def test_keyless_endpoints_never_need_a_key(self) -> None:
+        rows = self._rows()
+        for name in ("public", "pollinations", "ollama"):
+            assert rows[name].keyless and rows[name].status != "needs_key"
+
+    def test_names_read_like_the_brands(self) -> None:
+        rows = self._rows()
+        assert rows["openai"].label == "OpenAI" and rows["public"].label == "LLM7.io"
+        assert rows["anthropic"].label == "Anthropic"

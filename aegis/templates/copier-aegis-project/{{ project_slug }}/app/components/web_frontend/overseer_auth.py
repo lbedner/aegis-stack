@@ -90,8 +90,8 @@ def _user_rows(users: list[UserResponse]) -> list[dict[str, Any]]:
             "verified": _badge("Verified", "green")
             if user.is_verified
             else _badge("Unverified", "yellow"),
-            "created": format_relative_time(user.created_at.isoformat()),
-            "last_login": format_relative_time(user.last_login.isoformat())
+            "created": format_relative_time(user.created_at),
+            "last_login": format_relative_time(user.last_login)
             if user.last_login
             else None,
         }
@@ -110,7 +110,7 @@ def _session_rows(sessions: list[SessionResponse]) -> list[dict[str, Any]]:
                 "source": _badge(label, color),
                 "device": session.user_agent or "Unknown device",
                 "ip": session.ip,
-                "last_used": format_relative_time(used.isoformat()),
+                "last_used": format_relative_time(used),
                 "expires": session.expires_at,
             }
         )

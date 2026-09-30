@@ -310,7 +310,8 @@ class TestLLMPickerGating:
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The limit applies per vendor, and only callable vendors are
-        queried at all."""
+        queried at all: keyed ones with their key, and the keyless
+        endpoints (LLM7, Pollinations), which need none."""
         # The llm package re-exports its APIRouter under the same name,
         # shadowing the module attribute - import the module directly.
         llm_router = importlib.import_module("app.components.backend.api.llm.routes")
@@ -354,10 +355,12 @@ class TestLLMPickerGating:
         assert response.status_code == 200
         # ONE catalog call carrying every callable vendor - the old
         # per-vendor loop opened a session per vendor (confirmed slow).
-        assert calls == [["ollama", "openai"]]
+        assert calls == [["ollama", "openai", "pollinations", "public"]]
         assert [m["model_id"] for m in response.json()] == [
             "ollama-model",
             "openai-model",
+            "pollinations-model",
+            "public-model",
         ]
 
 

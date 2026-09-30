@@ -7,6 +7,7 @@ finance service as integer minor units with a currency code.
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 import html
+import re
 from typing import Any
 
 from markupsafe import Markup
@@ -168,6 +169,24 @@ def markdown(text: str | None) -> Markup:
     return Markup(_MARKDOWN.convert(text or ""))
 
 
+_RST_LITERAL = re.compile(r"``(.+?)``")
+
+
+def docstring(text: str | None) -> Markup:
+    """A docstring as HTML: escaped, its RST ``literals`` set as code.
+
+    Values that are already HTML (``Markup``) pass through as given.
+    """
+    if isinstance(text, Markup):
+        return text
+    return Markup(
+        _RST_LITERAL.sub(
+            r'<code class="font-mono text-aegis-teal">\1</code>',
+            html.escape(text or "", quote=False),
+        )
+    )
+
+
 # Tailwind classes for a block of rendered markdown. One string, because a
 # heading that looks different in chat than it does in a report is a bug
 # nobody files and everybody notices.
@@ -214,6 +233,7 @@ FILTERS: dict[str, Callable[..., str]] = {
     "short_date": short_date,
     "pct": pct,
     "markdown": markdown,
+    "docstring": docstring,
     "health_tone": health_tone,
     "color_tone": color_tone,
 }

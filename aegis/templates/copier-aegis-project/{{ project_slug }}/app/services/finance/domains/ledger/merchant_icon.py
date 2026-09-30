@@ -29,9 +29,9 @@ unmatched merchant degrades everywhere else in this app.
 """
 
 import asyncio
-import base64
 from datetime import timedelta
 
+from app.core.brand_icons import domain_of, fetch_icons
 from app.core.time import utcnow
 from app.services.finance.domains.ledger import queries
 from app.services.finance.models import FinanceIcon
@@ -45,16 +45,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 _MIN_DOMAIN_LENGTH = 2
 _MAX_DOMAIN_LENGTH = 24
 
-UPSTREAM = "https://www.google.com/s2/favicons"
-
 # domain -> base64 png, or None for a domain already known to miss. A
 # read-through layer over finance_icon rows - it only ever mirrors what
 # the table says (or what a fill just stored), so bounded process-local
 # state, and nothing user-scoped.
 _CACHE: dict[str, str | None] = {}
 _CACHE_MAX = 4096
-_CONCURRENCY = 24
-_TIMEOUT_SECONDS = 4.0
 
 # A stored miss is retried this much later. Brands do gain favicons (a
 # payee's website gets set, a new brand launches), just not per-render.
@@ -65,29 +61,10 @@ _NEGATIVE_RETRY = timedelta(days=7)
 _IN_FLIGHT: set[str] = set()
 
 
-def domain_from_website(website_url: str | None) -> str | None:
-    """The bare host from a stored payee website - the AUTHORITATIVE source
-    when a payee has one, because guessing cannot reach it.
-
-    The guess below only ever tries ``<name>.com``, which is wrong in two
-    ways a user can trivially fix by typing the real address: it misses
-    every other TLD ("aegis-stack.io"), and it strips the punctuation that
-    was part of the name ("Aegis Stack" -> "aegisstack", never
-    "aegis-stack"). Worse, a plausible-looking ``.com`` may belong to
-    somebody else entirely - "aegis-stack.com" resolves to a real, unrelated
-    site - so a confident guess can render a stranger's logo on your bill.
-    An explicit domain removes all of that.
-    """
-    raw = (website_url or "").strip()
-    if not raw:
-        return None
-    host = raw.split("//", 1)[-1]  # drop any scheme
-    host = host.split("/", 1)[0]  # drop any path
-    host = host.split("?", 1)[0].strip().lower()
-    if host.startswith("www."):
-        host = host[4:]
-    # A bare host has a dot and no spaces; anything else was not a domain.
-    return host if ("." in host and " " not in host and len(host) > 3) else None
+# The AUTHORITATIVE source when a payee has a website: guessing only ever
+# tries ``<name>.com``, which misses every other TLD and can land on a
+# stranger's logo. The parsing is the shared one (``app.core.brand_icons``).
+domain_from_website = domain_of
 
 
 # A fund's FULL name never guesses to a usable domain the way
@@ -208,7 +185,7 @@ async def _fill_icons(domains: list[str]) -> None:
     from app.core.db import get_async_session
 
     try:
-        fetched = await _fetch_domains(domains)
+        fetched = await fetch_icons(domains)
         async with get_async_session() as db:
             existing = await queries.icons_by_domains(db, fetched.keys())
             now = utcnow()
@@ -225,41 +202,3 @@ async def _fill_icons(domains: list[str]) -> None:
                 _remember(domain, icon_b64)
     finally:
         _IN_FLIGHT.difference_update(domains)
-
-
-async def _fetch_domains(domains: list[str]) -> dict[str, str | None]:
-    """``{domain: base64 png or None}`` from the upstream favicon service,
-    concurrently. None means the domain answered with no usable icon -
-    an answer worth storing, not an error."""
-    import httpx
-
-    semaphore = asyncio.Semaphore(_CONCURRENCY)
-    results: dict[str, str | None] = {}
-
-    async def one(client: "httpx.AsyncClient", domain: str) -> None:
-        async with semaphore:
-            try:
-                # follow_redirects: the service answers 301 to its real
-                # asset host and httpx (unlike urllib) does not follow by
-                # default - without this every icon misses on a redirect
-                # it should have chased.
-                response = await client.get(
-                    UPSTREAM, params={"sz": 64, "domain": domain}
-                )
-                payload = response.content if response.status_code == 200 else b""
-            except Exception:
-                # Includes having no network at all. An icon is never
-                # worth failing the page it decorates.
-                payload = b""
-        results[domain] = base64.b64encode(payload).decode() if payload else None
-
-    try:
-        async with httpx.AsyncClient(
-            timeout=_TIMEOUT_SECONDS, follow_redirects=True
-        ) as client:
-            await asyncio.gather(*(one(client, d) for d in domains))
-    except Exception:
-        # No network at all: report every domain as a miss so the negative
-        # rows still bound retries.
-        return {domain: results.get(domain) for domain in domains}
-    return results

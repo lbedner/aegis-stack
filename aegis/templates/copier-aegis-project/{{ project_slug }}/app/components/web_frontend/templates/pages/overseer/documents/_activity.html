@@ -1,0 +1,11 @@
+{# Every extraction run the job runner knows, newest first; a run opens
+   its document. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% call card(None, id="documents-activity") %}
+  {{ data_table([
+    {"key": "title", "label": "Document", "kind": "link", "target": "#overseer-main"},
+    {"key": "status", "label": "Status", "kind": "status"},
+    {"key": "when", "label": "When"},
+  ], rows, empty="No extraction runs yet") }}
+{% endcall %}

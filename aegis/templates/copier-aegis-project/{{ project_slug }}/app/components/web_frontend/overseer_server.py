@@ -12,9 +12,10 @@ from app.components.backend.api.traffic import get_traffic_sources
 from app.components.backend.middleware.performance import metrics_service
 from app.core.formatting import format_relative_time
 from app.core.log import logger
-from app.services.system import ui_backend
+from app.services.system import ui_backend, ui_cache
 from app.services.system.models import ComponentStatus
 
+from . import overseer_connections
 from .overseer_nav import SectionRequest
 from .rendering import status_cell
 
@@ -25,6 +26,8 @@ SECTIONS = (
         {
             "performance": "Performance",
             "traffic": "Traffic",
+            "cache": "Cache",
+            "connections": "Connections",
             "load-tests": "Load Tests",
         },
     ),
@@ -112,6 +115,10 @@ async def section_context(
     metadata = backend.metadata or {}
     if section == "overview":
         return overview_context(backend)
+    if section == "cache":
+        return {"cache": await ui_cache.load()}
+    if section == "connections":
+        return await overseer_connections.section_context(dict(req.query))
     if section == "routes":
         groups = [
             (name, route_rows(routes))

@@ -40,3 +40,14 @@
   background: currentColor;
   border-radius: 9999px;
 }
+
+/* The drawer (macros/layout.html) slides in from the right when it opens. */
+.aegis-drawer[open] {
+  animation: aegis-drawer-in 180ms ease-out;
+}
+
+@keyframes aegis-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+}

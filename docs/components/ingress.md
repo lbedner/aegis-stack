@@ -57,7 +57,7 @@ Without a domain, routing uses `PathPrefix(/)` for all traffic:
 
 Sensitive endpoints are protected by an IP allowlist middleware. By default, these paths are restricted:
 
-- `/dashboard` - Overseer frontend
+- `/dashboard` - the Flet dashboard
 - `/docs` - FastAPI Swagger UI
 - `/redoc` - FastAPI ReDoc
 - `/openapi.json` - OpenAPI schema
@@ -65,21 +65,25 @@ Sensitive endpoints are protected by an IP allowlist middleware. By default, the
 ```yaml
 # Docker labels on webserver service
 - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist"
-- "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-0.0.0.0/0}"
+- "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
 ```
 
-Set `ADMIN_IP_ALLOWLIST` in your `.env` to restrict access:
+The default admits loopback and the private ranges only, so these paths are closed to the public internet until you open them on purpose. Local development still reaches them: Docker hands Traefik your browser's requests from a `172.x` gateway address, which the default covers.
+
+Set `ADMIN_IP_ALLOWLIST` in your `.env` to change who gets in:
 
 ```bash
-# Allow only your IP
+# Default: this machine and private networks
+ADMIN_IP_ALLOWLIST=127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+
+# Only your office IP
 ADMIN_IP_ALLOWLIST=203.0.113.50/32
 
-# Allow a subnet
-ADMIN_IP_ALLOWLIST=10.0.0.0/8
-
-# Default: allow all (development)
+# Everyone, including the public internet (think twice)
 ADMIN_IP_ALLOWLIST=0.0.0.0/0
 ```
+
+The Overseer's Ingress page tags an allowlist that admits every address as **allows all**.
 
 ## Environment Variables
 
@@ -87,7 +91,7 @@ ADMIN_IP_ALLOWLIST=0.0.0.0/0
 |----------|---------|-------------|
 | `TRAEFIK_API_URL` | `http://traefik:8080` | Traefik API URL for health checks (Docker internal) |
 | `TRAEFIK_API_URL_LOCAL` | `http://localhost:8080` | Traefik API URL for local CLI commands |
-| `ADMIN_IP_ALLOWLIST` | `0.0.0.0/0` | CIDR range(s) allowed to access admin endpoints |
+| `ADMIN_IP_ALLOWLIST` | loopback and private ranges | CIDR range(s) allowed to access admin endpoints |
 | `DOMAIN` | `example.com` | Domain for TLS certificate (only with TLS enabled) |
 | `ACME_EMAIL` | - | Email for Let's Encrypt notifications (only with TLS enabled) |
 

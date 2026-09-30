@@ -1,0 +1,39 @@
+{# What is in the cache, by family (the first two parts of a key): how much
+   room each takes and whether it earns it. A family that takes room and
+   is rarely hit is the one to shorten or drop. Hits and misses count the
+   process serving this page; with Redis the entries are shared, the counts
+   are not. #}
+{% from "components/macros/layout.html" import card, stats_strip, progress, badge %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% macro share(value) %}<span class="inline-flex items-center gap-2 w-40">{{ progress(value, "ok", size="h-1.5") }}<span class="tabular-nums text-xs text-aegis-muted">{{ (value * 100)|round(1) }}%</span></span>{% endmacro %}
+{% macro rate(value) %}{% if value is none %}<span class="text-aegis-muted">-</span>{% else %}{{ badge(value ~ "%", "ok" if value >= 80 else ("warn" if value >= 50 else "error")) }}{% endif %}{% endmacro %}
+{% if cache.error %}
+<p role="alert" class="text-xs text-error bg-aegis-error/5 border border-aegis-error/40 rounded px-3 py-2">The cache could not be read ({{ cache.backend }}): {{ cache.error }}</p>
+{% else %}
+<div class="space-y-4">
+  {{ stats_strip(cache.figures, id="cache-figures") }}
+  <p class="text-xxs text-aegis-muted">Backend: {{ "Redis (shared by every process)" if cache.backend == "redis" else "memory (this process only)" }}</p>
+  {% if not cache.families %}
+  {{ empty_state("The cache is empty", "Services put values here with app.core.cache; they appear once something is cached.") }}
+  {% else %}
+  {% call card("Families", "By room taken", id="cache-families") %}
+    {{ data_table([
+      {"key": "family", "label": "Family", "kind": "code"},
+      {"key": "keys", "label": "Keys", "kind": "int", "align": "right"},
+      {"key": "size", "label": "Size", "align": "right"},
+      {"key": "share", "label": "Share", "render": share},
+      {"key": "ttl_label", "label": "Avg time left"},
+      {"key": "hit_rate", "label": "Hit rate", "render": rate},
+    ], cache.families) }}
+  {% endcall %}
+  {% call card("Largest keys", id="cache-largest") %}
+    {{ data_table([
+      {"key": "key", "label": "Key", "kind": "code"},
+      {"key": "size", "label": "Size", "align": "right"},
+      {"key": "ttl_label", "label": "Time left"},
+    ], cache.largest) }}
+  {% endcall %}
+  {% endif %}
+</div>
+{% endif %}

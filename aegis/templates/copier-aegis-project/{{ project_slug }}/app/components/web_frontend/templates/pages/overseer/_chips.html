@@ -1,0 +1,7 @@
+{# One row of filter chips above a list: ``chips`` is a list of
+   {label, url, active}; ``chips_label`` names the row for screen readers.
+   Each chip swaps the Overseer's main area, filters kept in its URL. #}
+{% from "components/macros/layout.html" import chip %}
+<nav aria-label="{{ chips_label|default('Filter') }}" class="flex flex-wrap items-center gap-1.5">
+  {% for c in chips %}{{ chip(c.label, c.active, c.url, hx_replace(c.url, "#overseer-main")) }}{% endfor %}
+</nav>

@@ -33,7 +33,7 @@ async def check_payment_service_health() -> ComponentStatus:
     try:
         async with get_async_session() as session:
             service = PaymentService(session)
-            provider_health = await _get_cached_provider_health(service)
+            provider_health = await cached_provider_health(service)
             summary = await service.get_status_summary(
                 provider_health=provider_health
             )
@@ -76,7 +76,7 @@ def invalidate_payment_health_cache() -> None:
     _cached_provider_health = None
 
 
-async def _get_cached_provider_health(service: PaymentService) -> ProviderHealth:
+async def cached_provider_health(service: PaymentService) -> ProviderHealth:
     """Return a fresh or cached ``ProviderHealth`` for this process."""
     global _cached_provider_health
 

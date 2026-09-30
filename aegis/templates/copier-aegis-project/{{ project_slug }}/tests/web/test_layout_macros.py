@@ -91,8 +91,9 @@ class TestDialog:
     def test_mounted_once_by_the_base_layout(self, client: TestClient) -> None:
         page = client.get("/").text
         one(page, "dialog#dialog")
+        one(page, "dialog#drawer")
         none(one(page, "main#app-content"), "dialog")
-        assert len(select(page, "dialog")) == 1
+        assert len(select(page, "dialog")) == 2
 
 
 class TestBadge:

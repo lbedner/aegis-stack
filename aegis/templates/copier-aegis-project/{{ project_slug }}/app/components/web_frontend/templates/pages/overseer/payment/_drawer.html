@@ -1,0 +1,19 @@
+{# One transaction in the drawer: what it was and who paid, and the refund
+   form when it can be refunded (the whole amount unless it is lowered). #}
+{% from "components/macros/layout.html" import badge, card, dialog_title, facts as fact_list %}
+{% from "components/macros/form.html" import field, money_input, select, primary_button %}
+<div class="space-y-4">
+  {{ dialog_title("Transaction #" ~ txn.id) }}
+  <div>{{ badge(status.label, status.tone) }}</div>
+  {% call card("Details", id="payment-transaction-facts") %}{{ fact_list(facts) }}{% endcall %}
+  {% if refund %}
+  {% call card("Refund", id="payment-refund") %}
+  <form hx-post="{{ refund.url }}" hx-swap="none" data-refund class="space-y-4">
+    <input type="hidden" name="original" value="{{ txn.amount }}">
+    {% call field("Amount") %}{{ money_input("amount", refund.amount) }}{% endcall %}
+    {% call field("Reason") %}{{ select("reason", refund.reasons, refund.reason, blank=None, block=True) }}{% endcall %}
+    {{ primary_button("Issue refund", "submit") }}
+  </form>
+  {% endcall %}
+  {% endif %}
+</div>

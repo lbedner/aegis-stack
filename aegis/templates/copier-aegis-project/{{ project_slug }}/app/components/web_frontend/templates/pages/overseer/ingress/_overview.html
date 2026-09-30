@@ -1,0 +1,34 @@
+{# How a request reaches the app through each of its routers, then the
+   entrypoints Traefik listens on. Traefik's own routers (its API and
+   dashboard) are not drawn. A middleware that does nothing in effect (an
+   allowlist open to everyone) is marked amber. #}
+{% from "components/macros/layout.html" import card, stats_strip, facts %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% if error %}{% include "pages/overseer/ingress/_error.html" %}{% else %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="ingress-figures") }}
+  {% call card("Request flow", "Entrypoint to server") %}
+  <div class="space-y-5">
+    {% for flow in flows %}
+    <div data-flow="{{ flow.name }}">
+      <p class="text-xs font-medium text-aegis-text mb-2">{{ flow.name }}</p>
+      <ol aria-label="{{ flow.name }} request flow" class="flex flex-wrap items-stretch gap-2">
+        {% for step in flow.steps %}
+        <li data-step data-tone="{{ step.tone or '' }}" class="flex items-center gap-2">
+          <div class="h-full min-w-0 max-w-[18rem] bg-aegis-bg border {{ 'border-aegis-amber/60' if step.tone == 'warn' else 'border-aegis-border' }} rounded px-3 py-2">
+            <p class="text-xxs caps {{ 'text-aegis-amber' if step.tone == 'warn' else 'text-aegis-muted' }}">{{ step.detail }}</p>
+            <p data-step-label class="text-sm font-mono text-aegis-text break-words">{{ step.label }}</p>
+          </div>
+          {% if not loop.last %}<span aria-hidden="true" class="text-aegis-muted">&rarr;</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% else %}
+    {{ empty_state("No app routers", "Add traefik.* labels to a compose service to route traffic to it.") }}
+    {% endfor %}
+  </div>
+  {% endcall %}
+  {% call card("Entrypoints") %}{{ facts(entrypoints) }}{% endcall %}
+</div>
+{% endif %}

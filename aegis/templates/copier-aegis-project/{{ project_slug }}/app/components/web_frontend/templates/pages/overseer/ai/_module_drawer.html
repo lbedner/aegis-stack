@@ -1,0 +1,28 @@
+{# One memory module in the drawer: its editor, and what it renders into an
+   agent's context right now. A fetcher's output is code, so only a static
+   module's text is editable. #}
+{% from "components/macros/layout.html" import card, dialog_title %}
+{% from "components/macros/form.html" import checkbox, field, text_input, textarea, primary_button %}
+<div class="space-y-4">
+  {{ dialog_title(module.name, facts=module.slug) }}
+  {% call card("Preview", "what an agent is handed", id="ai-module-preview") %}
+    {% if preview %}<pre class="text-xs text-aegis-text whitespace-pre-wrap break-words max-h-80 overflow-y-auto">{{ preview }}</pre>
+    {% else %}<p class="text-xs text-aegis-muted">Renders nothing right now.</p>{% endif %}
+  {% endcall %}
+  <form hx-post="{{ save_url }}" hx-swap="none" data-module class="space-y-4">
+    {% call field("Name") %}{{ text_input("name", module.name, required=True) }}{% endcall %}
+    {% call field("Description") %}{{ text_input("description", module.description) }}{% endcall %}
+    <div class="grid grid-cols-3 gap-3">
+      {% call field("Category") %}{{ text_input("category", module.category) }}{% endcall %}
+      {% call field("Priority") %}{{ text_input("priority", module.priority) }}{% endcall %}
+      {% call field("Token estimate") %}{{ text_input("token_estimate", module.token_estimate) }}{% endcall %}
+    </div>
+    {% if module.fetch_function %}
+    <p class="text-xs text-aegis-muted">Content from <code class="font-mono text-aegis-teal">{{ module.fetch_function }}</code>, a registered fetcher.</p>
+    {% else %}
+    {% call field("Content") %}{{ textarea("prompt_content", module.prompt_content or "", rows=8) }}{% endcall %}
+    {% endif %}
+    {{ checkbox("is_active", module.is_active, "Active") }}
+    {{ primary_button("Save", type="submit") }}
+  </form>
+</div>

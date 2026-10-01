@@ -1,3 +1,10 @@
-{# Chat: the one chat surface, filling the page below its header. The
-   drawer on every other Overseer page shows this same surface. #}
-<div class="h-[calc(100dvh-13rem)] min-h-[24rem]">{% include "partials/chat/surface.html" %}</div>
+{# Chat: the one chat surface. From md up, where the sidebar and the
+   section sub-menu sit beside the content, it fills the page below its
+   header down to the viewport's edge, the composer 0.75rem off the bottom
+   like the drawer's: the heights subtract the shell's top padding (py-7,
+   lg:py-10) and the page header (6rem with its padding and margin), and
+   the negative margin gives back the shell's bottom padding. Below md both
+   menus stack above the content, so the chat takes most of a screen and
+   the page scrolls to it. The drawer on every other Overseer page shows
+   this same surface. #}
+<div class="h-[80dvh] md:h-[calc(100dvh-8.5rem)] lg:h-[calc(100dvh-9.25rem)] md:-mb-7 lg:-mb-10 min-h-[24rem]">{% include "partials/chat/surface.html" %}</div>

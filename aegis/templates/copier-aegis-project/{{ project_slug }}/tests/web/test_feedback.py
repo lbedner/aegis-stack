@@ -228,3 +228,24 @@ class TestRangeChips:
             "30"
         ]
         assert "sr-only" in radios[0].get("class")  # the pill is the label
+
+
+def _layer(html: str, css: str) -> int:
+    """The z-index a Tailwind class gives an element (``z-50``, ``z-[60]``)."""
+    import re
+
+    classes = one(html, css).get("class")
+    return int(re.search(r"\bz-\[?(\d+)\]?", classes).group(1))
+
+
+def test_a_toast_shows_over_the_side_drawer() -> None:
+    """A save from inside the drawer says so in a toast; a toast under the
+    drawer (both sit at the right edge) reads as a save that did nothing."""
+    env = templates.env
+    toasts = env.from_string(
+        '{% from "components/macros/feedback.html" import toast_region %}{{ toast_region() }}'
+    ).render()
+    drawer = env.from_string(
+        '{% from "components/macros/layout.html" import drawer %}{{ drawer() }}'
+    ).render()
+    assert _layer(toasts, "#toasts") > _layer(drawer, "#drawer")

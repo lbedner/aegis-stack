@@ -14,12 +14,13 @@
    Alpine ``toasts`` component (static/js/app.js) queues it. One region per
    page, fixed to the viewport, outside ``#app-content`` so it survives
    section swaps. Polite live region: announced, never interrupting. #}
+{# Above the side drawer (z-[60]): a save made inside it answers here. #}
 {% macro toast_region() %}
 <div id="toasts"
      x-data="toasts"
      @toast.window="push($event.detail)"
      aria-live="polite"
-     class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 flex flex-col gap-2 sm:max-w-sm">
+     class="fixed bottom-4 right-4 left-4 sm:left-auto z-[70] flex flex-col gap-2 sm:max-w-sm">
   <template x-for="item in items" :key="item.id">
     <div role="status"
          x-transition:enter="transition-all duration-200"

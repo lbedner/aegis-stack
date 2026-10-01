@@ -21,7 +21,7 @@ from app.components.frontend.controls.data_table import (
 )
 from app.components.frontend.controls.table import TableNameText
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.ai.domains.llm.ollama_activity import get_ollama_activity
+from app.components.inference.activity import get_ollama_activity
 
 from ...activity_feed import format_relative_time
 from .columns import ACTIVITY_COLUMNS

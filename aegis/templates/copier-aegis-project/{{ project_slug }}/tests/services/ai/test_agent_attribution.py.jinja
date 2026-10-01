@@ -206,6 +206,68 @@ class TestTheTurnCarriesItsUser:
         assert current_user_id.get() is None
 
 
+class _CutOffResponse:
+    finish_reason = "length"
+
+
+class _CutOffResult(_FakeResult):
+    response = _CutOffResponse()
+
+
+class _CutOffAgent(_FakeAgent):
+    @asynccontextmanager
+    async def run_stream_events(self, prompt: str) -> "AsyncIterator[Any]":
+        class _Events:
+            def __aiter__(self) -> "AsyncIterator[Any]":
+                return self._events()
+
+            async def _events(self) -> "AsyncIterator[Any]":
+                yield PartStartEvent(index=0, part=TextPart(content="Half a sen"))
+                yield AgentRunResultEvent(result=_CutOffResult())
+
+        yield _Events()
+
+
+class TestAReplyCutOffAtTheLimitSaysSo:
+    """A reply stopped by ``max_tokens`` keeps why it stopped, so the chat
+    can say so instead of ending mid-sentence as if it were done."""
+
+    async def test_the_final_frame_carries_the_stop_reason(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, _recorder, _captured, monkeypatch = harness
+        monkeypatch.setattr(prompt_module, "get_agent", lambda *a, **k: _CutOffAgent())
+
+        chunks = [c async for c in service.stream_chat("tell me everything")]
+
+        assert chunks[-1].metadata["finish_reason"] == "length"
+
+    async def test_the_reply_keeps_the_agent_settings_it_ran_under(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """The chat's agent drawer shows what a reply used, which may no
+        longer be what the agent is set to."""
+        service, *_ = harness
+        config = default_agent_config()
+
+        chunks = [c async for c in service.stream_chat("hello")]
+
+        assert chunks[-1].metadata["agent"] == {
+            "slug": config.slug,
+            "temperature": config.temperature,
+            "max_tokens": config.max_tokens,
+        }
+
+    async def test_a_reply_that_finished_carries_none(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, *_ = harness
+
+        chunks = [c async for c in service.stream_chat("hello")]
+
+        assert "finish_reason" not in chunks[-1].metadata
+
+
 class TestAgentGrantsReachTheApiChatPath:
     """The service chat path attaches the agent's tools and code mode.
 

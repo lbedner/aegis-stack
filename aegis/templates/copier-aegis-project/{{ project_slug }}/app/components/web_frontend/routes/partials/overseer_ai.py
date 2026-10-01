@@ -129,6 +129,8 @@ async def save_agent(
         agent = await update_agent(db, slug, changes)
     except ValueError as exc:  # the registry's errors are ValueErrors too
         return toast_response(str(exc), "error")
+    if form.get("stay"):  # opened from a chat reply: stay in the thread
+        return toast_response(f"Saved {agent.name}")
     return go_to(
         overseer_ai_agents.agents_url(agent=slug),
         f"Saved {agent.name}",

@@ -1,9 +1,8 @@
 """What goes in one cell of the models table.
 
-Six formatters, each the rule for one column: a quantization that
-Ollama reports inconsistently, an id too long to show whole, a context
-length in tokens, a capability as a tag, a modified date as elapsed
-time. They are separate from the table because each is a rule worth
+The cell rules that need Flet: a capability as a tag, a modified date
+as elapsed time. The plain-text ones (quantization, digest, context
+length) live in ``app.components.inference.formatting``. They are separate from the table because each is a rule worth
 asserting on its own, and the generated model-table tests do.
 """
 
@@ -19,26 +18,6 @@ from app.components.frontend.controls.data_table import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_relative_time as format_relative_iso
-
-# Digest characters shown, matching `ollama list`.
-MODEL_ID_LENGTH = 12
-
-
-def format_quantization(quant: str) -> str:
-    """Convert quantization level to human-readable format.
-
-    Q4_K_M → 4-bit
-    Q8_0 → 8-bit
-    Q5_K_S → 5-bit
-    """
-    if not quant or quant == "—":
-        return "—"
-    # Extract the bit number from formats like Q4_K_M, Q8_0, Q5_K_S
-    if quant.startswith("Q") and len(quant) > 1:
-        bit_num = quant[1]
-        if bit_num.isdigit():
-            return f"{bit_num}-bit"
-    return quant
 
 
 def model_cell(text: str, *, numeric: bool = False) -> ft.Text:
@@ -60,33 +39,6 @@ def model_cell(text: str, *, numeric: bool = False) -> ft.Text:
         color=Theme.Colors.TEXT_SECONDARY,
         **CELL_ELLIPSIS_KWARGS,
     )
-
-
-def format_model_id(digest: str) -> str:
-    """Short digest, the same 12 characters ``ollama list`` prints.
-
-    The full sha256 is 64 characters and would dominate the row; the
-    leading 12 are what Ollama itself considers enough to identify a
-    build, and they are what the user sees in the terminal.
-    """
-    if not digest:
-        return "—"
-    return digest[:MODEL_ID_LENGTH]
-
-
-def format_context_length(tokens: int) -> str:
-    """Context window in K, because 262144 is a number you have to stop
-    and divide before it means anything.
-
-    Keeps one decimal only when rounding would lie (1536 -> 1.5K, not
-    2K); stays in raw tokens below 1K.
-    """
-    if tokens <= 0:
-        return "—"
-    if tokens < 1024:
-        return str(tokens)
-    k = tokens / 1024
-    return f"{k:.0f}K" if abs(k - round(k)) < 0.05 else f"{k:.1f}K"
 
 
 def capability_cell(present: bool) -> ft.Text:

@@ -16,6 +16,8 @@ from ..constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
+    InferenceEngines,
+    InferencePlacement,
     OllamaMode,
     PaymentProviders,
     PostgresProviders,
@@ -38,6 +40,7 @@ from .insights_service_parser import (
     is_insights_service_with_options,
     parse_insights_service_config,
 )
+from .option_spec import parse_options
 from .services import SERVICES
 
 
@@ -178,12 +181,61 @@ class TemplateGenerator:
             if has_ai and has_database:
                 self.ai_backend = StorageBackends.SQLITE
 
+        self._resolve_inference()
+
         # Build component specs using base names
         self.component_specs = {}
         for name in self.components:
             base_name = extract_base_component_name(name)
             if base_name in COMPONENTS:
                 self.component_specs[base_name] = COMPONENTS[base_name]
+
+    def _resolve_inference(self) -> None:
+        """The inference component's engine and placement.
+
+        From ``inference[engine,placement]``, or pulled in by the AI
+        service's ollama provider (the resolver usually added it already;
+        this covers callers that did not run it). A bracket-less
+        ``inference`` takes the placement the interactive Ollama prompt
+        chose, else the default.
+        """
+        self.inference_engine = InferenceEngines.DEFAULT
+        self.inference_placement = InferencePlacement.DEFAULT
+        found = next(
+            (
+                c
+                for c in self.components
+                if extract_base_component_name(c) == ComponentNames.INFERENCE
+            ),
+            None,
+        )
+        if found is None and AIProviders.OLLAMA in self._ai_providers():
+            found = ComponentNames.INFERENCE
+            self.components.append(found)
+        self.has_inference = found is not None
+        if found is None:
+            return
+        parsed = parse_options(found, COMPONENTS[ComponentNames.INFERENCE])
+        self.inference_engine = parsed["engine"]
+        self.inference_placement = parsed["placement"]
+        if "[" not in found:
+            from ..cli.interactive import get_ollama_mode_selection
+
+            chosen = get_ollama_mode_selection("ai")
+            if chosen in InferencePlacement.ALL:
+                self.inference_placement = chosen
+
+    def _ai_providers(self) -> list[str]:
+        """The AI providers chosen, or none without the AI service."""
+        has_ai = any(
+            extract_base_service_name(s) == AnswerKeys.SERVICE_AI
+            for s in self.selected_services
+        )
+        if not has_ai:
+            return []
+        from ..cli.interactive import get_ai_provider_selection
+
+        return list(get_ai_provider_selection("ai"))
 
     def _component_flag(self, name: str) -> str:
         """Cookiecutter "yes"/"no" for whether component ``name`` is selected.
@@ -295,8 +347,14 @@ class TemplateGenerator:
             AnswerKeys.AI_RAG: "yes" if self.ai_rag else "no",
             # AI Voice (TTS and STT) selection
             AnswerKeys.AI_VOICE: "yes" if self.ai_voice else "no",
-            # Ollama deployment mode (host, docker, or none)
-            AnswerKeys.OLLAMA_MODE: self._get_ollama_mode(),
+            # The inference component's axes
+            AnswerKeys.INFERENCE_ENGINE: self.inference_engine,
+            AnswerKeys.INFERENCE_PLACEMENT: self.inference_placement,
+            # Where Ollama runs: the placement, or none without the component.
+            # Templates read this one value.
+            AnswerKeys.OLLAMA_MODE: self.inference_placement
+            if self.has_inference
+            else OllamaMode.NONE,
             # Dependency lists for templates
             "selected_components": selected_only,  # Original selection for context
             "docker_services": self._get_docker_services(),
@@ -312,10 +370,17 @@ class TemplateGenerator:
         """
         services = []
         for component_name in self.components:
-            if component_name in self.component_specs:
-                spec = self.component_specs[component_name]
-                if spec.docker_services:
-                    services.extend(spec.docker_services)
+            base_name = extract_base_component_name(component_name)
+            spec = self.component_specs.get(base_name)
+            if spec is None or not spec.docker_services:
+                continue
+            # Inference on the host has no container of its own.
+            if (
+                base_name == ComponentNames.INFERENCE
+                and self.inference_placement != InferencePlacement.DOCKER
+            ):
+                continue
+            services.extend(spec.docker_services)
         return list(dict.fromkeys(services))  # Preserve order, remove duplicates
 
     def _get_pyproject_deps(self) -> list[str]:
@@ -442,26 +507,6 @@ class TemplateGenerator:
         from ..cli.interactive import get_ai_framework_selection
 
         return get_ai_framework_selection("ai")
-
-    def _get_ollama_mode(self) -> str:
-        """
-        Get Ollama deployment mode selection (host, docker, or none).
-
-        Returns:
-            Ollama mode string
-        """
-        # Check if AI service is selected (handle bracket syntax)
-        has_ai = any(
-            extract_base_service_name(s) == AnswerKeys.SERVICE_AI
-            for s in self.selected_services
-        )
-        if not has_ai:
-            return OllamaMode.NONE  # Default when AI not selected
-
-        # Import here to avoid circular imports
-        from ..cli.interactive import get_ollama_mode_selection
-
-        return get_ollama_mode_selection("ai")
 
     def _get_auth_level(self) -> str:
         """

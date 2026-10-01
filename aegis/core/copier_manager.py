@@ -27,6 +27,8 @@ from ..constants import (
     AIProviders,
     AnswerKeys,
     AuthLevels,
+    InferenceEngines,
+    InferencePlacement,
     OllamaMode,
     PaymentProviders,
     PostgresProviders,
@@ -163,8 +165,15 @@ def generate_with_copier(
         == "yes",
         AnswerKeys.AI_RAG: template_context.get(AnswerKeys.AI_RAG, "no") == "yes",
         AnswerKeys.AI_VOICE: template_context.get(AnswerKeys.AI_VOICE, "no") == "yes",
+        # Derived by the template generator from the inference component.
         AnswerKeys.OLLAMA_MODE: template_context.get(
             AnswerKeys.OLLAMA_MODE, OllamaMode.NONE
+        ),
+        AnswerKeys.INFERENCE_ENGINE: template_context.get(
+            AnswerKeys.INFERENCE_ENGINE, InferenceEngines.DEFAULT
+        ),
+        AnswerKeys.INFERENCE_PLACEMENT: template_context.get(
+            AnswerKeys.INFERENCE_PLACEMENT, InferencePlacement.DEFAULT
         ),
         AnswerKeys.INSIGHTS_GITHUB: template_context.get(
             AnswerKeys.INSIGHTS_GITHUB, "no"

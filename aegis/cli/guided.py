@@ -51,6 +51,7 @@ from ..blueprints import Blueprint
 from ..blueprints.spec import ACCEPT_PREFIX, QKeys, pick_index, pick_multi
 from ..constants import (
     AIProviders,
+    InferencePlacement,
     PostgresProviders,
     StorageBackends,
     WorkerBackends,
@@ -87,6 +88,7 @@ from .interactive import (
     ProjectSelection,
     get_skip_llm_sync_selection,
     run_project_selection,
+    set_ollama_mode_selection,
 )
 
 
@@ -455,6 +457,36 @@ class GuidedSelectionUI(BlueprintScreens):
                 qkey=QKeys.WORKER_BACKEND,
             )
         ].value
+
+    def choose_inference_placement(self) -> str:
+        choices = [
+            _Choice(
+                InferencePlacement.HOST,
+                "Host",
+                _g(
+                    "choice.inference.host",
+                    "Use the Ollama already running on this machine. The default.",
+                ),
+            ),
+            _Choice(
+                InferencePlacement.DOCKER,
+                "Docker",
+                _g(
+                    "choice.inference.docker",
+                    "Run Ollama as a container in the project's compose stack.",
+                ),
+            ),
+        ]
+        placement = choices[
+            self._select(
+                _g("prompt.inference_placement", "Where does Ollama run?"),
+                choices,
+                crumb="amend",
+                qkey=QKeys.INFERENCE_PLACEMENT,
+            )
+        ].value
+        set_ollama_mode_selection("ai", placement)
+        return placement
 
     def choose_database_engine(self, context: str) -> tuple[str, str | None]:
         choices = [

@@ -242,23 +242,9 @@ AI_PROVIDER=ollama
 AI_MODEL=llama3.1
 ```
 
-### Ollama Deployment Modes
+### Where Ollama runs
 
-Configure at project generation:
-
-```bash
-# Host mode: Ollama runs on your machine (default)
-aegis init my-app --services ai
-
-# Docker mode: Ollama runs in a Docker container
-# (select during aegis init interactive prompts)
-```
-
-| Mode | Description | Use Case |
-|------|-------------|----------|
-| `host` | Ollama on localhost:11434 | Development, GPU on host |
-| `docker` | Ollama in Docker container | Portable, CI/CD |
-| `none` | No Ollama support | Cloud-only providers |
+The `ollama` provider brings in the [Inference component](../../components/inference.md), which decides where Ollama runs: on the host by default, or as a container with `inference[docker]`.
 
 ### Switching Models via CLI
 

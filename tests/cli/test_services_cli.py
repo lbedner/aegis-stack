@@ -274,6 +274,7 @@ class TestInteractiveServiceSelection:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 True,  # auth service
                 True,  # database confirmation for auth
                 False,  # payment service
@@ -308,6 +309,7 @@ class TestInteractiveServiceSelection:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 False,  # auth service
                 False,  # payment service
                 False,  # AI service

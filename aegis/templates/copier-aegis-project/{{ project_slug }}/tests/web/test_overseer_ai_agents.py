@@ -131,6 +131,25 @@ def test_saving_an_agent_sends_only_its_fields(
     assert triggers(response)["toast"]["tone"] == "ok"
 
 
+def test_saving_from_the_chat_stays_in_the_chat(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Opened from a reply, Save keeps the drawer and the thread where they
+    are, instead of navigating to the Agents page."""
+
+    async def update(db: Any, slug: str, changes: dict[str, Any]) -> Any:
+        return SimpleNamespace(name="Illiana")
+
+    monkeypatch.setattr(partials, "update_agent", update)
+    response = client.post(
+        f"{PARTIALS}/agents/illiana", data={"name": "Illiana", "stay": "1"}
+    )
+    assert response.status_code == 200
+    assert "HX-Location" not in response.headers
+    assert "dialog:close" not in response.headers.get("HX-Trigger-After-Settle", "")
+    assert "Saved Illiana" in triggers(response)["toast"]["text"]
+
+
 def test_a_refused_agent_change_is_the_toast(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -45,6 +45,7 @@ class QKeys:
     SCHEDULER_BACKEND = "scheduler_backend"
     DATABASE_ENGINE = "database_engine"
     POSTGRES_PROVIDER = "postgres_provider"
+    INFERENCE_PLACEMENT = "inference_placement"
     AUTH_LEVEL = "auth_level"
     AI_FRAMEWORK = "ai_framework"
     AI_STORAGE = "ai_storage"
@@ -57,6 +58,7 @@ class QKeys:
         SCHEDULER_BACKEND,
         DATABASE_ENGINE,
         POSTGRES_PROVIDER,
+        INFERENCE_PLACEMENT,
         AUTH_LEVEL,
         AI_FRAMEWORK,
         AI_STORAGE,

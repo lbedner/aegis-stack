@@ -61,6 +61,21 @@ from app.services.ai.service.trace import (
 {%- endif %}
 
 
+{%- if ai_framework != "pydantic-ai" %}
+def _stop_reason(metadata: dict[str, Any] | None) -> str | None:
+    """A LangChain chunk's stop reason under its provider's key, with a
+    max_tokens cut-off as "length" (pydantic-ai's spelling) for every one."""
+    if not metadata:
+        return None
+    reason = (
+        metadata.get("finish_reason")  # OpenAI
+        or metadata.get("stop_reason")  # Anthropic
+        or metadata.get("done_reason")  # Ollama
+    )
+    return "length" if reason in ("length", "max_tokens") else reason
+
+
+{% endif %}
 class StreamingMixin(ChatMixin):
     """Streaming variant of the chat turn."""
 {% if ai_framework == "pydantic-ai" %}
@@ -170,6 +185,8 @@ class StreamingMixin(ChatMixin):
             stream_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 {% endif %}
             tool_trace: list[dict[str, Any]] = []
+            # Why the model stopped; "length" is max_tokens cutting it off.
+            finish_reason: str | None = None
 {% if ai_framework == "pydantic-ai" %}
             # Event-based streaming: unlike ``run_stream`` (which treats the
             # first text output as THE answer and stops), the event stream
@@ -235,6 +252,11 @@ class StreamingMixin(ChatMixin):
                                 )
                             continue
                         elif isinstance(event, AgentRunResultEvent):
+                            finish_reason = getattr(
+                                getattr(event.result, "response", None),
+                                "finish_reason",
+                                None,
+                            )
 {%- if ai_backend != "memory" %}
                             usage_obj = (
                                 event.result.usage()
@@ -252,8 +274,6 @@ class StreamingMixin(ChatMixin):
                                     )
                                     or 0,
                                 }
-{%- else %}
-                            pass
 {%- endif %}
 
                         if not text_chunk:
@@ -282,6 +302,11 @@ class StreamingMixin(ChatMixin):
             # no tool ever runs and no reading is ever staged.
             staged_readings: list[dict[str, Any]] = []
             async for chunk in llm.astream(messages):
+                # The stop reason rides the last chunk, which may carry no text.
+                finish_reason = (
+                    _stop_reason(getattr(chunk, "response_metadata", None))
+                    or finish_reason
+                )
                 # Get content from chunk
                 text_chunk = chunk.content if hasattr(chunk, 'content') else str(chunk)
                 if not text_chunk:
@@ -380,6 +405,16 @@ class StreamingMixin(ChatMixin):
 {% endif %}
             if tool_trace:
                 final_metadata["tool_trace"] = tool_trace
+            if finish_reason:
+                final_metadata["finish_reason"] = finish_reason
+{%- if ai_backend != "memory" %}
+            # The settings this reply ran under; the agent may change later.
+            final_metadata["agent"] = {
+                "slug": agent_config.slug,
+                "temperature": agent_config.temperature,
+                "max_tokens": agent_config.max_tokens,
+            }
+{%- endif %}
             # What the final frame reports is what the message keeps, so a
             # conversation reopened from history shows the same model and
             # cost the live turn did.

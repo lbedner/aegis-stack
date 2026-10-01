@@ -1,0 +1,17 @@
+{# What Ollama is serving right now, and where the app reaches it. #}
+{% from "components/macros/layout.html" import card, stats_strip, facts, badge %}
+{% from "components/macros/feedback.html" import empty_state %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="inference-figures") }}
+  {% include "pages/overseer/inference/_unreachable.html" %}
+  <div class="grid gap-4 lg:grid-cols-2">
+    {% call card("In memory", "Models Ollama holds warm, ready to answer.") %}
+      {% if loaded %}
+      <div class="flex flex-wrap gap-2">{% for name in loaded %}{{ badge(name, "ok") }}{% endfor %}</div>
+      {% elif not unreachable %}
+      {{ empty_state("Nothing loaded", "A model loads on its first request, or from Models.") }}
+      {% endif %}
+    {% endcall %}
+    {% call card("Server") %}{{ facts(server) }}{% endcall %}
+  </div>
+</div>

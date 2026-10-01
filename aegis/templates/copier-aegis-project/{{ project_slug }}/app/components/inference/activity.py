@@ -1,4 +1,3 @@
-{%- if ollama_mode != "none" -%}
 """
 Ollama model activity tracker.
 
@@ -153,6 +152,3 @@ def get_ollama_activity() -> OllamaActivityTracker:
     if _tracker is None:
         _tracker = OllamaActivityTracker()
     return _tracker
-{%- else -%}
-# Ollama activity tracker not included - ollama_mode is "none"
-{%- endif %}

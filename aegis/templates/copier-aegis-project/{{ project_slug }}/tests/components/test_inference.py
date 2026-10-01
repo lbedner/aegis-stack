@@ -1,10 +1,12 @@
-{% if ollama_mode != "none" %}
 """Tests for the ephemeral Ollama model activity tracker."""
 
-from app.services.ai.domains.llm.ollama_activity import (
+import pytest
+
+from app.components.inference.activity import (
     OllamaActivityTracker,
     get_ollama_activity,
 )
+from app.components.inference.ollama import OllamaClient
 
 
 class TestOllamaActivityTracker:
@@ -123,4 +125,24 @@ class TestOllamaActivityTracker:
 
     def test_singleton_accessor_returns_same_instance(self) -> None:
         assert get_ollama_activity() is get_ollama_activity()
-{% endif %}
+
+
+class TestModelMoves:
+    """Load and unload go through one door, whoever asks (dashboard, page)."""
+
+    async def test_an_action_reaches_its_call(self) -> None:
+        calls: list[tuple[str, str]] = []
+
+        class Recording(OllamaClient):
+            async def load_model(
+                self, model_name: str, keep_alive: str = "30m"
+            ) -> bool:
+                calls.append(("load", model_name))
+                return True
+
+        assert await Recording(base_url="http://x").move("load", "m") is True
+        assert calls == [("load", "m")]
+
+    async def test_anything_else_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="delete"):
+            await OllamaClient(base_url="http://x").move("delete", "m")

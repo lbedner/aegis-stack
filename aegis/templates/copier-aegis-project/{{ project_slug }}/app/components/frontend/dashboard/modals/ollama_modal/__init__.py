@@ -6,13 +6,12 @@ re-exports the names that were importable before, so nothing outside
 the package had to change.
 """
 
+from app.components.inference.formatting import format_model_id, format_quantization
+
 from .activity_tab import ActivitySection, ActivityTab
 from .cells import (
     build_modified_cell,
     capability_cell,
-    format_context_length,
-    format_model_id,
-    format_quantization,
     model_cell,
 )
 from .columns import (
@@ -48,7 +47,6 @@ __all__ = [
     "UseModelControl",
     "build_modified_cell",
     "capability_cell",
-    "format_context_length",
     "format_model_id",
     "format_quantization",
     "model_cell",

@@ -45,8 +45,8 @@ class SectionedPage(NamedTuple):
 
 
 def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
-    """Pages for services a project may not have: each registered only when
-    its module imports (the module ships with its service)."""
+    """Pages for services and components a project may not have: each
+    registered only when its module imports (the module ships with them)."""
     pages: dict[tuple[str, str], SectionedPage] = {}
     try:
         from . import overseer_blog
@@ -79,6 +79,14 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
             "payment", overseer_payment.SECTIONS, overseer_payment.section_context
         )
     except ImportError:  # no payment service in this project
+        pass
+    try:
+        from . import overseer_inference
+
+        pages[("components", "ollama")] = SectionedPage(
+            "inference", overseer_inference.SECTIONS, overseer_inference.section_context
+        )
+    except ImportError:  # no inference component in this project
         pass
     try:
         from . import overseer_ai

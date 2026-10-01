@@ -49,7 +49,7 @@ from app.services.ai.models.llm import (
 )
 
 try:
-    from app.services.ai.domains.llm.ollama import OllamaClient, OllamaModel
+    from app.components.inference.ollama import OllamaClient, OllamaModel
 except (ModuleNotFoundError, ImportError):
     # Ollama module not generated or empty (ollama_mode is "none"),
     # or missing dependency — either way, gracefully degrade

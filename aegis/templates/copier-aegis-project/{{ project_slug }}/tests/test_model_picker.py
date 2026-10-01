@@ -93,6 +93,21 @@ class TestFormatContextWindow:
         assert format_context_window(1_048_576) == "1M"
         assert format_context_window(2_000_000) == "2M"
 
+    def test_a_local_window_reads_in_binary_k(self) -> None:
+        """Ollama reports powers of two: 131072 is the 128k people say, not
+        131k. The one formatter serves the picker and the Inference page."""
+        from app.core.model_picker import format_context_window
+
+        assert format_context_window(131_072) == "128k"
+        assert format_context_window(262_144) == "256k"
+        assert format_context_window(40_960) == "40k"
+        assert format_context_window(1_536) == "1.5k"
+
+    def test_a_small_window_stays_in_tokens(self) -> None:
+        from app.core.model_picker import format_context_window
+
+        assert format_context_window(512) == "512"
+
     def test_unknown_is_blank(self) -> None:
         from app.core.model_picker import format_context_window
 

@@ -28,7 +28,6 @@ from app.components.frontend.dashboard.modals.ollama_modal import (
     MODEL_TABLE_WIDTH,
     MODELS_MODAL_WIDTH,
     capability_cell,
-    format_context_length,
     format_model_id,
     model_cell,
     table_width,
@@ -177,23 +176,6 @@ class TestTheModelId:
 
     def test_a_short_digest_is_left_alone(self) -> None:
         assert format_model_id("abc123") == "abc123"
-
-
-class TestTheContextWindow:
-    def test_it_reads_in_k_not_raw_tokens(self) -> None:
-        """262144 is a number you have to stop and divide; 256K is not."""
-        assert format_context_length(262144) == "256K"
-        assert format_context_length(4096) == "4K"
-
-    def test_a_non_round_window_keeps_one_decimal(self) -> None:
-        assert format_context_length(40960) == "40K"
-        assert format_context_length(1536) == "1.5K"
-
-    def test_a_small_window_stays_in_tokens(self) -> None:
-        assert format_context_length(512) == "512"
-
-    def test_an_unknown_window_reads_as_no_value(self) -> None:
-        assert format_context_length(0) == "—"
 
 
 class TestTheCapabilities:

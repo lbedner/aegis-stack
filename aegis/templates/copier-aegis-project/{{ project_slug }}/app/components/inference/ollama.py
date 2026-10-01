@@ -1,4 +1,3 @@
-{%- if ollama_mode != "none" -%}
 """
 Ollama API client for health checks and model discovery.
 
@@ -12,17 +11,19 @@ from datetime import datetime
 import httpx
 from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
+from app.components.inference.activity import get_ollama_activity
 from app.core.log import logger
-from app.services.ai.domains.llm.ollama_activity import get_ollama_activity
 
 # Default Ollama server URL for local development
 OLLAMA_DEFAULT_URL = "http://localhost:11434"
+# What a caller may ask of a model: warm it into memory, or free it.
+MODEL_ACTIONS = ("load", "unload")
 
 
 class OllamaModelDetails(BaseModel):
     """Model details from Ollama API."""
 
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra="ignore")
 
     parent_model: str = ""
     format: str = ""  # e.g., "gguf"
@@ -36,7 +37,7 @@ class OllamaModelDetails(BaseModel):
     context_length: int = 0  # e.g., 262144
     embedding_length: int = 0  # e.g., 2048
 
-    @field_validator('families', mode='before')
+    @field_validator("families", mode="before")
     @classmethod
     def normalize_families(cls, v: str | list[str] | None) -> list[str]:
         if v is None:
@@ -49,7 +50,7 @@ class OllamaModelDetails(BaseModel):
 class OllamaModel(BaseModel):
     """Model data from Ollama's /api/tags endpoint."""
 
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra="ignore")
 
     name: str  # Model name (e.g., "qwen2.5:7b")
     model: str  # Same as name
@@ -78,7 +79,7 @@ class OllamaModel(BaseModel):
 class OllamaRunningModel(BaseModel):
     """Model data from Ollama's /api/ps endpoint (running models)."""
 
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra="ignore")
 
     name: str  # Model name (e.g., "qwen2.5:7b")
     model: str  # Same as name
@@ -105,7 +106,7 @@ class OllamaRunningModel(BaseModel):
 class OllamaTagsResponse(BaseModel):
     """Response from /api/tags endpoint."""
 
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra="ignore")
 
     models: list[OllamaModel] = []
 
@@ -321,6 +322,15 @@ class OllamaClient:
             logger.error(f"Unexpected error unloading model {model_name}: {e}")
             return False
 
+    async def move(self, action: str, model_name: str) -> bool:
+        """Load or unload ``model_name`` by name (``MODEL_ACTIONS``), so a
+        button or a route can pass the action it was given straight through."""
+        if action not in MODEL_ACTIONS:
+            raise ValueError(f"Unknown model action: {action}")
+        if action == "load":
+            return await self.load_model(model_name)
+        return await self.unload_model(model_name)
+
     async def get_server_status(self) -> OllamaServerStatus:
         """Get comprehensive Ollama server status.
 
@@ -349,6 +359,3 @@ class OllamaClient:
             installed_models=installed_models,
             total_vram_gb=round(total_vram_gb, 2),
         )
-{%- else -%}
-# Ollama client not included - ollama_mode is "none"
-{%- endif %}

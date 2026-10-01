@@ -255,24 +255,39 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="ai_ollama",
-        # The only stack that sets ``ollama_mode``. Without one, post-gen
-        # strips the whole Ollama surface from every generated project -
-        # including ``tests/components/frontend/test_ollama_model_table.py``,
-        # whose 33 tests therefore never ran anywhere (#1183). ``ai[ollama]``
-        # resolves the mode to ``host`` in non-interactive mode, and ``host``
-        # needs no running Ollama to import and render, which is the point.
+        # ``ai[ollama]`` pulls in the inference component, on the host by
+        # default, which needs no running Ollama to import and render. Without
+        # the component post-gen strips the whole Ollama surface, including
+        # ``tests/components/frontend/test_ollama_model_table.py``.
         components=["database"],
         services=["ai[ollama,sqlite]"],
-        description="AI with the Ollama surface: the only stack that renders it",
+        description="AI on local Ollama: the provider pulls in inference",
         expected_files=[
             "app/components/frontend/dashboard/modals/ollama_modal/",
             "app/components/frontend/dashboard/cards/ollama_card.py",
-            "app/services/ai/domains/llm/ollama.py",
+            "app/components/inference/ollama.py",
+            "tests/components/test_inference.py",
             "app/services/system/health_ollama.py",
             "tests/components/frontend/test_ollama_model_table.py",
         ],
         expected_docker_services=["webserver"],
         expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
+    ),
+    StackCombination(
+        name="inference_docker",
+        # The component on its own, no AI service: the Ollama client, health
+        # check and dashboard stand alone, and the container ships.
+        components=["inference[docker]"],
+        services=[],
+        description="Inference in docker without the AI service",
+        expected_files=[
+            "app/components/inference/ollama.py",
+            "app/components/inference/activity.py",
+            "app/services/system/health_ollama.py",
+            "tests/components/test_inference.py",
+        ],
+        expected_docker_services=["webserver", "ollama"],
+        expected_pyproject_deps=["fastapi", "flet"],
     ),
     StackCombination(
         name="ai_langchain",
@@ -471,11 +486,15 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="htmx_auth",
-        components=["htmx", "database"],
+        # Inference rides along: its Overseer page needs the htmx frontend and
+        # auth's Overseer, and it renders here without the AI service.
+        components=["htmx", "database", "inference"],
         services=["auth"],
         description="htmx web frontend with the auth service (auth pages)",
         expected_files=[
             "app/components/web_frontend/templates/pages/auth/login.html",
+            "app/components/web_frontend/overseer_inference.py",
+            "tests/web/test_overseer_inference.py",
             "app/components/web_frontend/static/js/auth.js",
             "app/components/frontend/main.py",
             "app/services/auth/",

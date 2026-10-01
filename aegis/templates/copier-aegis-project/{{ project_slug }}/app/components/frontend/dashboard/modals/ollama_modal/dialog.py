@@ -14,7 +14,7 @@ from typing import Any
 import flet as ft
 from app.components.frontend.controls.tabs import PulseTabs
 from app.core.log import logger
-from app.services.ai.domains.llm.ollama_activity import get_ollama_activity
+from app.components.inference.activity import get_ollama_activity
 from app.services.system.models import ComponentStatus
 
 from ...cards.card_utils import get_status_detail

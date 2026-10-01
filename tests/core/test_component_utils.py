@@ -22,6 +22,14 @@ from aegis.core.component_utils import (
 class TestParseComponentName:
     """Test the core component name parsing function."""
 
+    def test_parse_a_list_of_options(self) -> None:
+        """A component with two option axes takes both in one bracket
+        (``inference[ollama,docker]``); each spec validates its own."""
+        assert parse_component_name("inference[ollama,docker]") == (
+            "inference",
+            "ollama,docker",
+        )
+
     def test_parse_simple_component(self) -> None:
         """Test parsing component without engine info."""
         base, engine = parse_component_name("scheduler")

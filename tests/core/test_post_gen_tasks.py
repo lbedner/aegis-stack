@@ -526,20 +526,19 @@ class TestRevisionsDerivedInsideTheProjectVenv:
         assert mig.call_args.args[1] is False
 
 
-class TestOllamaModeCleanup:
-    """``ollama_mode: none`` must leave no Ollama file behind.
+class TestInferenceCleanup:
+    """Without the inference component no Ollama file is left behind.
 
-    Their importers are all jinja-gated, so the files ship dead rather than
-    breaking the boot — but ``ollama_modal`` imports ``ollama_activity``,
-    which renders empty in that mode, so the package cannot even import.
+    The component's own manifest owns the surface, so the generic cleanup
+    removes it; the files survive with or without the AI service.
     """
 
     OLLAMA_FILES = (
+        "app/components/inference/ollama.py",
+        "app/components/inference/activity.py",
         "app/components/frontend/dashboard/cards/ollama_card.py",
         "app/components/frontend/dashboard/modals/ollama_modal/dialog.py",
         "app/services/system/health_ollama.py",
-        "app/services/ai/domains/llm/ollama.py",
-        "app/services/ai/domains/llm/ollama_activity.py",
     )
 
     def _project(self, tmp_path: Path) -> Path:
@@ -549,25 +548,26 @@ class TestOllamaModeCleanup:
             path.write_text("")
         return tmp_path
 
-    def _context(self, ollama_mode: str) -> dict[str, Any]:
+    def _context(self, *, inference: bool, ai: bool = True) -> dict[str, Any]:
         return {
-            "include_ai": True,
+            "include_ai": ai,
             "include_frontend": True,
             "include_database": True,
+            "include_inference": inference,
             "ai_backend": "postgres",
-            "ai_providers": "ollama",
-            "ollama_mode": ollama_mode,
+            "ai_providers": "ollama" if inference else "openai",
+            "ollama_mode": "host" if inference else "none",
         }
 
-    def test_none_removes_every_ollama_file(self, tmp_path: Path) -> None:
+    def test_without_the_component_every_ollama_file_goes(self, tmp_path: Path) -> None:
         project = self._project(tmp_path)
-        cleanup_components(project, self._context("none"))
+        cleanup_components(project, self._context(inference=False))
         left = [rel for rel in self.OLLAMA_FILES if (project / rel).exists()]
-        assert not left, f"ollama_mode=none still ships: {left}"
+        assert not left, f"no inference component, still ships: {left}"
 
-    def test_host_keeps_them(self, tmp_path: Path) -> None:
+    def test_the_component_keeps_them_even_without_ai(self, tmp_path: Path) -> None:
         project = self._project(tmp_path)
-        cleanup_components(project, self._context("host"))
+        cleanup_components(project, self._context(inference=True, ai=False))
         assert all((project / rel).exists() for rel in self.OLLAMA_FILES)
 
 

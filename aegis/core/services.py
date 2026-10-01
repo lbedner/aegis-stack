@@ -423,6 +423,9 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/overseer_payment.py",
                     "app/components/web_frontend/routes/partials/overseer_payment.py",
                     "tests/web/test_overseer_payment.py",
+                    "app/components/web_frontend/overseer_inference.py",
+                    "app/components/web_frontend/routes/partials/overseer_inference.py",
+                    "tests/web/test_overseer_inference.py",
                     "app/components/web_frontend/templates/components/auth_macros.html",
                     "app/components/web_frontend/static/js/auth.js",
                 ],
@@ -547,6 +550,12 @@ SERVICES: dict[str, ServiceSpec] = {
                 choices=sorted(AIProviders.ALL),
                 default=list(AIProviders.DEFAULT),
                 answer_key=AnswerKeys.AI_PROVIDERS,
+                # Ollama is served by the inference component: choosing the
+                # provider brings the server with it (on the host, unless
+                # inference[docker] says otherwise).
+                auto_requires=lambda v: [ComponentNames.INFERENCE]
+                if AIProviders.OLLAMA in v
+                else [],
             ),
             OptionSpec(
                 name="rag",
@@ -630,10 +639,6 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/modals/ai_analytics_tab",
                 "app/components/frontend/dashboard/modals/agents_tab.py",
                 "app/components/frontend/dashboard/modals/llm_catalog_tab",
-                # Imports ai.ollama_activity; only jinja-gated files reference
-                # it, so without AI it would ship as a dead module whose
-                # import cannot resolve.
-                "app/components/frontend/dashboard/modals/ollama_modal",
                 "tests/components/frontend/test_ai_analytics_utils.py",
                 "app/models/conversation.py",
             ],

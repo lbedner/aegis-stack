@@ -1,0 +1,4 @@
+{# Where the page looked for Ollama when nothing answered there. #}
+{% if unreachable %}
+<p role="alert" class="text-xs text-error bg-aegis-error/5 border border-aegis-error/40 rounded px-3 py-2">No Ollama answered at {{ unreachable }}. Start it with <code>ollama serve</code>, or check <code>OLLAMA_BASE_URL</code>.</p>
+{% endif %}

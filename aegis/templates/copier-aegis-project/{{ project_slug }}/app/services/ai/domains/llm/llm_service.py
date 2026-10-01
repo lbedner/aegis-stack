@@ -234,7 +234,7 @@ async def set_active_model(model_id: str, force: bool = False) -> SetModelResult
             else:
                 # Model not in catalog - check if it's an Ollama model
                 try:
-                    from app.services.ai.domains.llm.ollama import OllamaClient
+                    from app.components.inference.ollama import OllamaClient
 
                     client = OllamaClient()
                     if await client.is_available():

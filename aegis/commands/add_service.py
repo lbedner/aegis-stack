@@ -26,7 +26,7 @@ from ..core.component_utils import (
     extract_base_component_name,
     extract_base_service_name,
 )
-from ..core.components import COMPONENTS, CORE_COMPONENTS
+from ..core.components import COMPONENTS, CORE_COMPONENTS, component_option_answers
 from ..core.copier_manager import load_copier_answers
 from ..core.copier_updater import (
     cleanup_backup_tag,
@@ -364,6 +364,9 @@ def add_service_command(
         base_component = extract_base_component_name(component)
         include_key = AnswerKeys.include_key(base_component)
         update_data[include_key] = True
+        # A component a service pulls in (``ai[ollama]`` brings inference)
+        # records its options' defaults, as ``aegis add`` does.
+        update_data.update(component_option_answers(component))
 
     # Add services using ManualUpdater. Everything from here writes, so a
     # failure anywhere resets to this point: files, the answers file and
@@ -386,6 +389,7 @@ def add_service_command(
                 component_data[AnswerKeys.SCHEDULER_BACKEND] = scheduler_backend
             elif component == ComponentNames.DATABASE:
                 component_data[AnswerKeys.DATABASE_ENGINE] = StorageBackends.SQLITE
+            component_data.update(component_option_answers(component))
 
             # Add the component
             result = updater.add_component(component, component_data)

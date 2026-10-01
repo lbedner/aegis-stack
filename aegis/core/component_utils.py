@@ -23,6 +23,7 @@ def parse_component_name(component: str) -> tuple[str, str | None]:
         parse_component_name('database[sqlite]') -> ('database', 'sqlite')
         parse_component_name('scheduler') -> ('scheduler', None)
         parse_component_name('database[]') -> ('database', None)
+        parse_component_name('inference[ollama,docker]') -> ('inference', 'ollama,docker')
 
     Raises:
         ValueError: If component name format is invalid
@@ -36,14 +37,19 @@ def parse_component_name(component: str) -> tuple[str, str | None]:
     if not component:
         raise ValueError("Component name cannot be empty or whitespace")
 
-    # Use regex for robust parsing
-    pattern = r"^([a-zA-Z][a-zA-Z0-9_-]*?)(?:\[([a-zA-Z0-9_-]*)\])?$"
+    # Use regex for robust parsing. The bracket holds one token or a comma
+    # list (a component with several option axes, ``inference[ollama,docker]``);
+    # each spec validates its own values.
+    pattern = (
+        r"^([a-zA-Z][a-zA-Z0-9_-]*?)"
+        r"(?:\[([a-zA-Z0-9_-]+(?:\s*,\s*[a-zA-Z0-9_-]+)*)?\])?$"
+    )
     match = re.match(pattern, component)
 
     if not match:
         raise ValueError(
             f"Invalid component name format: '{component}'. "
-            "Expected format: 'name' or 'name[engine]'"
+            "Expected format: 'name', 'name[engine]' or 'name[a,b]'"
         )
 
     base_name, engine = match.groups()

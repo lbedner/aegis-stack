@@ -52,8 +52,20 @@ def hx_dialog(url: str, extra: str = "") -> Markup:
     a row-form's opener ("I can't open a new one until I refresh").
     Saying ``innerHTML`` here costs nothing and cannot be borrowed
     against, and it fixes every opener at once."""
+    return _hx_open(url, "#dialog-body", extra)
+
+
+def hx_drawer(url: str) -> Markup:
+    """The attributes for "open this in the side drawer": the panel an item
+    is edited in beside the page, without the address bar naming it (the
+    list-driven ``drawer_sync`` does that). Same stated swap as
+    ``hx_dialog``, for the same reason."""
+    return _hx_open(url, "#drawer-body")
+
+
+def _hx_open(url: str, target: str, extra: str = "") -> Markup:
     return Markup(
-        f'hx-get="{escape(url)}" hx-target="#dialog-body" hx-swap="innerHTML" {extra}'
+        f'hx-get="{escape(url)}" hx-target="{target}" hx-swap="innerHTML" {extra}'
     )
 
 
@@ -197,6 +209,7 @@ def pager(
 
 templates.env.globals["hx_replace"] = hx_replace
 templates.env.globals["hx_dialog"] = hx_dialog
+templates.env.globals["hx_drawer"] = hx_drawer
 templates.env.globals["hx_dialog_post"] = hx_dialog_post
 
 

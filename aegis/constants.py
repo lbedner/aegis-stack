@@ -23,6 +23,7 @@ class ComponentNames:
     INGRESS = "ingress"
     OBSERVABILITY = "observability"
     STORAGE = "storage"
+    INFERENCE = "inference"
 
     # Ordered list for interactive selection. Worker leads and redis
     # follows the steps that auto-add it (worker bundles redis), so most
@@ -38,6 +39,7 @@ class ComponentNames:
         INGRESS,
         OBSERVABILITY,
         HTMX,
+        INFERENCE,
     ]
 
 
@@ -163,8 +165,29 @@ class PaymentProviders:
     DEFAULT = STRIPE
 
 
+class InferenceEngines:
+    """What serves local models for the inference component."""
+
+    OLLAMA = "ollama"
+
+    ALL = [OLLAMA]
+    DEFAULT = OLLAMA
+
+
+class InferencePlacement:
+    """Where the inference engine runs: on the machine (where a Mac's GPU
+    is), or as a compose service."""
+
+    HOST = "host"
+    DOCKER = "docker"
+
+    ALL = [HOST, DOCKER]
+    DEFAULT = HOST
+
+
 class OllamaMode:
-    """Ollama deployment mode options."""
+    """Ollama deployment mode options. No longer asked: ``ollama_mode`` is
+    computed from the inference component's answers (copier.yml)."""
 
     HOST = "host"  # Connect to Ollama running on host machine
     DOCKER = "docker"  # Run Ollama in Docker container
@@ -253,6 +276,9 @@ class AnswerKeys:
     AUTH_OAUTH = "include_oauth"
     AI_VOICE = "ai_voice"
     OLLAMA_MODE = "ollama_mode"
+    INFERENCE = "include_inference"
+    INFERENCE_ENGINE = "inference_engine"
+    INFERENCE_PLACEMENT = "inference_placement"
     PROJECT_SLUG = "project_slug"
     SRC_PATH = "_src_path"
 

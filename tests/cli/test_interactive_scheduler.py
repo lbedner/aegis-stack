@@ -52,6 +52,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -96,6 +97,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -133,6 +135,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # ingress=no
                 False,  # observability=no
                 False,  # htmx
+                False,  # inference
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -166,6 +169,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -205,6 +209,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -252,6 +257,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # ingress=no
                 False,  # observability=no
                 False,  # htmx
+                False,  # inference
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -291,6 +297,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 False,  # no auth
                 False,  # payment
                 False,  # no AI

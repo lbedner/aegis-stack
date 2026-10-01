@@ -178,7 +178,7 @@ class SlashCommandHandler:
 
         # Check for Ollama models (local, no API key needed)
         try:
-            from app.services.ai.domains.llm.ollama import OllamaClient
+            from app.components.inference.ollama import OllamaClient
 
             ollama_client = OllamaClient()
             if await ollama_client.is_available():
@@ -388,7 +388,7 @@ class SlashCommandHandler:
         # Check if model is available in Ollama
         if model in self._model_cache:
             try:
-                from app.services.ai.domains.llm.ollama import OllamaClient
+                from app.components.inference.ollama import OllamaClient
 
                 ollama_client = OllamaClient()
                 if await ollama_client.is_available():

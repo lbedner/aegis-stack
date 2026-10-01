@@ -17,8 +17,13 @@ Gates — a no-op with a single log line unless ALL of:
 
 1. ``PLAID_TUNNEL_METRICS_URL`` is set (the overlay sets it; prod and
    plain compose don't).
-2. The tunnel answers within the discovery window (cloudflared may still
+2. ``PLAID_CLIENT_ID`` is set: ``make serve`` only starts the tunnel with
+   Plaid credentials, so without them there is nothing to discover.
+3. The tunnel answers within the discovery window (cloudflared may still
    be provisioning when the backend boots, so discovery retries).
+
+Only ``PLAID_WEBHOOK_PATH`` answers through the tunnel: the tunnel guard
+middleware refuses everything else, because the app has no login.
 
 Runs as a fire-and-forget task so a slow tunnel never delays startup,
 and never raises — this is a dev convenience, it must degrade silently
@@ -38,8 +43,19 @@ from app.core.log import logger
 _DISCOVERY_ATTEMPTS = 10
 _DISCOVERY_INTERVAL_SECONDS = 2.0
 
+# The one route the tunnel exists for, and the only one it lets through.
+PLAID_WEBHOOK_PATH = "/api/v1/finance/webhook/plaid"
+
 # Module-level so the task isn't garbage-collected mid-flight.
 _tunnel_task: asyncio.Task[None] | None = None
+
+
+def tunnel_metrics_url() -> str | None:
+    """Where the dev overlay's tunnel reports its hostname, or None.
+
+    ``getattr``: a finance stack without Plaid has no such setting at all.
+    """
+    return getattr(settings, "PLAID_TUNNEL_METRICS_URL", None)
 
 
 async def discover_tunnel_hostname(metrics_url: str) -> str | None:
@@ -76,7 +92,7 @@ async def _discover_and_reconcile(metrics_url: str) -> None:
         )
         return
 
-    webhook_url = f"https://{hostname}/api/v1/finance/webhook/plaid"
+    webhook_url = f"https://{hostname}{PLAID_WEBHOOK_PATH}"
     set_runtime_webhook_url(webhook_url)
     logger.info("Plaid webhooks routed through tunnel: %s", webhook_url)
 
@@ -97,8 +113,8 @@ async def _discover_and_reconcile(metrics_url: str) -> None:
 
 async def startup_finance_webhook_tunnel() -> None:
     global _tunnel_task
-    metrics_url = getattr(settings, "PLAID_TUNNEL_METRICS_URL", None)
-    if not metrics_url:
+    metrics_url = tunnel_metrics_url()
+    if not metrics_url or not settings.PLAID_CLIENT_ID:
         logger.debug("Plaid webhook tunnel not configured; skipping")
         return
     _tunnel_task = asyncio.get_running_loop().create_task(

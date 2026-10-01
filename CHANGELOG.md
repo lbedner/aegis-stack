@@ -9,6 +9,12 @@
 
 ### Fixed
 
+- **The dev Plaid tunnel carries only Plaid.** `make serve` started a cloudflared
+  quick tunnel to the whole webserver in every finance stack with Plaid, credentials
+  or not, which put an app with no login on a public trycloudflare.com address. The
+  tunnel now starts only when the env file has `PLAID_CLIENT_ID`, and a tunnel guard
+  middleware refuses every request Cloudflare forwarded (404, or a closed
+  websocket) unless it is `POST /api/v1/finance/webhook/plaid`.
 - **Finance tests no longer depend on the date they run.** They seeded
   fixed dates while the service reckoned "today" (its 30- and 90-day
   windows, the budget month, what is overdue) from the real clock, so the

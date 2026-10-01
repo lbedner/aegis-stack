@@ -164,20 +164,34 @@ class TestRefreshWebhookUrls:
 
 class TestStartupHookGating:
     @pytest.mark.asyncio
-    async def test_no_metrics_url_is_a_noop(self, monkeypatch) -> None:
+    @pytest.mark.parametrize(
+        ("metrics_url", "client_id"),
+        [(None, "client-id"), ("http://tunnel:1234", None)],
+        ids=["no-tunnel", "no-plaid"],
+    )
+    async def test_no_tunnel_or_no_plaid_is_a_noop(
+        self, monkeypatch, metrics_url: str | None, client_id: str | None
+    ) -> None:
+        """The tunnel only starts with Plaid credentials (#306), so without
+        them there is nothing to discover and no 20s poll to log about."""
         monkeypatch.setattr(
-            tunnel.settings, "PLAID_TUNNEL_METRICS_URL", None, raising=False
+            tunnel.settings, "PLAID_TUNNEL_METRICS_URL", metrics_url, raising=False
         )
-        called = False
+        monkeypatch.setattr(tunnel.settings, "PLAID_CLIENT_ID", client_id)
 
-        async def fake_discover(metrics_url: str):
-            nonlocal called
-            called = True
-            return None
+        async def never_called(metrics_url: str) -> str | None:
+            raise AssertionError("discovery ran with no tunnel to discover")
 
-        monkeypatch.setattr(tunnel, "discover_tunnel_hostname", fake_discover)
+        monkeypatch.setattr(tunnel, "discover_tunnel_hostname", never_called)
+        monkeypatch.setattr(tunnel, "_tunnel_task", None)
         await tunnel.startup_finance_webhook_tunnel()
-        assert called is False
+
+        # Discovery runs as a task, so "nothing called yet" proves nothing:
+        # a no-op is a hook that started no task at all.
+        started = tunnel._tunnel_task
+        if started is not None:
+            started.cancel()
+        assert started is None, "the hook started discovery"
         assert get_webhook_url() is None
 
 
@@ -209,6 +223,7 @@ class TestTaskLifetime:
             "http://tunnel:1234",
             raising=False,
         )
+        monkeypatch.setattr(tunnel.settings, "PLAID_CLIENT_ID", "client-id")
 
         async def never_answers(metrics_url: str) -> str | None:
             return None

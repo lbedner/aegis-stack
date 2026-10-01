@@ -1,0 +1,120 @@
+{%- if finance_plaid %}
+"""Only Plaid's webhook comes in through the dev tunnel (#306).
+
+The dev overlay's cloudflared quick tunnel forwards the whole webserver to a
+public trycloudflare.com address, and the app has no login. Cloudflare marks
+every request it forwards with ``cf-ray``: a marked request gets 404 unless
+it is the webhook, and local or LAN requests are untouched.
+"""
+
+from __future__ import annotations
+
+from fastapi import FastAPI, WebSocket
+from fastapi.testclient import TestClient
+import pytest
+from starlette.websockets import WebSocketDisconnect
+
+from app.components.backend.middleware import tunnel_guard
+from app.components.backend.startup.finance_webhook_tunnel import PLAID_WEBHOOK_PATH
+from app.core.config import settings
+
+THROUGH_THE_TUNNEL = {"cf-ray": "8c1d2e3f4a5b6c7d-EWR"}
+
+
+@pytest.fixture
+def client() -> TestClient:
+    app = FastAPI()
+
+    @app.get("/overview")
+    async def overview() -> dict[str, str]:
+        return {"page": "overview"}
+
+    @app.post(PLAID_WEBHOOK_PATH)
+    async def webhook() -> dict[str, str]:
+        return {"webhook": "received"}
+
+    @app.websocket("/live")
+    async def live(socket: WebSocket) -> None:
+        await socket.accept()
+        await socket.send_text("hello")
+        await socket.close()
+
+    app.add_middleware(tunnel_guard.TunnelGuardMiddleware)
+    return TestClient(app)
+
+
+def test_a_page_through_the_tunnel_is_not_found(client: TestClient) -> None:
+    assert client.get("/overview", headers=THROUGH_THE_TUNNEL).status_code == 404
+
+
+def test_the_webhook_through_the_tunnel_gets_through(client: TestClient) -> None:
+    response = client.post(PLAID_WEBHOOK_PATH, headers=THROUGH_THE_TUNNEL)
+
+    assert response.json() == {"webhook": "received"}
+
+
+def test_only_a_post_to_the_webhook_gets_through(client: TestClient) -> None:
+    assert client.get(PLAID_WEBHOOK_PATH, headers=THROUGH_THE_TUNNEL).status_code == 404
+
+
+def test_local_requests_are_untouched(client: TestClient) -> None:
+    assert client.get("/overview").json() == {"page": "overview"}
+
+
+def test_a_websocket_through_the_tunnel_is_refused(client: TestClient) -> None:
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/live", headers=THROUGH_THE_TUNNEL) as socket:
+            socket.receive_text()
+
+
+class TestRegistration:
+    def test_the_dev_overlay_installs_the_guard(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            settings, "PLAID_TUNNEL_METRICS_URL", "http://plaid-tunnel:20241"
+        )
+        app = FastAPI()
+
+        tunnel_guard.register_middleware(app)
+
+        assert [m.cls for m in app.user_middleware] == [
+            tunnel_guard.TunnelGuardMiddleware
+        ]
+
+    def test_without_the_overlay_there_is_nothing_to_guard(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "PLAID_TUNNEL_METRICS_URL", None)
+        app = FastAPI()
+
+        tunnel_guard.register_middleware(app)
+
+        assert app.user_middleware == []
+
+    def test_a_stack_without_plaid_settings_has_nothing_to_guard(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Finance without Plaid has no PLAID_TUNNEL_METRICS_URL setting at
+        all, and registering must not raise on every startup."""
+        monkeypatch.delattr(settings, "PLAID_TUNNEL_METRICS_URL")
+        app = FastAPI()
+
+        tunnel_guard.register_middleware(app)
+
+        assert app.user_middleware == []
+
+
+def test_the_guarded_path_is_the_real_webhook_route() -> None:
+    """The guard and the startup hook name the route once; this catches the
+    router moving it."""
+    from app.integrations.main import create_integrated_app
+
+    routes = {
+        (route.path, method)
+        for route in create_integrated_app().routes
+        for method in getattr(route, "methods", None) or ()
+    }
+
+    assert (PLAID_WEBHOOK_PATH, "POST") in routes
+{%- endif %}

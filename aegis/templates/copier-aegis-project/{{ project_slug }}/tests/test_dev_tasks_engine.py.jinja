@@ -1,0 +1,122 @@
+"""`make serve ENGINE=granian` reaches the container.
+
+Make exports command-line variables to its recipes, so ``ENGINE`` arrives
+in this process's environment; compose only forwards what the compose file
+names, which is ``WEBSERVER_ENGINE``. The translation happens here, and a
+plain ``make serve`` must not pin an engine at all.
+"""
+
+from __future__ import annotations
+
+{%- if include_finance and finance_plaid %}
+from pathlib import Path
+{%- endif %}
+import subprocess
+from typing import Any
+
+import pytest
+
+from scripts import dev_tasks
+
+
+@pytest.fixture
+{%- if include_finance and finance_plaid %}
+def serve_kwargs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
+    """What ``serve()`` hands to ``subprocess.run``: the keyword arguments,
+    and the compose command under ``cmd``. The project's ``.env`` is an
+    empty temp file until a test writes to it."""
+{%- else %}
+def serve_kwargs(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """What ``serve()`` hands to ``subprocess.run``: the keyword arguments,
+    and the compose command under ``cmd``."""
+{%- endif %}
+    captured: dict[str, Any] = {}
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> None:
+        captured.update(kwargs, cmd=cmd)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(dev_tasks, "resolve_ports", lambda **_: {})
+{%- if include_finance and finance_plaid %}
+    monkeypatch.setattr(dev_tasks, "_DOTENV", tmp_path / ".env")
+    monkeypatch.delenv("AEGIS_STACK_ENV_FILE", raising=False)
+{%- endif %}
+    monkeypatch.delenv("ENGINE", raising=False)
+    monkeypatch.delenv("WEBSERVER_ENGINE", raising=False)
+    return captured
+
+
+def test_engine_becomes_the_webserver_setting(
+    serve_kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ENGINE", "granian")
+
+    dev_tasks.serve()
+
+    assert serve_kwargs["env"]["WEBSERVER_ENGINE"] == "granian"
+
+
+def test_plain_serve_pins_no_engine(serve_kwargs: dict[str, Any]) -> None:
+    dev_tasks.serve()
+
+    assert "WEBSERVER_ENGINE" not in serve_kwargs["env"]
+
+{%- if include_finance and finance_plaid %}
+
+class TestThePlaidTunnel:
+    """The tunnel only carries Plaid's webhook, so ``make serve`` starts it
+    only when the containers' env file has Plaid credentials (#306). That is
+    the file compose hands them: ``AEGIS_STACK_ENV_FILE`` from the shell,
+    else the one ``.env`` names, else ``.env`` itself."""
+
+    def _profiles(self, cmd: list[str]) -> list[str]:
+        return [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "--profile"]
+
+    @pytest.mark.parametrize(
+        ("dotenv", "other", "shell", "tunnel"),
+        [
+            ("PLAID_CLIENT_ID=abc123\n", None, None, True),
+            ("", None, None, False),
+            ("PLAID_CLIENT_ID=\n", None, None, False),
+            ("", "PLAID_CLIENT_ID=abc123\n", "{other}", True),
+            ("AEGIS_STACK_ENV_FILE={other}\n", "PLAID_CLIENT_ID=abc123\n", None, True),
+            (
+                "PLAID_CLIENT_ID=abc123\nAEGIS_STACK_ENV_FILE={other}\n",
+                "",
+                None,
+                False,
+            ),
+            # Set but empty still beats .env, and compose's :- reads it as .env.
+            ("AEGIS_STACK_ENV_FILE={other}\n", "PLAID_CLIENT_ID=abc123\n", "", False),
+        ],
+        ids=[
+            "dotenv",
+            "absent",
+            "empty",
+            "shell-names-the-file",
+            "dotenv-names-the-file",
+            "unused-dotenv",
+            "empty-shell-means-dotenv",
+        ],
+    )
+    def test_the_tunnel_follows_the_containers_env_file(
+        self,
+        serve_kwargs: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+        dotenv: str,
+        other: str | None,
+        shell: str | None,
+        tunnel: bool,
+    ) -> None:
+        other_file = dev_tasks._DOTENV.parent / "other.env"
+        if other is not None:
+            other_file.write_text(other)
+        dev_tasks._DOTENV.write_text(dotenv.format(other=other_file))
+        if shell is not None:
+            monkeypatch.setenv("AEGIS_STACK_ENV_FILE", shell.format(other=other_file))
+
+        dev_tasks.serve()
+
+        expected = ["dev", "plaid"] if tunnel else ["dev"]
+        assert self._profiles(serve_kwargs["cmd"]) == expected
+{%- endif %}

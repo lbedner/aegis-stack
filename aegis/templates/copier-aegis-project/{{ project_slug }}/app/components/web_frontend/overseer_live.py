@@ -9,26 +9,14 @@ import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 import time
 
-from fastapi import Depends
 from fastapi.responses import StreamingResponse
-
-from app.core.db import AsyncSessionLocal
-from app.services.auth.deps import get_session_token
-from app.services.auth.service import get_current_user_from_token
-from app.services.auth.users import UserService
 
 MAX_STREAM_SECONDS = 300
 
 
-async def authenticate_stream(
-    token: str | None = Depends(get_session_token),
-) -> None:
-    """Check the user and close the DB session before the stream begins."""
-    async with AsyncSessionLocal() as session:
-        await get_current_user_from_token(token, UserService(session))
-
-
 def event_stream(events: AsyncIterator[str]) -> StreamingResponse:
+    """An SSE response. Who may open one is the Overseer gate's call
+    (``overseer_access``), as for every Overseer route."""
     return StreamingResponse(
         events,
         media_type="text/event-stream",

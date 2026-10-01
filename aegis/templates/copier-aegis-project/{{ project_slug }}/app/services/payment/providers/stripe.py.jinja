@@ -12,6 +12,7 @@ from typing import Any
 import stripe
 
 from app.core.config import settings
+from app.core.secrets import Secret
 
 from ..constants import PriceType
 from .base import (
@@ -24,6 +25,12 @@ from .base import (
     RefundResult,
     TransactionResult,
     WebhookEvent,
+)
+
+# What this provider reads (``app.core.secrets``).
+SECRETS = (
+    Secret("STRIPE_SECRET_KEY", owner="Payment (Stripe)", label="Secret key"),
+    Secret("STRIPE_WEBHOOK_SECRET", owner="Payment (Stripe)", label="Webhook signing secret"),
 )
 
 logger = logging.getLogger(__name__)

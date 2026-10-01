@@ -62,6 +62,7 @@ nav:
       - Lifecycle: components/backend/lifecycle.md
       - Routes: components/backend/routes.md
       - Cache: components/backend/cache.md
+      - Secrets: components/backend/secrets.md
       - ASGI Server: components/backend/serving.md
       - Authentication Integration: components/backend/auth.md
       - API Load Testing: components/backend/load-testing.md

@@ -379,7 +379,7 @@ PROVIDERS: dict[AIProvider, ProviderSpec] = {
         builds_own_client=True,
     ),
     AIProvider.PUBLIC: ProviderSpec(
-        env_var="PUBLIC_API_KEY",
+        env_var="LLM7_API_KEY",
         capabilities=PROVIDER_CAPABILITIES[AIProvider.PUBLIC],
         # It has a class like any other; what it lacks is a plain
         # constructor call, because the endpoint is keyless and the

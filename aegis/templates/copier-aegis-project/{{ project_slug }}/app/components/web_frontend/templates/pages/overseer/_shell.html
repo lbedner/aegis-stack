@@ -28,6 +28,11 @@
            class="overseer-rail-row nav-link py-2">
           {{ sidebar_icon("patterns") }}<span class="overseer-rail-hide truncate">Patterns</span>
         </a>
+        <a href="/overseer/secrets" title="Secrets" hx-get="/overseer/secrets" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+           {% if item is defined and item.group == "secrets" %}aria-current="page"{% endif %}
+           class="overseer-rail-row nav-link py-2">
+          {{ sidebar_icon("secrets") }}<span class="overseer-rail-hide truncate">Secrets</span>
+        </a>
       </div>
       {% for group, heading in [("components", "Components"), ("services", "Services")] %}
       {% if navigation[group] %}

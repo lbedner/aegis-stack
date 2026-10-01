@@ -18,6 +18,7 @@ from . import (
     overseer_patterns,
     overseer_redis,
     overseer_scheduler,
+    overseer_secrets,
     overseer_server,
     overseer_storage,
     overseer_web_frontend,
@@ -102,6 +103,9 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
 SECTIONED_PAGES: dict[tuple[str, str], SectionedPage] = {
     ("patterns", "patterns"): SectionedPage(
         "patterns", overseer_patterns.SECTIONS, overseer_patterns.section_context
+    ),
+    ("secrets", "secrets"): SectionedPage(
+        "secrets", overseer_secrets.SECTIONS, overseer_secrets.section_context
     ),
     ("components", "backend"): SectionedPage(
         "server", overseer_server.SECTIONS, overseer_server.section_context, live=True

@@ -33,6 +33,7 @@ from app.core.time import utcnow
 from app.services.auth.deps import get_refresh_service, get_user_service
 from app.core.config import settings
 from app.core.log import logger
+from app.core.secrets import Secret
 from app.core.security import create_access_token, set_refresh_cookie, set_session_cookie
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.deps import get_current_active_user
@@ -44,6 +45,16 @@ from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+
+# What sign-in with GitHub and Google reads (``app.core.secrets``); the
+# client IDs are public, the secrets are not.
+SECRETS = (
+    Secret("GITHUB_OAUTH_CLIENT_ID", owner="Sign-in (OAuth)", label="GitHub client ID", secret=False),
+    Secret("GITHUB_OAUTH_CLIENT_SECRET", owner="Sign-in (OAuth)", label="GitHub client secret"),
+    Secret("GOOGLE_OAUTH_CLIENT_ID", owner="Sign-in (OAuth)", label="Google client ID", secret=False),
+    Secret("GOOGLE_OAUTH_CLIENT_SECRET", owner="Sign-in (OAuth)", label="Google client secret"),
+)
 
 router = APIRouter(prefix="/auth/oauth", tags=["auth"])
 

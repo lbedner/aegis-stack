@@ -58,6 +58,35 @@ macros and delegates to the existing auth endpoint. A successful sign-in
 opens the protected `/overseer` page, which is the starting point for the
 server-rendered dashboard.
 
+### Who can open the Overseer
+
+The Overseer is operator access to the deployment: it shows its routes,
+source and live data, and runs user administration, scheduler jobs and model
+loads. So every Overseer page, live stream and action is open to admins only,
+not to every signed-in account. An admin is:
+
+- an account whose email is in `ADMIN_USER_EMAILS`, or
+- an account with the `admin` role, when the auth service runs at the RBAC
+  level (`auth[rbac]`).
+
+With `AUTH_ENABLED=false` (local development) the Overseer opens without
+signing in: a request with no session resolves to the dev user, an admin.
+
+Set the allowlist in `.env` as a JSON list, then restart the server:
+
+```bash
+ADMIN_USER_EMAILS=["you@example.com"]
+```
+
+With auth on and an empty allowlist, nobody reaches the Overseer: a signed-in
+account that is not an admin gets an "Admins only" page saying how to get in,
+and its fragments and streams answer 403. Signed out, Overseer pages redirect
+to `/overseer/login`. The check is one dependency on the pages router
+(`overseer_access.py`), and `tests/web/test_overseer_admin_gate.py` walks every
+Overseer route as a non-admin, so a new page cannot skip it. `require_admin`,
+for API routes you protect yourself, uses the same definition (`is_admin`); the
+API's built-in operator routes keep their own checks.
+
 Basic auth has no email verification step. New registrations are ready
 immediately and the registration form redirects to `/overseer`. Email based
 password reset is also absent from basic auth because this configuration has

@@ -14,9 +14,19 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.core.config import settings
+from app.core.secrets import Secret
 from app.services.ai.config import api_key_env
 from app.services.ai.models import PROVIDERS, AIProvider, ProviderCapabilities
 from app.services.ai.models.provider_names import KEYLESS_PROVIDERS, provider_label
+
+# The keys the providers read, for the Secrets page (``app.core.secrets``).
+# Derived from the registry, so a provider added there is declared with it.
+SECRETS = tuple(
+    Secret(spec.env_var, owner="AI", label=f"{provider_label(provider)} API key")
+    for provider, spec in PROVIDERS.items()
+    if spec.env_var in type(settings).model_fields
+)
 
 # Provider to pydantic-ai-slim extras mapping
 # Note: mistral, cohere, ollama, public, and pollinations use the

@@ -64,12 +64,11 @@ from app.components.web_frontend import (
     overseer_connections,
     overseer_patterns,
     overseer_redis,
+    overseer_secrets,
     overseer_worker,
 )
 from app.components.web_frontend.overseer_events import health_events
-from app.components.web_frontend.overseer_live import (
-    authenticate_stream as _authenticate_overseer_stream,
-)
+from app.components.web_frontend.overseer_access import overseer_gate
 from app.components.web_frontend.overseer_live import event_stream as _event_stream
 from app.components.web_frontend.rendering import render, templates
 from app.core.audit import AuditEmitter, get_audit
@@ -99,7 +98,16 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 {%- endif %}
 
+{%- if include_auth %}
+# Overseer pages that are not a component or service in the health tree.
+STANDALONE = {"patterns": overseer_patterns.ITEM, "secrets": overseer_secrets.ITEM}
+
+# Every Overseer page, stream and action is admin-only; the gate passes
+# everything outside the Overseer (overseer_access).
+router = APIRouter(dependencies=[Depends(overseer_gate)])
+{%- else %}
 router = APIRouter()
+{%- endif %}
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -209,17 +217,13 @@ router.include_router(overseer_inference_partials.router)
 
 
 @router.get("/overseer/events", include_in_schema=False)
-async def overseer_events(
-    _authenticated: None = Depends(_authenticate_overseer_stream),
-) -> StreamingResponse:
+async def overseer_events() -> StreamingResponse:
     """One authenticated stream for all sidebar status indicators."""
     return _event_stream(health_events())
 
 
 @router.get(overseer_redis.KEYSPACE_EVENTS, include_in_schema=False)
-async def overseer_redis_keyspace(
-    _authenticated: None = Depends(_authenticate_overseer_stream),
-) -> StreamingResponse:
+async def overseer_redis_keyspace() -> StreamingResponse:
     """The Redis page's keyspace map, while that page is open."""
     return _event_stream(overseer_redis.keyspace_events())
 
@@ -227,9 +231,7 @@ async def overseer_redis_keyspace(
 
 
 @router.get(overseer_worker.QUEUES_EVENTS, include_in_schema=False)
-async def overseer_worker_queues(
-    _authenticated: None = Depends(_authenticate_overseer_stream),
-) -> StreamingResponse:
+async def overseer_worker_queues() -> StreamingResponse:
     """The Worker page's queues, while that page is open."""
     return _event_stream(overseer_worker.queues_events())
 
@@ -237,12 +239,21 @@ async def overseer_worker_queues(
 @router.get(overseer_connections.EVENTS, include_in_schema=False)
 async def overseer_server_connections(
     request: Request,
-    _authenticated: None = Depends(_authenticate_overseer_stream),
 ) -> StreamingResponse:
     """The Server page's connections table, filters and all, while it is open."""
     return _event_stream(
         overseer_connections.connections_events(dict(request.query_params))
     )
+
+
+@router.get("/overseer/secrets", response_class=HTMLResponse, include_in_schema=False)
+async def overseer_secrets_page(
+    request: Request,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """Every credential the app reads: where it is set, never the value."""
+    return await _overseer_detail(request, "secrets", "secrets", user, db)
 
 
 @router.get("/overseer/patterns", response_class=HTMLResponse, include_in_schema=False)
@@ -307,7 +318,7 @@ async def _overseer_detail(
         return RedirectResponse(url="/overseer/login", status_code=303)
     status = last_system_status()
     navigation = build_navigation(status)
-    item = overseer_patterns.ITEM if group == "patterns" else find_item(navigation, group, name)
+    item = STANDALONE.get(group) or find_item(navigation, group, name)
     if item is None:
         raise HTTPException(status_code=404)
     context = {"user": user, "navigation": navigation, "status": status, "item": item}

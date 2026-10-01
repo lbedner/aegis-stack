@@ -11,7 +11,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from app.components.inference.ollama import MODEL_ACTIONS
 from app.components.web_frontend import overseer_inference
-from app.components.web_frontend.overseer_live import authenticate_stream, event_stream
+from app.components.web_frontend.overseer_live import event_stream
 from app.models.user import User
 from app.services.auth.deps import get_optional_user
 
@@ -21,9 +21,7 @@ router = APIRouter(prefix=overseer_inference.PARTIALS)
 
 
 @router.get("/models/events", include_in_schema=False)
-async def models_events(
-    _authenticated: None = Depends(authenticate_stream),
-) -> StreamingResponse:
+async def models_events() -> StreamingResponse:
     """The Models table, while the page is open."""
     return event_stream(overseer_inference.models_events())
 

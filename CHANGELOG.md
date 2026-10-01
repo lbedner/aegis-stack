@@ -7,6 +7,38 @@
 
 ## [Unreleased]
 
+### Added
+
+- **One interface for credentials, and an Overseer Secrets page.**
+  `app.core.secrets` ships in every project: `await secrets.get(name)`
+  reads a credential, `.env` is the default (read-only) backend, and a
+  writable store can plug in behind the same calls later, with `.env`
+  still winning. The code that reads a key declares it (`SECRETS`); AI
+  providers, Resend, Twilio, Stripe and GitHub/Google OAuth do. The new
+  **Overseer > Secrets** page lists them by owner with their source and
+  last four characters, never a value, and the `.env` line to add for any
+  that are missing. The services still read their keys from settings;
+  they move onto `secrets.get` with the writable store, which is what
+  makes a stored value take effect. `OPEN_ROUTER_API_KEY` is now a
+  setting, and the LLM7
+  provider is registered under the key it actually reads, `LLM7_API_KEY`.
+
+### Security
+
+- **The Overseer is admin-only.** Every Overseer page, live stream and htmx
+  action needed only a signed-in account, and with registration open by
+  default that was anyone: a new account could list every route, read
+  handler and migration source, peek at live Redis values, administer users
+  and load models. One dependency on the pages router now admits admins
+  only: an email in `ADMIN_USER_EMAILS`, or the `admin` role under
+  `auth[rbac]` (`AUTH_ENABLED=false` still passes). Non-admins get an
+  "Admins only" page that says how to get in; fragments and streams answer
+  403. With `AUTH_ENABLED=false` it opens without signing in (a request
+  with no session now resolves to the dev user). `require_admin`, for
+  routes you protect yourself, uses the same definition; the API's own
+  operator routes keep their existing checks. **Before upgrading, add your
+  email to `ADMIN_USER_EMAILS` in `.env`**, or the Overseer will refuse you.
+
 ### Fixed
 
 - **The dev Plaid tunnel carries only Plaid.** `make serve` started a cloudflared

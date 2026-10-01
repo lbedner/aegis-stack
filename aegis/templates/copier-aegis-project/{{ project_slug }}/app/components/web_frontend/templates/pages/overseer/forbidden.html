@@ -1,0 +1,17 @@
+{# A signed-in user who is not an admin asked for the Overseer
+   (overseer_access.overseer_gate). Says why, and how an admin is made. #}
+{% extends "pages/auth/_layout.html" %}
+
+{% block title %}Admins only - {{ project_name }}{% endblock %}
+{% block auth_brand %}<span class="text-aegis-teal">●</span> Overseer · {{ project_name }}{% endblock %}
+
+{% block auth_form %}
+<h1 class="text-2xl font-semibold text-aegis-text mb-2">Admins only</h1>
+<p class="text-sm text-aegis-muted mb-6">The Overseer shows this deployment's routes, source and live data, so it opens to admins only, and this account is not one.</p>
+<p class="text-sm text-aegis-text">To make an account an admin, add its email to <code class="font-mono text-aegis-teal">ADMIN_USER_EMAILS</code> in <code class="font-mono">.env</code> and restart the server:</p>
+<pre class="mt-3 rounded border border-aegis-border bg-aegis-bg px-3 py-2 text-xs font-mono text-aegis-text overflow-x-auto">ADMIN_USER_EMAILS=["you@example.com"]</pre>
+{% endblock %}
+
+{% block auth_footer %}
+<a href="/logout" class="text-aegis-teal hover:text-aegis-text transition-colors">Sign in as someone else</a>
+{% endblock %}

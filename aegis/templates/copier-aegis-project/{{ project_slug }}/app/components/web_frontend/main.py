@@ -8,7 +8,7 @@ Route modules import from those: full-page handlers live in
 ``routes/pages.py``, fragment handlers in ``routes/partials/``.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 
 
@@ -28,3 +28,17 @@ def create_web_frontend_app() -> APIRouter:
             route.tags = ["overseer" if "/overseer" in route.path else "web"]
 
     return router
+
+
+def add_error_pages(app: FastAPI) -> None:
+    """The pages an exception renders instead of JSON: the Overseer's
+    "admins only" refusal. The Overseer ships with auth; without it there
+    is nothing to refuse."""
+    try:
+        from app.components.web_frontend.overseer_access import (
+            AdminOnlyError,
+            admin_only_page,
+        )
+    except ImportError:  # no auth service, so no Overseer
+        return
+    app.add_exception_handler(AdminOnlyError, admin_only_page)

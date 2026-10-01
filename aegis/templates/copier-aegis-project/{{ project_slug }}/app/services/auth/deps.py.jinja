@@ -65,9 +65,10 @@ async def get_optional_user(
     (e.g. a checkout page that shows a "sign in" prompt for anon and a
     plan card for authed). Swallows the 401 ``get_current_user_from_token``
     would raise so the route can branch on the result instead of
-    catching exceptions.
+    catching exceptions. With ``AUTH_ENABLED=False`` a request with no
+    session still resolves, to the synthetic dev user.
     """
-    if not token:
+    if not token and settings.AUTH_ENABLED:
         return None
     try:
         return await get_current_user_from_token(token, user_service)
@@ -104,10 +105,23 @@ async def get_verified_user(
 {%- endif %}
 
 
+def is_admin(user: User) -> bool:
+    """Operator access to this deployment: the ``ADMIN_USER_EMAILS``
+    allowlist{% if include_auth_rbac %} or the admin role{% endif %}. Every user is one with
+    ``AUTH_ENABLED=False`` (dev), where the synthetic user stands in."""
+    if not settings.AUTH_ENABLED:
+        return True
+{%- if include_auth_rbac %}
+    if user.role == "admin":
+        return True
+{%- endif %}
+    return user.email in settings.ADMIN_USER_EMAILS
+
+
 async def require_admin(
     current_user: User = Depends(get_verified_user),
 ) -> User:
-    """Reject any user not on the ``ADMIN_USER_EMAILS`` allowlist.
+    """Reject any user who is not an admin (``is_admin``).
 
     Used to gate operator-only routes (refund actions, dispute review,
     aggregate revenue charts). On single-tenant deploys you set your
@@ -119,9 +133,7 @@ async def require_admin(
     with auth on, an empty allowlist 403s everyone — that's the safe
     default before someone deliberately grants themselves admin.
     """
-    if not settings.AUTH_ENABLED:
-        return current_user
-    if current_user.email not in settings.ADMIN_USER_EMAILS:
+    if not is_admin(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="admin_required",

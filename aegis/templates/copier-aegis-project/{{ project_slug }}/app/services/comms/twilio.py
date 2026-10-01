@@ -11,6 +11,23 @@ from typing import Any
 
 from twilio.rest import Client
 
+from app.core.secrets import Secret
+
+# What the SMS and voice channels read through this module
+# (``app.core.secrets``); the SIDs and the number are identifiers, safe to
+# show whole.
+SECRETS = (
+    Secret("TWILIO_ACCOUNT_SID", owner="Twilio", label="Account SID", secret=False),
+    Secret("TWILIO_AUTH_TOKEN", owner="Twilio", label="Auth token"),
+    Secret("TWILIO_PHONE_NUMBER", owner="Twilio", label="From number", secret=False),
+    Secret(
+        "TWILIO_MESSAGING_SERVICE_SID",
+        owner="Twilio",
+        label="Messaging service",
+        secret=False,
+    ),
+)
+
 CREDENTIALS_HELP = (
     "Twilio credentials not set. "
     "Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables. "

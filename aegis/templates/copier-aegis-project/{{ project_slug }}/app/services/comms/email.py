@@ -11,8 +11,15 @@ from typing import Any
 import resend
 from app.core.config import settings
 from app.core.log import logger
+from app.core.secrets import Secret
 
 from .models import EmailResponse, MessageStatus, SendEmailRequest
+
+# What this module reads (``app.core.secrets``).
+SECRETS = (
+    Secret("RESEND_API_KEY", owner="Email (Resend)"),
+    Secret("RESEND_FROM_EMAIL", owner="Email (Resend)", label="From address", secret=False),
+)
 
 
 class EmailError(Exception):

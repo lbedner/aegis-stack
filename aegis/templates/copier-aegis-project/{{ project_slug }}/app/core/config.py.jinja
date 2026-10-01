@@ -395,11 +395,11 @@ class Settings(
     # the free anonymous tier (open-weight models); an account key from
     # https://dash.llm7.io unlocks premium models and higher limits.
     LLM7_API_KEY: str | None = None
-    # Optional for the pollinations provider: keyless requests use the
-    # free anonymous tier (open-weight models, no streaming); a key
-    # selects an account tier.
+    # Optional for pollinations: keyless requests use the free anonymous
+    # tier (open-weight models, no streaming); a key selects an account tier.
     POLLINATIONS_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
+    OPEN_ROUTER_API_KEY: str | None = None  # its own name: see PROVIDERS
     ANTHROPIC_API_KEY: str | None = None
     GOOGLE_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None

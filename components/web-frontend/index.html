@@ -1066,6 +1066,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../backend/secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../backend/serving/" class="md-nav__link">
         
   
@@ -1697,6 +1725,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Getting it">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#who-can-open-the-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who can open the Overseer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -5273,6 +5318,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Getting it">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#who-can-open-the-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who can open the Overseer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -5371,6 +5433,29 @@ shared files that referenced it.</p>
 macros and delegates to the existing auth endpoint. A successful sign-in
 opens the protected <code>/overseer</code> page, which is the starting point for the
 server-rendered dashboard.</p>
+<h3 id="who-can-open-the-overseer">Who can open the Overseer</h3>
+<p>The Overseer is operator access to the deployment: it shows its routes,
+source and live data, and runs user administration, scheduler jobs and model
+loads. So every Overseer page, live stream and action is open to admins only,
+not to every signed-in account. An admin is:</p>
+<ul>
+<li>an account whose email is in <code>ADMIN_USER_EMAILS</code>, or</li>
+<li>an account with the <code>admin</code> role, when the auth service runs at the RBAC
+  level (<code>auth[rbac]</code>).</li>
+</ul>
+<p>With <code>AUTH_ENABLED=false</code> (local development) the Overseer opens without
+signing in: a request with no session resolves to the dev user, an admin.</p>
+<p>Set the allowlist in <code>.env</code> as a JSON list, then restart the server:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">ADMIN_USER_EMAILS</span><span class="o">=[</span><span class="s2">&quot;you@example.com&quot;</span><span class="o">]</span>
+</span></code></pre></div>
+<p>With auth on and an empty allowlist, nobody reaches the Overseer: a signed-in
+account that is not an admin gets an "Admins only" page saying how to get in,
+and its fragments and streams answer 403. Signed out, Overseer pages redirect
+to <code>/overseer/login</code>. The check is one dependency on the pages router
+(<code>overseer_access.py</code>), and <code>tests/web/test_overseer_admin_gate.py</code> walks every
+Overseer route as a non-admin, so a new page cannot skip it. <code>require_admin</code>,
+for API routes you protect yourself, uses the same definition (<code>is_admin</code>); the
+API's built-in operator routes keep their own checks.</p>
 <p>Basic auth has no email verification step. New registrations are ready
 immediately and the registration form redirects to <code>/overseer</code>. Email based
 password reset is also absent from basic auth because this configuration has
@@ -5383,28 +5468,28 @@ field ID, and empty-state marker. Steward's account, bill, matter, import,
 register, and chat macros depend on its own routes and data, so they remain
 in that application.</p>
 <h2 id="what-ships">What ships</h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>app/components/web_frontend/
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>├── main.py                  # router wiring
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>├── rendering.py             # Jinja2 env, render() (page or fragment), with_toast()
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>├── assets.py                # static() helper, CachedStaticFiles
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>├── filters.py               # money / short_date / pct
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>├── build.py                 # asset fingerprinting -&gt; static/dist/manifest.json
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>├── build_watch.py           # dev watcher: re-fingerprint on change
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>├── routes/
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   ├── pages.py             # page handlers (the landing, auth pages)
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│   └── partials/            # fragment-only routes
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>├── templates/
-</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│   ├── base.html            # document skeleton every page extends
-</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>│   ├── layouts/             # page.html and fragment.html, picked by render()
-</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>│   ├── pages/               # one template per page
-</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>│   └── components/          # macros, feedback macros, landing sections
-</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>└── static/
-</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>    ├── input.css            # Tailwind entry
-</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>    ├── css/app.css          # hand-authored styles
-</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>    └── js/app.js            # toasts and htmx error hooks
-</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>
-</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>package.json                 # Tailwind + DaisyUI + Biome (devDependencies only)
-</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>tailwind.config.js           # theme + the single rebrand point
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>app/components/web_frontend/
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>├── main.py                  # router wiring
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>├── rendering.py             # Jinja2 env, render() (page or fragment), with_toast()
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>├── assets.py                # static() helper, CachedStaticFiles
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>├── filters.py               # money / short_date / pct
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>├── build.py                 # asset fingerprinting -&gt; static/dist/manifest.json
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>├── build_watch.py           # dev watcher: re-fingerprint on change
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>├── routes/
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>│   ├── pages.py             # page handlers (the landing, auth pages)
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>│   └── partials/            # fragment-only routes
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>├── templates/
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>│   ├── base.html            # document skeleton every page extends
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>│   ├── layouts/             # page.html and fragment.html, picked by render()
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>│   ├── pages/               # one template per page
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>│   └── components/          # macros, feedback macros, landing sections
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>└── static/
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>    ├── input.css            # Tailwind entry
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>    ├── css/app.css          # hand-authored styles
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>    └── js/app.js            # toasts and htmx error hooks
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>package.json                 # Tailwind + DaisyUI + Biome (devDependencies only)
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>tailwind.config.js           # theme + the single rebrand point
 </span></code></pre></div>
 <p>Plus gated tests (<code>tests/components/test_web_frontend.py</code> and the web test
 kit under <code>tests/web/</code>), Makefile
@@ -5414,21 +5499,21 @@ targets (<code>build-static</code>, <code>lint-frontend</code>, <code>format-fro
 <ol>
 <li>
 <p>Add a template:</p>
-<div class="language-html highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="cm">&lt;!-- app/components/web_frontend/templates/pages/about.html --&gt;</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>{% extends &quot;base.html&quot; %}
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>{% block title %}About - {{ project_name }}{% endblock %}
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>{% block content %}
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">&lt;</span><span class="nt">section</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;py-10&quot;</span><span class="p">&gt;</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>  <span class="p">&lt;</span><span class="nt">h1</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;text-2xl font-semibold text-white&quot;</span><span class="p">&gt;</span>About<span class="p">&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">&lt;/</span><span class="nt">section</span><span class="p">&gt;</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>{% endblock %}
+<div class="language-html highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="cm">&lt;!-- app/components/web_frontend/templates/pages/about.html --&gt;</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>{% extends &quot;base.html&quot; %}
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>{% block title %}About - {{ project_name }}{% endblock %}
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>{% block content %}
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="p">&lt;</span><span class="nt">section</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;py-10&quot;</span><span class="p">&gt;</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  <span class="p">&lt;</span><span class="nt">h1</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;text-2xl font-semibold text-white&quot;</span><span class="p">&gt;</span>About<span class="p">&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">&lt;/</span><span class="nt">section</span><span class="p">&gt;</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>{% endblock %}
 </span></code></pre></div>
 </li>
 <li>
 <p>Add a route in <code>app/components/web_frontend/routes/pages.py</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/about&quot;</span><span class="p">,</span> <span class="n">response_class</span><span class="o">=</span><span class="n">HTMLResponse</span><span class="p">,</span> <span class="n">include_in_schema</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">about</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTMLResponse</span><span class="p">:</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="k">return</span> <span class="n">templates</span><span class="o">.</span><span class="n">TemplateResponse</span><span class="p">(</span><span class="n">request</span><span class="o">=</span><span class="n">request</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;pages/about.html&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/about&quot;</span><span class="p">,</span> <span class="n">response_class</span><span class="o">=</span><span class="n">HTMLResponse</span><span class="p">,</span> <span class="n">include_in_schema</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">about</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTMLResponse</span><span class="p">:</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="k">return</span> <span class="n">templates</span><span class="o">.</span><span class="n">TemplateResponse</span><span class="p">(</span><span class="n">request</span><span class="o">=</span><span class="n">request</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;pages/about.html&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 </li>
 </ol>

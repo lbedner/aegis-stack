@@ -143,6 +143,28 @@ include_observability:
   help: "Include Logfire observability and tracing?"
   default: false
 
+include_inference:
+  type: bool
+  help: "Include local model serving (Ollama)?"
+  default: false
+
+inference_engine:
+  type: str
+  help: "Inference engine"
+  default: "ollama"
+  choices:
+    - "ollama"
+  when: "{{ include_inference }}"
+
+inference_placement:
+  type: str
+  help: "Where the inference engine runs (host, or a docker service)"
+  default: "host"
+  choices:
+    - "host"
+    - "docker"
+  when: "{{ include_inference }}"
+
 include_storage:
   type: bool
   help: "Include S3 object storage (SeaweedFS container in dev)?"
@@ -260,8 +282,9 @@ ollama_mode:
     - "host"
     - "docker"
     - "none"
-  # Note: No 'when' condition - always include for template access
-  # Defaults to "none" when AI not using ollama
+  # Not asked: aegis derives it from the inference component (its
+  # placement, or "none" without it) on init, add, remove and update.
+  # Templates read this one value instead of repeating that logic.
 
 include_comms:
   type: bool

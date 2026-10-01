@@ -177,9 +177,12 @@
    without closing it. A list says which item is open with
    ``drawer_sync`` and app.js does the rest; mounted once by the app shell,
    beside the modal. #}
+{# The side drawer. Opened non-modally (it sits beside the page), so it
+   stacks by z-index: above the chat drawer's overlay (z-50), which a
+   reply's agent settings open from. #}
 {% macro drawer() %}
 <dialog id="drawer" aria-label="Details"
-        class="aegis-drawer fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-full sm:w-[40rem] max-w-full p-0 overflow-y-auto
+        class="aegis-drawer fixed z-[60] inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-full sm:w-[40rem] max-w-full p-0 overflow-y-auto
                bg-aegis-card text-aegis-text border-l border-aegis-border shadow-2xl">
   <div class="sticky top-0 z-10 flex justify-end px-3 pt-3 bg-aegis-card">
     <button type="button" aria-label="Close" data-drawer-close

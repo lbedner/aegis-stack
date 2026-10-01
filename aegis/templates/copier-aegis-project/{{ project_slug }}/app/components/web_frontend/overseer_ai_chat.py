@@ -136,6 +136,50 @@ def attachment_url(stored: dict[str, Any]) -> str:
     return f"{PATH}/attachments/{stored['key']}?" + urlencode({"type": media_type})
 
 
+# What Continue sends after a reply the token limit cut off.
+CONTINUE = "Continue exactly where you stopped."
+
+
+def cut_off(meta: dict[str, Any]) -> str | None:
+    """Why a reply ends mid-sentence, when the token limit is the reason."""
+    if meta.get("finish_reason") != "length":
+        return None
+    # The agent's setting is the limit; a reply from before replies kept
+    # it falls back to what it spent.
+    configured = (meta.get("agent") or {}).get("max_tokens")
+    tokens = int(configured or meta.get("output_tokens") or 0)
+    limit = f"{tokens:,}-token" if tokens else "token"
+    return f"Stopped at the {limit} limit."
+
+
+def reply_used(meta: dict[str, Any]) -> list[tuple[str, Any]]:
+    """The settings a reply ran under, from what its message kept."""
+    agent = meta.get("agent") or {}
+    tokens = agent.get("max_tokens")
+    return [
+        ("Model", meta.get("model")),
+        ("Temperature", agent.get("temperature")),
+        ("Max tokens", f"{tokens:,}" if isinstance(tokens, int) else None),
+    ]
+
+
+async def reply_agent_context(
+    db: Any, message: Any, focus: str | None
+) -> dict[str, Any] | None:
+    """The agent behind a reply, in its drawer: what the reply used above
+    the live editor, saved without leaving the chat."""
+    from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG
+
+    from .overseer_ai_agents import agent_context
+
+    meta = message.metadata or {}
+    slug = (meta.get("agent") or {}).get("slug") or DEFAULT_AGENT_SLUG
+    context = await agent_context(db, slug)
+    if context is None:
+        return None
+    return context | {"used": reply_used(meta), "stay": True, "focus": focus}
+
+
 def settled(
     message: Any, conversation_id: str, icons: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -160,6 +204,11 @@ def settled(
             for i, e in enumerate(meta.get("tool_trace") or [])
         ],
         "footer": footer_line(meta),
+        "cut_off": cut_off(meta),
+        # The agent registry lives in the database: no drawer without it.
+        "agent_url": f"{url}/agent" if PERSISTED else None,
+        "turns_url": f"{PATH}/turns",
+        "continue_vals": {"message": CONTINUE, "conversation_id": conversation_id},
         "model_icon": (icons or {}).get(str(meta.get("provider") or "")),
         "speech": f"{url}/speech" if HAS_VOICE else None,
     }

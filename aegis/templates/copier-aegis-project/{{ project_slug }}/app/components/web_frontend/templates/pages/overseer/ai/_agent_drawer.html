@@ -1,18 +1,27 @@
 {# One agent's definition in the drawer: persona, sampling, model pin and
    whether it is active. Grants are shown; the registry does not let an
-   admin surface change them. #}
+   admin surface change them. Opened from a chat reply it leads with what
+   that reply used (``used``), lands on ``focus``, and saves without
+   leaving the chat (``stay``). #}
 {% from "components/macros/layout.html" import card, dialog_title, facts %}
 {% from "components/macros/form.html" import checkbox, field, text_input, textarea, primary_button %}
 <div class="space-y-4">
   {{ dialog_title(agent.name, facts=agent.slug) }}
+  {% if used %}
+  {% call card("This reply used", id="chat-reply-used") %}{{ facts(used) }}{% endcall %}
+  {% endif %}
   <form hx-post="{{ save_url }}" hx-swap="none" data-agent class="space-y-4">
+    {% if stay %}
+    <input type="hidden" name="stay" value="1">
+    <p class="text-xs text-aegis-muted">Shared by every conversation. Applies from your next message.</p>
+    {% endif %}
     {% call field("Name") %}{{ text_input("name", agent.name, required=True) }}{% endcall %}
     {% call field("Description") %}{{ text_input("description", agent.description) }}{% endcall %}
     <div class="grid grid-cols-2 gap-3">
       {% call field("Category") %}{{ text_input("category", agent.category) }}{% endcall %}
       {% call field("Model") %}{{ text_input("model_id", agent.model_id, placeholder="The active model") }}{% endcall %}
       {% call field("Temperature") %}{{ text_input("temperature", agent.temperature, placeholder="Default") }}{% endcall %}
-      {% call field("Max tokens") %}{{ text_input("max_tokens", agent.max_tokens, placeholder="Default") }}{% endcall %}
+      {% call field("Max tokens") %}{{ text_input("max_tokens", agent.max_tokens, placeholder="Default", autofocus=(focus == "max_tokens")) }}{% endcall %}
     </div>
     {% call field("System prompt") %}{{ textarea("system_prompt", agent.system_prompt or "", rows=10) }}{% endcall %}
     {{ checkbox("is_active", agent.is_active, "Active") }}

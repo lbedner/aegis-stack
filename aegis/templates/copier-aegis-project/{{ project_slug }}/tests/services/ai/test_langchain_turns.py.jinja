@@ -22,8 +22,9 @@ PIECES = ("Hel", "lo ", "there")
 
 
 class _Chunk:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str, **metadata: str) -> None:
         self.content = content
+        self.response_metadata = metadata
 
 
 class _FakeLLM:
@@ -141,6 +142,34 @@ class TestLangChainStreaming:
         assert final.metadata["input_tokens"] == 0
         assert final.metadata["output_tokens"] == 0
 {%- endif %}
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            {"finish_reason": "length"},  # OpenAI
+            {"stop_reason": "max_tokens"},  # Anthropic
+            {"done_reason": "length"},  # Ollama
+        ],
+    )
+    async def test_a_reply_cut_off_at_the_limit_says_so(
+        self,
+        harness: tuple[AIService, MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
+        metadata: dict[str, str],
+    ) -> None:
+        """The stop reason rides the last chunk, under each provider's key."""
+        service, _recorder = harness
+
+        class _CutOff(_FakeLLM):
+            async def astream(self, messages: Any) -> AsyncIterator[_Chunk]:
+                yield _Chunk("Half a sen")
+                yield _Chunk("", **metadata)
+
+        monkeypatch.setattr(
+            AIService, "_prepare_llm_and_messages", lambda *a, **k: (_CutOff(), [])
+        )
+        final = [chunk async for chunk in service.stream_chat("hello")][-1]
+        assert final.metadata["finish_reason"] == "length"
 
     async def test_stream_persists_the_assembled_reply(
         self, harness: tuple[AIService, MagicMock]

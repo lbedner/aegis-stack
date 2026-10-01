@@ -151,6 +151,17 @@ class TestOllamaModeDetection:
         self._env(tmp_path, ".env", "OLLAMA_BASE_URL=http://ollama:11434\n")
         assert _detect_existing_features(tmp_path)["ollama_mode"] == "docker"
 
+    def test_an_ollama_project_gets_the_inference_component(
+        self, tmp_path: Path
+    ) -> None:
+        """Ollama is a component now: a project that talks to one has it, at
+        the placement its URL says, so the update renders the component
+        instead of dropping the Ollama it used."""
+        self._env(tmp_path, ".env", "OLLAMA_BASE_URL=http://ollama:11434\n")
+        detected = _detect_existing_features(tmp_path)
+        assert detected["include_inference"] is True
+        assert detected["inference_placement"] == "docker"
+
     def test_no_ollama_url_leaves_the_answer_absent(self, tmp_path: Path) -> None:
         """Nothing detected means nothing written — the default already is
         ``none``, and an absent key must never clobber a stored answer."""

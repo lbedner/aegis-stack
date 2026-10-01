@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     NumericText,
     SecondaryText,
@@ -20,14 +21,13 @@ from app.components.frontend.controls.data_table import (
 )
 from app.components.frontend.controls.table import TableNameText
 from app.components.frontend.theme import AegisTheme as Theme
+from app.components.inference.formatting import format_model_id, format_quantization
+from app.core.model_picker import format_context_window
 from app.services.system.models import ComponentStatus
 
 from .cells import (
     build_modified_cell,
     capability_cell,
-    format_context_length,
-    format_model_id,
-    format_quantization,
     model_cell,
 )
 from .columns import CAPABILITIES, MODEL_COLUMNS
@@ -176,7 +176,7 @@ class ModelsSection(ft.Container):
             # reads as one only if the glyphs line up.
             id_text = model_cell(format_model_id(model.get("digest", "")), numeric=True)
             context_text = model_cell(
-                format_context_length(context_length), numeric=True
+                format_context_window(context_length) or "—", numeric=True
             )
             cap_cells = [
                 capability_cell(cap.key in capabilities) for cap in CAPABILITIES

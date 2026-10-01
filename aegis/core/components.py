@@ -10,9 +10,18 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from ..constants import AnswerKeys, StorageBackends, WorkerBackends
+from ..constants import (
+    AnswerKeys,
+    ComponentNames,
+    InferenceEngines,
+    InferencePlacement,
+    OllamaMode,
+    StorageBackends,
+    WorkerBackends,
+)
 from .file_manifest import FileManifest
 from .migration_generator import SCHEDULER_MIGRATION
+from .option_spec import OptionMode, OptionSpec, parse_options
 from .plugins.spec import PluginKind, PluginSpec, ReadmeWiring
 
 
@@ -448,6 +457,73 @@ COMPONENTS: dict[str, ComponentSpec] = {
             ],
         ),
     ),
+    "inference": ComponentSpec(
+        readme=ReadmeWiring(
+            reach=(
+                "Ollama on the host (host.docker.internal:11434) or the ollama "
+                "compose service; OLLAMA_BASE_URL"
+            ),
+            env_groups=["COMPONENT SETTINGS"],
+        ),
+        name="inference",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Local model serving (Ollama)",
+        long_description=(
+            "Runs language models locally: an Ollama server on the machine, "
+            "where a Mac's GPU is, or as a compose service. The AI service's "
+            "ollama provider talks to it, the model catalog lists what it "
+            "serves, and the dashboards show its models and activity."
+        ),
+        # The container only exists for ``placement=docker``; the template
+        # generator drops it for ``host``.
+        docker_services=["ollama"],
+        options=[
+            OptionSpec(
+                name="engine",
+                mode=OptionMode.SINGLE,
+                choices=list(InferenceEngines.ALL),
+                default=InferenceEngines.DEFAULT,
+                answer_key=AnswerKeys.INFERENCE_ENGINE,
+            ),
+            OptionSpec(
+                name="placement",
+                mode=OptionMode.SINGLE,
+                choices=list(InferencePlacement.ALL),
+                default=InferencePlacement.DEFAULT,
+                answer_key=AnswerKeys.INFERENCE_PLACEMENT,
+            ),
+        ],
+        # ``ollama_mode`` mirrors the placement; without the component there
+        # is no Ollama, and a later re-add starts from the default.
+        reset_answers_on_remove={
+            AnswerKeys.OLLAMA_MODE: OllamaMode.NONE,
+            AnswerKeys.INFERENCE_PLACEMENT: InferencePlacement.DEFAULT,
+        },
+        docs_path="components/inference",
+        marker_path="app/components/inference/ollama.py",
+        files=FileManifest(
+            primary=[
+                "app/components/inference",
+                "app/services/system/health_ollama.py",
+                "app/components/frontend/dashboard/cards/ollama_card.py",
+                "app/components/frontend/dashboard/modals/ollama_modal",
+                "tests/components/test_inference.py",
+                "tests/components/frontend/test_ollama_model_table.py",
+            ],
+            extras={
+                # The Overseer's Inference page, only where the htmx frontend
+                # is. (It sits inside the Overseer, which auth brings; auth's
+                # own htmx list carries it too, so either one missing removes
+                # it.)
+                "include_htmx": [
+                    "app/components/web_frontend/overseer_inference.py",
+                    "app/components/web_frontend/routes/partials/overseer_inference.py",
+                    "app/components/web_frontend/templates/pages/overseer/inference",
+                    "tests/web/test_overseer_inference.py",
+                ],
+            },
+        ),
+    ),
 }
 
 
@@ -468,3 +544,20 @@ def get_components_by_type(component_type: ComponentType) -> dict[str, Component
 def list_available_components() -> list[str]:
     """Get list of all available component names."""
     return list(COMPONENTS.keys())
+
+
+def component_option_answers(component: str) -> dict[str, str]:
+    """The answers a component's options record, from ``name[values]``
+    (defaults for any option not given); empty for one without options.
+    The inference placement also decides ``ollama_mode``, which templates
+    read. Raises ``ValueError`` on a value the spec does not offer."""
+    spec = COMPONENTS.get(component.partition("[")[0])
+    if spec is None or not spec.options:
+        return {}
+    parsed = parse_options(component, spec)
+    answers = {
+        opt.answer_key: parsed[opt.name] for opt in spec.options if opt.answer_key
+    }
+    if spec.name == ComponentNames.INFERENCE:
+        answers[AnswerKeys.OLLAMA_MODE] = parsed["placement"]
+    return answers

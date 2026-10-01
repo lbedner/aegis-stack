@@ -1,0 +1,29 @@
+{# The Models table, rendered on the page and pushed again by its stream. A
+   button answers at once (``data-api-done``); the row shows the rest. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
+{% macro row_actions(row) -%}
+<span class="flex items-center justify-end">
+  {% if row.moving %}
+  {% elif row.loaded %}
+  {{ action("Unload", 'hx-post="' ~ partials ~ '/unload" hx-swap="none" hx-disabled-elt="this" data-api-done="Unloading"', "warn", vals={"model": row.model}) }}
+  {% else %}
+  {{ action("Load", 'hx-post="' ~ partials ~ '/load" hx-swap="none" hx-disabled-elt="this" data-api-done="Loading"', "primary", vals={"model": row.model}) }}
+  {% endif %}
+</span>
+{%- endmacro %}
+<div class="space-y-4">
+  {% include "pages/overseer/inference/_unreachable.html" %}
+  {% call card(None, id="inference-models") %}
+    {{ data_table([
+      {"key": "model", "label": "Model"},
+      {"key": "build", "label": "Build"},
+      {"key": "context", "label": "Context", "align": "right"},
+      {"key": "can", "label": "Can"},
+      {"key": "size", "label": "Size", "align": "right"},
+      {"key": "modified", "label": "Modified"},
+      {"key": "state", "label": "State", "kind": "status"},
+    ], models, actions=row_actions, empty="No models installed. Pull one with ollama pull.") }}
+  {% endcall %}
+</div>

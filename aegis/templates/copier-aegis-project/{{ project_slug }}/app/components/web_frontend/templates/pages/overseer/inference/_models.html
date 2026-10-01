@@ -1,0 +1,5 @@
+{# Every installed model; load warms one into memory, unload frees it. The
+   table streams while the page is open, so a load shows as it happens. #}
+<section id="inference-models-live" hx-ext="sse" sse-connect="{{ models_events }}">
+  <div sse-swap="{{ models_event }}" hx-target="this">{% include "pages/overseer/inference/_models_table.html" %}</div>
+</section>

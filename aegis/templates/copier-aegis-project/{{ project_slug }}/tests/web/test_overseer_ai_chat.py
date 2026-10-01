@@ -4,6 +4,7 @@ server renders every bubble (history, a settled turn); chat.js and
 voice.js only drive the live seconds, through data hooks the markup
 carries."""
 
+import asyncio
 from pathlib import Path
 import re
 from types import SimpleNamespace
@@ -164,6 +165,94 @@ def test_a_settled_turn_is_the_servers_html(client: TestClient) -> None:
     assert one(bubble, "[data-model-icon] img").get("src") == "/icons/ollama"
     assert client.get(f"{CHAT}/messages/c1/nope").status_code == 404
     assert client.get(f"{CHAT}/messages/other/m2").status_code == 404
+
+
+def test_a_reply_cut_off_at_the_limit_says_so(client: TestClient) -> None:
+    """Ending mid-sentence reads as a broken app; the bubble says it was the
+    token limit, and how many tokens that was."""
+    stored = overseer_ai_chat.conversations
+    message = asyncio.run(stored())[0].messages[1]
+    message.metadata |= {"finish_reason": "length", "output_tokens": 1000}
+    note = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-cut-off]")
+    assert "1,000" in text(note)
+
+
+def test_the_note_names_the_configured_limit(client: TestClient) -> None:
+    """The agent's max_tokens is the limit; output tokens can fall short of it."""
+    message = asyncio.run(overseer_ai_chat.conversations())[0].messages[1]
+    message.metadata |= {
+        "finish_reason": "length",
+        "output_tokens": 998,
+        "agent": {"slug": "assistant", "temperature": 0.7, "max_tokens": 1000},
+    }
+    note = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-cut-off]")
+    assert "1,000-token" in text(note)
+
+
+def test_a_finished_reply_has_no_cut_off_note(client: TestClient) -> None:
+    assert not select(client.get(f"{CHAT}/messages/c1/m2").text, "[data-cut-off]")
+
+
+AGENT_ROW = {
+    "slug": "assistant",
+    "name": "Illiana",
+    "description": None,
+    "category": None,
+    "model_id": None,
+    "temperature": 0.9,
+    "max_tokens": 4000,
+    "system_prompt": "You are Illiana.",
+    "is_active": True,
+}
+SNAPSHOT = {"slug": "assistant", "temperature": 0.7, "max_tokens": 1000}
+
+
+@pytest.fixture
+def agent_drawer(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    from app.components.web_frontend import overseer_ai_agents
+
+    async def agent_row(db: Any, slug: str) -> dict[str, Any] | None:
+        return AGENT_ROW if slug == "assistant" else None
+
+    monkeypatch.setattr(overseer_ai_agents, "agent_row", agent_row)
+    message = asyncio.run(overseer_ai_chat.conversations())[0].messages[1]
+    message.metadata |= {"agent": SNAPSHOT}
+    return client
+
+
+def test_the_name_on_a_reply_opens_its_agent_in_the_drawer(client: TestClient) -> None:
+    """The side drawer the Agents page edits in, not the centered modal."""
+    name = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-assistant]")
+    assert name.get("hx-get") == f"{CHAT}/messages/c1/m2/agent"
+    assert name.get("hx-target") == "#drawer-body"
+
+
+def test_the_agent_drawer_shows_what_the_reply_used_above_the_editor(
+    agent_drawer: TestClient,
+) -> None:
+    html = agent_drawer.get(f"{CHAT}/messages/c1/m2/agent").text
+    used = text(one(html, "#chat-reply-used"))
+    assert "llama3" in used and "0.7" in used and "1,000" in used
+    form = one(html, "form[data-agent]")
+    assert one(form, "input[name=max_tokens]").get("value") == "4000"  # live value
+    assert one(form, "input[name=stay]") is not None
+
+
+def test_raise_max_tokens_lands_on_that_field(agent_drawer: TestClient) -> None:
+    html = agent_drawer.get(f"{CHAT}/messages/c1/m2/agent?focus=max_tokens").text
+    assert one(html, "input[name=max_tokens]").get("autofocus") is not None
+
+
+def test_a_cut_off_reply_offers_raise_and_continue(client: TestClient) -> None:
+    message = asyncio.run(overseer_ai_chat.conversations())[0].messages[1]
+    message.metadata |= {"finish_reason": "length", "output_tokens": 1000}
+    note = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-cut-off]")
+    raise_button = one(note, "button[data-raise]")
+    assert raise_button.get("hx-get") == f"{CHAT}/messages/c1/m2/agent?focus=max_tokens"
+    assert raise_button.get("hx-target") == "#drawer-body"
+    resume = one(note, "button[data-continue]")
+    assert resume.get("hx-post") == f"{CHAT}/turns"
+    assert '"conversation_id": "c1"' in resume.get("hx-vals")
 
 
 def test_a_stored_image_shows_in_its_question(

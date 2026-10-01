@@ -428,7 +428,7 @@ async def startup_database_init() -> None:
             logger.warning(f"Agent registry seed failed: {e}")
 {% endif %}
 
-{% if include_ai and ai_backend != "memory" %}
+{% if include_ai and ai_backend != "memory" and (database_engine == "postgres" or include_inference) %}
         # Remote catalog and local Ollama tags, each only when missing.
         try:
             from app.components.backend.startup.llm_catalog import seed_llm_catalog

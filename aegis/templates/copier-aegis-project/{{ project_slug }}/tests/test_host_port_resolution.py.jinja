@@ -1,4 +1,4 @@
-{% if include_redis or database_engine == "postgres" or (include_ai and ollama_mode != "none") or include_ingress %}
+{% if include_redis or database_engine == "postgres" or ollama_mode != "none" or include_ingress %}
 """Tests for host-side service URL resolution.
 
 ``make serve`` shifts only the HOST publish port when a default is taken by
@@ -121,7 +121,7 @@ class TestRedisUrlEffective:
 {% endif %}
 
 
-{% if include_ai and ollama_mode != "none" %}
+{% if ollama_mode != "none" %}
 class TestOllamaBaseUrlEffective:
     URL = "http://ollama:11434"
 

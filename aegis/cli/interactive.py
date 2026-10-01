@@ -19,6 +19,7 @@ from ..constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
+    InferencePlacement,
     Messages,
     OllamaMode,
     PostgresProviders,
@@ -322,6 +323,8 @@ class SelectionUI(Protocol):
 
     def choose_scheduler_backend(self) -> str: ...
 
+    def choose_inference_placement(self) -> str: ...
+
     def configure_auth(self, service_name: str) -> str: ...
 
     def configure_ai(
@@ -382,6 +385,9 @@ class TyperSelectionUI:
         if not typer.confirm(f"  {t('interactive.persist_prompt')}", default=True):
             return StorageBackends.MEMORY
         return select_database_engine(context="Scheduler")
+
+    def choose_inference_placement(self) -> str:
+        return select_inference_placement()
 
     def configure_auth(self, service_name: str) -> str:
         return interactive_auth_service_config(service_name)
@@ -504,6 +510,23 @@ def _step_generic_component(
         state.components.append(spec.name)
 
 
+def _step_inference(
+    spec: ComponentSpec, state: ProjectSelection, ui: SelectionUI
+) -> None:
+    """Inference prompt, then where Ollama runs; host stays the plain name."""
+    desc = _translated_desc(spec.name, spec.description)
+    if not ui.confirm(
+        f"  {t('interactive.add_prompt', description=desc)}", context=spec
+    ):
+        return
+    placement = ui.choose_inference_placement()
+    state.components.append(
+        ComponentNames.INFERENCE
+        if placement == InferencePlacement.DEFAULT
+        else f"{ComponentNames.INFERENCE}[{placement}]"
+    )
+
+
 ComponentStep = Callable[[ComponentSpec, ProjectSelection, SelectionUI], None]
 
 # Components with selection rules beyond confirm-and-add. Anything not
@@ -512,6 +535,7 @@ _COMPONENT_STEPS: dict[str, ComponentStep] = {
     ComponentNames.WORKER: _step_worker,
     ComponentNames.SCHEDULER: _step_scheduler,
     ComponentNames.DATABASE: _step_database,
+    ComponentNames.INFERENCE: _step_inference,
 }
 
 
@@ -523,6 +547,10 @@ def run_project_selection(ui: SelectionUI) -> ProjectSelection:
     e.g. ``scheduler[sqlite]``, exactly as the resolvers expect).
     """
     state = ProjectSelection()
+    # Where Ollama runs is answered inside this run (the inference step or
+    # the AI provider prompt). Guided setup rewinds by running the steps
+    # again, so an answer from a run backed out of must not carry over.
+    clear_ollama_mode_selection()
 
     ui.section(t("interactive.component_selection"))
     ui.success(
@@ -887,6 +915,26 @@ def clear_ollama_mode_selection() -> None:
     _ollama_mode_selection.clear()
 
 
+def select_inference_placement(service_name: str = AnswerKeys.SERVICE_AI) -> str:
+    """Ask where Ollama runs (host or docker) and record it for generation."""
+    typer.echo(f"\n{t('interactive.ai_ollama_label')}")
+    typer.echo(f"  {t('interactive.ai_ollama_intro')}")
+    typer.echo(f"    1. {t('interactive.ai_ollama_host')}")
+    typer.echo(f"    2. {t('interactive.ai_ollama_docker')}")
+    use_host = typer.confirm(
+        f"  {t('interactive.ai_ollama_host_prompt')}", default=True
+    )
+    placement = InferencePlacement.HOST if use_host else InferencePlacement.DOCKER
+    _ollama_mode_selection[service_name] = placement
+    if placement == InferencePlacement.HOST:
+        brand.success(f"  {t('interactive.ai_ollama_host_ok')}")
+        typer.echo(f"  {t('interactive.ai_ollama_host_hint')}")
+    else:
+        brand.success(f"  {t('interactive.ai_ollama_docker_ok')}")
+        typer.echo(f"  {t('interactive.ai_ollama_docker_hint')}")
+    return placement
+
+
 def set_ai_service_config(
     service_name: str = "ai",
     framework: str | None = None,
@@ -1127,29 +1175,12 @@ def interactive_ai_service_config(
     # Store provider selection in global context for template generation
     _ai_provider_selection[service_name] = providers
 
-    # Ollama deployment mode selection (only if Ollama was selected)
-    if AIProviders.OLLAMA in providers:
-        typer.echo(f"\n{t('interactive.ai_ollama_label')}")
-        typer.echo(f"  {t('interactive.ai_ollama_intro')}")
-        typer.echo(f"    1. {t('interactive.ai_ollama_host')}")
-        typer.echo(f"    2. {t('interactive.ai_ollama_docker')}")
-
-        use_host = typer.confirm(
-            f"  {t('interactive.ai_ollama_host_prompt')}",
-            default=True,
-        )
-        ollama_mode = OllamaMode.HOST if use_host else OllamaMode.DOCKER
-        _ollama_mode_selection[service_name] = ollama_mode
-
-        if ollama_mode == OllamaMode.HOST:
-            brand.success(f"  {t('interactive.ai_ollama_host_ok')}")
-            typer.echo(f"  {t('interactive.ai_ollama_host_hint')}")
-        else:
-            brand.success(f"  {t('interactive.ai_ollama_docker_ok')}")
-            typer.echo(f"  {t('interactive.ai_ollama_docker_hint')}")
-    else:
-        # No Ollama selected - set mode to none
+    # Where Ollama runs: asked once, reused when the inference step already
+    # answered it.
+    if AIProviders.OLLAMA not in providers:
         _ollama_mode_selection[service_name] = OllamaMode.NONE
+    elif get_ollama_mode_selection(service_name) == OllamaMode.NONE:
+        select_inference_placement(service_name)
 
     typer.echo(f"\n{t('interactive.ai_rag_label')}")
     rag_enabled = typer.confirm(

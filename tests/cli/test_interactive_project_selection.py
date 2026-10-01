@@ -7,7 +7,7 @@ prep): the worker+redis bundling, auth's database-confirmation dance, the
 plain content-service path, and the decline-everything baseline.
 
 Prompt order (must hold for the scripted side_effect lists):
-worker, scheduler, database, redis, ingress, observability, htmx, then every
+worker, scheduler, database, redis, ingress, observability, htmx, inference, then every
 service grouped by ServiceType order: auth, payment, ai, comms, insights,
 blog, finance. Accepting worker bundles redis AND skips the redis prompt;
 accepting auth without a database inserts a database-confirmation prompt.
@@ -57,7 +57,7 @@ class TestWorkerRedisBundling:
         mock_backend.return_value = WorkerBackends.ARQ
         # worker=yes bundles redis and SKIPS the redis prompt; decline the
         # remaining 5 components and 7 services.
-        mock_confirm.side_effect = [True] + [False] * 15
+        mock_confirm.side_effect = [True] + [False] * 16
         components, _, _, _ = interactive_project_selection()
         assert "redis" in components
         assert "worker" in components
@@ -72,7 +72,7 @@ class TestWorkerRedisBundling:
     ) -> None:
         mock_backend.return_value = WorkerBackends.ARQ
         # worker=no -> redis gets its own prompt (4th) and can be accepted.
-        mock_confirm.side_effect = [False, False, False, True] + [False] * 12
+        mock_confirm.side_effect = [False, False, False, True] + [False] * 13
         components, _, _, _ = interactive_project_selection()
         assert components == ["redis"]
         assert mock_confirm.call_count == _prompt_count()
@@ -83,7 +83,7 @@ class TestWorkerRedisBundling:
         self, mock_confirm: Any, mock_backend: Any
     ) -> None:
         mock_backend.return_value = WorkerBackends.TASKIQ
-        mock_confirm.side_effect = [True] + [False] * 15
+        mock_confirm.side_effect = [True] + [False] * 16
         components, _, _, _ = interactive_project_selection()
         assert "worker[taskiq]" in components
         assert "worker" not in components  # bracket form replaces plain name
@@ -96,9 +96,9 @@ class TestAuthDatabaseDance:
         self, mock_confirm: Any, mock_auth_config: Any
     ) -> None:
         mock_auth_config.return_value = "basic"
-        # 8 components declined, auth=yes, db-confirm=yes, then decline
+        # 9 components declined, auth=yes, db-confirm=yes, then decline
         # payment, ai, comms, insights, blog, finance
-        mock_confirm.side_effect = [False] * 8 + [True, True] + [False] * 7
+        mock_confirm.side_effect = [False] * 9 + [True, True] + [False] * 7
         components, _, services, _ = interactive_project_selection()
         assert "auth[basic]" in services
         assert (
@@ -112,7 +112,7 @@ class TestAuthDatabaseDance:
     ) -> None:
         mock_auth_config.return_value = "basic"
         # auth=yes but decline the database confirmation -> auth dropped
-        mock_confirm.side_effect = [False] * 8 + [True, False] + [False] * 7
+        mock_confirm.side_effect = [False] * 9 + [True, False] + [False] * 7
         _, _, services, _ = interactive_project_selection()
         assert services == []
 
@@ -128,7 +128,7 @@ class TestAuthDatabaseDance:
         # database=yes among components (3rd prompt), auth=yes -> no extra
         # db prompt
         mock_confirm.side_effect = (
-            [False, False, True, False, False, False, False, False]
+            [False, False, True, False, False, False, False, False, False]
             + [True]
             + [False] * 7
         )
@@ -167,6 +167,7 @@ class ScriptedUI:
         scheduler_backend: str = "memory",
         database_engine: str = "sqlite",
         postgres_provider: str = "container",
+        inference_placement: str = "host",
         auth_level: str = "basic",
         ai_config: tuple[str, str, list[str], bool, bool] = (
             "memory",
@@ -181,6 +182,7 @@ class ScriptedUI:
         self._scheduler_backend = scheduler_backend
         self._database_engine = database_engine
         self._postgres_provider = postgres_provider
+        self._inference_placement = inference_placement
         self._auth_level = auth_level
         self._ai_config = ai_config
         self.transcript: list[str] = []
@@ -203,6 +205,10 @@ class ScriptedUI:
 
     def choose_worker_backend(self) -> str:
         return self._worker_backend
+
+    def choose_inference_placement(self) -> str:
+        self.transcript.append("[inference placement]")
+        return self._inference_placement
 
     def choose_scheduler_backend(self) -> str:
         self.transcript.append("[scheduler backend]")
@@ -235,11 +241,11 @@ class TestEngineWithScriptedUI:
 
         # worker=y (bundles redis, redis prompt skipped), scheduler=y
         # (backend via choose_scheduler_backend, db auto-added and skipped),
-        # storage=n, ingress=n, observability=n, htmx=n, then services in ServiceType
+        # storage=n, ingress=n, observability=n, htmx=n, inference=n, then services in ServiceType
         # order: auth=y, payment=n, ai=y, comms=n, insights=n,
         # documents=n, blog=y, finance=n
         ui = ScriptedUI(
-            confirms=[True, True, False, False, False, False]
+            confirms=[True, True, False, False, False, False, False]
             + [True, False, True, False, False, False, True, False],
             worker_backend="taskiq",
             scheduler_backend="postgres",
@@ -272,7 +278,7 @@ class TestEngineWithScriptedUI:
         from aegis.cli.interactive import run_project_selection
 
         ui = ScriptedUI(
-            confirms=[False, True] + [False] * 13,
+            confirms=[False, True] + [False] * 14,
             scheduler_backend="postgres",
             postgres_provider="neon",
         )
@@ -287,7 +293,7 @@ class TestEngineWithScriptedUI:
         from aegis.cli.interactive import run_project_selection
 
         ui = ScriptedUI(
-            confirms=[False] * 10 + [True] + [False] * 5,
+            confirms=[False] * 11 + [True] + [False] * 5,
             ai_config=("postgres", "pydantic-ai", ["public"], False, False),
             postgres_provider="neon",
         )
@@ -317,8 +323,10 @@ class TestDatabaseHostSelection:
     """
 
     def _accept_only_database(self) -> list[bool]:
-        # 8 components (database on) + 8 services (all declined).
-        return [False, False, True, False, False, False, False, False] + [False] * 8
+        # 9 components (database on) + 8 services (all declined).
+        return [False, False, True, False, False, False, False, False, False] + [
+            False
+        ] * 8
 
     def test_standalone_sqlite_stays_plain(self) -> None:
         from aegis.cli.interactive import run_project_selection
@@ -356,3 +364,78 @@ class TestDatabaseHostSelection:
         assert state.components == ["database[neon]"]
         assert state.database_engine == "postgres"
         assert state.postgres_provider == "neon"
+
+
+class TestInferenceStep:
+    """Inference asks where Ollama runs; host, the default, stays plain."""
+
+    def _accept_only_inference(self) -> list[bool]:
+        from aegis.constants import ComponentNames
+        from aegis.core.services import SERVICES
+
+        order = ComponentNames.INFRASTRUCTURE_ORDER
+        return [name == ComponentNames.INFERENCE for name in order] + [False] * len(
+            SERVICES
+        )
+
+    def test_host_is_the_plain_component(self) -> None:
+        from aegis.cli.interactive import run_project_selection
+
+        ui = ScriptedUI(confirms=self._accept_only_inference())
+        state = run_project_selection(ui)
+        assert state.components == ["inference"]
+        assert "[inference placement]" in ui.transcript
+
+    def test_docker_gets_the_bracket(self) -> None:
+        from aegis.cli.interactive import run_project_selection
+
+        ui = ScriptedUI(
+            confirms=self._accept_only_inference(), inference_placement="docker"
+        )
+        state = run_project_selection(ui)
+        assert state.components == ["inference[docker]"]
+
+    def test_the_ollama_provider_reuses_the_placement(self) -> None:
+        """Chosen at the inference step, the AI's Ollama question is not asked
+        again: one answer to where Ollama runs."""
+        from aegis.cli.interactive import (
+            clear_ollama_mode_selection,
+            interactive_ai_service_config,
+            set_ollama_mode_selection,
+        )
+        from aegis.i18n import t
+
+        clear_ollama_mode_selection()
+        set_ollama_mode_selection("ai", "docker")
+        asked: list[str] = []
+
+        def answer(prompt: str, default: bool = True) -> bool:
+            asked.append(prompt)
+            return t("interactive.ai_provider.ollama") in prompt
+
+        with patch("typer.confirm", side_effect=answer):
+            interactive_ai_service_config("ai")
+        clear_ollama_mode_selection()
+        assert not any(t("interactive.ai_ollama_host_prompt") in p for p in asked)
+
+
+def test_a_rerun_forgets_a_placement_it_no_longer_chose() -> None:
+    """Guided setup rewinds by running the steps again: a Docker answer from
+    a run that was backed out of must not leak into the next one."""
+    from aegis.cli.interactive import (
+        clear_ollama_mode_selection,
+        get_ollama_mode_selection,
+        run_project_selection,
+        set_ollama_mode_selection,
+    )
+    from aegis.core.services import SERVICES
+
+    set_ollama_mode_selection("ai", "docker")  # left by the abandoned run
+    try:
+        from aegis.constants import ComponentNames
+
+        declines = [False] * (len(ComponentNames.INFRASTRUCTURE_ORDER) + len(SERVICES))
+        run_project_selection(ScriptedUI(confirms=declines))
+        assert get_ollama_mode_selection("ai") == "none"
+    finally:
+        clear_ollama_mode_selection()

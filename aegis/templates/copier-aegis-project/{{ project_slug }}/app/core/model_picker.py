@@ -60,13 +60,21 @@ def group_models(
 
 
 def format_context_window(tokens: int | None) -> str:
-    """A context window as the compact figure people say: 128k, 1M."""
+    """A context window as the compact figure people say: 128k, 1M.
+
+    Whichever thousand divides it exactly: a hosted catalog's 128000 by
+    1000, Ollama's 131072 by 1024 (128k, not 131k). One decimal stays only
+    when rounding would lie (1.5k, not 2k).
+    """
     if not tokens:
         return ""
     if tokens >= 1_000_000:
         millions = tokens / 1_000_000
         return f"{millions:.0f}M" if millions >= 1.05 or millions < 1.0 else "1M"
-    return f"{round(tokens / 1_000)}k"
+    if tokens < 1_000:
+        return str(tokens)
+    k = tokens / (1024 if tokens % 1000 and not tokens % 1024 else 1000)
+    return f"{k:.0f}k" if abs(k - round(k)) < 0.05 else f"{k:.1f}k"
 
 
 def _usd(value: float) -> str:

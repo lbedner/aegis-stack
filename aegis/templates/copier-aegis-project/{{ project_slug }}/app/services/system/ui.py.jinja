@@ -70,7 +70,7 @@ def get_component_title(component_name: str) -> str:
         {%- if include_storage %}
         "storage": "Storage",
         {%- endif %}
-        {%- if include_ollama %}
+        {%- if include_inference %}
         "ollama": "Inference",
         {%- endif %}
         {%- if include_ai %}
@@ -128,7 +128,7 @@ def get_component_label(component_name: str) -> str:
         {%- if include_scheduler %}
         "scheduler": "APScheduler",
         {%- endif %}
-        {%- if include_ollama %}
+        {%- if include_inference %}
         "ollama": "Ollama",
         {%- endif %}
         {%- if include_ai %}

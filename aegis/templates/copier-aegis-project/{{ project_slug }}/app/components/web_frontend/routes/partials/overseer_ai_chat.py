@@ -141,6 +141,29 @@ async def message(
 
 
 @router.get(
+    "/messages/{conversation_id}/{message_id}/agent", response_class=HTMLResponse
+)
+async def reply_agent(
+    request: Request,
+    conversation_id: str,
+    message_id: str,
+    focus: str | None = None,
+    user: User | None = Depends(get_optional_user),
+) -> Response:
+    """The agent behind a reply, in the side drawer: what the reply used,
+    then the live settings. ``focus`` names the field to land on."""
+    signed_in(user)
+    found = await _message(conversation_id, message_id)
+    from app.core.db import get_async_session
+
+    async with get_async_session() as db:
+        context = await chat.reply_agent_context(db, found, focus)
+    if context is None:
+        raise HTTPException(status_code=404, detail="No such agent.")
+    return dialog(request, "pages/overseer/ai/_agent_drawer.html", **context)
+
+
+@router.get(
     "/messages/{conversation_id}/{message_id}/runs/{index}",
     response_class=HTMLResponse,
 )

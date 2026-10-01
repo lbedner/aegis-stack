@@ -5,7 +5,6 @@ page swaps in without a reload belongs in ``routes/partials/`` instead.
 """
 {%- if include_auth %}
 
-from collections.abc import AsyncIterator
 from typing import Annotated
 from urllib.parse import quote
 
@@ -56,6 +55,11 @@ from app.components.web_frontend.routes.partials import (
     overseer_ai as overseer_ai_partials,
 )
 {%- endif %}
+{%- if include_inference %}
+from app.components.web_frontend.routes.partials import (
+    overseer_inference as overseer_inference_partials,
+)
+{%- endif %}
 from app.components.web_frontend import (
     overseer_connections,
     overseer_patterns,
@@ -63,15 +67,18 @@ from app.components.web_frontend import (
     overseer_worker,
 )
 from app.components.web_frontend.overseer_events import health_events
+from app.components.web_frontend.overseer_live import (
+    authenticate_stream as _authenticate_overseer_stream,
+)
+from app.components.web_frontend.overseer_live import event_stream as _event_stream
 from app.components.web_frontend.rendering import render, templates
 from app.core.audit import AuditEmitter, get_audit
-from app.core.db import AsyncSessionLocal, get_async_db
+from app.core.db import get_async_db
 from app.core.security import REFRESH_COOKIE_NAME, clear_session_cookie
 from app.models.user import User, UserCreate
 from app.services.auth.deps import (
     get_optional_user,
     get_refresh_service,
-    get_session_token,
     get_user_service,
 )
 {%- if include_auth_org %}
@@ -79,7 +86,6 @@ from app.services.auth.deps import get_invite_service
 from app.services.auth.invites import InviteService
 {%- endif %}
 from app.services.auth.refresh_tokens import RefreshService
-from app.services.auth.service import get_current_user_from_token
 from app.services.auth.users import UserService
 from app.services.system.health import last_system_status
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -176,14 +182,6 @@ async def overseer_page(
     )
 
 
-async def _authenticate_overseer_stream(
-    token: str | None = Depends(get_session_token),
-) -> None:
-    """Check the user and close the DB session before the stream begins."""
-    async with AsyncSessionLocal() as session:
-        await get_current_user_from_token(token, UserService(session))
-
-
 # Overseer pages' dialogs and forms (htmx fragments).
 router.include_router(overseer_auth_partials.router)
 router.include_router(overseer_scheduler_partials.router)
@@ -205,6 +203,9 @@ router.include_router(overseer_payment_partials.router)
 {%- if include_ai %}
 router.include_router(overseer_ai_partials.router)
 {%- endif %}
+{%- if include_inference %}
+router.include_router(overseer_inference_partials.router)
+{%- endif %}
 
 
 @router.get("/overseer/events", include_in_schema=False)
@@ -223,6 +224,8 @@ async def overseer_redis_keyspace(
     return _event_stream(overseer_redis.keyspace_events())
 
 
+
+
 @router.get(overseer_worker.QUEUES_EVENTS, include_in_schema=False)
 async def overseer_worker_queues(
     _authenticated: None = Depends(_authenticate_overseer_stream),
@@ -239,14 +242,6 @@ async def overseer_server_connections(
     """The Server page's connections table, filters and all, while it is open."""
     return _event_stream(
         overseer_connections.connections_events(dict(request.query_params))
-    )
-
-
-def _event_stream(events: AsyncIterator[str]) -> StreamingResponse:
-    return StreamingResponse(
-        events,
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

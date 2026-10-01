@@ -110,10 +110,15 @@ document.body.addEventListener('htmx:sendError', () => {
 
 // The one modal. Any swap into #dialog-body opens the native <dialog>;
 // closing it clears the body (see the dialog macro in macros/layout.html).
+// A swap into #drawer-body (``hx_drawer``) opens the side drawer the same way.
 document.body.addEventListener('htmx:afterSwap', (event) => {
   if (event.detail.target.id === 'dialog-body') {
     const dialog = document.getElementById('dialog');
     if (dialog && !dialog.open) dialog.showModal();
+  }
+  if (event.detail.target.id === 'drawer-body') {
+    const drawer = document.getElementById('drawer');
+    if (drawer && !drawer.open) drawer.show();
   }
 });
 // The one drawer. A list renders a ``drawer_sync`` marker naming what is

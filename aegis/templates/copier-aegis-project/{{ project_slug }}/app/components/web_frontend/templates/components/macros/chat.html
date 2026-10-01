@@ -107,7 +107,10 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 {% set prose = "text-sm leading-relaxed text-aegis-text [&_p]:my-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:mt-5 [&_h1]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-0.5 [&_strong]:font-semibold [&_code]:font-mono [&_code]:text-xs [&_code]:text-aegis-teal [&_pre]:rounded [&_pre]:bg-aegis-bg [&_pre]:border [&_pre]:border-aegis-border [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre_code]:text-aegis-text [&_table]:my-2 [&_th]:text-left [&_th]:font-medium [&_th]:pr-4 [&_td]:pr-4 [&_td]:py-0.5 [&_a]:text-aegis-teal [&_blockquote]:border-l-2 [&_blockquote]:border-aegis-border [&_blockquote]:pl-3 [&_blockquote]:text-aegis-muted" %}
 
 {# The assistant's name over an answer, in both bubbles. #}
-{% macro assistant_name(assistant) %}<span class="micro-label text-aegis-muted" data-assistant>{{ assistant }}</span>{% endmacro %}
+{# The agent's name over a reply. With ``url`` it opens that agent's
+   settings in the side drawer; inside the trail's summary the click must not
+   also fold the trail, hence the preventDefault. #}
+{% macro assistant_name(assistant, url=None) %}{% if url %}<button type="button" {{ hx_drawer(url) }} hx-on:click="event.preventDefault()" title="{{ assistant }}'s settings" class="micro-label text-aegis-muted hover:text-aegis-text underline-offset-2 hover:underline transition-colors" data-assistant>{{ assistant }}</button>{% else %}<span class="micro-label text-aegis-muted" data-assistant>{{ assistant }}</span>{% endif %}{% endmacro %}
 
 {% macro assistant_bubble(message, assistant) %}
 <li class="pr-24" data-role="assistant" data-message-id="{{ message.id }}">
@@ -118,16 +121,23 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
     {% if message.trail %}
     <details class="group/trail mb-1" data-trail-fold>
       <summary class="list-none cursor-pointer inline-flex items-center gap-1.5 text-aegis-muted">
-        {{ assistant_name(assistant) }}
+        {{ assistant_name(assistant, message.agent_url) }}
         <span class="text-xxs opacity-0 group-hover/bubble:opacity-100 group-open/trail:opacity-100 transition-opacity">{{ message.trail|length }} {{ "step" if message.trail|length == 1 else "steps" }}</span>
         {{ icon("chevron-down", "w-3 h-3 opacity-0 group-hover/bubble:opacity-100 group-open/trail:opacity-100 group-open/trail:rotate-180 transition", 2) }}
       </summary>
       {{ trail_rows(message.trail) }}
     </details>
     {% else %}
-    <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant) }}</div>
+    <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant, message.agent_url) }}</div>
     {% endif %}
     <div class="{{ prose }}" data-body>{{ message.content|markdown }}</div>
+    {% if message.cut_off %}
+    <div data-cut-off class="mt-2 flex flex-wrap items-center gap-2 text-xs text-aegis-amber">
+      <span>{{ message.cut_off }}</span>
+      {% if message.agent_url %}<button type="button" data-raise {{ hx_drawer(message.agent_url ~ "?focus=max_tokens") }} class="{{ button_classes('default', 'xs') }}">Raise max tokens</button>{% endif %}
+      <button type="button" data-continue hx-post="{{ message.turns_url }}" hx-target="#chat-thread" hx-swap="beforeend" hx-vals='{{ message.continue_vals|tojson }}' class="{{ button_classes('default', 'xs') }}">Continue</button>
+    </div>
+    {% endif %}
     <div class="mt-2 flex items-center gap-2 text-xxs text-aegis-muted">
       {% if message.model_icon %}<span data-model-icon class="inline-flex">{{ avatar(message.footer, message.model_icon, size="xs") }}</span>{% endif %}
       {% if message.footer %}<span data-footer>{{ message.footer }}</span>{% endif %}

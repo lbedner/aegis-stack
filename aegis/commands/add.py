@@ -23,7 +23,7 @@ from ..constants import (
     WorkerBackends,
 )
 from ..core.component_utils import extract_base_component_name, extract_engine_info
-from ..core.components import COMPONENTS, CORE_COMPONENTS
+from ..core.components import COMPONENTS, CORE_COMPONENTS, component_option_answers
 from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
@@ -464,6 +464,18 @@ def add_command(
             brand.error(t("add.invalid_format", error=e), err=True)
             raise typer.Exit(1)
 
+    # A component that declares options (``inference[docker]``) records each
+    # option's answer; a bare name records the defaults.
+    option_answers: dict[str, dict[str, str]] = {}
+    for comp in components_raw:
+        try:
+            option_answers[extract_base_component_name(comp)] = (
+                component_option_answers(comp)
+            )
+        except ValueError as e:
+            brand.error(t("add.invalid_format", error=e), err=True)
+            raise typer.Exit(1) from e
+
     # Extract base component names for validation (removes bracket syntax)
     base_components = []
     for comp in selected_components:
@@ -608,6 +620,9 @@ def add_command(
     for component in components_to_add:
         include_key = AnswerKeys.include_key(component)
         update_data[include_key] = True
+        update_data.update(
+            option_answers.get(component) or component_option_answers(component)
+        )
 
     # Add scheduler backend configuration if adding scheduler
     if ComponentNames.SCHEDULER in components_to_add:
@@ -675,6 +690,10 @@ def add_command(
                 component_data[AnswerKeys.WORKER_BACKEND] = update_data[
                     AnswerKeys.WORKER_BACKEND
                 ]
+
+            component_data.update(
+                option_answers.get(component) or component_option_answers(component)
+            )
 
             # Add the component
             result = updater.add_component(component, component_data)

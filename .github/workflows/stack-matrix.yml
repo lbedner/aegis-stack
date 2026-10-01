@@ -90,6 +90,7 @@ jobs:
           - ai_service
           - ai_langchain
           - ai_ollama
+          - inference_docker
           - ai_voice
           - insights
           - insights_per_user

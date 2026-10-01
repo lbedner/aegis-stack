@@ -90,6 +90,45 @@ class TestAddCommand:
         assert (project_path / "app" / "entrypoints" / "scheduler.py").exists()
         assert (project_path / "tests" / "components" / "test_scheduler.py").exists()
 
+    def test_add_inference_records_where_ollama_runs(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """The bracket's placement is the answer, and ollama_mode follows it."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "add", "inference[docker]", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        answers = load_copier_answers(project_path)
+        assert answers.get("include_inference") is True
+        assert answers.get("inference_placement") == "docker"
+        assert answers.get("ollama_mode") == "docker"
+        assert (project_path / "app/components/inference/ollama.py").is_file()
+        assert "ollama:" in (project_path / "docker-compose.yml").read_text()
+
+    def test_the_ollama_provider_brings_inference_with_its_answers(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """``add-service ai[ollama]`` pulls inference in; the project must end
+        up on the host placement, or every Ollama gate stays off."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "add-service",
+            "ai[ollama,sqlite]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        answers = load_copier_answers(project_path)
+        assert answers.get("include_inference") is True
+        assert answers.get("inference_placement") == "host"
+        assert answers.get("ollama_mode") == "host"
+
     def test_add_worker_auto_adds_redis(self, project_factory: ProjectFactory) -> None:
         """Test that adding worker automatically adds redis dependency."""
         project_path = project_factory("base")

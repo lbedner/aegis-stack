@@ -40,6 +40,7 @@ class TestAIProviderSelection:
             False,  # ingress
             False,  # observability
             False,  # htmx
+            False,  # inference
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -85,6 +86,7 @@ class TestAIProviderSelection:
             False,  # ingress
             False,  # observability
             False,  # htmx
+            False,  # inference
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -131,6 +133,7 @@ class TestAIProviderSelection:
             False,  # ingress
             False,  # observability
             False,  # htmx
+            False,  # inference
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -177,6 +180,7 @@ class TestAIProviderSelection:
             False,  # ingress
             False,  # observability
             False,  # htmx
+            False,  # inference
             False,  # auth service
             False,  # payment
             False,  # AI service
@@ -226,6 +230,7 @@ class TestAIBackendSelection:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 False,  # auth service
                 False,  # payment
                 True,  # AI service
@@ -286,6 +291,7 @@ class TestAIBackendSelection:
                 False,  # ingress
                 False,  # observability
                 False,  # htmx
+                False,  # inference
                 False,  # auth service
                 False,  # payment
                 True,  # AI service
@@ -337,6 +343,7 @@ class TestAIBackendSelection:
             False,  # ingress
             False,  # observability
             False,  # htmx
+            False,  # inference
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -506,6 +513,7 @@ class TestAIConfigurationEndToEnd:
             False,  # ingress
             False,  # observability
             False,  # htmx
+            False,  # inference
             False,  # No auth service
             False,  # payment
             True,  # Yes AI service
@@ -614,6 +622,7 @@ class TestOllamaModeSelection:
             False,  # ingress
             False,  # observability
             False,  # htmx
+            False,  # inference
             False,  # auth service
             False,  # payment
             True,  # AI service

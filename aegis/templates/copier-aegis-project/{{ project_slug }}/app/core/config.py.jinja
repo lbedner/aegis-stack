@@ -405,6 +405,7 @@ class Settings(
     GROQ_API_KEY: str | None = None
     MISTRAL_API_KEY: str | None = None
     COHERE_API_KEY: str | None = None
+{%- endif %}{%- if include_ai or ollama_mode != "none" %}
 
     # Ollama settings (local LLM inference)
 {% if ollama_mode == "host" %}
@@ -419,6 +420,7 @@ class Settings(
     # None = use the container port. See `_localhost_url`.
     OLLAMA_HOST_PORT: int | None = None
     OLLAMA_API_KEY: str | None = None  # Optional, usually not needed
+{%- endif %}{%- if include_ai %}
 
     # Conversation settings
     AI_MAX_CONVERSATION_LENGTH: int = 50  # Max messages per conversation
@@ -666,7 +668,7 @@ class Settings(
         return urlunparse(parsed._replace(netloc=netloc))
 {% endif %}
 
-{% if include_ai and ollama_mode != "none" %}
+{% if ollama_mode != "none" %}
     @property
     def ollama_base_url_effective(self) -> str:
         """Get effective Ollama URL, preferring local override when not in Docker."""

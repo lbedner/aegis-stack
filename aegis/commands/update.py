@@ -98,6 +98,10 @@ def _detect_existing_features(target_path: Path) -> dict[str, Any]:
     ollama_mode = _detect_ollama_mode(target_path)
     if ollama_mode is not None:
         detected[AnswerKeys.OLLAMA_MODE] = ollama_mode
+        # Ollama is the inference component now: a project that talks to one
+        # has it, at the placement its URL says.
+        detected[AnswerKeys.INFERENCE] = True
+        detected[AnswerKeys.INFERENCE_PLACEMENT] = ollama_mode
 
     detected.update(_detect_finance_providers(target_path))
 

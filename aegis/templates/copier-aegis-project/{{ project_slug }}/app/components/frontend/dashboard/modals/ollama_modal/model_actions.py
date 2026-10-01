@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import flet as ft
+
 from app.components.frontend.controls import (
     SecondaryText,
 )
@@ -144,11 +145,10 @@ class ModelActionButton(ft.Container):
         self._page.update()
 
         try:
-            from app.services.ai.domains.llm.ollama import OllamaClient
+            from app.components.inference.ollama import OllamaClient
 
             client = OllamaClient(base_url=self._ollama_url)
-            run = getattr(client, f"{self._action}_model")
-            if await run(self._model_name):
+            if await client.move(self._action, self._model_name):
                 if self._dialog:
                     await self._dialog.refresh_data()
             else:

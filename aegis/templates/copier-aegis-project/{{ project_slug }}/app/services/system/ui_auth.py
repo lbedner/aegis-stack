@@ -44,3 +44,23 @@ def security_level(metadata: dict[str, Any]) -> tuple[str, str, str]:
 def session_source(source: str | None) -> tuple[str, str]:
     """How a session signed in, and its colour."""
     return _SOURCES.get(source or "", (source or "Unknown", "yellow"))
+
+
+# Deletes are soft: the row keeps ``deleted_at`` and ``.../restore`` brings it
+# back, so neither confirmation may promise the delete is permanent.
+def delete_user_confirmation(email: str) -> tuple[str, str]:
+    """The title and body of the delete-user confirmation."""
+    return (
+        "Delete user",
+        f"Delete {email}? They leave the user list and can no longer sign in.",
+    )
+
+
+def delete_org_confirmation(name: str) -> tuple[str, str]:
+    """The title and body of the delete-organization confirmation."""
+    return (
+        "Delete organization",
+        f"Delete {name}? It leaves the organization list, and its memberships "
+        "and pending invites are removed for good.",
+    )
+

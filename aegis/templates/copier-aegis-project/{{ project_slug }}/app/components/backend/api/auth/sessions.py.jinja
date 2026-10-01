@@ -13,7 +13,6 @@ from app.core.security import (
     REFRESH_COOKIE_NAME,
     clear_refresh_cookie,
     clear_session_cookie,
-    create_access_token,
     set_refresh_cookie,
     set_session_cookie,
     verify_password,
@@ -30,9 +29,9 @@ from app.models.user import (
     UserCreate,
     UserResponse,
 )
-from app.services.auth.service import get_current_user_from_token
+from app.services.auth.service import get_current_user_from_token, session_id_of
 from app.services.auth.deps import get_current_active_user, get_session_token
-from app.services.auth.refresh_tokens import RefreshService
+from app.services.auth.refresh_tokens import RefreshService, access_token
 from app.services.auth.users import RestoreConflictError, UserService
 
 router = APIRouter()
@@ -91,8 +90,7 @@ async def refresh(
         clear_refresh_cookie(failure)
         return failure
 
-    new_refresh, user_id = result
-    user = await user_service.get_user_by_id(user_id)
+    user = await user_service.get_user_by_id(result.user_id)
     if user is None or not user.is_active:
         failure = JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -103,14 +101,10 @@ async def refresh(
         clear_refresh_cookie(failure)
         return failure
 
-{% if include_auth_rbac %}
-    access_token = create_access_token(data={"sub": user.email, "role": user.role})
-{% else %}
-    access_token = create_access_token(data={"sub": user.email})
-{% endif %}
-    set_session_cookie(response, access_token)
-    set_refresh_cookie(response, new_refresh)
-    return TokenResponse(access_token=access_token)
+    token = access_token(user, result.family_id)
+    set_session_cookie(response, token)
+    set_refresh_cookie(response, result.token)
+    return TokenResponse(access_token=token)
 
 
 @router.post("/logout", response_model=StatusMessage)
@@ -126,17 +120,14 @@ async def logout(
 
     Both cookies are dropped on every response — success OR failure.
     Browsers that arrive with a stale cookie must be able to log out and
-    end up in a clean state, otherwise the user is stuck. The refresh
-    row is revoked on the success path; the short-lived access JWT is
-    left to expire naturally (no stateful blacklist).
+    end up in a clean state, otherwise the user is stuck. The session is
+    revoked on the success path, which ends its access tokens too.
 
     On the failure path we build a ``JSONResponse`` ourselves and attach
     the cookie removal to it. FastAPI's injected ``Response`` parameter
     is bypassed when the handler raises ``HTTPException``, so we can't
     just modify it and rely on the framework to carry it through.
     """
-    refresh_cookie = request.cookies.get(REFRESH_COOKIE_NAME)
-
     # Auth gate. If invalid, build the 401 response ourselves so the
     # cookie-removal headers actually ride on the wire.
     try:
@@ -155,19 +146,23 @@ async def logout(
     clear_session_cookie(response)
     clear_refresh_cookie(response)
 
-    if refresh_cookie:
-        await refresh_service.revoke(refresh_cookie)
+    session_id = await _current_session_family(request, token, refresh_service)
+    if session_id:
+        await refresh_service.revoke_family(session_id)
 
     await audit.emit("auth.logout", actor_id=current_user.id)
     return StatusMessage(detail="Logged out")
 
 
 async def _current_session_family(
-    request: Request, refresh_service: RefreshService
+    request: Request, token: str | None, refresh_service: RefreshService
 ) -> str | None:
-    """Resolve which session family owns this request's refresh
-    cookie, if any. Used to flag the ``is_current`` row in
-    ``GET /sessions`` and to scope ``DELETE /sessions``."""
+    """The caller's session: its access token's ``sid``, else the family
+    of its refresh cookie (an access token from before the claim). Flags
+    the ``is_current`` row in ``GET /sessions``, scopes ``DELETE
+    /sessions``, and is what ``/logout`` revokes."""
+    if sid := session_id_of(token):
+        return sid
     cookie = request.cookies.get(REFRESH_COOKIE_NAME)
     if not cookie:
         return None
@@ -190,7 +185,7 @@ async def list_sessions(
     returned.
     """
     current_user = await get_current_user_from_token(token, user_service)
-    current_family = await _current_session_family(request, refresh_service)
+    current_family = await _current_session_family(request, token, refresh_service)
     rows = await refresh_service.list_sessions(current_user.id)
     return session_responses(rows, current_family)
 
@@ -198,8 +193,7 @@ async def list_sessions(
 def session_responses(
     rows: list[RefreshToken], current_family: str | None
 ) -> list[SessionResponse]:
-    """The public view of each session row. Shared with the web Overseer,
-    which cannot see the refresh cookie and so passes no current family."""
+    """The public view of each session row. Shared with the web Overseer."""
     return [
         SessionResponse(
             id=row.family_id,
@@ -226,9 +220,7 @@ async def revoke_session(
     """Revoke a single session by id. 404 if the caller doesn't own
     that session (or it doesn't exist / already revoked).
 
-    Note: revoking only kills the refresh token. The currently-valid
-    access JWT lives up to ``ACCESS_TOKEN_EXPIRE_MINUTES`` longer.
-    UI copy should reflect that delay.
+    The session's access tokens stop working on their next request.
     """
     current_user = await get_current_user_from_token(token, user_service)
     revoked = await refresh_service.revoke_session(session_id, current_user.id)
@@ -254,16 +246,15 @@ async def revoke_other_sessions(
     audit: AuditEmitter = Depends(get_audit),
 ) -> dict[str, int]:
     """Revoke every session for the caller except the current one
-    (the one tied to this request's refresh cookie). Returns
+    (the one this request's access token belongs to). Returns
     ``{"revoked": N}``.
 
-    If the caller has no current-session cookie, behaves as
-    "revoke everything" — useful for "sign out everywhere" from a
-    pure-API client. Returns 401 if the caller isn't authenticated
-    via the access token.
+    A caller with no session (a token minted outside a sign-in) revokes
+    everything. Returns 401 if the caller isn't authenticated via the
+    access token.
     """
     current_user = await get_current_user_from_token(token, user_service)
-    current_family = await _current_session_family(request, refresh_service)
+    current_family = await _current_session_family(request, token, refresh_service)
     revoked = await refresh_service.revoke_other_sessions(
         current_family or "", current_user.id
     )

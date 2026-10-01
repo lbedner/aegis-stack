@@ -54,7 +54,7 @@ class TestRefreshService:
 
         result = await service.rotate(original)
         assert result is not None
-        new_token, returned_uid = result
+        new_token, returned_uid = result.token, result.user_id
         assert returned_uid == user.id
         assert new_token != original
 
@@ -101,7 +101,7 @@ class TestRefreshService:
         # First rotation succeeds.
         first = await service.rotate(original)
         assert first is not None
-        new_token, _ = first
+        new_token = first.token
 
         # Age the revocation past the benign-race grace window so the
         # replay reads as theft, not a concurrent-request race.
@@ -138,12 +138,12 @@ class TestRefreshService:
 
         first = await service.rotate(original)
         assert first is not None
-        successor_token, _ = first
+        successor_token = first.token
 
         # Sibling request races in with the same (now revoked) token.
         racer = await service.rotate(original)
         assert racer is not None
-        racer_token, racer_uid = racer
+        racer_token, racer_uid = racer.token, racer.user_id
         assert racer_token == successor_token  # converge on one successor
         assert racer_uid == user.id
 
@@ -166,7 +166,7 @@ class TestRefreshService:
 
         first = await service.rotate(original)
         assert first is not None
-        successor_token, _ = first
+        successor_token = first.token
 
         # Kill the whole family (e.g. explicit logout / prior theft nuke).
         original_row = await async_db_session.get(RefreshToken, original)
@@ -250,7 +250,7 @@ class TestRefreshServiceSessionMetadata:
             original, user_agent="ua-rotated", ip="2.2.2.2"
         )
         assert rotated is not None
-        new_token, _ = rotated
+        new_token = rotated.token
 
         new_row = await async_db_session.get(RefreshToken, new_token)
         assert new_row is not None
@@ -300,7 +300,7 @@ class TestRefreshServiceSessionMetadata:
         original = await service.mint(user.id, source="password")
         rotated = await service.rotate(original)
         assert rotated is not None
-        new_token, _ = rotated
+        new_token = rotated.token
 
         new_row = await async_db_session.get(RefreshToken, new_token)
         assert new_row is not None

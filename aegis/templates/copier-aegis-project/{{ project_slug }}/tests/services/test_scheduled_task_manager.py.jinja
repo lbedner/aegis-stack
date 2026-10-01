@@ -248,70 +248,74 @@ class TestScheduledTaskManager:
             assert stats.active_tasks == 2
             assert stats.paused_tasks == 1
 
-    def test_format_trigger_interval(self, manager: ScheduledTaskManager) -> None:
-        """Test _format_trigger handles interval triggers correctly."""
-        # Mock IntervalTrigger
-        mock_trigger = MagicMock()
-        mock_trigger.__class__.__name__ = "IntervalTrigger"
 
-        # Test seconds
-        mock_trigger.interval.total_seconds.return_value = 30
-        result = manager._format_trigger(mock_trigger)
-        assert result == "Every 30s"
+class TestOneScheduleWording:
+    """Both scheduler backends describe a trigger the same way.
 
-        # Test minutes
-        mock_trigger.interval.total_seconds.return_value = 300  # 5 minutes
-        result = manager._format_trigger(mock_trigger)
-        assert result == "Every 5m"
+    The task manager read stored jobs through one formatter and the health
+    monitor's direct inspection through a second copy; for cron they
+    disagreed ("Cron: hour=2..." against "Cron schedule").
+    """
 
-        # Test hours
-        mock_trigger.interval.total_seconds.return_value = 7200  # 2 hours
-        result = manager._format_trigger(mock_trigger)
-        assert result == "Every 2h"
+    @pytest.mark.parametrize(
+        ("trigger", "words", "kind"),
+        [
+            ({"seconds": 15}, "Every 15s", "interval"),
+            ({"minutes": 5}, "Every 5m", "interval"),
+            ({"hours": 2}, "Every 2h", "interval"),
+            ({"minutes": 90}, "Every 1.5h", "interval"),
+            ({"days": 1}, "Every 1d", "interval"),
+        ],
+    )
+    def test_interval(self, trigger: dict[str, int], words: str, kind: str) -> None:
+        from apscheduler.triggers.interval import IntervalTrigger
 
-    def test_format_trigger_cron(self, manager: ScheduledTaskManager) -> None:
-        """Test _format_trigger handles cron triggers correctly."""
-        mock_trigger = MagicMock()
-        mock_trigger.__class__.__name__ = "CronTrigger"
+        from app.services.scheduler.schedule import describe_trigger, trigger_kind
 
-        # Mock fields
-        mock_field = MagicMock()
-        mock_field.name = "hour"
-        mock_field.__str__ = MagicMock(return_value="2")
-        mock_trigger.fields = [mock_field]
+        assert describe_trigger(IntervalTrigger(**trigger)) == words
+        assert trigger_kind(IntervalTrigger(**trigger)) == kind
 
-        result = manager._format_trigger(mock_trigger)
-        assert result == "Cron: hour=2"
+    def test_cron_names_its_fields(self) -> None:
+        from apscheduler.triggers.cron import CronTrigger
 
-    def test_format_trigger_unknown(self, manager: ScheduledTaskManager) -> None:
-        """Test _format_trigger handles unknown triggers."""
-        result = manager._format_trigger(None)
-        assert result == "Unknown"
+        from app.services.scheduler.schedule import describe_trigger, trigger_kind
 
-        mock_trigger = MagicMock()
-        mock_trigger.__class__.__name__ = "UnknownTrigger"
-        result = manager._format_trigger(mock_trigger)
-        assert result == "Unknown"
+        trigger = CronTrigger(hour=2, minute=30)
+        assert describe_trigger(trigger).startswith("Cron: hour=2, minute=30")
+        assert trigger_kind(trigger) == "cron"
 
-    def test_get_trigger_type(self, manager: ScheduledTaskManager) -> None:
-        """Test _get_trigger_type extracts trigger types correctly."""
-        # Test interval
-        mock_trigger = MagicMock()
-        mock_trigger.__class__.__name__ = "IntervalTrigger"
-        result = manager._get_trigger_type(mock_trigger)
-        assert result == "interval"
+    def test_a_one_off_date(self) -> None:
+        from datetime import datetime
 
-        # Test cron
-        mock_trigger.__class__.__name__ = "CronTrigger"
-        result = manager._get_trigger_type(mock_trigger)
-        assert result == "cron"
+        from apscheduler.triggers.date import DateTrigger
 
-        # Test date
-        mock_trigger.__class__.__name__ = "DateTrigger"
-        result = manager._get_trigger_type(mock_trigger)
-        assert result == "date"
+        from app.services.scheduler.schedule import describe_trigger, trigger_kind
 
-        # Test unknown
-        result = manager._get_trigger_type(None)
-        assert result == "unknown"
+        trigger = DateTrigger(run_date=datetime(2026, 10, 1, 9, 5, 0))
+        assert describe_trigger(trigger) == "Once at 2026-10-01 09:05:00"
+        assert trigger_kind(trigger) == "date"
+
+    def test_nothing_to_describe(self) -> None:
+        from app.services.scheduler.schedule import describe_trigger, trigger_kind
+
+        assert describe_trigger(None) == "Unknown"
+        assert trigger_kind(None) == "unknown"
+
+    @pytest.mark.asyncio
+    async def test_direct_inspection_uses_the_same_words(self) -> None:
+        """The health monitor's direct-inspection fallback (used when the job
+        store cannot be read) is where the second copy lived."""
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+        from app.services.scheduler.task_monitor import TaskHealthMonitor
+
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(print, "cron", hour=2, minute=30, id="nightly")
+        scheduler.start(paused=True)
+        try:
+            metadata = await TaskHealthMonitor()._get_direct_scheduler_metadata(scheduler)
+        finally:
+            scheduler.shutdown(wait=False)
+
+        assert metadata.upcoming_tasks[0].schedule.startswith("Cron: hour=2, minute=30")
 {%- endif %}

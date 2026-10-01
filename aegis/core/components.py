@@ -193,7 +193,6 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/worker/patterns.py",
                 "tests/components/test_worker_patterns.py",
                 "tests/services/test_ui_worker.py",
-                "tests/web/test_overseer_worker.py",
                 "app/core/queue_workers.py",
                 "tests/test_queue_workers.py",
                 "tests/api/test_worker_endpoints.py",
@@ -203,6 +202,11 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 # part of the worker footprint so add/remove cover it.
                 "app/components/frontend/dashboard/modals/task_history_section.py",
             ],
+            extras={
+                # The Overseer page's test: needs the web frontend, and the
+                # Overseer itself (auth's ``include_htmx`` group).
+                "include_htmx": ["tests/web/test_overseer_worker.py"],
+            },
         ),
         # Pattern D: the templates ship every backend's implementation side
         # by side (``pools_arq.py`` / ``pools_dramatiq.py`` /
@@ -250,7 +254,6 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/services/scheduler/orphans.py",
                 "tests/components/test_scheduler.py",
                 "tests/components/test_scheduler_jobs.py",
-                "tests/web/test_overseer_scheduler.py",
                 "tests/services/test_scheduler_execution_log.py",
                 "tests/services/test_scheduler_executions_read.py",
                 "docs/components/scheduler.md",
@@ -268,6 +271,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
             # deletes them. Init-time memory-backend cleanup stays inline in
             # cleanup_components() (gated on scheduler_backend, not a toggle).
             extras={
+                # The Overseer page's test: needs the web frontend, and the
+                # Overseer itself (auth's ``include_htmx`` group).
+                "include_htmx": ["tests/web/test_overseer_scheduler.py"],
                 # Every file gated by ``scheduler_backend != "memory"``.
                 # Excluded from the memory add base (they would render empty),
                 # added for the sqlite backend, and always part of the full

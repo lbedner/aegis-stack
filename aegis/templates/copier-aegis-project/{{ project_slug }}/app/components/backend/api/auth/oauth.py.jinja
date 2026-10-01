@@ -34,7 +34,7 @@ from app.services.auth.deps import get_refresh_service, get_user_service
 from app.core.config import settings
 from app.core.log import logger
 from app.core.secrets import Secret
-from app.core.security import create_access_token, set_refresh_cookie, set_session_cookie
+from app.core.security import set_refresh_cookie, set_session_cookie
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.deps import get_current_active_user
 from app.services.auth.refresh_tokens import RefreshService
@@ -173,11 +173,8 @@ async def _finalize_oauth_signin(
     await user_service.update_user(
         user.id, last_login=utcnow()
     )
-    jwt = create_access_token({"sub": user.email})
-    refresh_token = await refresh_service.mint(
-        user.id,
-        source=f"oauth:{provider}",
-        **get_session_metadata(request),
+    jwt, refresh_token = await refresh_service.start_session(
+        user, source=f"oauth:{provider}", **get_session_metadata(request)
     )
     nxt = _safe_next(request.session.pop("oauth_next", ""))
     response = RedirectResponse(

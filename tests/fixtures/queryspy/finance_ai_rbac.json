@@ -1691,12 +1691,6 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/components/backend/api/auth/sessions.py",
-      "function": "_current_session_family"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
       "function": "revoke"
     },
@@ -1705,6 +1699,12 @@
       "label": "SELECT refresh_token.token AS refresh_token_token, refresh_token.user_id AS refresh_token_user_id, refresh_token.family_id AS refresh_token_family_id, refresh_token.expires_at AS refresh_token_expires_at, refresh_token.revoked_at AS refresh_token_revoked_at, refresh_token.created_at AS refresh_token_created_at, refresh_token.source AS refresh_token_source, refresh_token.user_agent AS refresh_token_user_agent, refresh_token.ip AS refresh_token_ip, refresh_token.last_used_at AS refresh_token_last_used_at FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
       "function": "rotate"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT refresh_token.token FROM refresh_token WHERE refresh_token.family_id = :family_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1 LIMIT :param_1",
+      "file": "app/services/auth/refresh_tokens.py",
+      "function": "is_live_session"
     },
     {
       "kind": "repeated_statement",

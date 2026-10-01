@@ -38,6 +38,7 @@ from app.components.frontend.dashboard.modals.insights_modal.charts import (
     _pretty_date,
     _smart_step,
 )
+from app.core.config import settings
 
 
 # Event type → chip border/highlight color
@@ -68,7 +69,8 @@ class DocsTab(InsightsTab):
         if not daily:
             content.append(
                 SecondaryText(
-                    "No Plausible data collected yet. Run: my-app insights collect plausible"  # noqa: E501
+                    "No Plausible data collected yet. Run: "
+                    f"{settings.PROJECT_NAME} insights collect plausible"
                 )
             )
             self._content_column.controls = content

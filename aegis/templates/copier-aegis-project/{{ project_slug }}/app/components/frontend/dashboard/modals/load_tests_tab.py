@@ -24,6 +24,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.config import settings
 from app.core.formatting import format_relative_time
 from app.services.system import ui_backend
 
@@ -73,7 +74,7 @@ class LoadTestsTab(ft.Container):
                     H3Text("No HTTP load-test runs yet"),
                     SecondaryText(
                         "Kick off a run from the CLI: "
-                        "`my-app api-load-test run /health --in-process`. "
+                        f"`{settings.PROJECT_NAME} api-load-test run /health --in-process`. "
                         "Results land here automatically."
                     ),
                 ],

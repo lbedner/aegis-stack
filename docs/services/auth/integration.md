@@ -469,10 +469,12 @@ class RefreshToken(SQLModel, table=True):
 
 | Method | Signature | Behavior |
 |--------|-----------|----------|
-| `mint` | `(user_id, family_id=None) -> token` | Insert a new refresh row. Callers minting a fresh sign-in leave `family_id=None`. |
-| `rotate` | `(token) -> (new_token, user_id) \| None` | Revoke inbound, insert successor in the same family. Returns `None` on miss / expired / replay. |
+| `start_session` | `(user, source=...) -> (access_token, refresh_token)` | Sign in: a new session (family) and its first access token, which carries the session id as `sid`. Login, registration and OAuth all use it. |
+| `mint` | `(user_id, family_id=None) -> token` | Insert a new refresh row. |
+| `rotate` | `(token) -> RefreshToken \| None` | Revoke inbound and insert its successor in the same family, in one commit. Returns the successor, or `None` on miss / expired / replay. |
+| `is_live_session` | `(session_id) -> bool` | Whether the session still has a live row. Checked on every request whose access token carries `sid`. |
 | `revoke` | `(token) -> None` | Mark a single row revoked. Idempotent — logout with a stale cookie never 500s. |
-| `revoke_family` | `(family_id) -> None` | Revoke every live row in the family. Used on reuse detection and as the basis for a future "sign out everywhere" feature. |
+| `revoke_family` | `(family_id) -> None` | Revoke every live row in the family. Used on reuse detection, logout and signing out a device. |
 | `validate` | `(token) -> user_id \| None` | Read-only check. Used by diagnostic paths; the hot refresh path uses `rotate`. |
 
 **Rotation contract:**

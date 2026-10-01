@@ -73,7 +73,7 @@ from app.components.web_frontend.overseer_live import event_stream as _event_str
 from app.components.web_frontend.rendering import render, templates
 from app.core.audit import AuditEmitter, get_audit
 from app.core.db import get_async_db
-from app.core.security import REFRESH_COOKIE_NAME, clear_session_cookie
+from app.core.security import SESSION_COOKIE_NAME, clear_refresh_cookie, clear_session_cookie
 from app.models.user import User, UserCreate
 from app.services.auth.deps import (
     get_optional_user,
@@ -85,6 +85,7 @@ from app.services.auth.deps import get_invite_service
 from app.services.auth.invites import InviteService
 {%- endif %}
 from app.services.auth.refresh_tokens import RefreshService
+from app.services.auth.service import session_id_of
 from app.services.auth.users import UserService
 from app.services.system.health import last_system_status
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -325,7 +326,7 @@ async def _overseer_detail(
     if page := SECTIONED_PAGES.get((group, name)):
         context |= {"page": page, "current": section}
         context |= await page.context(
-            section, item.component, SectionRequest(user, db, request.query_params, request.url.path, request.app.routes)
+            section, item.component, SectionRequest(user, db, request.query_params, request.url.path, request.app.routes, session_id_of(request.cookies.get(SESSION_COOKIE_NAME)))
         )
     return render(
         request,
@@ -445,15 +446,19 @@ async def register_submit(
 
 
 @router.get("/logout", include_in_schema=False)
-async def logout() -> RedirectResponse:
+async def logout(
+    request: Request, refresh_service: RefreshService = Depends(get_refresh_service)
+) -> RedirectResponse:
     """Sign out and land back on the public landing page.
 
-    A GET so a plain link works. Both cookies are dropped: leaving the
-    refresh cookie would let the next page load silently resume the session.
+    A GET so a plain link works. The session is revoked, ending its access
+    tokens wherever they were copied, and both cookies are dropped.
     """
+    if session_id := session_id_of(request.cookies.get(SESSION_COOKIE_NAME)):
+        await refresh_service.revoke_family(session_id)
     redirect = RedirectResponse(url="/", status_code=303)
     clear_session_cookie(redirect)
-    redirect.delete_cookie(REFRESH_COOKIE_NAME, path="/api/v1/auth")
+    clear_refresh_cookie(redirect)
     return redirect
 
 

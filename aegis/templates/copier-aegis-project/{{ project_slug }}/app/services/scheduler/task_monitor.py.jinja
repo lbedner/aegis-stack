@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.log import logger
 from .models import SchedulerHealthMetadata, UpcomingTask
+from .schedule import describe_trigger
 
 {% if scheduler_backend != "memory" %}
 from .scheduled_task_manager import ScheduledTaskManager
@@ -140,7 +141,7 @@ class TaskHealthMonitor:
                     job_id=job.id,
                     name=job.name or job.id,
                     next_run=job.next_run_time.isoformat(),
-                    schedule=self._format_trigger_simple(job.trigger),
+                    schedule=describe_trigger(job.trigger),
                     function=func_path,
                     description=func_doc,
                 ))
@@ -163,41 +164,6 @@ class TaskHealthMonitor:
                 scheduler_state="error"
             )
     
-    def _format_trigger_simple(self, trigger: Any) -> str:
-        """Simple trigger formatting for non-persistent mode."""
-        if not trigger:
-            return "Unknown"
-        
-        trigger_type = type(trigger).__name__
-        
-        if trigger_type == "IntervalTrigger":
-            if hasattr(trigger, "interval"):
-                seconds = trigger.interval.total_seconds()
-                if seconds < 60:
-                    return f"Every {int(seconds)}s"
-                elif seconds < 3600:
-                    minutes = int(seconds / 60)
-                    return f"Every {minutes}m"
-                elif seconds < 86400:
-                    hours = seconds / 3600
-                    if hours == int(hours):
-                        return f"Every {int(hours)}h"
-                    else:
-                        return f"Every {hours:.1f}h"
-                else:
-                    days = int(seconds / 86400)
-                    return f"Every {days}d"
-        
-        elif trigger_type == "CronTrigger":
-            # Simple cron description
-            return "Cron schedule"
-        
-        elif trigger_type == "DateTrigger":
-            if hasattr(trigger, "run_date"):
-                return f"Once at {trigger.run_date.strftime('%Y-%m-%d %H:%M')}"
-        
-        return trigger_type.replace("Trigger", "")
-
     def _get_function_path(self, job: Any) -> str:
         """Get the function path from an APScheduler job."""
         try:

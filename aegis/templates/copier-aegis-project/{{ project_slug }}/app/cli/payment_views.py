@@ -6,6 +6,7 @@ from rich.table import Table
 import typer
 
 from app.cli import theme
+from app.core.config import settings
 from app.i18n import t
 
 if TYPE_CHECKING:
@@ -206,5 +207,5 @@ async def _seed(reset: bool, clear: bool) -> None:
     console.print(table)
     console.print()
     console.print(f"[dim]{t('payment.seed_view_via_dashboard')}[/dim]")
-    console.print(f"  [{theme.ACCENT}]my-app payment transactions[/]")
-    console.print(f"  [{theme.ACCENT}]my-app payment disputes[/]")
+    console.print(f"  [{theme.ACCENT}]{settings.PROJECT_NAME} payment transactions[/]")
+    console.print(f"  [{theme.ACCENT}]{settings.PROJECT_NAME} payment disputes[/]")

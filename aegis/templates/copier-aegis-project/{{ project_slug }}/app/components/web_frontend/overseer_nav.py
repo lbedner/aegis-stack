@@ -65,6 +65,8 @@ class SectionRequest:
     path: str
     # The app's routes, for pages that describe the app itself.
     routes: Sequence[BaseRoute] = ()
+    # The viewer's own sign-in session (the access token's ``sid``).
+    session_id: str | None = None
 
 
 @dataclass(frozen=True)

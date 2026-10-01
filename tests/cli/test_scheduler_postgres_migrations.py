@@ -17,6 +17,7 @@ only, never the scheduler:
 
 from pathlib import Path
 
+from .conftest import ProjectFactory
 from .test_utils import run_aegis_command
 
 
@@ -87,3 +88,28 @@ def test_sqlite_scheduler_ships_an_unqualified_migration(
     assert "scheduler" not in content.split("def upgrade")[1].replace(
         "apscheduler_jobs", ""
     ).replace("ix_apscheduler", ""), "SQLite has no schemas to qualify with"
+
+
+def test_adding_a_sqlite_scheduler_versions_it_like_init(
+    project_factory: ProjectFactory,
+) -> None:
+    """``aegis add scheduler --backend sqlite`` wrote no revision (only
+    Postgres got one), so a project that gained the scheduler later had
+    tables no revision describes and failed its own drift check, where the
+    same stack from ``init`` passed."""
+    project = project_factory("base_with_database")
+
+    result = run_aegis_command(
+        "add",
+        "scheduler",
+        "--backend",
+        "sqlite",
+        "--project-path",
+        str(project),
+        "--yes",
+    )
+    assert result.returncode == 0, f"add failed: {result.stderr}"
+
+    migrations = list((project / "alembic" / "versions").glob("*_scheduler.py"))
+    assert len(migrations) == 1, "expected exactly one scheduler migration"
+    assert "job_execution" in migrations[0].read_text()

@@ -12,6 +12,7 @@ from app.core.db import async_engine, get_async_session
 from app.core.log import logger
 
 from .models import APSchedulerJob, JobExecution, ScheduledTask, TaskStatistics
+from .schedule import describe_trigger, trigger_kind
 
 
 class ScheduledTaskManager:
@@ -102,8 +103,8 @@ class ScheduledTaskManager:
             name=job_data.get("name", job.id),
             function=job_data.get("func", "unknown"),
             args=list(job_data.get("args", ())),
-            schedule=self._format_trigger(job_data.get("trigger")),
-            trigger_type=self._get_trigger_type(job_data.get("trigger")),
+            schedule=describe_trigger(job_data.get("trigger")),
+            trigger_type=trigger_kind(job_data.get("trigger")),
             next_run_time=(
                 datetime.fromtimestamp(job.next_run_time)
                 if job.next_run_time else None
@@ -130,78 +131,6 @@ class ScheduledTaskManager:
             active_tasks=active,
             paused_tasks=paused,
         )
-
-    def _format_trigger(self, trigger: Any) -> str:
-        """
-        Convert APScheduler trigger to human-readable string.
-
-        Args:
-            trigger: APScheduler trigger object (IntervalTrigger, CronTrigger, etc.)
-
-        Returns:
-            str: Human-readable schedule description.
-        """
-        if not trigger:
-            return "Unknown"
-
-        trigger_type = type(trigger).__name__
-
-        if trigger_type == "IntervalTrigger":
-            if hasattr(trigger, "interval"):
-                seconds = trigger.interval.total_seconds()
-                if seconds < 60:
-                    return f"Every {int(seconds)}s"
-                elif seconds < 3600:
-                    minutes = int(seconds / 60)
-                    return f"Every {minutes}m"
-                elif seconds < 86400:
-                    hours = seconds / 3600
-                    if hours == int(hours):
-                        return f"Every {int(hours)}h"
-                    else:
-                        return f"Every {hours:.1f}h"
-                else:
-                    days = int(seconds / 86400)
-                    return f"Every {days}d"
-
-        elif trigger_type == "CronTrigger":
-            if hasattr(trigger, "fields"):
-                parts = []
-                for field in trigger.fields:
-                    field_str = str(field)
-                    if field_str != "*":
-                        parts.append(f"{field.name}={field_str}")
-                if parts:
-                    return "Cron: " + ", ".join(parts)
-                return "Cron: * * * * *"
-
-        elif trigger_type == "DateTrigger":
-            if hasattr(trigger, "run_date"):
-                return f"Once at {trigger.run_date.strftime('%Y-%m-%d %H:%M:%S')}"
-
-        return trigger_type.replace("Trigger", "")
-
-    def _get_trigger_type(self, trigger: Any) -> str:
-        """
-        Extract trigger type as string.
-
-        Args:
-            trigger: APScheduler trigger object.
-
-        Returns:
-            str: Trigger type name (interval, cron, date, unknown).
-        """
-        if not trigger:
-            return "unknown"
-
-        trigger_name = type(trigger).__name__
-        if "Interval" in trigger_name:
-            return "interval"
-        elif "Cron" in trigger_name:
-            return "cron"
-        elif "Date" in trigger_name:
-            return "date"
-        return "unknown"
 
     async def list_executions(
         self,

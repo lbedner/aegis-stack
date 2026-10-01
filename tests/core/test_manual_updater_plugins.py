@@ -637,23 +637,27 @@ class TestPluginShipsMoreThanTemplates:
 
         assert "app/services/test_plugin/seeds/starter.json" in result.written
 
-    def test_a_plain_file_is_copied_not_rendered(self, fake_project: Path) -> None:
+    def test_a_plain_file_is_copied_not_rendered(
+        self, fake_project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Jinja syntax in a vendored asset is data, not a template."""
-        from aegis.core.plugins.template_resolver import get_plugin_template_root
+        import shutil
 
-        # Ask the resolver where the plugin's templates ACTUALLY are rather
-        # than assuming the copy next to this test. The fake plugin is an
-        # installed package, so in a git worktree the import can resolve to
-        # a different checkout's fixtures - and a file written to the wrong
-        # copy is never rendered.
-        root = get_plugin_template_root("aegis_plugin_test")
+        from aegis.core.plugins import template_resolver
+
+        # A private copy of the plugin's templates: writing into the shared
+        # fixture tree raced every other test walking it under xdist (one
+        # listed this file, then found it deleted).
+        root = template_resolver.get_plugin_template_root("aegis_plugin_test")
         assert root is not None
-        tree = root / "{{ project_slug }}/app/services/test_plugin/seeds"
-        braces = tree / "braces.json"
-        braces.write_text('{"kept": "{{ project_slug }}"}\n')
-        try:
-            ManualUpdater(fake_project).render_plugin_tree("aegis_plugin_test")
-            written = fake_project / "app/services/test_plugin/seeds/braces.json"
-            assert "{{ project_slug }}" in written.read_text()
-        finally:
-            braces.unlink()
+        copy = shutil.copytree(root, tmp_path / "templates")
+        monkeypatch.setattr(
+            template_resolver, "get_plugin_template_root", lambda _name: copy
+        )
+        seeds = copy / "{{ project_slug }}/app/services/test_plugin/seeds"
+        (seeds / "braces.json").write_text('{"kept": "{{ project_slug }}"}\n')
+
+        ManualUpdater(fake_project).render_plugin_tree("aegis_plugin_test")
+
+        written = fake_project / "app/services/test_plugin/seeds/braces.json"
+        assert "{{ project_slug }}" in written.read_text()

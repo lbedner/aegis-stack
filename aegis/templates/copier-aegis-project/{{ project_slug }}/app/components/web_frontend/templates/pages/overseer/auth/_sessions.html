@@ -18,7 +18,11 @@
     {"key": "last_used", "label": "Last used"},
     {"key": "expires", "label": "Expires", "kind": "date"},
   ], sessions, empty="No active sessions") %}
+    {% if row.current %}
+    <span class="text-xs text-aegis-muted">This browser</span>
+    {% else %}
     {{ action("Sign out", hx_dialog(partials ~ "/confirm/revoke/" ~ row.id), "danger") }}
+    {% endif %}
   {% endcall %}
 {% endcall %}
 {% endif %}

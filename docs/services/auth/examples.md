@@ -337,9 +337,7 @@ ACCOUNT_LOCKOUT_MINUTES=15
 
 ## 6. Logout + Refresh-Token Rotation
 
-`POST /auth/logout` revokes the refresh-token row in the database and drops both the `aegis_session` and `aegis_refresh` cookies. The short-lived access JWT is left to expire naturally — there is no stateful blacklist on access tokens.
-
-For browser flows, this is invisible: cookies are gone, so the next request is unauthenticated. For pure bearer-token clients, the access token keeps working until its `ACCESS_TOKEN_EXPIRE_MINUTES` window closes (15 min default), but the client can't mint a new one because the refresh row is revoked.
+`POST /auth/logout` revokes the session in the database and drops both the `aegis_session` and `aegis_refresh` cookies. The session's access tokens stop working on their next request, so a bearer client holding a copy is signed out too, not only the browser.
 
 **Login and capture the access + refresh tokens (use `-c` to persist cookies):**
 
@@ -407,8 +405,8 @@ curl -s -b cookies.txt -X POST http://localhost:8000/api/v1/auth/refresh \
 # 401
 ```
 
-!!! info "Why no access-token blacklist"
-    Access tokens are 15-minute JWTs verified statelessly on every request — no DB hit on the hot path. Revocation is handled at the refresh layer: once the refresh row is revoked (on logout or reuse), the client can no longer mint new access tokens. A stolen access token's blast radius is bounded by its natural expiry. See [Refresh-Token Rotation](index.md#refresh-token-rotation) for the design rationale.
+!!! info "How an access token is revoked"
+    Every access token carries its session's id as a `sid` claim. Each request checks that the session still has a live refresh row (one indexed lookup), so logout, "sign out this device", "sign out everywhere else", a password reset and reuse detection end the session's access tokens at once instead of when they expire. A token without `sid` (minted outside a sign-in, such as a load-test token) lives out its short lifetime. See [Refresh-Token Rotation](index.md#refresh-token-rotation) for the design rationale.
 
 ---
 

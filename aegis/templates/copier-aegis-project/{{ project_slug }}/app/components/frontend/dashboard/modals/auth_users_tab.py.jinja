@@ -27,6 +27,7 @@ from app.components.frontend.controls.snack_bar import (
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_relative_time
+from app.services.system import ui_auth
 
 
 class UsersTableSection(ft.Container):
@@ -394,12 +395,11 @@ class AuthUsersTab(ft.Container):
         async def do_delete() -> None:
             await self._delete_user(user_id)
 
+        title, message = ui_auth.delete_user_confirmation(user.get("email", ""))
         ConfirmDialog(
             page=page,
-            title="Delete User",
-            message=(
-                f"Permanently delete '{user.get('email')}'?\n\nThis cannot be undone."
-            ),
+            title=title,
+            message=message,
             confirm_text="Delete",
             on_confirm=do_delete,
             destructive=True,

@@ -827,9 +827,9 @@ class TestSessionsEndpoints:
         revoke = async_client_with_db.delete(f"/api/v1/auth/sessions/{sid}")
         assert revoke.status_code == status.HTTP_204_NO_CONTENT
 
+        # It was this browser's own session, so this browser is signed out.
         after = async_client_with_db.get("/api/v1/auth/sessions")
-        assert after.status_code == status.HTTP_200_OK
-        assert all(s["id"] != sid for s in after.json())
+        assert after.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_revoke_other_sessions_keeps_current(
@@ -866,6 +866,112 @@ class TestSessionsEndpoints:
         rows = after.json()
         assert len(rows) == 1
         assert rows[0]["is_current"] is True
+
+    def _bearer_login(self, client, email: str) -> dict[str, str]:
+        """Sign in, then forget the cookies: an API client holding only the
+        access token, which never sends the refresh cookie."""
+        response = client.post(
+            "/api/v1/auth/token",
+            data={"username": email, "password": _PASSWORD},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        client.cookies.clear()
+        return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+    @pytest.mark.asyncio
+    async def test_signing_out_another_device_ends_it_at_once(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ):
+        """Revoking a session ends its access token too, not only its
+        refresh token: the device is out on its next request, not when its
+        access token expires."""
+        user = await user_factory()
+        phone = self._bearer_login(async_client_with_db, user.email)
+        assert async_client_with_db.get("/api/v1/auth/me", headers=phone).status_code == 200
+
+        laptop = self._bearer_login(async_client_with_db, user.email)
+        rows = async_client_with_db.get("/api/v1/auth/sessions", headers=laptop).json()
+        other = next(s["id"] for s in rows if not s["is_current"])
+        revoke = async_client_with_db.delete(
+            f"/api/v1/auth/sessions/{other}", headers=laptop
+        )
+        assert revoke.status_code == status.HTTP_204_NO_CONTENT
+
+        assert async_client_with_db.get("/api/v1/auth/me", headers=phone).status_code == 401
+        assert async_client_with_db.get("/api/v1/auth/me", headers=laptop).status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_logout_ends_the_access_token(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ):
+        """A copied access token stops working once its session signs out."""
+        user = await user_factory()
+        await self._login(async_client_with_db, user.email)
+        token = async_client_with_db.cookies.get("aegis_session")
+        assert async_client_with_db.post("/api/v1/auth/logout").status_code == 200
+
+        async_client_with_db.cookies.clear()
+        me = async_client_with_db.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert me.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_a_bearer_client_knows_its_own_session(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ):
+        """Which session is the caller's comes from its access token, so a
+        client without the refresh cookie sees it too."""
+        user = await user_factory()
+        headers = self._bearer_login(async_client_with_db, user.email)
+        rows = async_client_with_db.get("/api/v1/auth/sessions", headers=headers).json()
+        assert [s["is_current"] for s in rows] == [True]
+
+    @pytest.mark.asyncio
+    async def test_a_bearer_client_signing_out_others_stays_signed_in(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ):
+        """Without the refresh cookie, "sign out everywhere else" used to
+        sign out the caller as well."""
+        from app.services.auth.refresh_tokens import RefreshService
+
+        user = await user_factory()
+        await RefreshService(async_db_session).mint(user.id, source="password")
+        headers = self._bearer_login(async_client_with_db, user.email)
+
+        response = async_client_with_db.delete("/api/v1/auth/sessions", headers=headers)
+        assert response.json() == {"revoked": 1}
+        rows = async_client_with_db.get("/api/v1/auth/sessions", headers=headers).json()
+        assert [s["is_current"] for s in rows] == [True]
+
+    @pytest.mark.asyncio
+    async def test_refresh_stays_in_the_same_session(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ):
+        user = await user_factory()
+        await self._login(async_client_with_db, user.email)
+        refreshed = async_client_with_db.post("/api/v1/auth/refresh")
+        assert refreshed.status_code == status.HTTP_200_OK
+
+        async_client_with_db.cookies.clear()
+        headers = {"Authorization": f"Bearer {refreshed.json()['access_token']}"}
+        rows = async_client_with_db.get("/api/v1/auth/sessions", headers=headers).json()
+        assert [s["is_current"] for s in rows] == [True]
 
     @pytest.mark.asyncio
     async def test_login_records_forwarded_ip_when_trust_proxy_headers(

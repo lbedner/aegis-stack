@@ -103,7 +103,9 @@ services:
     whoever maintains this template. --poll: on a bind mount (Docker Desktop
     on macOS) the watcher misses files created after it started, so classes
     used only in a new template never compile. Polling rescans the content
-    globs on every rebuild, which is what CHOKIDAR_USEPOLLING below backs up. #}
+    globs on every rebuild, which is what CHOKIDAR_USEPOLLING below backs up.
+    tailwind_watch.sh runs the watcher and restarts it when it exits or stops
+    rebuilding; it passes --watch=always --poll itself. #}
     image: node:22-alpine
     working_dir: /code
     volumes:
@@ -115,7 +117,7 @@ services:
     entrypoint: sh
     command:
       - -c
-      - npm install --no-audit --no-fund --silent && exec npx tailwindcss -i /code/app/components/web_frontend/static/input.css -o /code/app/components/web_frontend/static/dist/app.css --watch=always --poll
+      - npm install --no-audit --no-fund --silent && exec sh /code/app/components/web_frontend/tailwind_watch.sh
     profiles:
       - dev
 

@@ -750,9 +750,9 @@ class TestDockerAndComposeWiring:
         rendered = _render("docker-compose.dev.yml.jinja", _ctx(include_htmx=True))
         assert "tailwind:" in rendered
         assert "build-static-watcher:" in rendered
-        # The chain that makes hot reload work: tailwind rewrites app.css,
-        # the watcher re-fingerprints it.
-        assert "--watch=always" in rendered
+        # The chain that makes hot reload work: tailwind rewrites app.css
+        # (under its supervisor), the watcher re-fingerprints it.
+        assert "tailwind_watch.sh" in rendered
         assert "build-watch" in rendered
 
     def test_dev_tailwind_service_polls_for_docker_fs_events(self) -> None:

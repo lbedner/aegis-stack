@@ -737,12 +737,12 @@ def add_command(
                 typer.echo(f"   {t('add.specs_need_update_hint')}")
 
         # Generate migrations for newly-added components that own tables.
-        # Today that's scheduler[postgres] -> scheduler.job_execution; the
-        # schema'd migration runs at backend startup on Postgres. SQLite
-        # scheduler creates its table via create_all, so it needs no file.
+        # Today that's a persistent scheduler (job store and execution
+        # history), on SQLite as on Postgres: ``init`` versions both, and a
+        # project whose models have no revision fails its own drift check.
         if (
             ComponentNames.SCHEDULER in components_to_add
-            and scheduler_backend == StorageBackends.POSTGRES
+            and scheduler_backend != StorageBackends.MEMORY
         ):
             from ..core.migration_generator import (
                 bootstrap_alembic,

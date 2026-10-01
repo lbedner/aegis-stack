@@ -387,3 +387,35 @@ class TestPythonFormattingParity:
         assert "messy.py" in result.created
         written = (engine.project_path / "messy.py").read_text()
         assert 'VALUE = "hi"' in written
+
+    def test_a_file_that_differs_from_the_new_render_only_in_formatting_is_left(
+        self, engine: RenderDiffEngine
+    ) -> None:
+        """``aegis add`` writes a file through ruff, then the shared regen
+        compared that against the raw render, saw the import order differ,
+        and merged it with "Merged template changes into your customized
+        file" - for a file the same command had just written."""
+        if ruff_executable() is None:
+            pytest.skip("ruff not available")
+        tpl = engine.template_root / PROJECT_SLUG / "ordered.py.jinja"
+        tpl.parent.mkdir(parents=True, exist_ok=True)
+        tpl.write_text(
+            "{% if extra %}import sys\n{% endif %}import os\n\n"
+            "VALUE = (os.sep{% if extra %}, sys.path{% endif %})\n"
+        )
+        # A generated project's ruff config sorts imports, as `make fix` does.
+        (engine.project_path / "pyproject.toml").write_text(
+            '[tool.ruff.lint]\nselect = ["E", "F", "I"]\n'
+        )
+        ours = engine._render("ordered.py", {"extra": True})
+        on_disk = engine.project_path / "ordered.py"
+        on_disk.write_text("import os\nimport sys\n\nVALUE = (os.sep, sys.path)\n")
+        assert on_disk.read_text() != ours
+
+        plan = next(
+            p
+            for p in engine.plan({"extra": False}, {"extra": True})
+            if p.rel_path == "ordered.py"
+        )
+
+        assert plan.action == FileAction.SKIP

@@ -2401,6 +2401,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../components/inference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../components/ingress/" class="md-nav__link">
         
   
@@ -2967,10 +2995,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#ollama-deployment-modes" class="md-nav__link">
+  <a href="#where-ollama-runs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Ollama Deployment Modes
+        Where Ollama runs
       
     </span>
   </a>
@@ -5408,10 +5436,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#ollama-deployment-modes" class="md-nav__link">
+  <a href="#where-ollama-runs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Ollama Deployment Modes
+        Where Ollama runs
       
     </span>
   </a>
@@ -5778,54 +5806,22 @@ unavailable, or trying open-weight models with zero setup</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>ollama
 </span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nv">AI_MODEL</span><span class="o">=</span>llama3.1
 </span></code></pre></div>
-<h3 id="ollama-deployment-modes">Ollama Deployment Modes</h3>
-<p>Configure at project generation:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Host mode: Ollama runs on your machine (default)</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>ai
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Docker mode: Ollama runs in a Docker container</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="c1"># (select during aegis init interactive prompts)</span>
-</span></code></pre></div>
-<table>
-<thead>
-<tr>
-<th>Mode</th>
-<th>Description</th>
-<th>Use Case</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>host</code></td>
-<td>Ollama on localhost:11434</td>
-<td>Development, GPU on host</td>
-</tr>
-<tr>
-<td><code>docker</code></td>
-<td>Ollama in Docker container</td>
-<td>Portable, CI/CD</td>
-</tr>
-<tr>
-<td><code>none</code></td>
-<td>No Ollama support</td>
-<td>Cloud-only providers</td>
-</tr>
-</tbody>
-</table>
+<h3 id="where-ollama-runs">Where Ollama runs</h3>
+<p>The <code>ollama</code> provider brings in the <a href="../../../components/inference/">Inference component</a>, which decides where Ollama runs: on the host by default, or as a container with <code>inference[docker]</code>.</p>
 <h3 id="switching-models-via-cli">Switching Models via CLI</h3>
 <p>With the LLM Catalog, you can discover and switch Ollama models:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Sync Ollama models into catalog</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span>ollama
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># List available Ollama models</span>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>my-app<span class="w"> </span>llm<span class="w"> </span>list<span class="w"> </span>--vendor<span class="w"> </span>ollama
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>
-</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="c1"># Switch to an Ollama model</span>
-</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>llama3.1
-</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>
-</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="c1"># Or use /model in interactive chat</span>
-</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat
-</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>&gt;<span class="w"> </span>/model<span class="w"> </span>llama3.1
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Sync Ollama models into catalog</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span>ollama
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># List available Ollama models</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>my-app<span class="w"> </span>llm<span class="w"> </span>list<span class="w"> </span>--vendor<span class="w"> </span>ollama
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1"># Switch to an Ollama model</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>llama3.1
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>
+</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="c1"># Or use /model in interactive chat</span>
+</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat
+</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>&gt;<span class="w"> </span>/model<span class="w"> </span>llama3.1
 </span></code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Cost Tracking with Ollama</p>
@@ -5833,44 +5829,44 @@ unavailable, or trying open-weight models with zero setup</p>
 </div>
 <h2 id="switching-providers">Switching Providers</h2>
 <p>You can switch providers at any time by changing your <code>.env</code> file or using the CLI:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Switch from PUBLIC to Groq</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>groq
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your-key-here
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>llama-3.1-8b-instant
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Switch from PUBLIC to Groq</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>groq
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your-key-here
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>llama-3.1-8b-instant
 </span></code></pre></div>
 <h3 id="via-env">Via .env</h3>
 <p>Edit <code>.env</code> and restart:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>make<span class="w"> </span>stop<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>make<span class="w"> </span>serve
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>make<span class="w"> </span>stop<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>make<span class="w"> </span>serve
 </span></code></pre></div>
 <h3 id="via-cli-with-llm-catalog">Via CLI (with LLM Catalog)</h3>
 <p>Update <code>.env</code> from the catalog (takes effect on next CLI invocation or server restart):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Auto-detects provider from model name and updates .env</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>gpt-4o<span class="w">              </span><span class="c1"># → sets AI_PROVIDER=openai</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>claude-sonnet-4-20250514<span class="w">  </span><span class="c1"># → sets AI_PROVIDER=anthropic</span>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>llama3.1<span class="w">            </span><span class="c1"># → sets AI_PROVIDER=ollama</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Auto-detects provider from model name and updates .env</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>gpt-4o<span class="w">              </span><span class="c1"># → sets AI_PROVIDER=openai</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>claude-sonnet-4-20250514<span class="w">  </span><span class="c1"># → sets AI_PROVIDER=anthropic</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>llama3.1<span class="w">            </span><span class="c1"># → sets AI_PROVIDER=ollama</span>
 </span></code></pre></div>
 <p>Switch instantly within an interactive chat session (refreshes in-process, no restart needed):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>&gt;<span class="w"> </span>/model<span class="w"> </span>gpt-4o
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>✓<span class="w"> </span>Switched<span class="w"> </span>to<span class="w"> </span>OpenAI/gpt-4o
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>&gt;<span class="w"> </span>/model<span class="w"> </span>gpt-4o
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>✓<span class="w"> </span>Switched<span class="w"> </span>to<span class="w"> </span>OpenAI/gpt-4o
 </span></code></pre></div>
 <p><strong>Verify the switch:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>status
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>current
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>status
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>current
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="missing-api-key-error">"Missing API key" Error</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>❌<span class="w"> </span>Missing<span class="w"> </span>API<span class="w"> </span>key<span class="w"> </span><span class="k">for</span><span class="w"> </span>groq<span class="w"> </span>provider.<span class="w"> </span>Set<span class="w"> </span>GROQ_API_KEY<span class="w"> </span>environment<span class="w"> </span>variable.
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>❌<span class="w"> </span>Missing<span class="w"> </span>API<span class="w"> </span>key<span class="w"> </span><span class="k">for</span><span class="w"> </span>groq<span class="w"> </span>provider.<span class="w"> </span>Set<span class="w"> </span>GROQ_API_KEY<span class="w"> </span>environment<span class="w"> </span>variable.
 </span></code></pre></div>
 <p><strong>Solution:</strong> Add the API key to your <code>.env</code> file:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your-actual-key-here
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nv">GROQ_API_KEY</span><span class="o">=</span>your-actual-key-here
 </span></code></pre></div>
 <h3 id="provider-not-available-error">"Provider not available" Error</h3>
 <p><strong>Check configuration:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>status
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>status
 </span></code></pre></div>
 <p><strong>Verify provider is installed:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>providers
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>providers
 </span></code></pre></div>
 <hr />
 <p><strong>Next Steps:</strong></p>

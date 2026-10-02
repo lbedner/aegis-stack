@@ -42,6 +42,24 @@ class BaseSTTProvider(ABC):
         """
         pass
 
+    def _request(
+        self, audio: AudioInput, model: str, response_format: str
+    ) -> dict[str, Any]:
+        """The transcription request the hosted Whisper APIs both take: the
+        audio as a named file, and the language and spelling hint if set."""
+        audio_file = io.BytesIO(audio.content)
+        audio_file.name = f"audio{self._get_file_extension(audio.format)}"
+        params: dict[str, Any] = {
+            "model": model,
+            "file": audio_file,
+            "response_format": response_format,
+        }
+        if audio.language:
+            params["language"] = audio.language
+        if audio.prompt:
+            params["prompt"] = audio.prompt
+        return params
+
     def _get_file_extension(self, format: AudioFormat) -> str:
         """Get file extension for audio format."""
         return f".{format.value}"
@@ -98,21 +116,11 @@ class OpenAIWhisperProvider(BaseSTTProvider):
         """Transcribe audio using OpenAI Whisper API."""
         client = self._get_client()
 
-        # Create file-like object from bytes
-        audio_file = io.BytesIO(audio.content)
-        audio_file.name = f"audio{self._get_file_extension(audio.format)}"
-
+        whisper = self.model.startswith("whisper")  # gpt-4o-*: json only
+        params = self._request(
+            audio, self.model, "verbose_json" if whisper else "json"
+        )
         try:
-            whisper = self.model.startswith("whisper")  # gpt-4o-*: json only
-            params: dict[str, Any] = {
-                "model": self.model,
-                "file": audio_file,
-                "response_format": "verbose_json" if whisper else "json",
-            }
-
-            if audio.language:
-                params["language"] = audio.language
-
             response = await client.audio.transcriptions.create(**params)
 
             # Parse segments if available
@@ -403,21 +411,8 @@ class GroqWhisperProvider(BaseSTTProvider):
         """Transcribe audio using Groq Whisper API."""
         client = self._get_client()
 
-        # Create file-like object from bytes
-        audio_file = io.BytesIO(audio.content)
-        audio_file.name = f"audio{self._get_file_extension(audio.format)}"
-
+        params = self._request(audio, self.model, "verbose_json")
         try:
-            # Build request parameters
-            params: dict[str, Any] = {
-                "model": self.model,
-                "file": audio_file,
-                "response_format": "verbose_json",
-            }
-
-            if audio.language:
-                params["language"] = audio.language
-
             response = await client.audio.transcriptions.create(**params)
 
             # Parse segments if available

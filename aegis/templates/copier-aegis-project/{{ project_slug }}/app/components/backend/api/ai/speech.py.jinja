@@ -66,6 +66,11 @@ async def voice_chat(
     voice_mode: bool = Query(False, description="Summarize response for spoken output"),
     return_audio: bool = Query(False, description="Return TTS audio of response"),
     user_id: str = Query("api-user", description="User identifier"),
+    agent_slug: str | None = Query(None, description="Agent to answer as"),
+    surface: str | None = Query(None, description="History scope of the turn"),
+    transcription_hint: str | None = Query(
+        None, description="Names the transcriber should spell right"
+    ),
 ) -> VoiceChatApiResponse | Response:
     """
     Process voice input: transcribe → chat → return response.
@@ -126,6 +131,9 @@ async def voice_chat(
             audio=audio_input,
             conversation_id=conversation_id,
             user_id=user_id,
+            agent_slug=agent_slug,
+            surface=surface,
+            transcription_hint=transcription_hint,
             voice_mode=voice_mode,
             return_audio=return_audio,
         )

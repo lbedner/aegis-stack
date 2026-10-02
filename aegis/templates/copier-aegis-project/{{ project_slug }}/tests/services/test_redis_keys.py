@@ -1,7 +1,7 @@
 """The Redis keyspace map: which part of the app owns each key, and how the
 map draws them."""
 
-from typing import Any
+from typing import Any, Self
 
 import pytest
 
@@ -109,7 +109,7 @@ class FakeRedis:
         self.idle = idle
         self.calls: list[tuple[str, str]] = []
 
-    def pipeline(self, transaction: bool = False) -> FakeRedis:
+    def pipeline(self, transaction: bool = False) -> Self:
         return self
 
     def type(self, key: str) -> None:

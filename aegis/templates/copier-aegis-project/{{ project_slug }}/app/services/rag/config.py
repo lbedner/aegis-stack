@@ -5,7 +5,7 @@ Configuration management for RAG service including chunking settings,
 vector store paths, and search parameters.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel, Field
 
@@ -87,7 +87,7 @@ class RAGServiceConfig(BaseModel):
     )
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> RAGServiceConfig:
+    def from_settings(cls, settings: "Settings") -> Self:
         """Create configuration from main application settings."""
         return cls(
             enabled=settings.RAG_ENABLED,
@@ -122,6 +122,6 @@ class RAGServiceConfig(BaseModel):
         return errors
 
 
-def get_rag_config(settings: Settings) -> RAGServiceConfig:
+def get_rag_config(settings: "Settings") -> RAGServiceConfig:
     """Get RAG service configuration from application settings."""
     return RAGServiceConfig.from_settings(settings)

@@ -5,7 +5,7 @@ Configuration management for TTS providers and settings.
 Follows the same pattern as STTConfig for consistency.
 """
 
-from typing import Any
+from typing import Any, Self
 
 from pydantic import BaseModel, Field
 
@@ -43,7 +43,7 @@ class TTSConfig(BaseModel):
     )
 
     @classmethod
-    def from_settings(cls, settings: Any) -> TTSConfig:
+    def from_settings(cls, settings: Any) -> Self:
         """Create configuration from main application settings."""
         provider_str = getattr(settings, "TTS_PROVIDER", "openai")
 

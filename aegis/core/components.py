@@ -321,6 +321,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 # queryspy only means anything with a database, and the
                 # test job runs the gate against this file.
                 ".queryspy-baseline.json",
+                "tests/_queryspy_shape.py",
+                "tests/test_queryspy_shape.py",
             ],
         ),
     ),

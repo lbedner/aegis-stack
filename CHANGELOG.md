@@ -59,6 +59,14 @@
 
 ### Fixed
 
+- **A new column no longer turns the query baseline into new findings.** queryspy
+  knew a repeated statement by its whole SQL, select list included, so adding a
+  column renamed every SELECT on that table, the baseline read as all new, and
+  the fix was a 40-minute sweep of every stack. Generated projects now key a
+  statement on its shape, its SQL with the selected columns collapsed
+  (`tests/_queryspy_shape.py`): a new column changes no entry, while a new
+  WHERE, join, `DISTINCT` or a call site in another function still counts as
+  new. The shipped baseline and the per-stack fixtures are rewritten in shapes.
 - **The dev Plaid tunnel carries only Plaid.** `make serve` started a cloudflared
   quick tunnel to the whole webserver in every finance stack with Plaid, credentials
   or not, which put an app with no login on a public trycloudflare.com address. The

@@ -4,9 +4,12 @@
 #
 # Entries key on (kind, label, file, function) with paths relative to the
 # generated project, so one file serves the whole matrix. The label of a
-# repeated_statement is the statement text, so a column added to a model
-# changes every entry for that table: after a schema change on a service,
-# run this or the matrix fails on entries that are only stale.
+# repeated_statement is the statement's shape, its SQL with the selected
+# columns collapsed (tests/_queryspy_shape.py in the template), so a column
+# added to a model changes no entry and needs no sweep. A new WHERE, join,
+# DISTINCT or a call site in another function is a new entry, which is
+# what a sweep is for. (queryspy leaves line numbers out, so the same
+# statement at another line of one function never was.)
 #
 # Each stack's findings land in tests/fixtures/queryspy/<stack>.json and
 # the shipped baseline is their union, so sweeping one stack can never

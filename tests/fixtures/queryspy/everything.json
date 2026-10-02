@@ -916,24 +916,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM finance_pending_change WHERE finance_pending_change.batch_id = :batch_id_1 AND finance_pending_change.owner_user_id = :owner_user_id_1 ORDER BY finance_pending_change.id",
-      "file": "app/services/finance/domains/writes/queries.py",
-      "function": "batch_rows"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM finance_pending_change WHERE finance_pending_change.id = :id_1",
-      "file": "app/services/finance/domains/writes/queries.py",
-      "function": "get_change"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM finance_pending_change WHERE finance_pending_change.status = :status_1 AND finance_pending_change.owner_user_id = :owner_user_id_1 ORDER BY finance_pending_change.id DESC",
-      "file": "app/services/finance/domains/writes/queries.py",
-      "function": "list_changes"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_recurring_stream",
       "file": "tests/services/test_finance_stream_regimes.py",
       "function": "_rows"
@@ -2059,6 +2041,24 @@
       "label": "SELECT ... FROM payment_transaction WHERE payment_transaction.status = :status_1 AND payment_transaction.type = :type_1",
       "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.batch_id = :batch_id_1 AND pending_change.owner_user_id = :owner_user_id_1 ORDER BY pending_change.id",
+      "file": "app/services/change_queue/queries.py",
+      "function": "batch_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.id = :id_1",
+      "file": "app/services/change_queue/queries.py",
+      "function": "get_change"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.status = :status_1 AND pending_change.owner_user_id = :owner_user_id_1 ORDER BY pending_change.id DESC",
+      "file": "app/services/change_queue/queries.py",
+      "function": "list_changes"
     },
     {
       "kind": "repeated_statement",

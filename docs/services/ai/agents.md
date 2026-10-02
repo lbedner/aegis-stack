@@ -75,6 +75,36 @@ register_tool("lookup_order", lookup_order)
 
 Then grant it to an agent by inserting a `tool` row named `lookup_order` and linking it via `agent_tool`. A row naming a tool with no registered callable is skipped with a warning, never an error: a stale grant degrades that one tool, not the agent.
 
+## Proposals: Writes the User Approves
+
+A tool that changes something should not change it. It files a **pending change** instead: a card in the chat with **Approve** and **Reject**, and nothing runs until the user decides. The queue ships with every persistence-backed project (and with finance), and it knows nothing about any one service. A service makes a change proposable by registering a change type at import:
+
+```python
+from pydantic import BaseModel
+from app.services.change_queue import ChangeDisplayRow, ChangeExecutor, register
+
+class ReschedulePayload(BaseModel):
+    post_id: int
+    publish_at: str
+
+async def execute(db, payload, owner_user_id) -> dict:
+    ...  # the real mutation; runs only on approval
+    return {"post_id": payload.post_id}
+
+async def describe(db, payload, owner_user_id) -> list[ChangeDisplayRow]:
+    return [ChangeDisplayRow(label="Publish at", value=payload.publish_at)]
+
+register(ChangeExecutor(
+    change_type="post.reschedule",
+    title="Reschedule a post",
+    payload_model=ReschedulePayload,
+    execute=execute,
+    describe=describe,
+))
+```
+
+The payload model validates when the change is proposed and again when it is approved; `describe` renders the card from the database, never from the model's own words. Agents reach the queue through built-in tools: `propose` and `propose_many` (one card for a batch, with a per-row veto), and `pending`, `withdraw` and `withdraw_batch` for an agent's own open cards. The card's buttons call `/api/v1/changes` (`POST /changes/{id}/approve`, `/reject`, and the batch forms), and every resolution keeps its row as the audit trail.
+
 ## Per-User Memory
 
 Agents can remember durable facts about a user across conversations. Two built-in tools are registered on every persistence-backed project:

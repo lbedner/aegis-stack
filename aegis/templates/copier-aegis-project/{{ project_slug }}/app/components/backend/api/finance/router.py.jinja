@@ -22,7 +22,6 @@ from app.components.backend.api.finance import (
     accounts,
     budgets,
     categories,
-    changes,
     declare,
     goals,
     imports,
@@ -46,7 +45,6 @@ router.include_router(planning.router, tags=["finance: envelopes"])
 router.include_router(goals.router, tags=["finance: goals"])
 router.include_router(payees.router, tags=["finance: payees"])
 router.include_router(categories.router, tags=["finance: categories"])
-router.include_router(changes.router, tags=["finance: changes"])
 router.include_router(recurring.router, tags=["finance: recurring"])
 router.include_router(declare.router, tags=["finance: recurring"])
 router.include_router(insights.router, tags=["finance: insights"])

@@ -1,10 +1,10 @@
-"""The change-type registry: what the queue knows how to execute.
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""The change-type registry: what the queue knows how to execute.
 
-One entry per mutation kind. FW-06..09 grow by REGISTERING here - a
-payload contract, an executor, a describer - never by adding queue
-machinery. The payload model validates at propose time (a card the user
-cannot safely approve should never exist) and again at approve time
-(the world may have moved between the two).
+One entry per mutation kind, registered by the service that owns the
+mutation: a payload contract, an executor, a describer - never new
+queue machinery. The payload model validates at propose time (a card
+the user cannot safely approve should never exist) and again at approve
+time (the world may have moved between the two).
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.finance.schemas import ChangeDisplayRow
+from app.services.change_queue.schemas import ChangeDisplayRow
 
 
 @dataclass(frozen=True)
@@ -62,3 +62,4 @@ def executor_for(change_type: str) -> ChangeExecutor:
 
 def registered_change_types() -> tuple[str, ...]:
     return tuple(sorted(_EXECUTORS))
+{% endif %}

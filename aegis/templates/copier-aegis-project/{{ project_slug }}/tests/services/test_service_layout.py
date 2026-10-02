@@ -11,7 +11,7 @@ import pathlib
 
 import pytest
 
-CONFORMANT_SERVICES = ("ai", "comms", "finance", "insights", "rag")
+CONFORMANT_SERVICES = ("ai", "change_queue", "comms", "finance", "insights", "rag")
 
 # One-shot loaders, not runtime code: exempt by decision, whether a
 # folder or a single module.

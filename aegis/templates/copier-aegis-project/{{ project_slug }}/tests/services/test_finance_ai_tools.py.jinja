@@ -54,10 +54,13 @@ def _tools_use_test_session(
         yield session
 
     monkeypatch.setattr(ai_tools, "get_async_session", test_session)
-    # The write tools live in their own module with their own import.
+    # The id lookups and the shared queue's propose family live in their
+    # own modules, each with its own import.
+    from app.services.ai.domains.chat import change_tools
     from app.services.finance import ai_write_tools
 
     monkeypatch.setattr(ai_write_tools, "get_async_session", test_session)
+    monkeypatch.setattr(change_tools, "get_async_session", test_session)
 
 
 def test_finance_tools_register_on_import() -> None:
@@ -471,7 +474,7 @@ async def test_propose_is_the_only_write_and_moves_nothing(
     from sqlmodel import select
 
     from app.services.ai.domains.chat.user_memory import memory_user
-    from app.services.finance.models import FinancePendingChange
+    from app.services.change_queue import PendingChange
 
     account = await seed_account(svc)
     from app.services.finance.models import FinanceCategory
@@ -503,8 +506,8 @@ async def test_propose_is_the_only_write_and_moves_nothing(
     assert result["change_type"] == "transaction.categorize"
     row = (
         await session.exec(
-            select(FinancePendingChange).where(
-                FinancePendingChange.id == result["pending_change_id"]
+            select(PendingChange).where(
+                PendingChange.id == result["pending_change_id"]
             )
         )
     ).one()
@@ -572,8 +575,8 @@ async def test_pending_also_shows_what_the_user_decided(
     """"Show me the card" after a rejection must show the rejection, so
     recently decided cards ride along under ``decided`` with their
     status, and the chat redraws them in their resolved state."""
+    from app.services import change_queue
     from app.services.ai.domains.chat.user_memory import memory_user
-    from app.services.finance.domains import writes
     from app.services.finance.models import FinanceCategory
 
     account = await seed_account(svc)
@@ -599,7 +602,7 @@ async def test_pending_also_shows_what_the_user_decided(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
         )
-        await writes.reject(session, filed["pending_change_id"], owner_user_id=None)
+        await change_queue.reject(session, filed["pending_change_id"], owner_user_id=None)
         await session.commit()
         result = await ai_tools.pending()
 

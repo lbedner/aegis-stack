@@ -76,6 +76,13 @@ class ServiceMigrationSpec:
     # migration has no business knowing another's answers, so it asks
     # the database instead. Mutually exclusive with ``data_sql``.
     data_body: str = ""
+    # A raw ``upgrade()`` body that runs LAST, after the DDL, for data that
+    # needs the tables this same revision creates: rows carried over from a
+    # table the models moved away from. Placed only in the service's own
+    # generated revision, so it shares the stamp signature that revision
+    # declares about itself. Must tolerate an empty database (``migrate_gen``
+    # replays every revision onto one).
+    data_after: str = ""
     # Tables emptied BEFORE this service's DDL runs. Declared rather than
     # written as SQL because two places need it: the revision gets a DELETE
     # at the top of ``upgrade()``, and the generator is told the table will
@@ -223,6 +230,35 @@ SCHEDULER_MIGRATION = ServiceMigrationSpec(
     service_name="scheduler",
     description="Scheduler job execution history",
     schema="scheduler",
+)
+
+# The propose/approve queue. Shared by every service that proposes, so it is
+# named for itself, not a service; its revision follows finance's because the
+# table used to be finance's, and the rows it held carry over (``data_after``).
+_FINANCE_QUEUE_CARRY_OVER = """\
+    # The queue was finance's until it was shared: carry its rows over, ids
+    # included (chat transcripts point at them), then retire the old table.
+    bind = op.get_bind()
+    schema = "finance" if bind.dialect.name == "postgresql" else None
+    if sa.inspect(bind).has_table("finance_pending_change", schema=schema):
+        old = f"{schema}.finance_pending_change" if schema else "finance_pending_change"
+        cols = (
+            "id, owner_user_id, change_type, payload, proposed_by_agent, "
+            "conversation_id, batch_id, status, result, created_at, "
+            "updated_at, resolved_at"
+        )
+        op.execute(f"INSERT INTO pending_change ({cols}) SELECT {cols} FROM {old}")
+        if schema:
+            op.execute(
+                "SELECT setval(pg_get_serial_sequence('pending_change', 'id'), "
+                "COALESCE((SELECT MAX(id) FROM pending_change), 0) + 1, false)"
+            )
+        op.drop_table("finance_pending_change", schema=schema)"""
+
+CHANGE_QUEUE_MIGRATION = ServiceMigrationSpec(
+    service_name="change_queue",
+    description="Pending changes: the propose/approve queue any service can use",
+    data_after=_FINANCE_QUEUE_CARRY_OVER,
 )
 
 # The secrets component's one table: write-only credentials, encrypted. Its
@@ -593,6 +629,17 @@ def _prepend_body(name: str, src: str, body: str) -> str:
     return f"{head}{marker}{body}\n{tail}"
 
 
+def _append_body(name: str, src: str, body: str) -> str:
+    """Put ``body`` last in ``upgrade()``, after the generated DDL."""
+    marker = "\n\ndef downgrade("
+    if marker not in src:
+        raise MigrationGenerationError(
+            f"{name}: no downgrade() to anchor data statements"
+        )
+    head, _, tail = src.partition(marker)
+    return f"{head.rstrip()}\n{body}\n{marker}{tail}"
+
+
 def _tables_changed(src: str, tables: list[str]) -> list[str]:
     """The ``tables`` this revision's ``upgrade()`` actually operates on.
 
@@ -626,11 +673,15 @@ def _place_data_statements(
     created: list[Path] = []
     for service in services:
         spec = specs.get(service)
-        if spec is None or not (spec.data_sql or spec.data_body or spec.cleared_tables):
+        if spec is None or not (
+            spec.data_sql or spec.data_body or spec.data_after or spec.cleared_tables
+        ):
             continue
         own = [p for p in written if p.name.endswith(f"_{service}.py")]
         if own:
             src = own[0].read_text()
+            if spec.data_after:
+                src = _append_body(own[0].name, src, spec.data_after)
             # Prepended in reverse: clears end up first, then the data.
             if spec.data_sql or spec.data_body:
                 src = _prepend_body(own[0].name, src, _upgrade_body(spec))
@@ -831,6 +882,15 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     # exists. include_auth_on is defined above (payment_auth_link block).
     if include_finance_on and include_auth_on:
         services.append("finance_auth_link")
+
+    # The propose/approve queue, wherever something can propose: finance, or
+    # AI on a persistent backend. After auth (owner key to ``user``) and
+    # after finance (it carries finance's old queue rows over).
+    if include_finance_on or (
+        (include_ai == "yes" or include_ai is True)
+        and ai_backend != StorageBackends.MEMORY
+    ):
+        services.append("change_queue")
 
     # Scheduler component: its job store and execution-history tables, on
     # any persistent backend. A component, not a service, but it rides the

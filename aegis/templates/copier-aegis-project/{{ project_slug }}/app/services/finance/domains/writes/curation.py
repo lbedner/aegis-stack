@@ -9,9 +9,9 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.change_queue.schemas import ChangeDisplayRow
 from app.services.finance.domains.ledger import categories, merchants, transactions
 from app.services.finance.domains.writes.display import txn_subject
-from app.services.finance.schemas import ChangeDisplayRow
 from app.services.shared.queries import stored_owner
 
 

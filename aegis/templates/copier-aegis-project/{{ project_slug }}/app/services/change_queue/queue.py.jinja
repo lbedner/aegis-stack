@@ -1,4 +1,4 @@
-"""The queue itself: propose, approve, reject, and the reads over them.
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""The queue itself: propose, approve, reject, and the reads over them.
 
 Approval is the ONLY execution path. ``approve`` re-validates the
 payload and runs the registered executor in the caller's transaction, so
@@ -13,10 +13,10 @@ from typing import Any
 from uuid import uuid4
 
 from app.core.time import utcnow
-from app.services.finance.domains.writes.queries import batch_rows, get_change
-from app.services.finance.domains.writes.registry import executor_for
-from app.services.finance.models import FinancePendingChange
-from app.services.finance.schemas import ChangeDisplayRow
+from app.services.change_queue.models import PendingChange
+from app.services.change_queue.queries import batch_rows, get_change
+from app.services.change_queue.registry import executor_for
+from app.services.change_queue.schemas import ChangeDisplayRow
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -34,8 +34,8 @@ async def propose(
     owner_user_id: int | None = None,
     proposed_by_agent: str | None = None,
     conversation_id: str | None = None,
-) -> FinancePendingChange:
-    """Record a proposed mutation. Nothing in the ledger moves here.
+) -> PendingChange:
+    """Record a proposed mutation. Nothing moves here.
 
     The payload is validated against the change type's contract NOW: a
     malformed proposal dies at the door instead of becoming a card the
@@ -46,7 +46,7 @@ async def propose(
         model = executor.payload_model(**payload)
     except ValidationError as e:
         raise ValueError(f"invalid {change_type} payload: {e}") from None
-    row = FinancePendingChange(
+    row = PendingChange(
         owner_user_id=owner_user_id,
         change_type=change_type,
         payload=model.model_dump(mode="json"),
@@ -69,7 +69,7 @@ async def propose_many(
     owner_user_id: int | None = None,
     proposed_by_agent: str | None = None,
     conversation_id: str | None = None,
-) -> list[FinancePendingChange]:
+) -> list[PendingChange]:
     """One decision over many rows: N ordinary proposals sharing a
     batch id. Every row still resolves individually and keeps its own
     audit trail - a batch is a grouping, not a different kind of thing.
@@ -95,7 +95,7 @@ async def propose_many(
             ) from None
     batch_id = str(uuid4())
     rows = [
-        FinancePendingChange(
+        PendingChange(
             owner_user_id=owner_user_id,
             change_type=change_type,
             payload=model.model_dump(mode="json"),
@@ -154,7 +154,7 @@ async def reject_batch(
     return {"approved": 0, "rejected": rejected, "failed": 0}
 
 
-def _require_pending(row: FinancePendingChange | None) -> FinancePendingChange:
+def _require_pending(row: PendingChange | None) -> PendingChange:
     if row is None:
         raise ValueError("pending change not found")
     if row.status != "pending":
@@ -163,7 +163,7 @@ def _require_pending(row: FinancePendingChange | None) -> FinancePendingChange:
 
 
 async def _describe_row(
-    db: AsyncSession, row: FinancePendingChange
+    db: AsyncSession, row: PendingChange
 ) -> list[ChangeDisplayRow]:
     """The card body for a stored row, tolerant of tightened rules.
 
@@ -183,8 +183,8 @@ async def _describe_row(
 
 async def approve(
     db: AsyncSession, change_id: int, *, owner_user_id: int | None = None
-) -> FinancePendingChange:
-    """Execute the stored mutation. The one door into the ledger."""
+) -> PendingChange:
+    """Execute the stored mutation. The one door a proposal has into the world."""
     row = _require_pending(await get_change(db, change_id, owner_user_id=owner_user_id))
     executor = executor_for(row.change_type)
     model = executor.payload_model(**row.payload)
@@ -217,7 +217,7 @@ async def reject(
     *,
     owner_user_id: int | None = None,
     note: str | None = None,
-) -> FinancePendingChange:
+) -> PendingChange:
     row = _require_pending(await get_change(db, change_id, owner_user_id=owner_user_id))
     display = _freeze(await _describe_row(db, row))
     row.status = "rejected"
@@ -236,7 +236,7 @@ async def withdraw(
     agent_slug: str | None,
     owner_user_id: int | None = None,
     reason: str | None = None,
-) -> FinancePendingChange:
+) -> PendingChange:
     """An agent retracting ITS OWN pending proposal - propose's cleanup
     half. Guarded to the proposer, so one agent (or a slug-less caller)
     can never sweep another's cards, and it lands as a rejection with a
@@ -283,7 +283,7 @@ async def withdraw_batch(
     return withdrawn
 
 
-def outcome_of(row: FinancePendingChange) -> str:
+def outcome_of(row: PendingChange) -> str:
     """The row's status as a person reads it: a rejection the proposing
     agent filed against itself is "withdrawn", not the user saying no."""
     note = str((row.result or {}).get("note") or "")
@@ -293,7 +293,7 @@ def outcome_of(row: FinancePendingChange) -> str:
 
 
 async def describe_change(
-    db: AsyncSession, row: FinancePendingChange
+    db: AsyncSession, row: PendingChange
 ) -> list[ChangeDisplayRow]:
     """The card's body lines: system truth, never model copy.
 
@@ -305,3 +305,4 @@ async def describe_change(
     if row.status != "pending" and isinstance(frozen, list):
         return [ChangeDisplayRow(**line) for line in frozen]
     return await _describe_row(db, row)
+{% endif %}

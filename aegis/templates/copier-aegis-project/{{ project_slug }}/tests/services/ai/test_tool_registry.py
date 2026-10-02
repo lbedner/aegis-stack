@@ -7,13 +7,19 @@ what the model sees as the tool.
 """
 
 from collections.abc import Callable, Generator
+import importlib
 import inspect
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
+import app
 from app.services.ai.domains.chat.tools import (
+    get_tool,
+    mcp_servable,
+    native_write_tool_names,
     register_tool,
     registered_tool_names,
     resolve_tools,
@@ -100,3 +106,74 @@ class TestResolution:
         register_tool("first", first)
 
         assert unwrapped(resolve_tools(["first", "second"])) == [first, second]
+
+
+class TestEffect:
+    def test_effect_defaults_to_read(self) -> None:
+        register_tool("echo", _echo)
+
+        tool = get_tool("echo")
+        assert tool is not None
+        assert tool.effect == "read"
+
+    def test_every_non_read_effect_stays_native(self) -> None:
+        register_tool("echo", _echo)
+        register_tool("file_it", _echo, effect="proposes")
+        register_tool("save_it", _echo, effect="writes")
+
+        native = native_write_tool_names()
+        assert {"file_it", "save_it"} <= native
+        assert "echo" not in native
+
+    def test_mcp_never_serves_a_write_whatever_the_grant_says(self) -> None:
+        register_tool("echo", _echo)
+        register_tool("file_it", _echo, effect="proposes")
+        register_tool("save_it", _echo, effect="writes")
+
+        granted = ["save_it", "echo", "file_it", "never-registered"]
+        assert mcp_servable(granted) == ["echo", "file_it"]
+
+
+# Every tool the app registers, by the effect it must declare. A tool
+# registered from app code but missing here fails the test below, so a
+# new write cannot ship on the "read" default unnoticed.
+EXPECTED_EFFECTS = {
+    "context": "read",
+    "record_reading": "writes",
+    "save_memory": "writes",
+    "replace_memory": "writes",
+    # finance
+    "ledger": "read",
+    "accounts": "read",
+    "quote": "read",
+    "categories": "read",
+    "bills": "read",
+    "bill_candidates": "read",
+    "tags": "read",
+    "propose": "proposes",
+    "propose_many": "proposes",
+    "pending": "proposes",
+    "withdraw": "proposes",
+    "withdraw_batch": "proposes",
+}
+
+
+def _import_every_registrant() -> None:
+    """Import each app module that registers tools, so all are counted."""
+    root = Path(app.__file__).parent
+    for path in root.rglob("*.py"):
+        if path.name != "tools.py" and "register_tool(" in path.read_text():
+            rel = path.relative_to(root.parent).with_suffix("")
+            importlib.import_module(".".join(rel.parts))
+
+
+def test_every_registered_app_tool_declares_its_expected_effect() -> None:
+    _import_every_registrant()
+    declared: dict[str, str | None] = {}
+    for name in registered_tool_names():
+        tool = get_tool(name)
+        if tool is not None and tool.func.__module__.startswith("app."):
+            declared[name] = tool.effect
+
+    assert declared, "no app tool registered; the import sweep found nothing"
+    assert declared == {n: EXPECTED_EFFECTS.get(n) for n in declared}

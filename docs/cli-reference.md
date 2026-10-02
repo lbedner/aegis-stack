@@ -623,6 +623,73 @@ aegis deploy-setup
 
 ---
 
+### aegis deploy-provision
+
+Create a server in your own Hetzner Cloud account and deploy to it. Shows the
+monthly price and asks before creating anything. The server boots with the
+project's `scripts/server-setup.sh` as cloud-init user-data, so it arrives with
+Docker and the firewall ready. Provisioning then waits for SSH and cloud-init,
+points a name at the server, waits for that name to resolve (so the first
+Let's Encrypt request does not fail), writes `.aegis/deploy.yml` and runs
+`aegis deploy`.
+
+Tokens are read from the environment at call time and never stored or printed
+(at most the last four characters are shown):
+
+- `HCLOUD_TOKEN`, a Hetzner Cloud API token with read/write access. It can
+  create and delete every server in its project, so use a project dedicated to
+  this app.
+- `CLOUDFLARE_API_TOKEN`, only with `--domain`: a token with DNS edit rights on
+  the zone that owns the name.
+
+Without `--domain` the app gets an `sslip.io` name (`203-0-113-7.sslip.io`),
+so a first deploy needs no domain at all.
+
+Every resource is recorded under `provision:` in `.aegis/deploy.yml` the moment
+it exists. If a later step fails, the command lists what was created and offers
+to delete it; run it again to resume instead.
+
+**Usage:**
+```bash
+aegis deploy-provision [OPTIONS]
+```
+
+**Options:**
+
+- `--provider TEXT`, Cloud provider (default: `hetzner`)
+- `--size TEXT`, Server type (default: `cx23`)
+- `--region TEXT`, Provider location (default: `nbg1`)
+- `--domain TEXT`, Hostname to point at the server through Cloudflare
+- `--ssh-key TEXT`, Public key installed for root (default: `~/.ssh/id_ed25519.pub`)
+- `--project-path TEXT`, Path to the project (default: current directory)
+- `--yes, -y`, Skip the price confirmation
+
+**Examples:**
+```bash
+aegis deploy-provision
+aegis deploy-provision --size cx33 --region fsn1
+aegis deploy-provision --domain app.example.com
+```
+
+---
+
+### aegis deploy-destroy
+
+Delete the provisioned server, its DNS record and the SSH key provisioning
+uploaded, then mark the record in `.aegis/deploy.yml` destroyed. Asks you to
+type the server name to confirm.
+
+**Usage:**
+```bash
+aegis deploy-destroy [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT`, Path to the project (default: current directory)
+
+---
+
 ### aegis deploy-cd-setup
 
 Wire up GitHub Actions continuous deployment. Generates a dedicated ed25519

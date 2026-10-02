@@ -129,7 +129,7 @@ FINANCE_CHAT_TOOL_NAMES = (
     "save_memory",
     # The one LEDGER write, and it does not write: it files a pending
     # change the user approves in the app (FW-05). Registered
-    # native_write, so it surfaces as its own visible call.
+    # effect="proposes", so it surfaces as its own visible call.
     "propose",
     # Same contract, many rows, one approval card with per-row veto.
     "propose_many",

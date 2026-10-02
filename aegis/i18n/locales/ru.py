@@ -1213,4 +1213,69 @@ MESSAGES: dict[str, str] = {
     "build.step.migrate": "Применение миграций",
     "build.step.llm": "Синхронизация каталога LLM",
     "build.step.format": "Форматирование кода",
+    # ── Deploy provision ──────────────────────────────────────────────
+    "provision.help_opt_provider": (
+        "Облачный провайдер, в котором создать сервер (hetzner)"
+    ),
+    "provision.help_opt_size": "Тип сервера, например cx23",
+    "provision.help_opt_region": "Локация провайдера, например nbg1, fsn1, hel1, ash",
+    "provision.help_opt_domain": (
+        "Имя хоста, направляемое на сервер через Cloudflare (по умолчанию: имя sslip.io)"
+    ),
+    "provision.help_opt_ssh_key": "Публичный ключ для root на новом сервере",
+    "provision.unknown_provider": (
+        "Неподдерживаемый провайдер: {provider}. Поддерживаются: {supported}"
+    ),
+    "provision.token_missing": (
+        "Сначала задайте {env} в окружении. Он читается при вызове и никогда не сохраняется и не выводится."
+    ),
+    "provision.using_token": "Используется {env} {masked}",
+    "provision.already_ready": (
+        "У проекта уже есть созданный сервер ({ip}). Выполните 'aegis deploy' для деплоя или 'aegis deploy-destroy' для удаления."
+    ),
+    "provision.resuming": "Продолжение создания {name}",
+    "provision.price": (
+        "{size} в {region}: EUR {price}/мес. с НДС, плюс плата Hetzner за IPv4-адрес"
+    ),
+    "provision.confirm": "Создать этот сервер в вашем аккаунте Hetzner?",
+    "provision.cancelled": "Отменено. Ничего не создано.",
+    "provision.ssh_key_created": "SSH-ключ {id} загружен",
+    "provision.server_created": (
+        "Сервер {id} создан на {ip} (записан в .aegis/deploy.yml)"
+    ),
+    "provision.waiting_running": "Ожидание запуска сервера...",
+    "provision.not_running": "Сервер не перешёл в состояние 'running' вовремя.",
+    "provision.waiting_ssh": "Ожидание SSH на {ip}...",
+    "provision.ssh_timeout": "SSH на {ip} не стал доступен вовремя.",
+    "provision.waiting_cloud_init": (
+        "Ожидание завершения настройки сервера (cloud-init)..."
+    ),
+    "provision.cloud_init_failed": (
+        "Настройка сервера (cloud-init) на {ip} завершилась ошибкой. Проверьте: ssh root@{ip} cloud-init status --long"
+    ),
+    "provision.dns_created": "Создана DNS-запись {hostname} -> {ip}",
+    "provision.waiting_dns": "Ожидание разрешения {hostname}...",
+    "provision.dns_timeout": "{hostname} не начал указывать на сервер вовремя.",
+    "provision.ready": "Сервер готов: {hostname}. Передаём в 'aegis deploy'.",
+    "provision.partial_title": (
+        "Создание остановлено. В вашем аккаунте существуют ресурсы:"
+    ),
+    "provision.created_server": "сервер {id} '{name}' на {ip} ({size}, {region})",
+    "provision.created_ssh_key": "SSH-ключ {id}",
+    "provision.created_dns": "DNS A-запись {hostname}",
+    "provision.offer_delete": "Удалить их сейчас?",
+    "provision.cleanup_failed": "Ошибка очистки: {error}",
+    "provision.cleaned_up": "Удалено. От этого запуска в аккаунте ничего не осталось.",
+    "provision.resume_hint": (
+        "Запустите 'aegis deploy-provision' снова, чтобы продолжить, или 'aegis deploy-destroy', чтобы удалить их."
+    ),
+    "provision.nothing_to_destroy": (
+        "В .aegis/deploy.yml нет записи о созданном сервере."
+    ),
+    "provision.destroy_title": "Будет удалено безвозвратно:",
+    "provision.destroy_confirm": "Введите имя сервера ({name}) для подтверждения",
+    "provision.destroy_cancelled": "Имя не совпадает. Ничего не удалено.",
+    "provision.destroyed": (
+        "Удалено. Запись в .aegis/deploy.yml помечена как удалённая."
+    ),
 }

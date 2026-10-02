@@ -4,8 +4,8 @@ The model's only write door. ``propose`` and ``propose_many`` file
 pending changes of any registered type (``app.services.change_queue``);
 ``pending``, ``withdraw`` and ``withdraw_batch`` let an agent see and
 retract its own cards. Execution happens only when the user approves in
-the app. The tools register ``native_write``, so code mode dispatches
-them as visible calls.
+the app. The tools register ``effect="proposes"``, so code mode dispatches
+them as visible calls and MCP may serve them.
 """
 
 from __future__ import annotations
@@ -252,35 +252,35 @@ register_tool(
     "propose",
     propose,
     description="Propose a change for the user's approval (the only write)",
-    native_write=True,
+    effect="proposes",
     replace=True,
 )
 register_tool(
     "propose_many",
     propose_many,
     description="Propose a batch of same-type changes for one bulk approval",
-    native_write=True,
+    effect="proposes",
     replace=True,
 )
 register_tool(
     "pending",
     pending,
     description="Your own still-pending proposals, so you can withdraw what you supersede",
-    native_write=True,
+    effect="proposes",
     replace=True,
 )
 register_tool(
     "withdraw",
     withdraw,
     description="Retract one of your own still-pending proposals",
-    native_write=True,
+    effect="proposes",
     replace=True,
 )
 register_tool(
     "withdraw_batch",
     withdraw_batch,
     description="Retract one of your own still-pending batch cards, all rows at once",
-    native_write=True,
+    effect="proposes",
     replace=True,
 )
 {% endif %}

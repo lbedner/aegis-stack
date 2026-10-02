@@ -39,11 +39,6 @@ MEMORY_CATEGORIES = (
     "general",
 )
 
-# Tools that WRITE memory. Code mode sandboxes an agent's tools behind
-# run_code; these stay native calls so a write is a visible tool call in
-# the trail rather than a line inside generated Python.
-MEMORY_WRITE_TOOL_NAMES: tuple[str, ...] = ("save_memory", "replace_memory")
-
 current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 # Attribution for writes made mid-turn (queue proposals): which agent
 # asked, in which conversation. Set by the same runtimes that bind the
@@ -346,13 +341,13 @@ register_tool(
     "save_memory",
     save_memory,
     description="Persist one durable fact about the current user",
-    native_write=True,
+    effect="writes",
     replace=True,
 )
 register_tool(
     "replace_memory",
     replace_memory,
     description="Replace all saved facts about the current user",
-    native_write=True,
+    effect="writes",
     replace=True,
 )

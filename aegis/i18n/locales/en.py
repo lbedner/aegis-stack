@@ -1350,4 +1350,67 @@ MESSAGES: dict[str, str] = {
     "build.step.migrate": "Applying migrations",
     "build.step.llm": "Syncing LLM catalog",
     "build.step.format": "Formatting code",
+    # ── Deploy provision ──────────────────────────────────────────────
+    "provision.help_opt_provider": "Cloud provider to create the server in (hetzner)",
+    "provision.help_opt_size": "Server type, e.g. cx23",
+    "provision.help_opt_region": "Provider location, e.g. nbg1, fsn1, hel1, ash",
+    "provision.help_opt_domain": (
+        "Hostname to point at the server through Cloudflare (default: an sslip.io name)"
+    ),
+    "provision.help_opt_ssh_key": "Public key installed for root on the new server",
+    "provision.unknown_provider": (
+        "Unsupported provider: {provider}. Supported: {supported}"
+    ),
+    "provision.token_missing": (
+        "Set {env} in your environment first. It is read at call time and never stored or printed."
+    ),
+    "provision.using_token": "Using {env} {masked}",
+    "provision.already_ready": (
+        "This project already has a provisioned server ({ip}). Run 'aegis deploy' to deploy, or 'aegis deploy-destroy' to remove it."
+    ),
+    "provision.resuming": "Resuming provisioning of {name}",
+    "provision.price": (
+        "{size} in {region}: EUR {price}/month incl. VAT, plus Hetzner's IPv4 address fee"
+    ),
+    "provision.confirm": "Create this server in your Hetzner account?",
+    "provision.cancelled": "Cancelled. Nothing was created.",
+    "provision.ssh_key_created": "Uploaded SSH key {id}",
+    "provision.server_created": (
+        "Created server {id} at {ip} (recorded in .aegis/deploy.yml)"
+    ),
+    "provision.waiting_running": "Waiting for the server to start...",
+    "provision.not_running": "The server did not reach 'running' in time.",
+    "provision.waiting_ssh": "Waiting for SSH on {ip}...",
+    "provision.ssh_timeout": "SSH on {ip} did not come up in time.",
+    "provision.waiting_cloud_init": (
+        "Waiting for server setup (cloud-init) to finish..."
+    ),
+    "provision.cloud_init_failed": (
+        "Server setup (cloud-init) failed on {ip}. Inspect with: ssh root@{ip} cloud-init status --long"
+    ),
+    "provision.dns_created": "Created DNS record {hostname} -> {ip}",
+    "provision.waiting_dns": "Waiting for {hostname} to resolve...",
+    "provision.dns_timeout": "{hostname} did not resolve to the server in time.",
+    "provision.ready": "Server ready at {hostname}. Handing off to 'aegis deploy'.",
+    "provision.partial_title": (
+        "Provisioning stopped. These resources exist in your account:"
+    ),
+    "provision.created_server": "server {id} '{name}' at {ip} ({size}, {region})",
+    "provision.created_ssh_key": "SSH key {id}",
+    "provision.created_dns": "DNS A record {hostname}",
+    "provision.offer_delete": "Delete them now?",
+    "provision.cleanup_failed": "Cleanup failed: {error}",
+    "provision.cleaned_up": "Deleted. Nothing from this run is left in your account.",
+    "provision.resume_hint": (
+        "Run 'aegis deploy-provision' again to resume, or 'aegis deploy-destroy' to delete them."
+    ),
+    "provision.nothing_to_destroy": (
+        "No provisioned server is recorded in .aegis/deploy.yml."
+    ),
+    "provision.destroy_title": "This permanently deletes:",
+    "provision.destroy_confirm": "Type the server name ({name}) to confirm",
+    "provision.destroy_cancelled": "Name did not match. Nothing was deleted.",
+    "provision.destroyed": (
+        "Destroyed. The record in .aegis/deploy.yml is marked destroyed."
+    ),
 }

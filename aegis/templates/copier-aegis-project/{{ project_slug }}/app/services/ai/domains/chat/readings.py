@@ -194,6 +194,6 @@ register_tool(
     "record_reading",
     record_reading,
     description="Durably record line items read from an attached image",
-    native_write=True,
+    effect="writes",
     replace=True,
 )

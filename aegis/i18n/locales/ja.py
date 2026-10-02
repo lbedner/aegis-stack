@@ -1231,4 +1231,51 @@ MESSAGES: dict[str, str] = {
     "build.step.migrate": "マイグレーションを適用中",
     "build.step.llm": "LLM カタログを同期中",
     "build.step.format": "コードを整形中",
+    # ── Deploy provision ──────────────────────────────────────────────
+    "provision.help_opt_provider": "サーバーを作成するクラウドプロバイダー (hetzner)",
+    "provision.help_opt_size": "サーバータイプ (例: cx23)",
+    "provision.help_opt_region": "プロバイダーのロケーション (例: nbg1, fsn1, hel1, ash)",
+    "provision.help_opt_domain": "Cloudflare でサーバーに向けるホスト名 (既定: sslip.io の名前)",
+    "provision.help_opt_ssh_key": "新しいサーバーの root に登録する公開鍵",
+    "provision.unknown_provider": "未対応のプロバイダー: {provider}。対応: {supported}",
+    "provision.token_missing": "先に環境変数 {env} を設定してください。呼び出し時に読み取られ、保存も表示もされません。",
+    "provision.using_token": "{env} {masked} を使用",
+    "provision.already_ready": (
+        "このプロジェクトには作成済みのサーバー ({ip}) があります。デプロイは 'aegis deploy'、削除は 'aegis deploy-destroy' を実行してください。"
+    ),
+    "provision.resuming": "{name} の作成を再開します",
+    "provision.price": (
+        "{size} ({region}): 月額 EUR {price} (税込)、別途 Hetzner の IPv4 アドレス料金"
+    ),
+    "provision.confirm": "このサーバーを Hetzner アカウントに作成しますか?",
+    "provision.cancelled": "キャンセルしました。何も作成されていません。",
+    "provision.ssh_key_created": "SSH 鍵 {id} をアップロードしました",
+    "provision.server_created": "サーバー {id} を {ip} に作成しました (.aegis/deploy.yml に記録)",
+    "provision.waiting_running": "サーバーの起動を待っています...",
+    "provision.not_running": "サーバーが時間内に 'running' になりませんでした。",
+    "provision.waiting_ssh": "{ip} の SSH を待っています...",
+    "provision.ssh_timeout": "{ip} の SSH が時間内に応答しませんでした。",
+    "provision.waiting_cloud_init": "サーバーのセットアップ (cloud-init) の完了を待っています...",
+    "provision.cloud_init_failed": (
+        "{ip} でサーバーのセットアップ (cloud-init) に失敗しました。確認: ssh root@{ip} cloud-init status --long"
+    ),
+    "provision.dns_created": "DNS レコード {hostname} -> {ip} を作成しました",
+    "provision.waiting_dns": "{hostname} の名前解決を待っています...",
+    "provision.dns_timeout": "{hostname} が時間内にサーバーへ解決されませんでした。",
+    "provision.ready": "サーバーの準備完了: {hostname}。'aegis deploy' に引き継ぎます。",
+    "provision.partial_title": "作成を中断しました。アカウントには次のリソースがあります:",
+    "provision.created_server": "サーバー {id} '{name}' ({ip}, {size}, {region})",
+    "provision.created_ssh_key": "SSH 鍵 {id}",
+    "provision.created_dns": "DNS A レコード {hostname}",
+    "provision.offer_delete": "今すぐ削除しますか?",
+    "provision.cleanup_failed": "クリーンアップに失敗しました: {error}",
+    "provision.cleaned_up": "削除しました。この実行で作成したものはアカウントに残っていません。",
+    "provision.resume_hint": (
+        "再開するには 'aegis deploy-provision' を再実行、削除するには 'aegis deploy-destroy' を実行してください。"
+    ),
+    "provision.nothing_to_destroy": ".aegis/deploy.yml に作成済みサーバーの記録がありません。",
+    "provision.destroy_title": "次を完全に削除します:",
+    "provision.destroy_confirm": "確認のためサーバー名 ({name}) を入力してください",
+    "provision.destroy_cancelled": "名前が一致しません。何も削除されていません。",
+    "provision.destroyed": "削除しました。.aegis/deploy.yml の記録は削除済みになっています。",
 }

@@ -178,6 +178,19 @@ secrets_backend:
     - "database"
   when: "{{ include_secrets }}"
 
+include_deploy:
+  type: bool
+  help: "Include the deploy component (target, socket proxy for the Overseer)?"
+  default: false
+
+deploy_target:
+  type: str
+  help: "Where the app is deployed"
+  default: "compose"
+  choices:
+    - "compose"
+  when: "{{ include_deploy }}"
+
 include_storage:
   type: bool
   help: "Include S3 object storage (SeaweedFS container in dev)?"

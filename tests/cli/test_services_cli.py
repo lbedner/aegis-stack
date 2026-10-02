@@ -287,6 +287,7 @@ class TestInteractiveServiceSelection:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 True,  # auth service
                 True,  # database confirmation for auth
                 False,  # payment service
@@ -323,6 +324,7 @@ class TestInteractiveServiceSelection:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment service
                 False,  # AI service

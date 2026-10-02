@@ -7,6 +7,7 @@ x-app: &app
     args:
       - AEGIS_STACK_VERSION=${AEGIS_STACK_VERSION:-dev}
       - PORT=${PORT:-8000}
+      - BUILD_ID=${BUILD_ID:-dev}
   env_file:
     - ${AEGIS_STACK_ENV_FILE:-.env}
   environment:
@@ -24,6 +25,9 @@ x-app: &app
     - storage-data:/data/storage
 {%- if include_scheduler and include_database %}
     - backup-data:/var/backups/app
+{%- endif %}
+{%- if include_deploy and deploy_target == "compose" %}
+    - docker-proxy:/var/run/docker-proxy
 {%- endif %}
   labels:
     logging: "aegis-stack"
@@ -414,6 +418,41 @@ services:
       - prod
 {%- endif %}
 
+{%- if include_deploy and deploy_target == "compose" %}
+  socket-proxy:
+    image: wollomatic/socket-proxy:1.13.1
+    user: "0:0"
+    command:
+      - "-proxysocketendpoint=/var/run/docker-proxy/docker.sock"
+      - '-allowGET=(/v1\.[0-9]+)?/(containers/json|containers/[a-zA-Z0-9_.-]+/(stats|logs)|info|system/df)'
+      - "-allowhealthcheck"
+      - "-shutdowngracetime=5"
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - docker-proxy:/var/run/docker-proxy
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+    profiles:
+      - dev
+      - prod
+{%- endif %}
+
 {%- for p in _plugins | default([]) %}
 {%- for s in p.docker_services %}
   {{ s | trim | indent(2, true) }}
@@ -448,4 +487,7 @@ volumes:
 {%- endif %}
 {%- if include_ingress and ingress_tls %}
   traefik-letsencrypt:
+{%- endif %}
+{%- if include_deploy and deploy_target == "compose" %}
+  docker-proxy:
 {%- endif %}

@@ -123,10 +123,14 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:$PORT/health || exit 1
 
 
-# Labels for better container management
+# Labels for better container management. The revision is the BUILD_ID
+# ``aegis deploy`` stamps (a compose build arg); the runtime reads it from
+# the container list, so nothing ever needs a container's environment.
+ARG BUILD_ID=dev
 LABEL maintainer="contact@aegis-stack.dev" \
       version="0.1.0" \
-      description="Aegis Stack - Production-ready async Python foundation"
+      description="Aegis Stack - Production-ready async Python foundation" \
+      org.opencontainers.image.revision="${BUILD_ID}"
 
 # The entrypoint runs each role's program directly from /opt/venv (already
 # on PATH and synced above), so no ``uv run`` stays resident as its parent.

@@ -129,6 +129,27 @@ class TestAddCommand:
         assert answers.get("inference_placement") == "host"
         assert answers.get("ollama_mode") == "host"
 
+    def test_add_deploy_records_its_target_and_adds_the_proxy(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """``aegis add deploy`` lands the target answer, the component's
+        package and the socket-proxy service; nothing else mounts the
+        Docker socket."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "add", "deploy", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        answers = load_copier_answers(project_path)
+        assert answers.get("include_deploy") is True
+        assert answers.get("deploy_target") == "compose"
+        assert (project_path / "app/components/deploy/__init__.py").is_file()
+        compose = (project_path / "docker-compose.yml").read_text()
+        assert "socket-proxy:" in compose
+        assert compose.count("/var/run/docker.sock:/var/run/docker.sock") == 1
+
     def test_add_secrets_brings_its_own_migration_and_key(
         self, project_factory: ProjectFactory
     ) -> None:

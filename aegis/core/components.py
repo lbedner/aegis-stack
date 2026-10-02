@@ -13,6 +13,7 @@ from typing import Any
 from ..constants import (
     AnswerKeys,
     ComponentNames,
+    DeployTargets,
     InferenceEngines,
     InferencePlacement,
     OllamaMode,
@@ -576,6 +577,42 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/components/frontend/test_secrets_modal.py",
                 "app/cli/secrets_cli.py",
                 "tests/cli/test_secrets_cli.py",
+            ],
+        ),
+    ),
+    "deploy": ComponentSpec(
+        readme=ReadmeWiring(
+            reach=(
+                "`aegis deploy`; the socket-proxy service answers the Overseer's "
+                "read-only Docker queries"
+            ),
+        ),
+        name="deploy",
+        docs_path="components/deploy",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Deployment target (Docker Compose), read by the Overseer",
+        long_description=(
+            "Where the app runs, as a component: Docker Compose on a host "
+            "today. Adds a socket proxy, the only container that touches the "
+            "Docker socket, answering read-only queries (containers, stats, "
+            "logs, disk) so the Overseer can show what is running without "
+            "the webserver ever holding the socket."
+        ),
+        docker_services=["socket-proxy"],
+        options=[
+            OptionSpec(
+                name="target",
+                mode=OptionMode.SINGLE,
+                choices=list(DeployTargets.ALL),
+                default=DeployTargets.DEFAULT,
+                answer_key=AnswerKeys.DEPLOY_TARGET,
+            ),
+        ],
+        marker_path="app/components/deploy",
+        files=FileManifest(
+            primary=[
+                "app/components/deploy",
+                "tests/components/test_deploy_runtime.py",
             ],
         ),
     ),

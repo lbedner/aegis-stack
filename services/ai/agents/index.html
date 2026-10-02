@@ -3019,6 +3019,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#proposals-writes-the-user-approves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Proposals: Writes the User Approves
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#per-user-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5600,6 +5611,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#proposals-writes-the-user-approves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Proposals: Writes the User Approves
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#per-user-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5797,6 +5819,31 @@
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">register_tool</span><span class="p">(</span><span class="s2">&quot;lookup_order&quot;</span><span class="p">,</span> <span class="n">lookup_order</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Then grant it to an agent by inserting a <code>tool</code> row named <code>lookup_order</code> and linking it via <code>agent_tool</code>. A row naming a tool with no registered callable is skipped with a warning, never an error: a stale grant degrades that one tool, not the agent.</p>
+<h2 id="proposals-writes-the-user-approves">Proposals: Writes the User Approves</h2>
+<p>A tool that changes something should not change it. It files a <strong>pending change</strong> instead: a card in the chat with <strong>Approve</strong> and <strong>Reject</strong>, and nothing runs until the user decides. The queue ships with every persistence-backed project (and with finance), and it knows nothing about any one service. A service makes a change proposable by registering a change type at import:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.change_queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChangeDisplayRow</span><span class="p">,</span> <span class="n">ChangeExecutor</span><span class="p">,</span> <span class="n">register</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">ReschedulePayload</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">post_id</span><span class="p">:</span> <span class="nb">int</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">publish_at</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">payload</span><span class="p">,</span> <span class="n">owner_user_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="o">...</span>  <span class="c1"># the real mutation; runs only on approval</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;post_id&quot;</span><span class="p">:</span> <span class="n">payload</span><span class="o">.</span><span class="n">post_id</span><span class="p">}</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">payload</span><span class="p">,</span> <span class="n">owner_user_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ChangeDisplayRow</span><span class="p">]:</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">ChangeDisplayRow</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Publish at&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">payload</span><span class="o">.</span><span class="n">publish_at</span><span class="p">)]</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="n">register</span><span class="p">(</span><span class="n">ChangeExecutor</span><span class="p">(</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="n">change_type</span><span class="o">=</span><span class="s2">&quot;post.reschedule&quot;</span><span class="p">,</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Reschedule a post&quot;</span><span class="p">,</span>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="n">payload_model</span><span class="o">=</span><span class="n">ReschedulePayload</span><span class="p">,</span>
+</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>    <span class="n">execute</span><span class="o">=</span><span class="n">execute</span><span class="p">,</span>
+</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>    <span class="n">describe</span><span class="o">=</span><span class="n">describe</span><span class="p">,</span>
+</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="p">))</span>
+</span></code></pre></div>
+<p>The payload model validates when the change is proposed and again when it is approved; <code>describe</code> renders the card from the database, never from the model's own words. Agents reach the queue through built-in tools: <code>propose</code> and <code>propose_many</code> (one card for a batch, with a per-row veto), and <code>pending</code>, <code>withdraw</code> and <code>withdraw_batch</code> for an agent's own open cards. The card's buttons call <code>/api/v1/changes</code> (<code>POST /changes/{id}/approve</code>, <code>/reject</code>, and the batch forms), and every resolution keeps its row as the audit trail.</p>
 <h2 id="per-user-memory">Per-User Memory</h2>
 <p>Agents can remember durable facts about a user across conversations. Two built-in tools are registered on every persistence-backed project:</p>
 <ul>
@@ -5808,23 +5855,23 @@
 <p>When RAG is enabled (<code>ai[...,rag]</code>), an agent's <code>knowledge_base_ids</code> lists the collections it may search. Retrieval merges results across the scope and ranks by similarity; an explicitly requested collection inside the scope narrows the search to just it, and a request outside the scope is refused with a log line. An empty scope keeps the unrestricted single-collection behavior. The <code>knowledge_base</code> and <code>knowledge_base_source</code> tables track collection metadata and per-source ingestion state, including the chunking preset (<code>paragraph</code>, <code>sentence</code>, <code>fixed</code>, <code>code</code>).</p>
 <h2 id="sentiment-analysis">Sentiment Analysis</h2>
 <p>Persistence-backed projects ship a batch job that scores each conversation with the configured model: user sentiment (positive, neutral, negative, frustrated), a score from -1.0 to 1.0, assistant performance, and detected issues. The job is registered on the scheduler but <strong>off by default</strong>, because every scored conversation costs model tokens:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">AI_SENTIMENT_ENABLED</span><span class="o">=</span><span class="nb">true</span><span class="w">    </span><span class="c1"># enable scoring</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">AI_SENTIMENT_BATCH_LIMIT</span><span class="o">=</span><span class="m">20</span><span class="w">  </span><span class="c1"># conversations per run</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">AI_SENTIMENT_ENABLED</span><span class="o">=</span><span class="nb">true</span><span class="w">    </span><span class="c1"># enable scoring</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">AI_SENTIMENT_BATCH_LIMIT</span><span class="o">=</span><span class="m">20</span><span class="w">  </span><span class="c1"># conversations per run</span>
 </span></code></pre></div>
 <p>Results land in the <code>sentiment_analysis</code> table (one verdict per conversation) and surface in the CLI and the dashboard analytics tab:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>sentiment
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>sentiment
 </span></code></pre></div>
 <h2 id="managing-agents">Managing Agents</h2>
 <p><strong>CLI</strong>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>my-app<span class="w"> </span>agents<span class="w"> </span>list<span class="w">              </span><span class="c1"># every agent with grants at a glance</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>my-app<span class="w"> </span>agents<span class="w"> </span>show<span class="w"> </span>assistant<span class="w">    </span><span class="c1"># full definition including the prompt</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>assistant<span class="w">    </span><span class="c1"># one live turn through the resolved config</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>list<span class="w">      </span><span class="c1"># the module catalog</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-app<span class="w"> </span>agents<span class="w"> </span>list<span class="w">              </span><span class="c1"># every agent with grants at a glance</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>my-app<span class="w"> </span>agents<span class="w"> </span>show<span class="w"> </span>assistant<span class="w">    </span><span class="c1"># full definition including the prompt</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>assistant<span class="w">    </span><span class="c1"># one live turn through the resolved config</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>list<span class="w">      </span><span class="c1"># the module catalog</span>
 </span></code></pre></div>
 <p><strong>Dashboard</strong>: the AI service modal has an Agents tab listing every agent with an active toggle and a detail view.</p>
 <p><strong>API</strong>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>GET<span class="w">   </span>/api/v1/ai/agents<span class="w">          </span><span class="c1"># list definitions with tool/module grants</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>PATCH<span class="w"> </span>/api/v1/ai/agents/<span class="o">{</span>slug<span class="o">}</span><span class="w">   </span><span class="c1"># {&quot;is_active&quot;: bool}</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>GET<span class="w">   </span>/api/v1/ai/agents<span class="w">          </span><span class="c1"># list definitions with tool/module grants</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>PATCH<span class="w"> </span>/api/v1/ai/agents/<span class="o">{</span>slug<span class="o">}</span><span class="w">   </span><span class="c1"># {&quot;is_active&quot;: bool}</span>
 </span></code></pre></div>
 <p>Edits through the API invalidate the loader's warm cache, so the next chat request sees the change immediately.</p>
 <h2 id="related-pages">Related Pages</h2>

@@ -4084,6 +4084,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#sending-domains" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sending domains
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -5766,6 +5777,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#sending-domains" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sending domains
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -5969,6 +5991,14 @@
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nv">TWILIO_AUTH_TOKEN</span><span class="o">=</span>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 </span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="nv">TWILIO_PHONE_NUMBER</span><span class="o">=</span>+15551234567
 </span></code></pre></div>
+<p>With the <a href="../../components/secrets/">secrets component</a>, these can be set in the Overseer instead, while the app runs. The from address offers the Resend account's verified domains and is checked against them; the from number and messaging service offer the Twilio account's own.</p>
+<h3 id="sending-domains">Sending domains</h3>
+<p>Resend sends only from a verified domain. The Email section of Overseer &gt; Comms, and the Flet dashboard's Email tab, list the account's domains with their status:</p>
+<ul>
+<li><strong>Check</strong> asks Resend to look at the domain's DNS now.</li>
+<li><strong>Add domain</strong> registers a new one and shows the DNS records to create at your registrar; Check once they are in place.</li>
+</ul>
+<p>A send-only Resend key cannot list domains; the section says so, and sending still works.</p>
 <h2 id="usage-examples">Usage Examples</h2>
 <h3 id="cli">CLI</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Check service status</span>

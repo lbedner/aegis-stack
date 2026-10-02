@@ -3265,6 +3265,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#voice-chat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Voice Chat
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#catalog-summary" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5834,6 +5845,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#voice-chat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Voice Chat
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#catalog-summary" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6134,29 +6156,78 @@
 </span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">  </span>--output<span class="w"> </span>preview.mp3
 </span></code></pre></div>
 <p>Returns <code>audio/mpeg</code> content.</p>
-<h3 id="catalog-summary">Catalog Summary</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/summary<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+<h3 id="voice-chat">Voice Chat</h3>
+<p>A spoken turn is a typed turn with a microphone in front of it: the
+transcript becomes the user's message in the same conversation, answered
+by the same agent, as if it had been typed.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/v1/ai/voice-chat?conversation_id=c-1&amp;user_id=u-1&amp;agent_slug=helper&amp;surface=support&amp;transcription_hint=Aegis&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>-F<span class="w"> </span><span class="s2">&quot;audio=@question.webm&quot;</span>
 </span></code></pre></div>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">&quot;tts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="nt">&quot;provider_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="nt">&quot;model_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="nt">&quot;voice_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span>
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;openai&quot;</span><span class="p">]</span>
-</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">  </span><span class="p">},</span>
-</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">  </span><span class="nt">&quot;stt&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">    </span><span class="nt">&quot;provider_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="w">    </span><span class="nt">&quot;model_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="w">    </span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;openai_whisper&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;whisper_local&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;faster_whisper&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;groq_whisper&quot;</span><span class="p">]</span>
-</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="w">  </span><span class="p">},</span>
-</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="w">  </span><span class="nt">&quot;current_config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="w">    </span><span class="nt">&quot;tts_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
-</span><span id="__span-13-15"><a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a><span class="w">    </span><span class="nt">&quot;tts_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tts-1&quot;</span><span class="p">,</span>
-</span><span id="__span-13-16"><a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a><span class="w">    </span><span class="nt">&quot;tts_voice&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alloy&quot;</span><span class="p">,</span>
-</span><span id="__span-13-17"><a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="w">    </span><span class="nt">&quot;stt_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_whisper&quot;</span><span class="p">,</span>
-</span><span id="__span-13-18"><a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a><span class="w">    </span><span class="nt">&quot;stt_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;whisper-1&quot;</span>
-</span><span id="__span-13-19"><a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a><span class="w">  </span><span class="p">}</span>
-</span><span id="__span-13-20"><a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a><span class="p">}</span>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>conversation_id</code></td>
+<td>Continue this conversation (a new one when omitted)</td>
+</tr>
+<tr>
+<td><code>user_id</code></td>
+<td>Who spoke: owns the turn, and STT/TTS usage is recorded against it</td>
+</tr>
+<tr>
+<td><code>agent_slug</code></td>
+<td>The agent that answers, exactly as for a typed turn; the stack never picks one</td>
+</tr>
+<tr>
+<td><code>surface</code></td>
+<td>The history scope the turn lands in, as for a typed turn</td>
+</tr>
+<tr>
+<td><code>transcription_hint</code></td>
+<td>Names the transcriber should spell right, sent to it as its prompt</td>
+</tr>
+<tr>
+<td><code>voice_mode</code></td>
+<td>Return the answer as plain spoken sentences</td>
+</tr>
+<tr>
+<td><code>return_audio</code></td>
+<td>Also synthesize those sentences and return <code>audio/mpeg</code></td>
+</tr>
+</tbody>
+</table>
+<p>The audio is not stored: the conversation holds the words, and the usage
+records hold the cost. The spoken version of an answer is the agent's own
+words with the markdown stripped (<code>voice/spoken.py</code>), not a second model
+call. <code>/api/v1/ai/synthesize</code> takes form fields (<code>text</code>, <code>voice</code>, <code>speed</code>).</p>
+<h3 id="catalog-summary">Catalog Summary</h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/summary<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</span></code></pre></div>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">&quot;tts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="nt">&quot;provider_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="nt">&quot;model_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">    </span><span class="nt">&quot;voice_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">    </span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;openai&quot;</span><span class="p">]</span>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="nt">&quot;stt&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">    </span><span class="nt">&quot;provider_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">    </span><span class="nt">&quot;model_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
+</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">    </span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;openai_whisper&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;whisper_local&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;faster_whisper&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;groq_whisper&quot;</span><span class="p">]</span>
+</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="w">  </span><span class="nt">&quot;current_config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a><span class="w">    </span><span class="nt">&quot;tts_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
+</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="w">    </span><span class="nt">&quot;tts_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tts-1&quot;</span><span class="p">,</span>
+</span><span id="__span-14-16"><a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="w">    </span><span class="nt">&quot;tts_voice&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alloy&quot;</span><span class="p">,</span>
+</span><span id="__span-14-17"><a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="w">    </span><span class="nt">&quot;stt_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_whisper&quot;</span><span class="p">,</span>
+</span><span id="__span-14-18"><a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a><span class="w">    </span><span class="nt">&quot;stt_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;whisper-1&quot;</span>
+</span><span id="__span-14-19"><a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a><span class="w">  </span><span class="p">}</span>
+</span><span id="__span-14-20"><a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a><span class="p">}</span>
 </span></code></pre></div>
 <hr />
 <h2 id="configuration">Configuration</h2>
@@ -6215,7 +6286,7 @@
 </ul>
 <h3 id="stt">STT</h3>
 <ul>
-<li><strong>AudioInput</strong> - <code>content</code> (bytes), <code>format</code>, <code>language</code></li>
+<li><strong>AudioInput</strong> - <code>content</code> (bytes), <code>format</code>, <code>language</code>, <code>prompt</code> (a spelling hint for the transcriber)</li>
 <li><strong>TranscriptionResult</strong> - <code>text</code>, <code>language</code>, <code>duration_seconds</code>, <code>provider</code>, <code>segments</code></li>
 <li><strong>TranscriptionSegment</strong> - <code>text</code>, <code>start</code>, <code>end</code>, <code>confidence</code></li>
 </ul>
@@ -6268,6 +6339,10 @@
 <tr>
 <td><code>app/services/ai/voice/models.py</code></td>
 <td>Data models</td>
+</tr>
+<tr>
+<td><code>app/services/ai/voice/spoken.py</code></td>
+<td>An answer as it is said: markdown stripped</td>
 </tr>
 <tr>
 <td><code>app/components/backend/api/voice/router.py</code></td>

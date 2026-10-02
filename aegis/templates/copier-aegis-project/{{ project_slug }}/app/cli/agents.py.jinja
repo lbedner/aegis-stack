@@ -1,12 +1,14 @@
 """Agent registry CLI commands.
 
 Inspect and smoke-test the database-driven agent registry: list agents,
-show one agent's full definition, and run a single test turn through the
-agent loader against the configured model. The memory-modules commands
+show one agent's full definition, run a single test turn through the
+agent loader against the configured model, and change an agent's system
+prompt (``agents prompt``), which records why. The memory-modules commands
 inspect the reusable context blocks agents opt into.
 """
 
 import asyncio
+from pathlib import Path
 
 import typer
 from rich.panel import Panel
@@ -15,10 +17,12 @@ from rich.table import Table
 from app.cli import theme
 from app.i18n import lazy_t, t
 from app.services.ai.domains.chat.agent_loader import AgentConfig
-from app.services.ai.models.agents import Agent, MemoryModule
+from app.services.ai.models.agents import Agent, AgentPromptChange, MemoryModule
 
 app = typer.Typer(help=lazy_t("agents.help"))
 modules_app = typer.Typer(help=lazy_t("agents.modules_help"))
+prompt_app = typer.Typer(help=lazy_t("agents.prompt_help"))
+app.add_typer(prompt_app, name="prompt")
 console = theme.console()
 
 
@@ -40,6 +44,18 @@ async def _load_agents() -> list[Agent]:
 async def _load_agent(slug: str) -> Agent | None:
     agents = await _load_agents()
     return next((agent for agent in agents if agent.slug == slug), None)
+
+
+async def _load_history(slug: str) -> list[AgentPromptChange]:
+    from app.services.ai.domains.chat.agent_registry import prompt_history
+
+    return await prompt_history(slug)
+
+
+async def _set_prompt(slug: str, prompt: str, note: str) -> None:
+    from app.services.ai.domains.chat.agent_registry import update_agent
+
+    await update_agent(slug, {"system_prompt": prompt}, source="cli", note=note)
 
 
 async def _load_modules() -> list[MemoryModule]:
@@ -183,6 +199,82 @@ def test_agent(
             padding=(1, 2),
         )
     )
+
+
+def _error(message: str) -> None:
+    console.print(f"[{theme.ERROR}]{message}[/{theme.ERROR}]")
+
+
+@prompt_app.command("set", help=lazy_t("agents.prompt_help_set"))
+def set_prompt(
+    slug: str = typer.Argument(...),
+    note: str = typer.Option(..., "--note", help=lazy_t("agents.opt_note")),
+    file: Path | None = typer.Option(
+        None, "--file", exists=True, dir_okay=False, help=lazy_t("agents.opt_file")
+    ),
+    version: int | None = typer.Option(
+        None, "--version", help=lazy_t("agents.opt_version")
+    ),
+) -> None:
+    import sys
+
+    from app.services.ai.domains.chat.agent_registry import (
+        AgentNotFoundError,
+        InvalidAgentUpdateError,
+    )
+
+    if (file is None) == (version is None):
+        _error(t("agents.prompt_file_or_version"))
+        sys.exit(1)
+    try:
+        if file is not None:
+            prompt = file.read_text()
+        else:
+            history = asyncio.run(_load_history(slug))
+            earlier = next((c for c in history if c.id == version), None)
+            if earlier is None:
+                _error(t("agents.prompt_no_version", slug=slug, version=version))
+                sys.exit(1)
+            prompt = earlier.system_prompt
+        asyncio.run(_set_prompt(slug, prompt, note))
+    except (AgentNotFoundError, InvalidAgentUpdateError) as e:
+        _error(str(e))
+        sys.exit(1)
+    console.print(theme.good_text(t("agents.prompt_set", slug=slug)))
+
+
+@prompt_app.command("history", help=lazy_t("agents.prompt_help_history"))
+def show_prompt_history(slug: str = typer.Argument(...)) -> None:
+    import sys
+
+    from app.services.ai.domains.chat.agent_registry import AgentNotFoundError
+
+    try:
+        changes = asyncio.run(_load_history(slug))
+    except AgentNotFoundError:
+        _error(t("agents.not_found", slug=slug))
+        sys.exit(1)
+    if not changes:
+        console.print(f"[dim]{t('agents.prompt_history_empty', slug=slug)}[/dim]")
+        return
+
+    table = Table(
+        title=t("agents.prompt_history_title", slug=slug), show_header=True, box=None
+    )
+    table.add_column(t("agents.col_version"), style=theme.ACCENT, justify="right")
+    table.add_column(t("agents.col_when"), style="dim", no_wrap=True)
+    table.add_column(t("agents.col_source"))
+    table.add_column(t("agents.col_chars"), justify="right")
+    table.add_column(t("agents.col_note"))
+    for change in changes:
+        table.add_row(
+            str(change.id),
+            f"{change.created_at:%Y-%m-%d %H:%M}",
+            change.source,
+            str(len(change.system_prompt)),
+            change.note or "",
+        )
+    console.print(table)
 
 
 def _module_kind(module: MemoryModule) -> str:

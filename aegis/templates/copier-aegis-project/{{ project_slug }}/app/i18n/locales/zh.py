@@ -31,8 +31,8 @@ MESSAGES: dict[str, str] = {
     "bench.auth.one_only": "Pass only one of --as-admin / --as-user / --anon.",
     "bench.driver.fallback": "Falling back to the {driver} driver: {reason}.",
     "bench.driver.method": "ab cannot issue {method}",
-    "bench.driver.missing": "ab is not installed",    "bench.driver.docker": "no local ab, using the httpd image instead",
-
+    "bench.driver.missing": "ab is not installed",
+    "bench.driver.docker": "no local ab, using the httpd image instead",
     "bench.driver.warning": (
         "This driver tops out below what either engine can serve, so the two "
         "look equal no matter what. Install ab (apache2-utils) for a "
@@ -806,6 +806,22 @@ MESSAGES: dict[str, str] = {
     "agents.module_dynamic": "动态",
     "agents.module_hybrid": "混合",
     "agents.module_content": "静态内容：",
+    "agents.prompt_help": "修改智能体的系统提示词，并查看其历史。",
+    "agents.prompt_help_set": "从文件或较早的版本设置智能体的系统提示词，并记录原因。",
+    "agents.prompt_help_history": "列出智能体系统提示词的每一次已记录的修改。",
+    "agents.opt_note": "修改提示词的原因",
+    "agents.opt_file": "包含新提示词的文件",
+    "agents.opt_version": "要恢复的较早版本（见历史）",
+    "agents.prompt_file_or_version": "请只提供 --file 或 --version 其中之一。",
+    "agents.prompt_no_version": "智能体 '{slug}' 没有提示词版本 {version}。",
+    "agents.prompt_set": "已设置 '{slug}' 的提示词；下一轮对话即会使用。",
+    "agents.prompt_history_title": "提示词历史：{slug}",
+    "agents.prompt_history_empty": "'{slug}' 没有已记录的提示词修改。",
+    "agents.col_version": "版本",
+    "agents.col_when": "时间",
+    "agents.col_source": "来源",
+    "agents.col_chars": "字符数",
+    "agents.col_note": "备注",
     # 斜杠命令
     "slash.help_desc": "查看可用命令",
     "slash.clear_desc": "清屏",

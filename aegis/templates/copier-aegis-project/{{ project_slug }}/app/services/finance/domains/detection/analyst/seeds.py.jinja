@@ -8,6 +8,7 @@ from sqlmodel import (
 )
 
 from app.core.log import logger
+from app.services.ai.domains.chat.agent_registry import seed_agent
 from app.services.ai.models.agents import (
     Agent,
     AgentTool,
@@ -227,7 +228,7 @@ def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
             is not None
         ):
             continue
-        session.add(Agent(**definition))
+        seed_agent(session, definition)
         counts["finance_agents"] += 1
         logger.info(f"Seeded agent '{definition['slug']}'")
 

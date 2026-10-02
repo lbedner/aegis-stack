@@ -54,8 +54,8 @@ BUDGET: dict[str, int] = {
     # 457 lines of schemas in a package __init__; surfaced when ai/models gained
     # a third module. Debt recorded at size; the fix is a schemas module.
     "services/ai/models/__init__.py.jinja": 457,
-    "i18n/locales/en.py": 1324,
-    "i18n/locales/zh.py": 1300,
+    "i18n/locales/en.py": 1339,
+    "i18n/locales/zh.py": 1316,
     "i18n/locales/de.py": 1270,
     "i18n/locales/es.py": 1270,
     "i18n/locales/fr.py": 1270,

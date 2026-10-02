@@ -48,6 +48,21 @@ class TestAgentSeed:
         # None = "use the service's active model".
         assert agent.model_id is None
 
+    def test_every_seeded_agent_records_its_seed(self, session: Session) -> None:
+        """The seed is the first recorded change, so an agent's
+        history starts at the text it was born with."""
+        from app.services.ai.fixtures import load_agent_registry_fixtures
+        from app.services.ai.models.agents import AgentPromptChange
+
+        load_agent_registry_fixtures(session)
+
+        agents = session.exec(select(Agent)).all()
+        changes = session.exec(select(AgentPromptChange)).all()
+        assert agents
+        assert sorted(
+            (c.agent_id, c.system_prompt, c.source) for c in changes
+        ) == sorted((a.id, a.system_prompt, "seed") for a in agents)
+
     def test_seed_is_idempotent(self, session: Session) -> None:
         load_agent_fixtures(session)
         counts = load_agent_fixtures(session)

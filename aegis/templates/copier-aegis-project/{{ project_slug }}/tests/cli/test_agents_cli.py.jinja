@@ -5,7 +5,12 @@ from unittest.mock import patch
 
 from app.cli.main import app
 from app.services.ai.domains.chat.agent_loader import AgentConfig
-from app.services.ai.models.agents import Agent, MemoryModule, Tool
+from app.services.ai.models.agents import (
+    Agent,
+    AgentPromptChange,
+    MemoryModule,
+    Tool,
+)
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -103,6 +108,76 @@ class TestAgentsTest:
         result = runner.invoke(app, ["agents", "test", "assistant"])
 
         assert result.exit_code == 1
+
+
+class TestAgentsPrompt:
+    """One way to change a prompt, and it says why."""
+
+    @patch("app.cli.agents._set_prompt")
+    def test_set_from_a_file_records_the_note(self, mock_set, tmp_path) -> None:
+        prompt = tmp_path / "prompt.md"
+        prompt.write_text("Be terse.")
+
+        result = runner.invoke(
+            app,
+            [
+                "agents",
+                "prompt",
+                "set",
+                "helper",
+                "--file",
+                str(prompt),
+                "--note",
+                "too chatty",
+            ],
+        )
+
+        assert result.exit_code == 0, result.stdout
+        mock_set.assert_called_once_with("helper", "Be terse.", "too chatty")
+
+    @patch("app.cli.agents._set_prompt")
+    @patch("app.cli.agents._load_history")
+    def test_set_to_an_earlier_version_reverts(self, mock_history, mock_set) -> None:
+        mock_history.return_value = [
+            AgentPromptChange(id=2, agent_id=1, system_prompt="Be kind.", source="cli"),
+            AgentPromptChange(
+                id=1, agent_id=1, system_prompt="Be terse.", source="seed"
+            ),
+        ]
+
+        result = runner.invoke(
+            app,
+            ["agents", "prompt", "set", "helper", "--version", "1", "--note", "back"],
+        )
+
+        assert result.exit_code == 0, result.stdout
+        mock_set.assert_called_once_with("helper", "Be terse.", "back")
+
+    @patch("app.cli.agents._set_prompt")
+    def test_set_needs_a_file_or_a_version(self, mock_set) -> None:
+        result = runner.invoke(
+            app, ["agents", "prompt", "set", "helper", "--note", "x"]
+        )
+
+        assert result.exit_code == 1
+        mock_set.assert_not_called()
+
+    @patch("app.cli.agents._load_history")
+    def test_history_lists_each_change(self, mock_history) -> None:
+        mock_history.return_value = [
+            AgentPromptChange(
+                id=2, agent_id=1, system_prompt="Be kind.", source="cli", note="warmer"
+            ),
+            AgentPromptChange(
+                id=1, agent_id=1, system_prompt="Be terse.", source="seed"
+            ),
+        ]
+
+        result = runner.invoke(app, ["agents", "prompt", "history", "helper"])
+
+        assert result.exit_code == 0, result.stdout
+        assert "warmer" in result.stdout
+        assert "seed" in result.stdout
 
 
 class TestMemoryModulesCli:

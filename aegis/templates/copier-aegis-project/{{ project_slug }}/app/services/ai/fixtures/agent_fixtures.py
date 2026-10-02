@@ -9,23 +9,22 @@ source of the default agent.
 
 from typing import Any
 
-from sqlmodel import Session, select
-
-from app.core.log import logger
-from app.services.ai.domains.chat.agent_loader import (
-    DEFAULT_AGENT_SLUG,
-    default_agent_config,
-)
-
 # Importing the module registers the built-in memory tools. The registry
 # only holds tools whose module was imported, and seeding runs in
 # processes that never build a chat agent (a CLI, a startup hook): without
 # this the sync writes no rows and every later grant silently no-ops.
 import app.services.ai.domains.chat.readings  # noqa: F401
 import app.services.ai.domains.chat.self_context  # noqa: F401
-from app.services.ai.domains.chat.tools import get_tool, registered_tool_names
 import app.services.ai.domains.chat.user_memory  # noqa: F401
+from app.core.log import logger
+from app.services.ai.domains.chat.agent_loader import (
+    DEFAULT_AGENT_SLUG,
+    default_agent_config,
+)
+from app.services.ai.domains.chat.agent_registry import seed_agent
+from app.services.ai.domains.chat.tools import get_tool, registered_tool_names
 from app.services.ai.models.agents import Agent, Tool
+from sqlmodel import Session, select
 
 __all__ = ["DEFAULT_AGENT_SLUG", "default_agent_definition", "load_agent_fixtures"]
 
@@ -72,7 +71,7 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
         select(Agent).where(Agent.slug == definition["slug"])
     ).first()
     if existing is None:
-        session.add(Agent(**definition))
+        seed_agent(session, definition)
         session.commit()
         added = 1
         logger.info(f"Seeded default agent '{definition['slug']}'")

@@ -110,6 +110,13 @@ async def startup_hook() -> None:
     logger.info("Storage component health check registered")
     {%- endif %}
 
+    {%- if include_secrets %}
+    # Register secrets component health check (store installed, counts)
+    from app.components.secrets.health import check_secrets_health
+    register_health_check("secrets", check_secrets_health)
+    logger.info("Secrets component health check registered")
+    {%- endif %}
+
     logger.info("Component health detection complete")
 
     # ==========================================

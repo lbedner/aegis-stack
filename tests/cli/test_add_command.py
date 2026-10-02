@@ -129,6 +129,25 @@ class TestAddCommand:
         assert answers.get("inference_placement") == "host"
         assert answers.get("ollama_mode") == "host"
 
+    def test_add_secrets_brings_its_own_migration_and_key(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """A component that owns a table gets its revision on ``add``, as
+        ``init`` would have made it, and ``.env`` gets an ENCRYPTION_KEY."""
+        project_path = project_factory("base_with_database")
+
+        result = run_aegis_command(
+            "add", "secrets", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        assert list((project_path / "alembic" / "versions").glob("*_secrets.py"))
+        env = (project_path / ".env").read_text()
+        assert any(
+            line.startswith("ENCRYPTION_KEY=") and len(line) > len("ENCRYPTION_KEY=")
+            for line in env.splitlines()
+        )
+
     def test_add_worker_auto_adds_redis(self, project_factory: ProjectFactory) -> None:
         """Test that adding worker automatically adds redis dependency."""
         project_path = project_factory("base")

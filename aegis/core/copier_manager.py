@@ -197,6 +197,10 @@ def generate_with_copier(
             AnswerKeys.PAYMENT_PROVIDER, PaymentProviders.DEFAULT
         ),
     }
+    # Any other component option (``secrets[database]`` -> secrets_backend);
+    # the keys resolved explicitly above keep their values.
+    for key, value in template_gen.option_answers().items():
+        copier_data.setdefault(key, value)
 
     # Detect dev vs production mode for template sourcing
     # - Dev mode (--dev flag): Use plain file path to read from working tree
@@ -371,6 +375,7 @@ def generate_with_copier(
         AnswerKeys.FINANCE: is_finance_included,
         AnswerKeys.SCHEDULER: is_scheduler_included,
         AnswerKeys.SCHEDULER_BACKEND: scheduler_backend_str,
+        AnswerKeys.SECRETS: template_context.get(AnswerKeys.SECRETS) == "yes",
         # Finance tables live in a dedicated Postgres ``finance`` schema
         # (dropped on SQLite); the migration variant is engine-resolved.
         AnswerKeys.DATABASE_ENGINE: database_engine,

@@ -50,7 +50,7 @@ def test_every_table_lives_where_the_registry_looks() -> None:
         if p.suffix in (".py", ".jinja")
         and TABLE_RE.search(p.read_text())
         and not re.match(
-            r"app/(models/|services/[a-z_]+/models(/|\.py))",
+            r"app/(models/|(services|components)/[a-z_]+/models(/|\.py))",
             p.relative_to(PROJECT).as_posix(),
         )
     )

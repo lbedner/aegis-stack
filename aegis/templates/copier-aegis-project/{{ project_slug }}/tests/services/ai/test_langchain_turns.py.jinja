@@ -21,6 +21,15 @@ from app.services.ai.service import AIService
 PIECES = ("Hel", "lo ", "there")
 
 
+
+def _prepared(llm: Any) -> Any:
+    """An async ``_prepare_llm_and_messages`` stand-in handing back ``llm``."""
+
+    async def prepare(*args: Any, **kwargs: Any) -> tuple[Any, list[Any]]:
+        return llm, []
+
+    return prepare
+
 class _Chunk:
     def __init__(self, content: str, **metadata: str) -> None:
         self.content = content
@@ -85,7 +94,7 @@ def harness(
     monkeypatch.setattr(service, "_record_usage", recorder)
 {%- endif %}
 
-    def fake_prepare(self: AIService, conversation: Any, *args: Any, **kwargs: Any) -> Any:
+    async def fake_prepare(self: AIService, conversation: Any, *args: Any, **kwargs: Any) -> Any:
         return _FakeLLM(), ["messages"]
 
     monkeypatch.setattr(AIService, "_prepare_llm_and_messages", fake_prepare)
@@ -166,7 +175,7 @@ class TestLangChainStreaming:
                 yield _Chunk("", **metadata)
 
         monkeypatch.setattr(
-            AIService, "_prepare_llm_and_messages", lambda *a, **k: (_CutOff(), [])
+            AIService, "_prepare_llm_and_messages", _prepared(_CutOff())
         )
         final = [chunk async for chunk in service.stream_chat("hello")][-1]
         assert final.metadata["finish_reason"] == "length"

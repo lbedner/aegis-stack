@@ -124,7 +124,7 @@ class TestTTSServiceProviderManagement:
 class TestTTSServiceValidation:
     """Test TTSService validation methods."""
 
-    def test_validate_with_valid_config(self) -> None:
+    async def test_validate_with_valid_config(self) -> None:
         """Test validate returns empty list for valid config."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
@@ -134,21 +134,21 @@ class TestTTSServiceValidation:
         settings.TTS_SPEED = 1.0
 
         service = TTSService(settings)
-        errors = service.validate()
+        errors = await service.validate()
 
         assert len(errors) == 0
 
-    def test_validate_with_missing_api_key(self) -> None:
+    async def test_validate_with_missing_api_key(self) -> None:
         """Test validate returns errors for missing API key."""
         settings = MagicMock(spec=[])
 
         service = TTSService(settings)
-        errors = service.validate()
+        errors = await service.validate()
 
         assert len(errors) == 1
         assert "OPENAI_API_KEY" in errors[0]
 
-    def test_is_available_true_when_valid(self) -> None:
+    async def test_is_available_true_when_valid(self) -> None:
         """Test is_available returns True when validation passes."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
@@ -159,21 +159,21 @@ class TestTTSServiceValidation:
 
         service = TTSService(settings)
 
-        assert service.is_available() is True
+        assert await service.is_available() is True
 
-    def test_is_available_false_when_invalid(self) -> None:
+    async def test_is_available_false_when_invalid(self) -> None:
         """Test is_available returns False when validation fails."""
         settings = MagicMock(spec=[])
 
         service = TTSService(settings)
 
-        assert service.is_available() is False
+        assert await service.is_available() is False
 
 
 class TestTTSServiceStatus:
     """Test TTSService.get_status() method."""
 
-    def test_get_status_returns_dict(self) -> None:
+    async def test_get_status_returns_dict(self) -> None:
         """Test get_status returns status dictionary."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
@@ -183,7 +183,7 @@ class TestTTSServiceStatus:
         settings.TTS_SPEED = 1.0
 
         service = TTSService(settings)
-        status = service.get_status()
+        status = await service.get_status()
 
         assert isinstance(status, dict)
         assert status["provider"] == "openai"
@@ -193,17 +193,17 @@ class TestTTSServiceStatus:
         assert status["initialized"] is False
         assert status["available"] is True
 
-    def test_get_status_shows_not_available(self) -> None:
+    async def test_get_status_shows_not_available(self) -> None:
         """Test get_status shows not available when invalid."""
         settings = MagicMock(spec=[])
 
         service = TTSService(settings)
-        status = service.get_status()
+        status = await service.get_status()
 
         assert status["available"] is False
         assert status["errors"] is not None
 
-    def test_get_status_shows_initialized(self) -> None:
+    async def test_get_status_shows_initialized(self) -> None:
         """Test get_status shows initialized when provider created."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
@@ -216,6 +216,6 @@ class TestTTSServiceStatus:
         # Force provider creation
         service._provider_instance = MagicMock()
 
-        status = service.get_status()
+        status = await service.get_status()
 
         assert status["initialized"] is True

@@ -234,7 +234,7 @@ async def run_deep_dive(
     service_config = service_config.model_copy(update=update)
 
     try:
-        model, model_name = model_for(service_config, settings)
+        model, model_name = await model_for(service_config, settings)
         agent: PydanticAgent[None, DeepDive] = PydanticAgent(
             model,
             instructions=agent_config.system_prompt,

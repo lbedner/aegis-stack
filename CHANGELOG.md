@@ -9,17 +9,40 @@
 
 ### Added
 
+- **The secrets component: API keys set while the app runs.**
+  `aegis add secrets` adds an encrypted store behind `app.core.secrets`:
+  keys are encrypted with a dedicated `ENCRYPTION_KEY` (generated into
+  `.env`, never `SECRET_KEY`), kept in their own `secret` table, read live
+  by the webserver, worker and scheduler through the shared cache (which
+  holds only ciphertext), and never shown again apart from their last four
+  characters. Set, replace, remove and test them from Overseer > Secrets,
+  the Flet dashboard's Secrets card, `my-app secrets set|list|delete|test`
+  (hidden prompt or stdin, never argv) or the admin API at
+  `/api/v1/secrets`. A key set in `.env` still wins and reads as
+  read-only. Each key is checked with its provider when pasted (OpenAI,
+  Anthropic, Google, Groq, Mistral, Cohere, OpenRouter, Resend, Stripe,
+  Twilio): a refused key is never stored, so a typo fails at the paste.
+  Keys also say whether something enabled needs them: the active AI
+  provider's key reads Missing when unset, the providers you could add
+  read Not used, and health turns amber only for a missing needed key.
+  Every write is audited without the value. `database` is the first
+  backend; the `secrets[...]` axis leaves room for external managers.
+  `aegis add` now generates and runs the migrations of any component that
+  owns tables, not only the scheduler's.
+
 - **One interface for credentials, and an Overseer Secrets page.**
   `app.core.secrets` ships in every project: `await secrets.get(name)`
   reads a credential, `.env` is the default (read-only) backend, and a
-  writable store can plug in behind the same calls later, with `.env`
-  still winning. The code that reads a key declares it (`SECRETS`); AI
+  writable store (the secrets component, below) plugs in behind the same
+  calls, with `.env` still winning. The code that reads a key declares it (`SECRETS`); AI
   providers, Resend, Twilio, Stripe and GitHub/Google OAuth do. The new
   **Overseer > Secrets** page lists them by owner with their source and
   last four characters, never a value, and the `.env` line to add for any
-  that are missing. The services still read their keys from settings;
-  they move onto `secrets.get` with the writable store, which is what
-  makes a stored value take effect. `OPEN_ROUTER_API_KEY` is now a
+  that are missing. The bundled services read their keys through it at the
+  moment of use (comms, payment, AI providers, voice, RAG embeddings,
+  OAuth), so every key read on those paths is now async; a setting of your
+  own can stay on `settings`, and typing it `Credential` lists it on the
+  page. `OPEN_ROUTER_API_KEY` is now a
   setting, and the LLM7
   provider is registered under the key it actually reads, `LLM7_API_KEY`.
 - A troubleshooting page for stale or truncated files in dev containers on

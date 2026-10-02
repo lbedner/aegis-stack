@@ -12,6 +12,7 @@ costs a Stripe call. Registered only in projects with the payment service
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core import secrets
 from app.core.config import settings
 from app.core.formatting import format_relative_time
 from app.services.payment.catalog import get_catalog
@@ -135,10 +136,9 @@ def _chosen(
     return wanted if wanted in {key for key, _ in chips} else None
 
 
-def _provider(summary: Any) -> dict[str, Any]:
+def _provider(summary: Any, unset: bool) -> dict[str, Any]:
     """The provider card; an unset key reads as "Not configured", not as a
     test-mode account that happens to be down."""
-    unset = not settings.STRIPE_SECRET_KEY
     mode = "Not configured" if unset else ("Test" if summary.is_test_mode else "Live")
     return {
         "healthy": summary.healthy,
@@ -177,7 +177,7 @@ async def _overview(service: PaymentService) -> dict[str, Any]:
                 "tone": "error" if summary.open_disputes else None,
             },
         ],
-        "provider": _provider(summary),
+        "provider": _provider(summary, not await secrets.get("STRIPE_SECRET_KEY")),
         "revenue": _revenue(await service.get_revenue_timeseries(REVENUE_DAYS)),
     }
 
@@ -284,7 +284,7 @@ async def _disputes(
 
 
 async def _checkout(service: PaymentService) -> dict[str, Any]:
-    if not settings.STRIPE_SECRET_KEY:
+    if not await secrets.get("STRIPE_SECRET_KEY"):
         return {"missing": "STRIPE_SECRET_KEY"}
     entries = await get_catalog(service)
     return {

@@ -9,8 +9,30 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from app.core.secrets import Secret, probe
+
 if TYPE_CHECKING:
     from app.core.config import Settings
+
+
+async def _verify_hf_token(token: str) -> None:
+    """Hugging Face's whoami answers 401 for a token it does not know."""
+    await probe(
+        "https://huggingface.co/api/whoami-v2",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+# What RAG reads (``app.core.secrets``): the embedding-model download from
+# Hugging Face authenticates with this when it is set.
+SECRETS = (
+    Secret(
+        "HF_TOKEN",
+        owner="RAG (Hugging Face)",
+        label="Hugging Face token",
+        verify=_verify_hf_token,
+    ),
+)
 
 
 class RAGServiceConfig(BaseModel):
@@ -65,7 +87,7 @@ class RAGServiceConfig(BaseModel):
     )
 
     @classmethod
-    def from_settings(cls, settings: "Settings") -> "RAGServiceConfig":
+    def from_settings(cls, settings: Settings) -> RAGServiceConfig:
         """Create configuration from main application settings."""
         return cls(
             enabled=settings.RAG_ENABLED,
@@ -100,6 +122,6 @@ class RAGServiceConfig(BaseModel):
         return errors
 
 
-def get_rag_config(settings: "Settings") -> RAGServiceConfig:
+def get_rag_config(settings: Settings) -> RAGServiceConfig:
     """Get RAG service configuration from application settings."""
     return RAGServiceConfig.from_settings(settings)

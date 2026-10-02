@@ -59,7 +59,7 @@ async def _interactive_chat_session(
     # Warm up the agent (lazy imports, model initialization)
     from app.services.ai.domains.llm.providers import get_agent
 
-    _ = get_agent(ai_config, settings)
+    _ = await get_agent(ai_config, settings)
     console.print(f" [{theme.ACCENT}]{t('ai.ok')}[/{theme.ACCENT}]")
 
     console.print(f"  [dim]>[/dim] [dim]{t('ai.model_label')}[/dim] {ai_config.model}")

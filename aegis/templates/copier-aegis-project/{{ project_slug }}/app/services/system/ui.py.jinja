@@ -158,6 +158,9 @@ def get_component_label(component_name: str) -> str:
         {%- if include_storage %}
         "storage": "S3 object store",
         {%- endif %}
+        {%- if include_secrets %}
+        "secrets": "Encrypted store",
+        {%- endif %}
     }
     return mapping.get(component_name, component_name.replace("_", " ").title())
 

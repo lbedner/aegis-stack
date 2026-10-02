@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 import logging
 from typing import Any
 
-from app.core.config import settings
+from app.core import secrets
 from app.services.ops.types import (
     DnsRecord,
     DomainAddResult,
@@ -33,23 +33,22 @@ logger = logging.getLogger(__name__)
 class ResendAdapter:
     """``MailProviderAdapter`` implementation for resend.com.
 
-    Constructor reads ``settings.RESEND_API_KEY`` once; subsequent calls
-    re-set the SDK's module-level key in case some other code path (the
-    transactional send path) mutated it. Cheap and keeps adapters
-    re-entrant when callers instantiate per-run.
+    Each call reads ``RESEND_API_KEY`` through ``app.core.secrets`` (``.env``,
+    then the secrets store) and re-sets the SDK's module-level key in case
+    another code path (the transactional send path) mutated it. Cheap, and
+    keeps adapters re-entrant when callers instantiate per-run.
     """
 
     name: str = "resend"
 
     def __init__(self, api_key: str | None = None) -> None:
-        # Resolved lazily on each call so tests can monkeypatch settings
-        # without re-importing the module.
+        # Resolved on each call, so a key saved while the app runs is used.
         self._override_api_key = api_key
 
-    def _ensure_key(self) -> None:
+    async def _ensure_key(self) -> None:
         import resend  # type: ignore[import-not-found]
 
-        key = self._override_api_key or settings.RESEND_API_KEY
+        key = self._override_api_key or await secrets.get("RESEND_API_KEY")
         if not key:
             raise RuntimeError(
                 "RESEND_API_KEY not set. Add it to .env (sign up at resend.com)."
@@ -69,7 +68,7 @@ class ResendAdapter:
         duplicate signal differently across versions, so string-matching
         on the exception was brittle.
         """
-        self._ensure_key()
+        await self._ensure_key()
         import resend  # type: ignore[import-not-found]
 
         existing = await self._find_existing_domain_or_none(domain)
@@ -82,7 +81,7 @@ class ResendAdapter:
 
     async def get_domain_status(self, domain: str) -> DomainStatus:
         """Resolve domain by name → fetch fresh status."""
-        self._ensure_key()
+        await self._ensure_key()
         info = await self._find_existing_domain(domain)
         return _to_domain_status(domain, info)
 
@@ -96,7 +95,7 @@ class ResendAdapter:
         a no-op. Returns the final ``DomainStatus`` regardless of
         outcome — caller checks ``.verified``.
         """
-        self._ensure_key()
+        await self._ensure_key()
         import resend  # type: ignore[import-not-found]
 
         info = await self._find_existing_domain(domain)

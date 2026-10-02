@@ -9,8 +9,8 @@ is what these tests pin.
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.domains.llm import active_model
 from app.services.ai.config import get_ai_config
+from app.services.ai.domains.llm import active_model
 
 
 class _Settings:
@@ -300,7 +300,7 @@ class TestHeadlessResolution:
 
         seen: dict[str, str] = {}
 
-        def _model_for(config: object, _settings: object) -> tuple[str, str]:
+        async def _model_for(config: object, _settings: object) -> tuple[str, str]:
             seen["model"] = config.model  # type: ignore[attr-defined]
             return "model-instance", config.model  # type: ignore[attr-defined]
 
@@ -311,4 +311,3 @@ class TestHeadlessResolution:
 
         assert seen["model"] == "chosen-model"
         assert (model, model_name) == ("model-instance", "chosen-model")
-

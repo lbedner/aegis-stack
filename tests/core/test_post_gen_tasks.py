@@ -639,3 +639,44 @@ class TestTheFinalBannerTellsTheTruth:
         assert report["env_ok"] is False
         assert report["format_ok"] is False
         assert report["migrations_ok"] is True
+
+
+class TestEncryptionKey:
+    """The secrets component needs a stable ENCRYPTION_KEY, so generation
+    writes one into ``.env`` when it has none, and never touches one that
+    is already set: a changed key strands every stored secret."""
+
+    def test_a_missing_key_is_generated(self, tmp_path: Path) -> None:
+        from aegis.core.post_gen_tasks import ensure_encryption_key
+
+        env = tmp_path / ".env"
+        env.write_text("SECRET_KEY=abc\n")
+        assert ensure_encryption_key(tmp_path) is True
+        lines = dict(
+            line.split("=", 1) for line in env.read_text().splitlines() if "=" in line
+        )
+        assert lines["SECRET_KEY"] == "abc"
+        assert len(lines["ENCRYPTION_KEY"]) >= 32
+
+    def test_a_blank_key_is_filled(self, tmp_path: Path) -> None:
+        from aegis.core.post_gen_tasks import ensure_encryption_key
+
+        env = tmp_path / ".env"
+        env.write_text("ENCRYPTION_KEY=\n")
+        assert ensure_encryption_key(tmp_path) is True
+        assert env.read_text().count("ENCRYPTION_KEY=") == 1
+        assert env.read_text().strip() != "ENCRYPTION_KEY="
+
+    def test_an_existing_key_is_never_changed(self, tmp_path: Path) -> None:
+        from aegis.core.post_gen_tasks import ensure_encryption_key
+
+        env = tmp_path / ".env"
+        env.write_text("ENCRYPTION_KEY=keep-me\n")
+        assert ensure_encryption_key(tmp_path) is False
+        assert env.read_text() == "ENCRYPTION_KEY=keep-me\n"
+
+    def test_no_env_file_is_left_alone(self, tmp_path: Path) -> None:
+        from aegis.core.post_gen_tasks import ensure_encryption_key
+
+        assert ensure_encryption_key(tmp_path) is False
+        assert not (tmp_path / ".env").exists()

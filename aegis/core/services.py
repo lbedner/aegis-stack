@@ -361,6 +361,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/overseer_auth.py",
                     "app/components/web_frontend/overseer_access.py",
                     "app/components/web_frontend/overseer_secrets.py",
+                    "app/components/web_frontend/routes/partials/overseer_secrets.py",
                     "tests/web/test_overseer_secrets.py",
                     "tests/web/test_overseer_admin_gate.py",
                     "app/components/web_frontend/routes/partials/overseer_auth.py",

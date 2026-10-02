@@ -16,11 +16,12 @@ from ..constants import (
     InferenceEngines,
     InferencePlacement,
     OllamaMode,
+    SecretsBackends,
     StorageBackends,
     WorkerBackends,
 )
 from .file_manifest import FileManifest
-from .migration_generator import SCHEDULER_MIGRATION
+from .migration_generator import SCHEDULER_MIGRATION, SECRETS_MIGRATION
 from .option_spec import OptionMode, OptionSpec, parse_options
 from .plugins.spec import PluginKind, PluginSpec, ReadmeWiring
 
@@ -530,6 +531,52 @@ COMPONENTS: dict[str, ComponentSpec] = {
                     "tests/web/test_overseer_inference.py",
                 ],
             },
+        ),
+    ),
+    "secrets": ComponentSpec(
+        readme=ReadmeWiring(
+            reach=(
+                "app.core.secrets: await secrets.get(name); Overseer > Secrets; "
+                "ENCRYPTION_KEY in .env"
+            ),
+            cli_groups=["secrets"],
+            env_groups=["COMPONENT SETTINGS"],
+        ),
+        name="secrets",
+        docs_path="components/secrets",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Encrypted credential store (keys editable, live)",
+        long_description=(
+            "Makes credentials writable without a restart: keys are stored "
+            "encrypted in the database, read live by the webserver, worker and "
+            "scheduler, and never shown again after saving (only their last "
+            "four characters). A key set in .env still wins. Sits behind "
+            "app.core.secrets, which every project has."
+        ),
+        required_components=["database"],
+        options=[
+            OptionSpec(
+                name="backend",
+                mode=OptionMode.SINGLE,
+                choices=list(SecretsBackends.ALL),
+                default=SecretsBackends.DEFAULT,
+                answer_key=AnswerKeys.SECRETS_BACKEND,
+            ),
+        ],
+        migrations=[SECRETS_MIGRATION],
+        marker_path="app/components/secrets/store.py",
+        files=FileManifest(
+            primary=[
+                "app/components/secrets",
+                "app/components/backend/api/secrets",
+                "tests/components/test_secrets_store.py",
+                "tests/api/test_secrets_endpoints.py",
+                "app/components/frontend/dashboard/cards/secrets_card.py",
+                "app/components/frontend/dashboard/modals/secrets_modal.py",
+                "tests/components/frontend/test_secrets_modal.py",
+                "app/cli/secrets_cli.py",
+                "tests/cli/test_secrets_cli.py",
+            ],
         ),
     ),
 }

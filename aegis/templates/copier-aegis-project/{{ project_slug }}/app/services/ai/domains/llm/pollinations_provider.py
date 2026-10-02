@@ -19,6 +19,7 @@ Two wire-level rules make anonymous access work:
   unreachable. Results are cached per process.
 """
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -43,17 +44,17 @@ _model_cache: dict[bool, str] = {}
 _keyless_noted = False
 
 
-def _configured_key() -> str | None:
-    from app.core.config import settings
+async def _configured_key() -> str | None:
+    """Read now (``.env``, then the secrets store)."""
+    from app.core import secrets
 
-    key = getattr(settings, "POLLINATIONS_API_KEY", None)
-    return str(key) if key else None
+    return await secrets.get("POLLINATIONS_API_KEY")
 
 
-def pollinations_api_key() -> str | None:
+async def pollinations_api_key() -> str | None:
     """The Pollinations API key, or ``None`` for the anonymous tier."""
     global _keyless_noted
-    key = _configured_key()
+    key = await _configured_key()
     if key:
         return key
     if not _keyless_noted:
@@ -105,7 +106,7 @@ def _fetch_catalog() -> list[dict[str, str]]:
     ]
 
 
-def resolve_pollinations_model(configured_model: str | None) -> str:
+async def resolve_pollinations_model(configured_model: str | None) -> str:
     """Resolve the model name to send to Pollinations.
 
     An explicit model passes through untouched. ``auto`` (or empty)
@@ -117,13 +118,14 @@ def resolve_pollinations_model(configured_model: str | None) -> str:
     if configured_model and configured_model != "auto":
         return configured_model
 
-    keyed = _configured_key() is not None
+    keyed = await _configured_key() is not None
     cached = _model_cache.get(keyed)
     if cached:
         return cached
 
     try:
-        catalog = _fetch_catalog()
+        # A blocking HTTP read, once per process; off the event loop.
+        catalog = await asyncio.to_thread(_fetch_catalog)
         if keyed:
             candidates = [entry["name"] for entry in catalog]
         else:

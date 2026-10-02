@@ -80,6 +80,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 | **[Observability](https://docs.aegis-stack.io/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Storage](https://docs.aegis-stack.io/components/storage/)** | S3 object storage for the files an app keeps, SeaweedFS in dev | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Scheduler](https://docs.aegis-stack.io/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Secrets](https://docs.aegis-stack.io/components/secrets/)** | Encrypted credential store: keys set while the app runs, checked with the provider on paste, never shown again | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Worker](https://docs.aegis-stack.io/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
 [Components Docs →](https://docs.aegis-stack.io/components/)

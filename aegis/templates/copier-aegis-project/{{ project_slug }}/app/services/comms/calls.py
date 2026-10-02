@@ -5,13 +5,14 @@ Provides voice call functionality with direct Twilio SDK usage.
 No abstraction layers - just clean async functions.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from app.core.config import settings
-from app.core.log import logger
-from app.services.comms.twilio import credential_errors, twilio_client
 from twilio.base.exceptions import TwilioRestException
+
+from app.core.log import logger
+from app.services.comms.twilio import credential_errors, twilio_client, twilio_config
 
 from .models import CallResponse, CallStatus, MakeCallRequest
 
@@ -28,7 +29,6 @@ class CallConfigurationError(CallError):
     pass
 
 
-
 async def make_call(request: MakeCallRequest) -> CallResponse:
     """
     Make a voice call using Twilio.
@@ -43,10 +43,11 @@ async def make_call(request: MakeCallRequest) -> CallResponse:
         CallConfigurationError: If Twilio is not configured
         CallError: If call initiation fails
     """
-    client = twilio_client(settings, CallConfigurationError)
+    config = await twilio_config()
+    client = twilio_client(config, CallConfigurationError)
 
     # Determine caller ID phone number
-    from_number = request.from_number or settings.TWILIO_PHONE_NUMBER
+    from_number = request.from_number or config["TWILIO_PHONE_NUMBER"]
     if not from_number:
         raise CallConfigurationError(
             "No caller ID phone number specified. "
@@ -73,7 +74,8 @@ async def make_call(request: MakeCallRequest) -> CallResponse:
             ]
 
         # Initiate call via Twilio
-        call = client.calls.create(**params)
+        # The SDK blocks on the network; keep the event loop free.
+        call = await asyncio.to_thread(client.calls.create, **params)
 
         logger.info(f"Call initiated successfully: {call.sid} to {request.to}")
 
@@ -113,16 +115,17 @@ async def make_call_simple(to: str, twiml_url: str) -> CallResponse:
     return await make_call(request)
 
 
-def get_call_status() -> dict[str, Any]:
+async def get_call_status() -> dict[str, Any]:
     """
     Get voice call service configuration status.
 
     Returns:
         dict: Status information including configuration state
     """
-    account_sid_set = bool(settings.TWILIO_ACCOUNT_SID)
-    auth_token_set = bool(settings.TWILIO_AUTH_TOKEN)
-    phone_number_set = bool(settings.TWILIO_PHONE_NUMBER)
+    config = await twilio_config()
+    account_sid_set = bool(config["TWILIO_ACCOUNT_SID"])
+    auth_token_set = bool(config["TWILIO_AUTH_TOKEN"])
+    phone_number_set = bool(config["TWILIO_PHONE_NUMBER"])
 
     return {
         "service": "voice",
@@ -131,20 +134,21 @@ def get_call_status() -> dict[str, Any]:
         "account_sid_set": account_sid_set,
         "auth_token_set": auth_token_set,
         "phone_number_set": phone_number_set,
-        "phone_number": settings.TWILIO_PHONE_NUMBER if phone_number_set else None,
+        "phone_number": config["TWILIO_PHONE_NUMBER"] if phone_number_set else None,
     }
 
 
-def validate_call_config() -> list[str]:
+async def validate_call_config() -> list[str]:
     """
     Validate voice call service configuration.
 
     Returns:
         list[str]: List of configuration errors (empty if valid)
     """
-    errors = credential_errors(settings)
+    config = await twilio_config()
+    errors = credential_errors(config)
 
-    if not settings.TWILIO_PHONE_NUMBER:
+    if not config["TWILIO_PHONE_NUMBER"]:
         errors.append(
             "TWILIO_PHONE_NUMBER is not set. "
             "This should be a Twilio phone number capable of making calls."

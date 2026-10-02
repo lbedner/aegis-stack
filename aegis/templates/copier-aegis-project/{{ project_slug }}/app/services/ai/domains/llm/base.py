@@ -1,6 +1,7 @@
 """What both AI frameworks need: the provider errors and the key check."""
 
 from typing import Any
+
 from app.services.ai.config import AIServiceConfig, api_key_env
 from app.services.ai.models import PROVIDERS, AIProvider
 
@@ -34,10 +35,10 @@ def get_supported_providers() -> list[AIProvider]:
     return list(SUPPORTED_PROVIDERS)
 
 
-def require_api_key(config: AIServiceConfig, settings: Any) -> str:
+async def require_api_key(config: AIServiceConfig, settings: Any) -> str:
     """The configured key for a keyed provider, or the ``ProviderError``
     that says which variable to set and where a free key comes from."""
-    api_key = config.get_provider_config(settings).api_key
+    api_key = (await config.get_provider_config(settings)).api_key
     if api_key:
         return api_key
     hint = _FREE_KEY_HINTS.get(config.provider)

@@ -18,6 +18,8 @@ Results are cached per process with constant fallbacks when the
 catalog is unreachable.
 """
 
+import asyncio
+
 import httpx
 
 from app.core.log import logger
@@ -49,17 +51,17 @@ _model_cache: dict[bool, str] = {}
 _keyless_noted = False
 
 
-def _configured_key() -> str | None:
-    from app.core.config import settings
+async def _configured_key() -> str | None:
+    """Read now (``.env``, then the secrets store)."""
+    from app.core import secrets
 
-    key = getattr(settings, "LLM7_API_KEY", None)
-    return str(key) if key else None
+    return await secrets.get("LLM7_API_KEY")
 
 
-def public_api_key() -> str:
+async def public_api_key() -> str:
     """The LLM7.io API key, or the anonymous-tier placeholder."""
     global _keyless_noted
-    key = _configured_key()
+    key = await _configured_key()
     if key:
         return key
     if not _keyless_noted:
@@ -85,7 +87,7 @@ def _fetch_catalog() -> list[dict[str, str]]:
     ]
 
 
-def resolve_public_model(configured_model: str | None) -> str:
+async def resolve_public_model(configured_model: str | None) -> str:
     """Resolve the model id to send to LLM7.io.
 
     An explicit model passes through untouched. ``auto`` (or empty)
@@ -96,7 +98,7 @@ def resolve_public_model(configured_model: str | None) -> str:
     if configured_model and configured_model != "auto":
         return configured_model
 
-    keyed = _configured_key() is not None
+    keyed = await _configured_key() is not None
     cached = _model_cache.get(keyed)
     if cached:
         return cached
@@ -105,7 +107,8 @@ def resolve_public_model(configured_model: str | None) -> str:
     fallback = KEYED_FALLBACK_MODEL if keyed else ANONYMOUS_FALLBACK_MODEL
 
     try:
-        catalog = _fetch_catalog()
+        # A blocking HTTP read, once per process; off the event loop.
+        catalog = await asyncio.to_thread(_fetch_catalog)
         if keyed:
             candidates = [entry["id"] for entry in catalog]
         else:

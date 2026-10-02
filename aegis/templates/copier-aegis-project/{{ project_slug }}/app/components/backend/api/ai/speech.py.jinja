@@ -276,7 +276,7 @@ async def stt_status() -> dict[str, Any]:
     Returns current STT configuration and availability.
     """
     try:
-        status = ai_service.stt.get_status()
+        status = await ai_service.stt.get_status()
         return {
             "service": "stt",
             "status": "available",
@@ -380,7 +380,7 @@ async def tts_status() -> dict[str, Any]:
     Returns current TTS configuration and availability.
     """
     try:
-        status = ai_service.tts.get_status()
+        status = await ai_service.tts.get_status()
         return {
             "service": "tts",
             "status": "available",

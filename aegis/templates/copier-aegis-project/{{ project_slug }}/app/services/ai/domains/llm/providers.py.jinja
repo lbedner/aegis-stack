@@ -150,7 +150,7 @@ _KEYED_CHAT_MODELS: dict[AIProvider, tuple[str, str, str, str]] = {
 }
 
 
-def get_llm(config: AIServiceConfig, settings: Any):
+async def get_llm(config: AIServiceConfig, settings: Any):
     """
     Create a LangChain chat model for the configured provider.
 
@@ -168,20 +168,20 @@ def get_llm(config: AIServiceConfig, settings: Any):
         provider = config.provider
 
         if provider in _KEYED_CHAT_MODELS:
-            return _create_keyed_llm(config, settings)
+            return await _create_keyed_llm(config, settings)
         if provider == AIProvider.OLLAMA:
             return _create_ollama_llm(config, settings)
         if provider == AIProvider.PUBLIC:
-            return _create_public_llm(config)
+            return await _create_public_llm(config)
         if provider == AIProvider.POLLINATIONS:
-            return _create_pollinations_llm(config)
+            return await _create_pollinations_llm(config)
         # Anything the registry gives a base URL and that has no vendor
         # package of its own: an OpenAI-compatible server, reached with
         # LangChain's OpenAI client pointed elsewhere. Checked AFTER the
         # keyed table, so Mistral and Cohere keep their native clients.
         spec = PROVIDERS.get(provider)
         if spec is not None and spec.base_url:
-            return _create_openai_compatible_llm(config, settings, spec.base_url)
+            return await _create_openai_compatible_llm(config, settings, spec.base_url)
         raise ProviderError(f"Unsupported provider: {provider}")
 
     except ImportError as e:
@@ -194,7 +194,7 @@ def get_llm(config: AIServiceConfig, settings: Any):
         raise ProviderError(error_msg) from e
 
 
-def _create_keyed_llm(config: AIServiceConfig, settings: Any):
+async def _create_keyed_llm(config: AIServiceConfig, settings: Any):
     """A vendor's LangChain chat model, from the table above and the
     configured key."""
     import importlib
@@ -208,11 +208,11 @@ def _create_keyed_llm(config: AIServiceConfig, settings: Any):
         temperature=config.temperature,
         max_tokens=config.max_tokens,
         timeout=config.timeout_seconds,
-        **{key_kwarg: require_api_key(config, settings)},
+        **{key_kwarg: await require_api_key(config, settings)},
     )
 
 
-def _create_openai_compatible_llm(
+async def _create_openai_compatible_llm(
     config: AIServiceConfig, settings: Any, base_url: str
 ):
     """A chat model on any server that speaks the OpenAI API.
@@ -229,7 +229,7 @@ def _create_openai_compatible_llm(
         model=config.model,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
-        api_key=require_api_key(config, settings),
+        api_key=await require_api_key(config, settings),
         base_url=base_url,
         timeout=config.timeout_seconds,
     )
@@ -253,7 +253,7 @@ def _create_ollama_llm(config: AIServiceConfig, settings: Any):
     )
 
 
-def _create_public_llm(config: AIServiceConfig):
+async def _create_public_llm(config: AIServiceConfig):
     """Create LLM using the LLM7.io public endpoint (free account key)."""
     from langchain_openai import ChatOpenAI
 
@@ -263,19 +263,19 @@ def _create_public_llm(config: AIServiceConfig):
         resolve_public_model,
     )
 
-    model_name = resolve_public_model(config.model)
+    model_name = await resolve_public_model(config.model)
 
     return ChatOpenAI(
         model=model_name,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
-        api_key=public_api_key(),
+        api_key=await public_api_key(),
         base_url=LLM7_BASE_URL,
         timeout=config.timeout_seconds,
     )
 
 
-def _create_pollinations_llm(config: AIServiceConfig):
+async def _create_pollinations_llm(config: AIServiceConfig):
     """Create LLM using the Pollinations endpoint (keyless anonymous tier)."""
     from langchain_openai import ChatOpenAI
 
@@ -287,8 +287,8 @@ def _create_pollinations_llm(config: AIServiceConfig):
         resolve_pollinations_model,
     )
 
-    model_name = resolve_pollinations_model(config.model)
-    api_key = pollinations_api_key()
+    model_name = await resolve_pollinations_model(config.model)
+    api_key = await pollinations_api_key()
 
     if api_key:
         return ChatOpenAI(
@@ -319,10 +319,10 @@ def validate_provider_support(provider: AIProvider) -> bool:
     return provider in SUPPORTED_PROVIDERS
 
 
-def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
+async def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
     """The LangChain chat model for ``config``, plus the model name it
     resolved to - the same shape the pydantic-ai branch returns, so
     headless callers (``active_model.model_for_active``) need no
     framework branch of their own."""
-    return get_llm(config, settings), config.model
+    return await get_llm(config, settings), config.model
 {% endif %}

@@ -19,7 +19,7 @@ async def ai_health() -> dict[str, Any]:
     """
     try:
         status = await ai_service.get_service_status()
-        validation_errors = ai_service.validate_service()
+        validation_errors = await ai_service.validate_service()
 
         return {
             "service": "ai",

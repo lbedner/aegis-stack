@@ -96,13 +96,13 @@ async def _llm_score(transcript: str) -> dict[str, Any]:
 {% if ai_framework == "pydantic-ai" %}
     from app.services.ai.domains.llm.providers import get_agent
 
-    agent = get_agent(config, settings, SENTIMENT_SYSTEM_PROMPT)
+    agent = await get_agent(config, settings, SENTIMENT_SYSTEM_PROMPT)
     result = await agent.run(transcript)
     reply = result.output
 {% else %}
     from app.services.ai.domains.llm.providers import get_llm
 
-    llm = get_llm(config, settings)
+    llm = await get_llm(config, settings)
     result = await llm.ainvoke(
         [("system", SENTIMENT_SYSTEM_PROMPT), ("human", transcript)]
     )

@@ -35,7 +35,12 @@ from .component_utils import (
     extract_base_service_name,
     extract_engine_info,
 )
-from .components import COMPONENTS, CORE_COMPONENTS, ComponentType
+from .components import (
+    COMPONENTS,
+    CORE_COMPONENTS,
+    ComponentType,
+    component_option_answers,
+)
 from .insights_service_parser import (
     is_insights_service_with_options,
     parse_insights_service_config,
@@ -272,6 +277,10 @@ class TemplateGenerator:
         selected_only = [c for c in self.components if c not in CORE_COMPONENTS]
 
         return {
+            # Every selected component's option answers (``secrets[database]``
+            # -> ``secrets_backend``); keys set explicitly below win, so the
+            # inference axes keep their own resolution.
+            **self.option_answers(),
             "project_name": self.project_name,
             "project_slug": self.project_slug,
             "python_version": self.python_version,
@@ -360,6 +369,13 @@ class TemplateGenerator:
             "docker_services": self._get_docker_services(),
             "pyproject_dependencies": self._get_pyproject_deps(),
         }
+
+    def option_answers(self) -> dict[str, str]:
+        """Every selected component's option answers, from its brackets."""
+        answers: dict[str, str] = {}
+        for component in self.components:
+            answers.update(component_option_answers(component))
+        return answers
 
     def _get_docker_services(self) -> list[str]:
         """

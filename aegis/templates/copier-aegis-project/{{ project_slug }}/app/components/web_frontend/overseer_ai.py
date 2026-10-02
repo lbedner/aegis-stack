@@ -314,11 +314,11 @@ async def section_context(
     if section == "voice":
         from . import overseer_ai_voice
 
-        return overseer_ai_voice.voice_context()
+        return await overseer_ai_voice.voice_context()
     if section == "catalog":
         from . import overseer_ai_catalog
 
         return await overseer_ai_catalog.section_context(req.db, req.query)
-    rows = provider_readiness(settings)
+    rows = await provider_readiness(settings)
     icons = await _icons(req.db, rows)
     return {"rows": [_provider_row(r, icons.get(r.provider.value)) for r in rows]}

@@ -14,7 +14,15 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from app.core.secrets import Secret
 from app.core.storage import content_key, validate_key
+
+# The bucket credentials (``app.core.secrets``): read from settings when the
+# store is built at startup, so listed read-only, set in ``.env``.
+SECRETS = (
+    Secret("S3_ACCESS_KEY", owner="Storage (S3)", label="Access key", live=False),
+    Secret("S3_SECRET_KEY", owner="Storage (S3)", label="Secret key", live=False),
+)
 
 
 class S3Storage:

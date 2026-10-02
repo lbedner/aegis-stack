@@ -37,6 +37,7 @@ graph TB
         Ingress["Ingress<br/>Traefik Proxy"]
         Observability["Observability<br/>Logfire"]
         Cache["Cache Layer<br/>Redis Sessions"]
+        Secrets["Secrets<br/>Encrypted Key Store"]
     end
     
     API --> Frontend
@@ -45,6 +46,7 @@ graph TB
     Scheduler -.->|persistence| Database
     Worker -.->|requires| Cache
     Scheduler -.->|backup job| Database
+    Secrets -.->|requires| Database
 ```
 
 ## Component Deployment

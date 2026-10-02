@@ -32,13 +32,12 @@ class StatusMixin(AIServiceBase):
             "model": self.config.model,
             "agent_initialized": True,  # Agents created per request, always available
             "total_conversations": total_conversations,
-            "configuration_valid": len(
-                self.config.validate_configuration(self.settings)
-            )
-            == 0,
+            "configuration_valid": not await self.config.validate_configuration(
+                self.settings
+            ),
         }
 
-    def validate_service(self) -> list[str]:
+    async def validate_service(self) -> list[str]:
         """Validate service configuration and return any issues."""
         errors = []
 
@@ -47,7 +46,7 @@ class StatusMixin(AIServiceBase):
         errors.extend(dep_errors)
 
         # Check configuration
-        config_errors = self.config.validate_configuration(self.settings)
+        config_errors = await self.config.validate_configuration(self.settings)
         errors.extend(config_errors)
 
         return errors

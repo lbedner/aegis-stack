@@ -1848,6 +1848,14 @@ class ManualUpdater:
         """
         print(f"\n{t('updater.running_postgen')}")
 
+        # The secrets component encrypts with ENCRYPTION_KEY and has no
+        # fallback, so a project that has it gets one if .env lacks it.
+        if self.answers.get(AnswerKeys.SECRETS) is True:
+            from .post_gen_tasks import ensure_encryption_key
+
+            if ensure_encryption_key(self.project_path):
+                print(f"   {t('postgen.encryption_key_created')}")
+
         # Run uv sync to update dependencies
         try:
             subprocess.run(

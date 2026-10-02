@@ -19,8 +19,8 @@ from .overseer_auth import signed_in
 router = APIRouter(prefix=overseer_comms.PARTIALS)
 
 
-def _unready(key: str) -> Response | None:
-    missing = overseer_comms.channel(key)["missing"]
+async def _unready(key: str) -> Response | None:
+    missing = (await overseer_comms.channel(key))["missing"]
     return toast_response(" ".join(missing), "error") if missing else None
 
 
@@ -29,7 +29,7 @@ async def test_email(
     to: Annotated[str, Form()], user: User | None = Depends(get_optional_user)
 ) -> Response:
     signed_in(user)
-    if refused := _unready("email"):
+    if refused := await _unready("email"):
         return refused
     try:
         await send_email_simple(
@@ -45,7 +45,7 @@ async def test_sms(
     to: Annotated[str, Form()], user: User | None = Depends(get_optional_user)
 ) -> Response:
     signed_in(user)
-    if refused := _unready("sms"):
+    if refused := await _unready("sms"):
         return refused
     try:
         await send_sms_simple(to, "Test from the Overseer: SMS is set up.")

@@ -5,6 +5,7 @@ Tests for SMS service functionality.
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from app.services.comms.models import MessageStatus, SendSMSRequest
 from app.services.comms.sms import (
     SMSConfigurationError,
@@ -13,19 +14,20 @@ from app.services.comms.sms import (
     send_sms_simple,
     validate_sms_config,
 )
+from tests.services.comms._settings import secret_settings
 
 
 class TestSMSConfiguration:
     """Test SMS service configuration validation."""
 
-    def test_get_sms_status_configured(self) -> None:
+    async def test_get_sms_status_configured(self) -> None:
         """Test status when fully configured."""
-        with patch("app.services.comms.sms.settings") as mock_settings:
+        with secret_settings() as mock_settings:
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
             mock_settings.TWILIO_PHONE_NUMBER = "+15551234567"
 
-            status = get_sms_status()
+            status = await get_sms_status()
 
             assert status["configured"] is True
             assert status["account_sid_set"] is True
@@ -33,31 +35,31 @@ class TestSMSConfiguration:
             assert status["phone_number_set"] is True
             assert status["phone_number"] == "+15551234567"
 
-    def test_get_sms_status_not_configured(self) -> None:
+    async def test_get_sms_status_not_configured(self) -> None:
         """Test status when not configured."""
-        with patch("app.services.comms.sms.settings") as mock_settings:
+        with secret_settings() as mock_settings:
             mock_settings.TWILIO_ACCOUNT_SID = None
             mock_settings.TWILIO_AUTH_TOKEN = None
             mock_settings.TWILIO_PHONE_NUMBER = None
 
-            status = get_sms_status()
+            status = await get_sms_status()
 
             assert status["configured"] is False
             assert status["account_sid_set"] is False
             assert status["auth_token_set"] is False
 
-    def test_validate_sms_config_valid(self) -> None:
+    async def test_validate_sms_config_valid(self) -> None:
         """Test validation with valid configuration."""
-        with patch("app.services.comms.sms.settings") as mock_settings:
+        with secret_settings() as mock_settings:
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
             mock_settings.TWILIO_PHONE_NUMBER = "+15551234567"
 
-            errors = validate_sms_config()
+            errors = await validate_sms_config()
 
             assert len(errors) == 0
 
-    def test_validate_sms_config_missing_credentials(self) -> None:
+    async def test_validate_sms_config_missing_credentials(self) -> None:
         """Test validation when credentials are missing.
 
         ``validate_sms_config`` accepts EITHER a Messaging Service SID OR
@@ -67,13 +69,13 @@ class TestSMSConfiguration:
         as a truthy MagicMock, suppressing one error and failing the
         ``len(errors) == 3`` assertion.
         """
-        with patch("app.services.comms.sms.settings") as mock_settings:
+        with secret_settings() as mock_settings:
             mock_settings.TWILIO_ACCOUNT_SID = None
             mock_settings.TWILIO_AUTH_TOKEN = None
             mock_settings.TWILIO_PHONE_NUMBER = None
             mock_settings.TWILIO_MESSAGING_SERVICE_SID = None
 
-            errors = validate_sms_config()
+            errors = await validate_sms_config()
 
             assert len(errors) == 3
 
@@ -85,7 +87,7 @@ class TestSendSMS:
     async def test_send_sms_success(self) -> None:
         """Test successful SMS send."""
         with (
-            patch("app.services.comms.sms.settings") as mock_settings,
+            secret_settings() as mock_settings,
             patch("app.services.comms.twilio.Client") as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
@@ -113,7 +115,7 @@ class TestSendSMS:
     async def test_send_sms_calculates_segments(self) -> None:
         """Test that SMS segments are calculated correctly."""
         with (
-            patch("app.services.comms.sms.settings") as mock_settings,
+            secret_settings() as mock_settings,
             patch("app.services.comms.twilio.Client") as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
@@ -140,7 +142,7 @@ class TestSendSMS:
     @pytest.mark.asyncio
     async def test_send_sms_missing_credentials(self) -> None:
         """Test SMS send fails when credentials are missing."""
-        with patch("app.services.comms.sms.settings") as mock_settings:
+        with secret_settings() as mock_settings:
             mock_settings.TWILIO_ACCOUNT_SID = None
             mock_settings.TWILIO_AUTH_TOKEN = None
             mock_settings.TWILIO_PHONE_NUMBER = "+15551234567"
@@ -159,7 +161,7 @@ class TestSendSMS:
     async def test_send_sms_missing_phone_number(self) -> None:
         """Test SMS send fails when phone number is missing."""
         with (
-            patch("app.services.comms.sms.settings") as mock_settings,
+            secret_settings() as mock_settings,
             patch("app.services.comms.twilio.Client"),
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
@@ -185,7 +187,7 @@ class TestSendSMSSimple:
     async def test_send_sms_simple_success(self) -> None:
         """Test simple SMS send."""
         with (
-            patch("app.services.comms.sms.settings") as mock_settings,
+            secret_settings() as mock_settings,
             patch("app.services.comms.twilio.Client") as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"

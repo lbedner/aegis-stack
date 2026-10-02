@@ -10,11 +10,13 @@ invocation.
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from app.components.backend.shutdown import (
     payment_webhook_forwarder as shutdown_mod,
 )
@@ -27,7 +29,7 @@ from app.services.payment.providers import stripe as stripe_provider_mod
 
 
 @pytest.fixture(autouse=True)
-def _reset_module_state() -> Generator[None, None, None]:
+def _reset_module_state() -> Generator[None]:
     """Clear the runtime secret and subprocess handle between tests."""
     stripe_provider_mod._RUNTIME_WEBHOOK_SECRET = None
     startup_mod.forwarder_process = None
@@ -36,16 +38,29 @@ def _reset_module_state() -> Generator[None, None, None]:
     startup_mod.forwarder_process = None
 
 
+def _keys(
+    secret_key: str = "sk_test_abc", webhook_secret: str = ""
+) -> dict[str, str | None]:
+    """The Stripe keys in effect, as ``secrets.get_many`` hands them over."""
+    return {"STRIPE_SECRET_KEY": secret_key, "STRIPE_WEBHOOK_SECRET": webhook_secret}
+
+
+@contextmanager
 def _fake_settings(
     secret_key: str = "sk_test_abc",
     webhook_secret: str = "",
     port: int = 8000,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        STRIPE_SECRET_KEY=secret_key,
-        STRIPE_WEBHOOK_SECRET=webhook_secret,
-        PORT=port,
-    )
+) -> Iterator[None]:
+    """The port from settings, the keys from ``app.core.secrets``."""
+    with (
+        patch.object(startup_mod, "settings", SimpleNamespace(PORT=port)),
+        patch.object(
+            startup_mod.secrets,
+            "get_many",
+            AsyncMock(return_value=_keys(secret_key, webhook_secret)),
+        ),
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -57,40 +72,34 @@ class TestForwarderGate:
     """``_should_auto_forward`` returns False with a reason on any skip."""
 
     def test_skips_when_not_test_mode(self) -> None:
-        with patch.object(
-            startup_mod, "settings", _fake_settings(secret_key="sk_live_abc")
-        ):
-            ok, reason = startup_mod._should_auto_forward()
+        ok, reason = startup_mod._should_auto_forward(_keys(secret_key="sk_live_abc"))
         assert ok is False
         assert "not a test key" in reason
 
     def test_skips_when_webhook_secret_set(self) -> None:
-        with patch.object(
-            startup_mod,
-            "settings",
-            _fake_settings(webhook_secret="whsec_user_set"),
-        ):
-            ok, reason = startup_mod._should_auto_forward()
+        ok, reason = startup_mod._should_auto_forward(
+            _keys(webhook_secret="whsec_user_set")
+        )
         assert ok is False
         assert "set explicitly" in reason
 
     def test_skips_when_cli_missing(self) -> None:
         with (
-            patch.object(startup_mod, "settings", _fake_settings()),
+            _fake_settings(),
             patch.object(startup_mod.shutil, "which", return_value=None),
         ):
-            ok, reason = startup_mod._should_auto_forward()
+            ok, reason = startup_mod._should_auto_forward(_keys())
         assert ok is False
         assert "Stripe CLI not installed" in reason
 
     def test_allows_when_all_gates_pass(self) -> None:
         with (
-            patch.object(startup_mod, "settings", _fake_settings()),
+            _fake_settings(),
             patch.object(
                 startup_mod.shutil, "which", return_value="/usr/local/bin/stripe"
             ),
         ):
-            ok, reason = startup_mod._should_auto_forward()
+            ok, reason = startup_mod._should_auto_forward(_keys())
         assert ok is True
         assert reason == ""
 
@@ -107,9 +116,7 @@ class TestForwarderStartup:
     async def test_startup_skips_when_gate_fails(self) -> None:
         """Skip path must never touch subprocess or the runtime secret."""
         with (
-            patch.object(
-                startup_mod, "settings", _fake_settings(secret_key="sk_live_abc")
-            ),
+            _fake_settings(secret_key="sk_live_abc"),
             patch.object(startup_mod.subprocess, "Popen") as popen,
         ):
             await startup_mod.startup_payment_webhook_forwarder()
@@ -129,7 +136,7 @@ class TestForwarderStartup:
         fake_proc = MagicMock(stdout=fake_stdout)
 
         with (
-            patch.object(startup_mod, "settings", _fake_settings()),
+            _fake_settings(),
             patch.object(
                 startup_mod.shutil, "which", return_value="/usr/local/bin/stripe"
             ),
@@ -152,11 +159,7 @@ class TestForwarderStartup:
         fake_proc = MagicMock(stdout=fake_stdout)
 
         with (
-            patch.object(
-                startup_mod,
-                "settings",
-                _fake_settings(secret_key="sk_test_abc123"),
-            ),
+            _fake_settings(secret_key="sk_test_abc123"),
             patch.object(
                 startup_mod.shutil, "which", return_value="/usr/local/bin/stripe"
             ),
@@ -267,33 +270,39 @@ class TestStripeProviderVerifyWebhook:
 
 
 class TestStripeProviderRuntimeOverride:
-    def test_provider_prefers_runtime_secret(self) -> None:
-        """Runtime secret beats ``settings.STRIPE_WEBHOOK_SECRET``."""
-        from app.services.payment.providers.stripe import (
-            StripeProvider,
-            set_runtime_webhook_secret,
-        )
+    """``verify_webhook`` checks against the runtime secret first, then the
+    one in effect from ``app.core.secrets``."""
 
-        set_runtime_webhook_secret("whsec_from_runtime")
-        with patch.object(
-            stripe_provider_mod,
-            "settings",
-            _fake_settings(webhook_secret="whsec_from_env"),
-        ):
-            provider = StripeProvider()
-
-        assert provider._webhook_secret == "whsec_from_runtime"
-
-    def test_provider_falls_back_to_settings(self) -> None:
-        """When no runtime secret is set, settings value is used."""
+    async def _secret_used(self) -> str:
         from app.services.payment.providers.stripe import StripeProvider
 
-        assert stripe_provider_mod._RUNTIME_WEBHOOK_SECRET is None
-        with patch.object(
-            stripe_provider_mod,
-            "settings",
-            _fake_settings(webhook_secret="whsec_from_env"),
-        ):
-            provider = StripeProvider()
+        seen: dict[str, str] = {}
 
-        assert provider._webhook_secret == "whsec_from_env"
+        def construct(payload: bytes, signature: str, secret: str) -> SimpleNamespace:
+            seen["secret"] = secret
+            return SimpleNamespace(type="checkout.session.completed")
+
+        with (
+            patch.object(
+                stripe_provider_mod.stripe.Webhook,
+                "construct_event",
+                side_effect=construct,
+            ),
+            patch.object(
+                stripe_provider_mod.secrets,
+                "get",
+                AsyncMock(return_value="whsec_from_env"),
+            ),
+        ):
+            await StripeProvider().verify_webhook(b"{}", "sig")
+        return seen["secret"]
+
+    async def test_provider_prefers_runtime_secret(self) -> None:
+        from app.services.payment.providers.stripe import set_runtime_webhook_secret
+
+        set_runtime_webhook_secret("whsec_from_runtime")
+        assert await self._secret_used() == "whsec_from_runtime"
+
+    async def test_provider_falls_back_to_the_secret_in_effect(self) -> None:
+        assert stripe_provider_mod._RUNTIME_WEBHOOK_SECRET is None
+        assert await self._secret_used() == "whsec_from_env"

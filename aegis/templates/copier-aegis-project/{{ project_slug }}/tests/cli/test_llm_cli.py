@@ -1,36 +1,16 @@
 """Tests for LLM catalog CLI commands."""
 
-import asyncio
-import inspect
 import re
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import click
 from typer.testing import CliRunner
 
-from app.cli.main import app, run_command
+from app.cli.main import app
 from app.services.ai.domains.llm.etl.llm_sync_service import SyncResult
 from app.services.ai.domains.llm.llm_service import ModalityListResult, VendorListResult
+from tests._cli import invoke
 
 runner = CliRunner()
-
-
-def _invoke(args: list[str]) -> SimpleNamespace:
-    """Run a command the way ``main()`` does, output captured. The runner's
-    own ``invoke`` never awaits an async command, and awaiting it after the
-    runner returns would print past the capture; so the command is parsed
-    and its coroutine run by the harness, all inside one isolation."""
-    code = 0
-    with runner.isolation() as (stdout, _stderr, _output):
-        try:
-            value = app(args, standalone_mode=False)
-            if inspect.iscoroutine(value):
-                asyncio.run(run_command(value))
-        except click.exceptions.Exit as exc:
-            code = exc.exit_code
-        output = stdout.getvalue().decode()
-    return SimpleNamespace(exit_code=code, output=output)
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -62,7 +42,7 @@ class TestLLMOrgsCommand:
         """Test vendors command with empty catalog."""
         mock_list_vendors.return_value = []
 
-        result = _invoke(["llm", "vendors"])
+        result = invoke(["llm", "vendors"])
 
         assert result.exit_code == 0
         assert "No vendors found" in result.output
@@ -76,7 +56,7 @@ class TestLLMOrgsCommand:
             VendorListResult(name="openai", model_count=15),
         ]
 
-        result = _invoke(["llm", "vendors"])
+        result = invoke(["llm", "vendors"])
 
         assert result.exit_code == 0
         assert "anthropic" in result.output
@@ -100,7 +80,7 @@ class TestLLMModalitiesCommand:
         """Test modalities command with empty catalog."""
         mock_list_modalities.return_value = []
 
-        result = _invoke(["llm", "modalities"])
+        result = invoke(["llm", "modalities"])
 
         assert result.exit_code == 0
         assert "No modalities found" in result.output
@@ -116,7 +96,7 @@ class TestLLMModalitiesCommand:
             ModalityListResult(modality="video", model_count=10),
         ]
 
-        result = _invoke(["llm", "modalities"])
+        result = invoke(["llm", "modalities"])
 
         assert result.exit_code == 0
         assert "audio" in result.output
@@ -180,7 +160,7 @@ class TestLLMSyncCommand:
             models_added=2,
         )
 
-        result = _invoke(["llm", "sync", "--source=ollama"])
+        result = invoke(["llm", "sync", "--source=ollama"])
 
         assert result.exit_code == 0
         # Verify sync was called with source="ollama"
@@ -209,7 +189,7 @@ class TestLLMSyncCommand:
             models_added=100,
         )
 
-        result = _invoke(["llm", "sync", "--source=cloud"])
+        result = invoke(["llm", "sync", "--source=cloud"])
 
         assert result.exit_code == 0
         mock_sync.assert_called_once()
@@ -237,7 +217,7 @@ class TestLLMSyncCommand:
             models_added=102,
         )
 
-        result = _invoke(["llm", "sync", "--source=all"])
+        result = invoke(["llm", "sync", "--source=all"])
 
         assert result.exit_code == 0
         mock_sync.assert_called_once()
@@ -262,7 +242,7 @@ class TestLLMSyncCommand:
 
         mock_sync.return_value = SyncResult()
 
-        result = _invoke(["llm", "sync"])
+        result = invoke(["llm", "sync"])
 
         assert result.exit_code == 0
         mock_sync.assert_called_once()
@@ -291,7 +271,7 @@ class TestLLMSyncCommand:
             models_added=2,
         )
 
-        result = _invoke(["llm", "sync", "-s", "ollama"])
+        result = invoke(["llm", "sync", "-s", "ollama"])
 
         assert result.exit_code == 0
         mock_sync.assert_called_once()

@@ -53,6 +53,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -98,6 +99,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -136,6 +138,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability=no
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -170,6 +173,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -210,6 +214,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -258,6 +263,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability=no
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -298,6 +304,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # no auth
                 False,  # payment
                 False,  # no AI

@@ -76,6 +76,7 @@ MESSAGES: dict[str, str] = {
     "component.ingress": "Traefik reverse proxy and load balancer",
     "component.observability": "Logfire observability, tracing, and metrics",
     "component.inference": "Local model serving (Ollama)",
+    "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
@@ -378,6 +379,7 @@ MESSAGES: dict[str, str] = {
     "postgen.deps_uv_install": "Install uv first: https://github.com/astral-sh/uv",
     "postgen.deps_warn_error": "Warning: Dependency installation failed: {error}",
     "postgen.env_setup": "Setting up environment configuration...",
+    "postgen.encryption_key_created": "Generated ENCRYPTION_KEY in .env for stored secrets (keep it: changing it makes them unreadable)",
     "postgen.env_created": "Environment file created from .env.example",
     "postgen.env_exists": "Environment file already exists",
     "postgen.env_missing": "Warning: No .env.example file found",
@@ -1283,6 +1285,7 @@ MESSAGES: dict[str, str] = {
     "component.ingress.long": "Reverse proxy and traffic routing with Traefik: automatic service discovery, admin endpoint protection, and optional TLS via Let's Encrypt. The front door for deployments.",
     "component.observability.long": "Distributed tracing, metrics, and log correlation with Pydantic Logfire. Auto-instruments your application and adapts to whichever components you enable, so you can see what production is actually doing.",
     "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
+    "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Complete user management with JWT authentication, session cookies, and refresh-token rotation. Three levels: basic email/password, RBAC roles and permissions, or multi-tenant organizations. Includes registration, login, and an admin dashboard tab.",

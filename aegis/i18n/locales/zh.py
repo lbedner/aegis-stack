@@ -61,6 +61,7 @@ MESSAGES: dict[str, str] = {
     "component.ingress": "Traefik 反向代理与负载均衡",
     "component.observability": "Logfire 可观测性、链路追踪与指标监控",
     "component.inference": "Local model serving (Ollama)",
+    "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── 服务描述 ────────────────────────────────────────────────────────
@@ -287,6 +288,7 @@ MESSAGES: dict[str, str] = {
     "postgen.deps_uv_install": "安装 uv：https://github.com/astral-sh/uv",
     "postgen.deps_warn_error": "提示：依赖安装失败 — {error}",
     "postgen.env_setup": "正在配置环境变量……",
+    "postgen.encryption_key_created": "Generated ENCRYPTION_KEY in .env for stored secrets (keep it: changing it makes them unreadable)",
     "postgen.env_created": "已从 .env.example 生成 .env 文件",
     "postgen.env_exists": ".env 文件已存在",
     "postgen.env_missing": "提示：未找到 .env.example",
@@ -1021,6 +1023,7 @@ MESSAGES: dict[str, str] = {
     "component.ingress.long": "使用 Traefik 实现反向代理和流量路由：自动服务发现、管理端点保护，以及通过 Let's Encrypt 提供的可选 TLS。部署的入口。",
     "component.observability.long": "借助 Pydantic Logfire 实现分布式追踪、指标和日志关联。自动为你的应用埋点，并适配你启用的各个组件，让你看清生产环境实际在做什么。",
     "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
+    "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "完整的用户管理，包含 JWT 认证、会话 Cookie 和刷新令牌轮换。三个级别：基础的邮箱/密码、RBAC 角色与权限，或多租户组织。内含注册、登录以及管理后台标签页。",

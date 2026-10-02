@@ -190,9 +190,10 @@ async def clear_active_model() -> bool:
     return cleared
 
 
-def _not_callable(provider: str) -> str:
+async def _not_callable(provider: str) -> str:
     """Why ``provider`` cannot answer yet, and what fixes it."""
-    row = next(r for r in provider_readiness(settings) if r.provider.value == provider)
+    rows = await provider_readiness(settings)
+    row = next(r for r in rows if r.provider.value == provider)
     if row.status == "not_installed":
         return (
             f"{row.label} is not installed. Add it with `ai add-provider {provider}`."
@@ -275,14 +276,14 @@ async def set_active_model(model_id: str, force: bool = False) -> SetModelResult
     if (
         provider_value
         and not force
-        and provider_value not in usable_providers(settings)
+        and provider_value not in await usable_providers(settings)
     ):
         return SetModelResult(
             success=False,
             model_id=model_id,
             vendor=vendor_name,
             provider_updated=False,
-            message=_not_callable(provider_value),
+            message=await _not_callable(provider_value),
         )
 
     # Persist. With a catalog database the selection is a row, which every

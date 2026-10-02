@@ -41,6 +41,7 @@ class TestAIProviderSelection:
             False,  # observability
             False,  # htmx
             False,  # inference
+            False,  # secrets
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -87,6 +88,7 @@ class TestAIProviderSelection:
             False,  # observability
             False,  # htmx
             False,  # inference
+            False,  # secrets
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -134,6 +136,7 @@ class TestAIProviderSelection:
             False,  # observability
             False,  # htmx
             False,  # inference
+            False,  # secrets
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -181,6 +184,7 @@ class TestAIProviderSelection:
             False,  # observability
             False,  # htmx
             False,  # inference
+            False,  # secrets
             False,  # auth service
             False,  # payment
             False,  # AI service
@@ -231,6 +235,7 @@ class TestAIBackendSelection:
                 False,  # observability
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # auth service
                 False,  # payment
                 True,  # AI service
@@ -292,6 +297,7 @@ class TestAIBackendSelection:
                 False,  # observability
                 False,  # htmx
                 False,  # inference
+                False,  # secrets
                 False,  # auth service
                 False,  # payment
                 True,  # AI service
@@ -344,6 +350,7 @@ class TestAIBackendSelection:
             False,  # observability
             False,  # htmx
             False,  # inference
+            False,  # secrets
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -514,6 +521,7 @@ class TestAIConfigurationEndToEnd:
             False,  # observability
             False,  # htmx
             False,  # inference
+            False,  # secrets
             False,  # No auth service
             False,  # payment
             True,  # Yes AI service
@@ -623,6 +631,7 @@ class TestOllamaModeSelection:
             False,  # observability
             False,  # htmx
             False,  # inference
+            False,  # secrets
             False,  # auth service
             False,  # payment
             True,  # AI service

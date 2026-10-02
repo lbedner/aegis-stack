@@ -25,7 +25,7 @@ from typing import Any
 
 import httpx
 
-from app.core.config import settings
+from app.core import secrets
 from app.services.ops.types import (
     CreatedRecord,
     DnsRecord,
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 PORKBUN_BASE_URL = "https://api.porkbun.com/api/json/v3"
 PORKBUN_TIMEOUT_S = 30.0
+PORKBUN_KEYS = ("PORKBUN_API_KEY", "PORKBUN_SECRET_KEY")
 
 
 # ----------------------------------------------------------------------
@@ -94,8 +95,9 @@ class PorkbunAdapter:
         base_url: str = PORKBUN_BASE_URL,
         timeout_s: float = PORKBUN_TIMEOUT_S,
     ) -> None:
-        # Resolved lazily via ``_creds`` so tests can monkeypatch
-        # settings without re-importing. Constructor overrides win.
+        # Resolved on each call via ``_creds`` (``.env``, then the secrets
+        # store), so a key saved while the app runs is used. Constructor
+        # overrides win.
         self._api_key_override = api_key
         self._secret_key_override = secret_key
         self._base_url = base_url.rstrip("/")
@@ -103,9 +105,10 @@ class PorkbunAdapter:
 
     # -- Auth helpers -------------------------------------------------------
 
-    def _creds(self) -> dict[str, str]:
-        api_key = self._api_key_override or settings.PORKBUN_API_KEY
-        secret = self._secret_key_override or settings.PORKBUN_SECRET_KEY
+    async def _creds(self) -> dict[str, str]:
+        keys = await secrets.get_many(*PORKBUN_KEYS)
+        api_key = self._api_key_override or keys["PORKBUN_API_KEY"]
+        secret = self._secret_key_override or keys["PORKBUN_SECRET_KEY"]
         if not api_key or not secret:
             raise RuntimeError(
                 "Porkbun credentials missing. Set PORKBUN_API_KEY and "
@@ -126,7 +129,7 @@ class PorkbunAdapter:
         the orchestrator can react meaningfully instead of catching a
         bare ``httpx.HTTPStatusError`` and parsing URLs.
         """
-        body = {**self._creds(), **payload}
+        body = {**await self._creds(), **payload}
         url = f"{self._base_url}{path}"
         async with httpx.AsyncClient(timeout=self._timeout_s) as client:
             resp = await client.post(url, json=body)

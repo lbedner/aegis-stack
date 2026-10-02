@@ -225,6 +225,15 @@ SCHEDULER_MIGRATION = ServiceMigrationSpec(
     schema="scheduler",
 )
 
+# The secrets component's one table: write-only credentials, encrypted. Its
+# own Postgres schema like the scheduler's; SQLite keeps it in the one file.
+SECRETS_MIGRATION = ServiceMigrationSpec(
+    service_name="secrets",
+    description="Encrypted, write-only credentials",
+    schema="secrets",
+    stamp_signature=("table", "secrets.secret"),
+)
+
 
 # Default registry-facing variant is the shared-mode shape. Per-user mode
 # rebuilds the spec at generation time via _build_insights_migration(True).
@@ -834,6 +843,11 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
         include_scheduler == "yes" or include_scheduler is True
     ) and scheduler_backend != StorageBackends.MEMORY:
         services.append("scheduler")
+
+    # Secrets component: its one table. No FK to anything, so order is free.
+    include_secrets = context.get(AnswerKeys.SECRETS)
+    if include_secrets == "yes" or include_secrets is True:
+        services.append("secrets")
 
     # Per-user vs shared insights is one folded migration — generation
     # picks the shape from the context flag (see ``generate_migration``).

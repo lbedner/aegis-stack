@@ -70,12 +70,12 @@ class VendorResponse(BaseModel):
     icon_b64: str | None = None
 
 
-def _usable_vendor_names() -> set[str]:
+async def _usable_vendor_names() -> set[str]:
     """Vendors whose models the running install can answer with."""
     from app.core.config import settings
     from app.services.ai.domains.llm.provider_management import usable_providers
 
-    return set(usable_providers(settings))
+    return set(await usable_providers(settings))
 
 
 async def _vendor_icons(names: list[str]) -> dict[str, str]:
@@ -209,7 +209,7 @@ async def get_vendors(
         results: list[VendorListResult] = await list_vendors()
         icons: dict[str, str] = {}
         if usable:
-            allowed = _usable_vendor_names()
+            allowed = await _usable_vendor_names()
             results = [v for v in results if v.name in allowed and v.model_count]
             icons = await _vendor_icons([v.name for v in results])
         return [
@@ -263,7 +263,7 @@ async def get_models(
     """
     try:
         if usable:
-            allowed = _usable_vendor_names()
+            allowed = await _usable_vendor_names()
             if vendor is not None:
                 allowed &= {vendor}
             results: list[LLMListResult] = await list_models(

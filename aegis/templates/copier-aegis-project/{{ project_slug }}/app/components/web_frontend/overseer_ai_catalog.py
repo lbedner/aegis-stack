@@ -65,12 +65,12 @@ async def catalog_vendors(db: Any) -> list[Any]:
     return await list_vendors(session=db)
 
 
-def _vendor_filter(chosen: list[str], usable: bool) -> list[str] | None:
+async def _vendor_filter(chosen: list[str], usable: bool) -> list[str] | None:
     """The vendors to list: the ones picked, the callable ones, both (where
     they meet), or None for every vendor."""
     if not usable:
         return chosen or None
-    callable_now = usable_providers(settings)
+    callable_now = await usable_providers(settings)
     return [v for v in chosen if v in callable_now] if chosen else callable_now
 
 
@@ -104,7 +104,7 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
     reach = RELEASED[released][1]
     models = await list_models(
         pattern=q,
-        vendors=_vendor_filter(chosen, usable),
+        vendors=await _vendor_filter(chosen, usable),
         limit=CATALOG_LIMIT,
         released_after=date.today() - reach if reach else None,
         mode=None,  # a place to look: every kind, each saying which

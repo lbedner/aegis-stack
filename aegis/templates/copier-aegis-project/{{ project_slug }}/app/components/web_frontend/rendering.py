@@ -350,9 +350,9 @@ def go_to(path: str, toast: str, target: str) -> Response:
     return with_toast(response, toast)
 
 
-def dialog_done(path: str, toast: str) -> Response:
+def dialog_done(path: str, toast: str, tone: str = "ok") -> Response:
     """The end of a dialog form that made something: close it, say what
     happened, and send the content area where the result lives."""
     response = Response(status_code=200)
     navigate(response, path)
-    return close_dialog(with_toast(response, toast))
+    return close_dialog(with_toast(response, toast, tone))

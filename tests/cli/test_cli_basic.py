@@ -9,6 +9,9 @@ import pytest
 
 from .test_utils import run_aegis_command, run_cli_help_command, strip_ansi_codes
 
+# They did generate, though: every accepted init built a whole project.
+pytestmark = pytest.mark.usefixtures("init_without_generation")
+
 
 class TestCLIBasics:
     """Test basic CLI functionality."""

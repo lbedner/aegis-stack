@@ -11,14 +11,12 @@ Tests the core logic in aegis.core.dependency_resolver and ensures
 component combinations work as expected.
 """
 
-from pathlib import Path
-
 import pytest
 
 from aegis.core.components import COMPONENTS, ComponentSpec, ComponentType
 from aegis.core.dependency_resolver import DependencyResolver
 
-from .test_utils import run_aegis_init
+from .conftest import ProjectFactory
 
 
 class DependencyTestCase:
@@ -237,34 +235,16 @@ def test_invalid_component_handling() -> None:
 
 @pytest.mark.parametrize("test_case", DEPENDENCY_TEST_CASES, ids=lambda x: x.name)
 def test_generated_project_dependencies(
-    test_case: DependencyTestCase, temp_output_dir: Path
+    test_case: DependencyTestCase, project_factory: ProjectFactory
 ) -> None:
     """Test that generated projects have correct dependencies resolved."""
     if not test_case.requested_components:
         # Skip base-only test for project generation
         pytest.skip("Base-only test doesn't need project generation validation")
 
-    project_name = f"test-deps-{test_case.name}"
-
-    # Generate project with requested components
-    result = run_aegis_init(
-        project_name,
-        test_case.requested_components,
-        temp_output_dir,
-    )
-
-    if not result.success:
-        print(f"\n{'=' * 80}")
-        print(f"STDERR: {result.stderr}")
-        print(f"STDOUT: {result.stdout}")
-        print(f"Return code: {result.returncode}")
-        print(f"{'=' * 80}\n")
-
-    assert result.success, f"Failed to generate project for {test_case.description}"
-
-    # Read pyproject.toml
-    project_path = result.project_path
-    assert project_path is not None, "Project path is None"
+    # A cached project: the same component set is generated once per session
+    # and shared, where a fresh init per case was 10-15s each.
+    project_path = project_factory(components=test_case.requested_components)
     pyproject_path = project_path / "pyproject.toml"
     assert pyproject_path.exists(), "pyproject.toml not found"
 
@@ -295,27 +275,14 @@ def test_generated_project_dependencies(
 
 @pytest.mark.parametrize("test_case", DEPENDENCY_TEST_CASES, ids=lambda x: x.name)
 def test_generated_project_docker_services(
-    test_case: DependencyTestCase, temp_output_dir: Path
+    test_case: DependencyTestCase, project_factory: ProjectFactory
 ) -> None:
     """Test that generated projects have correct Docker services."""
     if not test_case.requested_components:
         # Skip base-only test
         pytest.skip("Base-only test doesn't need Docker service validation")
 
-    project_name = f"test-docker-{test_case.name}"
-
-    # Generate project with requested components
-    result = run_aegis_init(
-        project_name,
-        test_case.requested_components,
-        temp_output_dir,
-    )
-
-    assert result.success, f"Failed to generate project for {test_case.description}"
-
-    # Read docker-compose.yml
-    project_path = result.project_path
-    assert project_path is not None, "Project path is None"
+    project_path = project_factory(components=test_case.requested_components)
     docker_compose_path = project_path / "docker-compose.yml"
     assert docker_compose_path.exists(), "docker-compose.yml not found"
 

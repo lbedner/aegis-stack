@@ -16,7 +16,15 @@ from aegis.cli.interactive import (
     clear_ai_framework_selection,
     clear_ai_provider_selection,
 )
+from tests.cli.conftest import GenerationCalls, ProjectFactory
 from tests.cli.test_utils import run_aegis_command, strip_ansi_codes
+
+
+@pytest.fixture(autouse=True)
+def _no_generation(init_without_generation: GenerationCalls) -> GenerationCalls:
+    """Everything here is about init's own work (service validation,
+    dependency resolution, output); none of it reads a generated project."""
+    return init_without_generation
 
 
 @pytest.fixture(autouse=True)
@@ -105,7 +113,7 @@ class TestServicesCommand:
 class TestServicesOptionIntegration:
     """Test the --services option in init command."""
 
-    def test_init_with_valid_service(self):
+    def test_init_with_valid_service(self, _no_generation: GenerationCalls):
         """Test init command with valid service."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
@@ -127,10 +135,13 @@ class TestServicesOptionIntegration:
             assert "Services: auth" in output
             assert "Infrastructure: database" in output
 
-            # Check that project was created
-            project_path = Path(temp_dir) / "test-auth-service"
-            assert project_path.exists()
-            assert (project_path / "app").exists()
+            # Init asked for exactly this project, with the service and the
+            # components it requires.
+            [(template_gen, output_dir)] = _no_generation
+            assert output_dir == Path(temp_dir)
+            assert template_gen.project_name == "test-auth-service"
+            assert template_gen.selected_services == ["auth"]
+            assert "database" in template_gen.components
 
     def test_init_with_invalid_service(self):
         """Test init command with invalid service shows error."""
@@ -402,7 +413,9 @@ class TestServicesIntegrationWithExistingFeatures:
             assert result.returncode == 0
             assert "Overwriting existing directory" in result.stdout
 
-    def test_services_work_with_custom_output_dir(self):
+    def test_services_work_with_custom_output_dir(
+        self, _no_generation: GenerationCalls
+    ):
         """Test that services work with custom output directory."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             custom_dir = Path(temp_dir) / "custom"
@@ -420,7 +433,9 @@ class TestServicesIntegrationWithExistingFeatures:
             )
 
             assert result.returncode == 0
-            assert (custom_dir / "test-custom-dir").exists()
+            [(template_gen, output_dir)] = _no_generation
+            assert output_dir == custom_dir
+            assert template_gen.project_name == "test-custom-dir"
 
     def test_services_dependency_display_consistency(self):
         """Test that services show dependencies consistently."""
@@ -607,7 +622,9 @@ class TestServiceComponentCompatibilityValidation:
 class TestAuthServiceMigrationIntegration:
     """Test auth service migration-specific CLI behavior."""
 
-    def test_auth_service_cli_output_mentions_migrations(self):
+    def test_auth_service_cli_output_mentions_migrations(
+        self, project_factory: ProjectFactory
+    ):
         """Test that CLI output for auth service mentions migration infrastructure."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
@@ -629,14 +646,18 @@ class TestAuthServiceMigrationIntegration:
             assert "Infrastructure: database" in output
 
             # Verify migration infrastructure files were actually generated
-            project_path = Path(temp_dir) / "test-auth-migration-mention"
+            # What init builds for this, from the session cache (init itself
+            # stops at generation here).
+            project_path = project_factory("base_with_auth_service")
             alembic_dir = project_path / "alembic"
             assert alembic_dir.exists(), "Alembic directory not generated"
             assert (alembic_dir / "alembic.ini").exists(), "alembic.ini not generated"
             migration_files = list((alembic_dir / "versions").glob("*.py"))
             assert len(migration_files) > 0, "No migration files generated"
 
-    def test_auth_service_includes_database_automatically(self):
+    def test_auth_service_includes_database_automatically(
+        self, project_factory: ProjectFactory
+    ):
         """Test that auth service automatically includes database and shows clear messaging."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
@@ -663,10 +684,14 @@ class TestAuthServiceMigrationIntegration:
             assert "Services: auth" in output
 
             # Check that actual project has migration infrastructure
-            project_path = Path(temp_dir) / "test-auth-auto-db"
+            # What init builds for this, from the session cache (init itself
+            # stops at generation here).
+            project_path = project_factory("base_with_auth_service")
             assert (project_path / "alembic" / "alembic.ini").exists()
 
-    def test_database_only_excludes_migration_infrastructure(self):
+    def test_database_only_excludes_migration_infrastructure(
+        self, project_factory: ProjectFactory
+    ):
         """Test that database component alone does not include migration infrastructure."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
@@ -690,7 +715,9 @@ class TestAuthServiceMigrationIntegration:
             assert "Services:" not in output
 
             # Check that project has database but no migrations
-            project_path = Path(temp_dir) / "test-db-only-no-migration"
+            # What init builds for this, from the session cache (init itself
+            # stops at generation here).
+            project_path = project_factory("base_with_database")
             assert (project_path / "app" / "core" / "db.py").exists()
             assert not (project_path / "alembic").exists()
 
@@ -709,7 +736,9 @@ class TestAuthServiceMigrationIntegration:
         # Should provide usage guidance
         assert "Use 'aegis init PROJECT_NAME --services auth'" in output
 
-    def test_auth_service_file_generation_completeness(self):
+    def test_auth_service_file_generation_completeness(
+        self, project_factory: ProjectFactory
+    ):
         """Test that auth service generates all expected migration and auth files."""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
@@ -725,7 +754,9 @@ class TestAuthServiceMigrationIntegration:
 
             assert result.returncode == 0
             output = result.stdout
-            project_path = Path(temp_dir) / "test-auth-completeness"
+            # What init builds for this, from the session cache (init itself
+            # stops at generation here).
+            project_path = project_factory("base_with_auth_service")
 
             # Check CLI shows file generation
             files_section = output.split("Component Files:")[1].split("\n\n")[0]

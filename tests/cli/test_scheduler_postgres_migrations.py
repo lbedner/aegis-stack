@@ -59,26 +59,16 @@ def test_postgres_scheduler_ships_runnable_migrations(
 
 
 def test_sqlite_scheduler_ships_an_unqualified_migration(
-    temp_output_dir: Path,
+    project_factory: ProjectFactory,
 ) -> None:
     """A SQLite scheduler versions its tables like everything else.
 
     Revisions come from the models, and the models drop the ``scheduler``
     schema on SQLite, so there is nothing left that only Postgres can run.
     """
-    result = run_aegis_command(
-        "init",
-        "schedlite",
-        "--components",
-        "scheduler[sqlite]",
-        "--output-dir",
-        str(temp_output_dir),
-        "--no-interactive",
-        "--yes",
-    )
-    assert result.returncode == 0, f"init failed: {result.stderr}"
-
-    project = temp_output_dir / "schedlite"
+    # The cached database + SQLite scheduler project: what
+    # ``init --components scheduler[sqlite]`` builds, generated once per session.
+    project = project_factory("base_with_scheduler_sqlite")
     assert "alembic==" in (project / "pyproject.toml").read_text()
     migrations = list((project / "alembic" / "versions").glob("*_scheduler.py"))
     assert len(migrations) == 1, "expected exactly one scheduler migration"

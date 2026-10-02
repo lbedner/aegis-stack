@@ -25,6 +25,10 @@ from .test_utils import (
     run_aegis_init_expect_failure,
 )
 
+# Init's handling of its input, not the project it would build: an accepted
+# init stops at generation instead of spending 10-15s on it.
+pytestmark = pytest.mark.usefixtures("init_without_generation")
+
 
 class ErrorTestCase:
     """Test case for error handling validation."""

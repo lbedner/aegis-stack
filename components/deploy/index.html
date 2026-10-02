@@ -12,31 +12,31 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://docs.aegis-stack.io/components/frontend/state/">
+        <link rel="canonical" href="https://docs.aegis-stack.io/components/deploy/">
       
       
-        <link rel="prev" href="../routing/">
+        <link rel="prev" href="../redis/">
       
       
-        <link rel="next" href="../api-client/">
+        <link rel="next" href="../inference/">
       
       
         
       
       
-      <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
+      <link rel="icon" href="../../images/aegis_stack_layered_shield.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Session State - Aegis Stack</title>
+        <title>Deploy - Aegis Stack</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,11 +55,11 @@
       
     
     
-      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../../stylesheets/custom.css">
+      <link rel="stylesheet" href="../../stylesheets/custom.css">
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -72,7 +72,7 @@
     plausible.init()
   </script>
 
-   <link href="../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+   <link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
     html.glightbox-open { overflow: initial; height: 100%; }
     .gslide-title { margin-top: 0px; user-select: text; }
     .gslide-desc { color: #666; user-select: text; }
@@ -81,7 +81,7 @@
     .gdesc-inner { font-size: 0.75rem; }
     body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
     body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
-    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../assets/javascripts/glightbox.min.js"></script></head>
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../assets/javascripts/glightbox.min.js"></script></head>
   
   
     
@@ -100,7 +100,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#session-state" class="md-skip">
+        <a href="#deploy" class="md-skip">
           Skip to content
         </a>
       
@@ -114,9 +114,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -133,7 +133,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Session State
+              Deploy
             
           </span>
         </div>
@@ -248,7 +248,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../.." class="md-tabs__link">
+        <a href="../.." class="md-tabs__link">
           
   
   
@@ -268,7 +268,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../about/" class="md-tabs__link">
+        <a href="../../about/" class="md-tabs__link">
           
   
   
@@ -290,7 +290,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../" class="md-tabs__link">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -310,7 +310,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../services/" class="md-tabs__link">
+        <a href="../../services/" class="md-tabs__link">
           
   
   
@@ -330,7 +330,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../overseer/" class="md-tabs__link">
+        <a href="../../overseer/" class="md-tabs__link">
           
   
   
@@ -350,7 +350,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../deployment/" class="md-tabs__link">
+        <a href="../../deployment/" class="md-tabs__link">
           
   
   
@@ -370,7 +370,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../plugins/" class="md-tabs__link">
+        <a href="../../plugins/" class="md-tabs__link">
           
   
   
@@ -390,7 +390,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../cli-reference/" class="md-tabs__link">
+        <a href="../../cli-reference/" class="md-tabs__link">
           
   
   
@@ -424,9 +424,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     Aegis Stack
@@ -503,7 +503,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -531,7 +531,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../installation/" class="md-nav__link">
+      <a href="../../installation/" class="md-nav__link">
         
   
   
@@ -559,7 +559,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../troubleshooting/" class="md-nav__link">
+      <a href="../../troubleshooting/" class="md-nav__link">
         
   
   
@@ -644,7 +644,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../about/" class="md-nav__link">
+      <a href="../../about/" class="md-nav__link">
         
   
   
@@ -672,7 +672,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../technology/" class="md-nav__link">
+      <a href="../../technology/" class="md-nav__link">
         
   
   
@@ -700,7 +700,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../process/" class="md-nav__link">
+      <a href="../../process/" class="md-nav__link">
         
   
   
@@ -790,7 +790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -868,7 +868,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/" class="md-nav__link">
+      <a href="../backend/" class="md-nav__link">
         
   
   
@@ -946,7 +946,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/middleware/" class="md-nav__link">
+      <a href="../backend/middleware/" class="md-nav__link">
         
   
   
@@ -974,7 +974,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/middleware/performance/" class="md-nav__link">
+      <a href="../backend/middleware/performance/" class="md-nav__link">
         
   
   
@@ -1010,7 +1010,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/lifecycle/" class="md-nav__link">
+      <a href="../backend/lifecycle/" class="md-nav__link">
         
   
   
@@ -1038,7 +1038,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/routes/" class="md-nav__link">
+      <a href="../backend/routes/" class="md-nav__link">
         
   
   
@@ -1066,7 +1066,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/cache/" class="md-nav__link">
+      <a href="../backend/cache/" class="md-nav__link">
         
   
   
@@ -1094,7 +1094,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/secrets/" class="md-nav__link">
+      <a href="../backend/secrets/" class="md-nav__link">
         
   
   
@@ -1122,7 +1122,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/serving/" class="md-nav__link">
+      <a href="../backend/serving/" class="md-nav__link">
         
   
   
@@ -1150,7 +1150,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/auth/" class="md-nav__link">
+      <a href="../backend/auth/" class="md-nav__link">
         
   
   
@@ -1178,7 +1178,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backend/load-testing/" class="md-nav__link">
+      <a href="../backend/load-testing/" class="md-nav__link">
         
   
   
@@ -1264,7 +1264,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../database/" class="md-nav__link">
+      <a href="../database/" class="md-nav__link">
         
   
   
@@ -1292,7 +1292,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../database/neon/" class="md-nav__link">
+      <a href="../database/neon/" class="md-nav__link">
         
   
   
@@ -1325,8 +1325,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1337,11 +1335,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
         
           
           <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
@@ -1362,7 +1360,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1377,8 +1375,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1389,11 +1385,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_1" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_1" >
         
           
           <label class="md-nav__link" for="__nav_3_4_1" id="__nav_3_4_1_label" tabindex="0">
@@ -1414,7 +1410,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_1_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_4_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1432,7 +1428,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../frontend/" class="md-nav__link">
         
   
   
@@ -1460,7 +1456,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/" class="md-nav__link">
+      <a href="../frontend/architecture/" class="md-nav__link">
         
   
   
@@ -1488,7 +1484,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../routing/" class="md-nav__link">
+      <a href="../frontend/routing/" class="md-nav__link">
         
   
   
@@ -1513,37 +1509,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Session State
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../frontend/state/" class="md-nav__link">
         
   
   
@@ -1559,120 +1528,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-sessionstate-holds" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What SessionState holds
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#lifecycle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Lifecycle
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#teardown" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Teardown
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sign-out-keeps-sessionstate-alive" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Sign-out keeps SessionState alive
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-server-vs-browser" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Storage: server vs browser
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Storage: server vs browser">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#rule-do-not-put-auth-tokens-in-client_storage" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Rule: do not put auth tokens in client_storage
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rule-sessionstate-is-in-memory-only" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Rule: SessionState is in-memory only
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1685,7 +1540,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api-client/" class="md-nav__link">
+      <a href="../frontend/api-client/" class="md-nav__link">
         
   
   
@@ -1713,7 +1568,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../events/" class="md-nav__link">
+      <a href="../frontend/events/" class="md-nav__link">
         
   
   
@@ -1741,7 +1596,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../example/" class="md-nav__link">
+      <a href="../frontend/example/" class="md-nav__link">
         
   
   
@@ -1827,7 +1682,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web-frontend/" class="md-nav__link">
+      <a href="../web-frontend/" class="md-nav__link">
         
   
   
@@ -1855,7 +1710,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web-frontend/templates-and-partials/" class="md-nav__link">
+      <a href="../web-frontend/templates-and-partials/" class="md-nav__link">
         
   
   
@@ -1883,7 +1738,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web-frontend/styling/" class="md-nav__link">
+      <a href="../web-frontend/styling/" class="md-nav__link">
         
   
   
@@ -1911,7 +1766,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web-frontend/asset-pipeline/" class="md-nav__link">
+      <a href="../web-frontend/asset-pipeline/" class="md-nav__link">
         
   
   
@@ -1939,7 +1794,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web-frontend/auth-pages/" class="md-nav__link">
+      <a href="../web-frontend/auth-pages/" class="md-nav__link">
         
   
   
@@ -2033,7 +1888,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../scheduler/" class="md-nav__link">
+      <a href="../scheduler/" class="md-nav__link">
         
   
   
@@ -2061,7 +1916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../scheduler/examples/" class="md-nav__link">
+      <a href="../scheduler/examples/" class="md-nav__link">
         
   
   
@@ -2089,7 +1944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../scheduler/cli/" class="md-nav__link">
+      <a href="../scheduler/cli/" class="md-nav__link">
         
   
   
@@ -2117,7 +1972,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../scheduler/persistence/" class="md-nav__link">
+      <a href="../scheduler/persistence/" class="md-nav__link">
         
   
   
@@ -2145,7 +2000,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../scheduler/running-jobs/" class="md-nav__link">
+      <a href="../scheduler/running-jobs/" class="md-nav__link">
         
   
   
@@ -2231,7 +2086,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../storage/" class="md-nav__link">
+      <a href="../storage/" class="md-nav__link">
         
   
   
@@ -2259,7 +2114,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../storage/configuration/" class="md-nav__link">
+      <a href="../storage/configuration/" class="md-nav__link">
         
   
   
@@ -2287,7 +2142,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../storage/examples/" class="md-nav__link">
+      <a href="../storage/examples/" class="md-nav__link">
         
   
   
@@ -2373,7 +2228,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../secrets/" class="md-nav__link">
+      <a href="../secrets/" class="md-nav__link">
         
   
   
@@ -2401,7 +2256,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../secrets/setting-keys/" class="md-nav__link">
+      <a href="../secrets/setting-keys/" class="md-nav__link">
         
   
   
@@ -2429,7 +2284,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../secrets/needed-and-verified/" class="md-nav__link">
+      <a href="../secrets/needed-and-verified/" class="md-nav__link">
         
   
   
@@ -2457,7 +2312,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../secrets/how-it-works/" class="md-nav__link">
+      <a href="../secrets/how-it-works/" class="md-nav__link">
         
   
   
@@ -2543,7 +2398,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../worker/" class="md-nav__link">
+      <a href="../worker/" class="md-nav__link">
         
   
   
@@ -2571,7 +2426,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../worker/configuration/" class="md-nav__link">
+      <a href="../worker/configuration/" class="md-nav__link">
         
   
   
@@ -2599,7 +2454,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../worker/jobs/" class="md-nav__link">
+      <a href="../worker/jobs/" class="md-nav__link">
         
   
   
@@ -2627,7 +2482,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../worker/examples/" class="md-nav__link">
+      <a href="../worker/examples/" class="md-nav__link">
         
   
   
@@ -2705,7 +2560,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../worker/extras/load-testing/" class="md-nav__link">
+      <a href="../worker/extras/load-testing/" class="md-nav__link">
         
   
   
@@ -2749,7 +2604,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../redis/" class="md-nav__link">
+      <a href="../redis/" class="md-nav__link">
         
   
   
@@ -2774,10 +2629,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../deploy/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deploy
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -2793,6 +2675,70 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-socket-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The socket proxy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-it-from-the-app-appcoreruntime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading it from the app: app.core.runtime
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checking-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#removing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removing it
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2805,7 +2751,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../inference/" class="md-nav__link">
+      <a href="../inference/" class="md-nav__link">
         
   
   
@@ -2833,7 +2779,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ingress/" class="md-nav__link">
+      <a href="../ingress/" class="md-nav__link">
         
   
   
@@ -2861,7 +2807,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../observability/" class="md-nav__link">
+      <a href="../observability/" class="md-nav__link">
         
   
   
@@ -2946,7 +2892,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/" class="md-nav__link">
+      <a href="../../services/" class="md-nav__link">
         
   
   
@@ -3024,7 +2970,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/" class="md-nav__link">
+      <a href="../../services/ai/" class="md-nav__link">
         
   
   
@@ -3052,7 +2998,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/illiana/" class="md-nav__link">
+      <a href="../../services/ai/illiana/" class="md-nav__link">
         
   
   
@@ -3080,7 +3026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/agents/" class="md-nav__link">
+      <a href="../../services/ai/agents/" class="md-nav__link">
         
   
   
@@ -3108,7 +3054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/memory-modules/" class="md-nav__link">
+      <a href="../../services/ai/memory-modules/" class="md-nav__link">
         
   
   
@@ -3136,7 +3082,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/llm-catalog/" class="md-nav__link">
+      <a href="../../services/ai/llm-catalog/" class="md-nav__link">
         
   
   
@@ -3164,7 +3110,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/rag/" class="md-nav__link">
+      <a href="../../services/ai/rag/" class="md-nav__link">
         
   
   
@@ -3192,7 +3138,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/cost-tracking/" class="md-nav__link">
+      <a href="../../services/ai/cost-tracking/" class="md-nav__link">
         
   
   
@@ -3220,7 +3166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/voice/" class="md-nav__link">
+      <a href="../../services/ai/voice/" class="md-nav__link">
         
   
   
@@ -3248,7 +3194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/engines/" class="md-nav__link">
+      <a href="../../services/ai/engines/" class="md-nav__link">
         
   
   
@@ -3276,7 +3222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/providers/" class="md-nav__link">
+      <a href="../../services/ai/providers/" class="md-nav__link">
         
   
   
@@ -3304,7 +3250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/api/" class="md-nav__link">
+      <a href="../../services/ai/api/" class="md-nav__link">
         
   
   
@@ -3332,7 +3278,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/integration/" class="md-nav__link">
+      <a href="../../services/ai/integration/" class="md-nav__link">
         
   
   
@@ -3360,7 +3306,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/cli/" class="md-nav__link">
+      <a href="../../services/ai/cli/" class="md-nav__link">
         
   
   
@@ -3388,7 +3334,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ai/examples/" class="md-nav__link">
+      <a href="../../services/ai/examples/" class="md-nav__link">
         
   
   
@@ -3474,7 +3420,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/auth/" class="md-nav__link">
+      <a href="../../services/auth/" class="md-nav__link">
         
   
   
@@ -3502,7 +3448,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/auth/levels/" class="md-nav__link">
+      <a href="../../services/auth/levels/" class="md-nav__link">
         
   
   
@@ -3530,7 +3476,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/auth/api/" class="md-nav__link">
+      <a href="../../services/auth/api/" class="md-nav__link">
         
   
   
@@ -3558,7 +3504,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/auth/integration/" class="md-nav__link">
+      <a href="../../services/auth/integration/" class="md-nav__link">
         
   
   
@@ -3586,7 +3532,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/auth/cli/" class="md-nav__link">
+      <a href="../../services/auth/cli/" class="md-nav__link">
         
   
   
@@ -3614,7 +3560,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/auth/examples/" class="md-nav__link">
+      <a href="../../services/auth/examples/" class="md-nav__link">
         
   
   
@@ -3700,7 +3646,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/blog/" class="md-nav__link">
+      <a href="../../services/blog/" class="md-nav__link">
         
   
   
@@ -3728,7 +3674,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/blog/api/" class="md-nav__link">
+      <a href="../../services/blog/api/" class="md-nav__link">
         
   
   
@@ -3756,7 +3702,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/blog/dashboard/" class="md-nav__link">
+      <a href="../../services/blog/dashboard/" class="md-nav__link">
         
   
   
@@ -3784,7 +3730,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/blog/cli/" class="md-nav__link">
+      <a href="../../services/blog/cli/" class="md-nav__link">
         
   
   
@@ -3812,7 +3758,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/blog/examples/" class="md-nav__link">
+      <a href="../../services/blog/examples/" class="md-nav__link">
         
   
   
@@ -3898,7 +3844,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/documents/" class="md-nav__link">
+      <a href="../../services/documents/" class="md-nav__link">
         
   
   
@@ -3926,7 +3872,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/documents/api/" class="md-nav__link">
+      <a href="../../services/documents/api/" class="md-nav__link">
         
   
   
@@ -3954,7 +3900,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/documents/extraction/" class="md-nav__link">
+      <a href="../../services/documents/extraction/" class="md-nav__link">
         
   
   
@@ -3982,7 +3928,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/documents/dashboard/" class="md-nav__link">
+      <a href="../../services/documents/dashboard/" class="md-nav__link">
         
   
   
@@ -4068,7 +4014,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/comms/" class="md-nav__link">
+      <a href="../../services/comms/" class="md-nav__link">
         
   
   
@@ -4096,7 +4042,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/comms/setup/" class="md-nav__link">
+      <a href="../../services/comms/setup/" class="md-nav__link">
         
   
   
@@ -4124,7 +4070,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/comms/api/" class="md-nav__link">
+      <a href="../../services/comms/api/" class="md-nav__link">
         
   
   
@@ -4152,7 +4098,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/comms/cli/" class="md-nav__link">
+      <a href="../../services/comms/cli/" class="md-nav__link">
         
   
   
@@ -4180,7 +4126,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/comms/examples/" class="md-nav__link">
+      <a href="../../services/comms/examples/" class="md-nav__link">
         
   
   
@@ -4266,7 +4212,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/" class="md-nav__link">
+      <a href="../../services/finance/" class="md-nav__link">
         
   
   
@@ -4294,7 +4240,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/accounts/" class="md-nav__link">
+      <a href="../../services/finance/accounts/" class="md-nav__link">
         
   
   
@@ -4322,7 +4268,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/bills/" class="md-nav__link">
+      <a href="../../services/finance/bills/" class="md-nav__link">
         
   
   
@@ -4350,7 +4296,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/projected/" class="md-nav__link">
+      <a href="../../services/finance/projected/" class="md-nav__link">
         
   
   
@@ -4378,7 +4324,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/budget/" class="md-nav__link">
+      <a href="../../services/finance/budget/" class="md-nav__link">
         
   
   
@@ -4406,7 +4352,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/review/" class="md-nav__link">
+      <a href="../../services/finance/review/" class="md-nav__link">
         
   
   
@@ -4434,7 +4380,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/investments/" class="md-nav__link">
+      <a href="../../services/finance/investments/" class="md-nav__link">
         
   
   
@@ -4462,7 +4408,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/imports/" class="md-nav__link">
+      <a href="../../services/finance/imports/" class="md-nav__link">
         
   
   
@@ -4490,7 +4436,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/chat/" class="md-nav__link">
+      <a href="../../services/finance/chat/" class="md-nav__link">
         
   
   
@@ -4518,7 +4464,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/api/" class="md-nav__link">
+      <a href="../../services/finance/api/" class="md-nav__link">
         
   
   
@@ -4546,7 +4492,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/finance/cli/" class="md-nav__link">
+      <a href="../../services/finance/cli/" class="md-nav__link">
         
   
   
@@ -4632,7 +4578,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/insights/" class="md-nav__link">
+      <a href="../../services/insights/" class="md-nav__link">
         
   
   
@@ -4660,7 +4606,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/insights/data-sources/" class="md-nav__link">
+      <a href="../../services/insights/data-sources/" class="md-nav__link">
         
   
   
@@ -4688,7 +4634,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/insights/cli/" class="md-nav__link">
+      <a href="../../services/insights/cli/" class="md-nav__link">
         
   
   
@@ -4716,7 +4662,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/insights/dashboard/" class="md-nav__link">
+      <a href="../../services/insights/dashboard/" class="md-nav__link">
         
   
   
@@ -4744,7 +4690,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/insights/configuration/" class="md-nav__link">
+      <a href="../../services/insights/configuration/" class="md-nav__link">
         
   
   
@@ -4772,7 +4718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/insights/examples/" class="md-nav__link">
+      <a href="../../services/insights/examples/" class="md-nav__link">
         
   
   
@@ -4858,7 +4804,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/payment/" class="md-nav__link">
+      <a href="../../services/payment/" class="md-nav__link">
         
   
   
@@ -4886,7 +4832,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/payment/setup/" class="md-nav__link">
+      <a href="../../services/payment/setup/" class="md-nav__link">
         
   
   
@@ -4914,7 +4860,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/payment/dashboard/" class="md-nav__link">
+      <a href="../../services/payment/dashboard/" class="md-nav__link">
         
   
   
@@ -4942,7 +4888,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/payment/api/" class="md-nav__link">
+      <a href="../../services/payment/api/" class="md-nav__link">
         
   
   
@@ -4970,7 +4916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/payment/cli/" class="md-nav__link">
+      <a href="../../services/payment/cli/" class="md-nav__link">
         
   
   
@@ -4998,7 +4944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/payment/examples/" class="md-nav__link">
+      <a href="../../services/payment/examples/" class="md-nav__link">
         
   
   
@@ -5091,7 +5037,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/" class="md-nav__link">
+      <a href="../../overseer/" class="md-nav__link">
         
   
   
@@ -5119,7 +5065,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/story/" class="md-nav__link">
+      <a href="../../overseer/story/" class="md-nav__link">
         
   
   
@@ -5147,7 +5093,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/integration/" class="md-nav__link">
+      <a href="../../overseer/integration/" class="md-nav__link">
         
   
   
@@ -5232,7 +5178,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../deployment/" class="md-nav__link">
+      <a href="../../deployment/" class="md-nav__link">
         
   
   
@@ -5317,7 +5263,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/" class="md-nav__link">
+      <a href="../../plugins/" class="md-nav__link">
         
   
   
@@ -5345,7 +5291,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/creating/" class="md-nav__link">
+      <a href="../../plugins/creating/" class="md-nav__link">
         
   
   
@@ -5373,7 +5319,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/publishing/" class="md-nav__link">
+      <a href="../../plugins/publishing/" class="md-nav__link">
         
   
   
@@ -5458,7 +5404,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../cli-reference/" class="md-nav__link">
+      <a href="../../cli-reference/" class="md-nav__link">
         
   
   
@@ -5486,7 +5432,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../evolving-your-stack/" class="md-nav__link">
+      <a href="../../evolving-your-stack/" class="md-nav__link">
         
   
   
@@ -5514,7 +5460,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../integration-patterns/" class="md-nav__link">
+      <a href="../../integration-patterns/" class="md-nav__link">
         
   
   
@@ -5569,10 +5515,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-sessionstate-holds" class="md-nav__link">
+  <a href="#the-socket-proxy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What SessionState holds
+        The socket proxy
       
     </span>
   </a>
@@ -5580,10 +5526,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#lifecycle" class="md-nav__link">
+  <a href="#reading-it-from-the-app-appcoreruntime" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Lifecycle
+        Reading it from the app: app.core.runtime
       
     </span>
   </a>
@@ -5591,10 +5537,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#teardown" class="md-nav__link">
+  <a href="#checking-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Teardown
+        Checking it
       
     </span>
   </a>
@@ -5602,60 +5548,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#sign-out-keeps-sessionstate-alive" class="md-nav__link">
+  <a href="#removing-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sign-out keeps SessionState alive
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-server-vs-browser" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Storage: server vs browser
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Storage: server vs browser">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#rule-do-not-put-auth-tokens-in-client_storage" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Rule: do not put auth tokens in client_storage
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rule-sessionstate-is-in-memory-only" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Rule: SessionState is in-memory only
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
+        Removing it
       
     </span>
   </a>
@@ -5683,176 +5579,94 @@
   
 
 
-<h1 id="session-state">Session State</h1>
-<p>Every Flet session needs a place to keep the resources that views share
-within a session: the HTTP client, the theme manager, the signed-in user.
-Aegis ships <code>SessionState</code> for exactly this, attached to <code>page.data</code> and
-constructed once during bootstrap.</p>
-<p><code>SessionState</code> is the <strong>only</strong> intentional home for cross-view session
-state. If a view needs to share something with the next view, it goes
-here. If it can be re-fetched from the backend on demand, it does not.</p>
-<h2 id="what-sessionstate-holds">What <code>SessionState</code> holds</h2>
-<p><code>SessionState</code> is a <code>dataclass</code> in
-<code>app/components/frontend/state/session_state.py</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@dataclass</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">SessionState</span><span class="p">:</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">page</span><span class="p">:</span> <span class="n">ft</span><span class="o">.</span><span class="n">Page</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">api_client</span><span class="p">:</span> <span class="n">APIClient</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">theme_manager</span><span class="p">:</span> <span class="n">ThemeManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">current_user</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>   <span class="c1"># when auth is enabled</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span> <span class="o">...</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+<h1 id="deploy">Deploy</h1>
+<p>Where the app runs, as a component. The deployment target is its axis: <code>compose</code> (Docker Compose on a host, what <code>aegis deploy</code> does) is the default and the only value today.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>deploy<span class="w">             </span><span class="c1"># the compose target (the default)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>deploy<span class="o">[</span>compose<span class="o">]</span><span class="w">    </span><span class="c1"># the same, spelled out</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--components<span class="w"> </span>deploy
 </span></code></pre></div>
+<p>The base compose files are not part of it: every project ships them, because local development needs them regardless. The deploy component owns what depends on the target rather than on the app's features: how the Overseer reads the containers that are running.</p>
+<h2 id="the-socket-proxy">The socket proxy</h2>
+<p>Reading containers, their stats and their logs means talking to the Docker Engine, and the Docker socket is root on the host. So the webserver never mounts it. A <code>socket-proxy</code> service does, and it is the only container that does:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a> webserver / worker / scheduler            socket-proxy                 Docker Engine
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a> +---------------------------+   unix    +------------------+   unix   +---------------+
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a> | /var/run/docker-proxy/    | --------&gt; | GET allowlist    | -------&gt; | /var/run/     |
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a> |   docker.sock             |  socket   | everything else  |  socket  |   docker.sock |
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a> +---------------------------+  (volume) |   refused (403)  |   (ro)   +---------------+
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>                                         +------------------+
+</span></code></pre></div>
+<ul>
+<li><strong>Read-only.</strong> The first cut answers <code>GET</code> for the container list, stats, logs, <code>/info</code> and <code>/system/df</code>. Every other path and every other method is refused, including the reads that would leak data: container inspect (<code>/containers/{id}/json</code> returns a container's whole environment, secrets included, for any container on the host), <code>/containers/{id}/export</code> and <code>/containers/{id}/archive</code>.</li>
+<li><strong>No network.</strong> The proxy runs with <code>network_mode: none</code> and listens on a Unix socket in the <code>docker-proxy</code> volume, which the app containers mount. Nothing on the compose network can reach it.</li>
+<li><strong>No privileges.</strong> A read-only root filesystem, every Linux capability dropped, <code>no-new-privileges</code>. It runs as uid 0 only so it can open the host's socket on any host without knowing the host's <code>docker</code> group id.</li>
+<li><strong>Same in prod.</strong> The service carries both the <code>dev</code> and <code>prod</code> profiles; <code>aegis deploy</code> starts it with the rest of the stack.</li>
+</ul>
+<p>The proxy is <a href="https://github.com/wollomatic/socket-proxy">wollomatic/socket-proxy</a>, a small Go binary on a scratch image. Its allowlist is a regular expression per HTTP method, in <code>docker-compose.yml</code>:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">command</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;-proxysocketendpoint=/var/run/docker-proxy/docker.sock&quot;</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;-allowGET=(/v1\.[0-9]+)?/(containers/json|containers/[a-zA-Z0-9_.-]+/(stats|logs)|info|system/df)&#39;</span>
+</span></code></pre></div>
+<p>Write actions (restarting a container) will come as explicit additions to this allowlist, admin-only, confirmed and audited; nothing is writable today.</p>
+<h2 id="reading-it-from-the-app-appcoreruntime">Reading it from the app: <code>app.core.runtime</code></h2>
+<p>Every project has <code>app.core.runtime</code>, one async interface for what is running and how it is doing, the same pattern as <code>app.core.storage</code> and <code>app.core.secrets</code>. The backend follows the target:</p>
 <table>
 <thead>
 <tr>
-<th>Field</th>
-<th>Purpose</th>
+<th>Backend</th>
+<th>When</th>
+<th>Reads</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>page</code></td>
-<td>Backref to the Flet <code>ft.Page</code>. Convenient for helpers that take a <code>SessionState</code>.</td>
+<td><code>none</code></td>
+<td>No deploy component</td>
+<td>The app's own process and machine (psutil); no container logs</td>
 </tr>
 <tr>
-<td><code>api_client</code></td>
-<td>The per-session <a href="../api-client/">API client</a>. One instance per Flet session.</td>
-</tr>
-<tr>
-<td><code>theme_manager</code></td>
-<td>The session's <code>ThemeManager</code> (theme tokens, dark/light, custom palette).</td>
-</tr>
-<tr>
-<td><code>current_user</code></td>
-<td>The signed-in user payload, populated by <code>is_authenticated()</code>. <code>None</code> until login.</td>
-</tr>
-<tr>
-<td><code>_data</code> / <code>get</code> / <code>set</code></td>
-<td>A typed-loose bag for ad-hoc session values that do not deserve a real field. Use sparingly.</td>
+<td><code>docker</code></td>
+<td><code>deploy[compose]</code></td>
+<td>This compose project's containers, through the socket proxy</td>
 </tr>
 </tbody>
 </table>
-<h2 id="lifecycle">Lifecycle</h2>
-<p><code>SessionState</code> lives on <code>page.data["session_state"]</code> for the lifetime of
-the Flet session. Two helpers manage it:</p>
-<ul>
-<li><strong><code>init_session_state(page, *, api_client, theme_manager=None)</code></strong> is
-  called once during the per-session bootstrap in
-  <code>app/components/frontend/main.py</code>. It constructs the <code>SessionState</code>,
-  stashes it on <code>page.data</code>, and returns it.</li>
-<li><strong><code>get_session_state(page)</code></strong> is what views and controls call. It
-  raises <code>RuntimeError</code> if the bootstrap never ran, which is the right
-  failure mode: anything calling this expects a session to exist.</li>
-</ul>
-<p>A typical view starts an action like this:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.frontend.state.session_state</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_session_state</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_reload</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">state</span> <span class="o">=</span> <span class="n">get_session_state</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">page</span><span class="p">)</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">state</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/api/v1/insights/projects&quot;</span><span class="p">)</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="o">...</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">runtime</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">for</span> <span class="n">service</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">services</span><span class="p">():</span>        <span class="c1"># webserver, worker-system, redis...</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">service</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">service</span><span class="o">.</span><span class="n">page</span><span class="p">)</span>           <span class="c1"># the Overseer page it belongs on</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="k">for</span> <span class="n">instance</span> <span class="ow">in</span> <span class="n">service</span><span class="o">.</span><span class="n">instances</span><span class="p">:</span>          <span class="c1"># state, health, uptime, image, build</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="n">stats</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">stats</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>    <span class="c1"># CPU %, memory used / limit, network, disk I/O</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="n">lines</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">logs</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">tail</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="k">async</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">runtime</span><span class="o">.</span><span class="n">follow</span><span class="p">(</span><span class="n">instance_id</span><span class="p">):</span>  <span class="c1"># new lines as they are written</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="o">...</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">usage</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">disk</span><span class="p">()</span>    <span class="c1"># bytes per container and per volume</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="n">host</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runtime</span><span class="o">.</span><span class="n">host</span><span class="p">()</span>     <span class="c1"># CPUs, memory, Docker version, disk</span>
 </span></code></pre></div>
-<h2 id="teardown">Teardown</h2>
-<p><code>SessionState</code> dies with the page. Flet does not expose a real
-"session destroyed" hook in the current version, so eager teardown is
-not always possible. The one code path that destroys it on purpose is
-<code>clear_session_state(page)</code>, which:</p>
-<ol>
-<li>Calls <code>await state.api_client.aclose()</code> to release the httpx pool.</li>
-<li>Deletes <code>page.data["session_state"]</code>.</li>
-</ol>
-<p><code>clear_session_state</code> is <strong>not</strong> wired to <code>on_disconnect</code>. Flet fires
-<code>on_disconnect</code> on transient WebSocket blips too; the session id is the
-same and <code>on_connect</code> fires moments later against the same
-<code>SessionState</code>. Closing the httpx client on every disconnect would leave
-the post-reconnect call to <code>/auth/me</code> hitting a closed client.</p>
-<p>In practice the underlying httpx connection pool drains via Python GC
-when the page object is collected. The deterministic cleanup path
-exists for cases where the application explicitly wants to tear down.</p>
-<h2 id="sign-out-keeps-sessionstate-alive">Sign-out keeps <code>SessionState</code> alive</h2>
-<p>A common source of confusion: signing out <strong>does not</strong> call
-<code>clear_session_state</code>. The Flet session is still connected; only the
-auth state is being reset. <code>sign_out(page)</code> (in
-<code>app/components/frontend/auth/session.py</code>):</p>
-<ol>
-<li>POSTs <code>/api/v1/auth/logout</code> to revoke server-side.</li>
-<li>Calls <code>api_client.clear_cookies()</code> to defang the local jar.</li>
-<li>Sets <code>state.current_user = None</code>.</li>
-<li>Routes the user to <code>/login</code>.</li>
-</ol>
-<p>The same <code>SessionState</code> and <code>APIClient</code> instances live on, ready to be
-used by the next sign-in.</p>
-<h2 id="storage-server-vs-browser">Storage: server vs browser</h2>
-<p>People conflate three different places state can live in a Flet app.
-Knowing which is which makes the auth model a lot less mysterious.</p>
-<table>
-<thead>
-<tr>
-<th>Storage</th>
-<th>Lives in</th>
-<th>Survives browser refresh?</th>
-<th>Survives WebSocket drop?</th>
-<th>Survives sign-out?</th>
-<th>Use for</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>SessionState</code></td>
-<td>Python process, <code>page.data["session_state"]</code></td>
-<td>No</td>
-<td>Yes (same session id)</td>
-<td>Yes</td>
-<td>API client, theme manager, current user, anything that should outlive a view but not the session</td>
-</tr>
-<tr>
-<td><code>page.client_storage</code></td>
-<td>Browser <code>localStorage</code></td>
-<td>Yes</td>
-<td>Yes</td>
-<td>Yes</td>
-<td>UI preferences (last-selected filter, sidebar open state). Survives refresh; <strong>safe to read but never authoritative</strong>.</td>
-</tr>
-<tr>
-<td>HttpOnly cookie (<code>aegis_session</code>)</td>
-<td>Browser cookie jar (HttpOnly) + httpx jar on server</td>
-<td>Yes</td>
-<td>Yes</td>
-<td>No (cleared)</td>
-<td>Auth and only auth.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="rule-do-not-put-auth-tokens-in-client_storage">Rule: do not put auth tokens in <code>client_storage</code></h3>
-<p><code>client_storage</code> is browser-side <code>localStorage</code>, readable by any JS
-running on the page. Putting a session token there gives every script
-on the page access to it. The HttpOnly cookie cannot be read by JS at
-all, which is the whole reason it exists. The Aegis auth flow never
-touches <code>client_storage</code>; the backend issues <code>Set-Cookie:
-aegis_session=...</code> and the httpx client on the Python side carries it.
-This pattern is also the same one you would use with any other Python
-front end; the cookie does not care that Flet is rendering the UI.</p>
-<h3 id="rule-sessionstate-is-in-memory-only">Rule: <code>SessionState</code> is in-memory only</h3>
-<p><code>SessionState</code> lives in the Python process and dies with the session.
-Anything in it is gone after a browser refresh. If a piece of state
-needs to survive refresh:</p>
 <ul>
-<li>Persistent auth: the cookie handles it.</li>
-<li>User preferences: <code>page.client_storage</code> is the right tool.</li>
-<li>Anything else: it belongs in the backend (database, key-value store).
-  The view re-fetches it on <code>on_enter</code> and <code>on_refresh</code>.</li>
+<li><strong>Scoped to the project.</strong> Containers and volumes are filtered by the <code>com.docker.compose.project</code> label, read from the app container's own labels (or <code>COMPOSE_PROJECT_NAME</code>), so other projects on the same host never show up.</li>
+<li><strong>Log lines</strong> carry a timestamp and the stream (<code>stdout</code> / <code>stderr</code>). JSON lines (the production log format) are parsed into <code>level</code> and <code>event</code>; console lines have their colour codes stripped.</li>
+<li><strong>Service to page.</strong> <code>webserver</code> maps to Server, <code>worker-*</code> to Worker, <code>scheduler</code>, <code>redis</code>, <code>postgres</code> to Database, <code>seaweedfs</code> to Storage, <code>traefik</code> to Ingress, <code>ollama</code> to Inference.</li>
+<li><strong>Failures are explicit.</strong> A missing socket, a stopped proxy or a refused path raises <code>RuntimeUnavailableError</code>; nothing is guessed.</li>
 </ul>
-<h2 id="next-steps">Next Steps</h2>
+<p>Everything about an instance comes from the container list, never from inspect:</p>
 <ul>
-<li><a href="../api-client/">API Client</a>: the per-session <code>APIClient</code> that
-  <code>SessionState</code> owns, and the cookie jar that makes auth work.</li>
-<li><a href="../events/">Events</a>: how the page lifecycle interacts with
-  <code>SessionState</code> (especially the refresh-or-redirect path on
-  <code>on_connect</code>).</li>
+<li><strong>Uptime</strong> is read from the list's status (<code>Up 5 hours (healthy)</code>), so it is only as precise as Docker's rounded duration, and <code>started_at</code> is derived from it. Health comes from the same status.</li>
+<li><strong>Restarts</strong> are not in the list, so <code>restarts</code> is <code>None</code> for the Docker backend.</li>
+<li><strong>Build</strong> is the image's <code>org.opencontainers.image.revision</code> label. <code>aegis deploy</code> stamps <code>BUILD_ID</code> into the server's <code>.env</code>, compose passes it to the image build as a build arg, and the Dockerfile labels the image with it (<code>dev</code> locally). Without the label it falls back to the short image id.</li>
 </ul>
+<h2 id="checking-it">Checking it</h2>
+<p>With the stack up, from inside the webserver container:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>webserver<span class="w"> </span>curl<span class="w"> </span>-s<span class="w"> </span>--unix-socket<span class="w"> </span>/var/run/docker-proxy/docker.sock<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>http://docker/containers/json<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">200</span><span class="w">       </span><span class="c1"># answered</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>webserver<span class="w"> </span>curl<span class="w"> </span>-s<span class="w"> </span>-o<span class="w"> </span>/dev/null<span class="w"> </span>-w<span class="w"> </span><span class="s1">&#39;%{http_code}\n&#39;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--unix-socket<span class="w"> </span>/var/run/docker-proxy/docker.sock<span class="w"> </span>http://docker/images/json<span class="w">   </span><span class="c1"># 403</span>
+</span></code></pre></div>
+<h2 id="removing-it">Removing it</h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>deploy
+</span></code></pre></div>
+<p>The <code>socket-proxy</code> service and its volume leave the compose files; the base compose files and <code>aegis deploy</code> itself stay.</p>
 
 
 
@@ -5925,16 +5739,16 @@ needs to survive refresh:</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js"></script>
       
-        <script src="../../../javascripts/mermaid-config.js"></script>
+        <script src="../../javascripts/mermaid-config.js"></script>
       
-        <script src="../../../javascripts/feedback.js"></script>
+        <script src="../../javascripts/feedback.js"></script>
       
     
   <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});

@@ -10,6 +10,7 @@
   <ul class="space-y-1.5 text-xs text-aegis-muted list-disc pl-4">
     {% for line in ch.missing %}<li>{{ line }}</li>{% endfor %}
   </ul>
+  <a href="{{ secrets_page() }}" {{ hx_replace(secrets_page(), "#app-content") }} class="text-xs text-aegis-teal hover:underline">Set them on the Secrets page</a>
   {% endif %}
 {% endcall %}
 </div>

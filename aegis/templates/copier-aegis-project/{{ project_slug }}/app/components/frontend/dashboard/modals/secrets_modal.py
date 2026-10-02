@@ -15,6 +15,7 @@ import flet as ft
 
 from app.components.frontend.controls import H3Text, PrimaryText, SecondaryText
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.dropdown import NativeDropdown
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.snack_bar import (
     BaseSnackBar,
@@ -24,6 +25,7 @@ from app.components.frontend.controls.snack_bar import (
 )
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.client import error_detail
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -48,12 +50,6 @@ def _summary(rows: list[dict[str, Any]]) -> str:
     unused = sum(1 for r in rows if not r.get("needed") and r["source"] is None)
     done = sum(1 for r in needed if r["source"] is not None)
     return f"{done} of {len(needed)} needed keys set · {unused} optional not used"
-
-
-def _detail(body: Any, status: int) -> str:
-    if isinstance(body, dict) and body.get("detail"):
-        return str(body["detail"])
-    return f"status {status}"
 
 
 def _shown(row: dict[str, Any]) -> str:
@@ -88,7 +84,7 @@ class SecretsSection(ft.Column):
             self.controls.append(
                 SecondaryText(
                     "Secrets are listed and set here by an admin, through the "
-                    f"secrets API ({_detail(rows, status)})."
+                    f"secrets API ({error_detail(rows, status)})."
                 )
             )
         else:
@@ -121,15 +117,20 @@ class SecretsSection(ft.Column):
             # Read through ``settings``: only ``.env`` ever reaches that code.
             cells.append(SecondaryText("Set it in .env"))
         elif self._writable:
+            masked = row.get("secret", True)
             field = StyledTextField(
-                password=True,
-                can_reveal_password=True,
+                password=masked,
+                can_reveal_password=masked,
                 hint_text="Paste a new value" if row["source"] else "Paste the value",
                 data=name,
                 expand=True,
                 compact=True,
             )
             self._fields[name] = field
+            if row.get("choosable") and not masked:
+                cells.append(
+                    PulseButton(lambda: self.pick(name), "Pick", "muted", compact=True)
+                )
             cells += [field, PulseButton(lambda: self.save(name), "Save", compact=True)]
             if row["source"]:
                 cells.append(
@@ -143,6 +144,35 @@ class SecretsSection(ft.Column):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
+    async def pick(self, name: str) -> None:
+        """Offer what the provider lists for ``name`` beside its field."""
+        api = get_session_state(self._page).api_client
+        status, body = await api.request_with_status("GET", f"{API}/{name}/choices")
+        if status != 200 or not body:
+            WarningSnackBar(f"The provider listed nothing for {name}; type it.").launch(
+                self._page
+            )
+            return
+        field = self._fields[name]
+        row = next(
+            c for c in self.controls if isinstance(c, ft.Row) and field in c.controls
+        )
+        menu = NativeDropdown(
+            options=[ft.dropdown.Option(key=c["value"], text=c["label"]) for c in body],
+            on_change=lambda e: self.choose(name, e.control.value),
+            hint_text="Pick one",
+        )
+        row.controls.insert(row.controls.index(field), menu)
+        if self.page is not None:
+            row.update()
+
+    def choose(self, name: str, value: str) -> None:
+        """Fill ``name``'s field with a picked value, still editable."""
+        field = self._fields[name]
+        field.value = value
+        if field.page is not None:
+            field.update()
+
     async def save(self, name: str) -> None:
         value = (self._fields[name].value or "").strip()
         if not value:
@@ -154,7 +184,7 @@ class SecretsSection(ft.Column):
         )
         check = body.get("check") if status == 200 and isinstance(body, dict) else None
         if status != 200:
-            await self._done(ErrorSnackBar, _detail(body, status))
+            await self._done(ErrorSnackBar, error_detail(body, status))
         elif check is None:
             await self._done(SuccessSnackBar, f"{name} saved")
         else:
@@ -171,7 +201,7 @@ class SecretsSection(ft.Column):
         if status == 200 and isinstance(body, dict):
             VERDICT_BARS[body["result"]](body["message"]).launch(self._page)
         else:
-            ErrorSnackBar(_detail(body, status)).launch(self._page)
+            ErrorSnackBar(error_detail(body, status)).launch(self._page)
 
     async def remove(self, name: str) -> None:
         api = get_session_state(self._page).api_client
@@ -179,7 +209,7 @@ class SecretsSection(ft.Column):
         if status == 204:
             await self._done(SuccessSnackBar, f"{name} removed")
         else:
-            await self._done(ErrorSnackBar, _detail(body, status))
+            await self._done(ErrorSnackBar, error_detail(body, status))
 
     async def _done(self, bar: type[BaseSnackBar], message: str) -> None:
         bar(message).launch(self._page)

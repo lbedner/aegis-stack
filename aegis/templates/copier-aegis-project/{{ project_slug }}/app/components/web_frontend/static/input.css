@@ -245,3 +245,14 @@
 [hidden] {
   display: none !important;
 }
+
+/* DaisyUI's form controls focus with a 2px outline offset outside the
+   border, which reads as a second border around the field. Focus the way
+   the house controls do instead: no outline, the border turns teal. Unlayered
+   so it comes after DaisyUI's own component styles. */
+.input:focus, .input:focus-within,
+.select:focus, .select:focus-within,
+.textarea:focus, .textarea:focus-within,
+.file-input:focus, .file-input:focus-within {
+  @apply outline-none border-aegis-teal;
+}

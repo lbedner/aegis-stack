@@ -404,3 +404,39 @@ async def test_a_setting_read_through_settings_cannot_be_set_here(
         await secrets.put("SENDGRID_API_KEY", KEY, actor="ops")
     (row,) = await secrets.status()
     assert not row.live
+
+
+# Choices: values the provider itself offers, picked instead of typed.
+
+
+async def _two_numbers() -> list[tuple[str, str]]:
+    return [("+15550001111", "Main line"), ("+15550002222", "Support")]
+
+
+async def _unreachable_choices() -> list[tuple[str, str]]:
+    raise secrets.SecretUncheckedError("could not reach api.example.com.")
+
+
+async def test_choices_come_from_the_declaration(env: pytest.MonkeyPatch) -> None:
+    _declare(
+        env,
+        Secret("TWILIO_PHONE_NUMBER", owner="Twilio", secret=False, choices=_two_numbers),
+        Secret("OPENAI_API_KEY", owner="AI"),
+    )
+    assert await secrets.choices("TWILIO_PHONE_NUMBER") == await _two_numbers()
+    assert await secrets.choices("OPENAI_API_KEY") == []
+    rows = {row.name: row for row in await secrets.status()}
+    assert rows["TWILIO_PHONE_NUMBER"].choosable and not rows["OPENAI_API_KEY"].choosable
+
+
+async def test_a_provider_that_cannot_answer_offers_no_choices(
+    env: pytest.MonkeyPatch,
+) -> None:
+    """Typing the value still works; the picker is a convenience."""
+    _declare(env, Secret("TWILIO_PHONE_NUMBER", owner="Twilio", secret=False, choices=_unreachable_choices))
+    assert await secrets.choices("TWILIO_PHONE_NUMBER") == []
+
+
+async def test_choices_for_an_undeclared_name_refuse(env: pytest.MonkeyPatch) -> None:
+    with pytest.raises(secrets.UnknownSecretError):
+        await secrets.choices("PATH")

@@ -106,8 +106,7 @@ from fastapi.responses import HTMLResponse
 # Overseer pages that are not a component or service in the health tree.
 STANDALONE = {"patterns": overseer_patterns.ITEM, "secrets": overseer_secrets.ITEM}
 
-# Every Overseer page, stream and action is admin-only; the gate passes
-# everything outside the Overseer (overseer_access).
+# Every Overseer page, stream and action is admin-only (overseer_access).
 router = APIRouter(dependencies=[Depends(overseer_gate)])
 {%- else %}
 router = APIRouter()
@@ -255,7 +254,9 @@ async def overseer_secrets_page(
     user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> Response:
-    """Every credential the app reads: where it is set, never the value."""
+    """Every credential the app reads; the component's page when it is there."""
+    if overseer_secrets.has_component():
+        return RedirectResponse(url=overseer_secrets.COMPONENT_URL, status_code=303)
     return await _overseer_detail(request, "secrets", "secrets", user, db)
 
 
@@ -314,9 +315,8 @@ async def _overseer_detail(
     db: AsyncSession,
     section: str = "overview",
 ) -> Response:
-    """Render a page. ``db`` is the request's session, the one the user
-    lookup already opened: a second session would wait on SQLite's write
-    lock and fail with "database is locked"."""
+    """Render a page on the request's own session (``db``): a second one would
+    wait on SQLite's write lock and fail with "database is locked"."""
     if user is None:
         return RedirectResponse(url="/overseer/login", status_code=303)
     status = last_system_status()

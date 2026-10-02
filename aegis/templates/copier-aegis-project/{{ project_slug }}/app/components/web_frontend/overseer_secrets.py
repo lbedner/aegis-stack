@@ -9,6 +9,7 @@ here (``routes/partials/overseer_secrets.py``). An unset key reads Missing
 when something enabled needs it, Not used when it is only a choice, and a
 key with a provider check can be tested wherever it is set."""
 
+from importlib.util import find_spec
 from itertools import groupby
 from typing import Any
 
@@ -16,8 +17,8 @@ from app.core import secrets
 from app.core.formatting import format_relative_time
 from app.services.system.models import ComponentStatus
 
-from .overseer_nav import NavItem, SectionRequest
-from .rendering import status_cell
+from .overseer_nav import NavItem, SectionRequest, page_url
+from .rendering import status_cell, templates
 
 SECTIONS = ((None, {"overview": "Overview"}),)
 PARTIALS = "/partials/overseer/secrets"
@@ -30,6 +31,22 @@ ITEM = NavItem(
     status="",
     component=ComponentStatus(name="secrets", message=""),
 )
+# With the secrets component installed, its page under Components holds
+# all of this (one home); without it, the page stays at the top level.
+COMPONENT_URL = page_url("components", "secrets")
+
+
+def has_component() -> bool:
+    return find_spec("app.components.secrets") is not None
+
+
+def url() -> str:
+    """Where the Secrets page lives in this stack."""
+    return COMPONENT_URL if has_component() else ITEM.url
+
+
+templates.env.globals["secrets_page"] = url
+
 # How each source reads on the page; another store reads as its own name
 # ("vault" -> "Vault").
 SOURCES = {secrets.ENV: ".env", "database": "Saved here"}

@@ -149,7 +149,7 @@ class TestPlausibleCollectorSuccess:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.adapters.collectors.plausible.settings"
+                "app.services.insights.adapters.collectors.base.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
@@ -182,7 +182,7 @@ class TestPlausibleCollectorSuccess:
         )
 
         with patch(
-            "app.services.insights.adapters.collectors.plausible.settings"
+            "app.services.insights.adapters.collectors.base.settings"
         ) as mock_settings:
             mock_settings.INSIGHT_PLAUSIBLE_API_KEY = None
             mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
@@ -216,7 +216,7 @@ class TestPlausibleCollectorSuccess:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.adapters.collectors.plausible.settings"
+                "app.services.insights.adapters.collectors.base.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
@@ -286,7 +286,7 @@ class TestPlausibleCollectorSuccess:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.adapters.collectors.plausible.settings"
+                "app.services.insights.adapters.collectors.base.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
@@ -329,7 +329,7 @@ class TestPlausibleCollectorSuccess:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
             with patch(
-                "app.services.insights.adapters.collectors.plausible.settings"
+                "app.services.insights.adapters.collectors.base.settings"
             ) as mock_settings:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"

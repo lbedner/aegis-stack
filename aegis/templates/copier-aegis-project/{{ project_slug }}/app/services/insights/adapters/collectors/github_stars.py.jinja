@@ -30,7 +30,7 @@ class GitHubStarsCollector(BaseCollector):
 
     async def collect(self) -> CollectionResult:
         """Collect new stars with user profiles."""
-        github = self._github_repo()
+        github = await self._github_repo()
         if isinstance(github, CollectionResult):
             return github
         token, owner, repo = github

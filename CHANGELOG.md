@@ -9,13 +9,31 @@
 
 ### Added
 
+- **Secrets: finance and insights keys, provider pickers, sending domains.**
+  Plaid (`PLAID_CLIENT_ID`, `PLAID_SECRET`, needed when Plaid is enabled
+  and checked against Plaid on paste), SnapTrade, and the insights GitHub
+  and Plausible tokens are declared on the Secrets page and read through
+  `secrets.get` at the moment of use; a project's or connection's own
+  tokens stay on their rows, on the same encryption helper. Provider
+  settings can be picked instead of typed: the from address offers the
+  Resend account's verified domains (and is checked against them), the
+  Twilio number and messaging service the account's own, in both
+  Overseers and at `GET /api/v1/secrets/{name}/choices`. Overseer > Comms
+  and the Flet Email tab list Resend sending domains with a Check, and
+  Add domain shows the DNS records to create; the comms API serves them
+  at `/api/v1/comms/domains`. An unconfigured channel links to the
+  Secrets page. With the component installed, the Flet Comms tabs' Edit
+  and `ai add-provider` save keys in the store (checked, audited) instead
+  of writing `.env`; both commands it touched are now async.
+
 - **The secrets component: API keys set while the app runs.**
   `aegis add secrets` adds an encrypted store behind `app.core.secrets`:
   keys are encrypted with a dedicated `ENCRYPTION_KEY` (generated into
   `.env`, never `SECRET_KEY`), kept in their own `secret` table, read live
   by the webserver, worker and scheduler through the shared cache (which
   holds only ciphertext), and never shown again apart from their last four
-  characters. Set, replace, remove and test them from Overseer > Secrets,
+  characters. Set, replace, remove and test them from the component's page
+  (Overseer > Components > Secrets, which replaces the top-level page),
   the Flet dashboard's Secrets card, `my-app secrets set|list|delete|test`
   (hidden prompt or stdin, never argv) or the admin API at
   `/api/v1/secrets`. A key set in `.env` still wins and reads as
@@ -119,6 +137,11 @@
 - **Transcription works with the gpt-4o models.** OpenAI's
   `gpt-4o-transcribe` and `gpt-4o-mini-transcribe` reject `verbose_json`,
   which every call sent; only Whisper models get it now.
+- **Form fields no longer show a double border when focused.** DaisyUI's
+  inputs, selects, text areas and file inputs drew a focus outline offset
+  outside their border (the chat model picker's search box, the Voice
+  section's fields); they now focus like the rest of the Overseer, with
+  the border turning teal.
 - **A new column no longer turns the query baseline into new findings.** queryspy
   knew a repeated statement by its whole SQL, select list included, so adding a
   column renamed every SELECT on that table, the baseline read as all new, and

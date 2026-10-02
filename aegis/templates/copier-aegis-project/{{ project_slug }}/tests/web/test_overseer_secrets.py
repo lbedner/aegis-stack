@@ -9,13 +9,18 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from app.components.web_frontend import overseer_secrets
 from app.core import secrets
 from app.core.config import settings
 from app.core.secrets import Secret
+from app.services.system.models import ComponentStatus
 from tests.web.dom import one, select, text
 from tests.web.overseer import sign_in, status_with
 
 KEY = "sk-test-0123456789wxyz"
+# The component's health entry: with the component installed its page under
+# Components is where the Secrets page lives.
+SECRETS_ENTRY = ComponentStatus(name="secrets", message="")
 DECLARED = (
     Secret("OPENAI_API_KEY", owner="AI"),
     Secret("ANTHROPIC_API_KEY", owner="AI"),
@@ -25,7 +30,7 @@ DECLARED = (
 
 @pytest.fixture
 def page(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Generator[str]:
-    sign_in(app, monkeypatch, status_with())
+    sign_in(app, monkeypatch, status_with(SECRETS_ENTRY))
     monkeypatch.setattr(secrets, "declared", lambda: DECLARED)
     monkeypatch.setitem(settings.__dict__, "OPENAI_API_KEY", KEY)
     monkeypatch.setitem(settings.__dict__, "ANTHROPIC_API_KEY", None)
@@ -42,8 +47,35 @@ def _row(html: str, name: str) -> str:
 
 
 def test_the_sidebar_links_to_it(page: str) -> None:
-    link = one(page, '#overseer-sidebar a[href="/overseer/secrets"]')
+    link = one(page, f'#overseer-sidebar a[href="{overseer_secrets.url()}"]')
     assert link.get("aria-current") == "page"
+
+
+def test_with_the_component_secrets_live_on_its_page(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One home: the component's page under Components, not a second
+    top-level page beside it. The old address forwards there."""
+    sign_in(app, monkeypatch, status_with(SECRETS_ENTRY))
+    monkeypatch.setattr(secrets, "declared", lambda: DECLARED)
+    monkeypatch.setattr(overseer_secrets, "has_component", lambda: True)
+    client = TestClient(app)
+    moved = client.get("/overseer/secrets", follow_redirects=False)
+    assert moved.status_code == 303
+    assert moved.headers["location"] == "/overseer/components/secrets"
+    html = client.get("/overseer/components/secrets").text
+    assert one(html, "#secrets") is not None
+    assert not select(html, '#overseer-sidebar a[href="/overseer/secrets"]')
+
+
+def test_without_the_component_the_page_stays_at_the_top(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sign_in(app, monkeypatch, status_with(SECRETS_ENTRY))
+    monkeypatch.setattr(secrets, "declared", lambda: DECLARED)
+    monkeypatch.setattr(overseer_secrets, "has_component", lambda: False)
+    html = TestClient(app).get("/overseer/secrets").text
+    assert one(html, '#overseer-sidebar a[href="/overseer/secrets"]') is not None
 
 
 def test_secrets_are_grouped_by_who_reads_them(page: str) -> None:
@@ -105,7 +137,7 @@ class FakeStore:
 def writable(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[tuple[TestClient, FakeStore]]:
-    sign_in(app, monkeypatch, status_with())
+    sign_in(app, monkeypatch, status_with(SECRETS_ENTRY))
     monkeypatch.setattr(secrets, "declared", lambda: DECLARED)
     monkeypatch.setitem(settings.__dict__, "OPENAI_API_KEY", KEY)
     monkeypatch.setitem(settings.__dict__, "ANTHROPIC_API_KEY", None)
@@ -266,3 +298,25 @@ def test_a_key_read_through_settings_is_listed_but_not_settable(
     html = client.get("/overseer/secrets").text
     assert not select(html, f'#secrets button[hx-get="{PARTIALS}/ANTHROPIC_API_KEY"]')
     assert "set it in .env" in _row(html, "ANTHROPIC_API_KEY").lower()
+
+
+async def _domains() -> list[tuple[str, str]]:
+    return [("hello@mail.example.com", "mail.example.com (verified in Resend)")]
+
+
+def test_a_field_with_choices_offers_them_and_still_takes_typing(
+    writable: tuple[TestClient, FakeStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _ = writable
+    monkeypatch.setattr(
+        secrets,
+        "declared",
+        lambda: (
+            Secret("RESEND_FROM_EMAIL", owner="Email", secret=False, choices=_domains),
+        ),
+    )
+    html = client.get(f"{PARTIALS}/RESEND_FROM_EMAIL").text
+    field = one(html, 'input[name="value"]')
+    options = select(html, f"datalist#{field.get('list')} option")
+    assert [o.get("value") for o in options] == ["hello@mail.example.com"]
+    assert "verified in Resend" in (options[0].get("label") or "")

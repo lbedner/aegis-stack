@@ -107,6 +107,10 @@ SECTIONED_PAGES: dict[tuple[str, str], SectionedPage] = {
     ("secrets", "secrets"): SectionedPage(
         "secrets", overseer_secrets.SECTIONS, overseer_secrets.section_context
     ),
+    # The same page, on the secrets component's own entry when it is there.
+    ("components", "secrets"): SectionedPage(
+        "secrets", overseer_secrets.SECTIONS, overseer_secrets.section_context
+    ),
     ("components", "backend"): SectionedPage(
         "server", overseer_server.SECTIONS, overseer_server.section_context, live=True
     ),

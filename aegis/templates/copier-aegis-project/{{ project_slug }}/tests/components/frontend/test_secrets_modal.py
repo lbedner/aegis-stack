@@ -26,6 +26,9 @@ ROWS = [
     {"name": "RESEND_API_KEY", "owner": "Email", "label": "", "secret": True,
      "source": None, "hint": None, "set_at": None, "set_by": None,
      "needed": True, "verifiable": True},
+    {"name": "RESEND_FROM_EMAIL", "owner": "Email", "label": "From address",
+     "secret": False, "source": None, "hint": None, "set_at": None, "set_by": None,
+     "needed": False, "verifiable": True, "choosable": True},
 ]  # fmt: skip
 VERIFIED = {"result": "verified", "message": "It works."}
 
@@ -40,6 +43,10 @@ class FakeAPI:
         self, method: str, endpoint: str, json: dict[str, Any] | None = None
     ) -> tuple[int, Any]:
         self.calls.append((method, endpoint, json))
+        if method == "GET" and endpoint.endswith("/choices"):
+            return 200, [
+                {"value": "hello@mail.example.com", "label": "mail.example.com"}
+            ]
         if method == "GET":
             return self.list_status, ROWS if self.list_status == 200 else None
         if method == "PUT":
@@ -78,8 +85,17 @@ def _fields(section: SecretsSection) -> dict[str, ft.TextField]:
 
 async def test_a_paste_field_only_where_the_app_may_set_it(api: FakeAPI) -> None:
     fields = _fields(await _section())
-    assert set(fields) == {"ANTHROPIC_API_KEY", "GROQ_API_KEY", "RESEND_API_KEY"}
-    assert all(f.password and not f.value for f in fields.values())
+    assert set(fields) == {
+        "ANTHROPIC_API_KEY",
+        "GROQ_API_KEY",
+        "RESEND_API_KEY",
+        "RESEND_FROM_EMAIL",
+    }
+    assert not any(f.value for f in fields.values())
+    # A key is masked; provider config (a from address) shows in the clear.
+    assert (
+        fields["RESEND_API_KEY"].password and not fields["RESEND_FROM_EMAIL"].password
+    )
 
 
 async def test_a_key_in_env_says_where_to_change_it(api: FakeAPI) -> None:
@@ -170,3 +186,16 @@ async def test_a_refused_key_says_why(api: FakeAPI) -> None:
     _fields(section)["RESEND_API_KEY"].value = "re_typo_0123456789"
     await section.save("RESEND_API_KEY")
     assert "refused" in _said()
+
+
+async def test_provider_config_can_be_picked_from_what_the_provider_offers(
+    api: FakeAPI,
+) -> None:
+    section = await _section()
+    assert len(_buttons(section, "Pick")) == 1
+    await section.pick("RESEND_FROM_EMAIL")
+    assert ("GET", "/api/v1/secrets/RESEND_FROM_EMAIL/choices", None) in api.calls
+    (menu,) = [c for c in walk(section) if isinstance(c, ft.Dropdown)]
+    assert [o.key for o in menu.options] == ["hello@mail.example.com"]
+    section.choose("RESEND_FROM_EMAIL", "hello@mail.example.com")
+    assert _fields(section)["RESEND_FROM_EMAIL"].value == "hello@mail.example.com"

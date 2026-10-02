@@ -9,6 +9,7 @@ projects with the comms service (see ``overseer_sections``).
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from app.core import secrets
 from app.services.comms.calls import get_call_status, validate_call_config
 from app.services.comms.email import get_email_status, validate_email_config
 from app.services.comms.sms import get_sms_status, validate_sms_config
@@ -58,6 +59,35 @@ async def channel(key: str) -> dict[str, Any]:
     }
 
 
+async def domains_view() -> dict[str, Any]:
+    """The Resend account's sending domains for the Email section: each with
+    its status and a Check, or why there is no list (no key yet, or a
+    send-only key that cannot list domains)."""
+    from app.services.ops.adapters.resend import ResendAdapter
+
+    view: dict[str, Any] = {"new_url": f"{PARTIALS}/domains/new", "rows": []}
+    if not await secrets.get("RESEND_API_KEY"):
+        return view | {
+            "reason": "Set RESEND_API_KEY on the Secrets page to manage domains."
+        }
+    try:
+        found = await ResendAdapter().list_domains()
+    except Exception as exc:  # noqa: BLE001 - the reason is what the card shows
+        return view | {"reason": f"Resend did not list domains: {exc}"}
+    return view | {
+        "rows": [
+            {
+                "name": d.domain,
+                "status": status_cell(
+                    d.status.capitalize(), "ok" if d.verified else "warn"
+                ),
+                "check_url": f"{PARTIALS}/domains/{d.domain}/check",
+            }
+            for d in found
+        ]
+    }
+
+
 async def section_context(
     section: str, comms: ComponentStatus, req: SectionRequest
 ) -> dict[str, Any]:
@@ -65,5 +95,8 @@ async def section_context(
     if section == "overview":
         return context | {"channels": [await channel(key) for key, *_ in CHANNELS]}
     if section == "email":
-        return context | {"channel": await channel("email")}
+        return context | {
+            "channel": await channel("email"),
+            "domains": await domains_view(),
+        }
     return context | {"sms": await channel("sms"), "voice": await channel("voice")}

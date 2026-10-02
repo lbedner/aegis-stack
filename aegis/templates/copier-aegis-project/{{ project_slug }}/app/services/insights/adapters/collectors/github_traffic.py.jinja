@@ -30,7 +30,7 @@ class GitHubTrafficCollector(BaseCollector):
 
     async def collect(self) -> CollectionResult:
         """Collect clones, views, referrers, and popular paths."""
-        github = self._github_repo()
+        github = await self._github_repo()
         if isinstance(github, CollectionResult):
             return github
         token, owner, repo = github

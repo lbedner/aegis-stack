@@ -214,3 +214,60 @@ class TestCallMakeEndpoint:
             assert data["sid"] == "CA123456"
             assert data["to"] == "+15559876543"
 {% endif %}
+
+
+class TestSendingDomains:
+    """Resend sending domains, for the Flet dashboard's Email tab."""
+
+    @pytest.fixture
+    def domains(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from datetime import UTC, datetime
+
+        from app.core.config import settings
+        from app.services.ops.adapters.resend import ResendAdapter
+        from app.services.ops.types import DnsRecord, DomainAddResult, DomainStatus
+
+        async def list_domains(self: object) -> list[DomainStatus]:
+            return [DomainStatus("mail.example.com", True, "verified", datetime.now(UTC))]
+
+        async def add_domain(self: object, domain: str) -> DomainAddResult:
+            return DomainAddResult(domain, [DnsRecord("resend._domainkey", "TXT", "p=MIGf")], "d1")
+
+        async def check_domain(self: object, domain: str) -> DomainStatus:
+            return DomainStatus(domain, False, "pending", datetime.now(UTC))
+
+        monkeypatch.setitem(settings.__dict__, "RESEND_API_KEY", "re_test")
+        monkeypatch.setattr(ResendAdapter, "list_domains", list_domains)
+        monkeypatch.setattr(ResendAdapter, "add_domain", add_domain)
+        monkeypatch.setattr(ResendAdapter, "check_domain", check_domain)
+
+    @pytest.fixture
+{%- if include_auth %}
+    def api(self, authenticated_client: TestClient) -> TestClient:
+        """An admin: the domain routes are admin-only with auth."""
+        return authenticated_client
+{%- else %}
+    def api(self, test_client: TestClient) -> TestClient:
+        return test_client
+{%- endif %}
+
+    def test_lists_domains(self, api: TestClient, domains: None) -> None:
+        response = api.get("/api/v1/comms/domains")
+        assert response.status_code == 200, response.text
+        assert response.json() == [{"name": "mail.example.com", "status": "verified", "verified": True}]
+
+    def test_adding_returns_the_dns_records(
+        self, api: TestClient, domains: None
+    ) -> None:
+        response = api.post(
+            "/api/v1/comms/domains", json={"domain": "new.example.com"}
+        )
+        assert response.status_code == 200, response.text
+        (record,) = response.json()["records"]
+        assert (record["type"], record["host"], record["value"]) == ("TXT", "resend._domainkey", "p=MIGf")
+
+    def test_check_returns_the_status(
+        self, api: TestClient, domains: None
+    ) -> None:
+        response = api.post("/api/v1/comms/domains/new.example.com/check")
+        assert response.json() == {"name": "new.example.com", "status": "pending", "verified": False}

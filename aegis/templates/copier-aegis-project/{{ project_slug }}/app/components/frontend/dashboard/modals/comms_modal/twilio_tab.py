@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
@@ -21,7 +22,6 @@ from app.components.frontend.controls.form_fields import (
     FormTextField,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.config import reload_settings
 
 from .config_tab import EditableConfigTab
 
@@ -286,7 +286,7 @@ class TwilioTab(EditableConfigTab):
         self.expand = True
 
     async def _save_config(self) -> None:
-        """Save the configuration to .env and reload settings."""
+        """Save the configuration through the secrets store, or to .env."""
         # Get field values
         account_sid = self._account_sid_field.value.strip()
         auth_token = self._auth_token_field.value.strip()
@@ -316,11 +316,9 @@ class TwilioTab(EditableConfigTab):
             await self._cancel_edit()
             return
 
-        # Write to .env
-        self._env_service.write_env(updates)
-
-        # Reload settings so changes take effect
-        reload_settings()
+        # The secrets store when the stack has one, else .env (dev mode).
+        if not await self._save_credentials(updates):
+            return
 
         # Update local metadata to reflect changes
         if account_sid:

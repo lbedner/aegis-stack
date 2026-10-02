@@ -11,7 +11,7 @@ The secrets component is a small credential store built into your app, the way y
 - **Needed vs. optional.** Keys the app actually depends on (the AI provider you chose, your email provider) read **Missing** when unset. Providers you could add read **Not used**, so a long list of unset keys does not look like a long list of problems.
 - **Encrypted at rest.** Keys are stored encrypted in your database, with a key of their own, and every change is audited (who and when, never the value).
 
-![Overseer > Secrets: Stripe's secret key reads Missing because payments need it; the Twilio keys read Not used because SMS is optional](../../images/secrets_overseer_list.png)
+![The Secrets page: Stripe's secret key reads Missing because payments need it; the Twilio keys read Not used because SMS is optional](../../images/secrets_overseer_list.png)
 
 `.env` keeps working alongside it and always wins: a key set there shows as read-only, so an existing deployment behaves exactly as before.
 

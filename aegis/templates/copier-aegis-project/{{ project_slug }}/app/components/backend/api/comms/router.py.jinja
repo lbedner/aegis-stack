@@ -302,3 +302,89 @@ async def comms_version() -> dict[str, Any]:
             "GET /comms/status",
         ],
     }
+
+
+# Resend sending domains: the Flet dashboard's Email tab reads and adds
+# them here (the htmx Overseer calls the adapter directly).
+
+
+class DomainResponse(BaseModel):
+    name: str
+    status: str
+    verified: bool
+
+
+class NewDomain(BaseModel):
+    domain: str
+
+
+class DomainRecordResponse(BaseModel):
+    type: str
+    host: str
+    value: str
+    priority: int | None = None
+
+
+class DomainAdded(BaseModel):
+    domain: str
+    records: list[DomainRecordResponse]
+
+
+def _resend_failed(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=502, detail=f"Resend: {exc}")
+
+
+@router.get("/domains", response_model=list[DomainResponse])
+async def list_domains(
+{%- if include_auth %}
+    _: User = Depends(_require_admin),
+{%- endif %}
+) -> list[DomainResponse]:
+    """The Resend account's domains and their verification status."""
+    from app.services.ops.adapters.resend import ResendAdapter
+
+    try:
+        found = await ResendAdapter().list_domains()
+    except Exception as exc:  # noqa: BLE001 - surfaced as the 502 detail
+        raise _resend_failed(exc) from None
+    return [DomainResponse(name=d.domain, status=d.status, verified=d.verified) for d in found]
+
+
+@router.post("/domains", response_model=DomainAdded)
+async def add_domain(
+    body: NewDomain,
+{%- if include_auth %}
+    _: User = Depends(_require_admin),
+{%- endif %}
+) -> DomainAdded:
+    """Add a sending domain (or find it) and return the DNS records it needs."""
+    from app.services.ops.adapters.resend import ResendAdapter
+
+    try:
+        added = await ResendAdapter().add_domain(body.domain)
+    except Exception as exc:  # noqa: BLE001 - surfaced as the 502 detail
+        raise _resend_failed(exc) from None
+    return DomainAdded(
+        domain=added.domain,
+        records=[
+            DomainRecordResponse(type=r.type, host=r.host, value=r.value, priority=r.priority)
+            for r in added.required_records
+        ],
+    )
+
+
+@router.post("/domains/{domain}/check", response_model=DomainResponse)
+async def check_domain(
+    domain: str,
+{%- if include_auth %}
+    _: User = Depends(_require_admin),
+{%- endif %}
+) -> DomainResponse:
+    """Ask Resend to check the domain's DNS now and return its status."""
+    from app.services.ops.adapters.resend import ResendAdapter
+
+    try:
+        status = await ResendAdapter().check_domain(domain)
+    except Exception as exc:  # noqa: BLE001 - surfaced as the 502 detail
+        raise _resend_failed(exc) from None
+    return DomainResponse(name=status.domain, status=status.status, verified=status.verified)

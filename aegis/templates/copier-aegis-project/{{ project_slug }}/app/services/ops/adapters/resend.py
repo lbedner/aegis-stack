@@ -66,11 +66,13 @@ class ResendAdapter:
         only call ``Domains.create`` for genuinely-new domains. This
         avoids using ResendError as control flow — Resend phrases the
         duplicate signal differently across versions, so string-matching
-        on the exception was brittle.
+        on the exception was brittle. The name is normalized here (trimmed,
+        lowercased), so every caller passes what was typed.
         """
         await self._ensure_key()
         import resend  # type: ignore[import-not-found]
 
+        domain = domain.strip().lower()
         existing = await self._find_existing_domain_or_none(domain)
         if existing is not None:
             logger.info("resend.adapter: domain %s already registered; reusing", domain)
@@ -84,6 +86,31 @@ class ResendAdapter:
         await self._ensure_key()
         info = await self._find_existing_domain(domain)
         return _to_domain_status(domain, info)
+
+    async def list_domains(self) -> list[DomainStatus]:
+        """Every domain on the account with its status (one list call)."""
+        await self._ensure_key()
+        import resend  # type: ignore[import-not-found]
+
+        listing = await asyncio.to_thread(resend.Domains.list)
+        items = listing.get("data", listing) if isinstance(listing, dict) else listing
+        return [_to_domain_status(str(d.get("name") or ""), d) for d in items]
+
+    async def check_domain(self, domain: str) -> DomainStatus:
+        """Ask Resend to check the domain's DNS once, then read its status:
+        the Overseer's Check button, without ``wait_for_verification``'s
+        polling."""
+        await self._ensure_key()
+        import resend  # type: ignore[import-not-found]
+
+        info = await self._find_existing_domain(domain)
+        try:
+            await asyncio.to_thread(resend.Domains.verify, info["id"])
+        except Exception as exc:  # noqa: BLE001 - the status read below reports
+            logger.warning("resend.adapter: verify for %s raised %s", domain, exc)
+        return _to_domain_status(
+            domain, await asyncio.to_thread(resend.Domains.get, info["id"])
+        )
 
     async def wait_for_verification(
         self, domain: str, *, timeout_s: int = 600, poll_interval_s: int = 5

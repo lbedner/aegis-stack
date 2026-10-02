@@ -18,7 +18,10 @@ from typing import Any
 import pytest
 from filelock import FileLock
 
+from aegis.cli.utils import expand_scheduler_dependencies
+from aegis.core.component_utils import clean_component_names, restore_engine_info
 from aegis.core.copier_manager import generate_with_copier
+from aegis.core.dependency_resolver import DependencyResolver
 from aegis.core.template_generator import TemplateGenerator
 
 from .test_stack_generation import STACK_COMBINATIONS, StackCombination
@@ -163,6 +166,20 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
 }
 
 
+def _resolved_components(components: Iterable[str]) -> list[str]:
+    """The components ``aegis init --components`` hands generation.
+
+    Init's option callback resolves dependencies before anything is built
+    (a worker brings redis, ``scheduler[sqlite]`` brings the database). The
+    cache builds through ``TemplateGenerator`` directly, past that callback,
+    so without this a cached worker project had no redis and every test on
+    it ran against a project no user can generate.
+    """
+    selected = expand_scheduler_dependencies(list(components))
+    clean = clean_component_names(selected)
+    return restore_engine_info(DependencyResolver.resolve_dependencies(clean), selected)
+
+
 @pytest.fixture(scope="session")
 def project_template_cache(
     tmp_path_factory: pytest.TempPathFactory,
@@ -208,7 +225,7 @@ def project_template_cache(
                 try:
                     template_gen = TemplateGenerator(
                         project_name=project_name,
-                        selected_components=list(spec.components),
+                        selected_components=_resolved_components(spec.components),
                         scheduler_backend=spec.scheduler_backend,
                         selected_services=list(spec.services),
                         **(
@@ -516,3 +533,30 @@ def generated_db_project(
         stderr="",
         project_path=project_path,
     )
+
+
+GenerationCalls = list[tuple[TemplateGenerator, Path]]
+
+
+@pytest.fixture
+def init_without_generation(monkeypatch: pytest.MonkeyPatch) -> GenerationCalls:
+    """Run ``aegis init`` up to generation, and record what it asked for.
+
+    A real generation (render, uv sync, make fix, migrations) is 10-15s. A
+    test about init's own work - argument and component validation,
+    dependency resolution, what it prints - needs none of it, and ran it
+    anyway on every call: 600+ worker-seconds of the fast lane. Each call
+    appends ``(template_gen, output_dir)``, so a test asserts on what init
+    decided to build instead of on files it never needed. Tests that read a
+    generated project use ``project_factory``.
+    """
+    calls: GenerationCalls = []
+
+    def record(
+        template_gen: TemplateGenerator, output_dir: Path, **_kwargs: Any
+    ) -> Path:
+        calls.append((template_gen, Path(output_dir)))
+        return Path(output_dir) / template_gen.project_slug
+
+    monkeypatch.setattr("aegis.core.copier_manager.generate_with_copier", record)
+    return calls

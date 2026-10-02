@@ -44,9 +44,10 @@ env:
   UV_LINK_MODE: "copy"  # Avoid broken cache hardlinks (partial-install errors)
 
 jobs:
-  # Phase 1: every combination generates. In-process and cheap — one job
-  # covers all 18 in a couple of minutes, and a generation break fails fast
-  # here before 18 validation runners spin up on it.
+  # Every combination generates, in one job. It runs beside the validation
+  # jobs, not in front of them: nothing passes between them (each validation
+  # generates its own stack), and as a gate it held every run back by its
+  # whole length (7-8 minutes by October 2026).
   generation:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -68,13 +69,12 @@ jobs:
       - name: Test all stack combinations generate
         run: make test-stacks
 
-  # Phase 2: full validation (generate → uv sync → lint → typecheck →
-  # pytest), one stack per runner. The list mirrors STACK_COMBINATIONS in
+  # Full validation (generate → uv sync → lint → typecheck → pytest), one
+  # stack per runner. The list mirrors STACK_COMBINATIONS in
   # tests/cli/test_stack_generation.py — the guard job below fails if the
   # two ever drift. Node-id selection (not -k) so ``base`` can never
   # substring-match ``base_htmx``.
   validate:
-    needs: generation
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -132,7 +132,6 @@ jobs:
   # The non-parametrized slow tests: the representative end-to-end pipeline
   # (worker stack + CLI smoke) and the validation performance benchmarks.
   validate-extras:
-    needs: generation
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

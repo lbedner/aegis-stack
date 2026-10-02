@@ -31,6 +31,18 @@ ROWS = [
      "needed": False, "verifiable": True, "choosable": True},
 ]  # fmt: skip
 VERIFIED = {"result": "verified", "message": "It works."}
+# Settings (``?setting=true``): shown whole, with their defaults.
+SETTINGS = [
+    {"name": "MEMORY_THRESHOLD_PERCENT", "owner": "Health", "label": "", "secret": False,
+     "source": None, "hint": None, "set_at": None, "set_by": None, "needed": False,
+     "verifiable": False, "setting": True, "default": "90.0"},
+    {"name": "DISK_THRESHOLD_PERCENT", "owner": "Health", "label": "", "secret": False,
+     "source": "database", "hint": "80", "set_at": None, "set_by": "ops", "needed": False,
+     "verifiable": False, "setting": True, "default": "85.0"},
+    {"name": "TRAFFIC_MONITOR_ENABLED", "owner": "Traffic", "label": "", "secret": False,
+     "source": None, "hint": None, "set_at": None, "set_by": None, "needed": False,
+     "verifiable": False, "setting": True, "default": "True", "choosable": True},
+]  # fmt: skip
 
 
 class FakeAPI:
@@ -43,10 +55,17 @@ class FakeAPI:
         self, method: str, endpoint: str, json: dict[str, Any] | None = None
     ) -> tuple[int, Any]:
         self.calls.append((method, endpoint, json))
+        if method == "GET" and endpoint.endswith("TRAFFIC_MONITOR_ENABLED/choices"):
+            return 200, [
+                {"value": "True", "label": "True"},
+                {"value": "False", "label": "False"},
+            ]
         if method == "GET" and endpoint.endswith("/choices"):
             return 200, [
                 {"value": "hello@mail.example.com", "label": "mail.example.com"}
             ]
+        if method == "GET" and endpoint.endswith("?setting=true"):
+            return 200, SETTINGS
         if method == "GET":
             return self.list_status, ROWS if self.list_status == 200 else None
         if method == "PUT":
@@ -70,11 +89,11 @@ def api(monkeypatch: pytest.MonkeyPatch) -> FakeAPI:
 SNACKS: list[ft.Control] = []
 
 
-async def _section(writable: bool = True) -> SecretsSection:
+async def _section(writable: bool = True, setting: bool = False) -> SecretsSection:
     page = FakePage()
     SNACKS.clear()
     page.open = SNACKS.append  # type: ignore[attr-defined]  # snack bars
-    section = SecretsSection(page, writable=writable)  # type: ignore[arg-type]
+    section = SecretsSection(page, writable=writable, setting=setting)  # type: ignore[arg-type]
     await section.load()
     return section
 
@@ -199,3 +218,25 @@ async def test_provider_config_can_be_picked_from_what_the_provider_offers(
     assert [o.key for o in menu.options] == ["hello@mail.example.com"]
     section.choose("RESEND_FROM_EMAIL", "hello@mail.example.com")
     assert _fields(section)["RESEND_FROM_EMAIL"].value == "hello@mail.example.com"
+
+
+async def test_settings_show_their_default_and_apply_on_restart(api: FakeAPI) -> None:
+    section = await _section(setting=True)
+    assert ("GET", "/api/v1/secrets?setting=true", None) in api.calls
+    shown = texts(section)
+    assert any("Default" in t and "90.0" in t for t in shown)
+    assert any("80" in t for t in shown)
+    field = _fields(section)["MEMORY_THRESHOLD_PERCENT"]
+    assert not field.password
+    field.value = "75"
+    api.put_answer = (200, {**SETTINGS[0], "source": "database", "hint": "75"})
+    await section.save("MEMORY_THRESHOLD_PERCENT")
+    assert "restart" in _said()
+
+
+async def test_a_setting_with_choices_is_a_dropdown(api: FakeAPI) -> None:
+    section = await _section(setting=True)
+    (menu,) = [c for c in walk(section) if isinstance(c, ft.Dropdown)]
+    assert [o.key for o in menu.options] == ["True", "False"]
+    assert menu.value == "True"
+    assert "TRAFFIC_MONITOR_ENABLED" not in _fields(section)

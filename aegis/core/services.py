@@ -373,6 +373,8 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/overseer_secrets.py",
                     "app/components/web_frontend/routes/partials/overseer_secrets.py",
                     "tests/web/test_overseer_secrets.py",
+                    "app/components/web_frontend/overseer_settings.py",
+                    "tests/web/test_overseer_settings.py",
                     "tests/web/test_overseer_admin_gate.py",
                     "app/components/web_frontend/routes/partials/overseer_auth.py",
                     "app/components/web_frontend/overseer_scheduler.py",
@@ -643,13 +645,8 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_slash_commands.py",
                 "tests/cli/test_status_line.py",
                 "tests/services/ai",
-                # Applies the stored active-model selection at boot. Renders
-                # to a docstring-only module without AI (no ``startup_hook``,
-                # so discovery skips it), but it has no business shipping in a
-                # stack that has no AI service.
-                "app/components/backend/startup/llm_active_model.py",
                 # Seeds the agent registry (agents, memory modules, tool
-                # rows) at boot. Pure AI surface, same as the module above.
+                # rows) at boot. Pure AI surface.
                 "app/components/backend/startup/agent_registry.py",
                 "app/components/backend/startup/llm_catalog.py",
                 "app/components/frontend/dashboard/cards/ai_card.py",

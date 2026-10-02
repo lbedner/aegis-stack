@@ -20,6 +20,7 @@ from . import (
     overseer_scheduler,
     overseer_secrets,
     overseer_server,
+    overseer_settings,
     overseer_storage,
     overseer_web_frontend,
     overseer_worker,
@@ -100,12 +101,21 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
     return pages
 
 
+# Overseer pages that are not a component or service in the health tree.
+STANDALONE = {
+    item.name: item
+    for item in (overseer_patterns.ITEM, overseer_secrets.ITEM, overseer_settings.ITEM)
+}
+
 SECTIONED_PAGES: dict[tuple[str, str], SectionedPage] = {
     ("patterns", "patterns"): SectionedPage(
         "patterns", overseer_patterns.SECTIONS, overseer_patterns.section_context
     ),
     ("secrets", "secrets"): SectionedPage(
         "secrets", overseer_secrets.SECTIONS, overseer_secrets.section_context
+    ),
+    ("settings", "settings"): SectionedPage(
+        "settings", overseer_settings.SECTIONS, overseer_settings.section_context
     ),
     # The same page, on the secrets component's own entry when it is there.
     ("components", "secrets"): SectionedPage(

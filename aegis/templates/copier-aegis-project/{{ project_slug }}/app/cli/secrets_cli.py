@@ -8,15 +8,15 @@ The rules (declared names, ``.env`` wins, provider checks) are
 ``app.core.secrets``'s.
 """
 
-import getpass
 import sys
-from typing import Annotated, NoReturn
+from typing import Annotated
 
 from rich.table import Table
 import typer
 
 from app.cli import theme
 from app.core import secrets
+from app.core.audit import cli_actor
 
 app = typer.Typer(help="Set, list and test the credentials the app reads.")
 console = theme.console()
@@ -27,11 +27,6 @@ MARKS = {
     secrets.UNVERIFIED: theme.WARNING,
     secrets.REJECTED: theme.ERROR,
 }
-
-
-def _fail(message: str) -> NoReturn:
-    console.print(f"[{theme.ERROR}]✗[/] {message}")
-    raise typer.Exit(1)
 
 
 def _say(verdict: secrets.Verdict) -> None:
@@ -46,9 +41,9 @@ def _read_value(name: str) -> str:
 
 def _state(row: secrets.SecretStatus) -> str:
     """Where it is set; unset, whether something enabled needs it."""
-    if not row.is_set:
-        return f"[{theme.WARNING}]Missing[/]" if row.needed else "Not used"
-    return ".env" if row.source == secrets.ENV else str(row.source)
+    if not row.is_set and row.needed:
+        return f"[{theme.WARNING}]{row.state}[/]"
+    return row.state
 
 
 @app.command("list")
@@ -68,15 +63,15 @@ async def set_secret(name: NAME) -> None:
     """Store a key (hidden prompt, or stdin); the provider checks it first."""
     value = _read_value(name)
     if not value:
-        _fail(f"No value given for {name}.")
+        theme.fail(f"No value given for {name}.")
     try:
-        verdict = await secrets.put(name, value, actor=f"cli:{getpass.getuser()}")
+        verdict = await secrets.put(name, value, actor=cli_actor())
     except (
         secrets.UnknownSecretError,
         secrets.SecretsReadOnlyError,
         secrets.SecretRejectedError,
     ) as exc:
-        _fail(str(exc))
+        theme.fail(str(exc))
     console.print(f"[{theme.ACCENT}]✓[/] {name} saved")
     if verdict is not None:
         _say(verdict)
@@ -86,9 +81,9 @@ async def set_secret(name: NAME) -> None:
 async def delete_secret(name: NAME) -> None:
     """Remove a stored key."""
     try:
-        await secrets.delete(name, actor=f"cli:{getpass.getuser()}")
+        await secrets.delete(name, actor=cli_actor())
     except (secrets.UnknownSecretError, secrets.SecretsReadOnlyError) as exc:
-        _fail(str(exc))
+        theme.fail(str(exc))
     console.print(f"[{theme.ACCENT}]✓[/] {name} removed")
 
 
@@ -98,7 +93,7 @@ async def check_secret(name: NAME) -> None:
     try:
         verdict = await secrets.test(name)
     except secrets.UnknownSecretError as exc:
-        _fail(str(exc))
+        theme.fail(str(exc))
     _say(verdict)
     if verdict.result == secrets.REJECTED:
         raise typer.Exit(1)

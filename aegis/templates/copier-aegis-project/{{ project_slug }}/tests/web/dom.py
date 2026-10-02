@@ -112,6 +112,12 @@ def oob(markup: str) -> tuple[list[HtmlElement], list[HtmlElement]]:
     return primary, siblings
 
 
+def row_text(markup: Markup, rows: str, needle: str) -> str:
+    """The text of the first row (``rows``, a CSS selector) mentioning
+    ``needle``."""
+    return next(text(row) for row in select(markup, rows) if needle in text(row))
+
+
 def table_rows(markup: Markup, table: str = "table") -> list[dict[str, HtmlElement]]:
     """Each body row of ``table`` as ``{header label: cell}``, so tests read
     cells by name instead of counting columns."""

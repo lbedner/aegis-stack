@@ -17,9 +17,11 @@ import threading
 from typing import Any
 
 import dramatiq
+from dramatiq.asyncio import get_event_loop_thread
 import redis
 from app.components.worker import runtime
 from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync, worker_id
+from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
 from app.services.system.redis_keys import KeyFamily
@@ -101,6 +103,17 @@ class EventPublishMiddleware(dramatiq.Middleware):
                         )
                 for fields in self._runtime_reports:
                     runtime.publish_runtime_sync(self._redis, fields)
+
+    def after_worker_boot(
+        self, broker: dramatiq.Broker, worker: dramatiq.Worker
+    ) -> None:
+        """Apply what the Overseer saved, on the AsyncIO middleware's loop:
+        the one this worker's async actors and their database engine use."""
+        loop = get_event_loop_thread()
+        if loop is None:
+            logger.warning("No asyncio loop at worker boot: saved settings not applied")
+            return
+        loop.run_coroutine(apply_saved_overrides())
 
     def before_worker_boot(
         self, broker: dramatiq.Broker, worker: dramatiq.Worker

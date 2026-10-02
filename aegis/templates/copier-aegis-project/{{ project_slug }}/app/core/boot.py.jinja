@@ -1,0 +1,44 @@
+"""What the Overseer saved, applied to this process as it starts.
+
+Code reads ``settings`` synchronously, so a value saved while the app runs
+reaches it on the next start: each process (webserver, scheduler, worker)
+awaits ``apply_saved_overrides`` before its own work. A missing store or
+table (migrations not yet run) never stops a process from booting: it runs
+on ``.env``, which is already in effect.
+"""
+
+from app.core import saved_settings
+from app.core.log import logger
+
+
+async def apply_saved_overrides() -> None:
+    """Saved settings{% if include_ai and ai_backend in ("sqlite", "postgres") %}, and the model picked in the Overseer or with ``llm use``{% endif %}."""
+    try:
+        applied = await saved_settings.apply_saved()
+    except Exception:
+        logger.exception("Could not apply saved settings")
+    else:
+        if applied:
+            logger.info("Saved settings applied: %s", ", ".join(applied))
+{%- if include_ai and ai_backend in ("sqlite", "postgres") %}
+    await _apply_active_model()
+
+
+async def _apply_active_model() -> None:
+    """The active-model selection is a database row: replay it, so every
+    process answers on the model that was picked, not on ``.env``'s."""
+    from app.core.config import settings
+    from app.services.ai.domains.llm import active_model
+
+    try:
+        applied = await active_model.sync_from_db(settings)
+    except Exception:
+        logger.exception("Could not load the active LLM selection")
+        return
+    if applied:
+        logger.info(
+            "Active LLM selection applied: %s (%s)",
+            settings.AI_MODEL,
+            settings.AI_PROVIDER,
+        )
+{%- endif %}

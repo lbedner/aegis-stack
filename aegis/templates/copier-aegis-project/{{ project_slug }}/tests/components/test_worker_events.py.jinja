@@ -220,6 +220,24 @@ async def test_the_worker_reports_what_it_runs_with(
 from app.components.worker.middleware import EventPublishMiddleware  # noqa: E402
 
 
+def test_worker_boot_applies_what_the_overseer_saved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On the AsyncIO middleware's loop, the one async actors use."""
+    from app.components.worker import middleware
+
+    ran: list[Any] = []
+
+    class Loop:
+        def run_coroutine(self, coroutine: Any) -> None:
+            ran.append(coroutine.__name__)
+            coroutine.close()
+
+    monkeypatch.setattr(middleware, "get_event_loop_thread", lambda: Loop())
+    EventPublishMiddleware().after_worker_boot(MagicMock(), MagicMock())
+    assert ran == ["apply_saved_overrides"]
+
+
 def test_before_process_message_publishes_job_started() -> None:
     """before_process_message should publish a job.started event."""
     mw = EventPublishMiddleware()

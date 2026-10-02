@@ -17,6 +17,7 @@ from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 from app.components.worker import runtime
 from app.components.worker.events import publish_event
 from app.components.worker.heartbeat import mark_busy, mark_idle, worker_id
+from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
 
@@ -48,8 +49,10 @@ class EventPublishMiddleware(TaskiqMiddleware):
 
         Creates an async Redis connection and publishes a worker.started
         event to the Redis Stream. Called once when the TaskIQ worker
-        process starts, before any tasks are consumed.
+        process starts, before any tasks are consumed. What the Overseer
+        saved is applied first.
         """
+        await apply_saved_overrides()
         try:
             redis_url = (
                 settings.redis_url_effective

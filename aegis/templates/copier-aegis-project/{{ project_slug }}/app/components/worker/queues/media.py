@@ -11,6 +11,7 @@ import redis.asyncio as aioredis
 from app.components.worker import runtime
 from app.components.worker.events import publish_event
 from app.components.worker.heartbeat import worker_id
+from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
 from app.core.queue_workers import concurrency_for
@@ -58,7 +59,8 @@ class WorkerSettings:
 
     @staticmethod
     async def on_startup(ctx: dict[str, Any]) -> None:
-        """Publish worker.started event on worker startup."""
+        """Apply what the Overseer saved, then publish worker.started."""
+        await apply_saved_overrides()
         try:
             redis_url = (
                 settings.redis_url_effective

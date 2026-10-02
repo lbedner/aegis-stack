@@ -552,6 +552,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -6488,7 +6516,7 @@
 <p>Locked accounts cannot authenticate even with the correct password until the lockout period expires.</p>
 </div>
 <h3 id="token-revocation-logout">Token Revocation / Logout</h3>
-<p><code>POST /auth/logout</code> revokes the current refresh token (DB-backed) and drops both the <code>aegis_session</code> and <code>aegis_refresh</code> cookies. The short-lived access JWT (~15 min default) is left to expire naturally — there's no stateful blacklist.</p>
+<p><code>POST /auth/logout</code> revokes the current session (DB-backed) and drops both the <code>aegis_session</code> and <code>aegis_refresh</code> cookies. The session's access tokens carry its id (<code>sid</code>) and stop working on their next request.</p>
 <p>For mid-session token rotation, see <a href="../#refresh-token-rotation">Refresh-Token Rotation</a>: the frontend <code>APIClient</code> transparently calls <code>POST /auth/refresh</code> on any 401 and retries the original request, so users stay signed in across days without ever seeing a redirect to <code>/login</code>.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/logout<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span>

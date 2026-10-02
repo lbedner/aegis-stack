@@ -552,6 +552,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -5863,13 +5891,14 @@
     D--&gt;&gt;R: Row found, not revoked
     R-&gt;&gt;D: Mark inbound revoked,&lt;br/&gt;insert successor in same family
     D--&gt;&gt;R: Successor row
-    R--&gt;&gt;A: (new_token, user_id)
+    R--&gt;&gt;A: Successor row (same family_id)
     A--&gt;&gt;C: 200 + Set-Cookie&lt;br/&gt;(aegis_session, aegis_refresh)
     C-&gt;&gt;A: Retry GET /api/v1/things
     A--&gt;&gt;C: 200 OK + payload
     C--&gt;&gt;U: Render result
 
     Note over A,D: Reuse path: if a refresh arrives with&lt;br/&gt;an already-revoked token, RefreshService&lt;br/&gt;revokes the entire family_id and 401s.</code></pre>
+<p>A session is one <code>family_id</code>, and every access token minted for it carries that id as its <code>sid</code> claim. Each request checks the session is still live, so revoking a session (logout, signing out a device, a password reset, reuse detection) ends its access tokens on their next request rather than when they expire. The same claim tells the API and the Overseer which session is the caller's own.</p>
 <h2 id="quick-start">Quick Start</h2>
 <h3 id="1-generate-project-with-auth">1. Generate Project with Auth</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Create project with auth service</span>

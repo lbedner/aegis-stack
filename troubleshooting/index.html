@@ -12,31 +12,31 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://docs.aegis-stack.io/services/insights/cli/">
+        <link rel="canonical" href="https://docs.aegis-stack.io/troubleshooting/">
       
       
-        <link rel="prev" href="../data-sources/">
+        <link rel="prev" href="../installation/">
       
       
-        <link rel="next" href="../dashboard/">
+        <link rel="next" href="../about/">
       
       
         
       
       
-      <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
+      <link rel="icon" href="../images/aegis_stack_layered_shield.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>CLI Commands - Aegis Stack</title>
+        <title>Troubleshooting - Aegis Stack</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,11 +55,11 @@
       
     
     
-      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../../stylesheets/custom.css">
+      <link rel="stylesheet" href="../stylesheets/custom.css">
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -72,7 +72,7 @@
     plausible.init()
   </script>
 
-   <link href="../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+   <link href="../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
     html.glightbox-open { overflow: initial; height: 100%; }
     .gslide-title { margin-top: 0px; user-select: text; }
     .gslide-desc { color: #666; user-select: text; }
@@ -81,7 +81,7 @@
     .gdesc-inner { font-size: 0.75rem; }
     body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
     body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
-    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../assets/javascripts/glightbox.min.js"></script></head>
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../assets/javascripts/glightbox.min.js"></script></head>
   
   
     
@@ -100,7 +100,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#cli-commands" class="md-skip">
+        <a href="#troubleshooting" class="md-skip">
           Skip to content
         </a>
       
@@ -114,9 +114,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -133,7 +133,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              CLI Commands
+              Troubleshooting
             
           </span>
         </div>
@@ -244,11 +244,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../.." class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href=".." class="md-tabs__link">
           
   
   
@@ -268,7 +270,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../about/" class="md-tabs__link">
+        <a href="../about/" class="md-tabs__link">
           
   
   
@@ -288,7 +290,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../components/" class="md-tabs__link">
+        <a href="../components/" class="md-tabs__link">
           
   
   
@@ -304,13 +306,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../services/" class="md-tabs__link">
           
   
   
@@ -330,7 +330,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../overseer/" class="md-tabs__link">
+        <a href="../overseer/" class="md-tabs__link">
           
   
   
@@ -350,7 +350,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../deployment/" class="md-tabs__link">
+        <a href="../deployment/" class="md-tabs__link">
           
   
   
@@ -370,7 +370,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../plugins/" class="md-tabs__link">
+        <a href="../plugins/" class="md-tabs__link">
           
   
   
@@ -390,7 +390,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../cli-reference/" class="md-tabs__link">
+        <a href="../cli-reference/" class="md-tabs__link">
           
   
   
@@ -424,9 +424,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href=".." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     Aegis Stack
@@ -450,24 +450,29 @@
       
   
   
+    
   
   
+  
     
     
     
     
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
         
           
-          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
             
   
   
@@ -485,7 +490,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -503,7 +508,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -531,7 +536,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../installation/" class="md-nav__link">
+      <a href="../installation/" class="md-nav__link">
         
   
   
@@ -556,10 +561,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../troubleshooting/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -575,6 +607,87 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#stale-or-truncated-files-in-dev-containers-macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stale or truncated files in dev containers (macOS)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stale or truncated files in dev containers (macOS)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-it-looks-like" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it looks like
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-to-confirm-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to confirm it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#immediate-fix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Immediate fix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#durable-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Durable options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -644,7 +757,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../about/" class="md-nav__link">
+      <a href="../about/" class="md-nav__link">
         
   
   
@@ -672,7 +785,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../technology/" class="md-nav__link">
+      <a href="../technology/" class="md-nav__link">
         
   
   
@@ -700,7 +813,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../process/" class="md-nav__link">
+      <a href="../process/" class="md-nav__link">
         
   
   
@@ -785,7 +898,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/" class="md-nav__link">
+      <a href="../components/" class="md-nav__link">
         
   
   
@@ -863,7 +976,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/" class="md-nav__link">
+      <a href="../components/backend/" class="md-nav__link">
         
   
   
@@ -941,7 +1054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/middleware/" class="md-nav__link">
+      <a href="../components/backend/middleware/" class="md-nav__link">
         
   
   
@@ -969,7 +1082,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/middleware/performance/" class="md-nav__link">
+      <a href="../components/backend/middleware/performance/" class="md-nav__link">
         
   
   
@@ -1005,7 +1118,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/lifecycle/" class="md-nav__link">
+      <a href="../components/backend/lifecycle/" class="md-nav__link">
         
   
   
@@ -1033,7 +1146,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/routes/" class="md-nav__link">
+      <a href="../components/backend/routes/" class="md-nav__link">
         
   
   
@@ -1061,7 +1174,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/cache/" class="md-nav__link">
+      <a href="../components/backend/cache/" class="md-nav__link">
         
   
   
@@ -1089,7 +1202,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/secrets/" class="md-nav__link">
+      <a href="../components/backend/secrets/" class="md-nav__link">
         
   
   
@@ -1117,7 +1230,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/serving/" class="md-nav__link">
+      <a href="../components/backend/serving/" class="md-nav__link">
         
   
   
@@ -1145,7 +1258,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/auth/" class="md-nav__link">
+      <a href="../components/backend/auth/" class="md-nav__link">
         
   
   
@@ -1173,7 +1286,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/backend/load-testing/" class="md-nav__link">
+      <a href="../components/backend/load-testing/" class="md-nav__link">
         
   
   
@@ -1259,7 +1372,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/database/" class="md-nav__link">
+      <a href="../components/database/" class="md-nav__link">
         
   
   
@@ -1287,7 +1400,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/database/neon/" class="md-nav__link">
+      <a href="../components/database/neon/" class="md-nav__link">
         
   
   
@@ -1423,7 +1536,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/" class="md-nav__link">
+      <a href="../components/frontend/" class="md-nav__link">
         
   
   
@@ -1451,7 +1564,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/architecture/" class="md-nav__link">
+      <a href="../components/frontend/architecture/" class="md-nav__link">
         
   
   
@@ -1479,7 +1592,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/routing/" class="md-nav__link">
+      <a href="../components/frontend/routing/" class="md-nav__link">
         
   
   
@@ -1507,7 +1620,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/state/" class="md-nav__link">
+      <a href="../components/frontend/state/" class="md-nav__link">
         
   
   
@@ -1535,7 +1648,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/api-client/" class="md-nav__link">
+      <a href="../components/frontend/api-client/" class="md-nav__link">
         
   
   
@@ -1563,7 +1676,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/events/" class="md-nav__link">
+      <a href="../components/frontend/events/" class="md-nav__link">
         
   
   
@@ -1591,7 +1704,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/frontend/example/" class="md-nav__link">
+      <a href="../components/frontend/example/" class="md-nav__link">
         
   
   
@@ -1677,7 +1790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/" class="md-nav__link">
+      <a href="../components/web-frontend/" class="md-nav__link">
         
   
   
@@ -1705,7 +1818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/templates-and-partials/" class="md-nav__link">
+      <a href="../components/web-frontend/templates-and-partials/" class="md-nav__link">
         
   
   
@@ -1733,7 +1846,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/styling/" class="md-nav__link">
+      <a href="../components/web-frontend/styling/" class="md-nav__link">
         
   
   
@@ -1761,7 +1874,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/asset-pipeline/" class="md-nav__link">
+      <a href="../components/web-frontend/asset-pipeline/" class="md-nav__link">
         
   
   
@@ -1789,7 +1902,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/web-frontend/auth-pages/" class="md-nav__link">
+      <a href="../components/web-frontend/auth-pages/" class="md-nav__link">
         
   
   
@@ -1883,7 +1996,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/" class="md-nav__link">
+      <a href="../components/scheduler/" class="md-nav__link">
         
   
   
@@ -1911,7 +2024,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/examples/" class="md-nav__link">
+      <a href="../components/scheduler/examples/" class="md-nav__link">
         
   
   
@@ -1939,7 +2052,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/cli/" class="md-nav__link">
+      <a href="../components/scheduler/cli/" class="md-nav__link">
         
   
   
@@ -1967,7 +2080,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/persistence/" class="md-nav__link">
+      <a href="../components/scheduler/persistence/" class="md-nav__link">
         
   
   
@@ -1995,7 +2108,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/scheduler/running-jobs/" class="md-nav__link">
+      <a href="../components/scheduler/running-jobs/" class="md-nav__link">
         
   
   
@@ -2081,7 +2194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/" class="md-nav__link">
+      <a href="../components/storage/" class="md-nav__link">
         
   
   
@@ -2109,7 +2222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/configuration/" class="md-nav__link">
+      <a href="../components/storage/configuration/" class="md-nav__link">
         
   
   
@@ -2137,7 +2250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/storage/examples/" class="md-nav__link">
+      <a href="../components/storage/examples/" class="md-nav__link">
         
   
   
@@ -2223,7 +2336,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/" class="md-nav__link">
+      <a href="../components/worker/" class="md-nav__link">
         
   
   
@@ -2251,7 +2364,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/configuration/" class="md-nav__link">
+      <a href="../components/worker/configuration/" class="md-nav__link">
         
   
   
@@ -2279,7 +2392,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/jobs/" class="md-nav__link">
+      <a href="../components/worker/jobs/" class="md-nav__link">
         
   
   
@@ -2307,7 +2420,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/examples/" class="md-nav__link">
+      <a href="../components/worker/examples/" class="md-nav__link">
         
   
   
@@ -2385,7 +2498,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/worker/extras/load-testing/" class="md-nav__link">
+      <a href="../components/worker/extras/load-testing/" class="md-nav__link">
         
   
   
@@ -2429,7 +2542,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/redis/" class="md-nav__link">
+      <a href="../components/redis/" class="md-nav__link">
         
   
   
@@ -2457,7 +2570,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/inference/" class="md-nav__link">
+      <a href="../components/inference/" class="md-nav__link">
         
   
   
@@ -2485,7 +2598,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/ingress/" class="md-nav__link">
+      <a href="../components/ingress/" class="md-nav__link">
         
   
   
@@ -2513,7 +2626,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../components/observability/" class="md-nav__link">
+      <a href="../components/observability/" class="md-nav__link">
         
   
   
@@ -2545,29 +2658,24 @@
       
   
   
-    
   
   
-  
     
     
     
     
       
-        
-        
-      
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
   
@@ -2585,7 +2693,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2603,7 +2711,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../" class="md-nav__link">
+      <a href="../services/" class="md-nav__link">
         
   
   
@@ -2681,7 +2789,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/" class="md-nav__link">
+      <a href="../services/ai/" class="md-nav__link">
         
   
   
@@ -2709,7 +2817,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/illiana/" class="md-nav__link">
+      <a href="../services/ai/illiana/" class="md-nav__link">
         
   
   
@@ -2737,7 +2845,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/agents/" class="md-nav__link">
+      <a href="../services/ai/agents/" class="md-nav__link">
         
   
   
@@ -2765,7 +2873,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/memory-modules/" class="md-nav__link">
+      <a href="../services/ai/memory-modules/" class="md-nav__link">
         
   
   
@@ -2793,7 +2901,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/llm-catalog/" class="md-nav__link">
+      <a href="../services/ai/llm-catalog/" class="md-nav__link">
         
   
   
@@ -2821,7 +2929,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/rag/" class="md-nav__link">
+      <a href="../services/ai/rag/" class="md-nav__link">
         
   
   
@@ -2849,7 +2957,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/cost-tracking/" class="md-nav__link">
+      <a href="../services/ai/cost-tracking/" class="md-nav__link">
         
   
   
@@ -2877,7 +2985,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/voice/" class="md-nav__link">
+      <a href="../services/ai/voice/" class="md-nav__link">
         
   
   
@@ -2905,7 +3013,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/engines/" class="md-nav__link">
+      <a href="../services/ai/engines/" class="md-nav__link">
         
   
   
@@ -2933,7 +3041,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/providers/" class="md-nav__link">
+      <a href="../services/ai/providers/" class="md-nav__link">
         
   
   
@@ -2961,7 +3069,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/api/" class="md-nav__link">
+      <a href="../services/ai/api/" class="md-nav__link">
         
   
   
@@ -2989,7 +3097,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/integration/" class="md-nav__link">
+      <a href="../services/ai/integration/" class="md-nav__link">
         
   
   
@@ -3017,7 +3125,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/cli/" class="md-nav__link">
+      <a href="../services/ai/cli/" class="md-nav__link">
         
   
   
@@ -3045,7 +3153,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/examples/" class="md-nav__link">
+      <a href="../services/ai/examples/" class="md-nav__link">
         
   
   
@@ -3131,7 +3239,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/" class="md-nav__link">
+      <a href="../services/auth/" class="md-nav__link">
         
   
   
@@ -3159,7 +3267,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/levels/" class="md-nav__link">
+      <a href="../services/auth/levels/" class="md-nav__link">
         
   
   
@@ -3187,7 +3295,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/api/" class="md-nav__link">
+      <a href="../services/auth/api/" class="md-nav__link">
         
   
   
@@ -3215,7 +3323,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/integration/" class="md-nav__link">
+      <a href="../services/auth/integration/" class="md-nav__link">
         
   
   
@@ -3243,7 +3351,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/cli/" class="md-nav__link">
+      <a href="../services/auth/cli/" class="md-nav__link">
         
   
   
@@ -3271,7 +3379,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../auth/examples/" class="md-nav__link">
+      <a href="../services/auth/examples/" class="md-nav__link">
         
   
   
@@ -3357,7 +3465,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/" class="md-nav__link">
+      <a href="../services/blog/" class="md-nav__link">
         
   
   
@@ -3385,7 +3493,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/api/" class="md-nav__link">
+      <a href="../services/blog/api/" class="md-nav__link">
         
   
   
@@ -3413,7 +3521,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/dashboard/" class="md-nav__link">
+      <a href="../services/blog/dashboard/" class="md-nav__link">
         
   
   
@@ -3441,7 +3549,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/cli/" class="md-nav__link">
+      <a href="../services/blog/cli/" class="md-nav__link">
         
   
   
@@ -3469,7 +3577,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../blog/examples/" class="md-nav__link">
+      <a href="../services/blog/examples/" class="md-nav__link">
         
   
   
@@ -3555,7 +3663,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/" class="md-nav__link">
+      <a href="../services/documents/" class="md-nav__link">
         
   
   
@@ -3583,7 +3691,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/api/" class="md-nav__link">
+      <a href="../services/documents/api/" class="md-nav__link">
         
   
   
@@ -3611,7 +3719,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/extraction/" class="md-nav__link">
+      <a href="../services/documents/extraction/" class="md-nav__link">
         
   
   
@@ -3639,7 +3747,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../documents/dashboard/" class="md-nav__link">
+      <a href="../services/documents/dashboard/" class="md-nav__link">
         
   
   
@@ -3725,7 +3833,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/" class="md-nav__link">
+      <a href="../services/comms/" class="md-nav__link">
         
   
   
@@ -3753,7 +3861,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/setup/" class="md-nav__link">
+      <a href="../services/comms/setup/" class="md-nav__link">
         
   
   
@@ -3781,7 +3889,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/api/" class="md-nav__link">
+      <a href="../services/comms/api/" class="md-nav__link">
         
   
   
@@ -3809,7 +3917,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/cli/" class="md-nav__link">
+      <a href="../services/comms/cli/" class="md-nav__link">
         
   
   
@@ -3837,7 +3945,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../comms/examples/" class="md-nav__link">
+      <a href="../services/comms/examples/" class="md-nav__link">
         
   
   
@@ -3923,7 +4031,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/" class="md-nav__link">
+      <a href="../services/finance/" class="md-nav__link">
         
   
   
@@ -3951,7 +4059,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/accounts/" class="md-nav__link">
+      <a href="../services/finance/accounts/" class="md-nav__link">
         
   
   
@@ -3979,7 +4087,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/bills/" class="md-nav__link">
+      <a href="../services/finance/bills/" class="md-nav__link">
         
   
   
@@ -4007,7 +4115,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/projected/" class="md-nav__link">
+      <a href="../services/finance/projected/" class="md-nav__link">
         
   
   
@@ -4035,7 +4143,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/budget/" class="md-nav__link">
+      <a href="../services/finance/budget/" class="md-nav__link">
         
   
   
@@ -4063,7 +4171,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/review/" class="md-nav__link">
+      <a href="../services/finance/review/" class="md-nav__link">
         
   
   
@@ -4091,7 +4199,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/investments/" class="md-nav__link">
+      <a href="../services/finance/investments/" class="md-nav__link">
         
   
   
@@ -4119,7 +4227,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/imports/" class="md-nav__link">
+      <a href="../services/finance/imports/" class="md-nav__link">
         
   
   
@@ -4147,7 +4255,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/chat/" class="md-nav__link">
+      <a href="../services/finance/chat/" class="md-nav__link">
         
   
   
@@ -4175,7 +4283,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/api/" class="md-nav__link">
+      <a href="../services/finance/api/" class="md-nav__link">
         
   
   
@@ -4203,7 +4311,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../finance/cli/" class="md-nav__link">
+      <a href="../services/finance/cli/" class="md-nav__link">
         
   
   
@@ -4236,8 +4344,6 @@
                 
   
   
-    
-  
   
   
     
@@ -4248,11 +4354,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_8" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_8" >
         
           
           <label class="md-nav__link" for="__nav_4_8" id="__nav_4_8_label" tabindex="0">
@@ -4273,7 +4379,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_8_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_8_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4_8">
             <span class="md-nav__icon md-icon"></span>
             
@@ -4291,7 +4397,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../services/insights/" class="md-nav__link">
         
   
   
@@ -4319,7 +4425,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../data-sources/" class="md-nav__link">
+      <a href="../services/insights/data-sources/" class="md-nav__link">
         
   
   
@@ -4344,37 +4450,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    CLI Commands
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../services/insights/cli/" class="md-nav__link">
         
   
   
@@ -4390,193 +4469,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#collect" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        collect
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="collect">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#options" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Options
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#output" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#status" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        status
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="status">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#output_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stars" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        stars
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="stars">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#options_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Options
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#records" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        records
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sources" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        sources
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reddit-add" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        reddit add
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#event" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        event
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="event">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#options_2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Options
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#event-types" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Event types
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -4589,7 +4481,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dashboard/" class="md-nav__link">
+      <a href="../services/insights/dashboard/" class="md-nav__link">
         
   
   
@@ -4617,7 +4509,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/" class="md-nav__link">
+      <a href="../services/insights/configuration/" class="md-nav__link">
         
   
   
@@ -4645,7 +4537,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/" class="md-nav__link">
+      <a href="../services/insights/examples/" class="md-nav__link">
         
   
   
@@ -4731,7 +4623,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/" class="md-nav__link">
+      <a href="../services/payment/" class="md-nav__link">
         
   
   
@@ -4759,7 +4651,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/setup/" class="md-nav__link">
+      <a href="../services/payment/setup/" class="md-nav__link">
         
   
   
@@ -4787,7 +4679,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/dashboard/" class="md-nav__link">
+      <a href="../services/payment/dashboard/" class="md-nav__link">
         
   
   
@@ -4815,7 +4707,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/api/" class="md-nav__link">
+      <a href="../services/payment/api/" class="md-nav__link">
         
   
   
@@ -4843,7 +4735,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/cli/" class="md-nav__link">
+      <a href="../services/payment/cli/" class="md-nav__link">
         
   
   
@@ -4871,7 +4763,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../payment/examples/" class="md-nav__link">
+      <a href="../services/payment/examples/" class="md-nav__link">
         
   
   
@@ -4964,7 +4856,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/" class="md-nav__link">
+      <a href="../overseer/" class="md-nav__link">
         
   
   
@@ -4992,7 +4884,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/story/" class="md-nav__link">
+      <a href="../overseer/story/" class="md-nav__link">
         
   
   
@@ -5020,7 +4912,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../overseer/integration/" class="md-nav__link">
+      <a href="../overseer/integration/" class="md-nav__link">
         
   
   
@@ -5105,7 +4997,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../deployment/" class="md-nav__link">
+      <a href="../deployment/" class="md-nav__link">
         
   
   
@@ -5190,7 +5082,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/" class="md-nav__link">
+      <a href="../plugins/" class="md-nav__link">
         
   
   
@@ -5218,7 +5110,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/creating/" class="md-nav__link">
+      <a href="../plugins/creating/" class="md-nav__link">
         
   
   
@@ -5246,7 +5138,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/publishing/" class="md-nav__link">
+      <a href="../plugins/publishing/" class="md-nav__link">
         
   
   
@@ -5331,7 +5223,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../cli-reference/" class="md-nav__link">
+      <a href="../cli-reference/" class="md-nav__link">
         
   
   
@@ -5359,7 +5251,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../evolving-your-stack/" class="md-nav__link">
+      <a href="../evolving-your-stack/" class="md-nav__link">
         
   
   
@@ -5387,7 +5279,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../integration-patterns/" class="md-nav__link">
+      <a href="../integration-patterns/" class="md-nav__link">
         
   
   
@@ -5442,22 +5334,22 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#collect" class="md-nav__link">
+  <a href="#stale-or-truncated-files-in-dev-containers-macos" class="md-nav__link">
     <span class="md-ellipsis">
       
-        collect
+        Stale or truncated files in dev containers (macOS)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="collect">
+    <nav class="md-nav" aria-label="Stale or truncated files in dev containers (macOS)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#options" class="md-nav__link">
+  <a href="#what-it-looks-like" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Options
+        What it looks like
       
     </span>
   </a>
@@ -5465,127 +5357,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#output" class="md-nav__link">
+  <a href="#how-to-confirm-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Output
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#status" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        status
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="status">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#output_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stars" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        stars
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="stars">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#options_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Options
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#records" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        records
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sources" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        sources
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reddit-add" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        reddit add
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#event" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        event
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="event">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#options_2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Options
+        How to confirm it
       
     </span>
   </a>
@@ -5593,10 +5368,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#event-types" class="md-nav__link">
+  <a href="#immediate-fix" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Event types
+        Immediate fix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#durable-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Durable options
       
     </span>
   </a>
@@ -5629,201 +5415,48 @@
   
 
 
-<h1 id="cli-commands">CLI Commands</h1>
-<p>The Insights CLI provides commands for data collection, status monitoring, and manual event management.</p>
-<h2 id="collect">collect</h2>
-<p>Run data collection for one or all enabled sources.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Collect all enabled sources</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>my-app<span class="w"> </span>insights<span class="w"> </span>collect
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Collect a specific source</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>my-app<span class="w"> </span>insights<span class="w"> </span>collect<span class="w"> </span>github_traffic
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>my-app<span class="w"> </span>insights<span class="w"> </span>collect<span class="w"> </span>pypi
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>my-app<span class="w"> </span>insights<span class="w"> </span>collect<span class="w"> </span>plausible
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Backfill historical data (PyPI and Plausible support this)</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>my-app<span class="w"> </span>insights<span class="w"> </span>collect<span class="w"> </span>pypi<span class="w"> </span>--lookback-days<span class="w"> </span><span class="m">365</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>my-app<span class="w"> </span>insights<span class="w"> </span>collect<span class="w"> </span>plausible<span class="w"> </span>--lookback-days<span class="w"> </span><span class="m">365</span>
+<h1 id="troubleshooting">Troubleshooting</h1>
+<h2 id="stale-or-truncated-files-in-dev-containers-macos">Stale or truncated files in dev containers (macOS)</h2>
+<h3 id="what-it-looks-like">What it looks like</h3>
+<p>On macOS with Docker Desktop, the dev stack shares the project into its
+containers through a bind mount (<code>.:/code</code>). Docker Desktop's default file
+sharing (VirtioFS) caches file attributes inside its Linux VM. After a file
+is rewritten in place (truncated, then written again), a container can keep
+seeing the old size or modification time, so it reads a truncated file.</p>
+<p>It tends to follow bulk writes: <code>aegis add</code>, <code>ruff format</code> / <code>make fix</code>, or an
+editor that saves in place. The symptoms look like broken code:</p>
+<ul>
+<li>a syntax error in a file that is fine on disk, and a webserver that stays
+  down after a reload;</li>
+<li>a reload that never happens after you save;</li>
+<li>a CSS build failing with <code>Unclosed block</code>, and new Tailwind classes that
+  never appear.</li>
+</ul>
+<h3 id="how-to-confirm-it">How to confirm it</h3>
+<p>Compare the file's size on the host and in the container:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>wc<span class="w"> </span>-c<span class="w"> </span>app/components/frontend/dashboard/cards/__init__.py
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>&lt;project&gt;-webserver-1<span class="w"> </span>wc<span class="w"> </span>-c<span class="w"> </span>/code/app/components/frontend/dashboard/cards/__init__.py
 </span></code></pre></div>
-<h3 id="options">Options</h3>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Short</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>--lookback-days</code></td>
-<td><code>-d</code></td>
-<td>1</td>
-<td>Number of days to fetch. Higher values for backfill.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="output">Output</h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Collecting from all enabled sources...
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>  github_traffic: 6 written, 52 skipped
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>  github_stars: 0 written, 99 skipped
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>  pypi: 7 written, 78 skipped
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    Records broken: PyPI Best Single Day: 850 (was 334)
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>  plausible: 4 written, 0 skipped
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>  reddit: 0 written, 0 skipped
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>  github_events: 2 written, 24 skipped
+<p>Different sizes (and an older modification time inside the container) mean
+the container is reading a stale copy.</p>
+<h3 id="immediate-fix">Immediate fix</h3>
+<p>Replace the file instead of rewriting it, so the container sees a new file:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>cp<span class="w"> </span>path/to/file<span class="w"> </span>path/to/file.tmp<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mv<span class="w"> </span>path/to/file.tmp<span class="w"> </span>path/to/file
 </span></code></pre></div>
-<p>When a new all-time record is detected, it's reported in the output and automatically created as a milestone event.</p>
-<h2 id="status">status</h2>
-<p>Display current collection status across all sources.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>my-app<span class="w"> </span>insights<span class="w"> </span>status
-</span></code></pre></div>
-<h3 id="output_1">Output</h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Insights Status
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>                               Sources
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>+-----------------------+----------+----------------------+-----------+
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>| Source                | Enabled  | Last Collected       |   Metrics |
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>+-----------------------+----------+----------------------+-----------+
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>| GitHub Traffic        | Yes      | 2026-04-11 12:02:58  |         6 |
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>| GitHub Stars          | Yes      | 2026-04-11 09:05:30  |         1 |
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>| PyPI                  | Yes      | 2026-04-11 12:02:59  |         7 |
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>| Plausible             | Yes      | 2026-04-11 12:05:32  |         6 |
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>| Reddit                | Yes      | 2026-04-11 09:05:32  |         1 |
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>| GitHub Events         | Yes      | 2026-04-11 09:05:34  |         4 |
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>+-----------------------+----------+----------------------+-----------+
-</span></code></pre></div>
-<h2 id="stars">stars</h2>
-<p>Display top stargazers with profile metadata.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Show latest 10 stars</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>my-app<span class="w"> </span>insights<span class="w"> </span>stars
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Show more</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>my-app<span class="w"> </span>insights<span class="w"> </span>stars<span class="w"> </span>-n<span class="w"> </span><span class="m">20</span>
-</span></code></pre></div>
-<h3 id="options_1">Options</h3>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Short</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>-n</code> / <code>--limit</code></td>
-<td><code>-n</code></td>
-<td>10</td>
-<td>Number of stars to display</td>
-</tr>
-</tbody>
-</table>
-<h2 id="records">records</h2>
-<p>Display all-time records for each metric type.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-app<span class="w"> </span>insights<span class="w"> </span>records
-</span></code></pre></div>
-<h2 id="sources">sources</h2>
-<p>List all configured insight sources and their collection intervals.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>my-app<span class="w"> </span>insights<span class="w"> </span>sources
-</span></code></pre></div>
-<h2 id="reddit-add">reddit add</h2>
-<p>Add a Reddit post for tracking.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>my-app<span class="w"> </span>insights<span class="w"> </span>reddit<span class="w"> </span>add<span class="w"> </span>https://reddit.com/r/FastAPI/comments/abc123/your-post
-</span></code></pre></div>
-<p>The command fetches the post's current stats (upvotes, comments, subreddit, title) and creates both a metric row and a timeline event.</p>
-<h2 id="event">event</h2>
-<p>Log a manual event for the timeline.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Basic event (today&#39;s date)</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>my-app<span class="w"> </span>insights<span class="w"> </span>event<span class="w"> </span>feature<span class="w"> </span><span class="s2">&quot;Added Japanese localization&quot;</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Backdated event</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>my-app<span class="w"> </span>insights<span class="w"> </span>event<span class="w"> </span>external<span class="w"> </span><span class="s2">&quot;Featured in Python Weekly&quot;</span><span class="w"> </span>--date<span class="w"> </span><span class="m">2026</span>-03-15
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># Milestone with category (for record tracking on Overview)</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>my-app<span class="w"> </span>insights<span class="w"> </span>event<span class="w"> </span>milestone_github<span class="w"> </span><span class="s2">&quot;900 clones&quot;</span><span class="w"> </span>--date<span class="w"> </span><span class="m">2026</span>-04-15<span class="w"> </span>--category<span class="w"> </span>daily_clones
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="c1"># Feature launch</span>
-</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>my-app<span class="w"> </span>insights<span class="w"> </span>event<span class="w"> </span>feature<span class="w"> </span><span class="s2">&quot;Traefik + Deploy shipped (v0.6.0)&quot;</span><span class="w"> </span>--date<span class="w"> </span><span class="m">2026</span>-02-09
-</span></code></pre></div>
-<h3 id="options_2">Options</h3>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>--date</code></td>
-<td>Event date in YYYY-MM-DD format. Defaults to today.</td>
-</tr>
-<tr>
-<td><code>--category</code></td>
-<td>Milestone category for record deduplication (e.g., <code>daily_clones</code>, <code>pypi_daily</code>). Used by the Overview milestones grid to show only the latest record per category.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="event-types">Event types</h3>
-<table>
-<thead>
-<tr>
-<th>Type</th>
-<th>Color</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>release</code></td>
-<td>Green</td>
-<td>Version releases (auto-detected)</td>
-</tr>
-<tr>
-<td><code>star</code></td>
-<td>Amber</td>
-<td>Star events (auto-detected)</td>
-</tr>
-<tr>
-<td><code>reddit_post</code></td>
-<td>Orange</td>
-<td>Reddit posts (via <code>reddit add</code>)</td>
-</tr>
-<tr>
-<td><code>feature</code></td>
-<td>Cyan</td>
-<td>Feature launches</td>
-</tr>
-<tr>
-<td><code>milestone_github</code></td>
-<td>Pink</td>
-<td>GitHub metric records (auto-detected)</td>
-</tr>
-<tr>
-<td><code>milestone_pypi</code></td>
-<td>Pink</td>
-<td>PyPI metric records (auto-detected)</td>
-</tr>
-<tr>
-<td><code>anomaly_github</code></td>
-<td>Red</td>
-<td>Data anomalies</td>
-</tr>
-<tr>
-<td><code>localization</code></td>
-<td>Blue</td>
-<td>Localization events</td>
-</tr>
-<tr>
-<td><code>external</code></td>
-<td>Gray</td>
-<td>External events</td>
-</tr>
-</tbody>
-</table>
+<p><code>touch</code> is not enough: it keeps the same file, and the cached attributes stay.
+Then restart whatever stopped on the bad read, for example
+<code>docker restart &lt;project&gt;-webserver-1</code>.</p>
+<p>The dev Tailwind watcher recovers on its own: it restarts when it exits, or
+when a template, script or stylesheet changed and no build followed.</p>
+<h3 id="durable-options">Durable options</h3>
+<ul>
+<li><strong>OrbStack</strong>, a drop-in replacement for Docker Desktop on macOS. Its file
+  sharing does not show this.</li>
+<li><strong>Docker Desktop with gRPC FUSE</strong> file sharing (Settings, General, "Choose
+  file sharing implementation"). Slower than VirtioFS, without the stale
+  attributes.</li>
+</ul>
+<p>Linux hosts share files natively and are not affected.</p>
 
 
 
@@ -5896,16 +5529,16 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js"></script>
       
-        <script src="../../../javascripts/mermaid-config.js"></script>
+        <script src="../javascripts/mermaid-config.js"></script>
       
-        <script src="../../../javascripts/feedback.js"></script>
+        <script src="../javascripts/feedback.js"></script>
       
     
   <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});

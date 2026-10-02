@@ -552,6 +552,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -6505,14 +6533,24 @@
 </thead>
 <tbody>
 <tr>
+<td><code>start_session</code></td>
+<td><code>(user, source=...) -&gt; (access_token, refresh_token)</code></td>
+<td>Sign in: a new session (family) and its first access token, which carries the session id as <code>sid</code>. Login, registration and OAuth all use it.</td>
+</tr>
+<tr>
 <td><code>mint</code></td>
 <td><code>(user_id, family_id=None) -&gt; token</code></td>
-<td>Insert a new refresh row. Callers minting a fresh sign-in leave <code>family_id=None</code>.</td>
+<td>Insert a new refresh row.</td>
 </tr>
 <tr>
 <td><code>rotate</code></td>
-<td><code>(token) -&gt; (new_token, user_id) \| None</code></td>
-<td>Revoke inbound, insert successor in the same family. Returns <code>None</code> on miss / expired / replay.</td>
+<td><code>(token) -&gt; RefreshToken \| None</code></td>
+<td>Revoke inbound and insert its successor in the same family, in one commit. Returns the successor, or <code>None</code> on miss / expired / replay.</td>
+</tr>
+<tr>
+<td><code>is_live_session</code></td>
+<td><code>(session_id) -&gt; bool</code></td>
+<td>Whether the session still has a live row. Checked on every request whose access token carries <code>sid</code>.</td>
 </tr>
 <tr>
 <td><code>revoke</code></td>
@@ -6522,7 +6560,7 @@
 <tr>
 <td><code>revoke_family</code></td>
 <td><code>(family_id) -&gt; None</code></td>
-<td>Revoke every live row in the family. Used on reuse detection and as the basis for a future "sign out everywhere" feature.</td>
+<td>Revoke every live row in the family. Used on reuse detection, logout and signing out a device.</td>
 </tr>
 <tr>
 <td><code>validate</code></td>

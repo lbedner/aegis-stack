@@ -552,6 +552,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -5777,8 +5805,7 @@
 </span></code></pre></div>
 <hr />
 <h2 id="6-logout-refresh-token-rotation">6. Logout + Refresh-Token Rotation</h2>
-<p><code>POST /auth/logout</code> revokes the refresh-token row in the database and drops both the <code>aegis_session</code> and <code>aegis_refresh</code> cookies. The short-lived access JWT is left to expire naturally — there is no stateful blacklist on access tokens.</p>
-<p>For browser flows, this is invisible: cookies are gone, so the next request is unauthenticated. For pure bearer-token clients, the access token keeps working until its <code>ACCESS_TOKEN_EXPIRE_MINUTES</code> window closes (15 min default), but the client can't mint a new one because the refresh row is revoked.</p>
+<p><code>POST /auth/logout</code> revokes the session in the database and drops both the <code>aegis_session</code> and <code>aegis_refresh</code> cookies. The session's access tokens stop working on their next request, so a bearer client holding a copy is signed out too, not only the browser.</p>
 <p><strong>Login and capture the access + refresh tokens (use <code>-c</code> to persist cookies):</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-c<span class="w"> </span>cookies.txt<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/token<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="w">  </span>-d<span class="w"> </span><span class="s2">&quot;username=jane@example.com&amp;password=NewSecret5678!&quot;</span><span class="w"> </span><span class="se">\</span>
@@ -5823,8 +5850,8 @@
 </span><span id="__span-38-3"><a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a><span class="c1"># 401</span>
 </span></code></pre></div>
 <div class="admonition info">
-<p class="admonition-title">Why no access-token blacklist</p>
-<p>Access tokens are 15-minute JWTs verified statelessly on every request — no DB hit on the hot path. Revocation is handled at the refresh layer: once the refresh row is revoked (on logout or reuse), the client can no longer mint new access tokens. A stolen access token's blast radius is bounded by its natural expiry. See <a href="../#refresh-token-rotation">Refresh-Token Rotation</a> for the design rationale.</p>
+<p class="admonition-title">How an access token is revoked</p>
+<p>Every access token carries its session's id as a <code>sid</code> claim. Each request checks that the session still has a live refresh row (one indexed lookup), so logout, "sign out this device", "sign out everywhere else", a password reset and reuse detection end the session's access tokens at once instead of when they expire. A token without <code>sid</code> (minted outside a sign-in, such as a load-test token) lives out its short lifetime. See <a href="../#refresh-token-rotation">Refresh-Token Rotation</a> for the design rationale.</p>
 </div>
 <hr />
 <h2 id="7-organization-management">7. Organization Management</h2>

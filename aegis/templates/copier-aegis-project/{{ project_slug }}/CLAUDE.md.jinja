@@ -89,7 +89,9 @@ migration. Never query inside a loop (N+1); batch with `WHERE id IN (...)` or
 eager-load with `selectinload()`/`joinedload()`. `make check-queries` runs
 the test suite under queryspy and fails on any repeated-query site that is
 not already in `.queryspy-baseline.json` (CI's test job runs the same
-flags); the baseline is the known debt, shrink it, never add to it.
+flags); the baseline is the known debt, shrink it, never add to it. A
+statement is known by its shape (its SQL with the selected columns collapsed,
+`tests/_queryspy_shape.py`), so adding a column changes no entry.
 `make check-queries-baseline` rewrites it after a fix. See the `add-model-and-migration` skill.
 
 {% endif %}{% if include_worker %}## Worker

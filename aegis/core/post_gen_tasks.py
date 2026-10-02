@@ -887,6 +887,29 @@ def setup_env_file(project_path: Path) -> bool:
         return False
 
 
+def stack_holds_sqlite(project_path: Path) -> bool:
+    """Whether the project's running containers have its SQLite file open.
+
+    The dev stack bind-mounts ``data/app.db``; writing it from the host
+    leaves their open connections reading a torn view through Docker
+    Desktop's file sharing ("database disk image is malformed") until they
+    restart. No SQLite file, or no docker, means nothing holds it.
+    """
+    if not (project_path / "data" / "app.db").exists():
+        return False
+    try:
+        running = subprocess.run(
+            ["docker", "compose", "ps", "--status", "running", "--quiet"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return running.returncode == 0 and bool(running.stdout.strip())
+
+
 def run_migrations(
     project_path: Path,
     include_migrations: bool = False,
@@ -909,6 +932,10 @@ def run_migrations(
     """
     if not include_migrations:
         return True  # No migrations needed
+
+    if stack_holds_sqlite(project_path):
+        brand.error(t("postgen.db_in_use"))
+        return False
 
     try:
         typer.echo(t("postgen.db_setup"))

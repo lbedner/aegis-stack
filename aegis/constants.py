@@ -298,8 +298,13 @@ class AnswerKeys:
 
     @classmethod
     def include_key(cls, name: str) -> str:
-        """Generate include key for component/service name."""
-        return f"include_{name}"
+        """Generate include key for component/service name.
+
+        Options are dropped (``database[sqlite]`` -> ``include_database``):
+        a bracketed key matches no copier question and lingers in the
+        answers file through every later update.
+        """
+        return f"include_{name.split('[', 1)[0]}"
 
 
 class Messages:

@@ -82,6 +82,43 @@
 
 ### Fixed
 
+- **Adding an option to an installed service leaves the project as `init`
+  would.** `aegis add-service "ai[...,voice]"` on a project with `ai` added the
+  voice-only files but left every file it already had as first rendered: the
+  speech API was a one-line stub the router never mounted, and `AIService` had
+  no `stt` or `tts`. An option upgrade now creates only what the new option
+  adds and re-renders the service's existing files through the same 3-way
+  merge shared files get, so an edited file keeps its edits. It no longer
+  re-creates files the project deleted. Auth level upgrades take the same path
+  instead of overwriting a fixed list of files, edits and all.
+- **An option that is off ships none of its files on any add path.** Adding a
+  service copied option files that sat inside one of its always-copied
+  directories: `ai` without voice brought the whole voice package and a stub
+  speech router, `ai` without RAG its chat context modules, and `auth` without
+  org or OAuth their modules. The manifest now gates every file `init` removes
+  for an option, and a test holds the two to each other.
+- **`add-service` writes no bracketed answer keys and re-adds no database.** A
+  component a service pulls in by option (`database[sqlite]`) was looked up as
+  `include_database[sqlite]`: never found, so an installed database was added
+  again and the junk key stayed in `.copier-answers.yml` for good. Answer keys
+  drop the options now.
+- **An add formats only what it wrote.** It ran `make fix` over the whole
+  project, reformatting files the project keeps as they are; it now runs ruff
+  on the files the operation changed.
+- **No migration from the host while the dev stack holds the SQLite file.**
+  The containers' open connections then read a torn copy through Docker
+  Desktop's file sharing ("database disk image is malformed") until they
+  restarted. `add-service` now refuses before writing anything and says to
+  stop the stack, run it, and start the stack again; every other path that
+  migrates from the host refuses at the migration.
+- **AI routes keep provider and service errors in the log.** The chat, chat
+  stream, conversation, speech and voice preview routes returned exception
+  text, which can carry keys, URLs or SQL; they log it and return what failed.
+  A transcription or synthesis stream that fails before its first chunk is a
+  503 now, not a broken response.
+- **Transcription works with the gpt-4o models.** OpenAI's
+  `gpt-4o-transcribe` and `gpt-4o-mini-transcribe` reject `verbose_json`,
+  which every call sent; only Whisper models get it now.
 - **A new column no longer turns the query baseline into new findings.** queryspy
   knew a repeated statement by its whole SQL, select list included, so adding a
   column renamed every SELECT on that table, the baseline read as all new, and

@@ -103,11 +103,11 @@ class OpenAIWhisperProvider(BaseSTTProvider):
         audio_file.name = f"audio{self._get_file_extension(audio.format)}"
 
         try:
-            # Build request parameters
+            whisper = self.model.startswith("whisper")  # gpt-4o-*: json only
             params: dict[str, Any] = {
                 "model": self.model,
                 "file": audio_file,
-                "response_format": "verbose_json",  # Get segments and duration
+                "response_format": "verbose_json" if whisper else "json",
             }
 
             if audio.language:

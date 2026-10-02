@@ -98,13 +98,18 @@ async def chat(request: ChatRequest) -> ChatResponse:
             response_time_ms=response_time,
         )
 
-    # Subclasses before AIServiceError, or their branches never run.
-    except ProviderError as e:
-        raise HTTPException(status_code=502, detail=f"AI provider error: {e}")
+    # Subclasses before AIServiceError, or their branches never run. A
+    # provider's or the service's text is logged, not returned: it can
+    # carry keys or URLs. A conversation error is ours and says what the
+    # caller got wrong.
+    except ProviderError:
+        logger.exception("Chat provider error")
+        raise HTTPException(status_code=502, detail="AI provider error") from None
     except ConversationError as e:
         raise HTTPException(status_code=400, detail=f"Conversation error: {e}")
-    except AIServiceError as e:
-        raise HTTPException(status_code=503, detail=f"AI service error: {e}")
+    except AIServiceError:
+        logger.exception("Chat service error")
+        raise HTTPException(status_code=503, detail="AI service error") from None
     except Exception:
         # Logged, not returned: the text can carry paths, keys or SQL.
         logger.exception("Chat request failed")
@@ -187,14 +192,18 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
 
         # Subclasses before AIServiceError, or their branches never run.
-        except ProviderError as e:
-            error_data = {"error": "AI provider error", "detail": str(e)}
+        # Same rule as the plain route: only a conversation error's text
+        # is the caller's to read.
+        except ProviderError:
+            logger.exception("Chat stream provider error")
+            error_data = {"error": "AI provider error"}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
         except ConversationError as e:
             error_data = {"error": "Conversation error", "detail": str(e)}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
-        except AIServiceError as e:
-            error_data = {"error": "AI service error", "detail": str(e)}
+        except AIServiceError:
+            logger.exception("Chat stream service error")
+            error_data = {"error": "AI service error"}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
         except Exception:
             # Logged, not sent: the text can carry paths, keys or SQL.
@@ -247,10 +256,11 @@ async def list_conversations(
             for conv in conversations
         ]
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Listing conversations failed")
         raise HTTPException(
-            status_code=500, detail=f"Failed to list conversations: {e}"
-        )
+            status_code=500, detail="Failed to list conversations"
+        ) from None
 
 
 @router.get("/conversations/{conversation_id}")
@@ -303,5 +313,6 @@ async def get_conversation(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {e}")
+    except Exception:
+        logger.exception("Reading a conversation failed")
+        raise HTTPException(status_code=500, detail="Failed to get conversation") from None

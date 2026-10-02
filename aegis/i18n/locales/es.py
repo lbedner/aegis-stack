@@ -386,6 +386,7 @@ MESSAGES: dict[str, str] = {
         "y ejecuta 'alembic upgrade head' manualmente."
     ),
     "postgen.db_failed": "Advertencia: Configuración de migración de base de datos falló",
+    "postgen.db_in_use": "Los contenedores del proyecto tienen data/app.db abierto; migrarlo desde aquí les dejaría leyendo una copia dañada hasta que se reinicien. Detén el stack (make stop), vuelve a ejecutar esto y luego inícialo (make serve-bg).",
     "postgen.revisions_failed": "No se pudieron derivar las revisiones desde los modelos",
     "postgen.db_manual": "Ejecuta 'alembic upgrade head' manualmente tras crear el proyecto",
     "postgen.db_timeout": (

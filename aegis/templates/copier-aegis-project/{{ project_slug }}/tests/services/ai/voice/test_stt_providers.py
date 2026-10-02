@@ -270,3 +270,28 @@ class TestBaseSTTProviderInterface:
         for provider_class, expected_type in providers:
             assert hasattr(provider_class, "provider_type")
             assert provider_class.provider_type == expected_type
+
+
+class TestOpenAIResponseFormat:
+    """Only Whisper answers ``verbose_json``; the gpt-4o transcription
+    models accept ``json``/``text`` and reject every call otherwise."""
+
+    async def _format_sent(self, model: str) -> str:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from app.services.ai.domains.voice.models import AudioInput
+
+        provider = OpenAIWhisperProvider(model=model)
+        reply = MagicMock(text="hi", segments=None, language=None, duration=None)
+        create = AsyncMock(return_value=reply)
+        provider._client = MagicMock()
+        provider._client.audio.transcriptions.create = create
+        await provider.transcribe(AudioInput(content=b"x"))
+        return create.call_args.kwargs["response_format"]
+
+    async def test_whisper_gets_verbose_json(self) -> None:
+        assert await self._format_sent("whisper-1") == "verbose_json"
+
+    async def test_gpt_4o_models_get_json(self) -> None:
+        assert await self._format_sent("gpt-4o-mini-transcribe") == "json"
+        assert await self._format_sent("gpt-4o-transcribe") == "json"

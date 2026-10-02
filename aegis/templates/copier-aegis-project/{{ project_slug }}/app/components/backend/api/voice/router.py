@@ -382,11 +382,12 @@ async def _generate_preview(
             },
         )
 
-    except Exception as e:
+    except Exception:
+        # Logged, not returned: a provider's text can carry keys or URLs.
         logger.exception(f"Voice preview generation failed for {voice_id}")
         raise HTTPException(
-            status_code=503, detail=f"Voice preview generation failed: {e}"
-        )
+            status_code=503, detail="Voice preview generation failed"
+        ) from None
 
 
 # =============================================================================

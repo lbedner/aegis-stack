@@ -302,6 +302,7 @@ MESSAGES: dict[str, str] = {
         "跳过数据库迁移，请确认配置文件存在后手动执行 alembic upgrade head"
     ),
     "postgen.db_failed": "提示：数据库迁移未成功",
+    "postgen.db_in_use": "项目的容器正打开着 data/app.db，此时从这里迁移，容器在重启前读到的会是损坏的副本。请先停止服务（make stop），再运行一次，然后重新启动（make serve-bg）。",
     "postgen.revisions_failed": "无法根据模型生成迁移版本",
     "postgen.db_manual": "可手动执行 alembic upgrade head",
     "postgen.db_timeout": "提示：数据库迁移超时，请手动执行 alembic upgrade head",

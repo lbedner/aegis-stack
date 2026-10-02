@@ -366,6 +366,7 @@ MESSAGES: dict[str, str] = {
         "и выполните «alembic upgrade head» вручную."
     ),
     "postgen.db_failed": "Внимание: настройка миграций не удалась",
+    "postgen.db_in_use": "Контейнеры проекта держат data/app.db открытой; миграция отсюда оставит им повреждённую копию до перезапуска. Остановите стек (make stop), запустите команду снова, затем поднимите стек (make serve-bg).",
     "postgen.revisions_failed": "Не удалось создать ревизии на основе моделей",
     "postgen.db_manual": "Выполните «alembic upgrade head» вручную после создания проекта",
     "postgen.db_timeout": (

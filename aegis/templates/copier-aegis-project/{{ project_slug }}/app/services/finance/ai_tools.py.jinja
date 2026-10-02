@@ -428,19 +428,22 @@ register_tool(
     replace=True,
 )
 
-# The write-side tools (and the id lookup they need) live in their own
-# module; importing it here keeps "import ai_tools" the one line that
-# registers the whole finance tool surface.
+# The id lookups proposals need live in their own module, and the
+# propose family is the shared queue's; importing both here keeps
+# "import ai_tools" the one line that registers the whole finance tool
+# surface.
+from app.services.ai.domains.chat.change_tools import (  # noqa: E402,F401
+    pending,
+    propose,
+    propose_many,
+    withdraw,
+    withdraw_batch,
+)
 from app.services.finance.ai_write_tools import (  # noqa: E402,F401
     bill_candidates,
     bills,
     categories,
-    pending,
-    propose,
-    propose_many,
     tags,
-    withdraw,
-    withdraw_batch,
 )
 {% else %}"""Finance host tools ship only with the AI service on a persistent backend."""
 {% endif %}

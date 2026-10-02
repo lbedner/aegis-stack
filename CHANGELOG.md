@@ -9,6 +9,17 @@
 
 ### Added
 
+- **The propose/approve queue is shared, not finance's.** Any service can
+  make a change proposable: register a `ChangeExecutor` from
+  `app.services.change_queue` at import, and agents file it with the
+  built-in `propose` / `propose_many` tools (plus `pending`, `withdraw`,
+  `withdraw_batch` for their own cards). The queue ships with finance or
+  with AI on a persistent backend; its table is `pending_change` and its
+  routes moved from `/api/v1/finance/changes` to `/api/v1/changes`. On
+  update, existing `finance_pending_change` rows are copied over with
+  their ids, so cards in old chats still resolve, and the old table is
+  dropped.
+
 - **Secrets: finance and insights keys, provider pickers, sending domains.**
   Plaid (`PLAID_CLIENT_ID`, `PLAID_SECRET`, needed when Plaid is enabled
   and checked against Plaid on paste), SnapTrade, and the insights GitHub
@@ -209,6 +220,14 @@
   the clock moved to month ends, a leap day and 2030: all pass.
 
 ### Changed
+
+- **Breaking: the pending-change routes moved from `/api/v1/finance/changes`
+  to `/api/v1/changes`.** The propose/approve queue is shared now, so its
+  routes are no longer finance's. The old path is gone, with no alias. Every
+  caller inside the template (the chat panel's cards and the finance
+  modal's approvals section) was updated; anything outside it that calls
+  `/api/v1/finance/changes[...]` must switch to `/api/v1/changes[...]`.
+  The paths under it are unchanged.
 
 - **App containers run their program directly, and the webserver shuts
   down cleanly.** Every app container started as `uv run entrypoint.sh`

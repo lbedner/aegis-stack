@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.finance.domains import writes
-from app.services.finance.models import FinancePendingChange
-from app.services.finance.schemas import ChangeDisplayRow
+from app.services import change_queue
+from app.services.change_queue import ChangeDisplayRow, PendingChange
 from app.services.finance.service.base import FinanceServiceBase
 
 
@@ -19,8 +18,8 @@ class ChangesMixin(FinanceServiceBase):
         owner_user_id: int | None = None,
         proposed_by_agent: str | None = None,
         conversation_id: str | None = None,
-    ) -> FinancePendingChange:
-        return await writes.propose(
+    ) -> PendingChange:
+        return await change_queue.propose(
             self.db,
             change_type,
             payload,
@@ -31,8 +30,8 @@ class ChangesMixin(FinanceServiceBase):
 
     async def approve_change(
         self, change_id: int, *, owner_user_id: int | None = None
-    ) -> FinancePendingChange:
-        return await writes.approve(self.db, change_id, owner_user_id=owner_user_id)
+    ) -> PendingChange:
+        return await change_queue.approve(self.db, change_id, owner_user_id=owner_user_id)
 
     async def reject_change(
         self,
@@ -40,27 +39,27 @@ class ChangesMixin(FinanceServiceBase):
         *,
         owner_user_id: int | None = None,
         note: str | None = None,
-    ) -> FinancePendingChange:
-        return await writes.reject(
+    ) -> PendingChange:
+        return await change_queue.reject(
             self.db, change_id, owner_user_id=owner_user_id, note=note
         )
 
     async def list_pending_changes(
         self, *, owner_user_id: int | None = None, status: str | None = "pending"
-    ) -> list[FinancePendingChange]:
-        return await writes.list_changes(
+    ) -> list[PendingChange]:
+        return await change_queue.list_changes(
             self.db, owner_user_id=owner_user_id, status=status
         )
 
     async def get_pending_change(
         self, change_id: int, *, owner_user_id: int | None = None
-    ) -> FinancePendingChange | None:
-        return await writes.get_change(self.db, change_id, owner_user_id=owner_user_id)
+    ) -> PendingChange | None:
+        return await change_queue.get_change(self.db, change_id, owner_user_id=owner_user_id)
 
     async def describe_pending_change(
-        self, row: FinancePendingChange
+        self, row: PendingChange
     ) -> list[ChangeDisplayRow]:
-        return await writes.describe_change(self.db, row)
+        return await change_queue.describe_change(self.db, row)
 
     async def propose_many_changes(
         self,
@@ -70,8 +69,8 @@ class ChangesMixin(FinanceServiceBase):
         owner_user_id: int | None = None,
         proposed_by_agent: str | None = None,
         conversation_id: str | None = None,
-    ) -> list[FinancePendingChange]:
-        return await writes.propose_many(
+    ) -> list[PendingChange]:
+        return await change_queue.propose_many(
             self.db,
             change_type,
             payloads,
@@ -87,7 +86,7 @@ class ChangesMixin(FinanceServiceBase):
         owner_user_id: int | None = None,
         exclude_ids: list[int] | None = None,
     ) -> dict[str, Any]:
-        return await writes.approve_batch(
+        return await change_queue.approve_batch(
             self.db,
             batch_id,
             owner_user_id=owner_user_id,
@@ -97,4 +96,4 @@ class ChangesMixin(FinanceServiceBase):
     async def reject_batch(
         self, batch_id: str, *, owner_user_id: int | None = None
     ) -> dict[str, Any]:
-        return await writes.reject_batch(self.db, batch_id, owner_user_id=owner_user_id)
+        return await change_queue.reject_batch(self.db, batch_id, owner_user_id=owner_user_id)

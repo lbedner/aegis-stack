@@ -9,8 +9,8 @@ from __future__ import annotations
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.change_queue import propose
 from app.services.finance.domains.ledger import merchants as ledger_merchants
-from app.services.finance.domains.writes import propose
 from app.services.finance.models import (
     FinanceRecurringStream,
     FinanceTransaction,

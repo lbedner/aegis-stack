@@ -3288,7 +3288,7 @@ async def test_pending_change_approve_round_trip(
     await async_db_session.commit()
 
     proposed = authenticated_client.post(
-        "/api/v1/finance/changes",
+        "/api/v1/changes",
         json={
             "change_type": "transaction.categorize",
             "payload": {"transaction_id": txn.id, "category_id": category.id},
@@ -3300,11 +3300,11 @@ async def test_pending_change_approve_round_trip(
     assert change["title"] == "Categorize a transaction"
     assert any("Shelly" in row["value"] for row in change["display"])
 
-    listed = authenticated_client.get("/api/v1/finance/changes").json()
+    listed = authenticated_client.get("/api/v1/changes").json()
     assert [c["id"] for c in listed["items"]] == [change["id"]]
 
     approved = authenticated_client.post(
-        f"/api/v1/finance/changes/{change['id']}/approve"
+        f"/api/v1/changes/{change['id']}/approve"
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
@@ -3325,7 +3325,7 @@ async def test_pending_change_reject_keeps_the_audit_row(
     await async_db_session.commit()
 
     change = authenticated_client.post(
-        "/api/v1/finance/changes",
+        "/api/v1/changes",
         json={
             "change_type": "transaction.categorize",
             "payload": {"transaction_id": txn.id, "category_id": category.id},
@@ -3333,21 +3333,21 @@ async def test_pending_change_reject_keeps_the_audit_row(
     ).json()
 
     rejected = authenticated_client.post(
-        f"/api/v1/finance/changes/{change['id']}/reject"
+        f"/api/v1/changes/{change['id']}/reject"
     )
     assert rejected.status_code == 200
     assert rejected.json()["status"] == "rejected"
 
-    assert authenticated_client.get("/api/v1/finance/changes").json()["items"] == []
+    assert authenticated_client.get("/api/v1/changes").json()["items"] == []
     trail = authenticated_client.get(
-        "/api/v1/finance/changes", params={"status": "rejected"}
+        "/api/v1/changes", params={"status": "rejected"}
     ).json()["items"]
     assert [c["id"] for c in trail] == [change["id"]]
 
     await async_db_session.refresh(txn)
     assert txn.category_id is None
     resolved_again = authenticated_client.post(
-        f"/api/v1/finance/changes/{change['id']}/approve"
+        f"/api/v1/changes/{change['id']}/approve"
     )
     assert resolved_again.status_code == 400
 
@@ -3361,7 +3361,7 @@ async def test_a_withdrawn_row_tells_the_card_why(
     """The batch card refreshes from this endpoint, and it shows a
     withdrawal as the assistant taking its card back - so the row must
     carry the note, not just a bare "rejected"."""
-    from app.services.finance.domains import writes
+    from app.services import change_queue
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -3378,14 +3378,14 @@ async def test_a_withdrawn_row_tells_the_card_why(
         txn_date=date(2026, 8, 1),
         name="Store",
     )
-    (row,) = await writes.propose_many(
+    (row,) = await change_queue.propose_many(
         async_db_session,
         "transaction.categorize",
         [{"transaction_id": txn.id, "category_id": category.id}],
         owner_user_id=acting_owner_user_id,
         proposed_by_agent="finance-assistant",
     )
-    await writes.withdraw(
+    await change_queue.withdraw(
         async_db_session,
         row.id,
         agent_slug="finance-assistant",
@@ -3395,7 +3395,7 @@ async def test_a_withdrawn_row_tells_the_card_why(
     await async_db_session.commit()
 
     (item,) = authenticated_client.get(
-        f"/api/v1/finance/changes/batch/{row.batch_id}"
+        f"/api/v1/changes/batch/{row.batch_id}"
     ).json()["items"]
     assert item["status"] == "rejected"
     assert item["note"] == "Withdrawn by finance-assistant. Superseded."
@@ -3433,11 +3433,11 @@ async def test_batch_approve_with_a_veto(
     batch_id = rows[0].batch_id
     await async_db_session.commit()
 
-    listed = authenticated_client.get("/api/v1/finance/changes").json()["items"]
+    listed = authenticated_client.get("/api/v1/changes").json()["items"]
     assert {c["batch_id"] for c in listed} == {batch_id}
 
     resolved = authenticated_client.post(
-        f"/api/v1/finance/changes/batch/{batch_id}/approve",
+        f"/api/v1/changes/batch/{batch_id}/approve",
         json={"exclude_ids": [rows[1].id]},
     )
     assert resolved.status_code == 200
@@ -3461,7 +3461,7 @@ async def test_an_executor_crash_keeps_the_recorded_error(
     audit detail the card shows - and must not leak internals."""
     from pydantic import BaseModel, ConfigDict
 
-    from app.services.finance.domains.writes import registry
+    from app.services.change_queue import registry
 
     class _BoomPayload(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -3471,7 +3471,7 @@ async def test_an_executor_crash_keeps_the_recorded_error(
         raise RuntimeError("secret internal detail")
 
     async def _describe(db, payload, owner_user_id):
-        from app.services.finance.schemas import ChangeDisplayRow
+        from app.services.change_queue import ChangeDisplayRow
 
         return [ChangeDisplayRow(label="Anything", value=str(payload.anything))]
 
@@ -3486,17 +3486,17 @@ async def test_an_executor_crash_keeps_the_recorded_error(
     )
     try:
         change = authenticated_client.post(
-            "/api/v1/finance/changes",
+            "/api/v1/changes",
             json={"change_type": "test.boom", "payload": {"anything": 1}},
         ).json()
 
         crashed = authenticated_client.post(
-            f"/api/v1/finance/changes/{change['id']}/approve"
+            f"/api/v1/changes/{change['id']}/approve"
         )
 
         assert crashed.status_code == 500
         assert "secret internal detail" not in crashed.text
-        row = authenticated_client.get(f"/api/v1/finance/changes/{change['id']}").json()
+        row = authenticated_client.get(f"/api/v1/changes/{change['id']}").json()
         assert row["status"] == "pending"
         assert "secret internal detail" in (row["error"] or "")
     finally:

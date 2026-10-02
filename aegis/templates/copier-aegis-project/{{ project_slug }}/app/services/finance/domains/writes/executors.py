@@ -9,7 +9,7 @@ arms the whole surface.
 from __future__ import annotations
 
 from app.services.finance.domains.writes import curation, structure
-from app.services.finance.domains.writes.registry import ChangeExecutor, register
+from app.services.change_queue.registry import ChangeExecutor, register
 
 register(
     ChangeExecutor(

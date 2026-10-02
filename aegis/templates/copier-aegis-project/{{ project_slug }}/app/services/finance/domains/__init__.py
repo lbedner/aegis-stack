@@ -5,7 +5,8 @@ merchants). ``planning`` is what that past implies about the future
 (budgets, goals, envelopes, recurring streams). ``detection`` is the
 passes that infer facts nobody typed (transfers, rhythms, insights).
 ``investments`` is securities and the positions held in them.
-``writes`` is the propose/approve queue - the ONE door through which an
+``writes`` is finance's change types for the shared propose/approve
+queue (``app.services.change_queue``) - the ONE door through which an
 assistant's mutation can reach any of the others, and only with the
 user's approval.
 

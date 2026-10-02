@@ -13,6 +13,7 @@ from sqlalchemy import func
 from sqlmodel import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.change_queue import PendingChange
 from app.services.finance.domains.ledger import networth
 from app.services.finance.models import (
     FinanceAccount,
@@ -23,7 +24,6 @@ from app.services.finance.models import (
     FinanceInsight,
     FinanceLiabilityDetail,
     FinanceNetWorthSnapshot,
-    FinancePendingChange,
     FinanceRecurringStream,
     FinanceTrade,
     FinanceTransaction,
@@ -131,20 +131,20 @@ async def _delete_demo_rows(
     # nothing. The owner clause keeps one household's clear from taking
     # another's in a multi-user install.
     owner_clause = (
-        FinancePendingChange.owner_user_id.is_(None)
+        PendingChange.owner_user_id.is_(None)
         if owner_user_id is None
-        else FinancePendingChange.owner_user_id == owner_user_id
+        else PendingChange.owner_user_id == owner_user_id
     )
     gone = set(txn_ids)
     proposal_ids = [
         p.id
-        for p in (await db.exec(select(FinancePendingChange).where(owner_clause))).all()
+        for p in (await db.exec(select(PendingChange).where(owner_clause))).all()
         if p.proposed_by_agent == "demo_seed"
         or (p.payload or {}).get("transaction_id") in gone
     ]
     if proposal_ids:
         await _delete_where(
-            db, FinancePendingChange, FinancePendingChange.id, proposal_ids
+            db, PendingChange, PendingChange.id, proposal_ids
         )
     await _delete_where(db, FinanceAccount, FinanceAccount.id, account_ids)
 

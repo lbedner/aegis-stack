@@ -1,0 +1,69 @@
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""The propose/approve queue: any service's writes as pending changes.
+
+Primitives, not policy. This package ships the table, the queue
+(propose, approve, reject, withdraw) and the change-type registry; what
+a model may propose stays in the service that owns the mutation. A
+service joins by registering its types at import:
+
+    from app.services.change_queue import ChangeExecutor, register
+
+    register(ChangeExecutor(change_type="post.reschedule", ...))
+
+An executor that is never imported does not exist to the queue, the
+same rule the tool registry lives by - so the registrants below are
+imported here, and every process that touches the queue knows them.
+"""
+
+from app.services.change_queue.models import PendingChange
+from app.services.change_queue.queries import (
+    batch_rows,
+    get_change,
+    list_changes,
+)
+from app.services.change_queue.queue import (
+    approve,
+    approve_batch,
+    describe_change,
+    outcome_of,
+    propose,
+    propose_many,
+    reject,
+    reject_batch,
+    withdraw,
+    withdraw_batch,
+)
+from app.services.change_queue.registry import (
+    ChangeExecutor,
+    executor_for,
+    register,
+    registered_change_types,
+)
+from app.services.change_queue.schemas import ChangeDisplayRow
+{%- if include_finance %}
+
+# Registrants, imported last: each imports ``register`` from this package.
+import app.services.finance.domains.writes  # noqa: E402,F401
+{%- endif %}
+
+__all__ = [
+    "ChangeDisplayRow",
+    "ChangeExecutor",
+    "PendingChange",
+    "approve",
+    "approve_batch",
+    "batch_rows",
+    "describe_change",
+    "executor_for",
+    "get_change",
+    "list_changes",
+    "outcome_of",
+    "propose",
+    "propose_many",
+    "register",
+    "registered_change_types",
+    "reject",
+    "reject_batch",
+    "withdraw",
+    "withdraw_batch",
+]
+{% endif %}

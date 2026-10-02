@@ -139,6 +139,7 @@ class TestInTreeRegistry:
             "documents",
             "finance",
             "finance_auth_link",
+            "change_queue",
         }
 
     def test_each_migration_is_a_servicemigrationspec(self) -> None:

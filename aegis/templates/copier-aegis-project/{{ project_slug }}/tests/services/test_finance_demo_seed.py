@@ -12,12 +12,12 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.change_queue import PendingChange
 from app.services.finance.models import (
     FinanceAccount,
     FinanceImportBatch,
     FinanceInsight,
     FinanceNetWorthSnapshot,
-    FinancePendingChange,
     FinanceRecurringStream,
     FinanceTransaction,
     FinanceTransactionSplit,
@@ -390,11 +390,11 @@ class TestClearDemo:
         """A card the assistant filed against a seeded transaction is an
         orphan once that transaction is gone; the clear removes it rather
         than leaving a proposal pointing at nothing."""
-        from app.services.finance.domains import writes
+        from app.services import change_queue
 
         await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
         txn = (await _transactions(async_db_session))[0]
-        await writes.propose(
+        await change_queue.propose(
             async_db_session,
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": txn.category_id},
@@ -406,7 +406,7 @@ class TestClearDemo:
         await demo_seed.clear_demo(async_db_session, owner_user_id=OWNER)
         await async_db_session.commit()
 
-        assert (await async_db_session.exec(select(FinancePendingChange))).all() == []
+        assert (await async_db_session.exec(select(PendingChange))).all() == []
 
     @pytest.mark.asyncio
     async def test_clear_repairs_the_net_worth_history(
@@ -550,8 +550,8 @@ class TestTheReviewTabHasWork:
 
         pending = (
             await async_db_session.exec(
-                select(FinancePendingChange).where(
-                    FinancePendingChange.proposed_by_agent == "demo_seed"
+                select(PendingChange).where(
+                    PendingChange.proposed_by_agent == "demo_seed"
                 )
             )
         ).all()
@@ -593,7 +593,7 @@ class TestTheReviewTabHasWork:
         """The agent name says WHAT filed it; the owner says WHOSE it is.
         One household clearing its demo must not take a neighbour's."""
         await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER, months=12)
-        neighbour = FinancePendingChange(
+        neighbour = PendingChange(
             owner_user_id=OWNER + 1,
             change_type="transaction.categorize",
             payload={"transaction_id": 1, "category_id": 1},
@@ -606,8 +606,8 @@ class TestTheReviewTabHasWork:
 
         left = (
             await async_db_session.exec(
-                select(FinancePendingChange).where(
-                    FinancePendingChange.proposed_by_agent == "demo_seed"
+                select(PendingChange).where(
+                    PendingChange.proposed_by_agent == "demo_seed"
                 )
             )
         ).all()
@@ -622,8 +622,8 @@ class TestTheReviewTabHasWork:
 
         left = (
             await async_db_session.exec(
-                select(FinancePendingChange).where(
-                    FinancePendingChange.proposed_by_agent == "demo_seed"
+                select(PendingChange).where(
+                    PendingChange.proposed_by_agent == "demo_seed"
                 )
             )
         ).all()

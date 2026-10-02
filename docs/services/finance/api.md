@@ -94,7 +94,7 @@ Every read takes the same shape of scoping: an optional owner, and an optional `
 
 ## Changes
 
-The propose and approve queue.
+The propose and approve queue is shared with every service that proposes, so its routes live at `/api/v1/changes` rather than under `/finance`. Finance registers its change types into it; see [Agents](../ai/agents.md#proposals-writes-the-user-approves).
 
 | Method | Path | Does |
 |--------|------|------|

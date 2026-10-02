@@ -23,7 +23,11 @@ from app.core.model_picker import model_label
 from app.core.sse import stream_sse_post
 
 from .attachments_ui import AttachmentsMixin, attachment_payload
-from .components import PendingChangeBatchCard, components_from_trace
+from .components import (
+    PendingChangeBatchCard,
+    PendingChangeCard,
+    components_from_trace,
+)
 from .history_ui import HistoryMixin
 from .message import ChatMessageBubble
 from .model_picker import ModelChipMixin
@@ -190,22 +194,20 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
         identity only - the server supplies the rows."""
         self._pending_cards.extend(cards)
         for card in cards:
-            fetch = (
-                self._batch_fetch
-                if isinstance(card, PendingChangeBatchCard)
-                else self._change_fetch
-            )
             if self.page:
-                self.page.run_task(card.refresh_from, fetch)
+                self.page.run_task(self._refresh_card, card)
 
     async def _refresh_pending_cards(self) -> None:
         for card in list(self._pending_cards):
-            fetch = (
-                self._batch_fetch
-                if isinstance(card, PendingChangeBatchCard)
-                else self._change_fetch
-            )
-            await card.refresh_from(fetch)
+            await self._refresh_card(card)
+
+    async def _refresh_card(self, card: ft.Control) -> None:
+        """Re-read one card through the fetch its kind takes: a batch by
+        its batch id, a lone change by its row id."""
+        if isinstance(card, PendingChangeBatchCard):
+            await card.refresh_from(self._batch_fetch)
+        elif isinstance(card, PendingChangeCard):
+            await card.refresh_from(self._change_fetch)
 
     def did_mount(self) -> None:
         self._mount_attachments()
@@ -403,7 +405,7 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        response = await api.get(f"/api/v1/finance/changes/batch/{batch_id}")
+        response = await api.get(f"/api/v1/changes/batch/{batch_id}")
         return response.get("items") if isinstance(response, dict) else None
 
     async def _batch_action(
@@ -413,7 +415,7 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
 
         api = get_session_state(self.page).api_client
         response = await api.post(
-            f"/api/v1/finance/changes/batch/{batch_id}/{action}",
+            f"/api/v1/changes/batch/{batch_id}/{action}",
             json={"exclude_ids": exclude_ids} if action == "approve" else None,
         )
         if not isinstance(response, dict):
@@ -427,20 +429,20 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        response = await api.get(f"/api/v1/finance/changes/{change_id}")
+        response = await api.get(f"/api/v1/changes/{change_id}")
         return response if isinstance(response, dict) else None
 
     async def _change_action(
         self, change_id: int, action: str
     ) -> dict[str, Any] | None:
         """Resolve one pending change and hand the card the queue's new
-        truth. The endpoint is the finance write queue's - the only
-        surface that currently proposes - and a stack without it simply
+        truth. The endpoint is the shared propose/approve queue's, which
+        resolves every service's change types; a stack without it simply
         never renders a card that could call this."""
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        response = await api.post(f"/api/v1/finance/changes/{change_id}/{action}")
+        response = await api.post(f"/api/v1/changes/{change_id}/{action}")
         if not isinstance(response, dict):
             ErrorSnackBar(api.last_error or "Could not resolve the change.").launch(
                 self.page

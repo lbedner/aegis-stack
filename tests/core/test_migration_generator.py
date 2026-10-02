@@ -41,7 +41,7 @@ class TestGetServicesNeedingMigrations:
         """Test AI service with sqlite backend needs migrations."""
         context = {"include_auth": False, "include_ai": True, "ai_backend": "sqlite"}
         result = get_services_needing_migrations(context)
-        assert result == ["ai", "ai_agents", "ai_sentiment"]
+        assert result == ["ai", "ai_agents", "ai_sentiment", "change_queue"]
 
     def test_ai_with_memory_no_migrations(self) -> None:
         """Test AI service with memory backend does NOT need migrations."""
@@ -53,7 +53,14 @@ class TestGetServicesNeedingMigrations:
         """Test both auth and AI services need migrations."""
         context = {"include_auth": True, "include_ai": True, "ai_backend": "sqlite"}
         result = get_services_needing_migrations(context)
-        assert result == ["auth", "auth_tokens", "ai", "ai_agents", "ai_sentiment"]
+        assert result == [
+            "auth",
+            "auth_tokens",
+            "ai",
+            "ai_agents",
+            "ai_sentiment",
+            "change_queue",
+        ]
 
     def test_neither_service(self) -> None:
         """Test no services need migrations."""
@@ -90,7 +97,7 @@ class TestGetServicesNeedingMigrations:
             "include_ai": False,
             "ai_backend": "memory",
         }
-        assert get_services_needing_migrations(context) == ["finance"]
+        assert get_services_needing_migrations(context) == ["finance", "change_queue"]
 
     def test_finance_needs_migration_with_yes_string(self) -> None:
         """Finance service supports Copier-style yes strings."""
@@ -99,7 +106,7 @@ class TestGetServicesNeedingMigrations:
             "include_ai": False,
             "ai_backend": "memory",
         }
-        assert get_services_needing_migrations(context) == ["finance"]
+        assert get_services_needing_migrations(context) == ["finance", "change_queue"]
 
     def test_finance_auth_link_when_both(self) -> None:
         """finance + auth emits the owner-FK link migration, after auth+finance."""
@@ -431,6 +438,7 @@ class TestGetServicesNeedingMigrationsVoice:
             "ai_agents",
             "ai_sentiment",
             "ai_voice",
+            "change_queue",
         ]
 
 

@@ -77,7 +77,7 @@ class PendingChangesSection(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        listing = await api.get("/api/v1/finance/changes")
+        listing = await api.get("/api/v1/changes")
         items = listing.get("items", []) if isinstance(listing, dict) else []
         self._render_items(items)
 
@@ -123,7 +123,7 @@ class PendingChangesSection(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        response = await api.post(f"/api/v1/finance/changes/{change_id}/{action}")
+        response = await api.post(f"/api/v1/changes/{change_id}/{action}")
         if not isinstance(response, dict):
             ErrorSnackBar(api.last_error or "Could not resolve the change.").launch(
                 self.page
@@ -135,7 +135,7 @@ class PendingChangesSection(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        response = await api.get(f"/api/v1/finance/changes/batch/{batch_id}")
+        response = await api.get(f"/api/v1/changes/batch/{batch_id}")
         return response.get("items") if isinstance(response, dict) else None
 
     async def _resolve_batch(
@@ -145,7 +145,7 @@ class PendingChangesSection(ft.Container):
 
         api = get_session_state(self.page).api_client
         response = await api.post(
-            f"/api/v1/finance/changes/batch/{batch_id}/{action}",
+            f"/api/v1/changes/batch/{batch_id}/{action}",
             json={"exclude_ids": exclude_ids} if action == "approve" else None,
         )
         if not isinstance(response, dict):
@@ -210,6 +210,6 @@ class PendingChangesBanner(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        listing = await api.get("/api/v1/finance/changes")
+        listing = await api.get("/api/v1/changes")
         items = listing.get("items", []) if isinstance(listing, dict) else []
         self.show_count(len(items))

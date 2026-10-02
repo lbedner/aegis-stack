@@ -54,6 +54,9 @@ from app.components.backend.api.documents.router import router as documents_rout
 {%- if include_finance %}
 from app.components.backend.api.finance.router import router as finance_router
 {%- endif %}
+{%- if include_finance or (include_ai and ai_backend != "memory") %}
+from app.components.backend.api import changes
+{%- endif %}
 {%- if include_secrets and include_auth %}
 from app.components.backend.api.secrets.router import router as secrets_router
 {%- endif %}
@@ -122,6 +125,9 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if include_finance %}
     app.include_router(finance_router, prefix="/api/v1")
+    {%- endif %}
+    {%- if include_finance or (include_ai and ai_backend != "memory") %}
+    app.include_router(changes.router, prefix="/api/v1")
     {%- endif %}
     {%- for p in _plugins | default([]) %}
     {%- for r in p.wiring.routers %}

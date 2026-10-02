@@ -9,10 +9,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.change_queue.schemas import ChangeDisplayRow
 from app.services.finance.domains.detection.insights.formatting import format_usd
 from app.services.finance.domains.ledger import categories, splits
 from app.services.finance.domains.writes.display import txn_subject
-from app.services.finance.schemas import ChangeDisplayRow, SplitPart
+from app.services.finance.schemas import SplitPart
 
 
 class MatchPayload(BaseModel):

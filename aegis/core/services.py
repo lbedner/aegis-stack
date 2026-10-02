@@ -25,6 +25,7 @@ from .migration_generator import (
     AUTH_RBAC_MIGRATION,
     AUTH_TOKENS_MIGRATION,
     BLOG_MIGRATION,
+    CHANGE_QUEUE_MIGRATION,
     DOCUMENTS_MIGRATION,
     FINANCE_AUTH_LINK_MIGRATION,
     FINANCE_MIGRATION,
@@ -533,6 +534,8 @@ SERVICES: dict[str, ServiceSpec] = {
             KNOWLEDGE_MIGRATION,
             SENTIMENT_MIGRATION,
             VOICE_MIGRATION,
+            # Shared with finance: either one brings the propose/approve queue.
+            CHANGE_QUEUE_MIGRATION,
         ],
         # Bracket-syntax options: ai[framework, backend, providers..., flags...]
         # e.g. ai[langchain,sqlite,openai], ai[pydantic-ai,postgres,rag,voice]
@@ -1200,7 +1203,11 @@ SERVICES: dict[str, ServiceSpec] = {
                 ),
             ],
         ),
-        migrations=[FINANCE_MIGRATION, FINANCE_AUTH_LINK_MIGRATION],
+        migrations=[
+            FINANCE_MIGRATION,
+            FINANCE_AUTH_LINK_MIGRATION,
+            CHANGE_QUEUE_MIGRATION,
+        ],
         # Alembic is installed via the shared migration gate in
         # pyproject.toml.jinja; provider deps (plaid/...) land with their
         # tickets. ``ofxtools`` backs the OFX/QFX importer, which every

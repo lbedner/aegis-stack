@@ -1,9 +1,13 @@
-"""The propose/approve queue: AI writes as pending changes (FW-05).
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""The propose/approve queue: writes as pending changes.
 
 Confirmation is structural: the sandbox's only write tool is ``propose``,
 and execution happens exclusively when the app user approves - no
 direct-write tool exists, so the model cannot skip it. Every resolution
 keeps its row: the queue IS the audit trail.
+
+The table started life as ``finance.finance_pending_change``; the
+revision that creates this one copies those rows over, ids included, so
+cards in old chat transcripts still resolve.
 """
 
 from __future__ import annotations
@@ -12,14 +16,13 @@ from datetime import datetime
 from typing import Any
 
 from app.core.time import utcnow
-from app.services.finance.models.base import _SCHEMA, _OWNER_FK
 from sqlalchemy import JSON, CheckConstraint, Column, Index
 from sqlmodel import Field, SQLModel
 
 PENDING_CHANGE_STATUSES = ("pending", "approved", "rejected", "expired")
 
 
-class FinancePendingChange(SQLModel, table=True):
+class PendingChange(SQLModel, table=True):
     """One proposed mutation, from proposal through resolution.
 
     ``payload`` is the exact mutation the executor will run on approval -
@@ -28,19 +31,22 @@ class FinancePendingChange(SQLModel, table=True):
     (or refusal reason) for the audit trail.
     """
 
-    __tablename__ = "finance_pending_change"
+    __tablename__ = "pending_change"
     __table_args__ = (
-        Index("ix_finance_pending_owner", "owner_user_id"),
-        Index("ix_finance_pending_status", "status"),
+        Index("ix_pending_change_owner", "owner_user_id"),
+        Index("ix_pending_change_status", "status"),
         CheckConstraint(
             "status IN ('pending', 'approved', 'rejected', 'expired')",
-            name="ck_finance_pending_status",
+            name="ck_pending_change_status",
         ),
-        {"schema": _SCHEMA},
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    owner_user_id: int | None = Field(foreign_key=_OWNER_FK, default=None)
+{%- if include_auth %}
+    owner_user_id: int | None = Field(foreign_key="user.id", default=None)
+{%- else %}
+    owner_user_id: int | None = Field(default=None)
+{%- endif %}
     change_type: str = Field(max_length=64)
     payload: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("payload", JSON, nullable=False)
@@ -59,3 +65,4 @@ class FinancePendingChange(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     resolved_at: datetime | None = Field(default=None)
+{% endif %}

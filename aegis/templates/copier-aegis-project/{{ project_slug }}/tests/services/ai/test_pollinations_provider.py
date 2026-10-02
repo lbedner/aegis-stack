@@ -1,7 +1,7 @@
 """Tests for Pollinations (keyless provider) access helpers."""
 
 from collections.abc import Generator
-from typing import Any
+from typing import Any, Self
 from unittest.mock import MagicMock
 
 import httpx
@@ -42,10 +42,10 @@ class _FakeClient:
     def __init__(self, payload: list[dict[str, Any]] | Exception) -> None:
         self._payload = payload
 
-    def __call__(self, *args: Any, **kwargs: Any) -> _FakeClient:
+    def __call__(self, *args: Any, **kwargs: Any) -> Self:
         return self
 
-    def __enter__(self) -> _FakeClient:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *args: Any) -> None:

@@ -5,7 +5,7 @@ Configuration management for STT providers and settings.
 Follows the same pattern as AIServiceConfig for consistency.
 """
 
-from typing import Any
+from typing import Any, Self
 
 from pydantic import BaseModel, Field
 
@@ -39,7 +39,7 @@ class STTConfig(BaseModel):
     )
 
     @classmethod
-    def from_settings(cls, settings: Any) -> STTConfig:
+    def from_settings(cls, settings: Any) -> Self:
         """Create configuration from main application settings."""
         provider_str = getattr(settings, "STT_PROVIDER", "openai_whisper")
 

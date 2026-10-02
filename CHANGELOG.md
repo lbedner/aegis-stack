@@ -100,6 +100,15 @@
 
 ### Fixed
 
+- **Projects on Python 3.13 import again with the AI service.** A method
+  annotated with its own class (`AIServiceConfig.from_settings ->
+  AIServiceConfig`) raises `NameError` at import on 3.13, which evaluates
+  annotations when the `def` runs; 3.14 defers them, and new projects, CI and
+  the live app all run 3.14, so nothing caught it. The AI, RAG, speech-to-text
+  and text-to-speech configs, the RAG config's `TYPE_CHECKING`-only
+  `Settings`, and three test fakes now use `Self` or a quoted name, and
+  `test_template_annotations_py313.py` reads every template module (`.py.jinja`
+  rendered with every option on) for an annotation 3.13 cannot evaluate yet.
 - **Adding an option to an installed service leaves the project as `init`
   would.** `aegis add-service "ai[...,voice]"` on a project with `ai` added the
   voice-only files but left every file it already had as first rendered: the

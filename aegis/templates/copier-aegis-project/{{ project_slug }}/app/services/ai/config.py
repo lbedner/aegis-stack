@@ -5,7 +5,7 @@ Configuration management for AI service providers, models, and settings.
 Integrates with main application settings through app.core.config.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field
 
@@ -104,7 +104,7 @@ class AIServiceConfig(BaseModel):
     rag_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
 
     @classmethod
-    def from_settings(cls, settings: Any) -> AIServiceConfig:
+    def from_settings(cls, settings: Any) -> Self:
         """Create configuration from main application settings."""
         return cls(
             enabled=getattr(settings, "AI_ENABLED", True),

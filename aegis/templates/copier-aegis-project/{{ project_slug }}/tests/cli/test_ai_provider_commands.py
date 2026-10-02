@@ -7,15 +7,14 @@ and died before doing anything."""
 import ast
 from pathlib import Path
 
-from typer.testing import CliRunner
-
 from app.cli.ai import providers as providers_cli
+from tests._cli import invoke
 
 MODULE = Path(providers_cli.__file__)
 
 
 def test_ai_providers_prints_the_table() -> None:
-    result = CliRunner().invoke(providers_cli.app, ["providers"])
+    result = invoke(["ai", "providers"])
     assert result.exit_code == 0, result.output
     assert "Anthropic" in result.output
 

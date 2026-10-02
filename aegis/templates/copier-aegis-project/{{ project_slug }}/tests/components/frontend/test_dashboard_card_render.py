@@ -54,6 +54,7 @@ MINIMUM_FIELDS: dict[str, int] = {
     "PaymentCard": 9,
     "RedisCard": 9,
     "SchedulerCard": 10,
+    "SecretsCard": 7,
     "ServerCard": 9,
     "ServicesCard": 14,
     "StorageCard": 7,

@@ -123,43 +123,43 @@ class TestTTSConfigGetVoice:
 class TestTTSConfigGetApiKey:
     """Test TTSConfig.get_api_key() method."""
 
-    def test_get_api_key_openai(self) -> None:
+    async def test_get_api_key_openai(self) -> None:
         """Test get_api_key returns OpenAI key for OpenAI provider."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-openai-key"
 
         config = TTSConfig(provider=TTSProvider.OPENAI)
 
-        assert config.get_api_key(settings) == "sk-test-openai-key"
+        assert await config.get_api_key(settings) == "sk-test-openai-key"
 
-    def test_get_api_key_missing_returns_none(self) -> None:
+    async def test_get_api_key_missing_returns_none(self) -> None:
         """Test get_api_key returns None when key not set."""
         settings = MagicMock(spec=[])  # No attributes
 
         config = TTSConfig(provider=TTSProvider.OPENAI)
 
-        assert config.get_api_key(settings) is None
+        assert await config.get_api_key(settings) is None
 
 
 class TestTTSConfigValidation:
     """Test TTSConfig.validation_errors() method."""
 
-    def test_validate_openai_with_key_passes(self) -> None:
+    async def test_validate_openai_with_key_passes(self) -> None:
         """Test validation passes when OpenAI key is set."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = TTSConfig(provider=TTSProvider.OPENAI)
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 0
 
-    def test_validate_openai_missing_key_fails(self) -> None:
+    async def test_validate_openai_missing_key_fails(self) -> None:
         """Test validation fails when OpenAI key is missing."""
         settings = MagicMock(spec=[])
 
         config = TTSConfig(provider=TTSProvider.OPENAI)
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 1
         assert "OPENAI_API_KEY" in errors[0]
@@ -168,22 +168,22 @@ class TestTTSConfigValidation:
 class TestTTSConfigIsAvailable:
     """Test TTSConfig.is_available() method."""
 
-    def test_is_available_true_when_valid(self) -> None:
+    async def test_is_available_true_when_valid(self) -> None:
         """Test is_available returns True when validation passes."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = TTSConfig(provider=TTSProvider.OPENAI)
 
-        assert config.is_available(settings) is True
+        assert await config.is_available(settings) is True
 
-    def test_is_available_false_when_invalid(self) -> None:
+    async def test_is_available_false_when_invalid(self) -> None:
         """Test is_available returns False when validation fails."""
         settings = MagicMock(spec=[])
 
         config = TTSConfig(provider=TTSProvider.OPENAI)
 
-        assert config.is_available(settings) is False
+        assert await config.is_available(settings) is False
 
 
 class TestGetTTSConfigFunction:

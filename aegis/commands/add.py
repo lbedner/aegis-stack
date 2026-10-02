@@ -736,30 +736,29 @@ def add_command(
                 )
                 typer.echo(f"   {t('add.specs_need_update_hint')}")
 
-        # Generate migrations for newly-added components that own tables.
-        # Today that's a persistent scheduler (job store and execution
-        # history), on SQLite as on Postgres: ``init`` versions both, and a
-        # project whose models have no revision fails its own drift check.
-        if (
-            ComponentNames.SCHEDULER in components_to_add
-            and scheduler_backend != StorageBackends.MEMORY
-        ):
+        # Revisions for newly added components that own tables (a persistent
+        # scheduler, on SQLite as on Postgres; secrets): whatever the
+        # project's answers now call for and it lacks, exactly as ``init``
+        # would have generated them, then applied. A project whose models
+        # have no revision fails its own drift check.
+        if any(COMPONENTS[c].migrations for c in components_to_add if c in COMPONENTS):
             from ..core.migration_generator import (
                 bootstrap_alembic,
-                generate_migration,
-                service_has_migration,
+                generate_missing_migrations,
             )
+            from ..core.post_gen_tasks import run_migrations
 
             if not (target_path / "alembic").exists():
                 bootstrap_alembic(target_path, updater.jinja_env, updater.answers)
-            if not service_has_migration(target_path, ComponentNames.SCHEDULER):
-                migration_path = generate_migration(
-                    target_path, ComponentNames.SCHEDULER
+            generated = generate_missing_migrations(
+                target_path, load_copier_answers(target_path)
+            )
+            for migration_path in generated:
+                brand.success(
+                    f"   {t('add.generated_migration', name=migration_path.name)}"
                 )
-                if migration_path:
-                    brand.success(
-                        f"   {t('add.generated_migration', name=migration_path.name)}"
-                    )
+            if generated and not run_migrations(target_path, include_migrations=True):
+                brand.warn(t("add_service.migration_failed"))
 
         brand.success(f"\n{t('add.success')}")
 

@@ -6,6 +6,7 @@ template engines to avoid code duplication and ensure consistent behavior.
 """
 
 import os
+import secrets
 import shutil
 import subprocess
 from pathlib import Path
@@ -811,6 +812,49 @@ def install_dependencies(
         return False
 
 
+def _answered_yes(project_path: Path, key: str) -> bool:
+    """Whether the project's ``.copier-answers.yml`` turns ``key`` on."""
+    import yaml
+
+    answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
+    if not answers_file.exists():
+        return False
+    answers = yaml.safe_load(answers_file.read_text()) or {}
+    return answers.get(key) is True
+
+
+def ensure_encryption_key(project_path: Path) -> bool:
+    """Give ``.env`` an ``ENCRYPTION_KEY`` when it has none; whether it did.
+
+    The secrets component encrypts stored keys with it and will not fall
+    back to ``SECRET_KEY``. A key already set is never touched: changing it
+    strands every stored secret. No ``.env`` (setup failed) is left alone.
+    """
+    env_file = project_path / ".env"
+    if not env_file.exists():
+        return False
+    lines = env_file.read_text().splitlines()
+    current = next(
+        (
+            line.split("=", 1)[1].strip()
+            for line in lines
+            if line.startswith("ENCRYPTION_KEY=")
+        ),
+        None,
+    )
+    if current:
+        return False
+    generated = f"ENCRYPTION_KEY={secrets.token_urlsafe(32)}"
+    if current is None:
+        lines.append(generated)
+    else:
+        lines = [
+            generated if line.startswith("ENCRYPTION_KEY=") else line for line in lines
+        ]
+    env_file.write_text("\n".join(lines) + "\n")
+    return True
+
+
 def setup_env_file(project_path: Path) -> bool:
     """
     Copy .env.example to .env if .env doesn't exist.
@@ -1186,6 +1230,12 @@ def run_post_generation_tasks(
     if reporter is not None:
         reporter.step("env", t("build.step.env"))
     env_ok = setup_env_file(project_path)
+    if (
+        env_ok
+        and _answered_yes(project_path, AnswerKeys.SECRETS)
+        and ensure_encryption_key(project_path)
+    ):
+        typer.echo(t("postgen.encryption_key_created"))
     if report is not None:
         report["env_ok"] = env_ok
     if reporter is not None:

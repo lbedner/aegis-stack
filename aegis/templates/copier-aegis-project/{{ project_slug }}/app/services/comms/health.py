@@ -5,7 +5,7 @@ Health monitoring for email (Resend), SMS (Twilio), and voice call functionality
 Checks provider configuration, API key validation, and service readiness.
 """
 
-from app.core.config import settings
+from app.core import secrets
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -18,13 +18,21 @@ async def check_comms_service_health() -> ComponentStatus:
         ComponentStatus indicating comms service health
     """
     try:
+        cfg = await secrets.get_many(
+            "RESEND_API_KEY",
+            "RESEND_FROM_EMAIL",
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+            "TWILIO_PHONE_NUMBER",
+            "TWILIO_MESSAGING_SERVICE_SID",
+        )
         config_errors: list[str] = []
         config_warnings: list[str] = []
 
         # Check Email (Resend) configuration
         email_configured = False
-        if settings.RESEND_API_KEY:
-            if settings.RESEND_FROM_EMAIL:
+        if cfg["RESEND_API_KEY"]:
+            if cfg["RESEND_FROM_EMAIL"]:
                 email_configured = True
             else:
                 config_warnings.append("RESEND_FROM_EMAIL not configured")
@@ -38,9 +46,9 @@ async def check_comms_service_health() -> ComponentStatus:
         voice_configured = False
         twilio_configured = all(
             [
-                settings.TWILIO_ACCOUNT_SID,
-                settings.TWILIO_AUTH_TOKEN,
-                settings.TWILIO_PHONE_NUMBER,
+                cfg["TWILIO_ACCOUNT_SID"],
+                cfg["TWILIO_AUTH_TOKEN"],
+                cfg["TWILIO_PHONE_NUMBER"],
             ]
         )
 
@@ -49,11 +57,11 @@ async def check_comms_service_health() -> ComponentStatus:
             voice_configured = True
         else:
             missing_twilio = []
-            if not settings.TWILIO_ACCOUNT_SID:
+            if not cfg["TWILIO_ACCOUNT_SID"]:
                 missing_twilio.append("TWILIO_ACCOUNT_SID")
-            if not settings.TWILIO_AUTH_TOKEN:
+            if not cfg["TWILIO_AUTH_TOKEN"]:
                 missing_twilio.append("TWILIO_AUTH_TOKEN")
-            if not settings.TWILIO_PHONE_NUMBER:
+            if not cfg["TWILIO_PHONE_NUMBER"]:
                 missing_twilio.append("TWILIO_PHONE_NUMBER")
             if missing_twilio:
                 missing_str = ", ".join(missing_twilio)
@@ -93,7 +101,7 @@ async def check_comms_service_health() -> ComponentStatus:
             # Email provider info
             "email_provider": "resend" if email_configured else None,
             "email_configured": email_configured,
-            "email_from": settings.RESEND_FROM_EMAIL if email_configured else None,
+            "email_from": cfg["RESEND_FROM_EMAIL"] if email_configured else None,
             # SMS/Voice provider info
             "sms_provider": "twilio" if sms_configured else None,
             "sms_configured": sms_configured,
@@ -109,19 +117,19 @@ async def check_comms_service_health() -> ComponentStatus:
                 "worker": "optional",  # For async message sending
             },
             # Email (Resend) detailed config
-            "resend_api_key_configured": bool(settings.RESEND_API_KEY),
-            "resend_from_email": settings.RESEND_FROM_EMAIL or "Not configured",
+            "resend_api_key_configured": bool(cfg["RESEND_API_KEY"]),
+            "resend_from_email": cfg["RESEND_FROM_EMAIL"] or "Not configured",
             # Twilio detailed config
-            "twilio_account_sid_configured": bool(settings.TWILIO_ACCOUNT_SID),
+            "twilio_account_sid_configured": bool(cfg["TWILIO_ACCOUNT_SID"]),
             "twilio_account_sid_preview": (
-                f"...{settings.TWILIO_ACCOUNT_SID[-4:]}"
-                if settings.TWILIO_ACCOUNT_SID
+                f"...{str(cfg['TWILIO_ACCOUNT_SID'])[-4:]}"
+                if cfg["TWILIO_ACCOUNT_SID"]
                 else "Not configured"
             ),
-            "twilio_auth_token_configured": bool(settings.TWILIO_AUTH_TOKEN),
-            "twilio_phone_number": settings.TWILIO_PHONE_NUMBER or "Not configured",
+            "twilio_auth_token_configured": bool(cfg["TWILIO_AUTH_TOKEN"]),
+            "twilio_phone_number": cfg["TWILIO_PHONE_NUMBER"] or "Not configured",
             "twilio_messaging_service_configured": bool(
-                settings.TWILIO_MESSAGING_SERVICE_SID
+                cfg["TWILIO_MESSAGING_SERVICE_SID"]
             ),
         }
 

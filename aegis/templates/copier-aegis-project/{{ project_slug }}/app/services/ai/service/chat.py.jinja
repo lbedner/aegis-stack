@@ -353,7 +353,7 @@ class ChatMixin(PromptMixin):
 {% endif %}
 
 {%- if ai_framework == "pydantic-ai" %}
-        agent, conversation_context = self._prepare_agent_and_context(
+        agent, conversation_context = await self._prepare_agent_and_context(
             conversation,
 {% if ai_rag %}
             rag_context=rag_context,
@@ -377,7 +377,7 @@ class ChatMixin(PromptMixin):
             conversation_context=conversation_context,
         )
 {%- else %}
-        llm, messages = self._prepare_llm_and_messages(
+        llm, messages = await self._prepare_llm_and_messages(
 {% if ai_rag %}
             conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
 {% else %}

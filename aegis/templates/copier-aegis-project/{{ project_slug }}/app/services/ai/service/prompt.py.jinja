@@ -188,7 +188,7 @@ class PromptMixin(ContextsMixin):
         return system_prompt
 
 {% if ai_framework == "pydantic-ai" %}
-    def _prepare_agent_and_context(
+    async def _prepare_agent_and_context(
         self,
         conversation: Conversation,
 {% if ai_rag %}
@@ -261,7 +261,7 @@ class PromptMixin(ContextsMixin):
             tools = resolve_tools(agent_config.tool_names)
             capabilities = agent_capabilities(agent_config)
 {% endif %}
-        agent = get_agent(
+        agent = await get_agent(
             config,
             self.settings,
             system_prompt_override,
@@ -356,7 +356,7 @@ class PromptMixin(ContextsMixin):
 
         return ""
 {% else %}
-    def _prepare_llm_and_messages(
+    async def _prepare_llm_and_messages(
         self,
         conversation: Conversation,
 {% if ai_rag %}
@@ -392,7 +392,7 @@ class PromptMixin(ContextsMixin):
         """
         # Create LLM for this request (agent sampling/model overlaid)
         config = self._apply_agent_config(self.config, agent_config)
-        llm = get_llm(config, self.settings)
+        llm = await get_llm(config, self.settings)
 
         system_prompt = self._system_prompt_for(
             config,

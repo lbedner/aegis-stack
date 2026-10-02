@@ -5,6 +5,8 @@ Provides functions for checking, installing, and configuring AI providers
 at runtime, enabling users to dynamically add providers after project generation.
 """
 
+from collections.abc import Callable
+from functools import partial
 import importlib.util
 import os
 from pathlib import Path
@@ -14,16 +16,65 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.core import secrets
 from app.core.config import settings
-from app.core.secrets import Secret
+from app.core.secrets import Secret, probe
 from app.services.ai.config import api_key_env
 from app.services.ai.models import PROVIDERS, AIProvider, ProviderCapabilities
 from app.services.ai.models.provider_names import KEYLESS_PROVIDERS, provider_label
 
+
+def _bearer(key: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {key}"}
+
+
+# One cheap authenticated read per provider with a key worth checking:
+# (url, headers for the key, statuses that mean "refused"). Google answers
+# a bad key with 400.
+KEY_CHECKS: dict[
+    AIProvider, tuple[str, Callable[[str], dict[str, str]], tuple[int, ...]]
+] = {
+    AIProvider.OPENAI: ("https://api.openai.com/v1/models", _bearer, (401,)),
+    AIProvider.ANTHROPIC: (
+        "https://api.anthropic.com/v1/models",
+        lambda key: {"x-api-key": key, "anthropic-version": "2023-06-01"},
+        (401,),
+    ),
+    AIProvider.GOOGLE: (
+        "https://generativelanguage.googleapis.com/v1beta/models",
+        lambda key: {"x-goog-api-key": key},
+        (400, 401),
+    ),
+    AIProvider.GROQ: ("https://api.groq.com/openai/v1/models", _bearer, (401,)),
+    AIProvider.MISTRAL: ("https://api.mistral.ai/v1/models", _bearer, (401,)),
+    AIProvider.COHERE: ("https://api.cohere.com/v1/models", _bearer, (401,)),
+    AIProvider.OPENROUTER: ("https://openrouter.ai/api/v1/key", _bearer, (401,)),
+}
+
+
+async def _check_key(provider: AIProvider, key: str) -> None:
+    url, headers, rejected = KEY_CHECKS[provider]
+    await probe(url, headers=headers(key), rejected=rejected)
+
+
+def _in_use(provider: AIProvider) -> bool:
+    """Only the active provider's key is needed, and a keyless one's never."""
+    return (
+        str(settings.AI_PROVIDER) == provider.value
+        and provider not in KEYLESS_PROVIDERS
+    )
+
+
 # The keys the providers read, for the Secrets page (``app.core.secrets``).
 # Derived from the registry, so a provider added there is declared with it.
 SECRETS = tuple(
-    Secret(spec.env_var, owner="AI", label=f"{provider_label(provider)} API key")
+    Secret(
+        spec.env_var,
+        owner="AI",
+        label=f"{provider_label(provider)} API key",
+        needed=partial(_in_use, provider),
+        verify=partial(_check_key, provider) if provider in KEY_CHECKS else None,
+    )
     for provider, spec in PROVIDERS.items()
     if spec.env_var in type(settings).model_fields
 )
@@ -361,10 +412,15 @@ class ProviderReadiness(BaseModel):
         return "ready"
 
 
-def provider_readiness(settings: Any) -> list[ProviderReadiness]:
+async def provider_readiness(settings: Any) -> list[ProviderReadiness]:
     """Every provider, in declaration order, as it stands under ``settings``:
-    the ``ai providers`` table and the Overseer's Providers page read this."""
+    the ``ai providers`` table and the Overseer's Providers page read this.
+    Keys are read in one go through ``app.core.secrets`` (``.env``, then the
+    secrets store)."""
     current = str(getattr(settings, "AI_PROVIDER", "") or "").lower()
+    keys = await secrets.get_many(
+        *(spec.env_var for spec in PROVIDERS.values()), source=settings
+    )
     rows = []
     for provider, spec in PROVIDERS.items():
         keyless = provider in KEYLESS_PROVIDERS
@@ -374,7 +430,7 @@ def provider_readiness(settings: Any) -> list[ProviderReadiness]:
                 label=provider_label(provider),
                 installed=check_provider_dependency_installed(provider.value),
                 keyless=keyless,
-                has_key=keyless or bool(getattr(settings, spec.env_var, None)),
+                has_key=keyless or bool(keys.get(spec.env_var)),
                 current=provider.value == current,
                 env_var=None if keyless else spec.env_var,
                 key_url=spec.key_url,
@@ -384,10 +440,12 @@ def provider_readiness(settings: Any) -> list[ProviderReadiness]:
     return rows
 
 
-def usable_providers(settings: Any) -> list[str]:
+async def usable_providers(settings: Any) -> list[str]:
     """The providers this install can call right now: SDK installed, and
     keyed where a key is needed. The catalog's "usable" filter and the
     Overseer's Catalog read this."""
     return [
-        r.provider.value for r in provider_readiness(settings) if r.status == "ready"
+        r.provider.value
+        for r in await provider_readiness(settings)
+        if r.status == "ready"
     ]

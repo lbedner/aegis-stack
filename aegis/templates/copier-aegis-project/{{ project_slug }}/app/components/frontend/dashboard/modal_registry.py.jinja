@@ -64,6 +64,9 @@ def modal_registry() -> dict[str, type[ft.Container]]:
     {%- if include_storage %}
     from app.components.frontend.dashboard.modals.storage_modal import StorageDetailDialog
     {%- endif %}
+    {%- if include_secrets %}
+    from app.components.frontend.dashboard.modals.secrets_modal import SecretsDetailDialog
+    {%- endif %}
     {%- if ollama_mode != "none" %}
     from app.components.frontend.dashboard.modals.ollama_modal import OllamaDetailDialog
     {%- endif %}
@@ -120,6 +123,9 @@ def modal_registry() -> dict[str, type[ft.Container]]:
         {%- endif %}
         {%- if include_storage %}
         "storage": StorageDetailDialog,
+        {%- endif %}
+        {%- if include_secrets %}
+        "secrets": SecretsDetailDialog,
         {%- endif %}
         {%- if ollama_mode != "none" %}
         "ollama": OllamaDetailDialog,

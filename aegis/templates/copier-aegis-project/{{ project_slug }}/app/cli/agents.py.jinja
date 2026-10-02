@@ -68,13 +68,13 @@ async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
 {% if ai_framework == "pydantic-ai" %}
     from app.services.ai.domains.llm.providers import get_agent
 
-    agent = get_agent(service_config, settings, config.system_prompt)
+    agent = await get_agent(service_config, settings, config.system_prompt)
     result = await agent.run(message)
     return config, str(result.output)
 {% else %}
     from app.services.ai.domains.llm.providers import get_llm
 
-    llm = get_llm(service_config, settings)
+    llm = await get_llm(service_config, settings)
     result = await llm.ainvoke(
         [("system", config.system_prompt), ("human", message)]
     )

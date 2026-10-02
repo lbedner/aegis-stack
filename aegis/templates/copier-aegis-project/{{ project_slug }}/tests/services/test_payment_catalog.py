@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
 from app.services.payment import catalog as catalog_module
 from app.services.payment.catalog import (
     _CACHE_TTL_SECONDS,
@@ -80,7 +81,7 @@ class TestCatalogEntryValidation:
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache() -> Generator[None, None, None]:
+def _clear_cache() -> Generator[None]:
     """Ensure every test starts with an empty cache."""
     invalidate_catalog_cache()
     yield
@@ -217,7 +218,7 @@ class TestStripeListCatalogMapping:
         from app.services.payment.providers.stripe import StripeProvider
 
         provider = StripeProvider()
-        provider._api_key = ""
+        provider._api_key = AsyncMock(return_value="")  # type: ignore[method-assign]
         assert await provider.list_catalog() == []
 
     @pytest.mark.asyncio
@@ -226,7 +227,7 @@ class TestStripeListCatalogMapping:
         from app.services.payment.providers.stripe import StripeProvider
 
         provider = StripeProvider()
-        provider._api_key = "sk_test_fake"
+        provider._api_key = AsyncMock(return_value="sk_test_fake")  # type: ignore[method-assign]
 
         response = SimpleNamespace(
             data=[
@@ -257,7 +258,7 @@ class TestStripeListCatalogMapping:
         from app.services.payment.providers.stripe import StripeProvider
 
         provider = StripeProvider()
-        provider._api_key = "sk_test_fake"
+        provider._api_key = AsyncMock(return_value="sk_test_fake")  # type: ignore[method-assign]
 
         response = SimpleNamespace(
             data=[

@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
+from typing import Any
+
 import pytest
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -75,13 +77,22 @@ def _fake_model(monkeypatch, headline: str = NOTE_TEXT) -> list[str]:
     """
     calls: list[str] = []
 
-    def _model_for(config, settings):
+    async def _model_for(config, settings):
         calls.append(config.model)
         return TestModel(custom_output_args={"headline": headline}), "test-model"
 
     monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _model_for)
     return calls
 
+
+
+def _returns(value: Any) -> Any:
+    """An async ``model_for`` stand-in that hands back ``value``."""
+
+    async def model_for_stub(config: Any, settings: Any) -> Any:
+        return value
+
+    return model_for_stub
 
 async def _seed_agent(session: AsyncSession) -> None:
     """Insert the analyst rows on the async session the run will use."""
@@ -105,7 +116,7 @@ async def _notes(session: AsyncSession) -> list[FinanceInsight]:
 class TestModelFor:
     """The helper that hands a bare model to callers who bring their own agent."""
 
-    def test_ollama_model_points_at_the_local_openai_endpoint(self) -> None:
+    async def test_ollama_model_points_at_the_local_openai_endpoint(self) -> None:
         config = AIServiceConfig(
             provider=AIProvider.OLLAMA, model="qwen2.5:7b", temperature=0.2
         )
@@ -119,7 +130,7 @@ class TestModelFor:
             ) as chat_model,
             patch("app.services.ai.domains.llm.model_factory.OpenAIProvider"),
         ):
-            model, model_name = model_for(config, settings)
+            model, model_name = await model_for(config, settings)
 
         assert model_name == "qwen2.5:7b"
         assert model is chat_model.return_value
@@ -128,23 +139,23 @@ class TestModelFor:
         assert client.call_args.kwargs["api_key"] == "ollama"
         assert chat_model.call_args.kwargs["model_name"] == "qwen2.5:7b"
 
-    def test_keyless_public_provider_is_refused_with_a_pointer(self) -> None:
+    async def test_keyless_public_provider_is_refused_with_a_pointer(self) -> None:
         """The public endpoints build their own clients; there is no bare model
         to hand back, and saying so beats returning a broken one."""
         config = AIServiceConfig(provider=AIProvider.PUBLIC, model="auto")
 
         with pytest.raises(ProviderError) as excinfo:
-            model_for(config, MagicMock())
+            await model_for(config, MagicMock())
 
         assert "get_agent" in str(excinfo.value)
 
-    def test_a_keyed_provider_without_its_key_is_refused(self) -> None:
+    async def test_a_keyed_provider_without_its_key_is_refused(self) -> None:
         settings = MagicMock()
         settings.OPENAI_API_KEY = None
         config = AIServiceConfig(provider=AIProvider.OPENAI, model="gpt-4o")
 
         with pytest.raises(ProviderError) as excinfo:
-            model_for(config, settings)
+            await model_for(config, settings)
 
         assert "No API key configured" in str(excinfo.value)
 
@@ -195,10 +206,7 @@ class TestRunAnalystNote:
 
         monkeypatch.setattr(
             "app.services.ai.domains.llm.providers.model_for",
-            lambda config, settings: (
-                FunctionModel(_respond),
-                "function-model",
-            ),
+            _returns((FunctionModel(_respond), "function-model")),
         )
         await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
         await _seed_agent(async_db_session)
@@ -281,7 +289,7 @@ class TestRunAnalystNote:
         must cost a log line, never a note containing an error message."""
         use_test_session(async_db_session)
 
-        def _explode(config, settings):
+        async def _explode(config, settings):
             raise ProviderError("Ollama connection failed")
 
         monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _explode)

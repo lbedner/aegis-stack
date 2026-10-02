@@ -46,7 +46,7 @@ def analyst_ready(monkeypatch):
 
         calls: list[str] = []
 
-        def _model_for(config, settings):
+        async def _model_for(config, settings):
             # Vary the text per handout so "was the model actually re-run?"
             # is answerable from the response rather than from a row id
             # (SQLite reuses the freed rowid, so ids prove nothing here).
@@ -142,7 +142,7 @@ async def test_an_unavailable_model_is_a_503_not_an_empty_note(
 ) -> None:
     from app.services.ai.domains.llm.providers import ProviderError
 
-    def _explode(config, settings):
+    async def _explode(config, settings):
         raise ProviderError("Ollama is not running")
 
     monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _explode)

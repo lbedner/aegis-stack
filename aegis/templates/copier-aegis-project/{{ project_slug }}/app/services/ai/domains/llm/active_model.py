@@ -190,4 +190,4 @@ async def model_for_active(settings: Any) -> tuple[Any, str]:
     from app.services.ai.domains.llm import providers
 
     await sync_from_db(settings)
-    return providers.model_for(AIServiceConfig.from_settings(settings), settings)
+    return await providers.model_for(AIServiceConfig.from_settings(settings), settings)

@@ -6,7 +6,7 @@ words), and a test send where a channel is ready. Registered only in
 projects with the comms service (see ``overseer_sections``).
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app.services.comms.calls import get_call_status, validate_call_config
@@ -26,7 +26,13 @@ PARTIALS = "/partials/overseer/comms"
 
 # (key, title, status, validate)
 CHANNELS: tuple[
-    tuple[str, str, Callable[[], dict[str, Any]], Callable[[], list[str]]], ...
+    tuple[
+        str,
+        str,
+        Callable[[], Awaitable[dict[str, Any]]],
+        Callable[[], Awaitable[list[str]]],
+    ],
+    ...,
 ] = (
     ("email", "Email", get_email_status, validate_email_config),
     ("sms", "SMS", get_sms_status, validate_sms_config),
@@ -34,10 +40,10 @@ CHANNELS: tuple[
 )
 
 
-def channel(key: str) -> dict[str, Any]:
+async def channel(key: str) -> dict[str, Any]:
     """One channel: configured or not, where it sends from, what is missing."""
     _, title, status, validate = next(c for c in CHANNELS if c[0] == key)
-    state = status()
+    state = await status()
     configured = bool(state.get("configured"))
     return {
         "key": key,
@@ -48,7 +54,7 @@ def channel(key: str) -> dict[str, Any]:
         if configured
         else status_cell("Not configured", "muted"),
         "sender": state.get("from_email") or state.get("phone_number"),
-        "missing": [] if configured else validate(),
+        "missing": [] if configured else await validate(),
     }
 
 
@@ -57,7 +63,7 @@ async def section_context(
 ) -> dict[str, Any]:
     context: dict[str, Any] = {"partials": PARTIALS}
     if section == "overview":
-        return context | {"channels": [channel(key) for key, *_ in CHANNELS]}
+        return context | {"channels": [await channel(key) for key, *_ in CHANNELS]}
     if section == "email":
-        return context | {"channel": channel("email")}
-    return context | {"sms": channel("sms"), "voice": channel("voice")}
+        return context | {"channel": await channel("email")}
+    return context | {"sms": await channel("sms"), "voice": await channel("voice")}

@@ -42,10 +42,10 @@ class _FakeClient:
     def __init__(self, payload: list[dict[str, Any]] | Exception) -> None:
         self._payload = payload
 
-    def __call__(self, *args: Any, **kwargs: Any) -> "_FakeClient":
+    def __call__(self, *args: Any, **kwargs: Any) -> _FakeClient:
         return self
 
-    def __enter__(self) -> "_FakeClient":
+    def __enter__(self) -> _FakeClient:
         return self
 
     def __exit__(self, *args: Any) -> None:
@@ -76,10 +76,10 @@ def _set_key(monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
 
 
 class TestResolvePollinationsModel:
-    def test_explicit_model_passes_through(self) -> None:
-        assert resolve_pollinations_model("openai-fast") == "openai-fast"
+    async def test_explicit_model_passes_through(self) -> None:
+        assert await resolve_pollinations_model("openai-fast") == "openai-fast"
 
-    def test_keyless_auto_prefers_anonymous_tier(
+    async def test_keyless_auto_prefers_anonymous_tier(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Without a key, models above the anonymous tier are never picked."""
@@ -88,9 +88,11 @@ class TestResolvePollinationsModel:
             _catalog(("gpt-5.4", "flower"), ("openai-fast", "anonymous")),
         )
 
-        assert resolve_pollinations_model("auto") == "openai-fast"
+        assert await resolve_pollinations_model("auto") == "openai-fast"
 
-    def test_keyed_auto_may_use_any_tier(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_keyed_auto_may_use_any_tier(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """A key opens the whole catalog; unknown models resolve deterministically."""
         _set_key(monkeypatch, "pollinations-key")
         _use_catalog(
@@ -98,9 +100,9 @@ class TestResolvePollinationsModel:
             _catalog(("aria-large", "flower"), ("zephyr", "seed")),
         )
 
-        assert resolve_pollinations_model("auto") == "aria-large"
+        assert await resolve_pollinations_model("auto") == "aria-large"
 
-    def test_keyless_falls_back_to_any_anonymous_model(
+    async def test_keyless_falls_back_to_any_anonymous_model(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """No preferred model served: pick a deterministic anonymous one."""
@@ -109,16 +111,16 @@ class TestResolvePollinationsModel:
             _catalog(("some-open-model", "anonymous"), ("gpt-5.4", "flower")),
         )
 
-        assert resolve_pollinations_model(None) == "some-open-model"
+        assert await resolve_pollinations_model(None) == "some-open-model"
 
-    def test_unreachable_catalog_uses_fallback(
+    async def test_unreachable_catalog_uses_fallback(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _use_catalog(monkeypatch, ConnectionError("no network"))
 
-        assert resolve_pollinations_model("auto") == POLLINATIONS_FALLBACK_MODEL
+        assert await resolve_pollinations_model("auto") == POLLINATIONS_FALLBACK_MODEL
 
-    def test_resolution_is_cached_per_process(
+    async def test_resolution_is_cached_per_process(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         calls = {"count": 0}
@@ -132,29 +134,31 @@ class TestResolvePollinationsModel:
         fake_httpx.Client = CountingClient(_catalog(("openai-fast", "anonymous")))
         monkeypatch.setattr(pollinations_provider_module, "httpx", fake_httpx)
 
-        resolve_pollinations_model("auto")
-        resolve_pollinations_model("auto")
+        await resolve_pollinations_model("auto")
+        await resolve_pollinations_model("auto")
 
         assert calls["count"] == 1
 
 
 class TestPollinationsApiKey:
-    def test_configured_key_is_used(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_configured_key_is_used(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         _set_key(monkeypatch, "pollinations-real-key")
 
-        assert pollinations_api_key() == "pollinations-real-key"
+        assert await pollinations_api_key() == "pollinations-real-key"
 
-    def test_keyless_returns_none_with_one_note(
+    async def test_keyless_returns_none_with_one_note(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         noted = MagicMock()
         monkeypatch.setattr(pollinations_provider_module.logger, "info", noted)
         monkeypatch.setattr(pollinations_provider_module, "_keyless_noted", False)
 
-        assert pollinations_api_key() is None
+        assert await pollinations_api_key() is None
         noted.assert_called_once()
         # Note once per process, not once per request.
-        assert pollinations_api_key() is None
+        assert await pollinations_api_key() is None
         noted.assert_called_once()
 
 

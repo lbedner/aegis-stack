@@ -15,6 +15,7 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 from chromadb.errors import NotFoundError
 
+from app.core import secrets
 from app.core.log import logger
 
 from .ids import generate_chunk_id
@@ -62,6 +63,8 @@ class VectorStoreManager:
         self.model_cache_dir = model_cache_dir
         self._client: chromadb.ClientAPI | None = None
         self._embedding_function: Any = None
+        # The key the cached OpenAI embedding function was built with.
+        self._embedding_key: str | None = None
 
     @property
     def client(self) -> chromadb.ClientAPI:
@@ -83,17 +86,27 @@ class VectorStoreManager:
 
         return self._client
 
-    @property
-    def embedding_function(self) -> Any:
-        """Get embedding function based on configured provider (lazy initialization)."""
-        if self._embedding_function is None:
-            self._embedding_function = self._create_embedding_function()
+    async def _embedding(self) -> Any:
+        """The embedding function for the configured provider, built once.
+        OpenAI's key is read now (``.env``, then the secrets store) and the
+        function rebuilt when it changes, so a key saved while the app runs
+        is used."""
+        # OpenAI embeds with its key; the local model downloads with the
+        # Hugging Face token, when one is set.
+        key = (
+            self.openai_api_key or await secrets.get("OPENAI_API_KEY")
+            if self.embedding_provider == "openai"
+            else await secrets.get("HF_TOKEN")
+        )
+        if self._embedding_function is None or key != self._embedding_key:
+            self._embedding_function = self._create_embedding_function(key)
+            self._embedding_key = key
         return self._embedding_function
 
-    def _create_embedding_function(self) -> Any:
+    def _create_embedding_function(self, key: str | None) -> Any:
         """Create embedding function based on configured provider."""
         if self.embedding_provider == "openai":
-            if not self.openai_api_key:
+            if not key:
                 raise VectorStoreError(
                     "OpenAI API key required when using openai embedding provider. "
                     "Set OPENAI_API_KEY in your environment."
@@ -105,7 +118,7 @@ class VectorStoreManager:
                 model=self.embedding_model,
             )
             return OpenAIEmbeddingFunction(
-                api_key=self.openai_api_key,
+                api_key=key,
                 model_name=self.embedding_model,
             )
         else:
@@ -113,16 +126,14 @@ class VectorStoreManager:
             import logging
             import os
 
-            from app.core.config import settings
-
             # Keep the embedding-model load quiet for clean CLI/RAG output:
             # disable the HF/transformers download progress bar (must be set
             # before those libs import, below), authenticate the download if a
             # token is configured (drops the "unauthenticated requests"
             # warning), and silence sentence-transformers' INFO load line.
             os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            if settings.HF_TOKEN:
-                os.environ.setdefault("HF_TOKEN", settings.HF_TOKEN)
+            if key:
+                os.environ.setdefault("HF_TOKEN", key)
             logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
             from chromadb.utils.embedding_functions import (
@@ -174,7 +185,7 @@ class VectorStoreManager:
             self.client.get_or_create_collection,
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
-            embedding_function=self.embedding_function,
+            embedding_function=await self._embedding(),
         )
 
         # Prepare documents for ChromaDB
@@ -266,7 +277,7 @@ class VectorStoreManager:
             collection = await asyncio.to_thread(
                 self.client.get_collection,
                 name=collection_name,
-                embedding_function=self.embedding_function,
+                embedding_function=await self._embedding(),
             )
         except (ValueError, NotFoundError):
             logger.warning(
@@ -321,7 +332,7 @@ class VectorStoreManager:
             collection = await asyncio.to_thread(
                 self.client.get_collection,
                 name=collection_name,
-                embedding_function=self.embedding_function,
+                embedding_function=await self._embedding(),
             )
         except (ValueError, NotFoundError):
             return []
@@ -365,7 +376,7 @@ class VectorStoreManager:
             collection = await asyncio.to_thread(
                 self.client.get_collection,
                 name=collection_name,
-                embedding_function=self.embedding_function,
+                embedding_function=await self._embedding(),
             )
         except (ValueError, NotFoundError):
             logger.warning(
@@ -449,7 +460,7 @@ class VectorStoreManager:
             collection = await asyncio.to_thread(
                 self.client.get_collection,
                 name=collection_name,
-                embedding_function=self.embedding_function,
+                embedding_function=await self._embedding(),
             )
             count = await asyncio.to_thread(collection.count)
 

@@ -63,6 +63,9 @@ from ..dashboard.cards import (
 {% if include_storage %}
     StorageCard,
 {% endif %}
+{% if include_secrets %}
+    SecretsCard,
+{% endif %}
 {% if ollama_mode != "none" %}
     OllamaCard,
 {% endif %}
@@ -199,6 +202,10 @@ def create_component_card(
 {% if include_storage %}
         elif component_name == "storage":
             return StorageCard(component_data).build()
+{% endif %}
+{% if include_secrets %}
+        elif component_name == "secrets":
+            return SecretsCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
         elif component_name == "ollama":

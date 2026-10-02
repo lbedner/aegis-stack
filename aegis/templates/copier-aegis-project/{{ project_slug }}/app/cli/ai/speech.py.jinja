@@ -132,13 +132,13 @@ def transcribe(
 
 
 @app.command("stt-status", help=lazy_t("ai.help_stt_status"))
-def stt_status() -> None:
+async def stt_status() -> None:
     from app.services.ai.service import AIService
 
     with suppress_logs():
         ai_service = AIService(settings)
 
-    status = ai_service.stt.get_status()
+    status = await ai_service.stt.get_status()
 
     theme.title(t("ai.stt_status_title"))
     theme.label("=" * 40)
@@ -231,13 +231,13 @@ def speak(
 
 
 @app.command("tts-status", help=lazy_t("ai.help_tts_status"))
-def tts_status() -> None:
+async def tts_status() -> None:
     from app.services.ai.service import AIService
 
     with suppress_logs():
         ai_service = AIService(settings)
 
-    status = ai_service.tts.get_status()
+    status = await ai_service.tts.get_status()
 
     theme.title(t("ai.tts_status_title"))
     theme.label("=" * 40)

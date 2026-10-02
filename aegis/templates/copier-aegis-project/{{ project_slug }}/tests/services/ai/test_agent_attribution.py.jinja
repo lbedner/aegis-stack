@@ -68,6 +68,15 @@ class _FakeEventStream:
         yield AgentRunResultEvent(result=_FakeResult())
 
 
+def _built(agent: Any) -> Any:
+    """An async ``get_agent`` stand-in that hands back ``agent``."""
+
+    async def build(*args: Any, **kwargs: Any) -> Any:
+        return agent
+
+    return build
+
+
 class _FakeAgent:
     async def run(self, prompt: str) -> _FakeResult:
         return _FakeResult()
@@ -123,7 +132,7 @@ def harness(
 
     captured: dict[str, Any] = {}
 
-    def fake_get_agent(
+    async def fake_get_agent(
         config: Any, settings: Any, system_prompt: str, **kwargs: Any
     ) -> _FakeAgent:
         captured["config"] = config
@@ -170,7 +179,7 @@ class TestTheTurnCarriesItsUser:
         monkeypatch.setattr(
             prompt_module,
             "get_agent",
-            lambda *a, **k: _RecordingAgent(),
+            _built(_RecordingAgent()),
         )
 
         await service.chat("remember something", user_id="u42")
@@ -196,7 +205,7 @@ class TestTheTurnCarriesItsUser:
         monkeypatch.setattr(
             prompt_module,
             "get_agent",
-            lambda *a, **k: _RecordingAgent(),
+            _built(_RecordingAgent()),
         )
 
         async for _chunk in service.stream_chat("remember something", user_id="u42"):
@@ -236,7 +245,7 @@ class TestAReplyCutOffAtTheLimitSaysSo:
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:
         service, _recorder, _captured, monkeypatch = harness
-        monkeypatch.setattr(prompt_module, "get_agent", lambda *a, **k: _CutOffAgent())
+        monkeypatch.setattr(prompt_module, "get_agent", _built(_CutOffAgent()))
 
         chunks = [c async for c in service.stream_chat("tell me everything")]
 

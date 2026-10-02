@@ -1,19 +1,22 @@
 """Building a PydanticAI model for a provider."""
 
-from typing import Any
-from app.services.ai.config import AIServiceConfig, api_key_env
-from app.services.ai.models import PROVIDERS, AIProvider
+from collections.abc import Sequence
 import importlib
 import os
-from collections.abc import Sequence
+from typing import Any
+
 from openai import AsyncOpenAI
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
+
+from app.services.ai.config import AIServiceConfig, api_key_env
 from app.services.ai.domains.llm.base import (
     ProviderError,
     require_api_key,
 )
+from app.services.ai.models import PROVIDERS, AIProvider
+
 
 def _get_model_class(provider: AIProvider):
     """The pydantic-ai model class for a provider, imported lazily.
@@ -82,9 +85,7 @@ def _ollama_model(config: AIServiceConfig, settings: Any) -> Any:
     return OpenAIChatModel(
         model_name=config.model,
         provider=OpenAIProvider(openai_client=openai_client),
-        profile=OpenAIModelProfile(
-            openai_chat_supports_max_completion_tokens=False
-        ),
+        profile=OpenAIModelProfile(openai_chat_supports_max_completion_tokens=False),
     )
 
 
@@ -126,7 +127,7 @@ def _grant_kwargs(
     return kwargs
 
 
-def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
+async def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
     """A bare model instance for ``config``, plus the model name it resolved to.
 
     ``get_agent`` wraps a whole ``Agent`` around this one. Callers that bring
@@ -146,7 +147,8 @@ def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
         )
 
     # PydanticAI 1.0+ reads credentials from the environment, not kwargs.
-    os.environ[api_key_env(config.provider)] = require_api_key(config, settings)
+    key = await require_api_key(config, settings)
+    os.environ[api_key_env(config.provider)] = key
 
     # An OpenAI-compatible provider is a base URL and a key, and the URL
     # is the only thing distinguishing Mistral, Cohere and OpenRouter
@@ -157,7 +159,6 @@ def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
     # branches did the moment anybody selected them.
     spec = PROVIDERS.get(config.provider)
     if spec is not None and spec.base_url:
-        key = config.get_provider_config(settings).api_key
         return _openai_compatible(config.model, spec.base_url, key), config.model
     return _get_model_class(config.provider)(model_name=config.model), config.model
 

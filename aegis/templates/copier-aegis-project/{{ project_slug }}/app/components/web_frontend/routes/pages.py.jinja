@@ -22,6 +22,9 @@ from app.components.web_frontend.routes.partials import (
     overseer_scheduler as overseer_scheduler_partials,
 )
 from app.components.web_frontend.routes.partials import (
+    overseer_secrets as overseer_secrets_partials,
+)
+from app.components.web_frontend.routes.partials import (
     overseer_redis as overseer_redis_partials,
 )
 from app.components.web_frontend.routes.partials import (
@@ -121,10 +124,9 @@ async def landing(request: Request) -> HTMLResponse:
 def _safe_next(target: str | None) -> str:
     """Return ``target`` only if it is a local path, else ``/``.
 
-    ``?next=`` arrives from the URL, so it is attacker-controlled. Anything
-    not starting with a single ``/`` is discarded — which also rules out
-    ``//evil.example`` protocol-relative URLs — otherwise sign-in becomes an
-    open redirect.
+    ``?next=`` arrives from the URL, so it is attacker-controlled: anything not
+    starting with a single ``/`` is discarded (``//evil.example`` included),
+    or sign-in becomes an open redirect.
     """
     if not target or not target.startswith("/") or target.startswith("//"):
         return "/"
@@ -145,9 +147,8 @@ def _current_user_or_redirect(
         if bounce:
             return bounce
 
-    There is deliberately no default-deny middleware: a page without this
-    call is public, the same contract ``Depends(get_current_active_user)``
-    gives the API.
+    No default-deny middleware, deliberately: a page without this call is
+    public, the contract ``Depends(get_current_active_user)`` gives the API.
     """
     if user is not None:
         return None
@@ -194,6 +195,7 @@ async def overseer_page(
 # Overseer pages' dialogs and forms (htmx fragments).
 router.include_router(overseer_auth_partials.router)
 router.include_router(overseer_scheduler_partials.router)
+router.include_router(overseer_secrets_partials.router)
 router.include_router(overseer_redis_partials.router)
 router.include_router(overseer_storage_partials.router)
 router.include_router(overseer_server_partials.router)
@@ -350,11 +352,10 @@ async def login_submit(
 ) -> RedirectResponse:
     """Sign in from the page form.
 
-    Delegates to the API's own login handler rather than reimplementing it:
-    account lockout, failed-attempt tracking, audit events, token minting and
-    cookie scoping all live there, and a second copy here would drift out of
-    step with them. The rate limiter is re-declared above so this path is
-    limited by the same bucket as the API.
+    Delegates to the API's own login handler: lockout, failed-attempt
+    tracking, audit events, token minting and cookie scoping live there, and
+    a copy here would drift. The rate limiter is re-declared above so this
+    path shares the API's bucket.
 
     The redirect is handed in as the ``response``, so the session and refresh
     cookies the API handler sets land on the 303 the browser follows.
@@ -411,10 +412,9 @@ async def register_submit(
     """Create an account from the page form.
 
     Same delegation as ``login_submit``: the API handler owns the closed-
-    signup check, duplicate detection, and cookies. Every dependency
-    the API handler declares must be threaded
-    through here — an omitted one stays a bare ``Depends`` sentinel and
-    blows up the moment the handler body touches it.
+    signup check, duplicate detection and cookies. Every dependency it
+    declares must be threaded through here: an omitted one stays a bare
+    ``Depends`` sentinel and fails the moment the handler touches it.
     """
 {%- if auth_level == "basic" %}
     redirect = RedirectResponse(url=_safe_next(next) if next else "/overseer", status_code=303)

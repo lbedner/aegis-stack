@@ -487,14 +487,20 @@ STACK_COMBINATIONS = [
     StackCombination(
         name="htmx_auth",
         # Inference rides along: its Overseer page needs the htmx frontend and
-        # auth's Overseer, and it renders here without the AI service.
-        components=["htmx", "database", "inference"],
+        # auth's Overseer, and it renders here without the AI service. So
+        # does the secrets component: its store, table and migration need
+        # the database, and its page lives in the Overseer.
+        components=["htmx", "database", "inference", "secrets"],
         services=["auth"],
         description="htmx web frontend with the auth service (auth pages)",
         expected_files=[
             "app/components/web_frontend/templates/pages/auth/login.html",
             "app/components/web_frontend/overseer_inference.py",
             "tests/web/test_overseer_inference.py",
+            "app/components/secrets/store.py",
+            "tests/components/test_secrets_store.py",
+            # Its own revision, not swept into auth's.
+            "alembic/versions/002_secrets.py",
             "app/components/web_frontend/static/js/auth.js",
             "app/components/frontend/main.py",
             "app/services/auth/",

@@ -25,6 +25,7 @@ Selected capabilities:
 {% endif %}{% if include_comms %}- Comms: email, SMS, and voice.
 {% endif %}{% if include_insights %}- Insights: analytics collection.
 {% endif %}{% if include_payment %}- Payment ({{ payment_provider }}): checkout and billing.
+{% endif %}{% if include_secrets %}- Secrets: encrypted credential store; read keys with `await secrets.get(name)`.
 {% endif %}{% if include_observability %}- Observability: metrics and tracing.
 {% endif %}{% if include_ingress %}- Ingress: reverse proxy and TLS.
 {% endif %}

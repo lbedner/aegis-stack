@@ -24,6 +24,7 @@ class ComponentNames:
     OBSERVABILITY = "observability"
     STORAGE = "storage"
     INFERENCE = "inference"
+    SECRETS = "secrets"
 
     # Ordered list for interactive selection. Worker leads and redis
     # follows the steps that auto-add it (worker bundles redis), so most
@@ -40,6 +41,7 @@ class ComponentNames:
         OBSERVABILITY,
         HTMX,
         INFERENCE,
+        SECRETS,
     ]
 
 
@@ -185,6 +187,16 @@ class InferencePlacement:
     DEFAULT = HOST
 
 
+class SecretsBackends:
+    """Where the secrets component keeps writable credentials. The database
+    is the one durable store every stack can have; Vault or a cloud manager
+    would be further values behind the same ``app.core.secrets`` calls."""
+
+    DATABASE = "database"
+    ALL = [DATABASE]
+    DEFAULT = DATABASE
+
+
 class OllamaMode:
     """Ollama deployment mode options. No longer asked: ``ollama_mode`` is
     computed from the inference component's answers (copier.yml)."""
@@ -279,6 +291,8 @@ class AnswerKeys:
     INFERENCE = "include_inference"
     INFERENCE_ENGINE = "inference_engine"
     INFERENCE_PLACEMENT = "inference_placement"
+    SECRETS = "include_secrets"
+    SECRETS_BACKEND = "secrets_backend"
     PROJECT_SLUG = "project_slug"
     SRC_PATH = "_src_path"
 

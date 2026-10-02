@@ -50,6 +50,9 @@ from .observability_modal import ObservabilityDetailDialog
 {%- if include_storage %}
 from .storage_modal import StorageDetailDialog
 {%- endif %}
+{%- if include_secrets %}
+from .secrets_modal import SecretsDetailDialog
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .ollama_modal import OllamaDetailDialog
 {%- endif %}
@@ -106,6 +109,9 @@ __all__ = [
 {%- endif %}
 {%- if include_storage %}
     "StorageDetailDialog",
+{%- endif %}
+{%- if include_secrets %}
+    "SecretsDetailDialog",
 {%- endif %}
 {%- if ollama_mode != "none" %}
     "OllamaDetailDialog",

@@ -197,7 +197,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    ``bg_class`` lets callers match the surrounding surface. #}
 {% macro password_input(name=None, x_model=None, autocomplete=None, required=True, minlength=None, placeholder="", bg_class="bg-aegis-card") %}
 <div class="relative" x-data="{ shown: false }">
-  <input :type="shown ? 'text' : 'password'"
+  <input type="password" :type="shown ? 'text' : 'password'"
     {% if name %}name="{{ name }}"{% endif %}
     {% if x_model %}x-model="{{ x_model }}"{% endif %}
     {% if required %}required{% endif %}

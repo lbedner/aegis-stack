@@ -13,10 +13,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from app.cli.payment import _CLI_FIXTURE_DESCRIPTION, _archive_fixtures, app
-from typer.testing import CliRunner
-
-runner = CliRunner()
+from app.cli.payment import _CLI_FIXTURE_DESCRIPTION, _archive_fixtures
+from tests._cli import invoke
+from tests._secret_settings import secret_settings
 
 
 def _fake_product(
@@ -113,27 +112,27 @@ class TestTriggerCommand:
         """Refuse to run trigger against a ``sk_live_`` key."""
         with (
             patch("shutil.which", return_value="/bin/stripe"),
-            patch("app.core.config.settings") as s,
+            secret_settings("STRIPE_SECRET_KEY") as s,
             patch("subprocess.run") as sub,
         ):
             s.STRIPE_SECRET_KEY = "sk_live_real_key_do_not_touch"
-            result = runner.invoke(app, ["trigger", "checkout.session.completed"])
+            result = invoke(["payment", "trigger", "checkout.session.completed"])
 
         assert result.exit_code != 0
-        assert "live key" in result.stdout.lower()
+        assert "live key" in result.output.lower()
         sub.assert_not_called()
 
     def test_missing_cli_exits_nonzero(self) -> None:
         with patch("shutil.which", return_value=None):
-            result = runner.invoke(app, ["trigger", "checkout.session.completed"])
+            result = invoke(["payment", "trigger", "checkout.session.completed"])
         assert result.exit_code != 0
-        assert "stripe-cli not found" in result.stdout.lower()
+        assert "stripe-cli not found" in result.output.lower()
 
     def test_happy_path_triggers_then_cleans(self) -> None:
         """Setup runs, teardown runs, exit code == trigger's exit code."""
         with (
             patch("shutil.which", return_value="/bin/stripe"),
-            patch("app.core.config.settings") as s,
+            secret_settings("STRIPE_SECRET_KEY") as s,
             patch("subprocess.run") as sub,
             patch(
                 "app.cli.payment._archive_fixtures",
@@ -143,7 +142,7 @@ class TestTriggerCommand:
             s.STRIPE_SECRET_KEY = "sk_test_fake"
             sub.return_value = SimpleNamespace(returncode=0)
 
-            result = runner.invoke(app, ["trigger", "checkout.session.completed"])
+            result = invoke(["payment", "trigger", "checkout.session.completed"])
 
         assert result.exit_code == 0
         # Setup ran with the test key baked in as --api-key.
@@ -156,16 +155,15 @@ class TestTriggerCommand:
     def test_no_cleanup_flag_skips_teardown(self) -> None:
         with (
             patch("shutil.which", return_value="/bin/stripe"),
-            patch("app.core.config.settings") as s,
+            secret_settings("STRIPE_SECRET_KEY") as s,
             patch("subprocess.run") as sub,
             patch("app.cli.payment._archive_fixtures") as arch,
         ):
             s.STRIPE_SECRET_KEY = "sk_test_fake"
             sub.return_value = SimpleNamespace(returncode=0)
 
-            result = runner.invoke(
-                app,
-                ["trigger", "checkout.session.completed", "--no-cleanup"],
+            result = invoke(
+                ["payment", "trigger", "checkout.session.completed", "--no-cleanup"]
             )
 
         assert result.exit_code == 0

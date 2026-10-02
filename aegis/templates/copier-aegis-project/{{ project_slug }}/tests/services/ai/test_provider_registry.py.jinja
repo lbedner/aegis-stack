@@ -97,7 +97,7 @@ class TestOneClientForEveryOpenAICompatibleProvider:
     @pytest.mark.parametrize(
         "provider", [AIProvider.MISTRAL, AIProvider.COHERE, AIProvider.OPENROUTER]
     )
-    def test_each_one_actually_builds(
+    async def test_each_one_actually_builds(
         self, provider: AIProvider, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The regression guard: construction, not just configuration."""
@@ -114,12 +114,12 @@ class TestOneClientForEveryOpenAICompatibleProvider:
             settings.__dict__, PROVIDERS[provider].env_var, "test-key-not-used"
         )
 
-        model, name = model_for(config, settings)
+        model, name = await model_for(config, settings)
 
         assert name == "a-model"
         assert type(model).__name__ == "OpenAIChatModel"
 
-    def test_the_key_rides_the_client_not_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_the_key_rides_the_client_not_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A stack can hold a real OpenAI key AND an OpenRouter one;
         stamping OPENAI_API_KEY would let the last one built answer for
         both."""
@@ -135,7 +135,7 @@ class TestOneClientForEveryOpenAICompatibleProvider:
         config.model = "deepseek/deepseek-chat"
         monkeypatch.setitem(settings.__dict__, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
 
-        model_for(config, settings)
+        await model_for(config, settings)
 
         assert os.environ["OPENAI_API_KEY"] == "the-real-openai-key"
 {%- else %}
@@ -150,7 +150,7 @@ class TestOpenRouterOnLangChain:
     native clients rather than being quietly rerouted.
     """
 
-    def test_it_builds_through_the_openai_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_it_builds_through_the_openai_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from app.core.config import settings
         from app.services.ai.config import get_ai_config
         from app.services.ai.domains.llm.providers import get_llm
@@ -160,12 +160,12 @@ class TestOpenRouterOnLangChain:
         config.model = "deepseek/deepseek-chat"
         monkeypatch.setitem(settings.__dict__, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
 
-        llm = get_llm(config, settings)
+        llm = await get_llm(config, settings)
 
         assert type(llm).__name__ == "ChatOpenAI"
         assert str(llm.openai_api_base).startswith("https://openrouter.ai")
 
-    def test_the_key_rides_the_client_not_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_the_key_rides_the_client_not_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import os
 
         from app.core.config import settings
@@ -178,7 +178,7 @@ class TestOpenRouterOnLangChain:
         config.model = "deepseek/deepseek-chat"
         monkeypatch.setitem(settings.__dict__, "OPEN_ROUTER_API_KEY", "sk-or-v1-test")
 
-        get_llm(config, settings)
+        await get_llm(config, settings)
 
         assert os.environ["OPENAI_API_KEY"] == "the-real-openai-key"
 {%- endif %}

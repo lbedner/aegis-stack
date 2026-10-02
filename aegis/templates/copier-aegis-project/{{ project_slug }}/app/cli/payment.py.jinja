@@ -113,7 +113,7 @@ _CLI_FIXTURE_DESCRIPTION = "(created by Stripe CLI)"
 
 
 @app.command(help=lazy_t("payment.help_trigger"))
-def trigger(
+async def trigger(
     event: str = typer.Argument(..., help=lazy_t("payment.arg_event")),
     no_cleanup: bool = typer.Option(
         False,
@@ -144,14 +144,14 @@ def trigger(
     import shutil
     import subprocess
 
-    from app.core.config import settings
+    from app.core import secrets
 
     if not shutil.which("stripe"):
         console.print(f"[{theme.ERROR}]{t('payment.stripe_cli_not_found')}[/]")
         console.print(t("payment.stripe_install_brief"))
         raise typer.Exit(1)
 
-    api_key = settings.STRIPE_SECRET_KEY or ""
+    api_key = await secrets.get("STRIPE_SECRET_KEY") or ""
     if not api_key:
         console.print(f"[{theme.ERROR}]{t('payment.stripe_secret_missing')}[/]")
         raise typer.Exit(1)
@@ -161,7 +161,8 @@ def trigger(
         raise typer.Exit(1)
 
     console.print(t("payment.triggering", event=event))
-    result = subprocess.run(
+    result = await asyncio.to_thread(
+        subprocess.run,
         ["stripe", "trigger", "--api-key", api_key, event],
         capture_output=False,
     )
@@ -176,7 +177,7 @@ def trigger(
         console.print(f"[dim]{t('payment.skipping_cleanup')}[/dim]")
         raise typer.Exit(result.returncode)
 
-    archived = _archive_fixtures(api_key)
+    archived = await asyncio.to_thread(_archive_fixtures, api_key)
     if archived["products"] or archived["prices"]:
         console.print(
             t(

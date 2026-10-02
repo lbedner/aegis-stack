@@ -5,10 +5,10 @@ Provides a high-level interface for speech synthesis with provider abstraction,
 configuration management, and streaming support.
 """
 
-import logging
-import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+import logging
+import time
 from typing import Any
 
 from ..models import SpeechRequest, SpeechResult, TTSProvider
@@ -66,6 +66,7 @@ class TTSService:
         self._settings = settings
         self._explicit_api_key = api_key
         self._provider_instance: BaseTTSProvider | None = None
+        self._provider_key: str | None = None
 
         # Build config from settings or explicit values
         if provider or model or voice:
@@ -102,23 +103,25 @@ class TTSService:
         """Get the configured voice (with provider default fallback)."""
         return self._config.get_voice()
 
-    def _get_api_key(self) -> str | None:
+    async def _get_api_key(self) -> str | None:
         """Get API key for the current provider."""
         if self._explicit_api_key:
             return self._explicit_api_key
 
         if self._settings:
-            return self._config.get_api_key(self._settings)
+            return await self._config.get_api_key(self._settings)
 
         return None
 
-    def _get_provider(self) -> BaseTTSProvider:
-        """Get or create the TTS provider instance."""
-        if self._provider_instance is None:
+    async def _get_provider(self) -> BaseTTSProvider:
+        """Get or create the TTS provider instance; rebuilt when the
+        key changes, so one saved while the app runs takes effect."""
+        api_key = await self._get_api_key()
+        if self._provider_instance is None or api_key != self._provider_key:
+            self._provider_key = api_key
             provider_type = self.provider_type
             model = self.model
             voice = self.voice
-            api_key = self._get_api_key()
 
             logger.info(f"Initializing TTS provider: {provider_type.value}")
 
@@ -148,7 +151,7 @@ class TTSService:
         Raises:
             RuntimeError: If synthesis fails.
         """
-        provider = self._get_provider()
+        provider = await self._get_provider()
 
         logger.debug(
             f"Synthesizing speech ({len(request.text)} chars, "
@@ -200,7 +203,7 @@ class TTSService:
         Raises:
             RuntimeError: If synthesis fails.
         """
-        provider = self._get_provider()
+        provider = await self._get_provider()
 
         logger.debug(
             f"Streaming speech synthesis ({len(request.text)} chars) "
@@ -217,34 +220,34 @@ class TTSService:
         """
         self._provider_instance = None
 
-    def validate(self) -> list[str]:
+    async def validate(self) -> list[str]:
         """Validate the TTS configuration.
 
         Returns:
             List of validation error messages (empty if valid).
         """
         if self._settings:
-            return self._config.validation_errors(self._settings)
+            return await self._config.validation_errors(self._settings)
         return []
 
-    def is_available(self) -> bool:
+    async def is_available(self) -> bool:
         """Check if the configured TTS provider is available.
 
         Returns:
             True if the provider is properly configured and available.
         """
         if self._settings:
-            return self._config.is_available(self._settings)
+            return await self._config.is_available(self._settings)
         # Without settings, assume available (will fail at runtime if not)
         return True
 
-    def get_status(self) -> dict[str, Any]:
+    async def get_status(self) -> dict[str, Any]:
         """Get TTS service status information.
 
         Returns:
             Dictionary with provider type, model, voice, availability, and validation info.
         """
-        errors = self.validate()
+        errors = await self.validate()
         return {
             "provider": self.provider_type.value,
             "model": self.model,
@@ -280,7 +283,6 @@ class TTSService:
         """
         try:
             from app.core.db import get_async_session
-
             from app.services.ai.models.voice_usage import TTSUsage
         except ImportError:
             # A project generated without a database has no tts_usage table

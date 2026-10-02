@@ -76,6 +76,7 @@ MESSAGES: dict[str, str] = {
     "component.ingress": "Traefik reverse proxy y balanceador de carga",
     "component.observability": "Logfire observabilidad, trazas y métricas",
     "component.inference": "Local model serving (Ollama)",
+    "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
@@ -370,6 +371,7 @@ MESSAGES: dict[str, str] = {
     "postgen.deps_uv_install": "Instala uv primero: https://github.com/astral-sh/uv",
     "postgen.deps_warn_error": "Advertencia: Instalación de dependencias falló: {error}",
     "postgen.env_setup": "Configurando entorno...",
+    "postgen.encryption_key_created": "Generated ENCRYPTION_KEY in .env for stored secrets (keep it: changing it makes them unreadable)",
     "postgen.env_created": "Archivo de entorno creado desde .env.example",
     "postgen.env_exists": "Archivo de entorno ya existe",
     "postgen.env_missing": "Advertencia: Archivo .env.example no encontrado",
@@ -1188,6 +1190,7 @@ MESSAGES: dict[str, str] = {
     "component.ingress.long": "Proxy inverso y enrutamiento de tráfico con Traefik: descubrimiento automático de servicios, protección de endpoints de administración y TLS opcional mediante Let's Encrypt. La puerta de entrada para los despliegues.",
     "component.observability.long": "Trazado distribuido, métricas y correlación de registros con Pydantic Logfire. Instrumenta tu aplicación automáticamente y se adapta a los componentes que actives, para que veas qué está haciendo realmente producción.",
     "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
+    "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Gestión completa de usuarios con autenticación JWT, cookies de sesión y rotación de tokens de actualización. Tres niveles: correo/contraseña básico, roles y permisos RBAC, u organizaciones multiinquilino. Incluye registro, inicio de sesión y una pestaña de panel de administración.",

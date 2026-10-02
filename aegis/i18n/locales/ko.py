@@ -70,6 +70,7 @@ MESSAGES: dict[str, str] = {
     "component.ingress": "Traefik 리버스 프록시 및 로드 밸런서",
     "component.observability": "Logfire 관측성, 트레이싱 및 메트릭",
     "component.inference": "Local model serving (Ollama)",
+    "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
@@ -345,6 +346,7 @@ MESSAGES: dict[str, str] = {
     "postgen.deps_uv_install": "먼저 uv를 설치하세요: https://github.com/astral-sh/uv",
     "postgen.deps_warn_error": "경고: 의존성 설치 실패: {error}",
     "postgen.env_setup": "환경 구성 설정 중...",
+    "postgen.encryption_key_created": "Generated ENCRYPTION_KEY in .env for stored secrets (keep it: changing it makes them unreadable)",
     "postgen.env_created": ".env.example에서 환경 파일 생성 완료",
     "postgen.env_exists": "환경 파일이 이미 존재합니다",
     "postgen.env_missing": "경고: .env.example 파일을 찾을 수 없음",
@@ -1134,6 +1136,7 @@ MESSAGES: dict[str, str] = {
     "component.ingress.long": "Traefik를 이용한 리버스 프록시와 트래픽 라우팅: 자동 서비스 검색, 관리 엔드포인트 보호, Let's Encrypt를 통한 선택적 TLS. 배포의 정문입니다.",
     "component.observability.long": "Pydantic Logfire를 이용한 분산 추적, 메트릭, 로그 상관관계. 애플리케이션을 자동 계측하고 활성화한 컴포넌트에 맞게 적응하므로, 프로덕션이 실제로 무엇을 하는지 볼 수 있습니다.",
     "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
+    "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "JWT 인증, 세션 쿠키, 리프레시 토큰 회전을 갖춘 완전한 사용자 관리. 세 가지 레벨: 기본 이메일/비밀번호, RBAC 역할 및 권한, 멀티테넌트 조직. 회원가입, 로그인, 관리자 대시보드 탭을 포함합니다.",

@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.core import secrets
+
 from .models import (
     PROVIDERS,
     AIProvider,
@@ -120,14 +122,17 @@ class AIServiceConfig(BaseModel):
             rag_min_score=getattr(settings, "RAG_CHAT_MIN_SCORE", 0.1),
         )
 
-    def get_provider_config(self, settings: Any) -> ProviderConfig:
-        """Get provider-specific configuration."""
-        # Keyed providers read their key from settings; the local and
-        # keyless ones (ollama, public, pollinations) read it in their own
-        # provider path.
+    async def get_provider_config(self, settings: Any) -> ProviderConfig:
+        """Get provider-specific configuration. The key is read now through
+        ``app.core.secrets`` (``.env``, then the secrets store), so one
+        saved while the app runs is used by the next agent built."""
+        # The local and keyless providers (ollama, public, pollinations)
+        # read theirs in their own provider path.
         env_var = API_KEY_ENV.get(self.provider)
-        api_key = getattr(settings, env_var, None) if env_var else None
+        api_key = await secrets.get(env_var, source=settings) if env_var else None
+        return self._provider_config(api_key)
 
+    def _provider_config(self, api_key: str | None) -> ProviderConfig:
         return ProviderConfig(
             name=self.provider,
             api_key=api_key,
@@ -136,14 +141,20 @@ class AIServiceConfig(BaseModel):
             timeout_seconds=self.timeout_seconds,
         )
 
-    def validate_configuration(self, settings: Any) -> list[str]:
+    async def validate_configuration(self, settings: Any) -> list[str]:
         """
         Validate AI service configuration and return list of issues.
 
         Returns:
             List of validation error messages (empty if valid)
         """
-        errors = []
+        if not self.enabled:
+            return []
+        return self._issues((await self.get_provider_config(settings)).api_key)
+
+    def _issues(self, api_key: str | None) -> list[str]:
+        """What is wrong with this configuration, given its provider's key."""
+        errors: list[str] = []
 
         if not self.enabled:
             return errors  # Skip validation if disabled
@@ -154,9 +165,7 @@ class AIServiceConfig(BaseModel):
             errors.append(f"Unsupported provider: {self.provider}")
 
         # Check API key requirement (keyless providers don't need API keys)
-        provider_config = self.get_provider_config(settings)
-
-        if self.provider not in KEYLESS_PROVIDERS and not provider_config.api_key:
+        if self.provider not in KEYLESS_PROVIDERS and not api_key:
             errors.append(
                 f"Missing API key for {self.provider} provider. "
                 f"Set {self.provider.upper()}_API_KEY environment variable."
@@ -167,13 +176,15 @@ class AIServiceConfig(BaseModel):
 
         return errors
 
-    def is_provider_available(self, settings: Any) -> bool:
+    async def is_provider_available(self, settings: Any) -> bool:
         """Check if the configured provider is available and properly configured."""
-        errors = self.validate_configuration(settings)
+        errors = await self.validate_configuration(settings)
         return len(errors) == 0
 
-    def get_available_providers(self, settings: Any) -> list[AIProvider]:
-        """Get list of providers that are properly configured."""
+    async def get_available_providers(self, settings: Any) -> list[AIProvider]:
+        """Get list of providers that are properly configured. Every key is
+        read in one go (``secrets.get_many``), not one lookup per provider."""
+        keys = await secrets.get_many(*API_KEY_ENV.values(), source=settings)
         available = []
 
         for provider in AIProvider:
@@ -186,7 +197,8 @@ class AIServiceConfig(BaseModel):
                 max_tokens=self.max_tokens,
             )
 
-            if len(temp_config.validate_configuration(settings)) == 0:
+            env_var = API_KEY_ENV.get(provider)
+            if not temp_config._issues(keys.get(env_var) if env_var else None):
                 available.append(provider)
 
         return available

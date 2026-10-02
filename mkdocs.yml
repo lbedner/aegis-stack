@@ -95,6 +95,11 @@ nav:
       - Getting Started: components/storage/index.md
       - Configuration: components/storage/configuration.md
       - Examples: components/storage/examples.md
+    - Secrets:
+      - Getting Started: components/secrets/index.md
+      - Setting Keys: components/secrets/setting-keys.md
+      - Needed & Verified: components/secrets/needed-and-verified.md
+      - How It Works: components/secrets/how-it-works.md
     - Worker:
       - Getting Started: components/worker/index.md
       - Configuration: components/worker/configuration.md

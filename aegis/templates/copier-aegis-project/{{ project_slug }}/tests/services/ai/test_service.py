@@ -1,6 +1,7 @@
 """Tests for AI service core functionality."""
 
 import pytest
+
 from app.core.config import settings
 from app.services.ai.models import AIProvider
 from app.services.ai.service import AIService
@@ -90,18 +91,18 @@ class TestAIServiceStatus:
 class TestAIServiceValidation:
     """Test AI service validation."""
 
-    def test_validate_service_returns_list(self) -> None:
+    async def test_validate_service_returns_list(self) -> None:
         """Test that validate_service returns list of errors."""
         service = AIService(settings)
-        errors = service.validate_service()
+        errors = await service.validate_service()
 
         assert isinstance(errors, list)
         assert all(isinstance(e, str) for e in errors)
 
-    def test_validate_service_with_valid_config(self) -> None:
+    async def test_validate_service_with_valid_config(self) -> None:
         """Test validation with valid configuration."""
         service = AIService(settings)
-        errors = service.validate_service()
+        errors = await service.validate_service()
 
         # PUBLIC provider should have no errors (no API key required)
         if service.config.provider == AIProvider.PUBLIC:

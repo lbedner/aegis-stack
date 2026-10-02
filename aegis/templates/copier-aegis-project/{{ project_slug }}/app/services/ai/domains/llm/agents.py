@@ -1,16 +1,17 @@
 """Building a PydanticAI agent: the four provider shapes."""
 
-from typing import Any
-from app.core.log import logger
-from app.services.ai.config import AIServiceConfig, api_key_env
-from app.services.ai.models import PROVIDERS, AIProvider
-import json
 from collections.abc import Sequence
+import json
+from typing import Any
+
 import httpx
 from openai import AsyncOpenAI
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
+
+from app.core.log import logger
+from app.services.ai.config import AIServiceConfig
 from app.services.ai.domains.llm.base import (
     ProviderError,
     ProviderNotInstalledError,
@@ -21,8 +22,10 @@ from app.services.ai.domains.llm.model_factory import (
     _ollama_model,
     model_for,
 )
+from app.services.ai.models import AIProvider
 
-def get_agent(
+
+async def get_agent(
     config: AIServiceConfig,
     settings: Any,
     system_prompt_override: str | None = None,
@@ -54,7 +57,7 @@ def get_agent(
         # Special handling for PUBLIC provider (anonymous tier works keyless;
         # LLM7_API_KEY unlocks premium models)
         if config.provider == AIProvider.PUBLIC:
-            return _create_public_agent(
+            return await _create_public_agent(
                 config,
                 system_prompt_override,
                 tools=tools,
@@ -65,7 +68,7 @@ def get_agent(
         # Special handling for POLLINATIONS provider (anonymous tier works
         # keyless; POLLINATIONS_API_KEY selects an account tier)
         if config.provider == AIProvider.POLLINATIONS:
-            return _create_pollinations_agent(
+            return await _create_pollinations_agent(
                 config,
                 system_prompt_override,
                 tools=tools,
@@ -86,7 +89,7 @@ def get_agent(
 
         # Key check, env-var handoff, and model construction all live in
         # ``model_for`` so agent-building and model-only callers cannot drift.
-        model, _ = model_for(config, settings)
+        model, _ = await model_for(config, settings)
 
         # Determine system prompt
         system_prompt = system_prompt_override or (
@@ -121,7 +124,7 @@ def get_agent(
         raise ProviderError(error_msg) from e
 
 
-def _create_public_agent(
+async def _create_public_agent(
     config: AIServiceConfig,
     system_prompt_override: str | None = None,
     *,
@@ -139,10 +142,6 @@ def _create_public_agent(
         system_prompt_override: Optional custom system prompt (for RAG mode)
     """
     # Lazy imports - only needed for PUBLIC provider
-    from openai import AsyncOpenAI
-
-    from pydantic_ai.models.openai import OpenAIChatModel
-    from pydantic_ai.providers.openai import OpenAIProvider
 
     try:
         # Create a custom HTTP client that fixes LLM7.io response format
@@ -201,7 +200,7 @@ def _create_public_agent(
         # Create the AsyncOpenAI client directly. LLM7.io requires a free
         # account key since mid-2026; public_api_key() warns when unset.
         openai_client = AsyncOpenAI(
-            api_key=public_api_key(),
+            api_key=await public_api_key(),
             base_url=LLM7_BASE_URL,
             http_client=custom_http_client,
         )
@@ -213,7 +212,7 @@ def _create_public_agent(
         # LLM7's live catalog (their model list rotates).
         from .public_provider import resolve_public_model
 
-        model_name = resolve_public_model(config.model)
+        model_name = await resolve_public_model(config.model)
         model = OpenAIChatModel(model_name=model_name, provider=provider)
 
         # Determine system prompt
@@ -249,7 +248,7 @@ def _create_public_agent(
         raise ProviderError(error_msg) from e
 
 
-def _create_pollinations_agent(
+async def _create_pollinations_agent(
     config: AIServiceConfig,
     system_prompt_override: str | None = None,
     *,
@@ -269,10 +268,6 @@ def _create_pollinations_agent(
         system_prompt_override: Optional custom system prompt (for RAG mode)
     """
     # Lazy imports - only needed for POLLINATIONS provider
-    from openai import AsyncOpenAI
-
-    from pydantic_ai.models.openai import OpenAIChatModel
-    from pydantic_ai.providers.openai import OpenAIProvider
 
     from .pollinations_provider import (
         POLLINATIONS_BASE_URL,
@@ -282,11 +277,9 @@ def _create_pollinations_agent(
     )
 
     try:
-        api_key = pollinations_api_key()
+        api_key = await pollinations_api_key()
         if api_key:
-            openai_client = AsyncOpenAI(
-                api_key=api_key, base_url=POLLINATIONS_BASE_URL
-            )
+            openai_client = AsyncOpenAI(api_key=api_key, base_url=POLLINATIONS_BASE_URL)
         else:
             # The SDK insists on a key; the anonymous client strips the
             # resulting header before it reaches the wire.
@@ -297,7 +290,7 @@ def _create_pollinations_agent(
             )
 
         provider = OpenAIProvider(openai_client=openai_client)
-        model_name = resolve_pollinations_model(config.model)
+        model_name = await resolve_pollinations_model(config.model)
         model = OpenAIChatModel(model_name=model_name, provider=provider)
 
         system_prompt = system_prompt_override or (

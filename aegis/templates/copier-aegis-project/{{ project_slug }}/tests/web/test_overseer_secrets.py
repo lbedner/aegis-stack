@@ -61,7 +61,7 @@ def test_a_set_secret_shows_its_source_and_last_four_never_the_value(
 
 def test_a_missing_secret_says_what_to_add(page: str) -> None:
     row = _row(page, "ANTHROPIC_API_KEY")
-    assert "Not set" in row and "ANTHROPIC_API_KEY=" in row
+    assert "Not used" in row and "ANTHROPIC_API_KEY=" in row
 
 
 def test_provider_config_shows_whole(page: str) -> None:
@@ -71,3 +71,198 @@ def test_provider_config_shows_whole(page: str) -> None:
 def test_it_says_how_values_change(page: str) -> None:
     """Read-only on the env backend: a restart is what changes a value."""
     assert "restart" in text(one(page, "#secrets-backend")).lower()
+
+
+class FakeStore:
+    """A writable store, the shape the secrets component installs."""
+
+    name = "database"
+    writable = True
+
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    async def get(self, name: str) -> str | None:
+        return self.values.get(name)
+
+    async def get_many(self, names: list[str]) -> dict[str, str | None]:
+        return {name: self.values.get(name) for name in names}
+
+    async def put(self, name: str, value: str, hint: str | None, actor: str) -> None:
+        self.values[name] = value
+
+    async def delete(self, name: str, actor: str) -> None:
+        self.values.pop(name, None)
+
+    async def stored(self) -> dict[str, secrets.StoredSecret]:
+        return {
+            n: secrets.StoredSecret(hint=v[-4:], set_by="ops@example.com")
+            for n, v in self.values.items()
+        }
+
+
+@pytest.fixture
+def writable(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> Generator[tuple[TestClient, FakeStore]]:
+    sign_in(app, monkeypatch, status_with())
+    monkeypatch.setattr(secrets, "declared", lambda: DECLARED)
+    monkeypatch.setitem(settings.__dict__, "OPENAI_API_KEY", KEY)
+    monkeypatch.setitem(settings.__dict__, "ANTHROPIC_API_KEY", None)
+    monkeypatch.setitem(settings.__dict__, "RESEND_FROM_EMAIL", None)
+    store = FakeStore()
+    secrets.set_store(store)
+    yield TestClient(app), store
+    secrets.set_store(None)
+
+
+PARTIALS = "/partials/overseer/secrets"
+
+
+def test_a_settable_secret_offers_set_and_one_in_env_does_not(
+    writable: tuple[TestClient, FakeStore],
+) -> None:
+    client, _ = writable
+    html = client.get("/overseer/secrets").text
+    assert (
+        one(html, f'#secrets button[hx-get="{PARTIALS}/ANTHROPIC_API_KEY"]') is not None
+    )
+    assert not select(html, f'#secrets button[hx-get="{PARTIALS}/OPENAI_API_KEY"]')
+    assert "change it in .env" in _row(html, "OPENAI_API_KEY").lower()
+
+
+def test_the_dialog_never_shows_the_value(
+    writable: tuple[TestClient, FakeStore],
+) -> None:
+    client, store = writable
+    store.values["ANTHROPIC_API_KEY"] = "sk-ant-stored-0000wxyz"
+    html = client.get(f"{PARTIALS}/ANTHROPIC_API_KEY").text
+    field = one(html, 'input[name="value"]')
+    assert field.get("type") == "password" and not field.get("value")
+    assert "sk-ant-stored" not in html
+
+
+def test_saving_stores_it_and_echoes_nothing(
+    writable: tuple[TestClient, FakeStore],
+) -> None:
+    client, store = writable
+    response = client.post(
+        f"{PARTIALS}/ANTHROPIC_API_KEY", data={"value": "sk-ant-new-0000abcd"}
+    )
+    assert response.status_code == 200
+    assert store.values["ANTHROPIC_API_KEY"] == "sk-ant-new-0000abcd"
+    assert "sk-ant-new" not in response.text + str(response.headers)
+
+
+def test_remove_clears_a_stored_value(writable: tuple[TestClient, FakeStore]) -> None:
+    client, store = writable
+    store.values["ANTHROPIC_API_KEY"] = "sk-ant-stored-0000wxyz"
+    assert client.post(f"{PARTIALS}/ANTHROPIC_API_KEY/remove").status_code == 200
+    assert "ANTHROPIC_API_KEY" not in store.values
+
+
+def test_a_refused_write_says_why(writable: tuple[TestClient, FakeStore]) -> None:
+    client, _ = writable
+    response = client.post(
+        f"{PARTIALS}/OPENAI_API_KEY", data={"value": "sk-other-000000"}
+    )
+    assert response.status_code == 422 and ".env" in response.text
+
+
+def test_a_read_only_backend_names_where_to_change_it(
+    writable: tuple[TestClient, FakeStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, store = writable
+    monkeypatch.setattr(store, "name", "vault")
+    monkeypatch.setattr(store, "writable", False)
+    html = client.get("/overseer/secrets").text
+    assert not select(html, f'#secrets button[hx-get^="{PARTIALS}/"]')
+    assert "vault" in text(one(html, "#secrets-backend")).lower()
+
+
+async def _accepts(value: str) -> None:
+    return None
+
+
+async def _refuses(value: str) -> None:
+    raise secrets.SecretRejectedError("api.example.com refused it (401).")
+
+
+def _checked(monkeypatch: pytest.MonkeyPatch, verify: object) -> None:
+    monkeypatch.setattr(
+        secrets,
+        "declared",
+        lambda: (
+            Secret("OPENAI_API_KEY", owner="AI", needed=True, verify=verify),
+            Secret("ANTHROPIC_API_KEY", owner="AI", needed=True, verify=verify),
+            Secret("RESEND_FROM_EMAIL", owner="Email", secret=False),
+        ),
+    )
+
+
+def test_a_missing_needed_key_reads_apart_from_an_optional_one(
+    writable: tuple[TestClient, FakeStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _ = writable
+    _checked(monkeypatch, _accepts)
+    html = client.get("/overseer/secrets").text
+    assert "Missing" in _row(html, "ANTHROPIC_API_KEY")
+    assert "Not used" in _row(html, "RESEND_FROM_EMAIL")
+    assert "1 of 2 needed" in text(one(html, "#secrets-summary"))
+
+
+def test_a_key_with_a_check_offers_test_wherever_it_is_set(
+    writable: tuple[TestClient, FakeStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _ = writable
+    _checked(monkeypatch, _accepts)
+    html = client.get("/overseer/secrets").text
+    assert (
+        one(html, f'#secrets button[hx-post="{PARTIALS}/OPENAI_API_KEY/test"]')
+        is not None
+    )
+    assert not select(
+        html, f'#secrets button[hx-post="{PARTIALS}/ANTHROPIC_API_KEY/test"]'
+    )
+    response = client.post(f"{PARTIALS}/OPENAI_API_KEY/test")
+    assert response.status_code == 200
+    assert "works" in response.headers["HX-Trigger"] and KEY not in str(
+        response.headers
+    )
+
+
+def test_a_key_the_provider_refuses_is_not_saved(
+    writable: tuple[TestClient, FakeStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, store = writable
+    _checked(monkeypatch, _refuses)
+    response = client.post(
+        f"{PARTIALS}/ANTHROPIC_API_KEY", data={"value": "sk-ant-typo-000000"}
+    )
+    assert response.status_code == 422 and "refused" in response.text
+    assert store.values == {}
+
+
+def test_a_saved_key_says_it_was_verified(
+    writable: tuple[TestClient, FakeStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _ = writable
+    _checked(monkeypatch, _accepts)
+    response = client.post(
+        f"{PARTIALS}/ANTHROPIC_API_KEY", data={"value": "sk-ant-good-000000"}
+    )
+    assert "verified" in response.headers["HX-Trigger"]
+
+
+def test_a_key_read_through_settings_is_listed_but_not_settable(
+    writable: tuple[TestClient, FakeStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _ = writable
+    monkeypatch.setattr(
+        secrets,
+        "declared",
+        lambda: (Secret("ANTHROPIC_API_KEY", owner="App", live=False),),
+    )
+    html = client.get("/overseer/secrets").text
+    assert not select(html, f'#secrets button[hx-get="{PARTIALS}/ANTHROPIC_API_KEY"]')
+    assert "set it in .env" in _row(html, "ANTHROPIC_API_KEY").lower()

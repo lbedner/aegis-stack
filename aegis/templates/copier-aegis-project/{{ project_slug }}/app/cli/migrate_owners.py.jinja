@@ -21,7 +21,8 @@ def _owners() -> dict[str, list[str]]:
     """Map each table key to the service names that may claim it.
 
     ``app.services.ai.models.agents.tool`` offers ``ai_agents`` then ``ai``;
-    ``app.models.org`` offers ``auth_org`` then ``auth``. The first name in
+    ``app.models.org`` offers ``auth_org`` then ``auth``; a component's own
+    tables (``app.components.secrets.models``) belong to the component. The first name in
     the requested service list wins, so a stack adding ``ai[agents]`` later
     gets its own ``NNN_ai_agents.py`` while a fresh init folds it into ``ai``.
     """
@@ -30,7 +31,9 @@ def _owners() -> dict[str, list[str]]:
         parts = mapper.class_.__module__.split(".")
         if parts[:2] == ["app", "models"]:
             base, sub = "auth", parts[2:3]
-        elif parts[:2] == ["app", "services"] and "models" in parts:
+        elif parts[:2] in (["app", "services"], ["app", "components"]) and (
+            "models" in parts
+        ):
             base = parts[2]
             sub = parts[parts.index("models") + 1 : parts.index("models") + 2]
         else:

@@ -31,8 +31,8 @@ from app.components.backend.security.rate_limit import get_session_metadata
 from app.core.db import get_async_db
 from app.core.time import utcnow
 from app.services.auth.deps import get_refresh_service, get_user_service
-from app.core.config import settings
 from app.core.log import logger
+from app.core import secrets
 from app.core.secrets import Secret
 from app.core.security import set_refresh_cookie, set_session_cookie
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
@@ -67,21 +67,26 @@ router = APIRouter(prefix="/auth/oauth", tags=["auth"])
 _OAUTH_HTTP_TIMEOUT = httpx.Timeout(10.0)
 
 
-def _build_oauth() -> OAuth:
-    """Build a fresh Authlib OAuth registry from current settings.
+# Each provider's display name and the two keys it needs.
+_PROVIDERS = {
+    "github": ("GitHub", "GITHUB_OAUTH_CLIENT_ID", "GITHUB_OAUTH_CLIENT_SECRET"),
+    "google": ("Google", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"),
+}
 
-    Re-evaluated on each ``/start`` and ``/callback`` rather than cached
-    at module import time so ``reload_settings()`` (in
-    ``app/core/config.py``) picks up new ``GITHUB_OAUTH_CLIENT_ID`` /
-    ``GOOGLE_OAUTH_CLIENT_ID`` values without an app restart. The
-    registry itself is just a couple of dict allocations - cheap enough
-    to rebuild per OAuth request, which is a low-QPS path.
+
+def _build_oauth(keys: dict[str, str | None]) -> OAuth:
+    """Build a fresh Authlib OAuth registry from the keys in effect.
+
+    Rebuilt on each ``/start`` and ``/callback`` rather than cached at
+    import, so a client ID or secret changed in ``.env`` or saved in the
+    secrets store is picked up without an app restart. The registry is a
+    couple of dict allocations, cheap on a low-QPS path.
     """
     oauth = OAuth()
     oauth.register(
         name="github",
-        client_id=settings.GITHUB_OAUTH_CLIENT_ID,
-        client_secret=settings.GITHUB_OAUTH_CLIENT_SECRET,
+        client_id=keys.get("GITHUB_OAUTH_CLIENT_ID"),
+        client_secret=keys.get("GITHUB_OAUTH_CLIENT_SECRET"),
         access_token_url="https://github.com/login/oauth/access_token",
         authorize_url="https://github.com/login/oauth/authorize",
         api_base_url="https://api.github.com/",
@@ -92,8 +97,8 @@ def _build_oauth() -> OAuth:
     )
     oauth.register(
         name="google",
-        client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
-        client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET,
+        client_id=keys.get("GOOGLE_OAUTH_CLIENT_ID"),
+        client_secret=keys.get("GOOGLE_OAUTH_CLIENT_SECRET"),
         # Google ships a discovery document. Authlib reads it to
         # populate authorize_url, access_token_url, jwks_uri, etc. -
         # so we don't hand-copy the endpoints (which Google
@@ -117,20 +122,13 @@ def _require_provider_configured(
         )
 
 
-def _require_github_configured() -> None:
-    _require_provider_configured(
-        "GitHub",
-        settings.GITHUB_OAUTH_CLIENT_ID,
-        settings.GITHUB_OAUTH_CLIENT_SECRET,
-    )
-
-
-def _require_google_configured() -> None:
-    _require_provider_configured(
-        "Google",
-        settings.GOOGLE_OAUTH_CLIENT_ID,
-        settings.GOOGLE_OAUTH_CLIENT_SECRET,
-    )
+async def _oauth_client(provider: str) -> Any:
+    """The provider's Authlib client from the keys in effect (``.env``, then
+    the secrets store), or a 503 when it is not set up."""
+    label, id_name, secret_name = _PROVIDERS[provider]
+    keys = await secrets.get_many(id_name, secret_name)
+    _require_provider_configured(label, keys[id_name] or "", keys[secret_name] or "")
+    return getattr(_build_oauth(keys), provider)
 
 
 def _safe_next(candidate: str | None) -> str:
@@ -194,12 +192,12 @@ async def github_start(request: Request, next: str = "") -> RedirectResponse:
     callback can redirect the user back to the page they were trying
     to reach before getting bounced to /login.
     """
-    _require_github_configured()
+    client = await _oauth_client("github")
     nxt = _safe_next(next)
     if nxt:
         request.session["oauth_next"] = nxt
     redirect_uri = str(request.url_for("github_callback"))
-    return await _build_oauth().github.authorize_redirect(request, redirect_uri)
+    return await client.authorize_redirect(request, redirect_uri)
 
 
 @router.get("/github/callback", name="github_callback")
@@ -209,12 +207,10 @@ async def github_callback(
     refresh_service: RefreshService = Depends(get_refresh_service),
 ) -> RedirectResponse:
     """Exchange the code for a token and sign the user in."""
-    _require_github_configured()
+    client = await _oauth_client("github")
 
     try:
-        token: dict[str, Any] = await _build_oauth().github.authorize_access_token(
-            request
-        )
+        token: dict[str, Any] = await client.authorize_access_token(request)
     except OAuthError as exc:
         logger.warning("GitHub OAuth exchange failed: %s", exc)
         return RedirectResponse(url="/login?oauth_error=1", status_code=302)
@@ -286,12 +282,12 @@ async def github_callback(
 async def google_start(request: Request, next: str = "") -> RedirectResponse:
     """Kick off the Google authorization flow. Same ``next``-stashing
     pattern as GitHub — keeps the post-login landing consistent."""
-    _require_google_configured()
+    client = await _oauth_client("google")
     nxt = _safe_next(next)
     if nxt:
         request.session["oauth_next"] = nxt
     redirect_uri = str(request.url_for("google_callback"))
-    return await _build_oauth().google.authorize_redirect(request, redirect_uri)
+    return await client.authorize_redirect(request, redirect_uri)
 
 
 @router.get("/google/callback", name="google_callback")
@@ -301,12 +297,10 @@ async def google_callback(
     refresh_service: RefreshService = Depends(get_refresh_service),
 ) -> RedirectResponse:
     """Exchange the code, parse the OIDC userinfo, link/create the user."""
-    _require_google_configured()
+    client = await _oauth_client("google")
 
     try:
-        token: dict[str, Any] = await _build_oauth().google.authorize_access_token(
-            request
-        )
+        token: dict[str, Any] = await client.authorize_access_token(request)
     except OAuthError as exc:
         logger.warning("Google OAuth exchange failed: %s", exc)
         return RedirectResponse(url="/login?oauth_error=1", status_code=302)

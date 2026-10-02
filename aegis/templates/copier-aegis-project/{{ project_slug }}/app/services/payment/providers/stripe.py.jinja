@@ -11,8 +11,8 @@ from typing import Any
 
 import stripe
 
-from app.core.config import settings
-from app.core.secrets import Secret
+from app.core import secrets
+from app.core.secrets import Secret, probe
 
 from ..constants import PriceType
 from .base import (
@@ -27,9 +27,27 @@ from .base import (
     WebhookEvent,
 )
 
+
+
+async def _verify_key(key: str) -> None:
+    """Reading the balance is the cheapest authenticated call; a restricted
+    key without that permission gets a 403, which still proves the key."""
+    await probe(
+        "https://api.stripe.com/v1/balance",
+        headers={"Authorization": f"Bearer {key}"},
+        passes=lambda r: r.is_success or r.status_code == 403,
+    )
+
+
 # What this provider reads (``app.core.secrets``).
 SECRETS = (
-    Secret("STRIPE_SECRET_KEY", owner="Payment (Stripe)", label="Secret key"),
+    Secret(
+        "STRIPE_SECRET_KEY",
+        owner="Payment (Stripe)",
+        label="Secret key",
+        needed=True,
+        verify=_verify_key,
+    ),
     Secret("STRIPE_WEBHOOK_SECRET", owner="Payment (Stripe)", label="Webhook signing secret"),
 )
 
@@ -39,9 +57,8 @@ logger = logging.getLogger(__name__)
 # ``app/components/backend/startup/payment_webhook_forwarder.py``) writes
 # the ephemeral ``whsec_...`` captured from ``stripe listen`` here at
 # startup so local webhook delivery works without the user editing
-# ``.env``. ``StripeProvider.__init__`` prefers this value when it's set
-# and falls back to the pydantic ``settings.STRIPE_WEBHOOK_SECRET`` when
-# it isn't — so an explicitly configured secret always wins.
+# ``.env``. ``verify_webhook`` prefers this value when it's set and falls
+# back to ``STRIPE_WEBHOOK_SECRET`` (``.env``, then the secrets store).
 _RUNTIME_WEBHOOK_SECRET: str | None = None
 
 
@@ -54,13 +71,13 @@ def set_runtime_webhook_secret(secret: str) -> None:
 class StripeProvider(BasePaymentProvider):
     """Stripe payment provider."""
 
-    def __init__(self) -> None:
-        self._api_key = settings.STRIPE_SECRET_KEY or ""
-        self._webhook_secret = (
-            _RUNTIME_WEBHOOK_SECRET or settings.STRIPE_WEBHOOK_SECRET or ""
-        )
-        if self._api_key:
-            stripe.api_key = self._api_key
+    async def _api_key(self) -> str:
+        """The secret key, read now (``.env``, then the secrets store), so a
+        key saved while the app runs is used on the next call."""
+        key = await secrets.get("STRIPE_SECRET_KEY") or ""
+        if key:
+            stripe.api_key = key
+        return key
 
     @property
     def provider_key(self) -> str:
@@ -78,6 +95,7 @@ class StripeProvider(BasePaymentProvider):
         trial_period_days: int | None = None,
     ) -> CheckoutResult:
         """Create a Stripe Checkout Session."""
+        await self._api_key()
         params: dict[str, Any] = {
             "line_items": [{"price": price_id, "quantity": quantity}],
             "mode": mode,
@@ -106,6 +124,7 @@ class StripeProvider(BasePaymentProvider):
         self, provider_transaction_id: str
     ) -> TransactionResult:
         """Fetch a PaymentIntent from Stripe."""
+        await self._api_key()
         pi = await stripe.PaymentIntent.retrieve_async(provider_transaction_id)
         return TransactionResult(
             provider_transaction_id=pi.id,
@@ -128,6 +147,7 @@ class StripeProvider(BasePaymentProvider):
         else (including our local-only ``other``) is omitted from the
         upstream call — the full reason still lives on our DB row.
         """
+        await self._api_key()
         from ..constants import RefundReason
 
         params: dict[str, Any] = {
@@ -169,6 +189,7 @@ class StripeProvider(BasePaymentProvider):
           Pass ``"always_invoice"`` to bill it immediately, or
           ``"none"`` to defer the switch to next cycle.
         """
+        await self._api_key()
         sub = await stripe.Subscription.retrieve_async(provider_subscription_id)
         items = (sub.get("items") or {}).get("data") if isinstance(sub, dict) else None
         if items is None:
@@ -228,6 +249,7 @@ class StripeProvider(BasePaymentProvider):
         self, email: str, name: str | None = None
     ) -> CustomerResult:
         """Create a Stripe customer."""
+        await self._api_key()
         params: dict[str, Any] = {"email": email}
         if name:
             params["name"] = name
@@ -260,9 +282,10 @@ class StripeProvider(BasePaymentProvider):
         """
         import json
 
-        event = stripe.Webhook.construct_event(
-            payload, signature, self._webhook_secret
+        webhook_secret = (
+            _RUNTIME_WEBHOOK_SECRET or await secrets.get("STRIPE_WEBHOOK_SECRET") or ""
         )
+        event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
         parsed = json.loads(payload)
         data_dict = parsed.get("data", {}).get("object", {}) or {}
         return WebhookEvent(
@@ -273,7 +296,8 @@ class StripeProvider(BasePaymentProvider):
 
     async def health_check(self) -> ProviderHealth:
         """Check Stripe API connectivity by hitting the balance endpoint."""
-        if not self._api_key:
+        api_key = await self._api_key()
+        if not api_key:
             return ProviderHealth(
                 provider_key=self.provider_key,
                 healthy=False,
@@ -283,7 +307,7 @@ class StripeProvider(BasePaymentProvider):
         try:
             # Probe API connectivity; result intentionally discarded.
             await stripe.Balance.retrieve_async()
-            is_test = self._api_key.startswith("sk_test_")
+            is_test = api_key.startswith("sk_test_")
             return ProviderHealth(
                 provider_key=self.provider_key,
                 healthy=True,
@@ -313,7 +337,7 @@ class StripeProvider(BasePaymentProvider):
         missing a ``unit_amount`` (e.g. ``billing_scheme=tiered``) are
         skipped because the Actions tab needs a concrete price to display.
         """
-        if not self._api_key:
+        if not await self._api_key():
             return []
 
         response = await stripe.Price.list_async(

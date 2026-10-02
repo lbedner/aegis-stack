@@ -125,7 +125,7 @@ async def run_analyst_note(
         )
 
     try:
-        model, model_name = model_for(service_config, settings)
+        model, model_name = await model_for(service_config, settings)
         # The model returns typed commentary, nothing else; the report's
         # layout and every figure in it come from ``facts``. Structured
         # output rides pydantic-ai's output tool, which local models handle

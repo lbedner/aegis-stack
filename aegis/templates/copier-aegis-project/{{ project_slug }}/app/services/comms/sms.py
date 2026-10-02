@@ -5,13 +5,14 @@ Provides SMS sending functionality with direct Twilio SDK usage.
 No abstraction layers - just clean async functions.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from app.core.config import settings
-from app.core.log import logger
-from app.services.comms.twilio import credential_errors, twilio_client
 from twilio.base.exceptions import TwilioRestException
+
+from app.core.log import logger
+from app.services.comms.twilio import credential_errors, twilio_client, twilio_config
 
 from .models import MessageStatus, SendSMSRequest, SMSResponse
 
@@ -28,7 +29,6 @@ class SMSConfigurationError(SMSError):
     pass
 
 
-
 async def send_sms(request: SendSMSRequest) -> SMSResponse:
     """
     Send an SMS using Twilio.
@@ -43,10 +43,11 @@ async def send_sms(request: SendSMSRequest) -> SMSResponse:
         SMSConfigurationError: If Twilio is not configured
         SMSError: If sending fails
     """
-    client = twilio_client(settings, SMSConfigurationError)
+    config = await twilio_config()
+    client = twilio_client(config, SMSConfigurationError)
 
     # Determine sender phone number
-    from_number = request.from_number or settings.TWILIO_PHONE_NUMBER
+    from_number = request.from_number or config["TWILIO_PHONE_NUMBER"]
     if not from_number:
         raise SMSConfigurationError(
             "No sender phone number specified. "
@@ -62,8 +63,8 @@ async def send_sms(request: SendSMSRequest) -> SMSResponse:
 
         # Use Messaging Service SID if configured (required for toll-free numbers)
         # Otherwise fall back to direct phone number
-        if settings.TWILIO_MESSAGING_SERVICE_SID:
-            params["messaging_service_sid"] = settings.TWILIO_MESSAGING_SERVICE_SID
+        if config["TWILIO_MESSAGING_SERVICE_SID"]:
+            params["messaging_service_sid"] = config["TWILIO_MESSAGING_SERVICE_SID"]
         else:
             params["from_"] = from_number
 
@@ -72,7 +73,8 @@ async def send_sms(request: SendSMSRequest) -> SMSResponse:
             params["status_callback"] = request.status_callback
 
         # Send SMS via Twilio
-        message = client.messages.create(**params)
+        # The SDK blocks on the network; keep the event loop free.
+        message = await asyncio.to_thread(client.messages.create, **params)
 
         logger.info(f"SMS sent successfully: {message.sid} to {request.to}")
 
@@ -116,17 +118,18 @@ async def send_sms_simple(to: str, body: str) -> SMSResponse:
     return await send_sms(request)
 
 
-def get_sms_status() -> dict[str, Any]:
+async def get_sms_status() -> dict[str, Any]:
     """
     Get SMS service configuration status.
 
     Returns:
         dict: Status information including configuration state
     """
-    account_sid_set = bool(settings.TWILIO_ACCOUNT_SID)
-    auth_token_set = bool(settings.TWILIO_AUTH_TOKEN)
-    phone_number_set = bool(settings.TWILIO_PHONE_NUMBER)
-    messaging_service_sid_set = bool(settings.TWILIO_MESSAGING_SERVICE_SID)
+    config = await twilio_config()
+    account_sid_set = bool(config["TWILIO_ACCOUNT_SID"])
+    auth_token_set = bool(config["TWILIO_AUTH_TOKEN"])
+    phone_number_set = bool(config["TWILIO_PHONE_NUMBER"])
+    messaging_service_sid_set = bool(config["TWILIO_MESSAGING_SERVICE_SID"])
 
     # SMS is configured if we have credentials and either a messaging
     # service or a phone number
@@ -144,21 +147,22 @@ def get_sms_status() -> dict[str, Any]:
         "auth_token_set": auth_token_set,
         "phone_number_set": phone_number_set,
         "messaging_service_sid_set": messaging_service_sid_set,
-        "phone_number": settings.TWILIO_PHONE_NUMBER if phone_number_set else None,
+        "phone_number": config["TWILIO_PHONE_NUMBER"] if phone_number_set else None,
     }
 
 
-def validate_sms_config() -> list[str]:
+async def validate_sms_config() -> list[str]:
     """
     Validate SMS service configuration.
 
     Returns:
         list[str]: List of configuration errors (empty if valid)
     """
-    errors = credential_errors(settings)
+    config = await twilio_config()
+    errors = credential_errors(config)
 
     # Need either Messaging Service SID (preferred) or phone number
-    if not settings.TWILIO_MESSAGING_SERVICE_SID and not settings.TWILIO_PHONE_NUMBER:
+    if not config["TWILIO_MESSAGING_SERVICE_SID"] and not config["TWILIO_PHONE_NUMBER"]:
         errors.append(
             "TWILIO_MESSAGING_SERVICE_SID or TWILIO_PHONE_NUMBER must be set. "
             "Messaging Service SID is required for toll-free numbers."

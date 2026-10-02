@@ -134,6 +134,11 @@ def get_component_display_info(
     elif component_name == "storage":
         return ("Storage", get_component_subtitle("storage", metadata))
 {% endif %}
+{% if include_secrets %}
+
+    elif component_name == "secrets":
+        return ("Secrets", get_component_subtitle("secrets", metadata))
+{% endif %}
 
     elif component_name == "frontend":
         return ("Frontend", "Flet")
@@ -278,6 +283,9 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_storage %}
             "storage",
+{% endif %}
+{% if include_secrets %}
+            "secrets",
 {% endif %}
         ]
 

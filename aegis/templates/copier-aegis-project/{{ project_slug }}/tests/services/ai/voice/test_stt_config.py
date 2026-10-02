@@ -128,137 +128,137 @@ class TestSTTConfigGetModel:
 class TestSTTConfigGetApiKey:
     """Test STTConfig.get_api_key() method."""
 
-    def test_get_api_key_openai(self) -> None:
+    async def test_get_api_key_openai(self) -> None:
         """Test get_api_key returns OpenAI key for OpenAI provider."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-openai-key"
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER)
 
-        assert config.get_api_key(settings) == "sk-test-openai-key"
+        assert await config.get_api_key(settings) == "sk-test-openai-key"
 
-    def test_get_api_key_groq(self) -> None:
+    async def test_get_api_key_groq(self) -> None:
         """Test get_api_key returns Groq key for Groq provider."""
         settings = MagicMock()
         settings.GROQ_API_KEY = "gsk-test-groq-key"
 
         config = STTConfig(provider=STTProvider.GROQ_WHISPER)
 
-        assert config.get_api_key(settings) == "gsk-test-groq-key"
+        assert await config.get_api_key(settings) == "gsk-test-groq-key"
 
-    def test_get_api_key_local_returns_none(self) -> None:
+    async def test_get_api_key_local_returns_none(self) -> None:
         """Test get_api_key returns None for local providers."""
         settings = MagicMock()
 
         config = STTConfig(provider=STTProvider.WHISPER_LOCAL)
 
-        assert config.get_api_key(settings) is None
+        assert await config.get_api_key(settings) is None
 
-    def test_get_api_key_faster_whisper_returns_none(self) -> None:
+    async def test_get_api_key_faster_whisper_returns_none(self) -> None:
         """Test get_api_key returns None for faster-whisper."""
         settings = MagicMock()
 
         config = STTConfig(provider=STTProvider.FASTER_WHISPER)
 
-        assert config.get_api_key(settings) is None
+        assert await config.get_api_key(settings) is None
 
-    def test_get_api_key_missing_returns_none(self) -> None:
+    async def test_get_api_key_missing_returns_none(self) -> None:
         """Test get_api_key returns None when key not set."""
         settings = MagicMock(spec=[])  # No attributes
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER)
 
-        assert config.get_api_key(settings) is None
+        assert await config.get_api_key(settings) is None
 
 
 class TestSTTConfigValidation:
     """Test STTConfig.validation_errors() method."""
 
-    def test_validate_openai_with_key_passes(self) -> None:
+    async def test_validate_openai_with_key_passes(self) -> None:
         """Test validation passes when OpenAI key is set."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER)
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 0
 
-    def test_validate_openai_missing_key_fails(self) -> None:
+    async def test_validate_openai_missing_key_fails(self) -> None:
         """Test validation fails when OpenAI key is missing."""
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER)
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 1
         assert "OPENAI_API_KEY" in errors[0]
 
-    def test_validate_groq_with_key_passes(self) -> None:
+    async def test_validate_groq_with_key_passes(self) -> None:
         """Test validation passes when Groq key is set."""
         settings = MagicMock()
         settings.GROQ_API_KEY = "gsk-test-key"
 
         config = STTConfig(provider=STTProvider.GROQ_WHISPER)
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 0
 
-    def test_validate_groq_missing_key_fails(self) -> None:
+    async def test_validate_groq_missing_key_fails(self) -> None:
         """Test validation fails when Groq key is missing."""
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.GROQ_WHISPER)
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 1
         assert "GROQ_API_KEY" in errors[0]
 
-    def test_validate_local_no_key_required(self) -> None:
+    async def test_validate_local_no_key_required(self) -> None:
         """Test validation passes for local providers without API key."""
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.WHISPER_LOCAL)
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 0
 
-    def test_validate_faster_whisper_no_key_required(self) -> None:
+    async def test_validate_faster_whisper_no_key_required(self) -> None:
         """Test validation passes for faster-whisper without API key."""
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.FASTER_WHISPER)
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 0
 
-    def test_validate_invalid_language_code_fails(self) -> None:
+    async def test_validate_invalid_language_code_fails(self) -> None:
         """Test validation fails for invalid language code format."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER, language="english")
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 1
         assert "language code" in errors[0].lower()
 
-    def test_validate_valid_language_code_passes(self) -> None:
+    async def test_validate_valid_language_code_passes(self) -> None:
         """Test validation passes for valid ISO 639-1 language code."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER, language="en")
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 0
 
-    def test_validate_multiple_errors(self) -> None:
+    async def test_validate_multiple_errors(self) -> None:
         """Test validation can return multiple errors."""
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER, language="invalid")
-        errors = config.validation_errors(settings)
+        errors = await config.validation_errors(settings)
 
         assert len(errors) == 2  # Missing API key + invalid language
 
@@ -266,22 +266,22 @@ class TestSTTConfigValidation:
 class TestSTTConfigIsAvailable:
     """Test STTConfig.is_available() method."""
 
-    def test_is_available_true_when_valid(self) -> None:
+    async def test_is_available_true_when_valid(self) -> None:
         """Test is_available returns True when validation passes."""
         settings = MagicMock()
         settings.OPENAI_API_KEY = "sk-test-key"
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER)
 
-        assert config.is_available(settings) is True
+        assert await config.is_available(settings) is True
 
-    def test_is_available_false_when_invalid(self) -> None:
+    async def test_is_available_false_when_invalid(self) -> None:
         """Test is_available returns False when validation fails."""
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.OPENAI_WHISPER)
 
-        assert config.is_available(settings) is False
+        assert await config.is_available(settings) is False
 
 
 class TestGetSTTConfigFunction:

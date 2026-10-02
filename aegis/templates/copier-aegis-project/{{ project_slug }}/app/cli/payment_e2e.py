@@ -33,7 +33,7 @@ async def _e2e(
     from sqlmodel import select
     import stripe
 
-    from app.core.config import settings
+    from app.core import secrets
     from app.core.db import get_async_session
     from app.models.user import User
     from app.services.payment.models import (
@@ -56,7 +56,7 @@ async def _e2e(
     # against a live key by accident and you'll bill real customers
     # and ship real receipt emails - the sk_test_ prefix check is
     # the line of defence between "smoke test" and "incident".
-    api_key = settings.STRIPE_SECRET_KEY or ""
+    api_key = await secrets.get("STRIPE_SECRET_KEY") or ""
     if not api_key:
         console.print(f"[{theme.ERROR}]{t('payment.stripe_secret_missing')}[/]")
         raise typer.Exit(1)

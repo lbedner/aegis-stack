@@ -22,7 +22,7 @@ from ...services.ai.models import (
 
 
 @app.command(help=lazy_t("ai.help_status"))
-def status() -> None:
+async def status() -> None:
     ai_config = get_ai_config(settings)
 
     theme.title(t("ai.status_title"))
@@ -50,7 +50,7 @@ def status() -> None:
 
     # API key: present is a good state (teal); absent is just a fact (neutral),
     # not an error — the validation verdict below carries the real judgment.
-    provider_config = ai_config.get_provider_config(settings)
+    provider_config = await ai_config.get_provider_config(settings)
     api_key_value = (
         theme.good_text(t("shared.yes")) if provider_config.api_key else t("shared.no")
     )
@@ -58,7 +58,7 @@ def status() -> None:
 
     # Validation — the one verdict the eye is hunting for.
     typer.echo("")
-    errors = ai_config.validate_configuration(settings)
+    errors = await ai_config.validate_configuration(settings)
     if not errors:
         theme.good(f"✓ {t('ai.config_valid')}")
         capabilities = get_provider_capabilities(ai_config.provider)
@@ -82,7 +82,7 @@ def status() -> None:
                 )
 
     # Available providers count
-    available = ai_config.get_available_providers(settings)
+    available = await ai_config.get_available_providers(settings)
     typer.echo("")
     typer.echo(
         theme.label_text(t("ai.available_providers") + " ") + f"{len(available)}"
@@ -90,7 +90,7 @@ def status() -> None:
 
 
 @app.command(help=lazy_t("ai.help_providers"))
-def providers() -> None:
+async def providers() -> None:
     from app.services.ai.domains.llm.provider_management import provider_readiness
 
     _yes = f"[{theme.ACCENT}]{t('ai.prov_yes')}[/{theme.ACCENT}]"
@@ -108,7 +108,7 @@ def providers() -> None:
     table.add_column(t("ai.col_vision"), width=6, justify="center")
 
     # One readiness answer, shared with the Overseer's Providers page.
-    for row in provider_readiness(settings):
+    for row in await provider_readiness(settings):
         capabilities = row.capabilities
         local = row.provider == AIProvider.OLLAMA
         api_key_display = (

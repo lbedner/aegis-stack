@@ -104,6 +104,14 @@ except ImportError:
     # AI service not available, skip ai commands
     pass
 
+# Conditionally register secrets command if the secrets component is available
+try:
+    secrets_module = importlib.import_module("app.cli.secrets_cli")
+    app.add_typer(secrets_module.app, name="secrets")
+except ImportError:
+    # Secrets component not available, skip secrets commands
+    pass
+
 # Conditionally register comms command if comms service is available
 try:
     comms_module = importlib.import_module("app.cli.comms")

@@ -31,6 +31,7 @@ import shutil
 import subprocess
 from typing import Any
 
+from app.core import secrets
 from app.core.config import settings
 from app.core.log import logger
 from app.services.payment.providers.stripe import set_runtime_webhook_secret
@@ -61,14 +62,18 @@ def _stripe_listen_args(port: int, api_key: str) -> list[str]:
     return ["stripe", "listen", "--api-key", api_key, "--forward-to", target]
 
 
-def _should_auto_forward() -> tuple[bool, str]:
-    """Evaluate the gate. Returns (should_start, reason_if_not)."""
-    api_key = settings.STRIPE_SECRET_KEY or ""
+STRIPE_KEYS = ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET")
+
+
+def _should_auto_forward(keys: dict[str, str | None]) -> tuple[bool, str]:
+    """Evaluate the gate on the Stripe keys in effect. Returns
+    (should_start, reason_if_not)."""
+    api_key = keys["STRIPE_SECRET_KEY"] or ""
     if not api_key.startswith("sk_test_"):
         return False, (
             "STRIPE_SECRET_KEY is not a test key; skipping auto-webhook-forwarder."
         )
-    if settings.STRIPE_WEBHOOK_SECRET:
+    if keys["STRIPE_WEBHOOK_SECRET"]:
         return False, (
             "STRIPE_WEBHOOK_SECRET is set explicitly; skipping auto-webhook-forwarder."
         )
@@ -184,7 +189,8 @@ async def startup_payment_webhook_forwarder() -> None:
     """Launch ``stripe listen`` subprocess if the gate permits."""
     global forwarder_process
 
-    should_start, reason = _should_auto_forward()
+    keys = await secrets.get_many(*STRIPE_KEYS)
+    should_start, reason = _should_auto_forward(keys)
     if not should_start:
         logger.info(reason)
         return
@@ -192,7 +198,7 @@ async def startup_payment_webhook_forwarder() -> None:
     # ``_should_auto_forward`` confirmed a non-empty ``sk_test_...`` key;
     # the ``or ""`` narrows the type for callers that treat ``str | None``
     # strictly.
-    args = _stripe_listen_args(settings.PORT, settings.STRIPE_SECRET_KEY or "")
+    args = _stripe_listen_args(settings.PORT, keys["STRIPE_SECRET_KEY"] or "")
     try:
         forwarder_process = subprocess.Popen(
             args,

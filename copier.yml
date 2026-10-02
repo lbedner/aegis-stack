@@ -165,6 +165,19 @@ inference_placement:
     - "docker"
   when: "{{ include_inference }}"
 
+include_secrets:
+  type: bool
+  help: "Include the encrypted credential store (keys editable, live)?"
+  default: false
+
+secrets_backend:
+  type: str
+  help: "Where the credential store keeps keys"
+  default: "database"
+  choices:
+    - "database"
+  when: "{{ include_secrets }}"
+
 include_storage:
   type: bool
   help: "Include S3 object storage (SeaweedFS container in dev)?"

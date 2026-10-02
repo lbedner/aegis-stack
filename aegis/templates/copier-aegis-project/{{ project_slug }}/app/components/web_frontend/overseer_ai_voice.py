@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import UploadFile
 
+from app.core import secrets
 from app.core.config import settings
 
 from .overseer_ai_common import PARTIALS
@@ -20,8 +21,9 @@ from .overseer_ai_common import PARTIALS
 PREVIEW = "/api/v1/voice/preview/"
 
 
-def _provider(providers: list[Any], provider_id: str) -> dict[str, Any]:
-    """A provider's name and whether its key is set (named when missing)."""
+async def _provider(providers: list[Any], provider_id: str) -> dict[str, Any]:
+    """A provider's name and whether its key is set (named when missing),
+    read through ``app.core.secrets`` (``.env``, then the secrets store)."""
     info = next((p for p in providers if p.id == provider_id), None)
     if info is None:
         return {"name": provider_id, "key": None}
@@ -30,11 +32,11 @@ def _provider(providers: list[Any], provider_id: str) -> dict[str, Any]:
     key = info.api_key_env_var
     return {
         "name": info.name,
-        "key": "Set" if key and getattr(settings, key, None) else f"{key} missing",
+        "key": "Set" if key and await secrets.get(key) else f"{key} missing",
     }
 
 
-def voice_context() -> dict[str, Any]:
+async def voice_context() -> dict[str, Any]:
     from app.services.ai.domains.voice import (
         get_current_voice_config,
         get_stt_providers,
@@ -43,8 +45,8 @@ def voice_context() -> dict[str, Any]:
     )
 
     config = get_current_voice_config(settings)
-    speaker = _provider(get_tts_providers(), config["tts_provider"])
-    listener = _provider(get_stt_providers(), config["stt_provider"])
+    speaker = await _provider(get_tts_providers(), config["tts_provider"])
+    listener = await _provider(get_stt_providers(), config["stt_provider"])
     voices = get_tts_voices(config["tts_provider"])
     return {
         "speaking": [

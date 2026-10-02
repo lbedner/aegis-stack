@@ -3,11 +3,13 @@
 Anything that reasons about the whole schema - alembic's ``env.py``,
 ``migrate-fix``, the startup re-adoption check, the test suite's
 ``create_all`` - needs every table registered first. Registration is a side
-effect of importing the module that defines the class, so this walks the two
+effect of importing the module that defines the class, so this walks the
 places tables live and imports them:
 
 - ``app/models/`` (core tables: users, orgs, conversations)
 - ``app/services/<service>/models`` - a package or a single module
+- ``app/components/<component>/models`` - a component's own tables (the
+  secrets component's ``secret``)
 
 A plugin or a hand-written service that keeps its tables there is picked up
 without touching anything else. A table defined anywhere else is invisible,
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+from pathlib import Path
 import pkgutil
 from types import ModuleType
 
@@ -49,5 +52,24 @@ def import_all_models() -> list[str]:
         except ModuleNotFoundError:
             found = False
         if found:
+            imported.extend(_import_tree(importlib.import_module(name)))
+    imported.extend(_component_models())
+    return imported
+
+
+def _component_models() -> list[str]:
+    """Each component's ``models`` module or package, found on disk first:
+    ``find_spec`` would import every component package to look (the Flet
+    frontend, the worker's broker), and those imports have effects."""
+    import app.components as components
+
+    root = Path(components.__path__[0])
+    imported: list[str] = []
+    for component in pkgutil.iter_modules(components.__path__):
+        here = root / component.name
+        if component.ispkg and (
+            (here / "models.py").exists() or (here / "models" / "__init__.py").exists()
+        ):
+            name = f"app.components.{component.name}.models"
             imported.extend(_import_tree(importlib.import_module(name)))
     return imported

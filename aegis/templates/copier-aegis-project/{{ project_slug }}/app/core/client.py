@@ -485,6 +485,14 @@ class APIClient(SessionCookieMixin):
         return text[:300] if isinstance(text, str) else ""
 
 
+def error_detail(body: Any, status: int) -> str:
+    """Why a ``request_with_status`` call failed: the API's ``detail``,
+    else the status code."""
+    if isinstance(body, dict) and body.get("detail"):
+        return str(body["detail"])
+    return f"status {status}"
+
+
 def get_api_client() -> APIClient:
     """Dependency provider for APIClient."""
     return APIClient()

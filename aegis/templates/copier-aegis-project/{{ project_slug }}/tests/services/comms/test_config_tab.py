@@ -71,3 +71,75 @@ class TestTheEditModeContract:
 
     def test_it_is_one_contract_and_not_two(self, tab_class: type) -> None:
         assert issubclass(tab_class, EditableConfigTab)
+
+
+class _API:
+    def __init__(self, status: int = 200) -> None:
+        self.calls: list[tuple[str, str, object]] = []
+        self.status = status
+
+    async def request_with_status(
+        self, method: str, endpoint: str, json: dict[str, str] | None = None
+    ) -> tuple[int, object]:
+        self.calls.append((method, endpoint, json))
+        if self.status != 200:
+            return self.status, {"detail": "RESEND_API_KEY is set in .env, which wins"}
+        return (204, None) if method == "DELETE" else (200, {"check": None})
+
+
+@pytest.fixture
+def store_on(monkeypatch: pytest.MonkeyPatch) -> _API:
+    """A writable secrets store: credentials go to it, through the API."""
+    from types import SimpleNamespace
+
+    from app.components.frontend.dashboard.modals.comms_modal import config_tab
+    from app.core import secrets
+
+    api = _API()
+    monkeypatch.setattr(secrets, "writable", lambda: True)
+    monkeypatch.setattr(
+        config_tab, "get_session_state", lambda page: SimpleNamespace(api_client=api)
+    )
+    return api
+
+
+class TestSavingWithTheSecretsStore:
+    @pytest.mark.asyncio
+    async def test_credentials_go_to_the_store_not_env(
+        self, store_on: _API, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from tests.components.frontend._fakes import FakePage
+
+        tab = EmailTab(METADATA)
+        monkeypatch.setattr(
+            tab, "_env_service", None
+        )  # any .env write would fail loudly
+        tab._page_ref = FakePage()
+        saved = await tab._save_credentials(
+            {"RESEND_API_KEY": "re_new_key_0123", "RESEND_FROM_EMAIL": ""}
+        )
+        assert saved
+        assert (
+            "PUT",
+            "/api/v1/secrets/RESEND_API_KEY",
+            {"value": "re_new_key_0123"},
+        ) in store_on.calls
+        assert ("DELETE", "/api/v1/secrets/RESEND_FROM_EMAIL", None) in store_on.calls
+
+    @pytest.mark.asyncio
+    async def test_a_refused_credential_stops_the_save(self, store_on: _API) -> None:
+        from tests.components.frontend._fakes import FakePage
+
+        store_on.status = 409
+        tab = EmailTab(METADATA)
+        page = FakePage()
+        opened: list[object] = []
+        page.open = opened.append  # type: ignore[attr-defined]
+        tab._page_ref = page
+        assert not await tab._save_credentials({"RESEND_API_KEY": "re_new_key_0123"})
+        assert opened  # the refusal is shown
+
+    def test_editing_is_offered_wherever_the_store_takes_writes(
+        self, store_on: _API
+    ) -> None:
+        assert EmailTab(METADATA)._can_edit

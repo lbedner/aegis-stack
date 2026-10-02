@@ -35,6 +35,7 @@ from typing import Any
 
 import httpx
 
+from app.core import secrets
 from app.core.config import settings
 from app.core.log import logger
 
@@ -114,7 +115,7 @@ async def _discover_and_reconcile(metrics_url: str) -> None:
 async def startup_finance_webhook_tunnel() -> None:
     global _tunnel_task
     metrics_url = tunnel_metrics_url()
-    if not metrics_url or not settings.PLAID_CLIENT_ID:
+    if not metrics_url or not await secrets.get("PLAID_CLIENT_ID"):
         logger.debug("Plaid webhook tunnel not configured; skipping")
         return
     _tunnel_task = asyncio.get_running_loop().create_task(

@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 
+from app.core import secrets
 from app.core.config import settings
 
 # A webhook JWT older than this is replayable and gets rejected (Plaid's
@@ -68,9 +69,14 @@ def get_webhook_url() -> str | None:
     return _runtime_webhook_url or settings.PLAID_WEBHOOK_URL
 
 
+PLAID_KEYS = ("PLAID_CLIENT_ID", "PLAID_SECRET")
+
+
+
 class PlaidClient:
-    """Async Plaid client. Reads credentials/environment from settings unless
-    overridden (handy for tests)."""
+    """Async Plaid client. Reads its credentials on each call through
+    ``app.core.secrets`` (``.env``, then the secrets store) unless overridden
+    (handy for tests); the environment from settings."""
 
     def __init__(
         self,
@@ -79,8 +85,8 @@ class PlaidClient:
         secret: str | None = None,
         environment: str | None = None,
     ) -> None:
-        self._client_id = client_id or settings.PLAID_CLIENT_ID
-        self._secret = secret or settings.PLAID_SECRET
+        self._client_id = client_id
+        self._secret = secret
         self._environment = environment or settings.PLAID_ENV
         self._base_url = _ENV_HOSTS.get(self._environment, _ENV_HOSTS["sandbox"])
         self._webhook_keys: dict[str, dict[str, Any]] = {}
@@ -90,12 +96,15 @@ class PlaidClient:
         return self._environment
 
     async def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        if not (self._client_id and self._secret):
+        keys = await secrets.get_many(*PLAID_KEYS)
+        client_id = self._client_id or keys["PLAID_CLIENT_ID"]
+        secret = self._secret or keys["PLAID_SECRET"]
+        if not (client_id and secret):
             raise PlaidError(
                 "missing_credentials",
                 "PLAID_CLIENT_ID / PLAID_SECRET are not configured.",
             )
-        payload = {"client_id": self._client_id, "secret": self._secret, **body}
+        payload = {"client_id": client_id, "secret": secret, **body}
         async with httpx.AsyncClient(base_url=self._base_url, timeout=30.0) as client:
             response = await client.post(path, json=payload)
         try:

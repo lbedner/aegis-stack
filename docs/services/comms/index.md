@@ -128,6 +128,17 @@ TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_PHONE_NUMBER=+15551234567
 ```
 
+With the [secrets component](../../components/secrets/index.md), these can be set in the Overseer instead, while the app runs. The from address offers the Resend account's verified domains and is checked against them; the from number and messaging service offer the Twilio account's own.
+
+### Sending domains
+
+Resend sends only from a verified domain. The Email section of Overseer > Comms, and the Flet dashboard's Email tab, list the account's domains with their status:
+
+- **Check** asks Resend to look at the domain's DNS now.
+- **Add domain** registers a new one and shows the DNS records to create at your registrar; Check once they are in place.
+
+A send-only Resend key cannot list domains; the section says so, and sending still works.
+
 ## Usage Examples
 
 ### CLI

@@ -48,6 +48,9 @@ OWNERS = (
     "app.services.ops.adapters.porkbun_keys",
     "app.services.rag.config",
     "app.components.storage.s3",
+    "app.services.finance.adapters.providers.plaid_keys",
+    "app.services.finance.adapters.providers.snaptrade",
+    "app.services.insights.adapters.collectors.base",
 )
 # Shorter than this, the last four characters are most of the value.
 HINT_MIN_LENGTH = 12
@@ -76,6 +79,10 @@ class Secret:
     # Raises SecretRejectedError if the provider refuses ``value``, or
     # SecretUncheckedError if it cannot say; returns if it works.
     verify: Callable[[str], Awaitable[None]] | None = None
+    # Values the provider itself offers (an account's phone numbers, a
+    # mail provider's verified domains), as (value, label), picked instead
+    # of typed. Raises like ``verify`` when the provider cannot answer.
+    choices: Callable[[], Awaitable[list[tuple[str, str]]]] | None = None
     # Read with ``secrets.get``, so a stored value takes effect. False for a
     # key read through ``settings`` (a ``Credential`` field), which only
     # ever sees ``.env``: listed, never set here.
@@ -118,6 +125,7 @@ class SecretStatus:
     needed: bool = False
     verifiable: bool = False
     live: bool = True
+    choosable: bool = False
 
     @property
     def is_set(self) -> bool:
@@ -322,6 +330,19 @@ async def test(name: str) -> Verdict:
     )
 
 
+async def choices(name: str) -> list[tuple[str, str]]:
+    """What the provider offers for ``name`` as (value, label); empty when
+    it has no list or cannot be asked, so typing the value still works."""
+    entry = _declared(name)
+    if entry.choices is None:
+        return []
+    try:
+        return await entry.choices()
+    except (SecretUncheckedError, SecretRejectedError) as exc:
+        logger.info("No choices for secret", name=name, reason=str(exc))
+        return []
+
+
 async def _verify(entry: Secret, value: str) -> Verdict | None:
     if entry.verify is None:
         return None
@@ -403,6 +424,7 @@ def _row(
         needed=entry.is_needed(),
         verifiable=entry.verify is not None,
         live=entry.live,
+        choosable=entry.choices is not None,
     )
 
 

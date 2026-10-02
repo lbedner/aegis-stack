@@ -152,3 +152,97 @@ def test_an_unset_channel_refuses_a_test_send(comms: TestClient) -> None:
         "toast"
     ]
     assert toast["tone"] == "error" and "TWILIO_ACCOUNT_SID" in toast["text"]
+
+
+def test_an_unset_channel_links_to_the_secrets_page(comms: TestClient) -> None:
+    from app.components.web_frontend import overseer_secrets
+
+    link = f"[data-channel='email'] a[href='{overseer_secrets.url()}']"
+    assert one(_get(comms), link) is not None
+
+
+def _domains(monkeypatch: pytest.MonkeyPatch, *domains: tuple[str, str]) -> None:
+    from datetime import UTC, datetime
+
+    from app.services.ops.adapters.resend import ResendAdapter
+    from app.services.ops.types import DomainStatus
+
+    async def list_domains(self: object) -> list[DomainStatus]:
+        return [
+            DomainStatus(name, status == "verified", status, datetime.now(UTC))
+            for name, status in domains
+        ]
+
+    monkeypatch.setattr(ResendAdapter, "list_domains", list_domains)
+
+
+def test_the_email_section_lists_resend_domains_with_a_check(
+    comms: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _email_ready(monkeypatch)
+    _domains(
+        monkeypatch, ("mail.example.com", "verified"), ("new.example.com", "pending")
+    )
+    page = _get(comms, "email")
+    domains = one(page, "#comms-domains")
+    assert "mail.example.com" in text(domains) and "pending" in text(domains).lower()
+    check = f'#comms-domains button[hx-post="{PARTIALS}/domains/new.example.com/check"]'
+    assert one(page, check) is not None
+    assert (
+        one(page, f'#comms-domains button[hx-get="{PARTIALS}/domains/new"]') is not None
+    )
+
+
+def test_without_a_key_the_domains_card_says_what_to_set(comms: TestClient) -> None:
+    domains = one(_get(comms, "email"), "#comms-domains")
+    assert "RESEND_API_KEY" in text(domains)
+
+
+def test_a_domain_resend_cannot_list_says_why(
+    comms: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services.ops.adapters.resend import ResendAdapter
+
+    async def refuse(self: object) -> list[object]:
+        raise RuntimeError("This API key is restricted to only send emails")
+
+    _email_ready(monkeypatch)
+    monkeypatch.setattr(ResendAdapter, "list_domains", refuse)
+    assert "restricted" in text(one(_get(comms, "email"), "#comms-domains"))
+
+
+def test_check_asks_resend_and_says_the_status(
+    comms: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+
+    from app.services.ops.adapters.resend import ResendAdapter
+    from app.services.ops.types import DomainStatus
+
+    async def check(self: object, domain: str) -> DomainStatus:
+        return DomainStatus(domain, True, "verified", datetime.now(UTC))
+
+    _email_ready(monkeypatch)
+    monkeypatch.setattr(ResendAdapter, "check_domain", check)
+    response = comms.post(f"{PARTIALS}/domains/new.example.com/check")
+    assert response.status_code == 200
+    assert "verified" in str(triggers(response)).lower()
+
+
+def test_adding_a_domain_shows_the_dns_records_to_create(
+    comms: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services.ops.adapters.resend import ResendAdapter
+    from app.services.ops.types import DnsRecord, DomainAddResult
+
+    async def add(self: object, domain: str) -> DomainAddResult:
+        record = DnsRecord(host="resend._domainkey", type="TXT", value="p=MIGf")
+        return DomainAddResult(domain, [record], "dom_1")
+
+    _email_ready(monkeypatch)
+    monkeypatch.setattr(ResendAdapter, "add_domain", add)
+    form = comms.get(f"{PARTIALS}/domains/new").text
+    assert one(form, 'input[name="domain"]') is not None
+    html = comms.post(f"{PARTIALS}/domains", data={"domain": "new.example.com"}).text
+    rows = text(one(html, "#domain-records"))
+    assert "resend._domainkey" in rows and "TXT" in rows and "p=MIGf" in rows

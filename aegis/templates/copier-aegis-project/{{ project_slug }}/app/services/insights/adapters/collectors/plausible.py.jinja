@@ -11,8 +11,6 @@ import logging
 from datetime import datetime, timedelta
 
 import httpx
-from app.core.config import settings
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.insights.utils import today as today_midnight
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
@@ -56,17 +54,8 @@ class PlausibleCollector(BaseCollector):
             lookback_days: Number of days to fetch. 1 = today only (default).
                            Higher values for backfill (e.g., 365).
         """
-        {% if insights_per_user -%}
-        if self.project is not None:
-            api_key = self.project.plausible_api_key
-            sites_str = self.project.plausible_site
-        else:
-            api_key = settings.INSIGHT_PLAUSIBLE_API_KEY
-            sites_str = settings.INSIGHT_PLAUSIBLE_SITES
-        {% else -%}
-        api_key = settings.INSIGHT_PLAUSIBLE_API_KEY
-        sites_str = settings.INSIGHT_PLAUSIBLE_SITES
-        {%- endif %}
+        api_key = await self._secret("plausible_api_key", "INSIGHT_PLAUSIBLE_API_KEY")
+        sites_str = self._setting("plausible_site", "INSIGHT_PLAUSIBLE_SITES")
 
         if not api_key or not sites_str:
             # Plausible is opt-in. When unconfigured, return

@@ -13,6 +13,7 @@ route so the mount is real.
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 from typing import Any
 
@@ -609,6 +610,26 @@ class TestNodePipeline:
         ):
             assert layer in source, layer
         assert "@layer components" in source
+
+    def test_daisyui_form_controls_focus_without_a_second_border(self) -> None:
+        """DaisyUI 4 focuses ``.input``/``.select``/``.textarea``/``.file-input``
+        with a 2px outline offset outside the border, which reads as a second
+        border. One rule turns it off for all of them, the way the house
+        controls already focus (the border turns teal)."""
+        source = re.sub(
+            r"/\*.*?\*/",
+            "",
+            (_web_frontend_tree() / "static/input.css").read_text(),
+            flags=re.S,
+        )
+        selectors = {
+            sel.strip()
+            for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", source)
+            if "outline-none" in match.group(2)
+            for sel in match.group(1).split(",")
+        }
+        for control in (".input", ".select", ".textarea", ".file-input"):
+            assert f"{control}:focus" in selectors, control
 
     def test_biome_never_runs_unscoped(self) -> None:
         """Biome with no path walks the whole project and rewrites every .js

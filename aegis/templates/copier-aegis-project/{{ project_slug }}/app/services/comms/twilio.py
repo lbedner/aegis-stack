@@ -7,6 +7,8 @@ has one, so a token saved in the Overseer takes effect on the next send.
 
 from __future__ import annotations
 
+import asyncio
+
 from twilio.rest import Client
 
 from app.core import secrets
@@ -23,6 +25,24 @@ async def _verify_token(token: str) -> None:
     )
 
 
+async def _account_client() -> Client:
+    return twilio_client(await twilio_config(), SecretUncheckedError)
+
+
+async def _phone_numbers() -> list[tuple[str, str]]:
+    """The account's own numbers, to send and call from."""
+    client = await _account_client()
+    numbers = await asyncio.to_thread(client.incoming_phone_numbers.list, limit=100)
+    return [(n.phone_number, n.friendly_name or n.phone_number) for n in numbers]
+
+
+async def _messaging_services() -> list[tuple[str, str]]:
+    """The account's messaging services (needed for toll-free numbers)."""
+    client = await _account_client()
+    services = await asyncio.to_thread(client.messaging.v1.services.list, limit=100)
+    return [(s.sid, s.friendly_name or s.sid) for s in services]
+
+
 # What the SMS and voice channels read through this module
 # (``app.core.secrets``); the SIDs and the number are identifiers, safe to
 # show whole.
@@ -31,12 +51,19 @@ SECRETS = (
     Secret(
         "TWILIO_AUTH_TOKEN", owner="Twilio", label="Auth token", verify=_verify_token
     ),
-    Secret("TWILIO_PHONE_NUMBER", owner="Twilio", label="From number", secret=False),
+    Secret(
+        "TWILIO_PHONE_NUMBER",
+        owner="Twilio",
+        label="From number",
+        secret=False,
+        choices=_phone_numbers,
+    ),
     Secret(
         "TWILIO_MESSAGING_SERVICE_SID",
         owner="Twilio",
         label="Messaging service",
         secret=False,
+        choices=_messaging_services,
     ),
 )
 

@@ -12,6 +12,7 @@ from app.cli.ai.shared import (
 )
 from app.i18n import lazy_t, t
 
+from ...core import secrets
 from ...core.config import settings
 from ...services.ai.config import get_ai_config
 from ...services.ai.models import (
@@ -152,8 +153,23 @@ async def providers() -> None:
     console.print(f"[dim]{t('ai.providers_tip', app='aidb')}[/dim]")
 
 
+async def _save_to_store(name: str, value: str) -> None:
+    """Save a provider key in the secrets store: checked with the provider
+    first, audited, and live without a restart. A refused key stops here."""
+    import getpass
+
+    try:
+        verdict = await secrets.put(name, value, actor=f"cli:{getpass.getuser()}")
+    except (secrets.SecretRejectedError, secrets.SecretsReadOnlyError) as exc:
+        console.print(f"  [{theme.ERROR}]✗[/{theme.ERROR}] {exc}")
+        raise typer.Exit(1) from None
+    console.print(f"  [{theme.ACCENT}]✓[/{theme.ACCENT}] {name} → secrets store")
+    if verdict is not None:
+        console.print(f"    [dim]{verdict.message}[/dim]")
+
+
 @app.command("add-provider", help=lazy_t("ai.help_add_provider"))
-def add_provider(
+async def add_provider(
     provider: str = typer.Argument(
         ...,
         help=lazy_t("ai.arg_provider"),
@@ -250,7 +266,8 @@ def add_provider(
     # Handle API key configuration
     if provider_enum != AIProvider.PUBLIC and not skip_api_key:
         env_var_name = get_env_var_name(provider)
-        existing_key = get_existing_api_key(provider)
+        # .env, then the secrets store when the stack has one.
+        existing_key = get_existing_api_key(provider) or await secrets.get(env_var_name)
 
         console.print()
         if existing_key:
@@ -283,7 +300,9 @@ def add_provider(
                 )
                 api_key = ""
 
-            if api_key:
+            if api_key and secrets.writable():
+                await _save_to_store(env_var_name, api_key)
+            elif api_key:
                 update_env_file({env_var_name: api_key})
                 console.print(
                     f"  [{theme.ACCENT}]✓[/{theme.ACCENT}] {env_var_name} → .env"
@@ -311,7 +330,7 @@ def add_provider(
 
 
 @app.command("use-provider", help=lazy_t("ai.help_use_provider"))
-def use_provider(
+async def use_provider(
     provider: str = typer.Argument(
         ...,
         help=lazy_t("ai.arg_provider_switch"),
@@ -357,7 +376,8 @@ def use_provider(
     # Check API key (except for PUBLIC)
     if provider_enum != AIProvider.PUBLIC:
         env_var_name = get_env_var_name(provider)
-        existing_key = get_existing_api_key(provider)
+        # .env, then the secrets store when the stack has one.
+        existing_key = get_existing_api_key(provider) or await secrets.get(env_var_name)
 
         if not existing_key:
             warning = t("ai.no_api_key_configured", var=env_var_name)

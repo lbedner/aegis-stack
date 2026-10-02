@@ -14,7 +14,7 @@ import resend
 from app.core import secrets
 from app.core.config import settings
 from app.core.log import logger
-from app.core.secrets import Secret, probe
+from app.core.secrets import Secret, SecretRejectedError, SecretUncheckedError, probe
 
 from .models import EmailResponse, MessageStatus, SendEmailRequest
 
@@ -29,6 +29,44 @@ async def _verify_resend(key: str) -> None:
     )
 
 
+async def _resend_domains() -> list[Any]:
+    """The account's domains, or why Resend could not list them (a
+    send-only key cannot)."""
+    from app.services.ops.adapters.resend import ResendAdapter
+
+    try:
+        return await ResendAdapter().list_domains()
+    except Exception as exc:  # noqa: BLE001 - the reason is the answer
+        raise SecretUncheckedError(f"Resend did not list domains ({exc}).") from None
+
+
+async def _from_address_choices() -> list[tuple[str, str]]:
+    """An address on each verified domain, to pick and then edit."""
+    return [
+        (f"hello@{d.domain}", f"{d.domain} (verified in Resend)")
+        for d in await _resend_domains()
+        if d.verified
+    ]
+
+
+async def _verify_from_address(address: str) -> None:
+    """Resend only sends from a verified domain: check this one is."""
+    from email.utils import parseaddr
+
+    domain = parseaddr(address)[1].rpartition("@")[2].lower()
+    if not domain:
+        raise SecretRejectedError("that is not an email address.")
+    match = next(
+        (d for d in await _resend_domains() if d.domain.lower() == domain), None
+    )
+    if match is None:
+        raise SecretRejectedError(f"{domain} is not a domain in your Resend account.")
+    if not match.verified:
+        raise SecretRejectedError(
+            f"{domain} is not verified in Resend yet ({match.status})."
+        )
+
+
 # What this module reads (``app.core.secrets``).
 SECRETS = (
     Secret(
@@ -40,6 +78,8 @@ SECRETS = (
         label="From address",
         secret=False,
         needed=True,
+        choices=_from_address_choices,
+        verify=_verify_from_address,
     ),
 )
 

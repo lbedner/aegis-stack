@@ -23,8 +23,14 @@ import httpx
 from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.time import utcnow
+from app.core import secrets
 from app.core.config import settings
+{% if insights_plausible -%}
+from app.core.secrets import Secret, SecretUncheckedError, probe
+{% elif insights_github -%}
+from app.core.secrets import Secret, probe
+{% endif -%}
+from app.core.time import utcnow
 from app.services.insights import queries
 from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
 from app.services.insights.utils import today as today  # re-exported for the collectors
@@ -34,6 +40,41 @@ from app.services.insights.models import Project
 
 logger = logging.getLogger(__name__)
 
+
+{% if insights_github %}
+
+async def _verify_github_token(token: str) -> None:
+    """GitHub answers 401 for a token it does not know."""
+    await probe(
+        "https://api.github.com/user",
+        headers={"Authorization": f"Bearer {token}", "X-GitHub-Api-Version": "2022-11-28"},
+    )
+{% endif %}
+{% if insights_plausible %}
+
+async def _verify_plausible_key(key: str) -> None:
+    """Realtime visitors for the first configured site: 401 for a bad key."""
+    site = next((s.strip() for s in settings.INSIGHT_PLAUSIBLE_SITES.split(",") if s.strip()), None)
+    if not site:
+        raise SecretUncheckedError("set INSIGHT_PLAUSIBLE_SITES first.")
+    await probe(
+        f"https://plausible.io/api/v1/stats/realtime/visitors?site_id={site}",
+        headers={"Authorization": f"Bearer {key}"},
+    )
+{% endif %}
+
+
+# The operator's collector credentials (``app.core.secrets``). A project's
+# own tokens live on its row, not here. Only the enabled sources' keys:
+# the rest have no setting to read.
+SECRETS = (
+{%- if insights_github %}
+    Secret("INSIGHT_GITHUB_TOKEN", owner="Insights", label="GitHub token", verify=_verify_github_token),
+{%- endif %}
+{%- if insights_plausible %}
+    Secret("INSIGHT_PLAUSIBLE_API_KEY", owner="Insights", label="Plausible API key", verify=_verify_plausible_key),
+{%- endif %}
+)
 
 class CollectionResult(BaseModel):
     """Result of a collection run."""
@@ -143,11 +184,21 @@ class BaseCollector(ABC):
         {%- endif %}
         return getattr(settings, env_name) or None
 
-    def _github_repo(self) -> tuple[str, str, str] | CollectionResult:
+    async def _secret(self, project_attr: str, env_name: str) -> str | None:
+        """``_setting`` for a credential: the operator's value comes through
+        ``app.core.secrets`` (``.env``, then the secrets store)."""
+        {% if insights_per_user -%}
+        if self.project is not None:
+            return getattr(self.project, project_attr) or None
+        {%- endif %}
+        return await secrets.get(env_name, source=settings)
+
+    async def _github_repo(self) -> tuple[str, str, str] | CollectionResult:
         """(token, owner, repo) for the GitHub REST collectors, or the
         error result naming what is missing on the caller's config
-        surface (project columns or env vars)."""
-        token = self._setting("github_token", "INSIGHT_GITHUB_TOKEN")
+        surface (project columns or env vars). The operator's token is read
+        now through ``app.core.secrets``."""
+        token = await self._secret("github_token", "INSIGHT_GITHUB_TOKEN")
         owner = self._setting("github_owner", "INSIGHT_GITHUB_OWNER")
         repo = self._setting("github_repo", "INSIGHT_GITHUB_REPO")
         if token and owner and repo:

@@ -1,0 +1,22 @@
+{# The DNS records a new sending domain needs (dialog body), and a Check
+   once they are in place. #}
+{% from "components/macros/layout.html" import dialog_title, copy_button %}
+{% from "components/macros/form.html" import action %}
+{{ dialog_title(domain, "Create these records at your registrar, then Check.") }}
+<table id="domain-records" class="w-full text-xs">
+  <thead><tr class="text-left text-aegis-muted"><th class="py-1 pr-3">Type</th><th class="py-1 pr-3">Host</th><th class="py-1 pr-3">Value</th><th></th></tr></thead>
+  <tbody>
+  {% for r in records %}
+    <tr class="border-t border-aegis-border align-top">
+      <td class="py-1.5 pr-3 font-mono">{{ r.type }}{% if r.priority is not none %} {{ r.priority }}{% endif %}</td>
+      <td class="py-1.5 pr-3 font-mono break-all">{{ r.host }}</td>
+      <td class="py-1.5 pr-3 font-mono break-all">{{ r.value }}</td>
+      <td class="py-1.5">{{ copy_button(r.value) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="mt-4 flex items-center gap-3">
+  {{ action("Check", 'hx-post="' ~ check_url ~ '" hx-swap="none"', "primary") }}
+  <button type="button" @click="$el.closest('dialog').close()" class="text-xs text-aegis-muted hover:text-aegis-text">Close</button>
+</div>

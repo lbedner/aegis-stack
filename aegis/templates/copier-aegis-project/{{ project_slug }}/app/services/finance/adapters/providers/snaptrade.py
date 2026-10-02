@@ -33,7 +33,9 @@ import asyncio
 import json
 from typing import Any
 
+from app.core import secrets
 from app.core.config import settings
+from app.core.secrets import Secret
 
 
 class SnapTradeError(RuntimeError):
@@ -50,18 +52,51 @@ def _body(response: Any) -> Any:
     return getattr(response, "body", response)
 
 
+SNAPTRADE_KEYS = ("SNAPTRADE_CLIENT_ID", "SNAPTRADE_CONSUMER_KEY")
+
+# What brokerage connections read (``app.core.secrets``). No paste-time
+# check: SnapTrade signs every request, so there is no cheap call to make
+# with the key alone. Nothing without SnapTrade: its settings are not
+# generated then.
+SECRETS = (
+    (
+        Secret(
+            "SNAPTRADE_CLIENT_ID",
+            owner="Finance (SnapTrade)",
+            label="Client ID",
+            secret=False,
+        ),
+        Secret(
+            "SNAPTRADE_CONSUMER_KEY", owner="Finance (SnapTrade)", label="Consumer key"
+        ),
+    )
+    if settings.FINANCE_SNAPTRADE
+    else ()
+)
+
+
 class SnapTradeClient:
-    """Async SnapTrade client. Reads partner credentials from settings unless
-    overridden (handy for tests)."""
+    """Async SnapTrade client. Reads partner credentials through
+    ``app.core.secrets`` (``.env``, then the secrets store) before each call,
+    unless overridden (handy for tests); a changed key rebuilds the SDK."""
 
     def __init__(
         self, *, client_id: str | None = None, consumer_key: str | None = None
     ) -> None:
-        self._client_id = client_id or getattr(settings, "SNAPTRADE_CLIENT_ID", None)
-        self._consumer_key = consumer_key or getattr(
-            settings, "SNAPTRADE_CONSUMER_KEY", None
-        )
+        self._overrides = (client_id, consumer_key)
+        self._client_id, self._consumer_key = client_id, consumer_key
         self._client: Any = None
+
+    async def _ready(self) -> None:
+        """Resolve the key pair now; a pair that changed drops the SDK."""
+        keys = await secrets.get_many(*SNAPTRADE_KEYS)
+        pair = (
+            self._overrides[0] or keys["SNAPTRADE_CLIENT_ID"],
+            self._overrides[1] or keys["SNAPTRADE_CONSUMER_KEY"],
+        )
+        if pair != (self._client_id, self._consumer_key):
+            self._client_id, self._consumer_key = pair
+            self._client = None
 
     @property
     def is_personal(self) -> bool:
@@ -126,6 +161,7 @@ class SnapTradeClient:
     async def register_user(self, user_id: str) -> str:
         """Register a SnapTrade user; returns the ``user_secret`` (the caller
         encrypts and stores it — it IS the access credential)."""
+        await self._ready()
         if self.is_personal:
             raise SnapTradeError(
                 "personal_key", "registerUser is not available for personal keys."
@@ -141,6 +177,7 @@ class SnapTradeClient:
     async def delete_user(self, user_id: str) -> None:
         """Delete a SnapTrade user (removes all its authorizations). Used to
         recover when a user exists but its secret was lost."""
+        await self._ready()
         await self._call(
             self._sdk().authentication.delete_snap_trade_user, user_id=user_id
         )
@@ -155,6 +192,7 @@ class SnapTradeClient:
     ) -> str:
         """A connection-portal URL (expires in ~5 minutes) where the user
         completes the brokerage OAuth."""
+        await self._ready()
         kwargs: dict[str, Any] = {"user_id": user_id, "user_secret": user_secret}
         if broker:
             kwargs["broker"] = broker
@@ -174,6 +212,7 @@ class SnapTradeClient:
         self, user_id: str, user_secret: str
     ) -> list[dict[str, Any]]:
         """Every brokerage authorization (completed connection) for the user."""
+        await self._ready()
         body = await self._call(
             self._sdk().connections.list_brokerage_authorizations,
             user_id=user_id,
@@ -185,6 +224,7 @@ class SnapTradeClient:
         self, user_id: str, user_secret: str, authorization_id: str
     ) -> None:
         """Revoke one brokerage authorization at SnapTrade."""
+        await self._ready()
         await self._call(
             self._sdk().connections.remove_brokerage_authorization,
             user_id=user_id,
@@ -199,6 +239,7 @@ class SnapTradeClient:
     ) -> list[dict[str, Any]]:
         """All brokerage accounts across the user's authorizations (each row
         carries ``brokerage_authorization`` to scope it to a connection)."""
+        await self._ready()
         body = await self._call(
             self._sdk().account_information.list_user_accounts,
             user_id=user_id,
@@ -214,6 +255,7 @@ class SnapTradeClient:
         ``/positions/all`` returns every instrument kind (stock, ETF, option,
         crypto, future, ...) in one ``results`` list, each row discriminated
         by ``instrument.kind``."""
+        await self._ready()
         body = await self._call(
             self._sdk().account_information.get_all_account_positions,
             user_id=user_id,
@@ -237,6 +279,7 @@ class SnapTradeClient:
     ) -> dict[str, Any]:
         """One page of account activities (trades, dividends, cash movements)
         in a date window. Returns ``{"data": [...], "pagination": {...}}``."""
+        await self._ready()
         body = await self._call(
             self._sdk().account_information.get_account_activities,
             account_id=account_id,

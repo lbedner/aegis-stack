@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
@@ -21,9 +22,9 @@ from app.components.frontend.controls.form_fields import (
     FormTextField,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.config import reload_settings
 
 from .config_tab import EditableConfigTab
+from .domains import DomainsSection
 
 
 class EmailTab(EditableConfigTab):
@@ -151,6 +152,8 @@ class EmailTab(EditableConfigTab):
                             from_address_row,
                             ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                             status_row,
+                            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                            DomainsSection(),
                         ],
                         spacing=Theme.Spacing.SM,
                     ),
@@ -200,7 +203,7 @@ class EmailTab(EditableConfigTab):
         self.expand = True
 
     async def _save_config(self) -> None:
-        """Save the configuration to .env and reload settings."""
+        """Save the configuration through the secrets store, or to .env."""
         # Validate fields
         api_key = self._api_key_field.value.strip()
         from_email = self._from_email_field.value.strip()
@@ -224,11 +227,9 @@ class EmailTab(EditableConfigTab):
             await self._cancel_edit()
             return
 
-        # Write to .env
-        self._env_service.write_env(updates)
-
-        # Reload settings so changes take effect
-        reload_settings()
+        # The secrets store when the stack has one, else .env (dev mode).
+        if not await self._save_credentials(updates):
+            return
 
         # Update local metadata to reflect changes
         if api_key:

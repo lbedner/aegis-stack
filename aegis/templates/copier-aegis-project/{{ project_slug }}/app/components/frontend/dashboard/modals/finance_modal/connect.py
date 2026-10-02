@@ -10,7 +10,10 @@ from app.components.frontend.controls import (
     MenuAction,
 )
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
+from app.core import secrets
 from app.core.config import settings
+from app.services.finance.adapters.providers.plaid import PLAID_KEYS
+from app.services.finance.adapters.providers.snaptrade import SNAPTRADE_KEYS
 
 # Named rows in the import review's detail sections before the tail folds
 # into a count. A Quicken tree can carry hundreds of new categories, and a
@@ -51,6 +54,18 @@ def _build_connect_menu(on_bank, on_brokerage) -> ActionDropdown | None:
     return ActionDropdown("Connect", actions, tooltip="Connect an institution")
 
 
+async def _configured(page: ft.Page, provider: str, keys: tuple[str, ...]) -> bool:
+    """Whether every key a connect flow needs is set; if not, say which and
+    where to set them."""
+    if all((await secrets.get_many(*keys)).values()):
+        return True
+    ErrorSnackBar(
+        f"{provider} isn't configured yet: set {' and '.join(keys)} "
+        "on the Secrets page or in .env."
+    ).launch(page)
+    return False
+
+
 async def _connect_bank_flow(
     page: ft.Page, reload: Callable[[], Awaitable[None]]
 ) -> None:
@@ -58,11 +73,7 @@ async def _connect_bank_flow(
     poll server-side (~2.5 min) and reload the caller's view when the
     connection lands. (In sandbox mode the test credentials live on the
     Connections tab's Plaid card.)"""
-    if not (settings.PLAID_CLIENT_ID and settings.PLAID_SECRET):
-        ErrorSnackBar(
-            "Plaid isn't configured yet: set PLAID_CLIENT_ID and PLAID_SECRET "
-            "in .env, then restart."
-        ).launch(page)
+    if not await _configured(page, "Plaid", PLAID_KEYS):
         return
     from app.components.frontend.state.session_state import get_session_state
 
@@ -98,11 +109,7 @@ async def _connect_brokerage_flow(
     """SnapTrade connection portal: open it in a new tab, then poll
     server-side (~2.5 min) until the new authorization lands and reload the
     caller's view."""
-    if not (settings.SNAPTRADE_CLIENT_ID and settings.SNAPTRADE_CONSUMER_KEY):
-        ErrorSnackBar(
-            "SnapTrade isn't configured yet: set SNAPTRADE_CLIENT_ID and "
-            "SNAPTRADE_CONSUMER_KEY in .env, then restart."
-        ).launch(page)
+    if not await _configured(page, "SnapTrade", SNAPTRADE_KEYS):
         return
     from app.components.frontend.state.session_state import get_session_state
 

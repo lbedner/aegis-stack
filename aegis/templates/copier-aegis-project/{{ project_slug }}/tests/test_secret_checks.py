@@ -22,6 +22,10 @@ def _owner(path: str) -> ModuleType:
 
 
 def _entry(module: ModuleType, name: str) -> secrets.Secret:
+    """The declaration of ``name``; skipped where its setting is not
+    generated (a source or provider this stack left out)."""
+    if name not in type(settings).model_fields:
+        pytest.skip(f"{name} is not generated in this stack")
     return next(s for s in module.SECRETS if s.name == name)
 
 
@@ -138,3 +142,111 @@ def test_every_owner_is_registered() -> None:
         "app.components.storage.s3",
     ):
         assert path in secrets.OWNERS
+
+
+async def test_a_plaid_secret_is_checked_with_its_client_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _owner("app.services.finance.adapters.providers.plaid_keys")
+    entry = _entry(module, "PLAID_SECRET")
+    assert entry.verify is not None
+    monkeypatch.setitem(settings.__dict__, "PLAID_CLIENT_ID", None)
+    with pytest.raises(secrets.SecretUncheckedError, match="PLAID_CLIENT_ID"):
+        await entry.verify(KEY)
+    monkeypatch.setitem(settings.__dict__, "PLAID_CLIENT_ID", "client-1")
+    sent = answering(monkeypatch, 200, "{}")
+    await entry.verify(KEY)
+    assert sent[0].method == "POST" and sent[0].url.path == "/institutions/get"
+    answering(monkeypatch, 400, '{"error_code": "INVALID_API_KEYS"}')
+    with pytest.raises(secrets.SecretRejectedError):
+        await entry.verify(KEY)
+
+
+async def test_the_insights_github_token_is_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _owner("app.services.insights.adapters.collectors.base")
+    github = _entry(module, "INSIGHT_GITHUB_TOKEN")
+    assert github.verify is not None
+    sent = answering(monkeypatch, 200)
+    await github.verify(KEY)
+    assert sent[0].url.host == "api.github.com"
+
+
+async def test_the_plausible_key_is_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _owner("app.services.insights.adapters.collectors.base")
+    plausible = _entry(module, "INSIGHT_PLAUSIBLE_API_KEY")
+    assert plausible.verify is not None
+    monkeypatch.setitem(settings.__dict__, "INSIGHT_PLAUSIBLE_SITES", "")
+    with pytest.raises(secrets.SecretUncheckedError, match="INSIGHT_PLAUSIBLE_SITES"):
+        await plausible.verify(KEY)
+    monkeypatch.setitem(settings.__dict__, "INSIGHT_PLAUSIBLE_SITES", "example.com")
+    answering(monkeypatch, 401)
+    with pytest.raises(secrets.SecretRejectedError):
+        await plausible.verify(KEY)
+
+
+def test_the_finance_and_insights_owners_are_registered() -> None:
+    for path in (
+        "app.services.finance.adapters.providers.plaid_keys",
+        "app.services.finance.adapters.providers.snaptrade",
+        "app.services.insights.adapters.collectors.base",
+    ):
+        assert path in secrets.OWNERS
+
+
+def _resend_domains(monkeypatch: pytest.MonkeyPatch, *domains: tuple[str, str]) -> None:
+    from datetime import UTC, datetime
+
+    from app.services.ops.adapters.resend import ResendAdapter
+    from app.services.ops.types import DomainStatus
+
+    async def list_domains(self: object) -> list[DomainStatus]:
+        return [
+            DomainStatus(name, status == "verified", status, datetime.now(UTC))
+            for name, status in domains
+        ]
+
+    monkeypatch.setattr(ResendAdapter, "list_domains", list_domains)
+
+
+async def test_the_from_address_offers_verified_domains_and_checks_its_own(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _owner("app.services.comms.email")
+    entry = _entry(module, "RESEND_FROM_EMAIL")
+    assert entry.choices is not None and entry.verify is not None
+    _resend_domains(monkeypatch, ("mail.example.com", "verified"), ("new.example.com", "pending"))
+    assert await entry.choices() == [
+        ("hello@mail.example.com", "mail.example.com (verified in Resend)")
+    ]
+    await entry.verify("My App <hello@mail.example.com>")
+    with pytest.raises(secrets.SecretRejectedError, match="not verified"):
+        await entry.verify("hello@new.example.com")
+    with pytest.raises(secrets.SecretRejectedError, match="not a domain"):
+        await entry.verify("hello@elsewhere.com")
+
+
+async def test_twilio_offers_the_accounts_numbers_and_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    module = _owner("app.services.comms.twilio")
+    number = SimpleNamespace(phone_number="+15550001111", friendly_name="Main line")
+    service = SimpleNamespace(sid="MG123", friendly_name="Alerts")
+    client = SimpleNamespace(
+        incoming_phone_numbers=SimpleNamespace(list=lambda **_: [number]),
+        messaging=SimpleNamespace(v1=SimpleNamespace(services=SimpleNamespace(list=lambda **_: [service]))),
+    )
+    monkeypatch.setattr(module, "Client", lambda sid, token: client)
+    monkeypatch.setitem(settings.__dict__, "TWILIO_ACCOUNT_SID", None)
+    monkeypatch.setitem(settings.__dict__, "TWILIO_AUTH_TOKEN", None)
+    phone = _entry(module, "TWILIO_PHONE_NUMBER")
+    assert phone.choices is not None
+    with pytest.raises(secrets.SecretUncheckedError):
+        await phone.choices()
+    monkeypatch.setitem(settings.__dict__, "TWILIO_ACCOUNT_SID", "AC1")
+    monkeypatch.setitem(settings.__dict__, "TWILIO_AUTH_TOKEN", "tok")
+    assert await phone.choices() == [("+15550001111", "Main line")]
+    services = _entry(module, "TWILIO_MESSAGING_SERVICE_SID")
+    assert services.choices is not None
+    assert await services.choices() == [("MG123", "Alerts")]

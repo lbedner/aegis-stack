@@ -40,6 +40,8 @@ async def _form(
         errors=errors,
         url=f"{overseer_secrets.PARTIALS}/{name}",
         stored=row.is_set and row.source == secrets.store_name(),
+        # What the provider offers, for a field shown in the clear.
+        choices=await secrets.choices(name) if row.choosable and not row.secret else [],
     )
 
 
@@ -69,11 +71,11 @@ async def save(
     except secrets.UnknownSecretError:
         raise HTTPException(status_code=404) from None
     if verdict is None:
-        return dialog_done(overseer_secrets.ITEM.url, f"{name} saved")
+        return dialog_done(overseer_secrets.url(), f"{name} saved")
     tone = overseer_secrets.VERDICT_TONES[verdict.result]
     word = "verified" if verdict.result == secrets.VERIFIED else "not verified"
     return dialog_done(
-        overseer_secrets.ITEM.url, f"{name} saved, {word}. {verdict.message}", tone
+        overseer_secrets.url(), f"{name} saved, {word}. {verdict.message}", tone
     )
 
 
@@ -103,4 +105,4 @@ async def remove(
         return await _form(request, name, [str(exc)], 422)
     except secrets.UnknownSecretError:
         raise HTTPException(status_code=404) from None
-    return dialog_done(overseer_secrets.ITEM.url, f"{name} removed")
+    return dialog_done(overseer_secrets.url(), f"{name} removed")

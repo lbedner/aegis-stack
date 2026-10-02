@@ -11,14 +11,18 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
+from app.models.conversation import Conversation, ConversationMessage
+from app.services.ai.models.agents import (
+    Agent,
+    AgentPromptChange,
+    AgentUserMemory,
+    MemoryModule,
+)
+from app.services.ai.models.sentiment import SentimentAnalysis
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
-from app.models.conversation import Conversation, ConversationMessage
-from app.services.ai.models.agents import Agent, AgentUserMemory, MemoryModule
-from app.services.ai.models.sentiment import SentimentAnalysis
 
 # --- Conversations (ConversationManager) --------------------------------
 
@@ -218,6 +222,24 @@ async def agent_by_slug(session: AsyncSession, slug: str) -> Agent | None:
             select(Agent).where(Agent.slug == slug).options(selectinload(Agent.tools))  # type: ignore[arg-type]
         )
     ).first()
+
+
+async def prompt_changes(
+    session: AsyncSession, agent_id: int
+) -> Sequence[AgentPromptChange]:
+    """One agent's prompt history, newest first."""
+    return (
+        await session.exec(
+            select(AgentPromptChange)
+            .where(AgentPromptChange.agent_id == agent_id)
+            .order_by(col(AgentPromptChange.id).desc())
+        )
+    ).all()
+
+
+async def latest_prompt_change_id(session: AsyncSession) -> int | None:
+    """The newest recorded prompt change: the loader cache's version."""
+    return (await session.exec(select(func.max(AgentPromptChange.id)))).one()
 
 
 async def all_agents(session: AsyncSession) -> Sequence[Agent]:

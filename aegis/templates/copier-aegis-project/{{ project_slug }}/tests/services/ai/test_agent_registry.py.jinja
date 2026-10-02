@@ -11,6 +11,7 @@ from app.services.ai.domains.chat.agent_registry import (
     AgentNotFoundError,
     InvalidAgentUpdateError,
     list_agents,
+    prompt_history,
     serialize_agent,
     set_agent_active,
     update_agent,
@@ -143,6 +144,47 @@ class TestUpdateAgent:
         )
 
         assert updated.model_id is None
+
+
+class TestPromptHistory:
+    """The row is the prompt, and every change to it is recorded."""
+
+    async def test_a_new_prompt_is_recorded_with_why(
+        self, session: AsyncSession
+    ) -> None:
+        await _add_agent(session, "helper")
+
+        await update_agent(
+            "helper",
+            {"system_prompt": "Be terse."},
+            session=session,
+            source="cli",
+            note="too chatty",
+        )
+        await update_agent("helper", {"system_prompt": "Be kind."}, session=session)
+
+        history = await prompt_history("helper", session=session)
+        assert [(c.system_prompt, c.source, c.note) for c in history] == [
+            ("Be kind.", "dashboard", None),  # newest first
+            ("Be terse.", "cli", "too chatty"),
+        ]
+
+    async def test_a_same_prompt_or_another_field_records_nothing(
+        self, session: AsyncSession
+    ) -> None:
+        await _add_agent(session, "helper")
+
+        await update_agent(
+            "helper",
+            {"system_prompt": "You are helpful.", "temperature": 0.2},
+            session=session,
+        )
+
+        assert await prompt_history("helper", session=session) == []
+
+    async def test_an_unknown_agent_has_no_history(self, session: AsyncSession) -> None:
+        with pytest.raises(AgentNotFoundError):
+            await prompt_history("ghost", session=session)
 
 
 class TestSerializeAgent:

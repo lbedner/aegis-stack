@@ -11,7 +11,9 @@ the storage backend:
   no tables involved.
 
 CRUD paths that edit agent rows must call ``invalidate_agent_cache`` so
-the next request sees the change.
+the next request sees the change. A prompt change made in another process
+(the CLI) cannot call it here, so the cache also carries the newest
+recorded prompt change and empties itself when a newer one appears.
 """
 
 {% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}from collections.abc import Awaitable, Callable, Sequence
@@ -90,6 +92,16 @@ def default_agent_config() -> AgentConfig:
 {% if ai_backend != "memory" %}
 
 _cache: dict[str, AgentConfig] = {}
+# The newest recorded prompt change when ``_cache`` was filled.
+_cache_version: int | None = None
+
+
+def _expire_if_changed(version: int | None) -> None:
+    """Empty the cache when a prompt change was recorded since it filled."""
+    global _cache_version
+    if version != _cache_version:
+        _cache.clear()
+        _cache_version = version
 
 
 def invalidate_agent_cache(slug: str | None = None) -> None:
@@ -123,17 +135,20 @@ async def resolve_agent(
     """Resolve an agent config by slug: warm cache -> DB row -> fallback.
 
     Only DB-sourced configs are cached; a fallback for a missing row is
-    returned uncached so a row seeded later wins the next resolve.
+    returned uncached so a row seeded later wins the next resolve. Each
+    resolve reads the newest recorded prompt change, one cheap query, so
+    a change from another process reaches the next turn.
     """
+    if session is None:
+        async with get_async_session() as owned_session:
+            return await resolve_agent(slug, session=owned_session)
+
+    _expire_if_changed(await queries.latest_prompt_change_id(session))
     cached = _cache.get(slug)
     if cached is not None:
         return cached
 
-    if session is not None:
-        row = await queries.agent_by_slug(session, slug)
-    else:
-        async with get_async_session() as owned_session:
-            row = await queries.agent_by_slug(owned_session, slug)
+    row = await queries.agent_by_slug(session, slug)
 
     if row is None or not row.is_active:
         logger.warning(

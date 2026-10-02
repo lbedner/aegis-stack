@@ -1,19 +1,21 @@
 """Agent registry admin operations (list, activate/deactivate).
 
-The read/write surface behind the dashboard agents tab and the API.
-Writes invalidate the agent loader's warm cache so the next chat request
-sees the change.
+The read/write surface behind the dashboard agents tab, the API and the
+CLI. Writes invalidate the agent loader's warm cache so the next chat
+request sees the change, and every change to a system prompt is recorded
+(``AgentPromptChange``): the row is the only source of an agent's prompt,
+and code only seeds it.
 """
 
 from typing import Any
-
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.agent_loader import invalidate_agent_cache
-from app.services.ai.models.agents import Agent
+from app.services.ai.models.agents import Agent, AgentPromptChange
+from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 class AgentNotFoundError(ValueError):
@@ -46,6 +48,20 @@ EDITABLE_FIELDS = frozenset(
 _NON_NULLABLE_FIELDS = frozenset(
     {"name", "temperature", "max_tokens", "system_prompt", "is_active", "code_mode"}
 )
+
+
+def seed_agent(session: Session, definition: dict[str, Any]) -> None:
+    """Add an agent from its seed definition, with the seed as its first
+    recorded prompt. The caller commits."""
+    agent = Agent(**definition)
+    session.add(agent)
+    session.flush()
+    assert agent.id is not None
+    session.add(
+        AgentPromptChange(
+            agent_id=agent.id, system_prompt=agent.system_prompt, source="seed"
+        )
+    )
 
 
 def _validate_changes(changes: dict[str, Any]) -> None:
@@ -86,16 +102,28 @@ async def update_agent(
     changes: dict[str, Any],
     *,
     session: AsyncSession | None = None,
+    source: str = "dashboard",
+    note: str | None = None,
 ) -> Agent:
-    """Apply editable-field changes and invalidate the cached config."""
+    """Apply editable-field changes and invalidate the cached config. A
+    new system prompt is recorded with ``source`` and ``note``."""
     if session is None:
         async with get_async_session() as owned_session:
-            return await update_agent(slug, changes, session=owned_session)
+            return await update_agent(
+                slug, changes, session=owned_session, source=source, note=note
+            )
 
     _validate_changes(changes)
     agent = await queries.agent_by_slug(session, slug)
-    if agent is None:
+    if agent is None or agent.id is None:
         raise AgentNotFoundError(f"Agent '{slug}' not found")
+    prompt = changes.get("system_prompt")
+    if prompt is not None and prompt != agent.system_prompt:
+        session.add(
+            AgentPromptChange(
+                agent_id=agent.id, system_prompt=prompt, source=source, note=note
+            )
+        )
     for field, value in changes.items():
         setattr(agent, field, value)
     session.add(agent)
@@ -108,6 +136,19 @@ async def update_agent(
     if refreshed is None:
         raise AgentNotFoundError(f"Agent '{slug}' vanished after update")
     return refreshed
+
+
+async def prompt_history(
+    slug: str, *, session: AsyncSession | None = None
+) -> list[AgentPromptChange]:
+    """Every recorded change to an agent's system prompt, newest first."""
+    if session is None:
+        async with get_async_session() as owned_session:
+            return await prompt_history(slug, session=owned_session)
+    agent = await queries.agent_by_slug(session, slug)
+    if agent is None or agent.id is None:
+        raise AgentNotFoundError(f"Agent '{slug}' not found")
+    return list(await queries.prompt_changes(session, agent.id))
 
 
 async def set_agent_active(

@@ -710,3 +710,49 @@ class TestFailuresKeepTheirTextInTheLog:
             response = client.get(f"/api/v1/voice/preview/{OpenAIVoice.ALLOY.value}")
         assert response.status_code == 503
         assert SECRET not in response.text
+
+
+class TestVoiceChatCarriesTheTurn:
+    """The route passes what a typed turn passes, so the caller - not the
+    stack - decides which agent answers."""
+
+    def test_agent_surface_user_conversation_and_hint(self, client: TestClient) -> None:
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from app.services.ai.domains.voice.models import (
+            STTProvider,
+            TranscriptionResult,
+            VoiceChatResponse,
+        )
+
+        service = MagicMock()
+        service.voice_chat = AsyncMock(
+            return_value=VoiceChatResponse(
+                transcription=TranscriptionResult(
+                    text="hi", provider=STTProvider.OPENAI_WHISPER
+                ),
+                full_response="hello",
+                voice_response="hello",
+                conversation_id="c-1",
+            )
+        )
+        with patch("app.components.backend.api.ai.speech.ai_service", service):
+            response = client.post(
+                "/api/v1/ai/voice-chat",
+                params={
+                    "conversation_id": "c-1",
+                    "user_id": "0",
+                    "agent_slug": "helper",
+                    "surface": "support",
+                    "transcription_hint": "Illiana",
+                },
+                files={"audio": ("a.webm", b"x", "audio/webm")},
+            )
+
+        assert response.status_code == 200
+        kwargs = service.voice_chat.call_args.kwargs
+        assert kwargs["conversation_id"] == "c-1"
+        assert kwargs["user_id"] == "0"
+        assert kwargs["agent_slug"] == "helper"
+        assert kwargs["surface"] == "support"
+        assert kwargs["transcription_hint"] == "Illiana"

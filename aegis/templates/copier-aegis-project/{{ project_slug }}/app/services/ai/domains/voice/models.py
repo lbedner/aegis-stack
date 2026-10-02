@@ -66,6 +66,10 @@ class AudioInput(BaseModel):
         default=None,
         description="Duration of audio in seconds (optional, for usage tracking)",
     )
+    prompt: str | None = Field(
+        default=None,
+        description="Spelling hint for names the model cannot guess",
+    )
 
     model_config = {"arbitrary_types_allowed": True}
 

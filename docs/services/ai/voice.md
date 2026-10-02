@@ -197,6 +197,32 @@ curl "http://localhost:8000/voice/preview/alloy?text=Hello+world&speed=1.0" \
 
 Returns `audio/mpeg` content.
 
+### Voice Chat
+
+A spoken turn is a typed turn with a microphone in front of it: the
+transcript becomes the user's message in the same conversation, answered
+by the same agent, as if it had been typed.
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/ai/voice-chat?conversation_id=c-1&user_id=u-1&agent_slug=helper&surface=support&transcription_hint=Aegis" \
+  -F "audio=@question.webm"
+```
+
+| Parameter | Meaning |
+|-----------|---------|
+| `conversation_id` | Continue this conversation (a new one when omitted) |
+| `user_id` | Who spoke: owns the turn, and STT/TTS usage is recorded against it |
+| `agent_slug` | The agent that answers, exactly as for a typed turn; the stack never picks one |
+| `surface` | The history scope the turn lands in, as for a typed turn |
+| `transcription_hint` | Names the transcriber should spell right, sent to it as its prompt |
+| `voice_mode` | Return the answer as plain spoken sentences |
+| `return_audio` | Also synthesize those sentences and return `audio/mpeg` |
+
+The audio is not stored: the conversation holds the words, and the usage
+records hold the cost. The spoken version of an answer is the agent's own
+words with the markdown stripped (`voice/spoken.py`), not a second model
+call. `/api/v1/ai/synthesize` takes form fields (`text`, `voice`, `speed`).
+
 ### Catalog Summary
 
 ```bash
@@ -251,7 +277,7 @@ curl http://localhost:8000/voice/catalog/summary | jq
 
 ### STT
 
-- **AudioInput** - `content` (bytes), `format`, `language`
+- **AudioInput** - `content` (bytes), `format`, `language`, `prompt` (a spelling hint for the transcriber)
 - **TranscriptionResult** - `text`, `language`, `duration_seconds`, `provider`, `segments`
 - **TranscriptionSegment** - `text`, `start`, `end`, `confidence`
 
@@ -271,6 +297,7 @@ curl http://localhost:8000/voice/catalog/summary | jq
 | `app/services/ai/voice/stt/usage.py` | STT usage tracking |
 | `app/services/ai/voice/catalog.py` | Voice catalog (providers, models, voices) |
 | `app/services/ai/voice/models.py` | Data models |
+| `app/services/ai/voice/spoken.py` | An answer as it is said: markdown stripped |
 | `app/components/backend/api/voice/router.py` | API endpoints |
 
 ---

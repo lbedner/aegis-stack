@@ -295,3 +295,21 @@ class TestOpenAIResponseFormat:
     async def test_gpt_4o_models_get_json(self) -> None:
         assert await self._format_sent("gpt-4o-mini-transcribe") == "json"
         assert await self._format_sent("gpt-4o-transcribe") == "json"
+
+    async def test_a_hint_rides_as_the_prompt(self) -> None:
+        """Names the model cannot guess go to it as the API's ``prompt``."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from app.services.ai.domains.voice.models import AudioInput
+
+        provider = OpenAIWhisperProvider(model="gpt-4o-mini-transcribe")
+        reply = MagicMock(text="hi", segments=None, language=None, duration=None)
+        create = AsyncMock(return_value=reply)
+        provider._client = MagicMock()
+        provider._client.audio.transcriptions.create = create
+
+        await provider.transcribe(AudioInput(content=b"x", prompt="Illiana"))
+        assert create.call_args.kwargs["prompt"] == "Illiana"
+
+        await provider.transcribe(AudioInput(content=b"x"))
+        assert "prompt" not in create.call_args.kwargs

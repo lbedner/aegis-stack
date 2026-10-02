@@ -208,28 +208,6 @@ def sweep_empty_stubs(project_path: Path) -> list[str]:
     return deleted
 
 
-# Files with Jinja conditionals that depend on auth level (basic/rbac/org).
-# Must be regenerated when upgrading auth level.
-REGENERATE_ON_AUTH_LEVEL_CHANGE = {
-    "app/models/user.py",
-    "app/models/org.py",
-    "app/core/security.py",
-    "app/services/auth/service.py",
-    "app/services/auth/orgs.py",
-    "app/services/auth/memberships.py",
-    "app/services/auth/invites.py",
-    "app/components/backend/api/auth/router.py",
-    "app/components/backend/api/orgs/router.py",
-    "app/components/backend/api/orgs/__init__.py",
-    "app/components/backend/api/deps.py",
-    "app/components/frontend/dashboard/modals/auth_modal.py",
-    "app/components/frontend/dashboard/modals/auth_users_tab.py",
-    "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
-    "tests/services/test_org_integration.py",
-    "tests/api/test_org_endpoints.py",
-}
-
-
 class PluginRenderResult(BaseModel):
     """Outcome of rendering one plugin's template tree into a project."""
 
@@ -472,6 +450,27 @@ class ManualUpdater:
             component_files = get_component_files(
                 component, backend_variant, answers=updated_answers
             )
+            if is_variant_upgrade:
+                # An option upgrade creates only what the new option adds.
+                # The service's files from before are the project's: the
+                # ones it kept are re-rendered through the shared-file
+                # merge below, the ones it deleted stay deleted. A missing
+                # file the old answers rendered empty (gated whole-file on
+                # the option) was never there to delete.
+                before = set(
+                    get_component_files(
+                        component, backend_variant, answers=self.answers
+                    )
+                )
+                component_files = [
+                    f
+                    for f in component_files
+                    if f not in before
+                    or (
+                        not (self.project_path / f).exists()
+                        and not self._renders(f, self.answers)
+                    )
+                ]
 
             # Some components (like Redis) have no template files - they only
             # configure Docker services and dependencies via shared files
@@ -513,13 +512,6 @@ class ManualUpdater:
 
                     # Check for conflicts
                     if output_path.exists():
-                        # Some files have conditional content and must be regenerated
-                        # Files whose body depends on the variant. Only auth
-                        # has entries today; the trigger itself is generic.
-                        regenerate_for_variant = (
-                            is_variant_upgrade
-                            and relative_path in REGENERATE_ON_AUTH_LEVEL_CHANGE
-                        )
                         # Existing-but-empty files are empty stubs left behind
                         # by an earlier init where this service's templates
                         # were gated off. They're not user content, so
@@ -528,7 +520,6 @@ class ManualUpdater:
                         is_empty_stub = _is_empty_stub(output_path)
                         if (
                             relative_path in REGENERATE_ON_COMPONENT_CHANGE
-                            or regenerate_for_variant
                             or is_empty_stub
                         ):
                             self._write_rendered(output_path, content)
@@ -558,7 +549,12 @@ class ManualUpdater:
                 shared_files_updated,
                 shared_files_backed_up,
                 shared_files_need_manual_merge,
-            ) = self._regenerate_shared_files(updated_answers, component)
+            ) = self._regenerate_shared_files(
+                updated_answers,
+                component,
+                include_operated=is_variant_upgrade,
+                written=set(files_modified),
+            )
 
             # Cross-spec: the shared cards/__init__.py just regenerated to
             # import ServicesCard if a service is now present — make sure the
@@ -940,7 +936,12 @@ class ManualUpdater:
         spec.post_render(self.project_path, updated_answers)
 
     def _regenerate_shared_files(
-        self, updated_answers: dict[str, Any], operated: str | None = None
+        self,
+        updated_answers: dict[str, Any],
+        operated: str | None = None,
+        *,
+        include_operated: bool = False,
+        written: set[str] | None = None,
     ) -> tuple[list[str], list[str], list[str]]:
         """
         Regenerate shared template files with updated answers.
@@ -963,6 +964,10 @@ class ManualUpdater:
             operated: The spec being added or removed; its own files are
                 copied or deleted by the caller, not re-rendered here.
                 ``None`` leaves other specs' files out of scope.
+            include_operated: Re-render ``operated``'s own files too (an
+                option upgrade of an installed spec).
+            written: Paths the caller just wrote from the new answers;
+                there is nothing to merge into them.
 
         Returns:
             Tuple of (updated_files, backed_up_files, need_manual_merge_files)
@@ -985,10 +990,12 @@ class ManualUpdater:
             if p not in OWNED_BUT_SHARED_PATHS or (self.project_path / p).exists()
         ]
         if operated is not None:
+            fresh = written or set()
             scope += get_cross_spec_scope(
                 self._render_diff_engine.discover_paths(),
-                lambda rel: (self.project_path / rel).exists(),
+                lambda rel: rel not in fresh and (self.project_path / rel).exists(),
                 operated,
+                include_operated=include_operated,
             )
             scope = sorted(set(scope))
 
@@ -1133,6 +1140,13 @@ class ManualUpdater:
         self._write_rendered(output_path, content)
         verbose_print(f"   Created cross-spec file: {SERVICES_CARD_FILE}")
         return SERVICES_CARD_FILE
+
+    def _renders(self, rel_path: str, answers: dict[str, Any]) -> bool:
+        """Whether ``rel_path``'s template renders anything for ``answers``."""
+        content = self._render_template_file(
+            f"{PROJECT_SLUG_PLACEHOLDER}/{rel_path}", answers
+        )
+        return bool(content and content.strip())
 
     def _render_template_file(
         self, template_file: str, context: dict[str, Any]
@@ -1868,15 +1882,29 @@ class ManualUpdater:
         except subprocess.CalledProcessError as e:
             print(f"   Warning: Failed to sync dependencies: {e}")
 
-        # Run make fix to auto-format code
-        try:
-            subprocess.run(
-                ["make", "fix"],
-                cwd=self.project_path,
-                check=True,
-                capture_output=True,
+        # Format what this run wrote, never the rest of the project: a
+        # project may keep files unformatted on purpose, and ``make fix``
+        # (``ruff format .``) rewrote them on every add.
+        changed = _changed_files(self.project_path)
+        if changed is None:
+            commands = [["make", "fix"]]
+        else:
+            python = [p for p in changed if p.endswith(".py")]
+            commands = (
+                [
+                    ["uv", "run", "ruff", "check", "--fix", "--exit-zero", *python],
+                    ["uv", "run", "ruff", "format", *python],
+                ]
+                if python
+                else []
             )
-            print(f"   {t('updater.code_formatted')}")
+        try:
+            for command in commands:
+                subprocess.run(
+                    command, cwd=self.project_path, check=True, capture_output=True
+                )
+            if commands:
+                print(f"   {t('updater.code_formatted')}")
         except subprocess.CalledProcessError:
             typer.echo(
                 "   "
@@ -1885,6 +1913,27 @@ class ManualUpdater:
                 + brand.accent_text("make fix")
                 + " had issues. Run it manually to see details."
             )
+
+
+def _changed_files(project_path: Path) -> list[str] | None:
+    """Files changed since the last commit, modified or new; ``None`` when
+    the project is not a git repository (nothing says what changed).
+
+    The add commands start from a clean tree, so these are what the
+    operation wrote.
+    """
+    try:
+        listed = subprocess.run(
+            ["git", "ls-files", "--modified", "--others", "--exclude-standard"],
+            cwd=project_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    paths = sorted(set(listed.stdout.splitlines()))
+    return [p for p in paths if (project_path / p).is_file()]
 
 
 def add_component_manual(

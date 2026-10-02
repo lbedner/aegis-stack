@@ -47,6 +47,7 @@ from ..core.option_spec import (
     variant_answers,
     variant_delta,
 )
+from ..core.post_gen_tasks import stack_holds_sqlite
 from ..core.project_map import render_project_map
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES, get_service_dependencies
@@ -295,11 +296,15 @@ def add_service_command(
         raise typer.Exit(1)
 
     # If AI service selected SQLite backend, ensure database is in required components
-    if (
-        ai_config.get("backend") == StorageBackends.SQLITE
-        and ComponentNames.DATABASE not in required_components
-    ):
+    if ai_config.get("backend") == StorageBackends.SQLITE:
         required_components.append(ComponentNames.DATABASE)
+
+    # One entry per component: ``database[sqlite]`` and ``database`` are the
+    # same component, and the first (options and all) is the one added.
+    by_name: dict[str, str] = {}
+    for component in required_components:
+        by_name.setdefault(extract_base_component_name(component), component)
+    required_components = list(by_name.values())
 
     # Check which components are already enabled
     enabled_components = []
@@ -344,29 +349,27 @@ def add_service_command(
                 f"\n{t('add_service.already_have_components', components=', '.join(non_core_enabled))}"
             )
 
+    # Services whose schema this add migrates (AI on the memory backend has
+    # none). Known before anything is written, so a database the running
+    # stack holds is refused up front rather than after the files land.
+    ai_needs_migrations = (
+        ai_config.get("backend", StorageBackends.MEMORY) != StorageBackends.MEMORY
+    )
+    services_with_migrations = [
+        s
+        for s in services_to_add
+        if service_base_map[s] in MIGRATION_SPECS
+        and (service_base_map[s] != AnswerKeys.SERVICE_AI or ai_needs_migrations)
+    ]
+    if services_with_migrations and stack_holds_sqlite(target_path):
+        brand.error(t("postgen.db_in_use"), err=True)
+        raise typer.Exit(1)
+
     # Confirm before proceeding
     typer.echo()
     if not yes and not typer.confirm(t("add_service.confirm"), default=True):
         brand.error(t("shared.operation_cancelled"))
         raise typer.Exit(0)
-
-    # Prepare update data for ManualUpdater
-    update_data: dict[str, bool | str] = {}
-
-    # Add service flags (use base service name to handle bracket syntax like ai[sqlite])
-    for service in services_to_add:
-        base_service = service_base_map[service]
-        include_key = AnswerKeys.include_key(base_service)
-        update_data[include_key] = True
-
-    # Add missing component flags (use base component name to handle bracket syntax)
-    for component in missing_components:
-        base_component = extract_base_component_name(component)
-        include_key = AnswerKeys.include_key(base_component)
-        update_data[include_key] = True
-        # A component a service pulls in (``ai[ollama]`` brings inference)
-        # records its options' defaults, as ``aegis add`` does.
-        update_data.update(component_option_answers(component))
 
     # Add services using ManualUpdater. Everything from here writes, so a
     # failure anywhere resets to this point: files, the answers file and
@@ -389,10 +392,15 @@ def add_service_command(
                 component_data[AnswerKeys.SCHEDULER_BACKEND] = scheduler_backend
             elif component == ComponentNames.DATABASE:
                 component_data[AnswerKeys.DATABASE_ENGINE] = StorageBackends.SQLITE
+            # A component a service pulls in (``ai[ollama]`` brings
+            # inference) records its options' defaults, as ``aegis add`` does.
             component_data.update(component_option_answers(component))
 
-            # Add the component
-            result = updater.add_component(component, component_data)
+            # Add the component, by its name: the bracket is its options,
+            # already in component_data.
+            result = updater.add_component(
+                extract_base_component_name(component), component_data
+            )
 
             if not result.success:
                 brand.error(
@@ -556,16 +564,6 @@ def add_service_command(
             )
 
         # Auto-run migrations for services that need them
-        # Exclude AI service with memory backend (doesn't need migrations)
-        ai_needs_migrations = (
-            ai_config.get("backend", StorageBackends.MEMORY) != StorageBackends.MEMORY
-        )
-        services_with_migrations = [
-            s
-            for s in services_to_add
-            if service_base_map[s] in MIGRATION_SPECS
-            and (service_base_map[s] != AnswerKeys.SERVICE_AI or ai_needs_migrations)
-        ]
         if services_with_migrations:
             brand.accent(f"\n{t('add_service.applying_migrations')}")
             from ..core.post_gen_tasks import run_migrations

@@ -498,6 +498,43 @@ class TestChatErrorsReachTheClientCorrectly:
         assert response.status_code == 500
         assert self.SECRET not in response.text
 
+    @pytest.mark.parametrize("kind", ["ProviderError", "AIServiceError"])
+    def test_a_service_error_keeps_its_text_server_side(
+        self, client: TestClient, kind: str
+    ) -> None:
+        """A provider's message can echo the request, a key or a URL; the
+        status code and a label say enough."""
+        from app.services.ai import service
+
+        with self._chat_raising(getattr(service, kind)(self.SECRET)):
+            response = client.post("/api/v1/ai/chat", json={"message": "hi"})
+        assert self.SECRET not in response.text
+
+        with self._stream_raising(getattr(service, kind)(self.SECRET)):
+            body = client.post(
+                "/api/v1/ai/chat/stream", json={"message": "hi", "user_id": "u"}
+            ).text
+        assert self.SECRET not in body
+
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("list_conversations", "/api/v1/ai/conversations?user_id=u"),
+            ("get_conversation", "/api/v1/ai/conversations/c1"),
+        ],
+    )
+    def test_conversation_reads_keep_their_text_server_side(
+        self, client: TestClient, method: str, path: str
+    ) -> None:
+        with patch(
+            f"app.components.backend.api.ai.service.ai_service.{method}",
+            new=AsyncMock(side_effect=RuntimeError(self.SECRET)),
+            create=True,
+        ):
+            response = client.get(path)
+        assert response.status_code == 500
+        assert self.SECRET not in response.text
+
     def _stream_raising(self, exc: Exception) -> Any:
         async def _raise(*_args: Any, **_kwargs: Any) -> Any:
             raise exc

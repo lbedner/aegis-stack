@@ -665,3 +665,48 @@ class TestCatalogSummary:
         ]
         for field in required_fields:
             assert field in config
+
+
+SECRET = "secret internal detail"
+
+
+class _Exploding:
+    """Every attribute, and every call, raises with ``SECRET``."""
+
+    def __getattr__(self, name: str) -> "_Exploding":
+        return self
+
+    def __call__(self, *args: object, **kwargs: object) -> None:
+        raise RuntimeError(SECRET)
+
+
+class TestFailuresKeepTheirTextInTheLog:
+    """A failing provider's text can carry keys, paths or SQL: it goes to
+    the log, never to the client. ``/ai/synthesize`` takes form fields."""
+
+    @pytest.mark.parametrize(
+        ("method", "path", "kwargs"),
+        [
+            ("post", "/api/v1/ai/transcribe", {"files": {"audio": ("a.wav", b"x")}}),
+            ("post", "/api/v1/ai/voice-chat", {"files": {"audio": ("a.wav", b"x")}}),
+            ("post", "/api/v1/ai/synthesize", {"data": {"text": "hi"}}),
+            ("post", "/api/v1/ai/synthesize/stream", {"data": {"text": "hi"}}),
+            ("get", "/api/v1/ai/stt/status", {}),
+            ("get", "/api/v1/ai/tts/status", {}),
+        ],
+    )
+    def test_speech_routes(
+        self, client: TestClient, method: str, path: str, kwargs: dict[str, object]
+    ) -> None:
+        with patch("app.components.backend.api.ai.speech.ai_service", _Exploding()):
+            response = getattr(client, method)(path, **kwargs)
+        assert SECRET not in response.text
+
+    def test_voice_preview(self, client: TestClient) -> None:
+        with patch(
+            "app.components.backend.api.voice.router.AIService",
+            return_value=_Exploding(),
+        ):
+            response = client.get(f"/api/v1/voice/preview/{OpenAIVoice.ALLOY.value}")
+        assert response.status_code == 503
+        assert SECRET not in response.text

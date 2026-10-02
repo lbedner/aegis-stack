@@ -361,6 +361,7 @@ MESSAGES: dict[str, str] = {
         "'alembic upgrade head'를 수동으로 실행하세요."
     ),
     "postgen.db_failed": "경고: 데이터베이스 마이그레이션 설정 실패",
+    "postgen.db_in_use": "프로젝트 컨테이너가 data/app.db를 열고 있습니다. 여기서 마이그레이션하면 재시작할 때까지 컨테이너가 손상된 사본을 읽게 됩니다. 스택을 중지하고(make stop) 다시 실행한 뒤 시작하세요(make serve-bg).",
     "postgen.revisions_failed": "모델에서 리비전을 생성하지 못했습니다",
     "postgen.db_manual": "프로젝트 생성 후 'alembic upgrade head'를 수동으로 실행하세요",
     "postgen.db_timeout": (

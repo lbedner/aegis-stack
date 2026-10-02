@@ -173,11 +173,14 @@ async def voice_chat(
 
     except HTTPException:
         raise
-    # ProviderError before AIServiceError when it subclasses it.
-    except ProviderError as e:
-        raise HTTPException(status_code=502, detail=f"AI provider error: {e}")
-    except AIServiceError as e:
-        raise HTTPException(status_code=503, detail=f"AI service error: {e}")
+    # ProviderError before AIServiceError when it subclasses it. Each is
+    # logged, not returned: a provider's text can carry keys or URLs.
+    except ProviderError:
+        logger.exception("Voice chat provider error")
+        raise HTTPException(status_code=502, detail="AI provider error") from None
+    except AIServiceError:
+        logger.exception("Voice chat service error")
+        raise HTTPException(status_code=503, detail="AI service error") from None
     except Exception:
         logger.exception("Voice chat failed")
         raise HTTPException(status_code=500, detail="Voice chat failed") from None
@@ -263,9 +266,9 @@ async def transcribe_audio(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Transcription failed")
-        raise HTTPException(status_code=503, detail=f"Transcription failed: {e}")
+        raise HTTPException(status_code=503, detail="Transcription failed") from None
 
 
 @router.get("/stt/status")
@@ -282,12 +285,9 @@ async def stt_status() -> dict[str, Any]:
             "status": "available",
             **status,
         }
-    except Exception as e:
-        return {
-            "service": "stt",
-            "status": "error",
-            "error": str(e),
-        }
+    except Exception:
+        logger.exception("STT status check failed")
+        return {"service": "stt", "status": "error"}
 
 
 @router.post("/synthesize")
@@ -324,9 +324,9 @@ async def synthesize_speech(
             },
         )
 
-    except Exception as e:
+    except Exception:
         logger.exception("Speech synthesis failed")
-        raise HTTPException(status_code=503, detail=f"Speech synthesis failed: {e}")
+        raise HTTPException(status_code=503, detail="Speech synthesis failed") from None
 
 
 @router.post("/synthesize/stream")
@@ -353,15 +353,22 @@ async def synthesize_speech_stream(
     """
     request = SpeechRequest(text=text, voice=voice, speed=speed)
 
+    # The first chunk before the response starts: once headers are out a
+    # failure can no longer be a 503, only a cut-off body.
+    try:
+        stream = ai_service.tts.synthesize_stream(request)
+        first = await anext(stream, b"")
+    except Exception:
+        logger.exception("Speech synthesis streaming failed")
+        raise HTTPException(status_code=503, detail="Speech synthesis failed") from None
+
     async def generate():
+        yield first
         try:
-            async for chunk in ai_service.tts.synthesize_stream(request):
+            async for chunk in stream:
                 yield chunk
-        except Exception as e:
-            logger.exception("Speech synthesis streaming failed")
-            raise HTTPException(
-                status_code=503, detail=f"Speech synthesis failed: {e}"
-            )
+        except Exception:
+            logger.exception("Speech synthesis stream broke off")
 
     return StreamingResponse(
         generate(),
@@ -386,10 +393,7 @@ async def tts_status() -> dict[str, Any]:
             "status": "available",
             **status,
         }
-    except Exception as e:
-        return {
-            "service": "tts",
-            "status": "error",
-            "error": str(e),
-        }
+    except Exception:
+        logger.exception("TTS status check failed")
+        return {"service": "tts", "status": "error"}
 {% endif %}

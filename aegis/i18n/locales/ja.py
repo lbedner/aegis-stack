@@ -376,6 +376,7 @@ MESSAGES: dict[str, str] = {
         "設定ファイルを確認し、手動で 'alembic upgrade head' を実行してください。"
     ),
     "postgen.db_failed": "警告：データベースマイグレーションのセットアップに失敗",
+    "postgen.db_in_use": "プロジェクトのコンテナが data/app.db を開いています。ここからマイグレーションすると、再起動するまでコンテナは壊れたコピーを読むことになります。スタックを停止し（make stop）、もう一度実行してから起動してください（make serve-bg）。",
     "postgen.revisions_failed": "モデルからリビジョンを生成できませんでした",
     "postgen.db_manual": "プロジェクト作成後に手動で 'alembic upgrade head' を実行してください",
     "postgen.db_timeout": (

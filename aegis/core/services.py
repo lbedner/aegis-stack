@@ -334,10 +334,19 @@ SERVICES: dict[str, ServiceSpec] = {
                 # on two answers).
                 "include_auth_org": [
                     "app/models/org.py",
+                    "app/services/auth/orgs.py",
+                    "app/services/auth/memberships.py",
+                    "app/services/auth/invites.py",
                     "app/components/backend/api/orgs",
                     "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
                     "tests/services/test_org_integration.py",
                     "tests/api/test_org_endpoints.py",
+                ],
+                # OAuth sign-in. Its middleware and tests are owned by no
+                # spec; the shared-file engine renders those per answer.
+                "include_oauth": [
+                    "app/components/backend/api/auth/oauth.py",
+                    "app/components/frontend/controls/auth/oauth_button.py",
                 ],
                 # htmx web frontend auth surface. Owned here, not by the htmx
                 # component: these exist only when auth does, and an
@@ -664,6 +673,10 @@ SERVICES: dict[str, ServiceSpec] = {
                     # off, rendering a dead RAG tab (issue #814). The modal's
                     # ``_HAS_RAG`` import guard handles its absence.
                     "app/components/frontend/dashboard/modals/rag_tab",
+                    # RAG modules inside the always-copied ai tree.
+                    "app/services/ai/domains/chat/rag_context.py",
+                    "app/services/ai/domains/chat/rag_stats_context.py",
+                    "tests/services/ai/test_rag_stats_context.py",
                 ],
                 # The Overseer's AI page, only where the htmx frontend is
                 # (auth brings the Overseer itself).
@@ -696,6 +709,8 @@ SERVICES: dict[str, ServiceSpec] = {
                 ],
                 "ai_voice": [
                     "app/components/backend/api/voice",
+                    # The spoken-turn endpoints under /ai.
+                    "app/components/backend/api/ai/speech.py",
                     "app/services/ai/domains/voice",
                     "tests/services/ai/voice",
                     "tests/api/test_voice_endpoints.py",

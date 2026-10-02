@@ -394,6 +394,12 @@ MESSAGES: dict[str, str] = {
         "and run 'alembic upgrade head' manually."
     ),
     "postgen.db_failed": "Warning: Database migration setup failed",
+    "postgen.db_in_use": (
+        "The project's running containers have data/app.db open, and migrating "
+        "it from here would leave them reading a broken copy until they "
+        "restart. Stop the stack (make stop), run this again, then start it "
+        "(make serve-bg)."
+    ),
     "postgen.revisions_failed": "Could not derive revisions from the models",
     "postgen.db_manual": "Run 'alembic upgrade head' manually after project creation",
     "postgen.db_timeout": (

@@ -257,6 +257,10 @@ def _foreign_gated_files(component: str, answers: dict[str, Any]) -> set[str]:
     return excluded
 
 
+# The one extras group that is a backend variant, not an answer to gate on.
+SCHEDULER_PERSISTENCE = "scheduler_persistence"
+
+
 def get_component_files(
     component: str,
     backend_variant: str | None = None,
@@ -317,21 +321,26 @@ def get_component_files(
             base.extend(extra_files)
         return sorted(set(_expand_directories_to_files(base)))
 
+    own_off: set[str] = set()
     if answers:
         # Option-gated extras join the add base when the project's answers
         # enable them. Groups whose name isn't an answer key (e.g.
         # ``scheduler_persistence``, handled by the backend_variant branch
-        # below) simply never match.
+        # below) simply never match. A group whose answer is off is taken
+        # back out: it may sit inside a primary directory (voice inside
+        # ``app/services/ai``), which would otherwise copy it anyway.
         for group, extra_files in _spec_extras(component).items():
             if answers.get(group):
                 base.extend(extra_files)
+            elif group != SCHEDULER_PERSISTENCE:
+                own_off |= set(_expand_directories_to_files(extra_files))
 
     if component == ComponentNames.SCHEDULER:
         # Scheduler persistence files are gated on ``scheduler_backend !=
         # memory``. On a database backend (sqlite/postgres) they render real
         # content (add them); on the memory backend they render empty, so
         # subtract them from the add base to avoid writing 0-byte stubs.
-        persistence = mapping.get("scheduler_persistence", [])
+        persistence = mapping.get(SCHEDULER_PERSISTENCE, [])
         base_files = set(_expand_directories_to_files(base))
         persistence_files = set(_expand_directories_to_files(persistence))
         if backend_variant in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
@@ -339,13 +348,13 @@ def get_component_files(
         else:
             files = base_files - persistence_files
         if answers:
-            files -= _foreign_gated_files(component, answers)
+            files -= _foreign_gated_files(component, answers) | own_off
         return sorted(files)
 
     # Expand directories to include all nested files
     files = set(_expand_directories_to_files(base))
     if answers:
-        files -= _foreign_gated_files(component, answers)
+        files -= _foreign_gated_files(component, answers) | own_off
     return sorted(files)
 
 
@@ -525,7 +534,11 @@ def get_shared_scope(all_paths: Iterable[str]) -> list[str]:
 
 
 def get_cross_spec_scope(
-    all_paths: Iterable[str], exists: Callable[[str], bool], operated: str
+    all_paths: Iterable[str],
+    exists: Callable[[str], bool],
+    operated: str,
+    *,
+    include_operated: bool = False,
 ) -> list[str]:
     """Other specs' owned files that are on disk, for an add/remove of ``operated``.
 
@@ -537,9 +550,13 @@ def get_cross_spec_scope(
     one before and after the operation and touches only those whose output
     changes; the rest are no-ops. ``exists`` keeps existence manifest-owned:
     a file not on disk is never created by an unrelated operation.
+
+    ``include_operated`` adds ``operated``'s own files: an option upgrade
+    (``ai`` -> ``ai[voice]``) changes the answers they branch on too.
     """
-    own = set(get_component_files(operated, full=True))
-    owned = get_all_owned_paths() - own
+    owned = get_all_owned_paths()
+    if not include_operated:
+        owned -= set(get_component_files(operated, full=True))
     return sorted(
         p for p in set(all_paths) & owned if p not in _ENGINE_UNSAFE_PATHS and exists(p)
     )

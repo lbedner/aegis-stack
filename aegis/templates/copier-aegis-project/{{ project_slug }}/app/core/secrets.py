@@ -58,6 +58,8 @@ HINT_MIN_LENGTH = 12
 # Where a value came from: ``.env`` and the environment, or the installed
 # store's own name (``database``, later ``vault``...).
 ENV = "env"
+# How a source reads to a person; another store reads as its own name.
+SOURCE_LABELS = {ENV: ".env", "database": "Saved here"}
 
 # What a check found: the provider took it, refused it, or could not be asked.
 VERIFIED, REJECTED, UNVERIFIED = "verified", "rejected", "unverified"
@@ -87,6 +89,13 @@ class Secret:
     # key read through ``settings`` (a ``Credential`` field), which only
     # ever sees ``.env``: listed, never set here.
     live: bool = True
+    # A ``Configurable`` setting rather than a credential
+    # (``app.core.saved_settings``): its own page, its default shown, and a
+    # value checked against its type: ``parse`` returns the text to store,
+    # or raises SecretRejectedError.
+    setting: bool = False
+    default: str | None = None
+    parse: Callable[[str], str] | None = None
 
     def is_needed(self) -> bool:
         return self.needed() if callable(self.needed) else self.needed
@@ -126,10 +135,31 @@ class SecretStatus:
     verifiable: bool = False
     live: bool = True
     choosable: bool = False
+    setting: bool = False
+    default: str | None = None
 
     @property
     def is_set(self) -> bool:
         return self.source is not None
+
+    @property
+    def state(self) -> str:
+        return state_label(self.source, self.needed, self.setting)
+
+    @property
+    def in_effect(self) -> str | None:
+        """The value to show: the hint where set, else a setting's default."""
+        return self.hint if self.is_set else self.default
+
+
+def state_label(source: str | None, needed: bool = False, setting: bool = False) -> str:
+    """Where a value comes from, as every surface words it. Unset: Default
+    (a setting), Missing (something enabled needs it), else Not used."""
+    if source is not None:
+        return SOURCE_LABELS.get(source, source.capitalize())
+    if setting:
+        return "Default"
+    return "Missing" if needed else "Not used"
 
 
 class SecretStore(Protocol):
@@ -234,6 +264,10 @@ def collect() -> tuple[Secret, ...]:
                 name,
                 Secret(name, owner="App", label=field.description or "", live=False),
             )
+    from app.core import saved_settings  # it imports this module
+
+    for entry in saved_settings.declarations():
+        found.setdefault(entry.name, entry)
     return tuple(found.values())
 
 
@@ -243,10 +277,20 @@ def declared() -> tuple[Secret, ...]:
     return collect()
 
 
+def is_setting(name: str) -> bool:
+    """Whether ``name`` is a saved setting (its own page), not a credential."""
+    return any(entry.name == name and entry.setting for entry in declared())
+
+
 def _from_env(name: str, source: Any = None) -> str | None:
     """What ``Settings`` loaded for ``name`` (``.env`` and the environment).
     ``source`` is a settings object handed in (a service built with its own
-    settings); the app's when None."""
+    settings); the app's when None. A setting at its default is not set
+    there: a saved value replaces it."""
+    from app.core import saved_settings  # it imports this module
+
+    if source is None and name in saved_settings.left_at_default():
+        return None
     value = getattr(settings if source is None else source, name, None)
     if value is None:
         return None
@@ -312,6 +356,8 @@ async def put(name: str, value: str, actor: str) -> Verdict | None:
     stored; one it could not be asked about is stored unverified. Returns
     the check's verdict, None where the name has no check."""
     entry, store = _writable_store(name)
+    if entry.parse is not None:
+        value = entry.parse(value)
     verdict = await _verify(entry, value)
     if verdict is not None and verdict.result == REJECTED:
         raise SecretRejectedError(verdict.message)
@@ -425,15 +471,26 @@ def _row(
         verifiable=entry.verify is not None,
         live=entry.live,
         choosable=entry.choices is not None,
+        setting=entry.setting,
+        default=entry.default,
     )
 
 
-async def status() -> list[SecretStatus]:
-    """Every declared secret: where it is set, its hint, when and by whom."""
+async def status_of(name: str) -> SecretStatus | None:
+    """One declared name's status, a credential's or a setting's."""
+    rows = await status(setting=is_setting(name))
+    return next((row for row in rows if row.name == name), None)
+
+
+async def status(setting: bool = False) -> list[SecretStatus]:
+    """Every declared secret (or, with ``setting``, every saved-setting
+    field): where it is set, its hint, when and by whom."""
     store = _active_store()
     stored = await store.stored() if store is not None else {}
     rows = []
     for entry in declared():
+        if entry.setting != setting:
+            continue
         if (value := _from_env(entry.name)) is not None:
             rows.append(_row(entry, ENV, _hint(entry, value)))
         elif store is not None and (kept := stored.get(entry.name)) is not None:

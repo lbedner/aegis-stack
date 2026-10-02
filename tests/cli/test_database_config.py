@@ -5,6 +5,7 @@ This module tests that database configuration is properly generated
 and accessible in projects that include the database component.
 """
 
+import ast
 from typing import TYPE_CHECKING
 
 from aegis.core.template_generator import TemplateGenerator
@@ -78,8 +79,14 @@ class TestDatabaseConfiguration:
         config_file = project_path / "app" / "core" / "config.py"
         config_content = config_file.read_text()
 
-        # Verify Any type is imported for type hints
-        assert "from typing import Any" in config_content
+        # Any is imported from typing (whatever else that line imports)
+        typing_names = {
+            alias.name
+            for node in ast.walk(ast.parse(config_content))
+            if isinstance(node, ast.ImportFrom) and node.module == "typing"
+            for alias in node.names
+        }
+        assert "Any" in typing_names
         assert "dict[str, Any]" in config_content
 
     def test_database_file_generated_with_component(

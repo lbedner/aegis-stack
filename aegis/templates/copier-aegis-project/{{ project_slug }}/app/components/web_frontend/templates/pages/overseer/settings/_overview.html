@@ -1,0 +1,9 @@
+{# Every Configurable setting by owner: its value, where it comes from and
+   its default. With a writable store, one not in .env opens the Secrets
+   page's own dialog; a saved value applies when the app restarts. #}
+{% from "pages/overseer/secrets/_macros.html" import backend_note, owner_tables with context %}
+<div id="settings" class="space-y-4">
+  {{ backend_note("settings", "Values saved here apply when the app restarts, in every process.", "save") }}
+  {% if groups %}{{ owner_tables("settings", groups, with_default=True) }}
+  {% else %}<p class="text-sm text-aegis-muted">No setting is marked <code class="font-mono">Configurable</code> yet.</p>{% endif %}
+</div>

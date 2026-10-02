@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import app.cli._i18n_click  # noqa: F401 — translate Click's built-in --help text
 import click
 import typer
-from app.cli import dns, docs, health, patterns, theme
+from app.cli import dns, docs, health, patterns, settings_cli, theme
 from app.i18n import detect_locale, lazy_t, set_locale, t
 from app.i18n.locales import AVAILABLE_LOCALES
 
@@ -61,6 +61,7 @@ app.add_typer(health.app, name="health")
 app.add_typer(docs.app, name="docs")
 app.add_typer(dns.app, name="dns")
 app.add_typer(patterns.app, name="patterns")
+app.add_typer(settings_cli.app, name="settings")
 
 # API load testing — no component dependencies, ships in every project
 from app.cli import api_load_test as _api_load_test  # noqa: E402

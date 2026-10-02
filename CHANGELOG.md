@@ -44,6 +44,23 @@
   failure offers to delete what was created, and a rerun resumes.
   `aegis deploy-destroy` removes the server, its DNS record and the uploaded
   key. Tokens come from `HCLOUD_TOKEN` and `CLOUDFLARE_API_TOKEN`.
+- **Overseer > Settings: the settings that are not secrets.** Annotate a
+  `Settings` field with `Configurable("Owner")` and it is listed on a new
+  Overseer Settings page, grouped by what reads it, with its value, where it
+  comes from and its default. With the secrets component installed, one that
+  `.env` does not set can be saved there, with `my-app settings set|reset`, or
+  through the secrets API (`GET /api/v1/secrets?setting=true`); the value is
+  checked against the field's type (a `bool`, `Literal`, `Enum` or a named
+  list such as `choices=timezones` is picked from a list, never typed), kept
+  in the same store, and applies when
+  the app restarts, in every process: the webserver, scheduler and worker now
+  apply saved values (and the active model) as they start through one
+  `app.core.boot`. `.env` still wins. Marked out of the box: health,
+  traffic, account lockout, worker history, the scheduler timezone, sentiment,
+  the finance lookback and the insights project settings; a generated test
+  fails if a marked setting is read at import, where a saved value could
+  never reach it. The Flet Secrets modal lists them too.
+
 - **Secrets: finance and insights keys, provider pickers, sending domains.**
   Plaid (`PLAID_CLIENT_ID`, `PLAID_SECRET`, needed when Plaid is enabled
   and checked against Plaid on paste), SnapTrade, and the insights GitHub

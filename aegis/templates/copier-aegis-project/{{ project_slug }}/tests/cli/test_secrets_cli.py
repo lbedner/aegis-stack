@@ -2,42 +2,17 @@
 terminal. A value comes in through a hidden prompt or stdin, never argv,
 and nothing prints it back."""
 
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
 from app.core import secrets
 from app.core.config import settings
-from app.core.secrets import Secret, StoredSecret
+from app.core.secrets import Secret
 from tests._cli import invoke
+from tests._secret_settings import FakeStore, use_store
 
 KEY = "sk-live-0123456789abcdWXYZ"
-
-
-class FakeStore:
-    name = "database"
-    writable = True
-
-    def __init__(self) -> None:
-        self.values: dict[str, str] = {}
-        self.actors: list[str] = []
-
-    async def get(self, name: str) -> str | None:
-        return self.values.get(name)
-
-    async def get_many(self, names: list[str]) -> dict[str, str | None]:
-        return {name: self.values.get(name) for name in names}
-
-    async def put(self, name: str, value: str, hint: str | None, actor: str) -> None:
-        self.values[name] = value
-        self.actors.append(actor)
-
-    async def delete(self, name: str, actor: str) -> None:
-        self.values.pop(name, None)
-
-    async def stored(self) -> dict[str, StoredSecret]:
-        return {n: StoredSecret(hint=v[-4:]) for n, v in self.values.items()}
 
 
 async def _accepts(value: str) -> None:
@@ -49,14 +24,11 @@ async def _refuses(value: str) -> None:
 
 
 @pytest.fixture
-def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeStore]:
-    fake = FakeStore()
-    secrets.set_store(fake)
+def store(monkeypatch: pytest.MonkeyPatch) -> FakeStore:
     monkeypatch.setitem(settings.__dict__, "TEST_API_KEY", None)
     monkeypatch.setitem(settings.__dict__, "TEST_OTHER_KEY", None)
     _declare(monkeypatch, _accepts)
-    yield fake
-    secrets.set_store(None)
+    return use_store(monkeypatch)
 
 
 def _declare(monkeypatch: pytest.MonkeyPatch, verify: Any) -> None:

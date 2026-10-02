@@ -40,14 +40,10 @@ async def sync_active_model() -> None:
     what makes ``llm use`` and the Cloud Catalog tab take effect on the
     running server without a restart.
     """
-    from app.core.db import get_async_session
     from app.services.ai.domains.llm import active_model
 
-    try:
-        async with get_async_session() as session:
-            applied = await active_model.load_into_settings(session, settings)
-    except Exception:
-        return  # No catalog table yet; the .env default is already in effect.
+    # No catalog table yet reads as nothing applied: .env is in effect.
+    applied = await active_model.sync_from_db(settings)
     if applied and (
         ai_service.config.model != settings.AI_MODEL
         or ai_service.config.provider.value != settings.AI_PROVIDER

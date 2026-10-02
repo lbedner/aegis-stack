@@ -14,7 +14,8 @@ from app.core import secrets
 from app.core.config import settings
 from app.core.secrets import Secret
 from app.services.system.models import ComponentStatus
-from tests.web.dom import one, select, text
+from tests._secret_settings import FakeStore, use_store
+from tests.web.dom import one, row_text, select, text
 from tests.web.overseer import sign_in, status_with
 
 KEY = "sk-test-0123456789wxyz"
@@ -41,9 +42,7 @@ def page(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Generator[str]:
 
 
 def _row(html: str, name: str) -> str:
-    return next(
-        text(row) for row in select(html, "#secrets tbody tr") if name in text(row)
-    )
+    return row_text(html, "#secrets tbody tr", name)
 
 
 def test_the_sidebar_links_to_it(page: str) -> None:
@@ -105,47 +104,16 @@ def test_it_says_how_values_change(page: str) -> None:
     assert "restart" in text(one(page, "#secrets-backend")).lower()
 
 
-class FakeStore:
-    """A writable store, the shape the secrets component installs."""
-
-    name = "database"
-    writable = True
-
-    def __init__(self) -> None:
-        self.values: dict[str, str] = {}
-
-    async def get(self, name: str) -> str | None:
-        return self.values.get(name)
-
-    async def get_many(self, names: list[str]) -> dict[str, str | None]:
-        return {name: self.values.get(name) for name in names}
-
-    async def put(self, name: str, value: str, hint: str | None, actor: str) -> None:
-        self.values[name] = value
-
-    async def delete(self, name: str, actor: str) -> None:
-        self.values.pop(name, None)
-
-    async def stored(self) -> dict[str, secrets.StoredSecret]:
-        return {
-            n: secrets.StoredSecret(hint=v[-4:], set_by="ops@example.com")
-            for n, v in self.values.items()
-        }
-
-
 @pytest.fixture
 def writable(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
-) -> Generator[tuple[TestClient, FakeStore]]:
+) -> tuple[TestClient, FakeStore]:
     sign_in(app, monkeypatch, status_with(SECRETS_ENTRY))
     monkeypatch.setattr(secrets, "declared", lambda: DECLARED)
     monkeypatch.setitem(settings.__dict__, "OPENAI_API_KEY", KEY)
     monkeypatch.setitem(settings.__dict__, "ANTHROPIC_API_KEY", None)
     monkeypatch.setitem(settings.__dict__, "RESEND_FROM_EMAIL", None)
-    store = FakeStore()
-    secrets.set_store(store)
-    yield TestClient(app), store
-    secrets.set_store(None)
+    return TestClient(app), use_store(monkeypatch)
 
 
 PARTIALS = "/partials/overseer/secrets"

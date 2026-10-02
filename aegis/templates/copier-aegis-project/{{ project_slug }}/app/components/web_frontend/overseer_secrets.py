@@ -9,6 +9,7 @@ here (``routes/partials/overseer_secrets.py``). An unset key reads Missing
 when something enabled needs it, Not used when it is only a choice, and a
 key with a provider check can be tested wherever it is set."""
 
+from collections.abc import Callable
 from importlib.util import find_spec
 from itertools import groupby
 from typing import Any
@@ -47,9 +48,6 @@ def url() -> str:
 
 templates.env.globals["secrets_page"] = url
 
-# How each source reads on the page; another store reads as its own name
-# ("vault" -> "Vault").
-SOURCES = {secrets.ENV: ".env", "database": "Saved here"}
 # A provider check's toast tone.
 VERDICT_TONES = {
     secrets.VERIFIED: "ok",
@@ -58,37 +56,57 @@ VERDICT_TONES = {
 }
 
 
-def _row(row: secrets.SecretStatus, writable: bool) -> dict[str, Any]:
-    if not row.is_set:
-        # Needed by something enabled, or a provider this app could use.
-        state = (
-            status_cell("Missing", "warn")
-            if row.needed
-            else status_cell("Not used", "muted")
-        )
-        value = f"{row.name}=..."
-    else:
-        source = row.source or secrets.ENV
-        state = status_cell(SOURCES.get(source, source.capitalize()), "ok")
-        value = (f"•••• {row.hint}" if row.secret else row.hint) if row.hint else "Set"
-    when = (
-        f"{format_relative_time(row.set_at)}"
-        + (f" by {row.set_by}" if row.set_by else "")
-        if row.set_at
-        else ""
-    )
+def updated(row: secrets.SecretStatus) -> str:
+    """When a stored value was set, and by whom; nothing for ``.env``."""
+    if not row.set_at:
+        return ""
+    by = f" by {row.set_by}" if row.set_by else ""
+    return f"{format_relative_time(row.set_at)}{by}"
+
+
+def page_context(
+    rows: list[secrets.SecretStatus],
+    row: Callable[[secrets.SecretStatus, bool], dict[str, Any]],
+) -> dict[str, Any]:
+    """Rows grouped by the code that reads them, and whether (and where)
+    they can be changed: the Secrets and Settings pages alike."""
+    writable = secrets.writable()
+    return {
+        "groups": [
+            {"owner": owner, "rows": [row(r, writable) for r in members]}
+            for owner, members in groupby(rows, key=lambda r: r.owner)
+        ],
+        "writable": writable,
+        "store": (secrets.store_name() or "").capitalize(),
+    }
+
+
+def base_row(row: secrets.SecretStatus) -> dict[str, Any]:
+    """What a Secrets or Settings row always carries."""
     return {
         "name": row.name,
         "label": row.label,
+        "when": updated(row),
+        "in_env": row.source == secrets.ENV,
+        "url": f"{PARTIALS}/{row.name}",
+    }
+
+
+def _row(row: secrets.SecretStatus, writable: bool) -> dict[str, Any]:
+    if not row.is_set:
+        # Needed by something enabled, or a provider this app could use.
+        state = status_cell(row.state, "warn" if row.needed else "muted")
+        value = f"{row.name}=..."
+    else:
+        state = status_cell(row.state, "ok")
+        value = (f"•••• {row.hint}" if row.secret else row.hint) if row.hint else "Set"
+    return base_row(row) | {
         "state": state,
         "shown": {"text": value, "missing": not row.is_set},
-        "when": when,
         "editable": writable and row.live and row.source != secrets.ENV,
         # Read through ``settings``: only ``.env`` ever reaches that code.
         "env_only": writable and not row.live and row.source != secrets.ENV,
-        "in_env": row.source == secrets.ENV,
         "testable": row.is_set and row.verifiable,
-        "url": f"{PARTIALS}/{row.name}",
     }
 
 
@@ -106,14 +124,7 @@ async def section_context(
 ) -> dict[str, Any]:
     """The declared secrets by owner, and whether they can be changed here."""
     rows = await secrets.status()
-    writable = secrets.writable()
-    return {
-        "groups": [
-            {"owner": owner, "rows": [_row(r, writable) for r in members]}
-            for owner, members in groupby(rows, key=lambda r: r.owner)
-        ],
-        "writable": writable,
+    return page_context(rows, _row) | {
         "summary": _summary(rows),
-        "store": (secrets.store_name() or "").capitalize(),
         "section_subtitle": "Every credential the app reads. Values are never shown.",
     }

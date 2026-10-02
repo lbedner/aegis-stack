@@ -13,6 +13,7 @@ from app.cli.ai.shared import (
 from app.i18n import lazy_t, t
 
 from ...core import secrets
+from ...core.audit import cli_actor
 from ...core.config import settings
 from ...services.ai.config import get_ai_config
 from ...services.ai.models import (
@@ -156,10 +157,8 @@ async def providers() -> None:
 async def _save_to_store(name: str, value: str) -> None:
     """Save a provider key in the secrets store: checked with the provider
     first, audited, and live without a restart. A refused key stops here."""
-    import getpass
-
     try:
-        verdict = await secrets.put(name, value, actor=f"cli:{getpass.getuser()}")
+        verdict = await secrets.put(name, value, actor=cli_actor())
     except (secrets.SecretRejectedError, secrets.SecretsReadOnlyError) as exc:
         console.print(f"  [{theme.ERROR}]✗[/{theme.ERROR}] {exc}")
         raise typer.Exit(1) from None

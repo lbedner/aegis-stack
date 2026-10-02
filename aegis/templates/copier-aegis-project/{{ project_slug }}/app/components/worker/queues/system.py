@@ -16,6 +16,7 @@ from app.components.worker.tasks.simple_system_tasks import (
     cleanup_temp_files,
     system_health_check,
 )
+from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
 from app.core.queue_workers import concurrency_for
@@ -58,7 +59,8 @@ class WorkerSettings:
 
     @staticmethod
     async def on_startup(ctx: dict[str, Any]) -> None:
-        """Publish worker.started event on worker startup."""
+        """Apply what the Overseer saved, then publish worker.started."""
+        await apply_saved_overrides()
         try:
             redis_url = (
                 settings.redis_url_effective

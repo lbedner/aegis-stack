@@ -16,7 +16,7 @@ from app.components.web_frontend.overseer_nav import (
     build_navigation,
     find_item,
 )
-from app.components.web_frontend.overseer_sections import SECTIONED_PAGES
+from app.components.web_frontend.overseer_sections import SECTIONED_PAGES, STANDALONE
 from app.components.web_frontend.routes.partials import overseer_auth as overseer_auth_partials
 from app.components.web_frontend.routes.partials import (
     overseer_scheduler as overseer_scheduler_partials,
@@ -65,7 +65,6 @@ from app.components.web_frontend.routes.partials import (
 {%- endif %}
 from app.components.web_frontend import (
     overseer_connections,
-    overseer_patterns,
     overseer_redis,
     overseer_secrets,
     overseer_worker,
@@ -103,9 +102,6 @@ from fastapi.responses import HTMLResponse
 {%- endif %}
 
 {%- if include_auth %}
-# Overseer pages that are not a component or service in the health tree.
-STANDALONE = {"patterns": overseer_patterns.ITEM, "secrets": overseer_secrets.ITEM}
-
 # Every Overseer page, stream and action is admin-only (overseer_access).
 router = APIRouter(dependencies=[Depends(overseer_gate)])
 {%- else %}
@@ -248,18 +244,6 @@ async def overseer_server_connections(
     )
 
 
-@router.get("/overseer/secrets", response_class=HTMLResponse, include_in_schema=False)
-async def overseer_secrets_page(
-    request: Request,
-    user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_async_db),
-) -> Response:
-    """Every credential the app reads; the component's page when it is there."""
-    if overseer_secrets.has_component():
-        return RedirectResponse(url=overseer_secrets.COMPONENT_URL, status_code=303)
-    return await _overseer_detail(request, "secrets", "secrets", user, db)
-
-
 @router.get("/overseer/patterns", response_class=HTMLResponse, include_in_schema=False)
 @router.get("/overseer/patterns/{section}", response_class=HTMLResponse, include_in_schema=False)
 async def overseer_patterns_page(
@@ -273,6 +257,20 @@ async def overseer_patterns_page(
     if section and section not in labels[1:]:
         raise HTTPException(status_code=404)
     return await _overseer_detail(request, "patterns", "patterns", user, db, section or labels[0])
+
+
+@router.get("/overseer/{group}", response_class=HTMLResponse, include_in_schema=False)
+async def overseer_standalone_page(
+    request: Request,
+    group: str,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """A page outside the health tree (``STANDALONE``). Secrets lives on the
+    component's own page when the stack has it."""
+    if group == "secrets" and overseer_secrets.has_component():
+        return RedirectResponse(url=overseer_secrets.COMPONENT_URL, status_code=303)
+    return await _overseer_detail(request, group, group, user, db)
 
 
 @router.get("/overseer/{group}/{name}", response_class=HTMLResponse, include_in_schema=False)

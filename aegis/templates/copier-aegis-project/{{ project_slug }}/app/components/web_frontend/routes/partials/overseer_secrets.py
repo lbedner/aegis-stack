@@ -13,9 +13,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
-from app.components.web_frontend import overseer_secrets
+from app.components.web_frontend import overseer_secrets, overseer_settings
 from app.components.web_frontend.rendering import dialog, dialog_done, toast_response
-from app.core import secrets
+from app.core import saved_settings, secrets
 from app.models.user import User
 from app.services.auth.deps import get_optional_user
 
@@ -26,12 +26,20 @@ router = APIRouter(prefix=overseer_secrets.PARTIALS)
 FORM = "pages/overseer/secrets/_set.html"
 
 
+def _home(name: str) -> str:
+    """The page a dialog returns to: Settings for a setting, else Secrets."""
+    if secrets.is_setting(name):
+        return overseer_settings.ITEM.url
+    return overseer_secrets.url()
+
+
 async def _form(
     request: Request, name: str, errors: list[str], status_code: int = 200
 ) -> Response:
-    row = next((r for r in await secrets.status() if r.name == name), None)
+    row = await secrets.status_of(name)
     if row is None:
         raise HTTPException(status_code=404)
+    offered = await secrets.choices(name) if row.choosable and not row.secret else []
     return dialog(
         request,
         FORM,
@@ -40,8 +48,10 @@ async def _form(
         errors=errors,
         url=f"{overseer_secrets.PARTIALS}/{name}",
         stored=row.is_set and row.source == secrets.store_name(),
-        # What the provider offers, for a field shown in the clear.
-        choices=await secrets.choices(name) if row.choosable and not row.secret else [],
+        # What the provider offers, for a field shown in the clear: a hint
+        # list for provider config, the only values for a setting.
+        choices=offered if not row.setting else [],
+        picks=[{"id": v, "name": label} for v, label in offered] if row.setting else [],
     )
 
 
@@ -71,11 +81,11 @@ async def save(
     except secrets.UnknownSecretError:
         raise HTTPException(status_code=404) from None
     if verdict is None:
-        return dialog_done(overseer_secrets.url(), f"{name} saved")
-    tone = overseer_secrets.VERDICT_TONES[verdict.result]
-    word = "verified" if verdict.result == secrets.VERIFIED else "not verified"
+        return dialog_done(_home(name), saved_settings.saved(name))
     return dialog_done(
-        overseer_secrets.url(), f"{name} saved, {word}. {verdict.message}", tone
+        _home(name),
+        saved_settings.saved(name, verdict.result, verdict.message),
+        overseer_secrets.VERDICT_TONES[verdict.result],
     )
 
 
@@ -105,4 +115,4 @@ async def remove(
         return await _form(request, name, [str(exc)], 422)
     except secrets.UnknownSecretError:
         raise HTTPException(status_code=404) from None
-    return dialog_done(overseer_secrets.url(), f"{name} removed")
+    return dialog_done(_home(name), saved_settings.removed(name))

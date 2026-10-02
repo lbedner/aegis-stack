@@ -1,5 +1,6 @@
 """Secrets component detail modal: every declared credential, and a paste
-field for each one this app may set. An unset key reads Missing when
+field for each one this app may set; below them the settings marked
+``Configurable``, whose saved values apply when the app restarts. An unset key reads Missing when
 something enabled needs it and Not used when it is only a choice; a key
 with a provider check can be tested, and is checked again when saved.
 
@@ -25,6 +26,7 @@ from app.components.frontend.controls.snack_bar import (
 )
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core import saved_settings, secrets
 from app.core.client import error_detail
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -35,8 +37,6 @@ from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
 API = "/api/v1/secrets"
-ENV = "env"
-SOURCES = {ENV: ".env", "database": "Saved here"}
 # A provider check's snack bar, by its result.
 VERDICT_BARS: dict[str, type[BaseSnackBar]] = {
     "verified": SuccessSnackBar,
@@ -52,32 +52,49 @@ def _summary(rows: list[dict[str, Any]]) -> str:
     return f"{done} of {len(needed)} needed keys set · {unused} optional not used"
 
 
+def _status(row: dict[str, Any]) -> secrets.SecretStatus:
+    """The API's row as core's status (it is ``asdict`` of one), so the
+    wording of its state and value is core's."""
+    return secrets.SecretStatus(**row)
+
+
 def _shown(row: dict[str, Any]) -> str:
-    if row["source"] is None:
-        # Needed by something enabled, or a provider this app could use.
-        return "Missing" if row.get("needed") else "Not used"
-    source = SOURCES.get(row["source"], str(row["source"]).capitalize())
-    hint = row.get("hint")
-    if not hint:
-        return source
-    return f"{source} · {'•••• ' if row.get('secret', True) else ''}{hint}"
+    status = _status(row)
+    value = status.in_effect
+    if not value or not (status.is_set or status.setting):
+        return status.state
+    return f"{status.state} · {'•••• ' if status.secret else ''}{value}"
+
+
+def _menu(offered: list[dict[str, str]], **kwargs: Any) -> NativeDropdown:
+    """A dropdown of the API's choices for a name."""
+    options = [ft.dropdown.Option(key=c["value"], text=c["label"]) for c in offered]
+    return NativeDropdown(options=options, hint_text="Pick one", **kwargs)
 
 
 class SecretsSection(ft.Column):
-    """One row per declared secret, grouped by the code that reads it."""
+    """One row per declared secret (or, with ``setting``, per saved
+    setting), grouped by the code that reads it."""
 
-    def __init__(self, page: ft.Page, writable: bool) -> None:
+    def __init__(self, page: ft.Page, writable: bool, setting: bool = False) -> None:
         super().__init__(spacing=Theme.Spacing.SM)
         self._page = page
         self._writable = writable
-        self._fields: dict[str, StyledTextField] = {}
+        self._setting = setting
+        self._list = f"{API}?setting=true" if setting else API
+        self._fields: dict[str, ft.TextField | ft.Dropdown] = {}
+        # A setting's closed set of values, by name: picked, never typed.
+        self._offered: dict[str, list[dict[str, str]]] = {}
+
+    @property
+    def _api(self) -> Any:
+        return get_session_state(self._page).api_client
 
     def did_mount(self) -> None:
         self._page.run_task(self.load)
 
     async def load(self) -> None:
-        api = get_session_state(self._page).api_client
-        status, rows = await api.request_with_status("GET", API)
+        status, rows = await self._api.request_with_status("GET", self._list)
         self.controls.clear()
         self._fields.clear()
         if status != 200 or not isinstance(rows, list):
@@ -88,7 +105,18 @@ class SecretsSection(ft.Column):
                 )
             )
         else:
-            self.controls.append(PrimaryText(_summary(rows)))
+            if self._setting:
+                self._offered = {
+                    row["name"]: offered
+                    for row in rows
+                    if row.get("choosable")
+                    and (offered := await self._choices(row["name"]))
+                }
+            self.controls.append(
+                SecondaryText("Saved values apply when the app restarts.")
+                if self._setting
+                else PrimaryText(_summary(rows))
+            )
             owner = None
             for row in rows:
                 if row["owner"] != owner:
@@ -111,23 +139,16 @@ class SecretsSection(ft.Column):
             cells.append(
                 PulseButton(lambda: self.test(name), "Test", "muted", compact=True)
             )
-        if row["source"] == ENV:
+        if row["source"] == secrets.ENV:
             cells.append(SecondaryText("Change it in .env"))
         elif not row.get("live", True):
             # Read through ``settings``: only ``.env`` ever reaches that code.
             cells.append(SecondaryText("Set it in .env"))
         elif self._writable:
             masked = row.get("secret", True)
-            field = StyledTextField(
-                password=masked,
-                can_reveal_password=masked,
-                hint_text="Paste a new value" if row["source"] else "Paste the value",
-                data=name,
-                expand=True,
-                compact=True,
-            )
+            field = self._field(row)
             self._fields[name] = field
-            if row.get("choosable") and not masked:
+            if row.get("choosable") and not masked and name not in self._offered:
                 cells.append(
                     PulseButton(lambda: self.pick(name), "Pick", "muted", compact=True)
                 )
@@ -144,11 +165,33 @@ class SecretsSection(ft.Column):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
+    def _field(self, row: dict[str, Any]) -> ft.TextField | ft.Dropdown:
+        """A setting with a closed set of values is a dropdown at the value
+        in effect; anything else is typed, a key masked."""
+        offered = self._offered.get(row["name"])
+        if offered:
+            return _menu(offered, value=_status(row).in_effect)
+        masked = row.get("secret", True)
+        return StyledTextField(
+            password=masked,
+            can_reveal_password=masked,
+            hint_text="Paste a new value" if row["source"] else "Paste the value",
+            data=row["name"],
+            expand=True,
+            compact=True,
+        )
+
+    async def _choices(self, name: str) -> list[dict[str, str]]:
+        """What ``name`` may be set to (the API's choices); empty if nothing."""
+        status, body = await self._api.request_with_status(
+            "GET", f"{API}/{name}/choices"
+        )
+        return body if status == 200 and isinstance(body, list) else []
+
     async def pick(self, name: str) -> None:
         """Offer what the provider lists for ``name`` beside its field."""
-        api = get_session_state(self._page).api_client
-        status, body = await api.request_with_status("GET", f"{API}/{name}/choices")
-        if status != 200 or not body:
+        body = await self._choices(name)
+        if not body:
             WarningSnackBar(f"The provider listed nothing for {name}; type it.").launch(
                 self._page
             )
@@ -157,11 +200,7 @@ class SecretsSection(ft.Column):
         row = next(
             c for c in self.controls if isinstance(c, ft.Row) and field in c.controls
         )
-        menu = NativeDropdown(
-            options=[ft.dropdown.Option(key=c["value"], text=c["label"]) for c in body],
-            on_change=lambda e: self.choose(name, e.control.value),
-            hint_text="Pick one",
-        )
+        menu = _menu(body, on_change=lambda e: self.choose(name, e.control.value))
         row.controls.insert(row.controls.index(field), menu)
         if self.page is not None:
             row.update()
@@ -178,36 +217,32 @@ class SecretsSection(ft.Column):
         if not value:
             ErrorSnackBar(f"Paste a value for {name}.").launch(self._page)
             return
-        api = get_session_state(self._page).api_client
-        status, body = await api.request_with_status(
+        status, body = await self._api.request_with_status(
             "PUT", f"{API}/{name}", json={"value": value}
         )
         check = body.get("check") if status == 200 and isinstance(body, dict) else None
         if status != 200:
             await self._done(ErrorSnackBar, error_detail(body, status))
         elif check is None:
-            await self._done(SuccessSnackBar, f"{name} saved")
+            await self._done(SuccessSnackBar, saved_settings.saved(name))
         else:
-            word = "verified" if check["result"] == "verified" else "not verified"
             await self._done(
                 VERDICT_BARS[check["result"]],
-                f"{name} saved, {word}. {check['message']}",
+                saved_settings.saved(name, check["result"], check["message"]),
             )
 
     async def test(self, name: str) -> None:
         """Ask the provider whether the key in effect works."""
-        api = get_session_state(self._page).api_client
-        status, body = await api.request_with_status("POST", f"{API}/{name}/test")
+        status, body = await self._api.request_with_status("POST", f"{API}/{name}/test")
         if status == 200 and isinstance(body, dict):
             VERDICT_BARS[body["result"]](body["message"]).launch(self._page)
         else:
             ErrorSnackBar(error_detail(body, status)).launch(self._page)
 
     async def remove(self, name: str) -> None:
-        api = get_session_state(self._page).api_client
-        status, body = await api.request_with_status("DELETE", f"{API}/{name}")
+        status, body = await self._api.request_with_status("DELETE", f"{API}/{name}")
         if status == 204:
-            await self._done(SuccessSnackBar, f"{name} removed")
+            await self._done(SuccessSnackBar, saved_settings.removed(name))
         else:
             await self._done(ErrorSnackBar, error_detail(body, status))
 
@@ -241,6 +276,16 @@ class SecretsDetailDialog(BaseDetailPopup):
                 overview,
                 ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Container(SecretsSection(page, writable), padding=Theme.Spacing.MD),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Container(
+                    ft.Column(
+                        [
+                            H3Text("Settings"),
+                            SecretsSection(page, writable, setting=True),
+                        ]
+                    ),
+                    padding=Theme.Spacing.MD,
+                ),
             ],
             width=900,
             height=620,

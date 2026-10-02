@@ -6,8 +6,6 @@ a value set in ``.env`` still wins over it. Nothing here ever hands back a
 stored value except ``get`` to the code that uses it.
 """
 
-from datetime import UTC, datetime
-
 import httpx
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -16,46 +14,15 @@ import pytest
 from app.core import secrets
 from app.core.config import settings
 from app.core.credential import Credential
-from app.core.secrets import Secret, StoredSecret
+from app.core.secrets import Secret
 from tests._probe import answering
+from tests._secret_settings import FakeStore
 
 KEY = "sk-test-0123456789abcd"
 DECLARED = (
     Secret("OPENAI_API_KEY", owner="AI"),
     Secret("RESEND_FROM_EMAIL", owner="Email", label="From address", secret=False),
 )
-
-
-class FakeStore:
-    """A writable backend, the shape the secrets component implements."""
-
-    name = "database"
-    writable = True
-
-    def __init__(self) -> None:
-        self.values: dict[str, str] = {}
-        self.hints: dict[str, str | None] = {}
-
-    async def get(self, name: str) -> str | None:
-        return self.values.get(name)
-
-    async def get_many(self, names: list[str]) -> dict[str, str | None]:
-        return {name: self.values.get(name) for name in names}
-
-    async def put(self, name: str, value: str, hint: str | None, actor: str) -> None:
-        self.values[name] = value
-        self.hints[name] = hint
-
-    async def delete(self, name: str, actor: str) -> None:
-        self.values.pop(name, None)
-
-    async def stored(self) -> dict[str, StoredSecret]:
-        return {
-            name: StoredSecret(
-                hint=value[-4:], set_at=datetime(2026, 10, 1, tzinfo=UTC), set_by="ops"
-            )
-            for name, value in self.values.items()
-        }
 
 
 @pytest.fixture(autouse=True)
@@ -420,20 +387,32 @@ async def _unreachable_choices() -> list[tuple[str, str]]:
 async def test_choices_come_from_the_declaration(env: pytest.MonkeyPatch) -> None:
     _declare(
         env,
-        Secret("TWILIO_PHONE_NUMBER", owner="Twilio", secret=False, choices=_two_numbers),
+        Secret(
+            "TWILIO_PHONE_NUMBER", owner="Twilio", secret=False, choices=_two_numbers
+        ),
         Secret("OPENAI_API_KEY", owner="AI"),
     )
     assert await secrets.choices("TWILIO_PHONE_NUMBER") == await _two_numbers()
     assert await secrets.choices("OPENAI_API_KEY") == []
     rows = {row.name: row for row in await secrets.status()}
-    assert rows["TWILIO_PHONE_NUMBER"].choosable and not rows["OPENAI_API_KEY"].choosable
+    assert (
+        rows["TWILIO_PHONE_NUMBER"].choosable and not rows["OPENAI_API_KEY"].choosable
+    )
 
 
 async def test_a_provider_that_cannot_answer_offers_no_choices(
     env: pytest.MonkeyPatch,
 ) -> None:
     """Typing the value still works; the picker is a convenience."""
-    _declare(env, Secret("TWILIO_PHONE_NUMBER", owner="Twilio", secret=False, choices=_unreachable_choices))
+    _declare(
+        env,
+        Secret(
+            "TWILIO_PHONE_NUMBER",
+            owner="Twilio",
+            secret=False,
+            choices=_unreachable_choices,
+        ),
+    )
     assert await secrets.choices("TWILIO_PHONE_NUMBER") == []
 
 

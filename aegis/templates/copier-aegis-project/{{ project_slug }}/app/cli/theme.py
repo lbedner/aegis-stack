@@ -14,7 +14,7 @@ they also work directly in Rich markup (``f"[{theme.ACCENT}]...[/]"``) and Rich
 table column styles (``style=theme.ACCENT``).
 """
 
-from typing import Any
+from typing import Any, NoReturn
 
 import typer
 
@@ -59,6 +59,12 @@ def bad(
 ) -> None:
     """An error / failed state, in brand red."""
     typer.secho(message, fg=_RED, bold=bold or None, nl=nl, err=err)
+
+
+def fail(message: str) -> NoReturn:
+    """Say what went wrong, in brand red, and exit 1."""
+    bad(f"✗ {message}")
+    raise typer.Exit(1)
 
 
 def accent(

@@ -16,6 +16,8 @@ from apscheduler.events import (
     EVENT_JOB_SUBMITTED,
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from app.core.boot import apply_saved_overrides
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database, db_session
@@ -86,33 +88,6 @@ def _cleanup_stale_jobs() -> None:
 {% endif %}
 
 
-{%- if include_ai and ai_backend in ("sqlite", "postgres") %}
-async def _apply_active_model() -> None:
-    """Replay the stored active-model selection into this process's settings.
-
-    Mirrors the backend's ``llm_active_model`` startup hook. A missing table
-    (migrations not yet run) must not stop the scheduler from booting: without
-    an override the .env default is already correct.
-    """
-    from app.core.config import settings
-    from app.core.db import get_async_session
-    from app.services.ai.domains.llm import active_model
-
-    try:
-        async with get_async_session() as session:
-            applied = await active_model.load_into_settings(session, settings)
-    except Exception:
-        logger.exception("Could not load the active LLM selection")
-        return
-    if applied:
-        logger.info(
-            "Active LLM selection applied: %s (%s)",
-            settings.AI_MODEL,
-            settings.AI_PROVIDER,
-        )
-
-
-{% endif %}
 # Interval jobs count from this fixed start, not from when the process
 # started. Every startup re-adds each job, and an interval with no start date
 # counts from that moment, so each restart pushed every interval job back a
@@ -219,15 +194,10 @@ async def run_scheduler() -> None:
     """Main scheduler runner with lifecycle management."""
 
     logger.info("Starting {{ project_name }} Scheduler")
-{%- if include_ai and ai_backend in ("sqlite", "postgres") %}
 
-    # The active model is a database row, and startup hooks are a backend
-    # concern this process never runs. Without replaying the selection here,
-    # the scheduler would keep answering on whatever .env said while the
-    # webserver used the model you actually picked - so a nightly AI job and
-    # the dashboard would quietly disagree about which model is in use.
-    await _apply_active_model()
-{%- endif %}
+    # Startup hooks are the webserver's; without this the scheduler's jobs
+    # would run on .env while the webserver used what the Overseer saved.
+    await apply_saved_overrides()
 
     scheduler = create_scheduler()
 {%- if scheduler_backend != "memory" %}

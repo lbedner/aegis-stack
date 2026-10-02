@@ -372,13 +372,14 @@ class TestAuthLevelDerivedFlags:
 
 
 class TestSpecsGatedOnALateComponent:
-    """The half of #1080 where re-rendering is not safe.
+    """Which installed services still carry their old branch after an add.
 
-    A plugin's files are vendored and replaced on upgrade by definition,
-    so adding a component can bring them up to date in place. An in-tree
-    service's files are the user's to edit, so the same move would
-    overwrite their work - what the render-diff engine exists to prevent.
-    Those are named instead, and ``aegis update`` is the repair.
+    Adding a component re-renders the other services' files that branch on
+    it (the render-diff engine, with each file's own merge rules). What is
+    left on the old branch is only what that pass could not update: a
+    conflict, or a file it preserved because it was edited. Naming every
+    service whose templates merely mention the component sent people to
+    ``aegis update`` for files that had just been re-rendered (#1279).
     """
 
     def _project(self, tmp_path: Path, **answers: object) -> Path:
@@ -399,39 +400,57 @@ class TestSpecsGatedOnALateComponent:
         )
         return project
 
-    def test_a_service_whose_files_branch_on_the_component_is_named(
+    def test_a_service_whose_file_was_left_unmerged_is_named(
         self, tmp_path: Path
     ) -> None:
-        """``documents`` renders its dispatch one way with a worker and
-        another without, and adding the worker later does not re-render
-        it."""
+        from aegis.core.component_files import get_component_files
         from aegis.core.manual_updater import ManualUpdater
 
         project = self._project(
             tmp_path, include_database=True, include_documents=True, include_worker=True
         )
+        updater = ManualUpdater(project)
+        documents_file = get_component_files("documents", full=True)[0]
 
-        stale = ManualUpdater(project)._specs_gated_on(
-            "worker", ManualUpdater(project).answers
+        stale = updater._specs_left_behind("worker", [documents_file], updater.answers)
+
+        assert stale == ["documents"]
+
+    def test_a_service_that_was_re_rendered_is_not_named(self, tmp_path: Path) -> None:
+        """The reported case: auth branches on the scheduler, adding the
+        scheduler re-rendered it cleanly, and auth was still named."""
+        from aegis.core.manual_updater import ManualUpdater
+
+        project = self._project(
+            tmp_path, include_database=True, include_auth=True, include_scheduler=True
+        )
+        updater = ManualUpdater(project)
+
+        assert updater._specs_left_behind("scheduler", [], updater.answers) == []
+
+    def test_the_component_being_added_is_never_named(self, tmp_path: Path) -> None:
+        """Its own files were just written from the current answers."""
+        from aegis.core.component_files import get_component_files
+        from aegis.core.manual_updater import ManualUpdater
+
+        project = self._project(tmp_path, include_worker=True)
+        updater = ManualUpdater(project)
+        worker_file = get_component_files("worker", full=True)[0]
+
+        assert (
+            updater._specs_left_behind("worker", [worker_file], updater.answers) == []
         )
 
-        assert "documents" in stale
-
-    def test_a_project_with_nothing_gating_on_it_names_nothing(
+    def test_a_file_no_installed_service_owns_names_nothing(
         self, tmp_path: Path
     ) -> None:
+        """Shared files (pyproject, compose) are reported on their own."""
         from aegis.core.manual_updater import ManualUpdater
 
         project = self._project(tmp_path, include_redis=True)
         updater = ManualUpdater(project)
 
-        assert updater._specs_gated_on("redis", updater.answers) == []
-
-    def test_the_component_being_added_is_never_named(self, tmp_path: Path) -> None:
-        """Its own files were just written from the current answers."""
-        from aegis.core.manual_updater import ManualUpdater
-
-        project = self._project(tmp_path, include_worker=True)
-        updater = ManualUpdater(project)
-
-        assert "worker" not in updater._specs_gated_on("worker", updater.answers)
+        assert (
+            updater._specs_left_behind("redis", ["pyproject.toml"], updater.answers)
+            == []
+        )

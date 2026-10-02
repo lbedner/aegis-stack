@@ -26,6 +26,7 @@ from app.components.frontend.controls.snack_bar import (
 )
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_auth
 
 
 def _format_relative_time(timestamp_str: str) -> str:
@@ -324,13 +325,11 @@ class AuthOrgsTab(ft.Container):
         async def do_delete() -> None:
             await self._delete_org(org_id)
 
+        title, message = ui_auth.delete_org_confirmation(org.get("name", ""))
         ConfirmDialog(
             page=page,
-            title="Delete Organization",
-            message=(
-                f"Permanently delete '{org.get('name')}'?\n\n"
-                "All memberships will be removed. This cannot be undone."
-            ),
+            title=title,
+            message=message,
             confirm_text="Delete",
             on_confirm=do_delete,
             destructive=True,

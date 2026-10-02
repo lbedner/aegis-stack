@@ -137,9 +137,9 @@ def trigger(
 
     Examples::
 
-        my-app payment trigger checkout.session.completed
-        my-app payment trigger payment_intent.succeeded
-        my-app payment trigger customer.subscription.created --no-cleanup
+        {{ project_slug }} payment trigger checkout.session.completed
+        {{ project_slug }} payment trigger payment_intent.succeeded
+        {{ project_slug }} payment trigger customer.subscription.created --no-cleanup
     """
     import shutil
     import subprocess

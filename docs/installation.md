@@ -28,7 +28,7 @@ Generated projects use Docker for:
 
 ### Installing Docker
 
-- **macOS/Windows**: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- **macOS/Windows**: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (on macOS, see [stale files in dev containers](troubleshooting.md#stale-or-truncated-files-in-dev-containers-macos) if a container reads a file differently from the host)
 - **Linux**: [Docker Engine](https://docs.docker.com/engine/install/) + [Docker Compose](https://docs.docker.com/compose/install/)
 
 ## Installation

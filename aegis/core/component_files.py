@@ -335,8 +335,12 @@ def get_component_files(
         base_files = set(_expand_directories_to_files(base))
         persistence_files = set(_expand_directories_to_files(persistence))
         if backend_variant in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
-            return sorted(base_files | persistence_files)
-        return sorted(base_files - persistence_files)
+            files = base_files | persistence_files
+        else:
+            files = base_files - persistence_files
+        if answers:
+            files -= _foreign_gated_files(component, answers)
+        return sorted(files)
 
     # Expand directories to include all nested files
     files = set(_expand_directories_to_files(base))

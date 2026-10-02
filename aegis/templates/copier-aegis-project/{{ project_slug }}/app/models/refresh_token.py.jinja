@@ -52,8 +52,8 @@ class SessionResponse(BaseModel):
 
     Never carries the raw refresh token. ``id`` is the ``family_id``;
     clients pass it back on ``DELETE /auth/sessions/{id}`` to revoke
-    that device. ``is_current`` is set for the row matching the
-    request's refresh cookie at the time of the call.
+    that device. ``is_current`` is set for the caller's own session
+    (its access token's ``sid``).
     """
 
     id: str

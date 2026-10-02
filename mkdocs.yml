@@ -48,6 +48,7 @@ nav:
   - Home:
     - Overview: index.md
     - Installation: installation.md
+    - Troubleshooting: troubleshooting.md
   - Origin Story:
     - About: about.md
     - Technology Stack: technology.md

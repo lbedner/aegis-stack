@@ -326,22 +326,26 @@ class RenderDiffEngine:
 
     def _pristine(self, rel_path: str, disk_content: str, baseline: str) -> bool:
         """True if ``disk_content`` still matches the template's ``baseline``
-        render, i.e. the project hasn't hand-edited this file.
+        render, i.e. the project hasn't hand-edited this file."""
+        return self._same(rel_path, disk_content, baseline)
+
+    def _same(self, rel_path: str, left: str, right: str) -> bool:
+        """Whether two renders of ``rel_path`` say the same thing.
 
         Whitespace-insensitive first; for ``.py`` files that still differ,
         re-compares after ruff-normalizing both sides so formatting drift
-        (``make fix``) isn't mistaken for a user edit (issue #715; same
-        discipline as the update path's ``_sync_python_file``).
+        (``make fix``, import order) isn't mistaken for a change (issue
+        #715; same discipline as the update path's ``_sync_python_file``).
         """
-        if normalize_for_compare(disk_content) == normalize_for_compare(baseline):
+        if normalize_for_compare(left) == normalize_for_compare(right):
             return True
         if not rel_path.endswith(".py"):
             return False
-        disk_norm = run_ruff_on_text(disk_content, self.project_path, "", rel_path)
-        base_norm = run_ruff_on_text(baseline, self.project_path, "", rel_path)
-        if disk_norm is None or base_norm is None:
+        left_norm = run_ruff_on_text(left, self.project_path, "", rel_path)
+        right_norm = run_ruff_on_text(right, self.project_path, "", rel_path)
+        if left_norm is None or right_norm is None:
             return False
-        return normalize_for_compare(disk_norm) == normalize_for_compare(base_norm)
+        return normalize_for_compare(left_norm) == normalize_for_compare(right_norm)
 
     def _merge(
         self, rel_path: str, disk_content: str, base: str, ours: str
@@ -411,7 +415,7 @@ class RenderDiffEngine:
                 # docker-compose.prod.yml / .env.deploy.example /
                 # scripts/server-setup.sh.
                 return FilePlan(rel_path, FileAction.OVERWRITE, ours, policy=policy)
-            if normalize_for_compare(theirs) == normalize_for_compare(ours):
+            if self._same(rel_path, theirs, ours):
                 return FilePlan(rel_path, FileAction.SKIP, policy=policy)
             # A file exists on disk despite no base render — no safe merge
             # base to reconcile against. Preserve rather than guess, same
@@ -443,7 +447,7 @@ class RenderDiffEngine:
             return FilePlan(rel_path, FileAction.CREATE, ours, policy=policy)
         if self._pristine(rel_path, theirs, base):
             return FilePlan(rel_path, FileAction.OVERWRITE, ours, policy=policy)
-        if normalize_for_compare(theirs) == normalize_for_compare(ours):
+        if self._same(rel_path, theirs, ours):
             return FilePlan(rel_path, FileAction.SKIP, policy=policy)
 
         if policy in (FilePolicy.USER_OWNED, FilePolicy.WARN_IF_DIVERGED):

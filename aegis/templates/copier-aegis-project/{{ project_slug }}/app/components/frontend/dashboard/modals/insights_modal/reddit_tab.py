@@ -17,6 +17,7 @@ from app.services.insights.schemas import BulkInsightsResponse
 from app.components.frontend.dashboard.modals.insights_modal.charts import (
     _pretty_date,
 )
+from app.core.config import settings
 
 
 # Event type → chip border/highlight color
@@ -41,7 +42,8 @@ class RedditTab(ft.Container):
             self.content = ft.Column(
                 [
                     SecondaryText(
-                        "No Reddit posts tracked. Use: my-app insights reddit add <url>"
+                        "No Reddit posts tracked. Use: "
+                        f"{settings.PROJECT_NAME} insights reddit add <url>"
                     )
                 ],
                 scroll=ft.ScrollMode.AUTO,

@@ -583,14 +583,15 @@ class ManualUpdater:
             # issue #686 — Failure A.
             files_deleted = sweep_empty_stubs(self.project_path)
 
-            # Jinja decided every ``{% if include_<component> %}`` when a
-            # file was written, so a component added later does not reach
-            # the files of OTHER specs that gate on it (#1080). Plugin
-            # trees are vendored and re-rendered wholesale by definition,
-            # so they can be brought up to date here; an in-tree spec's
-            # files may carry user edits, so those are reported instead.
+            # Plugin trees are vendored and re-rendered wholesale. Other
+            # in-tree specs' files went through the shared regen above with
+            # their own merge rules; whatever it could not update (a
+            # conflict, or an edited file it preserved) is what still
+            # carries the old branch, and its spec is named.
             plugins_rerendered = self._rerender_installed_plugins(updated_answers)
-            specs_needing_update = self._specs_gated_on(component, updated_answers)
+            specs_needing_update = self._specs_left_behind(
+                component, shared_files_need_manual_merge, updated_answers
+            )
 
             if run_post_gen:
                 self.run_post_generation_tasks()
@@ -1325,50 +1326,26 @@ class ManualUpdater:
             self.answers = previous_answers
         return rerendered
 
-    def _specs_gated_on(self, component: str, answers: dict[str, Any]) -> list[str]:
-        """Installed specs whose own files branch on ``component``.
+    def _specs_left_behind(
+        self, component: str, unmerged: list[str], answers: dict[str, Any]
+    ) -> list[str]:
+        """Installed specs owning a file the add could not bring up to date.
 
-        Their templates decided the branch when they were written, and
-        re-rendering them here would overwrite files the user may have
-        edited - which is what the render-diff engine exists to avoid. So
-        they are named, and ``aegis update`` is the repair.
+        ``unmerged`` is what the shared regen left on its old render: a
+        conflict, or an edited file it preserved. A spec whose files all
+        re-rendered is current, whatever its templates mention.
         """
         from .components import COMPONENTS
         from .services import SERVICES
 
-        answer_key = AnswerKeys.include_key(component)
-        template_root = get_template_path() / PROJECT_SLUG_PLACEHOLDER
-        stale: list[str] = []
-        for name, spec in {**SERVICES, **COMPONENTS}.items():
-            if name == component or not answers.get(AnswerKeys.include_key(name)):
-                continue
-            if self._spec_templates_mention(spec, answer_key, template_root):
-                stale.append(name)
-        return sorted(stale)
-
-    @staticmethod
-    def _spec_templates_mention(
-        spec: Any, answer_key: str, template_root: Path
-    ) -> bool:
-        """True when any of the spec's own template files reads ``answer_key``."""
-        for rel in list(getattr(spec.files, "primary", []) or []):
-            source = template_root / rel
-            candidates = (
-                sorted(source.rglob("*"))
-                if source.is_dir()
-                else [source, Path(f"{source}{JINJA_EXTENSION}")]
-            )
-            for candidate in candidates:
-                if not candidate.is_file():
-                    continue
-                try:
-                    if re.search(
-                        rf"\b{re.escape(answer_key)}\b", candidate.read_text()
-                    ):
-                        return True
-                except (OSError, UnicodeDecodeError):
-                    continue
-        return False
+        stale = set(unmerged)
+        return sorted(
+            name
+            for name in {**SERVICES, **COMPONENTS}
+            if name != component
+            and answers.get(AnswerKeys.include_key(name))
+            and stale & set(get_component_files(name, full=True, answers=answers))
+        )
 
     def _snapshot_if_replaced_bytes(
         self, out_path: Path, incoming: bytes, backup_root: Path

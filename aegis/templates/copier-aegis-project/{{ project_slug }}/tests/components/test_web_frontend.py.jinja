@@ -454,6 +454,24 @@ class TestAuthPages:
         assert "aegis_refresh=" in cleared
         assert not async_client_with_db.cookies.get("aegis_session")
         assert not async_client_with_db.cookies.get("aegis_refresh")
+
+    def test_logout_ends_the_session_on_the_server(
+        self, async_client_with_db: TestClient
+    ) -> None:
+        """Dropping the cookies only forgets them in this browser; a copy of
+        the access token must stop working too."""
+        async_client_with_db.post(
+            "/register",
+            data={"email": "barbara@example.com", "password": "hunter2hunter2"},
+            follow_redirects=False,
+        )
+        token = async_client_with_db.cookies.get("aegis_session")
+        async_client_with_db.get("/logout", follow_redirects=False)
+
+        me = async_client_with_db.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert me.status_code == 401
 {%- endif %}
 
 

@@ -32,7 +32,6 @@ from app.core.security import (
     REFRESH_COOKIE_NAME,
     clear_refresh_cookie,
     clear_session_cookie,
-    create_access_token,
     set_refresh_cookie,
     set_session_cookie,
     verify_password,
@@ -130,20 +129,14 @@ async def register(
 {% endif %}
     await audit.emit("auth.user_registered", actor_email=user_data.email, target_type="user", target_id=user.id)
 
-    # Auto-sign-in: mint a JWT and attach it as the HttpOnly session cookie
-    # so the client lands on a signed-in state without a second round-trip.
-{% if include_auth_rbac %}
-    access_token = create_access_token(data={"sub": user.email, "role": user.role})
-{% else %}
-    access_token = create_access_token(data={"sub": user.email})
-{% endif %}
-    set_session_cookie(response, access_token)
-
-    # Refresh token: opaque, server-side row. The cookie is path-scoped
-    # to ``/api/v1/auth`` so it only rides on auth endpoints.
-    refresh_token = await refresh_service.mint(
-        user.id, source="password", **_session_metadata(request)
+    # Auto-sign-in: set the HttpOnly session cookie so the client lands on a
+    # signed-in state without a second round-trip. The refresh token is an
+    # opaque, server-side row; its cookie is path-scoped to ``/api/v1/auth``
+    # so it only rides on auth endpoints.
+    access_token, refresh_token = await refresh_service.start_session(
+        user, source="password", **_session_metadata(request)
     )
+    set_session_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
 
     return UserResponse.model_validate(user)
@@ -238,18 +231,11 @@ async def login(
         user.id, last_login=utcnow()
     )
 
-    # Create access token
-{% if include_auth_rbac %}
-    access_token = create_access_token(data={"sub": user.email, "role": user.role})
-{% else %}
-    access_token = create_access_token(data={"sub": user.email})
-{% endif %}
-    set_session_cookie(response, access_token)
-
-    # Refresh token: see /register for the cookie scoping rationale.
-    refresh_token = await refresh_service.mint(
-        user.id, source="password", **_session_metadata(request)
+    # See /register for the cookie scoping rationale.
+    access_token, refresh_token = await refresh_service.start_session(
+        user, source="password", **_session_metadata(request)
     )
+    set_session_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
 
     await audit.emit("auth.login_success", actor_email=form_data.username, actor_id=user.id, ip_address=ip_address)

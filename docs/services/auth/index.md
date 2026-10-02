@@ -175,7 +175,7 @@ sequenceDiagram
     D-->>R: Row found, not revoked
     R->>D: Mark inbound revoked,<br/>insert successor in same family
     D-->>R: Successor row
-    R-->>A: (new_token, user_id)
+    R-->>A: Successor row (same family_id)
     A-->>C: 200 + Set-Cookie<br/>(aegis_session, aegis_refresh)
     C->>A: Retry GET /api/v1/things
     A-->>C: 200 OK + payload
@@ -183,6 +183,8 @@ sequenceDiagram
 
     Note over A,D: Reuse path: if a refresh arrives with<br/>an already-revoked token, RefreshService<br/>revokes the entire family_id and 401s.
 ```
+
+A session is one `family_id`, and every access token minted for it carries that id as its `sid` claim. Each request checks the session is still live, so revoking a session (logout, signing out a device, a password reset, reuse detection) ends its access tokens on their next request rather than when they expire. The same claim tells the API and the Overseer which session is the caller's own.
 
 ## Quick Start
 

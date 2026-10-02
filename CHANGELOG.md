@@ -22,6 +22,8 @@
   makes a stored value take effect. `OPEN_ROUTER_API_KEY` is now a
   setting, and the LLM7
   provider is registered under the key it actually reads, `LLM7_API_KEY`.
+- A troubleshooting page for stale or truncated files in dev containers on
+  macOS Docker Desktop.
 
 ### Security
 
@@ -38,6 +40,22 @@
   routes you protect yourself, uses the same definition; the API's own
   operator routes keep their existing checks. **Before upgrading, add your
   email to `ADMIN_USER_EMAILS` in `.env`**, or the Overseer will refuse you.
+- **Signing a session out ends it at once.** Revoking a session (logout,
+  "Sign out" on a device, "Sign out everywhere else", a password reset)
+  only revoked its refresh token, so its access token kept working until
+  it expired, up to `ACCESS_TOKEN_EXPIRE_MINUTES` later. Access tokens now
+  carry their session's id (`sid`), and each request checks that the
+  session is still live. The web `/logout` now revokes the session on the
+  server too; it only dropped the browser's cookies. A refresh revokes the
+  old token and issues its successor in one commit, so a session is never
+  briefly without a live token. Tokens issued before the upgrade have no
+  `sid` and expire as before.
+- **"Sign out everywhere else" keeps this device signed in from any
+  client.** Which session was the caller's came from the refresh cookie,
+  which a bearer client (the Flet dashboard) never sends, so it signed the
+  caller out with the rest and never marked a session "Current". It comes
+  from the access token now, and the web Overseer's Sessions list marks
+  "This browser" without a sign-out button.
 
 ### Fixed
 
@@ -47,6 +65,37 @@
   tunnel now starts only when the env file has `PLAID_CLIENT_ID`, and a tunnel guard
   middleware refuses every request Cloudflare forwarded (404, or a closed
   websocket) unless it is `POST /api/v1/finance/webhook/plaid`.
+- **`aegis add` no longer sends you to `aegis update` for parts it just
+  updated.** It named every installed service whose templates mention the
+  new component, even though the add had re-rendered them; it now names only
+  a service with a file the add could not bring up to date (a conflict, or
+  an edited file it kept). The add also reported files it had just written
+  as "Merged template changes into your customized file": the comparison
+  read ruff's import ordering as an edit, and now looks past formatting the
+  way the pristine check already did.
+- **Adding a component no longer drops a test for a frontend the project
+  does not have.** The scheduler and worker listed their web Overseer page
+  tests unconditionally, so `aegis add scheduler` on a project without htmx
+  added `tests/web/test_overseer_scheduler.py` and broke test collection.
+  They ship with htmx now, as every service's do.
+- **`aegis add scheduler --backend sqlite` writes the scheduler's
+  migration**, as `init` does. Only Postgres got one, so a project that
+  gained the scheduler later failed its own revisions-match-models check.
+- **The dev Tailwind watcher restarts when it stops rebuilding.** It could
+  keep running while ignoring every change, so new classes never reached
+  `app.css`. A small supervisor now restarts it when it exits, or when a
+  template, script or stylesheet changed and no build followed; a build is
+  Tailwind's own "Done in" line, since it skips rewriting an unchanged
+  `app.css`.
+- **The scheduler describes a job's schedule one way.** Two copies of the
+  formatter disagreed on cron ("Cron: hour=2, minute=0" against "Cron
+  schedule"); both paths use one now.
+- **Delete confirmations say what the delete does.** The dashboard said
+  "Permanently delete ... This cannot be undone" for users and
+  organizations, which are soft-deleted and restorable; both dashboards
+  share one wording now.
+- **Hints name the project's own CLI**, not `my-app`, in the load-test and
+  insights empty states and the payment CLI.
 - **Finance tests no longer depend on the date they run.** They seeded
   fixed dates while the service reckoned "today" (its 30- and 90-day
   windows, the budget month, what is overdue) from the real clock, so the

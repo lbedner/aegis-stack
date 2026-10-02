@@ -182,9 +182,13 @@ class TestFootprintSplit:
         "backend", [StorageBackends.SQLITE, StorageBackends.POSTGRES]
     )
     def test_scheduler_remove_matches_db_backend_footprint(self, backend: str) -> None:
+        """Removal takes everything a database backend adds, plus the web
+        Overseer page test, which only an htmx project gets."""
         files = set(get_component_files("scheduler", backend))
         full = set(get_component_files("scheduler", full=True))
-        assert files == full
+        htmx_only = set(COMPONENTS["scheduler"].files.extras["include_htmx"])
+        assert files == full - htmx_only
+        assert htmx_only <= full
 
     def test_non_gated_specs_add_base_equals_full(self) -> None:
         """Specs with no gated extras have identical add/remove footprints."""

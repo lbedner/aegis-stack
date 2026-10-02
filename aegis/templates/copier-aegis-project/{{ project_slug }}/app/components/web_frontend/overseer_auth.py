@@ -3,9 +3,7 @@
 The Flet auth modal's Overview, Users and Sessions. Overview reads the auth
 health metadata; Users and Sessions read through the same code as the API
 routes. Actions are confirmations whose button calls the auth API itself,
-as Flet does, so the API keeps its permissions, audit and cookie handling
-(signing out "everywhere else" needs the refresh cookie, which only the
-browser sends, and only to the API).
+as Flet does, so the API keeps its permissions, audit and cookie handling.
 """
 
 from typing import Any
@@ -51,11 +49,12 @@ async def load_users(db: AsyncSession) -> list[UserResponse]:
     return await list_users(user_service=UserService(db))
 
 
-async def load_sessions(db: AsyncSession, viewer: User) -> list[SessionResponse]:
-    """The viewer's sessions. Which one is this browser is unknown here: the
-    refresh cookie is scoped to the auth API and never reaches Overseer."""
+async def load_sessions(
+    db: AsyncSession, viewer: User, current: str | None = None
+) -> list[SessionResponse]:
+    """The viewer's sessions, ``current`` (this browser's) flagged."""
     rows = await RefreshService(db).list_sessions(viewer.id)
-    return session_responses(rows, current_family=None)
+    return session_responses(rows, current_family=current)
 
 
 def _overview(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -107,6 +106,7 @@ def _session_rows(sessions: list[SessionResponse]) -> list[dict[str, Any]]:
         rows.append(
             {
                 "id": session.id,
+                "current": session.is_current,
                 "source": _badge(label, color),
                 "device": session.user_agent or "Unknown device",
                 "ip": session.ip,
@@ -137,7 +137,9 @@ async def section_context(
         }
     if section == "sessions":
         rows = (
-            _session_rows(await load_sessions(req.db, req.viewer)) if available else []
+            _session_rows(await load_sessions(req.db, req.viewer, req.session_id))
+            if available
+            else []
         )
         return {"available": available, "sessions": rows, "partials": PARTIALS}
     return {}
@@ -146,9 +148,10 @@ async def section_context(
 def _user_confirmation(action: str, user: UserResponse) -> dict[str, str]:
     base = f"/api/v1/auth/users/{user.id}"
     if action == "delete":
+        title, body = ui_auth.delete_user_confirmation(user.email)
         return {
-            "title": "Delete user",
-            "body": f"Delete {user.email}? They leave the user list and can no longer sign in.",
+            "title": title,
+            "body": body,
             "method": "delete",
             "url": base,
             "label": "Delete",
@@ -166,12 +169,11 @@ def _user_confirmation(action: str, user: UserResponse) -> dict[str, str]:
     }
 
 
-def _session_confirmation(session: SessionResponse, delay: str) -> dict[str, str]:
+def _session_confirmation(session: SessionResponse) -> dict[str, str]:
     device = session.user_agent or "this device"
     return {
         "title": "Sign out this device",
-        "body": f"Sign out {device}? It can take up to {delay} to take effect. "
-        "If it is this browser, you will be signed out here too.",
+        "body": f"Sign out {device}? It is signed out on its next request.",
         "method": "delete",
         "url": f"/api/v1/auth/sessions/{session.id}",
         "label": "Sign out",
@@ -183,18 +185,17 @@ async def confirmation(
     action: str, target: str, auth: ComponentStatus, viewer: User, db: AsyncSession
 ) -> dict[str, str] | None:
     """The confirmation for one action, or None if it or its target is unknown."""
-    delay = str((auth.metadata or {}).get("token_expiry_display", "a few minutes"))
     if action in ("activate", "deactivate", "delete"):
         user = next((u for u in await load_users(db) if str(u.id) == target), None)
         return _user_confirmation(action, user) if user else None
     if action == "revoke":
         sessions = await load_sessions(db, viewer)
         session = next((s for s in sessions if s.id == target), None)
-        return _session_confirmation(session, delay) if session else None
+        return _session_confirmation(session) if session else None
     if action == "revoke-others" and target == "all":
         return {
             "title": "Sign out everywhere else",
-            "body": f"Sign out all your other devices? Each can take up to {delay} to sign out.",
+            "body": "Sign out all your other devices? Each is signed out on its next request.",
             "method": "delete",
             "url": "/api/v1/auth/sessions",
             "label": "Sign out others",

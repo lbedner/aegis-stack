@@ -266,16 +266,10 @@ class AuthSessionsTab(ft.Container):
         async def do_revoke() -> None:
             await self._revoke_session(session_id)
 
-        # Be explicit about the eventual-consistency window: the access
-        # JWT lives up to its own ``exp``, so revoking the refresh row
-        # doesn't sign the device out instantly.
         ConfirmDialog(
             page=page,
             title="Sign out this device",
-            message=(
-                f"Sign out '{ua}'? It can take up to 15 minutes to fully "
-                "take effect."
-            ),
+            message=f"Sign out '{ua}'? It is signed out on its next request.",
             confirm_text="Sign out",
             on_confirm=do_revoke,
             destructive=True,
@@ -293,8 +287,7 @@ class AuthSessionsTab(ft.Container):
             page=page,
             title="Sign out everywhere else",
             message=(
-                "Sign out all other devices? Each device may take up to "
-                "15 minutes to fully sign out."
+                "Sign out all other devices? Each is signed out on its next request."
             ),
             confirm_text="Sign out others",
             on_confirm=do_revoke_all,

@@ -296,6 +296,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 ".claude/skills/protect-an-endpoint",
                 "tests/api/test_auth_endpoints.py",
                 "tests/services/test_auth_integration.py",
+                "tests/services/test_ui_auth.py",
                 # Goal service is auth-coupled (Goal.user_id FK to user table);
                 # cleanup_components removes it on the auth-off path. Note: it
                 # is also removed on the insights-off path (kept consistent

@@ -22,6 +22,13 @@ Rotation invariants:
 The token itself is opaque to the client: a 32-byte url-safe random
 string with no embedded claims. All authorization decisions look up
 the row by PK.
+
+A session is one family, and every access token minted for it carries
+the family id as its ``sid`` claim. That is how a request knows which
+session it belongs to without the refresh cookie (scoped to the auth
+API), and how revoking a session ends its access tokens at once:
+``get_current_user_from_token`` refuses a ``sid`` whose family has no
+live row left.
 """
 
 from __future__ import annotations
@@ -35,8 +42,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.log import logger
+from app.core.security import create_access_token
 from app.core.time import utcnow
 from app.models.refresh_token import RefreshToken
+from app.models.user import User
 
 
 # Shared with ``cleanup_jobs.cleanup_expired_refresh_tokens_job``. Rows
@@ -67,6 +76,15 @@ def _new_family_id() -> str:
     return str(uuid.uuid4())
 
 
+def access_token(user: User, session_id: str) -> str:
+    """An access token for ``user`` in the session (family) ``session_id``."""
+{%- if include_auth_rbac %}
+    return create_access_token({"sub": user.email, "role": user.role, "sid": session_id})
+{%- else %}
+    return create_access_token({"sub": user.email, "sid": session_id})
+{%- endif %}
+
+
 class RefreshService:
     """DB-backed refresh-token store with rotation + reuse detection."""
 
@@ -95,23 +113,63 @@ class RefreshService:
         sign-in (login / register / OAuth callback) leave it ``None``.
 
         ``source`` / ``user_agent`` / ``ip`` populate the session-list
-        UI (#633). They're all optional so paths without request
+        UI. They're all optional so paths without request
         context (tests, internal flows) still work.
         """
-        token = _new_token_value()
-        row = RefreshToken(
-            token=token,
-            user_id=user_id,
-            family_id=family_id or _new_family_id(),
-            expires_at=utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        row = self._add(
+            user_id,
+            family_id or _new_family_id(),
             source=source,
             user_agent=user_agent,
             ip=ip,
             last_used_at=last_used_at,
         )
-        self.db.add(row)
         await self.db.commit()
-        return token
+        return row.token
+
+    def _add(
+        self, user_id: int, family_id: str, **metadata: str | datetime | None
+    ) -> RefreshToken:
+        """Stage a new row; the caller commits."""
+        row = RefreshToken(
+            token=_new_token_value(),
+            user_id=user_id,
+            family_id=family_id,
+            expires_at=utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            **metadata,
+        )
+        self.db.add(row)
+        return row
+
+    async def start_session(
+        self,
+        user: User,
+        *,
+        source: str,
+        user_agent: str | None = None,
+        ip: str | None = None,
+    ) -> tuple[str, str]:
+        """Sign ``user`` in: a new session's ``(access_token, refresh_token)``.
+
+        Every sign-in (password login, registration, OAuth) starts here, so
+        each access token names the session it belongs to.
+        """
+        session_id = _new_family_id()
+        refresh = await self.mint(
+            user.id, session_id, source=source, user_agent=user_agent, ip=ip
+        )
+        return access_token(user, session_id), refresh
+
+    async def is_live_session(self, session_id: str) -> bool:
+        """Whether the session still has a live (unrevoked, unexpired) row."""
+        stmt = (
+            select(RefreshToken.token)
+            .where(RefreshToken.family_id == session_id)
+            .where(RefreshToken.revoked_at.is_(None))  # type: ignore[union-attr]
+            .where(RefreshToken.expires_at > utcnow())
+            .limit(1)
+        )
+        return (await self.db.exec(stmt)).first() is not None
 
     async def rotate(
         self,
@@ -119,10 +177,10 @@ class RefreshService:
         *,
         user_agent: str | None = None,
         ip: str | None = None,
-    ) -> tuple[str, int] | None:
+    ) -> RefreshToken | None:
         """Validate ``token``, revoke it, mint a successor in the same family.
 
-        Returns ``(new_token, user_id)`` on success.
+        Returns the successor row on success.
         Returns ``None`` if the token is missing, expired, or already revoked
         (the revoked-already case ALSO triggers family-wide revocation as a
         replay-attack defense).
@@ -146,7 +204,7 @@ class RefreshService:
             if (utcnow() - row.revoked_at) <= timedelta(seconds=REUSE_GRACE_SECONDS):
                 successor = await self._newest_active_in_family(row.family_id)
                 if successor is not None:
-                    return successor.token, successor.user_id
+                    return successor
             await self.revoke_family(row.family_id)
             return None
 
@@ -158,18 +216,20 @@ class RefreshService:
             await self.db.commit()
             return None
 
-        # Happy path: revoke inbound, mint successor in the same family.
+        # Happy path: revoke inbound, mint successor in the same family, in
+        # one commit, so the family is never without a live row: a request
+        # authenticating in between would read the session as signed out.
         row.revoked_at = utcnow()
         self.db.add(row)
-        await self.db.commit()
-        new_token = await self.mint(
+        successor = self._add(
             row.user_id,
-            family_id=row.family_id,
+            row.family_id,
             source=row.source,
             user_agent=user_agent,
             ip=ip,
             last_used_at=utcnow(),
         )
+        await self.db.commit()
 {% if not include_scheduler %}
         # No scheduler component — sweep expired rows opportunistically
         # from the rotation path. The scheduled job (see
@@ -177,7 +237,7 @@ class RefreshService:
         # when the scheduler IS installed.
         await self._maybe_sweep_expired()
 {% endif %}
-        return new_token, row.user_id
+        return successor
 
 {% if not include_scheduler %}
     async def _maybe_sweep_expired(self) -> None:

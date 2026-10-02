@@ -11,6 +11,7 @@ import pytest
 from app.components.web_frontend import overseer_auth
 from app.components.web_frontend.routes.partials import overseer_auth as partials
 from app.core.db import get_async_db
+from app.core.security import create_access_token
 from app.models.refresh_token import SessionResponse
 from app.models.user import UserResponse
 from app.services.system.models import ComponentStatus
@@ -61,7 +62,25 @@ SESSIONS = [
         expires_at=NOW,
         is_current=False,
     ),
+    SessionResponse(
+        id="fam-here",
+        source="password",
+        user_agent="Safari on macOS",
+        ip="10.0.0.3",
+        created_at=NOW,
+        last_used_at=NOW,
+        expires_at=NOW,
+        is_current=False,
+    ),
 ]
+
+
+def _browse_as(client: TestClient, session_id: str) -> None:
+    """This browser's session cookie, an access token for ``session_id``."""
+    client.cookies.set(
+        "aegis_session",
+        create_access_token({"sub": "ops@example.com", "sid": session_id}),
+    )
 
 
 def _client(
@@ -74,9 +93,11 @@ def _client(
         assert db is REQUEST_SESSION
         return USERS
 
-    async def sessions(db: Any, _viewer: Any) -> list[SessionResponse]:
+    async def sessions(
+        db: Any, _viewer: Any, current: str | None = None
+    ) -> list[SessionResponse]:
         assert db is REQUEST_SESSION
-        return SESSIONS
+        return [s.model_copy(update={"is_current": s.id == current}) for s in SESSIONS]
 
     async def request_session() -> Any:
         return REQUEST_SESSION
@@ -149,6 +170,20 @@ class TestSessions:
         rows = _cells(_get(signed_in, "sessions"))
         assert rows[0][:3] == ["GitHub", "Firefox on Linux", "10.0.0.2"]
 
+    def test_marks_this_browser_and_offers_it_no_sign_out(
+        self, signed_in: TestClient
+    ) -> None:
+        """Signing out this browser is the Sign out link, not a row action
+        that leaves the page broken."""
+        _browse_as(signed_in, "fam-here")
+        html = _get(signed_in, "sessions")
+        rows = select(html, "tbody tr")
+        assert "This browser" in text(rows[1])
+        assert "This browser" not in text(rows[0])
+        assert [b.get("hx-get") for b in select(html, "tbody button[hx-get]")] == [
+            "/partials/overseer/auth/confirm/revoke/fam-1"
+        ]
+
 
 class TestActions:
     """Each action opens a confirmation, whose button calls the auth API
@@ -192,11 +227,9 @@ class TestActions:
         response = signed_in.get("/partials/overseer/auth/confirm/delete/1")
         assert "ops@example.com" in text(one(response.text, "p"))
 
-    def test_session_sign_out_warns_about_the_token_lifetime(
-        self, signed_in: TestClient
-    ) -> None:
+    def test_session_sign_out_names_the_device(self, signed_in: TestClient) -> None:
         response = signed_in.get("/partials/overseer/auth/confirm/revoke/fam-1")
-        assert "30 minutes" in text(one(response.text, "p"))
+        assert "Firefox on Linux" in text(one(response.text, "p"))
 
     @pytest.mark.parametrize("path", ["nope/1", "delete/99", "revoke/other-family"])
     def test_unknown_action_or_target_is_404(
@@ -206,17 +239,12 @@ class TestActions:
             signed_in.get(f"/partials/overseer/auth/confirm/{path}").status_code == 404
         )
 
-    def test_sessions_offer_sign_out_and_sign_out_everywhere_else(
+    def test_sessions_offer_sign_out_everywhere_else(
         self, signed_in: TestClient
     ) -> None:
         html = _get(signed_in, "sessions")
-        assert one(html, "tbody button[hx-get]").get("hx-get") == (
-            "/partials/overseer/auth/confirm/revoke/fam-1"
-        )
         others = one(html, 'button[hx-get$="/revoke-others/all"]')
-        assert (
-            others.get("disabled") is not None
-        )  # one session: nothing else to sign out
+        assert others.get("disabled") is None  # two sessions
 
     def test_confirmations_need_a_signed_in_user(self, client: TestClient) -> None:
         """A fragment answers 401 rather than redirecting: a redirect would

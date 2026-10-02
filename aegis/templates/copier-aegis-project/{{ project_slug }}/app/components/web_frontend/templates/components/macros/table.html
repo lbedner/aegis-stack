@@ -91,7 +91,7 @@ text-aegis-text
   {% if expandable %}
   <td class="pl-5 pr-0 py-2 w-4">
     <button type="button" @click.stop="open = !open" aria-expanded="false" :aria-expanded="open.toString()" aria-label="Details"
-            class="text-aegis-muted hover:text-aegis-text"><span aria-hidden="true" class="inline-block transition-transform" :class="open && 'rotate-90'">&rsaquo;</span></button>
+            class="text-aegis-muted hover:text-aegis-text"><span aria-hidden="true" class="inline-block transition-transform" :class="open && 'rotate-90'">›</span></button>
   </td>
   {% endif %}
   {% for col in columns %}

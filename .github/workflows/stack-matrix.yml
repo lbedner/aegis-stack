@@ -91,6 +91,7 @@ jobs:
           - ai_langchain
           - ai_ollama
           - inference_docker
+          - deploy
           - ai_voice
           - insights
           - insights_per_user

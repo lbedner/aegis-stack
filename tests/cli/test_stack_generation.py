@@ -290,6 +290,19 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet"],
     ),
     StackCombination(
+        name="deploy",
+        # The compose target on its own: the socket proxy and the docker
+        # runtime backend the Overseer reads through it.
+        components=["deploy"],
+        services=[],
+        description="Deploy component, compose target (socket proxy)",
+        expected_files=[
+            "app/components/deploy/__init__.py",
+        ],
+        expected_docker_services=["webserver", "socket-proxy"],
+        expected_pyproject_deps=["fastapi", "flet"],
+    ),
+    StackCombination(
         name="ai_langchain",
         components=["database"],
         services=["ai[sqlite,langchain,openai]"],

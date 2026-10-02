@@ -42,6 +42,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -78,6 +79,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -114,6 +116,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -152,6 +155,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -191,6 +195,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -235,6 +240,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -277,6 +283,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -449,6 +456,7 @@ class TestSchedulerPersistenceLogic:
                 False,  # htmx
                 False,  # inference
                 False,  # secrets
+                False,  # deploy
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -487,6 +495,7 @@ class TestSchedulerPersistenceLogic:
                     False,  # htmx
                     False,  # inference
                     False,  # secrets
+                    False,  # deploy
                     False,  # auth service
                     False,  # payment
                     False,  # AI service

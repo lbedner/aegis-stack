@@ -25,6 +25,7 @@ class ComponentNames:
     STORAGE = "storage"
     INFERENCE = "inference"
     SECRETS = "secrets"
+    DEPLOY = "deploy"
 
     # Ordered list for interactive selection. Worker leads and redis
     # follows the steps that auto-add it (worker bundles redis), so most
@@ -42,6 +43,7 @@ class ComponentNames:
         HTMX,
         INFERENCE,
         SECRETS,
+        DEPLOY,
     ]
 
 
@@ -197,6 +199,16 @@ class SecretsBackends:
     DEFAULT = DATABASE
 
 
+class DeployTargets:
+    """Where the deploy component runs the app. ``compose`` is Docker
+    Compose on a host (what ``aegis deploy`` does); ECS would be a
+    further value behind the same ``app.core.runtime`` calls."""
+
+    COMPOSE = "compose"
+    ALL = [COMPOSE]
+    DEFAULT = COMPOSE
+
+
 class OllamaMode:
     """Ollama deployment mode options. No longer asked: ``ollama_mode`` is
     computed from the inference component's answers (copier.yml)."""
@@ -293,6 +305,8 @@ class AnswerKeys:
     INFERENCE_PLACEMENT = "inference_placement"
     SECRETS = "include_secrets"
     SECRETS_BACKEND = "secrets_backend"
+    DEPLOY = "include_deploy"
+    DEPLOY_TARGET = "deploy_target"
     PROJECT_SLUG = "project_slug"
     SRC_PATH = "_src_path"
 

@@ -25,6 +25,10 @@ from aegis.core.component_utils import extract_base_component_name
 from aegis.core.components import COMPONENTS
 from aegis.core.services import SERVICES
 
+# One count of the guided questions for every flow test: it grows with each
+# component or service, and a private copy here went stale when deploy came.
+from .test_guided import _DECLINE_ALL
+
 
 @pytest.fixture
 def runner() -> CliRunner:
@@ -214,8 +218,8 @@ class TestEscFromBlueprintReview:
         from aegis.cli.guided import run_guided_init_flow
 
         # Gallery door, open, pick finance, esc on review -> back at the
-        # doors (cursor on blank canvas), take it, decline all 18, build.
-        keys = ["down", "\r", "\r", "esc", "\r"] + ["n"] * 18 + ["\r"]
+        # doors (cursor on blank canvas), take it, decline every question, build.
+        keys = ["down", "\r", "\r", "esc", "\r"] + _DECLINE_ALL + ["\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         # Nothing from the blueprint survived: it was un-picked, not edited.

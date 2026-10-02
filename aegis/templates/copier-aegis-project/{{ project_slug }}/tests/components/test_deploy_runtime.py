@@ -1,0 +1,255 @@
+"""The Docker backend of ``app.core.runtime``, read through the socket proxy.
+
+Driven by ``httpx.MockTransport`` with the Engine API's own shapes, so
+no daemon is needed. Scoping is by the ``com.docker.compose.project``
+label: another project's containers on the same host are never listed.
+"""
+
+import json
+import re
+from typing import Any
+
+import httpx
+import pytest
+
+from app.components.deploy.docker import (
+    BUILD_LABEL,
+    DockerRuntime,
+    parse_status,
+    split_frames,
+)
+from app.core import runtime
+from app.core.runtime import RuntimeUnavailableError
+
+PROJECT = "demo"
+
+
+def _container(cid: str, service: str, project: str = PROJECT) -> dict[str, Any]:
+    return {
+        "Id": cid * 8,
+        "Names": [f"/{project}-{service}-1"],
+        "Image": f"{project}:latest",
+        "ImageID": "sha256:" + "ab" * 32,
+        "State": "running",
+        "Status": "Up 5 hours (healthy)",
+        "Created": 1_790_960_104,
+        "Labels": {
+            "com.docker.compose.project": project,
+            "com.docker.compose.service": service,
+            BUILD_LABEL: "abc1234",
+        },
+    }
+
+
+# Every path the backend asked for, so a test can prove inspect is never one.
+REQUESTED: list[str] = []
+INSPECT = re.compile(r"^(/v[\d.]+)?/containers/(?!json$)[^/]+/json$")
+
+
+def _frame(stream: int, text: str) -> bytes:
+    payload = text.encode()
+    return bytes([stream, 0, 0, 0]) + len(payload).to_bytes(4, "big") + payload
+
+
+STATS = {
+    "cpu_stats": {
+        "cpu_usage": {"total_usage": 3_000_000},
+        "system_cpu_usage": 20_000_000,
+        "online_cpus": 2,
+    },
+    "precpu_stats": {
+        "cpu_usage": {"total_usage": 1_000_000},
+        "system_cpu_usage": 10_000_000,
+    },
+    "memory_stats": {
+        "usage": 120_000_000,
+        "limit": 805_306_368,
+        "stats": {"inactive_file": 20_000_000},
+    },
+    "networks": {
+        "eth0": {"rx_bytes": 100, "tx_bytes": 50},
+        "eth1": {"rx_bytes": 1, "tx_bytes": 2},
+    },
+    "blkio_stats": {
+        "io_service_bytes_recursive": [
+            {"op": "read", "value": 4096},
+            {"op": "write", "value": 8192},
+        ]
+    },
+}
+
+
+def _handler(request: httpx.Request) -> httpx.Response:
+    path = request.url.path
+    REQUESTED.append(path)
+    if path == "/containers/json":
+        filters = json.loads(request.url.params["filters"])
+        if "id" in filters:
+            return httpx.Response(200, json=[_container("a", "webserver")])
+        assert filters == {"label": [f"com.docker.compose.project={PROJECT}"]}
+        return httpx.Response(
+            200,
+            json=[_container("a", "webserver"), _container("b", "worker-system")],
+        )
+    if path.endswith("/stats"):
+        return httpx.Response(200, json=STATS)
+    if path.endswith("/logs"):
+        body = _frame(
+            1, '2026-10-02T20:45:39.5Z {"level": "error", "event": "boom"}\n'
+        ) + _frame(2, "2026-10-02T20:45:40Z \x1b[31mred\x1b[0m\n")
+        return httpx.Response(200, content=body)
+    if path == "/system/df":
+        return httpx.Response(
+            200,
+            json={
+                "Containers": [
+                    {**_container("a", "webserver"), "SizeRw": 10},
+                    {**_container("c", "web", project="other"), "SizeRw": 99},
+                ],
+                "Volumes": [
+                    {
+                        "Name": f"{PROJECT}_storage-data",
+                        "Labels": {"com.docker.compose.project": PROJECT},
+                        "UsageData": {"Size": 2048},
+                    },
+                    {"Name": "stranger", "Labels": None, "UsageData": {"Size": 1}},
+                ],
+            },
+        )
+    if path == "/info":
+        return httpx.Response(
+            200, json={"NCPU": 4, "MemTotal": 8_000_000_000, "ServerVersion": "28.3.0"}
+        )
+    return httpx.Response(403, text="forbidden")
+
+
+def _runtime() -> DockerRuntime:
+    return DockerRuntime(project=PROJECT, transport=httpx.MockTransport(_handler))
+
+
+def test_frames_split_by_stream() -> None:
+    frames, rest = split_frames(_frame(1, "out\n") + _frame(2, "err\n") + b"\x01\x00")
+    assert frames == [("stdout", b"out\n"), ("stderr", b"err\n")]
+    assert rest == b"\x01\x00"
+
+
+async def test_services_group_this_projects_containers() -> None:
+    services = await _runtime().services()
+    assert [s.name for s in services] == ["webserver", "worker-system"]
+    assert [s.page for s in services] == ["server", "worker"]
+    instance = services[0].instances[0]
+    assert instance.name == "demo-webserver-1"
+    assert (instance.state, instance.health) == ("running", "healthy")
+    # The list does not carry a restart count; only inspect does.
+    assert instance.restarts is None
+    assert instance.build == "abc1234"
+    assert instance.uptime_seconds == pytest.approx(5 * 3600, abs=5)
+
+
+@pytest.mark.parametrize(
+    ("status", "uptime", "health"),
+    [
+        ("Up 5 hours (healthy)", 5 * 3600, "healthy"),
+        ("Up 46 hours (unhealthy)", 46 * 3600, "unhealthy"),
+        ("Up 3 seconds (health: starting)", 3, "starting"),
+        ("Up About a minute", 60, None),
+        ("Up About an hour", 3600, None),
+        ("Up Less than a second", 0, None),
+        ("Up 2 weeks", 14 * 86400, None),
+        ("Exited (0) 3 minutes ago", None, None),
+        ("Restarting (1) 5 seconds ago", None, None),
+    ],
+)
+def test_status_gives_coarse_uptime_and_health(
+    status: str, uptime: int | None, health: str | None
+) -> None:
+    assert parse_status(status) == (uptime, health)
+
+
+async def test_no_code_path_inspects_a_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inspect returns a container's whole Env and the proxy refuses it;
+    discovery, listing, stats, logs, disk and host all do without it."""
+    monkeypatch.setattr("socket.gethostname", lambda: "aaaaaaaaaaaa")
+    REQUESTED.clear()
+    backend = DockerRuntime(transport=httpx.MockTransport(_handler))
+    await backend.services()
+    await backend.stats("a")
+    await backend.logs("a")
+    _ = [line async for line in backend.follow("a")]
+    await backend.disk()
+    await backend.host()
+    assert REQUESTED
+    assert not [p for p in REQUESTED if INSPECT.match(p)], REQUESTED
+
+
+async def test_the_project_comes_from_this_containers_own_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("COMPOSE_PROJECT_NAME", raising=False)
+    monkeypatch.setattr("socket.gethostname", lambda: "aaaaaaaaaaaa")
+    backend = DockerRuntime(transport=httpx.MockTransport(_handler))
+    assert [s.name for s in await backend.services()] == ["webserver", "worker-system"]
+
+
+async def test_stats_compute_cpu_and_memory_like_docker_stats() -> None:
+    stats = await _runtime().stats("a")
+    assert stats.cpu_percent == pytest.approx(40.0)
+    assert stats.memory_used == 100_000_000
+    assert stats.memory_limit == 805_306_368
+    assert (stats.network_rx, stats.network_tx) == (101, 52)
+    assert (stats.disk_read, stats.disk_write) == (4096, 8192)
+
+
+async def test_logs_parse_both_streams() -> None:
+    first, second = await _runtime().logs("a", tail=10)
+    assert (first.stream, first.level, first.event) == ("stdout", "error", "boom")
+    assert (second.stream, second.text) == ("stderr", "red")
+
+
+async def test_follow_yields_the_same_lines() -> None:
+    lines = [line async for line in _runtime().follow("a")]
+    assert [line.stream for line in lines] == ["stdout", "stderr"]
+
+
+async def test_tty_logs_are_raw_text() -> None:
+    def tty(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"2026-10-02T20:45:39Z one\ntwo")
+
+    backend = DockerRuntime(project=PROJECT, transport=httpx.MockTransport(tty))
+    assert [line.text for line in await backend.logs("a")] == ["one", "two"]
+
+
+async def test_disk_is_scoped_to_the_project() -> None:
+    disk = await _runtime().disk()
+    assert disk.containers == {"demo-webserver-1": 10}
+    assert disk.volumes == {f"{PROJECT}_storage-data": 2048}
+
+
+async def test_host_comes_from_the_engine() -> None:
+    host = await _runtime().host()
+    assert (host.cpus, host.memory, host.docker_version) == (4, 8_000_000_000, "28.3.0")
+
+
+async def test_a_refused_path_raises() -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, text="forbidden")
+
+    backend = DockerRuntime(project=PROJECT, transport=httpx.MockTransport(refuse))
+    with pytest.raises(RuntimeUnavailableError):
+        await backend.host()
+
+
+async def test_a_missing_socket_is_unavailable_not_a_crash(tmp_path: Any) -> None:
+    backend = DockerRuntime(project=PROJECT, socket_path=str(tmp_path / "absent.sock"))
+    with pytest.raises(RuntimeUnavailableError):
+        await backend.services()
+
+
+def test_the_deploy_component_installs_the_docker_backend() -> None:
+    runtime.set_runtime(None)
+    try:
+        assert isinstance(runtime.get_runtime(), DockerRuntime)
+    finally:
+        runtime.set_runtime(None)

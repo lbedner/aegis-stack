@@ -20,6 +20,14 @@
   their ids, so cards in old chats still resolve, and the old table is
   dropped.
 
+- **The deploy component, and `app.core.runtime` to read where the app runs.**
+  `aegis add deploy` (or `deploy[compose]` at init) adds a socket proxy, the
+  only container that touches the Docker socket: no network, read-only, and
+  answering only the container list, stats, logs, `/info` and `/system/df`.
+  Container inspect is refused, so nothing through the socket returns another
+  container's environment. Every project gets `app.core.runtime` (services,
+  stats, logs, disk, host); with the component it reads the project's own
+  containers through the proxy, without it the app's own process.
 - **Secrets: finance and insights keys, provider pickers, sending domains.**
   Plaid (`PLAID_CLIENT_ID`, `PLAID_SECRET`, needed when Plaid is enabled
   and checked against Plaid on paste), SnapTrade, and the insights GitHub

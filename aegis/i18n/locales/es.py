@@ -1250,4 +1250,73 @@ MESSAGES: dict[str, str] = {
     "build.step.migrate": "Aplicando migraciones",
     "build.step.llm": "Sincronizando catálogo de LLM",
     "build.step.format": "Formateando el código",
+    # ── Deploy provision ──────────────────────────────────────────────
+    "provision.help_opt_provider": "Proveedor cloud donde crear el servidor (hetzner)",
+    "provision.help_opt_size": "Tipo de servidor, p. ej. cx23",
+    "provision.help_opt_region": (
+        "Ubicación del proveedor, p. ej. nbg1, fsn1, hel1, ash"
+    ),
+    "provision.help_opt_domain": (
+        "Nombre de host que apunta al servidor mediante Cloudflare (por defecto: un nombre sslip.io)"
+    ),
+    "provision.help_opt_ssh_key": (
+        "Clave pública instalada para root en el nuevo servidor"
+    ),
+    "provision.unknown_provider": (
+        "Proveedor no soportado: {provider}. Soportados: {supported}"
+    ),
+    "provision.token_missing": (
+        "Define primero {env} en tu entorno. Se lee al momento de la llamada y nunca se guarda ni se muestra."
+    ),
+    "provision.using_token": "Usando {env} {masked}",
+    "provision.already_ready": (
+        "Este proyecto ya tiene un servidor aprovisionado ({ip}). Ejecuta 'aegis deploy' para desplegar o 'aegis deploy-destroy' para eliminarlo."
+    ),
+    "provision.resuming": "Reanudando el aprovisionamiento de {name}",
+    "provision.price": (
+        "{size} en {region}: EUR {price}/mes con IVA, más la tarifa de IPv4 de Hetzner"
+    ),
+    "provision.confirm": "¿Crear este servidor en tu cuenta de Hetzner?",
+    "provision.cancelled": "Cancelado. No se creó nada.",
+    "provision.ssh_key_created": "Clave SSH {id} subida",
+    "provision.server_created": (
+        "Servidor {id} creado en {ip} (registrado en .aegis/deploy.yml)"
+    ),
+    "provision.waiting_running": "Esperando a que el servidor arranque...",
+    "provision.not_running": "El servidor no llegó a 'running' a tiempo.",
+    "provision.waiting_ssh": "Esperando SSH en {ip}...",
+    "provision.ssh_timeout": "SSH en {ip} no estuvo disponible a tiempo.",
+    "provision.waiting_cloud_init": (
+        "Esperando a que termine la configuración del servidor (cloud-init)..."
+    ),
+    "provision.cloud_init_failed": (
+        "La configuración del servidor (cloud-init) falló en {ip}. Revisa con: ssh root@{ip} cloud-init status --long"
+    ),
+    "provision.dns_created": "Registro DNS {hostname} -> {ip} creado",
+    "provision.waiting_dns": "Esperando a que {hostname} resuelva...",
+    "provision.dns_timeout": "{hostname} no resolvió al servidor a tiempo.",
+    "provision.ready": "Servidor listo en {hostname}. Pasando a 'aegis deploy'.",
+    "provision.partial_title": (
+        "El aprovisionamiento se detuvo. Estos recursos existen en tu cuenta:"
+    ),
+    "provision.created_server": "servidor {id} '{name}' en {ip} ({size}, {region})",
+    "provision.created_ssh_key": "clave SSH {id}",
+    "provision.created_dns": "registro DNS A {hostname}",
+    "provision.offer_delete": "¿Eliminarlos ahora?",
+    "provision.cleanup_failed": "La limpieza falló: {error}",
+    "provision.cleaned_up": "Eliminados. No queda nada de esta ejecución en tu cuenta.",
+    "provision.resume_hint": (
+        "Ejecuta 'aegis deploy-provision' de nuevo para reanudar, o 'aegis deploy-destroy' para eliminarlos."
+    ),
+    "provision.nothing_to_destroy": (
+        "No hay ningún servidor aprovisionado registrado en .aegis/deploy.yml."
+    ),
+    "provision.destroy_title": "Esto elimina de forma permanente:",
+    "provision.destroy_confirm": (
+        "Escribe el nombre del servidor ({name}) para confirmar"
+    ),
+    "provision.destroy_cancelled": "El nombre no coincide. No se eliminó nada.",
+    "provision.destroyed": (
+        "Eliminado. El registro en .aegis/deploy.yml está marcado como eliminado."
+    ),
 }

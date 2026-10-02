@@ -105,6 +105,12 @@ register(ChangeExecutor(
 
 The payload model validates when the change is proposed and again when it is approved; `describe` renders the card from the database, never from the model's own words. Agents reach the queue through built-in tools: `propose` and `propose_many` (one card for a batch, with a per-row veto), and `pending`, `withdraw` and `withdraw_batch` for an agent's own open cards. The card's buttons call `/api/v1/changes` (`POST /changes/{id}/approve`, `/reject`, and the batch forms), and every resolution keeps its row as the audit trail.
 
+A tool declares what a call does with `effect`: `read` (the default) changes nothing, `proposes` files a change the user approves before it lands, and `writes` changes state at once. Any tool that is not `read` stays a visible native call in code mode instead of running inside the sandbox, and only `read` and `proposes` tools can ever be served to an outside assistant:
+
+```python
+register_tool("save_note", save_note, effect="writes")
+```
+
 ## Per-User Memory
 
 Agents can remember durable facts about a user across conversations. Two built-in tools are registered on every persistence-backed project:

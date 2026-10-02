@@ -95,9 +95,9 @@ def _load_deploy_config(project_path: str | None = None) -> dict | None:
         return yaml.safe_load(f)
 
 
-def _save_deploy_config(config: dict) -> None:
+def _save_deploy_config(config: dict, project_path: str | None = None) -> None:
     """Save deploy configuration to .aegis/deploy.yml."""
-    project_root = _get_project_root()
+    project_root = _get_project_root(project_path)
     config_dir = project_root / ".aegis"
     config_dir.mkdir(exist_ok=True)
 

@@ -1196,4 +1196,51 @@ MESSAGES: dict[str, str] = {
     "build.step.migrate": "마이그레이션 적용 중",
     "build.step.llm": "LLM 카탈로그 동기화 중",
     "build.step.format": "코드 포매팅 중",
+    # ── Deploy provision ──────────────────────────────────────────────
+    "provision.help_opt_provider": "서버를 만들 클라우드 제공자 (hetzner)",
+    "provision.help_opt_size": "서버 유형 (예: cx23)",
+    "provision.help_opt_region": "제공자 위치 (예: nbg1, fsn1, hel1, ash)",
+    "provision.help_opt_domain": "Cloudflare로 서버를 가리킬 호스트명 (기본값: sslip.io 이름)",
+    "provision.help_opt_ssh_key": "새 서버의 root에 설치할 공개 키",
+    "provision.unknown_provider": "지원하지 않는 제공자: {provider}. 지원: {supported}",
+    "provision.token_missing": "먼저 환경 변수 {env}를 설정하세요. 호출 시점에 읽으며 저장하거나 출력하지 않습니다.",
+    "provision.using_token": "{env} {masked} 사용",
+    "provision.already_ready": (
+        "이 프로젝트에는 이미 생성된 서버({ip})가 있습니다. 배포하려면 'aegis deploy', 삭제하려면 'aegis deploy-destroy'를 실행하세요."
+    ),
+    "provision.resuming": "{name} 생성을 이어서 진행합니다",
+    "provision.price": (
+        "{size} ({region}): 월 EUR {price} (VAT 포함), Hetzner IPv4 주소 요금 별도"
+    ),
+    "provision.confirm": "Hetzner 계정에 이 서버를 만들까요?",
+    "provision.cancelled": "취소했습니다. 아무것도 만들지 않았습니다.",
+    "provision.ssh_key_created": "SSH 키 {id} 업로드됨",
+    "provision.server_created": "서버 {id}를 {ip}에 만들었습니다 (.aegis/deploy.yml에 기록됨)",
+    "provision.waiting_running": "서버가 시작되기를 기다리는 중...",
+    "provision.not_running": "서버가 제시간에 'running' 상태가 되지 않았습니다.",
+    "provision.waiting_ssh": "{ip}의 SSH를 기다리는 중...",
+    "provision.ssh_timeout": "{ip}의 SSH가 제시간에 열리지 않았습니다.",
+    "provision.waiting_cloud_init": "서버 설정(cloud-init)이 끝나기를 기다리는 중...",
+    "provision.cloud_init_failed": (
+        "{ip}에서 서버 설정(cloud-init)이 실패했습니다. 확인: ssh root@{ip} cloud-init status --long"
+    ),
+    "provision.dns_created": "DNS 레코드 {hostname} -> {ip} 생성됨",
+    "provision.waiting_dns": "{hostname} 이름 해석을 기다리는 중...",
+    "provision.dns_timeout": "{hostname}이(가) 제시간에 서버로 해석되지 않았습니다.",
+    "provision.ready": "서버 준비 완료: {hostname}. 'aegis deploy'로 넘깁니다.",
+    "provision.partial_title": "생성이 중단되었습니다. 계정에 다음 리소스가 있습니다:",
+    "provision.created_server": "서버 {id} '{name}' ({ip}, {size}, {region})",
+    "provision.created_ssh_key": "SSH 키 {id}",
+    "provision.created_dns": "DNS A 레코드 {hostname}",
+    "provision.offer_delete": "지금 삭제할까요?",
+    "provision.cleanup_failed": "정리 실패: {error}",
+    "provision.cleaned_up": "삭제했습니다. 이번 실행으로 만든 것은 계정에 남아 있지 않습니다.",
+    "provision.resume_hint": (
+        "이어서 진행하려면 'aegis deploy-provision'을 다시 실행하고, 삭제하려면 'aegis deploy-destroy'를 실행하세요."
+    ),
+    "provision.nothing_to_destroy": ".aegis/deploy.yml에 생성된 서버 기록이 없습니다.",
+    "provision.destroy_title": "다음을 영구 삭제합니다:",
+    "provision.destroy_confirm": "확인하려면 서버 이름({name})을 입력하세요",
+    "provision.destroy_cancelled": "이름이 일치하지 않습니다. 아무것도 삭제하지 않았습니다.",
+    "provision.destroyed": "삭제했습니다. .aegis/deploy.yml의 기록은 삭제됨으로 표시됩니다.",
 }

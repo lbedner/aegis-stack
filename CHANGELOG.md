@@ -9,6 +9,13 @@
 
 ### Added
 
+- **Agent tools declare what a call does.** `register_tool(..., effect=...)`
+  takes `read` (the default), `proposes` (files a change the user approves)
+  or `writes` (changes state at once), replacing the `native_write` flag.
+  Anything but `read` stays a visible native call in code mode, and
+  `mcp_servable()` hands an outside assistant only `read` and `proposes`
+  tools, never a direct write; a test holds every registered tool to its
+  declared effect.
 - **The propose/approve queue is shared, not finance's.** Any service can
   make a change proposable: register a `ChangeExecutor` from
   `app.services.change_queue` at import, and agents file it with the
@@ -28,6 +35,15 @@
   container's environment. Every project gets `app.core.runtime` (services,
   stats, logs, disk, host); with the component it reads the project's own
   containers through the proxy, without it the app's own process.
+- **`aegis deploy-provision`: a server in your own Hetzner account, one
+  command.** It shows the monthly price, creates the server with the
+  project's own setup script as cloud-init, points a name at it (a
+  Cloudflare record with `--domain`, otherwise an `sslip.io` name), waits
+  until it resolves and hands off to `aegis deploy`. The server, the bill and
+  the data stay yours. Every resource is recorded the moment it exists; a
+  failure offers to delete what was created, and a rerun resumes.
+  `aegis deploy-destroy` removes the server, its DNS record and the uploaded
+  key. Tokens come from `HCLOUD_TOKEN` and `CLOUDFLARE_API_TOKEN`.
 - **Secrets: finance and insights keys, provider pickers, sending domains.**
   Plaid (`PLAID_CLIENT_ID`, `PLAID_SECRET`, needed when Plaid is enabled
   and checked against Plaid on paste), SnapTrade, and the insights GitHub

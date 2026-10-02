@@ -215,7 +215,7 @@ def agent_capabilities(config: AgentConfig) -> list[Any]:
 
         # Reads go in the sandbox (slicing a payload in code is the point);
         # writes stay native so they surface as their own tool call. A
-        # tool declares its own nature at registration (native_write) -
+        # tool declares its own effect at registration (effect != "read") -
         # memory saves and queue proposals both ride this, and the next
         # write tool just declares itself.
         native = native_write_tool_names()

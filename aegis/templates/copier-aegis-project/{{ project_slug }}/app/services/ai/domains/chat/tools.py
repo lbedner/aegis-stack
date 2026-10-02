@@ -23,29 +23,38 @@ a warning, never an error: a stale row must not brick chat.
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from app.core.log import logger
 from app.services.ai.domains.chat.tool_telemetry import instrument
 
 ToolFunc = Callable[..., Any]
 
+# What a call does to the app's state, declared by the tool itself:
+# ``read`` changes nothing, ``proposes`` files work for the user's
+# approval (nothing lands until they act), ``writes`` changes state at once.
+ToolEffect = Literal["read", "proposes", "writes"]
+
+# Effects an outside assistant may reach over MCP. An allowlist, so an
+# effect added later is unservable until someone decides otherwise.
+_MCP_SERVABLE_EFFECTS: frozenset[str] = frozenset({"read", "proposes"})
+
 
 @dataclass(frozen=True)
 class RegisteredTool:
     """A named tool entry: the callable plus registry metadata.
 
-    ``native_write`` marks a tool that must stay a visible native call
-    even in code mode - a write the user has to see in the tool trail
-    (memory saves, queue proposals) is never dispatched from inside the
-    sandbox. The tool declares this about itself at registration; the
-    agent loader asks the registry rather than keeping its own list.
+    Every non-read tool stays a visible native call even in code mode - a
+    write or proposal the user has to see in the tool trail is never
+    dispatched from inside the sandbox. The tool declares its ``effect`` at
+    registration; the agent loader and the MCP server ask the registry
+    rather than keeping their own lists.
     """
 
     name: str
     func: ToolFunc
     description: str | None = None
-    native_write: bool = False
+    effect: ToolEffect = "read"
 
 
 _registry: dict[str, RegisteredTool] = {}
@@ -56,7 +65,7 @@ def register_tool(
     func: ToolFunc,
     *,
     description: str | None = None,
-    native_write: bool = False,
+    effect: ToolEffect = "read",
     replace: bool = False,
 ) -> None:
     """Register a callable under a tool name.
@@ -69,7 +78,7 @@ def register_tool(
             f"Tool '{name}' is already registered; pass replace=True to rebind it"
         )
     _registry[name] = RegisteredTool(
-        name=name, func=func, description=description, native_write=native_write
+        name=name, func=func, description=description, effect=effect
     )
 
 
@@ -88,7 +97,21 @@ def get_tool(name: str) -> RegisteredTool | None:
 
 def native_write_tool_names() -> frozenset[str]:
     """Every registered tool that must stay native in code mode."""
-    return frozenset(t.name for t in _registry.values() if t.native_write)
+    return frozenset(t.name for t in _registry.values() if t.effect != "read")
+
+
+def mcp_servable(names: Iterable[str]) -> list[str]:
+    """The granted names an MCP client may call: reads and proposals only.
+
+    The one gate for MCP. A ``writes`` tool is dropped whatever the grant
+    says, and so is a name with no registered tool. Order is preserved.
+    """
+    return [
+        name
+        for name in names
+        if (tool := _registry.get(name)) is not None
+        and tool.effect in _MCP_SERVABLE_EFFECTS
+    ]
 
 
 def registered_tool_names() -> list[str]:

@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-02
+
 ### Added
 
 - **Database activity: who held the lock.** A transaction held longer than

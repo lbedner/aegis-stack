@@ -133,6 +133,7 @@ def test_sections_are_overview_and_browse(signed_in: TestClient) -> None:
     assert [text(a) for a in select(html, "#overseer-subnav nav a")] == [
         "Overview",
         "Browse",
+        "Container",
     ]
 
 

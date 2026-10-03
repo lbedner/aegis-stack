@@ -68,6 +68,9 @@ EXAMPLES: dict[str, dict[str, str]] = {
               "labels": ["09:00", "10:00", "11:00", "12:00"],
               "series": [{"label": "Done", "values": [120, 180, 150, 210]}],
             }) }}""",
+        "chart_data": """
+            {# What a live stream re-sends for chart_panel(..., live=...). #}
+            {{ chart_data("catalog-demo", {"labels": [1, 2], "series": [{"label": "Done", "values": [3, 4]}]}) }}""",
         "dialog": """
             {# Mounted once by base.html; content arrives via hx_dialog(...). #}
             {{ dialog() }}""",
@@ -213,6 +216,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
             {{ password_input("password", placeholder="Password", required=False) }}""",
         "or_divider": "{{ or_divider() }}",
         "range_chips": """{{ range_chips([(1, "1d"), (7, "7d"), (30, "30d")], 7) }}""",
+        "range_form": """{{ range_form([(1, "1d"), (7, "7d"), (30, "30d")], 7, "/overseer", "#overseer-main") }}""",
         "action": """
             {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}
             <div class="flex flex-wrap gap-2">

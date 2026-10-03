@@ -74,6 +74,12 @@ Everything about an instance comes from the container list, never from inspect:
 - **Restarts** are not in the list, so `restarts` is `None` for the Docker backend.
 - **Build** is the image's `org.opencontainers.image.revision` label. `aegis deploy` stamps `BUILD_ID` into the server's `.env`, compose passes it to the image build as a build arg, and the Dockerfile labels the image with it (`dev` locally). Without the label it falls back to the short image id.
 
+## In Overseer: the Container section
+
+Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a **Container** section, in Overseer's htmx pages and Flet modals alike. It shows one row per instance: state and health, CPU, memory used against its limit, network in and out, disk I/O, restarts, uptime, and the image with its build. It renders from the containers sampler's last reading (`app.core.series`), so it opens full, then refreshes every second while it is open, with CPU and memory charts over the last 15 minutes, 30 minutes or hour.
+
+Without the deploy component the backend is `none`: the section says so and points at `aegis add deploy` instead of showing the app's own process as if it were a container. A page with nothing running behind it (a SQLite database, which is a file) says that too, and a runtime that does not answer says why.
+
 ## Checking it
 
 With the stack up, from inside the webserver container:

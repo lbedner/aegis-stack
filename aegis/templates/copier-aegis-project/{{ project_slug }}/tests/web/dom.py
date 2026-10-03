@@ -82,8 +82,13 @@ def stat(markup: Markup, label: str) -> str:
 def chart_data(markup: Markup, kind: str) -> dict[str, Any]:
     """The JSON a ``chart_panel`` canvas of ``kind`` points at."""
     canvas = one(markup, f'canvas[data-chart="{kind}"]')
-    payload = one(markup, f"#{canvas.get('data-chart-data')}")
-    return json.loads(payload.text or "")
+    return chart_json(markup, canvas.get("data-chart-data"))
+
+
+def chart_json(markup: Markup, script_id: str) -> dict[str, Any]:
+    """A chart's data script by its id, as a page renders it or a live
+    stream re-sends it (``chart_data`` in macros/layout.html)."""
+    return json.loads(one(markup, f"#{script_id}").text or "")
 
 
 def location(response: Any) -> str:
@@ -127,3 +132,9 @@ def table_rows(markup: Markup, table: str = "table") -> list[dict[str, HtmlEleme
         dict(zip(headers, tr.getchildren(), strict=False))
         for tr in select(root, "tbody tr")
     ]
+
+
+def checked(markup: Markup, css: str) -> list[str]:
+    """The values of the checked inputs ``css`` finds: a radio row's pick,
+    or the boxes ticked."""
+    return [i.get("value") for i in select(markup, css) if i.get("checked") is not None]

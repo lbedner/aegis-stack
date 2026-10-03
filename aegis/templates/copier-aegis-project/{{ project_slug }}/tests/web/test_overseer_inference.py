@@ -3,85 +3,22 @@ installed model with load and unload (Models), and the models moving in
 and out of memory (Activity). Everything reads the server live, so a load
 shows on the next render rather than the next health poll."""
 
+import asyncio
 from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.inference import activity
-from app.components.inference.ollama import (
-    OllamaClient,
-    OllamaModel,
-    OllamaModelDetails,
-    OllamaRunningModel,
-    OllamaServerStatus,
-)
+from app.components.inference import activity, sampler
+from app.components.inference.ollama import OllamaServerStatus
 from app.components.web_frontend import overseer_inference
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from tests.web.dom import one, select, text
+from tests._fake_ollama import SERVING, FakeClient
+from tests.web.dom import chart_json, one, select, text
 from tests.web.overseer import sign_in, status_with
 
 PAGE = "/overseer/components/ollama"
-NOW = datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
-DETAILS = OllamaModelDetails(
-    parameter_size="7.6B", quantization_level="Q4_K_M", context_length=32768
-)
-
-
-def _installed(name: str) -> OllamaModel:
-    return OllamaModel(
-        name=name,
-        model=name,
-        size=4 * 1024**3,
-        digest="0123456789abcdef" * 4,
-        modified_at=NOW - timedelta(days=2),
-        details=DETAILS,
-        capabilities=["completion", "tools"],
-    )
-
-
-RUNNING = OllamaRunningModel(
-    name="qwen2.5:7b",
-    model="qwen2.5:7b",
-    size=4 * 1024**3,
-    size_vram=int(4.2 * 1024**3),
-    digest="0123456789abcdef" * 4,
-    details=DETAILS,
-    expires_at=NOW + timedelta(minutes=30),
-)
-SERVING = OllamaServerStatus(
-    available=True,
-    version="0.12.3",
-    running_models=[RUNNING],
-    installed_models=[_installed("qwen2.5:7b"), _installed("llama3.1:8b")],
-    total_vram_gb=4.2,
-)
-
-
-class FakeClient(OllamaClient):
-    """The real client's dispatch (``move``) over faked server calls."""
-
-    status = SERVING
-    loaded: bool = True
-    calls: list[tuple[str, str]] = []
-
-    def __init__(self, base_url: str | None = None) -> None:
-        self.base_url = base_url or "http://host.docker.internal:11434"
-
-    async def get_server_status(self) -> OllamaServerStatus:
-        return self.status
-
-    async def load_model(self, model_name: str, keep_alive: str = "30m") -> bool:
-        FakeClient.calls.append(("load", model_name))
-        return self.loaded
-
-    async def unload_model(self, model_name: str) -> bool:
-        FakeClient.calls.append(("unload", model_name))
-        return self.loaded
-
-
 OLLAMA = ComponentStatus(
     name="ollama",
     status=ComponentStatusType.HEALTHY,
@@ -95,6 +32,7 @@ def signed_in(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Generator[TestCl
     sign_in(app, monkeypatch, status_with(OLLAMA))
     FakeClient.status, FakeClient.loaded, FakeClient.calls = SERVING, True, []
     monkeypatch.setattr(overseer_inference, "OllamaClient", FakeClient)
+    monkeypatch.setattr(sampler, "OllamaClient", FakeClient)  # the one reader
     monkeypatch.setattr(activity, "_tracker", activity.OllamaActivityTracker())
     monkeypatch.setattr(overseer_inference, "_moving", {})
     monkeypatch.setattr(overseer_inference, "_failed", {})
@@ -120,6 +58,7 @@ def test_sections_are_overview_models_and_activity(signed_in: TestClient) -> Non
         "Overview",
         "Models",
         "Activity",
+        "Container",
     ]
 
 
@@ -279,3 +218,58 @@ def test_activity_lists_what_moved(signed_in: TestClient) -> None:
     activity.get_ollama_activity().record_loaded("llama3.1:8b")
     rows = select(_get(signed_in, "activity"), "#inference-activity tbody tr")
     assert "llama3.1:8b" in text(rows[0])
+
+
+def test_models_are_served_from_the_one_shared_reading(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sampler reads Ollama once a tick for every viewer; a page reads
+    that, not the server."""
+    from app.core import series
+
+    asyncio.run(series.sample(sampler.SAMPLER))
+    FakeClient.status = OllamaServerStatus(available=False)  # a live read
+    html = _get(signed_in, "models")
+    loaded, _idle = select(html, "#inference-models tbody tr")
+    assert "Loaded" in text(loaded)
+
+
+def test_a_server_outside_docker_shows_its_own_numbers_in_place_of_a_container(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ollama on the host has no container to read: the Container section
+    says so and charts what Ollama and the app's own calls report."""
+    from app.core import series
+    from tests._fake_runtime import REDIS, FakeRuntime, use_runtime
+
+    use_runtime(monkeypatch, FakeRuntime(REDIS))  # no Ollama container
+    asyncio.run(series.sample(sampler.SAMPLER))
+    asyncio.run(
+        series.record({f"{series.LLM}:qwen2.5:7b:{series.TOKENS_PER_SECOND}": 25.0})
+    )
+    html = _get(signed_in, "container")
+    assert "outside Docker" in text(one(html, "#container"))
+    memory = chart_json(html, "chart-container-model-memory-data")
+    assert memory["series"][0]["label"] == "qwen2.5:7b"
+    tokens = chart_json(html, "chart-container-tokens-data")
+    assert tokens["series"] == [{"label": "qwen2.5:7b", "values": [25.0]}]
+    # A call is a moment, not a level: dots, never a line between two calls.
+    assert tokens["style"] == "events" and "style" not in memory
+    # No call has been timed yet: the chart says so rather than draw nothing.
+    assert "No calls" in text(one(html, "#chart-container-latency [data-chart-empty]"))
+
+
+def test_the_host_section_keeps_its_own_sampler_watched(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the section charts (the inference sampler) runs at full pace while
+    it is open; Docker, which has nothing to show here, does not."""
+    from app.core import series
+    from app.services.system import ui_runtime
+    from tests._fake_runtime import REDIS, FakeRuntime, use_runtime
+
+    use_runtime(monkeypatch, FakeRuntime(REDIS))  # no Ollama container
+    asyncio.run(series.sample(sampler.SAMPLER))
+    _get(signed_in, "container")
+    assert asyncio.run(series.watched(series.INFERENCE))
+    assert not asyncio.run(series.watched(ui_runtime.SAMPLER))

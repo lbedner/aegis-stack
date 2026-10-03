@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 import json
 import os
 import re
 import socket
+import time
 from typing import Any
 
 import httpx
@@ -146,20 +148,39 @@ def _instance(summary: dict[str, Any]) -> Instance:
     )
 
 
-def _stats(data: dict[str, Any]) -> Stats:
-    """The numbers ``docker stats`` shows, from one Engine API sample."""
-    cpu = data.get("cpu_stats") or {}
-    pre = data.get("precpu_stats") or {}
-    cpu_delta = (cpu.get("cpu_usage") or {}).get("total_usage", 0) - (
-        pre.get("cpu_usage") or {}
-    ).get("total_usage", 0)
-    system_delta = cpu.get("system_cpu_usage", 0) - pre.get("system_cpu_usage", 0)
-    online = cpu.get("online_cpus") or 1
-    percent = (
-        cpu_delta / system_delta * online * 100.0
-        if cpu_delta > 0 and system_delta > 0
-        else 0.0
+# The shortest stretch a CPU share is measured over: just under the
+# containers sampler's one-second tick, so each tick measures afresh.
+MIN_CPU_WINDOW = 0.9
+
+
+@dataclass(frozen=True)
+class _CpuBaseline:
+    reading: tuple[int, int]
+    at: float
+    percent: float | None
+
+
+def _cpu_reading(cpu: dict[str, Any]) -> tuple[int, int]:
+    """(the container's CPU time, the host's) in one sample."""
+    return (cpu.get("cpu_usage") or {}).get("total_usage", 0), cpu.get(
+        "system_cpu_usage", 0
     )
+
+
+def _stats(data: dict[str, Any], before: tuple[int, int] | None) -> Stats:
+    """The numbers ``docker stats`` shows, from one Engine API sample; CPU
+    is the share used since ``before`` (None without one)."""
+    cpu = data.get("cpu_stats") or {}
+    percent = None
+    if before is not None:
+        now = _cpu_reading(cpu)
+        cpu_delta, system_delta = now[0] - before[0], now[1] - before[1]
+        online = cpu.get("online_cpus") or 1
+        percent = (
+            cpu_delta / system_delta * online * 100.0
+            if cpu_delta > 0 and system_delta > 0
+            else 0.0
+        )
     memory = data.get("memory_stats") or {}
     extra = memory.get("stats") or {}
     # Page cache the kernel can drop is not "used" (cgroup v2, then v1).
@@ -200,6 +221,11 @@ class DockerRuntime:
         self._socket = socket_path
         self._project = project or os.environ.get("COMPOSE_PROJECT_NAME") or None
         self._transport = transport
+        # Each container's CPU baseline: the reading the next share is
+        # measured from, when it was taken, and the share it gave.
+        # ponytail: per process and never pruned; a recreated container
+        # leaves one stale entry behind.
+        self._cpu: dict[str, _CpuBaseline] = {}
 
     def _client(self, timeout: httpx.Timeout = TIMEOUT) -> httpx.AsyncClient:
         transport = self._transport or httpx.AsyncHTTPTransport(uds=self._socket)
@@ -258,11 +284,34 @@ class DockerRuntime:
         ]
 
     async def stats(self, instance: str) -> Stats:
+        """One sample, read at once (``one-shot``): Docker otherwise waits a
+        second for a second one. CPU is measured against this container's
+        previous read, or Docker's own previous sample when it sends one."""
         async with self._client() as client:
             response = await self._get(
-                client, f"/containers/{instance}/stats", stream="false"
+                client,
+                f"/containers/{instance}/stats",
+                stream="false",
+                **{"one-shot": "true"},
             )
-        return _stats(response.json())
+        data = response.json()
+        docker_before = _cpu_reading(data.get("precpu_stats") or {})
+        if docker_before[1]:
+            return _stats(data, docker_before)
+        return self._measured(instance, data)
+
+    def _measured(self, instance: str, data: dict[str, Any]) -> Stats:
+        """CPU against this container's baseline, which moves only after
+        ``MIN_CPU_WINDOW``: two readers in step (the sampler and a viewer)
+        would otherwise measure a fraction of a second, which is noise."""
+        now = time.monotonic()
+        base = self._cpu.get(instance)
+        if base is not None and now - base.at < MIN_CPU_WINDOW:
+            return replace(_stats(data, None), cpu_percent=base.percent)
+        stats = _stats(data, base.reading if base else None)
+        reading = _cpu_reading(data.get("cpu_stats") or {})
+        self._cpu[instance] = _CpuBaseline(reading, now, stats.cpu_percent)
+        return stats
 
     @staticmethod
     def _log_params(tail: str, since: datetime | None = None) -> dict[str, str]:

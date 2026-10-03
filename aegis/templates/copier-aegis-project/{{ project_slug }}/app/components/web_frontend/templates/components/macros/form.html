@@ -251,6 +251,16 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {% endmacro %}
 
 
+{# The time-window row that re-requests ``url`` when a chip is picked and
+   swaps ``target`` (``hx_replace``), the choice kept in the address as
+   ``field``. #}
+{% macro range_form(ranges, current, url, target, field="days", aria="Time window", id=None, class="") %}
+<form {% if id %}id="{{ id }}" {% endif %}class="{{ class }}" {{ hx_replace(url, target) }} hx-trigger="change">
+  {{ range_chips(ranges, current, field=field, aria=aria) }}
+</form>
+{% endmacro %}
+
+
 {# A small action button (row verbs, card verbs, toolbar). ``attrs`` is
    the htmx verb; ``vals`` a dict for ``hx-vals``; ``tone`` is default
    (quiet), primary (teal), danger or warn. The one recipe every compact

@@ -1,4 +1,4 @@
-"""The cache view both Overseers show: what is in the cache by family, how
+"""The cache view Overseer shows (htmx and Flet): what is in the cache by family, how
 much room each family takes, and whether it earns that room (hit rate).
 
 Entries come from ``CacheService.entries`` (sampled past its limit, like

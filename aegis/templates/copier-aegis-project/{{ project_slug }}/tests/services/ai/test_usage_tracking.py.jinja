@@ -169,6 +169,31 @@ class TestWhatTheLedgerKeeps:
         assert row is not None
         assert row.duration_ms == 1234.5
 
+    async def test_a_timed_call_is_a_point_on_the_live_charts(
+        self,
+        async_db_session: AsyncSession,
+        llm: LargeLanguageModel,
+        price: LLMPrice,
+    ) -> None:
+        """Pushed as it happens, so throughput and latency chart with no
+        polling: per model, seconds and output tokens a second."""
+        from app.core import series
+        from app.services.ai import usage_recording
+
+        with _store_session(async_db_session):
+            await usage_recording.record_usage(
+                action="chat",
+                model_name="ollama/qwen2.5:7b",
+                usage={"input_tokens": 10, "output_tokens": 50},
+                user_id="u-live",
+                duration_ms=2000.0,
+            )
+        found = await series.read(f"{series.LLM}:", window=60)
+        assert {name: [v for _, v in points] for name, points in found.items()} == {
+            f"qwen2.5:7b:{series.LATENCY}": [2.0],
+            f"qwen2.5:7b:{series.TOKENS_PER_SECOND}": [25.0],
+        }
+
     async def test_an_untimed_call_records_nothing_rather_than_zero(
         self,
         async_db_session: AsyncSession,

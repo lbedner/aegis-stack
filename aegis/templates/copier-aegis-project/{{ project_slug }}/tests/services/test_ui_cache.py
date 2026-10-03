@@ -1,4 +1,4 @@
-"""The cache view both Overseers show: what is in the cache by family,
+"""The cache view Overseer shows (htmx and Flet): what is in the cache by family,
 how much room each takes, and whether it earns it (hit rate)."""
 
 from app.core.cache import CacheEntry, CacheStats

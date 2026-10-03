@@ -37,7 +37,9 @@ accidentally take down the worker, and arq purges can't blow away
 view cache.
 """
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
+from operator import itemgetter
 import pickle
 import time
 from typing import Any, NamedTuple
@@ -213,28 +215,108 @@ class CacheService:
         records kept one per key rather than in a list two writers race
         to rewrite. Not counted as hits or misses (a listing, not a read)."""
         if self._redis is not None:
-            keys: list[bytes] = []
-            cursor = 0
-            while True:
-                cursor, page = await self._redis.scan(
-                    cursor=cursor, match=f"{prefix}*", count=500
-                )
-                keys.extend(page)
-                if cursor == 0:
-                    break
+            keys = await self._keys(prefix)
             blobs = await self._redis.mget(keys) if keys else []
             return {
                 key.decode(): pickle.loads(blob)
                 for key, blob in zip(keys, blobs, strict=True)
                 if blob is not None
             }
+        return dict(self._live(prefix))
+
+    async def append_many(
+        self,
+        points: dict[str, float],
+        *,
+        at: float,
+        keep_seconds: int,
+        index: str | None = None,
+    ) -> None:
+        """Add one point at ``at`` to each time series in ``points`` (key to
+        value) and drop the ones older than ``keep_seconds`` before ``at``
+        (``app.core.series`` writes these). Redis keeps a sorted set per
+        series scored by time, listed in the set ``index`` names so a read
+        finds them without scanning the keyspace, all in one round trip."""
+        if self._redis is not None:
+            pipe = self._redis.pipeline(transaction=False)
+            for key, value in points.items():
+                pipe.zadd(key, {f"{at}:{value}": at})
+                pipe.zremrangebyscore(key, "-inf", at - keep_seconds)
+                pipe.expire(key, keep_seconds)
+            if index is not None and points:
+                pipe.sadd(index, *points)
+                pipe.expire(index, keep_seconds)
+            await pipe.execute()
+            return
+        assert self._store is not None
+        for key, value in points.items():
+            kept, _ = self._store.get(key, ([], 0.0))
+            # Points arrive in time order: drop the stale ones from the front.
+            del kept[: bisect_right(kept, at - keep_seconds, key=itemgetter(0))]
+            kept.append((at, value))
+            self._store[key] = (kept, time.time() + keep_seconds)
+
+    async def points_with_prefix(
+        self, prefix: str, *, since: float, index: str | None = None
+    ) -> dict[str, list[tuple[float, float]]]:
+        """Every time series whose key starts with ``prefix``, by key: its
+        points from ``since`` on, oldest first. With ``index`` (the set
+        ``append`` listed them in) Redis reads that set, not the keyspace."""
+        if self._redis is None:
+            found = {
+                key: points[bisect_left(points, since, key=itemgetter(0)) :]
+                for key, points in self._live(prefix)
+            }
+            return {key: points for key, points in found.items() if points}
+        keys = (
+            sorted(
+                k
+                for k in await self._redis.smembers(index)
+                if k.decode().startswith(prefix)
+            )
+            if index is not None
+            else await self._keys(prefix)
+        )
+        pipe = self._redis.pipeline(transaction=False)
+        for key in keys:
+            pipe.zrangebyscore(key, since, "+inf")
+        replies = await pipe.execute()
+        gone = [key for key, members in zip(keys, replies, strict=True) if not members]
+        if index is not None and gone:  # expired series still listed
+            await self._redis.srem(index, *gone)
+        return {
+            key.decode(): [_point(member) for member in members]
+            for key, members in zip(keys, replies, strict=True)
+            if members
+        }
+
+    async def claim(self, key: str, ttl: int) -> bool:
+        """Take ``key`` for ``ttl`` seconds if nobody holds it: one process
+        of many does a periodic job each round."""
+        if self._redis is not None:
+            return bool(await self._redis.set(key, b"1", nx=True, ex=ttl))
+        if await self._lookup(key) is not None:
+            return False
+        assert self._store is not None
+        self._store[key] = (True, time.time() + ttl)
+        return True
+
+    async def _keys(self, prefix: str) -> list[bytes]:
+        """Every Redis key starting with ``prefix``: SCAN with MATCH, O(n)
+        over the keyspace but never blocking the server, unlike KEYS."""
+        return [
+            key async for key in self._redis.scan_iter(match=f"{prefix}*", count=500)
+        ]
+
+    def _live(self, prefix: str) -> list[tuple[str, Any]]:
+        """The in-memory entries under ``prefix`` that have not expired."""
         assert self._store is not None
         now = time.time()
-        return {
-            key: value
+        return [
+            (key, value)
             for key, (value, expires_at) in list(self._store.items())
             if key.startswith(prefix) and expires_at > now
-        }
+        ]
 
     async def invalidate(self, key: str) -> None:
         """Remove a specific key."""
@@ -253,18 +335,10 @@ class CacheService:
         DEL per page.
         """
         if self._redis is not None:
+            keys = await self._keys(prefix)
             total = 0
-            cursor = 0
-            while True:
-                cursor, keys = await self._redis.scan(
-                    cursor=cursor,
-                    match=f"{prefix}*",
-                    count=500,
-                )
-                if keys:
-                    total += await self._redis.delete(*keys)
-                if cursor == 0:
-                    break
+            for start in range(0, len(keys), 500):  # one DEL per page
+                total += await self._redis.delete(*keys[start : start + 500])
             return int(total)
         assert self._store is not None
         keys = [k for k in self._store if k.startswith(prefix)]
@@ -301,6 +375,12 @@ class CacheService:
         """
         if self._redis is not None:
             await self._redis.aclose()
+
+
+def _point(member: bytes) -> tuple[float, float]:
+    """A time-series member as stored: ``b"<at>:<value>"``."""
+    at, value = member.decode().split(":")
+    return float(at), float(value)
 
 
 def _pickled_size(value: Any) -> int:

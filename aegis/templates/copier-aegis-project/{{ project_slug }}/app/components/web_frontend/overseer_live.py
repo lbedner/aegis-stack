@@ -24,7 +24,7 @@ def event_stream(events: AsyncIterator[str]) -> StreamingResponse:
     )
 
 
-async def fragment_events(
+def fragment_events(
     event: str,
     render: Callable[[], Awaitable[str]],
     interval: float,
@@ -32,16 +32,42 @@ async def fragment_events(
 ) -> AsyncIterator[str]:
     """``render()`` every ``interval`` seconds, sent as ``event`` in the htmx
     SSE format when it differs from the last one sent."""
-    last = ""
+
+    async def one() -> dict[str, str]:
+        return {event: await render()}
+
+    return fragments_events(one, interval, max_frames)
+
+
+async def fragments_events(
+    render: Callable[[], Awaitable[dict[str, str]]],
+    interval: float,
+    max_frames: int | None = None,
+) -> AsyncIterator[str]:
+    """Several fragments on one stream (a table and its charts, say):
+    ``render()`` gives html by event name, and each event goes out when
+    its html differs from the last one sent."""
+    last: dict[str, str] = {}
     deadline = time.monotonic() + MAX_STREAM_SECONDS
     frames = 0
     while time.monotonic() < deadline and (max_frames is None or frames < max_frames):
         frames += 1
-        html = await render()
-        if html != last:
-            last = html
-            data = html.strip().replace("\r", "").replace("\n", " ")
-            yield f"event: {event}\ndata: {data}\n\n"
-        else:
+        sent = changed_frames(last, await render())
+        for frame in sent:
+            yield frame
+        if not sent:
             yield ": unchanged\n\n"
         await asyncio.sleep(interval)
+
+
+def changed_frames(last: dict[str, str], payloads: dict[str, str]) -> list[str]:
+    """The htmx SSE frames for the events whose html differs from ``last``
+    (the html last sent for each), which it brings up to date."""
+    frames = []
+    for event, html in payloads.items():
+        if last.get(event) == html:
+            continue
+        last[event] = html
+        data = html.strip().replace("\r", "").replace("\n", " ")
+        frames.append(f"event: {event}\ndata: {data}\n\n")
+    return frames

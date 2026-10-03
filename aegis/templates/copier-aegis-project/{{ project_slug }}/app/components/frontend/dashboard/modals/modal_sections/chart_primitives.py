@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.theme import AegisTheme as Theme
 
 
@@ -41,6 +42,12 @@ class ChartColors:
     # Muted fallback (also used as the secondary surface text token in
     # the htmx side; reused here as the palette's "neutral" slot)
     MUTED = "#7E8A9A"
+
+    EMERALD = "#10B981"
+    ORANGE = "#F97316"
+    # One colour per series on a multi-series chart, in the htmx charts'
+    # order (--aegis-chart-1..8), so a series reads the same in both UIs.
+    RAMP = (TEAL, VIOLET, AMBER, BLUE, PINK, EMERALD, ORANGE, CYAN)
 
 
 def chart_tooltip_kwargs() -> dict[str, Any]:

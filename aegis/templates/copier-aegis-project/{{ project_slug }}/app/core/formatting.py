@@ -36,6 +36,21 @@ def format_bytes(size: int | float) -> str:
     return f"{size:.1f} TB"
 
 
+def format_value(value: float, fmt: str | None) -> str:
+    """A charted value as its chart reads it (``"percent"``, ``"bytes"``,
+    ``"money"``, plain otherwise): the twin of formatValue in charts.js,
+    for the Flet charts drawing the same data."""
+    if fmt == "percent":
+        return format_percentage(value)
+    if fmt == "bytes":
+        return format_bytes(value)
+    if fmt == "seconds":
+        return f"{value:.1f} s" if value < 10 else f"{value:.0f} s"
+    if fmt == "money":
+        return f"{'-' if value < 0 else ''}${abs(value):,.2f}"
+    return f"{value:,.0f}" if float(value).is_integer() else f"{value:,}"
+
+
 def format_date(value: object) -> str:
     """An ISO date (or ``date``) as "Aug 19, 2026". Blank stays blank.
 

@@ -4,7 +4,7 @@
 {% from "components/macros/table.html" import data_table %}
 {% from "components/macros/form.html" import search_input %}
 <div class="flex flex-wrap items-center gap-4 mb-4">
-  <form hx-get="{{ catalog_url }}" hx-target="#overseer-main" hx-select="#overseer-main" hx-swap="outerHTML" hx-push-url="true"
+  <form {{ hx_replace(catalog_url, "#overseer-main") }}
         hx-trigger="keyup changed delay:250ms from:input[name=q], search, change from:input[name=vendor] delay:400ms"
         class="flex flex-wrap items-center gap-3">
     {{ search_input("q", q, placeholder="Search models") }}

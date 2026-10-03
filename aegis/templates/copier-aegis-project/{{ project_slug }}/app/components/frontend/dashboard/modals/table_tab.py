@@ -1,4 +1,4 @@
-"""A database tab that is one table of ``ui_database`` rows."""
+"""A tab or section that is one table of rows (``ui_database``, ``ui_runtime``)."""
 
 import flet as ft
 

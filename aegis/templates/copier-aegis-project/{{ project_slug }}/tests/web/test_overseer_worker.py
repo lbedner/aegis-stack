@@ -175,6 +175,7 @@ class TestSections:
             "Tasks",
             "Runtime",
             "Lifecycle",
+            "Container",
         ]
 
 

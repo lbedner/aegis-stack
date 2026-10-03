@@ -58,6 +58,8 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body class="min-h-screen bg-aegis-bg text-aegis-text {% block body_class %}{% endblock %}">
+  {# The bar along the top while a page or an htmx request loads (app.js). #}
+  <div id="page-progress" class="aegis-page-progress" aria-hidden="true"></div>
 
   {% block navbar %}
   <div class="max-w-screen-xl mx-auto px-6 lg:px-16 py-3 flex items-center justify-between border-b border-aegis-border">

@@ -304,8 +304,8 @@ async def comms_version() -> dict[str, Any]:
     }
 
 
-# Resend sending domains: the Flet dashboard's Email tab reads and adds
-# them here (the htmx Overseer calls the adapter directly).
+# Resend sending domains: Overseer's Flet Email tab reads and adds them
+# here (its htmx page calls the adapter directly).
 
 
 class DomainResponse(BaseModel):

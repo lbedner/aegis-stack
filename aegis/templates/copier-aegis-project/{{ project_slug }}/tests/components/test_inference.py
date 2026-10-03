@@ -146,3 +146,25 @@ class TestModelMoves:
     async def test_anything_else_is_refused(self) -> None:
         with pytest.raises(ValueError, match="delete"):
             await OllamaClient(base_url="http://x").move("delete", "m")
+
+
+class TestInferenceSampler:
+    """One read of Ollama a tick for every viewer (``app.core.series``): each
+    loaded model's memory and VRAM, and the server as a whole for the
+    Inference page."""
+
+    async def test_it_reads_each_loaded_models_memory(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.components.inference import sampler
+        from app.core import series
+        from tests._fake_ollama import RUNNING, SERVING, FakeClient
+
+        FakeClient.status = SERVING
+        monkeypatch.setattr(sampler, "OllamaClient", FakeClient)
+        reading = await sampler.read()
+        assert reading.values == {
+            f"qwen2.5:7b:{series.MEMORY}": RUNNING.size,
+            f"qwen2.5:7b:{series.VRAM}": RUNNING.size_vram,
+        }
+        assert reading.latest == (SERVING, "http://host.docker.internal:11434")

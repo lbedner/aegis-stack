@@ -9,10 +9,11 @@ gives them a home. Registered only in projects with the AI service (see
 ``overseer_sections``).
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time
 from typing import Any
 
 from app.components.backend.api.ai.service import ai_service
+from app.core import series
 from app.core.config import settings
 from app.core.formatting import format_relative_time
 from app.services.ai.domains.llm.provider_management import (
@@ -21,6 +22,7 @@ from app.services.ai.domains.llm.provider_management import (
 )
 from app.services.system.models import ComponentStatus
 
+from . import ranges
 from .overseer_ai_common import (
     HAS_RAG,
     HAS_VOICE,
@@ -60,14 +62,8 @@ SECTIONS = (
     ),
 )
 
-# The usage window: a label, and how far back it reaches (None: all time).
-WINDOWS = {
-    "24h": ("24 hours", timedelta(hours=24)),
-    "7d": ("7 days", timedelta(days=7)),
-    "30d": ("30 days", timedelta(days=30)),
-    "all": ("All time", None),
-}
-DEFAULT_WINDOW = "7d"
+# The usage window, in days: one of the app's range chips (``ranges.WINDOWS``).
+DEFAULT_DAYS = 7
 RECENT_CALLS = 25
 SENTIMENTS = ("positive", "neutral", "negative")
 
@@ -195,10 +191,10 @@ def _call(r: dict[str, Any], icon_url: str | None) -> dict[str, Any]:
 
 
 async def _usage(db: Any, query: dict[str, str]) -> dict[str, Any]:
-    window = query.get("window") if query.get("window") in WINDOWS else DEFAULT_WINDOW
-    reach = WINDOWS[window][1]
+    days = series.window_of(query.get("days"), ranges.WINDOWS, DEFAULT_DAYS)
+    start = ranges.since(days)
     stats = await usage_stats(
-        start_time=datetime.now(UTC) - reach if reach else None,
+        start_time=datetime.combine(start, time.min, tzinfo=UTC) if start else None,
         recent_limit=RECENT_CALLS,
     )
     # Each model's vendor, from the breakdown; the recent calls fall in the
@@ -207,14 +203,9 @@ async def _usage(db: Any, query: dict[str, str]) -> dict[str, Any]:
     marks = await mark_urls(db, {v: (v,) for v in set(vendor_of.values()) if v})
     icon_of = {model: marks.get(vendor or "") for model, vendor in vendor_of.items()}
     return {
-        "chips": [
-            {
-                "label": label,
-                "url": section_url("usage", window=key),
-                "active": key == window,
-            }
-            for key, (label, _) in WINDOWS.items()
-        ],
+        "windows": ranges.WINDOWS,
+        "days": days,
+        "usage_url": section_url("usage"),
         "figures": [
             {"label": "Requests", "value": f"{stats.get('total_requests', 0):,}"},
             {

@@ -8,12 +8,12 @@ Alembic in worker processes). ``AIService`` delegates here; the price
 lookup lives in exactly one place.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
+from app.core import series
 from app.core.db import get_async_session
-from app.core.time import utcnow
 from app.core.log import logger
+from app.core.time import utcnow
 from app.services.ai.domains.llm import queries as llm_queries
 
 from .models.llm import LLMUsage
@@ -136,6 +136,18 @@ def _priced_input_cost(usage: dict[str, int], input_price: float) -> float:
     )
 
 
+async def _chart(model: str, usage: dict[str, int], duration_ms: float | None) -> None:
+    """The call as points on the live charts (``app.core.series``), pushed as
+    it happens: seconds taken, and output tokens a second."""
+    if not duration_ms:
+        return
+    seconds = duration_ms / 1000
+    points = {f"{series.LLM}:{model}:{series.LATENCY}": seconds}
+    if output := usage.get("output_tokens", 0):
+        points[f"{series.LLM}:{model}:{series.TOKENS_PER_SECOND}"] = output / seconds
+    await series.record(points)
+
+
 async def record_usage(
     action: str,
     model_name: str,
@@ -198,6 +210,7 @@ async def record_usage(
             tokens=usage,
             cost=total_cost,
         )
+        await _chart(bare, usage, duration_ms)
     except Exception as e:
         logger.error("Failed to record LLM usage", error=str(e))
     return total_cost

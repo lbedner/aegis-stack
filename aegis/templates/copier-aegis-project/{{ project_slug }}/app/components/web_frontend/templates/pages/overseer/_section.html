@@ -10,7 +10,9 @@
    verbs in the header (``<folder>/_<section>_actions.html``). #}
 {% set subtitle = section_subtitle if section_subtitle is defined else (message if current == "overview" else none) %}
 {% call page_header(page.labels[current], subtitle) %}{% include "pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ "_actions.html" ignore missing %}{% endcall %}
-{% set partial = "pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ ".html" %}
+{# A section every page may have (the Container section) falls back to one
+   shared ``_<section>.html``. #}
+{% set partial = ["pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ ".html", "pages/overseer/_" ~ current|replace("-", "_") ~ ".html"] %}
 {% if page.live and current == "overview" %}
 <div id="{{ page.folder }}-overview" sse-swap="{{ page.folder }}-overview" hx-target="this">{% include partial %}</div>
 {% else %}

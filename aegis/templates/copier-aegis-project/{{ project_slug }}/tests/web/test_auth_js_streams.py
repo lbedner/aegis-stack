@@ -8,10 +8,8 @@ the refresh-on-401 wrapper, so the SSE extension's next retry connects.
 
 import json
 from pathlib import Path
-import shutil
-import subprocess
 
-import pytest
+from tests.web.node import run
 
 AUTH_JS = Path("app/components/web_frontend/static/js/auth.js")
 
@@ -38,14 +36,8 @@ require(%s);
 
 
 def _stream_errors(count: int) -> list[str]:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node not installed")
     script = HARNESS.replace("ERRORS", str(count)) % json.dumps(str(AUTH_JS.resolve()))
-    out = subprocess.run(
-        [node, "-e", script], capture_output=True, text=True, check=True
-    ).stdout
-    return json.loads(out)
+    return run(script)
 
 
 def test_a_stream_error_renews_an_expired_session() -> None:

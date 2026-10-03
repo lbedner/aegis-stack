@@ -1,8 +1,10 @@
 """Every WebSocket and event stream, for the Overseer's Server >
 Connections section: listed while open, counted while it talks, and
-remembered after with a timeline. A client that comes back within the
-grace window is the same connection reconnecting, not a new one. Plain
-requests are never listed."""
+remembered after with a timeline. An event stream is told its record's id
+and is the same connection only when the browser's retry names it
+(``Last-Event-ID``); a new page opening the same stream is a new one. A
+WebSocket that comes back within the grace window is the same connection
+reconnecting. Plain requests are never listed."""
 
 from typing import Any
 
@@ -26,7 +28,10 @@ def cache(monkeypatch: pytest.MonkeyPatch) -> CacheService:
 
 
 async def _drive(
-    app: Any, scope: dict[str, Any], incoming: list[dict[str, Any]]
+    app: Any,
+    scope: dict[str, Any],
+    incoming: list[dict[str, Any]],
+    sent: list[dict[str, Any]] | None = None,
 ) -> None:
     queue = list(incoming)
 
@@ -34,18 +39,32 @@ async def _drive(
         return queue.pop(0) if queue else {"type": "http.disconnect"}
 
     async def send(message: dict[str, Any]) -> None:
-        return None
+        if sent is not None:
+            sent.append(message)
 
     await ConnectionsMiddleware(app)(scope, receive, send)
 
 
-def _http(path: str) -> dict[str, Any]:
+def _http(path: str, last_id: str | None = None, method: str = "GET") -> dict[str, Any]:
+    headers = [(b"user-agent", b"Firefox")]
+    if last_id is not None:
+        headers.append((b"last-event-id", last_id.encode()))
     return {
         "type": "http",
+        "method": method,
         "path": path,
         "query_string": b"token=secret",
         "client": ("10.0.0.5", 51000),
-        "headers": [(b"user-agent", b"Firefox")],
+        "headers": headers,
+    }
+
+
+def _websocket() -> dict[str, Any]:
+    return {
+        "type": "websocket",
+        "path": "/dashboard/ws",
+        "client": ("127.0.0.1", 1),
+        "headers": [],
     }
 
 
@@ -106,12 +125,7 @@ async def test_a_websocket_is_listed_from_accept_to_close() -> None:
         seen.append(open_connections())
         await send({"type": "websocket.close"})
 
-    scope = {
-        "type": "websocket",
-        "path": "/dashboard/ws",
-        "client": ("127.0.0.1", 1),
-        "headers": [],
-    }
+    scope = _websocket()
     await _drive(
         socket,
         scope,
@@ -145,7 +159,12 @@ async def test_a_failing_app_still_leaves_the_list() -> None:
     assert open_connections() == []
 
 
-async def _sse(path: str = "/overseer/events", fail: bool = False) -> None:
+async def _sse(
+    path: str = "/overseer/events",
+    fail: bool = False,
+    last_id: str | None = None,
+    method: str = "GET",
+) -> list[dict[str, Any]]:
     async def stream(scope: Any, receive: Any, send: Any) -> None:
         await send(
             {
@@ -161,23 +180,51 @@ async def _sse(path: str = "/overseer/events", fail: bool = False) -> None:
             raise RuntimeError("boom")
         await receive()  # the client goes away
 
+    sent: list[dict[str, Any]] = []
     try:
-        await _drive(stream, _http(path), [{"type": "http.disconnect"}])
+        await _drive(
+            stream, _http(path, last_id, method), [{"type": "http.disconnect"}], sent
+        )
     except RuntimeError:
         pass
+    return sent
+
+
+async def _ws() -> None:
+    async def socket(scope: Any, receive: Any, send: Any) -> None:
+        await receive()  # websocket.connect
+        await send({"type": "websocket.accept"})
+        await send({"type": "websocket.send", "text": "hello"})
+        await receive()  # the client goes away
+
+    scope = _websocket()
+    await _drive(
+        socket, scope, [{"type": "websocket.connect"}, {"type": "websocket.disconnect"}]
+    )
 
 
 async def test_a_closed_connection_is_remembered_with_how_it_ended() -> None:
     await _sse()
     [record] = await history()
-    assert record["state"] == "reconnecting"  # inside the grace window
+    assert record["state"] == "closed"
     assert record["ended"] == "client went away" and record["sent"] == 1
     assert [what for _, what, _ in record["events"]] == ["connected", "dropped"]
 
 
-async def test_coming_back_inside_the_grace_window_is_the_same_connection() -> None:
+async def test_a_stream_is_told_its_record_id_first() -> None:
+    """The id lets the browser's own retry name the connection it lost; a
+    posted stream (the chat's, read by fetch) is left as it is."""
+    sent = await _sse()
+    [record] = await history()
+    assert sent[1]["body"] == f"id: {record['id']}\n\n".encode()
+    posted = await _sse("/api/v1/ai/chat/stream", method="POST")
+    assert not posted[1]["body"].startswith(b"id:")
+
+
+async def test_a_stream_whose_retry_names_its_id_is_the_same_connection() -> None:
     await _sse()
-    await _sse()
+    [first] = await history()
+    await _sse(last_id=first["id"])
     [record] = await history()
     assert record["reconnects"] == 1 and record["sent"] == 2
     assert [what for _, what, _ in record["events"]] == [
@@ -188,12 +235,28 @@ async def test_coming_back_inside_the_grace_window_is_the_same_connection() -> N
     ]
 
 
-async def test_after_the_grace_window_it_is_closed_and_a_return_is_new(
+async def test_a_new_page_opening_the_same_stream_is_a_new_connection() -> None:
+    await _sse()
+    await _sse()
+    records = await history()
+    assert len(records) == 2 and {r["reconnects"] for r in records} == {0}
+
+
+async def test_a_websocket_back_inside_the_grace_window_is_the_same_one() -> None:
+    await _ws()
+    [closed] = await history()
+    assert closed["state"] == "reconnecting"  # inside the grace window
+    await _ws()
+    [record] = await history()
+    assert record["reconnects"] == 1
+
+
+async def test_after_the_grace_window_a_websocket_is_closed_and_a_return_is_new(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(connections, "GRACE_SECONDS", 0)
-    await _sse()
-    await _sse()
+    await _ws()
+    await _ws()
     records = await history()
     assert len(records) == 2 and {r["state"] for r in records} == {"closed"}
 
@@ -317,7 +380,7 @@ async def test_returning_after_a_server_restart_is_the_same_connection(
     cache: CacheService,
 ) -> None:
     await cache.set(connections.RECORD + "ghost1", _ghost(), ttl=60)
-    await _sse()
+    await _sse(last_id="ghost1")
     [record] = await history()
     assert record["id"] == "ghost1" and record["reconnects"] == 1
     assert [(w, d) for _, w, d in record["events"][1:3]] == [

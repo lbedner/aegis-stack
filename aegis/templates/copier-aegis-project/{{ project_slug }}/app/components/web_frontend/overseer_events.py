@@ -13,9 +13,10 @@ import weakref
 from app.core.log import logger
 from app.services.system.health import get_system_status, last_system_status
 
+from .overseer_live import changed_frames
 from .overseer_nav import build_navigation
 from .overseer_server import overview_context
-from .rendering import templates
+from .rendering import fragment
 
 SAMPLE_INTERVAL_SECONDS = 30
 HEARTBEAT_INTERVAL_SECONDS = 15
@@ -27,9 +28,10 @@ def _state() -> dict[str, str]:
     if status is None:
         return {}
     navigation = build_navigation(status)
-    dot = templates.env.get_template("pages/overseer/_status_dot.html")
     payloads = {
-        entry.event: dot.render(health_status=entry.status)
+        entry.event: fragment(
+            "pages/overseer/_status_dot.html", health_status=entry.status
+        )
         for entries in navigation.values()
         for entry in entries
     }
@@ -42,9 +44,10 @@ def _state() -> dict[str, str]:
         None,
     )
     if backend is not None:
-        overview = templates.env.get_template("pages/overseer/server/_overview.html")
-        payloads["server-overview"] = overview.render(
-            component=backend, **overview_context(backend)
+        payloads["server-overview"] = fragment(
+            "pages/overseer/server/_overview.html",
+            component=backend,
+            **overview_context(backend),
         )
     return payloads
 
@@ -124,11 +127,7 @@ async def health_events() -> AsyncIterator[str]:
             except TimeoutError:
                 yield ": heartbeat\n\n"
                 continue
-            for event, payload in snapshot.items():
-                if last_seen.get(event) == payload:
-                    continue
-                last_seen[event] = payload
-                html = payload.strip().replace("\r", "").replace("\n", " ")
-                yield f"event: {event}\ndata: {html}\n\n"
+            for frame in changed_frames(last_seen, snapshot):
+                yield frame
     finally:
         feed.unsubscribe(queue)

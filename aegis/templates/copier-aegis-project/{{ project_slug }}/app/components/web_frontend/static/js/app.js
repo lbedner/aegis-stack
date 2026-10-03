@@ -112,11 +112,13 @@ document.body.addEventListener('htmx:sendError', () => {
 // closing it clears the body (see the dialog macro in macros/layout.html).
 // A swap into #drawer-body (``hx_drawer``) opens the side drawer the same way.
 document.body.addEventListener('htmx:afterSwap', (event) => {
-  if (event.detail.target.id === 'dialog-body') {
+  // A live stream's swap (the SSE extension) carries no target.
+  const id = event.detail.target?.id;
+  if (id === 'dialog-body') {
     const dialog = document.getElementById('dialog');
     if (dialog && !dialog.open) dialog.showModal();
   }
-  if (event.detail.target.id === 'drawer-body') {
+  if (id === 'drawer-body') {
     const drawer = document.getElementById('drawer');
     if (drawer && !drawer.open) drawer.show();
   }
@@ -217,7 +219,7 @@ document.body.addEventListener('htmx:afterRequest', (event) => {
   markClean(form.closest('#drawer, #dialog'));
 });
 document.body.addEventListener('htmx:afterSwap', (event) => {
-  const id = event.detail.target.id;
+  const id = event.detail.target?.id;
   if (id === 'drawer-body' || id === 'dialog-body') markClean(event.detail.target.closest('dialog'));
 });
 // ``close`` does not bubble; the capture phase still sees it.
@@ -240,5 +242,45 @@ document.body.addEventListener('dialog:close', () => {
   if (dialog && dialog.open) dialog.close();
 });
 
+// The progress bar along the top (#page-progress in base.html): on while
+// htmx has a request out, while part of the page is still on its way
+// (``data-pending``: a section whose data a live stream brings), and from
+// a click on a link that loads another page here until that page replaces
+// this one. A link htmx took, a new tab, another site, a download or an
+// anchor never starts it.
+let requestsOut = 0;
+let leaving = false;
+function syncProgress() {
+  const on = leaving || requestsOut > 0 || document.querySelector('[data-pending]') !== null;
+  document.getElementById('page-progress')?.classList.toggle('is-loading', on);
+}
+function navigates(event) {
+  const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+  if (event.button !== 0 || modified || event.defaultPrevented) return false;
+  const link = event.target.closest && event.target.closest('a[href]');
+  if (!link || link.target || link.hasAttribute('download')) return false;
+  return link.origin === window.location.origin && !link.getAttribute('href').startsWith('#');
+}
+document.addEventListener('click', (event) => {
+  if (!navigates(event)) return;
+  leaving = true;
+  syncProgress();
+});
+document.body.addEventListener('htmx:beforeRequest', () => {
+  requestsOut += 1;
+  syncProgress();
+});
+document.body.addEventListener('htmx:afterRequest', () => {
+  requestsOut = Math.max(0, requestsOut - 1);
+  syncProgress();
+});
+// The page's first paint, and every swap after it (a stream's included).
+document.body.addEventListener('htmx:load', syncProgress);
+// Back to this page from the browser's cache: nothing is loading.
+window.addEventListener('pageshow', () => {
+  leaving = false;
+  syncProgress();
+});
+
 // The dismissal rules, for the node tests (tests/web/test_app_js.py).
-if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss };
+if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates };

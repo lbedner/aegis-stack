@@ -128,6 +128,7 @@ class TestSections:
             "Overview",
             "Slow queries",
             "Connections",
+            "Container",
         ]
 
 

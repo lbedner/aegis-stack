@@ -178,3 +178,32 @@ class TestValuesWithPrefix:
         await cache.set("connections:record:old", {"n": 1}, ttl=1)
         monkeypatch.setattr("app.core.cache.time.time", lambda: 10**12)
         assert await cache.values_with_prefix("connections:record:") == {}
+
+
+class TestSeriesPoints:
+    """Time series kept in the cache (``app.core.series`` writes them): a
+    sorted set per series under Redis, a list here."""
+
+    async def test_points_come_back_in_time_order_from_since(self) -> None:
+        cache = CacheService()
+        await cache.append_many({"series:a:x": 1.0}, at=100.0, keep_seconds=60)
+        await cache.append_many({"series:a:x": 2.0}, at=130.0, keep_seconds=60)
+        await cache.append_many({"series:a:y": 5.0}, at=130.0, keep_seconds=60)
+        await cache.append_many({"series:b:x": 9.0}, at=130.0, keep_seconds=60)
+        assert await cache.points_with_prefix("series:a:", since=110.0) == {
+            "series:a:x": [(130.0, 2.0)],
+            "series:a:y": [(130.0, 5.0)],
+        }
+
+    async def test_a_point_older_than_its_window_is_dropped(self) -> None:
+        cache = CacheService()
+        await cache.append_many({"series:a:x": 1.0}, at=100.0, keep_seconds=60)
+        await cache.append_many({"series:a:x": 2.0}, at=200.0, keep_seconds=60)
+        assert await cache.points_with_prefix("series:a:", since=0) == {
+            "series:a:x": [(200.0, 2.0)]
+        }
+
+    async def test_a_claim_holds_until_it_expires(self) -> None:
+        cache = CacheService()
+        assert await cache.claim("series-claim:a", ttl=60) is True
+        assert await cache.claim("series-claim:a", ttl=60) is False

@@ -18,7 +18,7 @@ from app.services.system.ui_database import display_url
 from .filters import color_tone
 from .overseer_live import fragment_events
 from .overseer_nav import SectionRequest
-from .rendering import status_cell, templates
+from .rendering import fragment, status_cell
 
 SECTIONS = (
     (None, {"overview": "Overview"}),
@@ -69,9 +69,7 @@ def keyspace_view(keyspace: dict[str, Any]) -> dict[str, Any]:
 
 
 def render_keyspace(keyspace: dict[str, Any]) -> str:
-    return templates.env.get_template(KEYSPACE_TEMPLATE).render(
-        **keyspace_view(keyspace)
-    )
+    return fragment(KEYSPACE_TEMPLATE, **keyspace_view(keyspace))
 
 
 def keyspace_events(max_frames: int | None = None) -> AsyncIterator[str]:

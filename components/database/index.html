@@ -1465,6 +1465,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#database-activity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Database Activity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#testing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5801,6 +5812,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#database-activity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Database Activity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#testing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6009,6 +6031,10 @@ drifted, replay the revisions onto a scratch database and diff:</p>
 <li>Migrations work identically for SQLite and PostgreSQL</li>
 <li>On Neon, migrations run over the direct (unpooled) <code>DATABASE_URL_UNPOOLED</code> endpoint automatically; the pooled endpoint is reserved for app runtime</li>
 </ul>
+<h2 id="database-activity">Database Activity</h2>
+<p>A transaction held longer than <code>DATABASE_SLOW_TRANSACTION_SECONDS</code> (2 seconds by default), and a statement that found the database locked, are recorded with the process and the line of app code behind each. They show on the Database page's <strong>Activity</strong> tab in the Overseer and the Flet dashboard, and in the log.</p>
+<p>On SQLite every write takes the database's one write lock and waits up to 30 seconds for it, so <code>database is locked</code> means some other transaction held the lock that long. The Activity tab names it: usually a session kept open across slow work (an LLM call, a provider request, a long stream). The fix stays local: close the session before the slow call, or commit sooner.</p>
+<p>Records live for an hour, in Redis when the stack has it (the webserver then shows what the worker and scheduler recorded too), otherwise in the process that recorded them. <code>DATABASE_SLOW_TRANSACTION_SECONDS=0</code> turns it off; it is also on the Overseer Settings page.</p>
 <h2 id="testing">Testing</h2>
 <p>The component includes test fixtures for database testing:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># tests/conftest.py provides:</span>

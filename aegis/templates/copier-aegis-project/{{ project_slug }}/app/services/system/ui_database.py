@@ -10,6 +10,8 @@ import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from app.core.formatting import format_relative_time
+
 # Docker service names a developer reaches as localhost from the host.
 _DOCKER_HOSTS = ("@db:", "@postgres:", "@postgresql:", "@database:", "@redis:")
 
@@ -211,6 +213,22 @@ def _sqlite_settings(metadata: dict[str, Any]) -> list[tuple[str, Any, str]]:
         (key, shown.get(key, pragma[key]), category)
         for key, category in layout
         if key in pragma
+    ]
+
+
+def activity(metadata: dict[str, Any]) -> list[dict[str, str]]:
+    """Slow transactions and lock failures (``app.core.db_activity``),
+    newest first, for the Activity tab."""
+    return [
+        {
+            "when": format_relative_time(event["at"]),
+            "what": "Locked"
+            if event["kind"] == "locked"
+            else f"Held {event['seconds']} s",
+            "process": event["process"],
+            "caller": event["caller"],
+        }
+        for event in metadata.get("activity", [])
     ]
 
 

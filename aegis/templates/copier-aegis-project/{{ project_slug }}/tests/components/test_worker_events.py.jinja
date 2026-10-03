@@ -321,11 +321,11 @@ async def test_the_worker_reports_what_it_runs_with(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Startup reports arq's max_jobs, which comes from the settings."""
-    from app.components.worker import runtime
+    from app.components.worker import arq_hooks, runtime
     from app.components.worker.queues import system
 
     started: dict[str, Any] = {}
-    monkeypatch.setattr(system.aioredis, "from_url", lambda *_a, **_k: AsyncMock())
+    monkeypatch.setattr(arq_hooks.aioredis, "from_url", lambda *_a, **_k: AsyncMock())
     monkeypatch.setattr(
         runtime, "start_reporting", lambda _redis, fields: started.update(fields)
     )
@@ -333,6 +333,51 @@ async def test_the_worker_reports_what_it_runs_with(
 
     assert started["engine"] == "arq" and started["queue"] == "system"
     assert started["concurrency"] == system.WorkerSettings.max_jobs
+
+
+ARQ_HOOKS = ("on_startup", "on_shutdown", "on_job_start", "after_job_end")
+
+
+def _arq_queues() -> list[str]:
+    from app.components.worker.registry import discover_worker_queues
+
+    return discover_worker_queues()
+
+
+@pytest.mark.parametrize("queue", _arq_queues())
+def test_every_queue_carries_the_shared_hooks(queue: str) -> None:
+    """arq reads a queue's hooks from its settings class's own ``__dict__``
+    (an inherited hook never runs), so each queue assigns the shared ones."""
+    from app.components.worker.registry import get_worker_settings
+
+    own = vars(get_worker_settings(queue))
+    assert all(hook in own for hook in ARQ_HOOKS)
+    assert all(own[hook].__module__.endswith("arq_hooks") for hook in ARQ_HOOKS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("queue", _arq_queues())
+async def test_every_queue_records_its_jobs_in_task_history(
+    queue: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.components.worker import arq_hooks
+    from app.components.worker.registry import get_worker_settings
+
+    started, finished = AsyncMock(), AsyncMock()
+    monkeypatch.setattr(arq_hooks, "publish_event", AsyncMock())
+    monkeypatch.setattr(arq_hooks, "resolve_arq_task_name", AsyncMock(return_value="t"))
+    monkeypatch.setattr(arq_hooks, "record_task_started", started)
+    monkeypatch.setattr(arq_hooks, "record_task_finished", finished)
+    redis = AsyncMock()
+    redis.get.return_value = None
+    ctx = {"events_redis": redis, "job_id": "job-1"}
+    settings_class = get_worker_settings(queue)
+
+    await settings_class.on_job_start(ctx)
+    await settings_class.after_job_end(ctx)
+
+    assert started.call_args.kwargs["queue_name"] == queue
+    assert finished.call_args.kwargs["queue_name"] == queue
 
 
 def test_max_jobs_comes_from_the_settings(monkeypatch: pytest.MonkeyPatch) -> None:

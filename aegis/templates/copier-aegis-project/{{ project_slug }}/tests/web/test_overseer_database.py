@@ -1,4 +1,4 @@
-"""The Overseer Database page: four tabs carried over from the Flet database modal."""
+"""The Overseer Database page: the Flet database modal's tabs, Activity included."""
 
 from collections.abc import Generator
 from typing import Any
@@ -64,6 +64,22 @@ SQLITE: dict[str, Any] = {
     "wal_enabled": True,
     "pragma_settings": {"journal_mode": "wal", "foreign_keys": True, "synchronous": 1},
     "comprehensive_pragma": {"page_size": 4096, "db_efficiency": 97.5},
+    "activity": [
+        {
+            "kind": "locked",
+            "seconds": None,
+            "process": "worker:12",
+            "caller": "app/services/ai/jobs.py:40 in score",
+            "at": "2026-10-02T12:00:05+00:00",
+        },
+        {
+            "kind": "slow",
+            "seconds": 34.2,
+            "process": "webserver:7",
+            "caller": "app/services/ai/chat.py:88 in stream_turn",
+            "at": "2026-10-02T12:00:00+00:00",
+        },
+    ],
 }
 
 
@@ -101,13 +117,14 @@ def _figures(html: str) -> dict[str, str]:
 
 
 class TestSections:
-    def test_four_sections_with_overview_first(self, postgres: TestClient) -> None:
+    def test_five_sections_with_overview_first(self, postgres: TestClient) -> None:
         html = _get(postgres)
         assert [text(a) for a in select(html, "#overseer-subnav nav a")] == [
             "Overview",
             "Schema",
             "Migrations",
             "Settings",
+            "Activity",
         ]
         assert text(one(html, "#overseer-subnav h2")) == "Database"
         assert "PostgreSQL 16.4" in text(one(html, "#overseer-subnav"))
@@ -186,3 +203,17 @@ class TestSettings:
         assert rows["foreign_keys"] == "Enabled"
         assert rows["page_size"] == "4096 bytes"
         assert rows["db_efficiency"] == "97.50%"
+
+
+class TestActivity:
+    def test_slow_transactions_and_lock_waits_name_their_caller(
+        self, sqlite: TestClient
+    ) -> None:
+        rows = [text(r) for r in select(_get(sqlite, "activity"), "tbody tr")]
+        assert (
+            "Locked" in rows[0] and "worker:12" in rows[0] and "jobs.py:40" in rows[0]
+        )
+        assert "34.2" in rows[1] and "chat.py:88 in stream_turn" in rows[1]
+
+    def test_nothing_recorded_says_so(self, postgres: TestClient) -> None:
+        assert "Nothing" in text(one(_get(postgres, "activity"), "#database-activity"))

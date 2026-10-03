@@ -141,7 +141,7 @@ demos/recordings
 .claude/*.local.json
 
 # Typical generated stack folders
-my-app/
+my-app*/
 
 # Translation review artifacts
 aegis_*_review.csv

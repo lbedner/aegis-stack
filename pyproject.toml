@@ -147,7 +147,7 @@ target-version = "py311"
 extend-exclude = [
     "aegis/templates",
     "test-project",
-    "my-app",
+    "my-app*",
     "finance-app",
     "finance-blueprint",
     "demo-*",
@@ -200,7 +200,7 @@ asyncio_default_fixture_loop_scope = "function"
 exclude = [
     "aegis/templates/**",
     "test-project/**",
-    "my-app/**",
+    "my-app*/**",
     "finance-app/**",
     "finance-blueprint/**",
     "test-*/**",

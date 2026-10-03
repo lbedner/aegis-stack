@@ -1,0 +1,15 @@
+{# Slow transactions and lock failures from the last hour
+   (app.core.db_activity), each with the process and the app code behind it. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+<div id="database-activity">
+{% call card("Activity") %}
+  <p class="text-xs text-aegis-muted mb-2">Transactions held longer than {{ threshold }} s, and statements that found the database locked, in the last hour, with the code behind each.</p>
+  {{ data_table([
+    {"key": "when", "label": "When"},
+    {"key": "what", "label": "What"},
+    {"key": "process", "label": "Process", "kind": "code"},
+    {"key": "caller", "label": "Code", "kind": "code"},
+  ], activity, empty="Nothing slow or locked in the last hour") }}
+{% endcall %}
+</div>

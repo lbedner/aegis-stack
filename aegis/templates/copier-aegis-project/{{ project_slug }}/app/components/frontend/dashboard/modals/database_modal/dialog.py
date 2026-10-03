@@ -3,6 +3,7 @@
 import flet as ft
 
 from app.components.frontend.controls.tabs import PulseTabs
+from app.components.frontend.dashboard.modals.database_modal.activity import ActivityTab
 from app.components.frontend.dashboard.modals.database_modal.migrations import (
     MigrationsTab,
 )
@@ -37,6 +38,7 @@ class DatabaseDetailDialog(BaseDetailPopup):
                     text="Migrations", content=MigrationsTab(database_component, page)
                 ),
                 ft.Tab(text="Settings", content=SettingsTab(database_component, page)),
+                ft.Tab(text="Activity", content=ActivityTab(database_component, page)),
             ],
             expand=True,
         )

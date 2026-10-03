@@ -6,6 +6,7 @@ The same four views as the Flet database modal's tabs, built by the same helpers
 
 from typing import Any
 
+from app.core.config import settings
 from app.services.system import ui_database
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_database_subtitle
@@ -20,6 +21,7 @@ SECTIONS = (
             "schema": "Schema",
             "migrations": "Migrations",
             "settings": "Settings",
+            "activity": "Activity",
         },
     ),
 )
@@ -40,4 +42,7 @@ async def section_context(
         context["migrations"] = ui_database.migrations(metadata)
     elif section == "settings":
         context["settings"] = ui_database.settings(metadata)
+    elif section == "activity":
+        context["activity"] = ui_database.activity(metadata)
+        context["threshold"] = settings.DATABASE_SLOW_TRANSACTION_SECONDS
     return context

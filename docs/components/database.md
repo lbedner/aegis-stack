@@ -206,6 +206,14 @@ alembic upgrade head
 - Migrations work identically for SQLite and PostgreSQL
 - On Neon, migrations run over the direct (unpooled) `DATABASE_URL_UNPOOLED` endpoint automatically; the pooled endpoint is reserved for app runtime
 
+## Database Activity
+
+A transaction held longer than `DATABASE_SLOW_TRANSACTION_SECONDS` (2 seconds by default), and a statement that found the database locked, are recorded with the process and the line of app code behind each. They show on the Database page's **Activity** tab in the Overseer and the Flet dashboard, and in the log.
+
+On SQLite every write takes the database's one write lock and waits up to 30 seconds for it, so `database is locked` means some other transaction held the lock that long. The Activity tab names it: usually a session kept open across slow work (an LLM call, a provider request, a long stream). The fix stays local: close the session before the slow call, or commit sooner.
+
+Records live for an hour, in Redis when the stack has it (the webserver then shows what the worker and scheduler recorded too), otherwise in the process that recorded them. `DATABASE_SLOW_TRANSACTION_SECONDS=0` turns it off; it is also on the Overseer Settings page.
+
 ## Testing
 
 The component includes test fixtures for database testing:

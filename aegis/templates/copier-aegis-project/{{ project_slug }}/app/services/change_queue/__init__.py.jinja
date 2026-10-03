@@ -23,6 +23,7 @@ from app.services.change_queue.queries import (
 from app.services.change_queue.queue import (
     approve,
     approve_batch,
+    card,
     describe_change,
     outcome_of,
     propose,
@@ -51,6 +52,7 @@ __all__ = [
     "PendingChange",
     "approve",
     "approve_batch",
+    "card",
     "batch_rows",
     "describe_change",
     "executor_for",

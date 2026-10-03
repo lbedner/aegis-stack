@@ -131,6 +131,11 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
     <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant, message.agent_url) }}</div>
     {% endif %}
     <div class="{{ prose }}" data-body>{{ message.content|markdown }}</div>
+    {# The approval cards this reply's tools proposed, loaded fresh so a
+       card shows its state now, not the state when it was filed. #}
+    {% for url in message.changes or [] %}
+    <div hx-get="{{ url }}" hx-trigger="load" hx-swap="outerHTML" class="my-2 text-xs text-aegis-muted">Loading the change&hellip;</div>
+    {% endfor %}
     {% if message.cut_off %}
     <div data-cut-off class="mt-2 flex flex-wrap items-center gap-2 text-xs text-aegis-amber">
       <span>{{ message.cut_off }}</span>

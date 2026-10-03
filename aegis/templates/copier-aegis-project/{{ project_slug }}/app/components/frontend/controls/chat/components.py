@@ -21,6 +21,8 @@ from typing import Any
 
 import flet as ft
 
+from app.core.chat_transcript import CARD_STATUS_LABELS, card_markers
+
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.chat.display_rows import (
     _display_rows,
@@ -37,12 +39,16 @@ ChangeAction = Callable[[int, str], Awaitable[dict[str, Any] | None]]
 # fixed narrow width and centers in whatever column hosts it.
 CARD_WIDTH = 420
 
+_STATUS_COLORS = {
+    "pending": Theme.Colors.WARNING,
+    "approved": Theme.Colors.SUCCESS,
+    "rejected": Theme.Colors.ERROR,
+    "withdrawn": ft.Colors.OUTLINE,
+    "expired": ft.Colors.OUTLINE,
+}
 _STATUS_COPY = {
-    "pending": ("Awaiting your approval", Theme.Colors.WARNING),
-    "approved": ("Approved", Theme.Colors.SUCCESS),
-    "rejected": ("Rejected", Theme.Colors.ERROR),
-    "withdrawn": ("Withdrawn", ft.Colors.OUTLINE),
-    "expired": ("Expired", ft.Colors.OUTLINE),
+    status: (CARD_STATUS_LABELS[status], color)
+    for status, color in _STATUS_COLORS.items()
 }
 
 
@@ -426,9 +432,7 @@ def _card_data(entry: dict[str, Any]) -> list[dict[str, Any]]:
     JSON - the identity fields lead the blob, so they survive the clip
     and are salvaged; the card fetches its rows like any marker card.
     """
-    marker = entry.get("component")
-    markers = marker if isinstance(marker, list) else [marker]
-    found = [{**m, "items": []} for m in markers if isinstance(m, dict) and m.get("kind")]
+    found = [{**m, "items": []} for m in card_markers(entry)]
     if found or entry.get("tool") == "pending":
         return found
     result = entry.get("result")

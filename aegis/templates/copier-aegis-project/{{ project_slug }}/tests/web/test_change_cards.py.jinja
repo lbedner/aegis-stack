@@ -1,0 +1,217 @@
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""Approval cards in the htmx UI (#1368): the change queue's card, its
+batch card, the review list, and the card a chat reply carries.
+
+A card renders the stored queue row, so what the user approves is what
+runs; approving or rejecting swaps the card for its new state.
+"""
+
+from collections.abc import Iterator
+from types import SimpleNamespace
+from typing import Any
+
+from fastapi.testclient import TestClient
+from pydantic import BaseModel, ConfigDict
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services import change_queue
+from app.services.change_queue import ChangeDisplayRow, ChangeExecutor, registry
+from tests.web.dom import one, select, text
+
+NOTE = "test.card_note"
+HX = {"HX-Request": "true"}
+executed: list[str] = []
+
+
+class NotePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+
+
+async def _execute(
+    db: AsyncSession, payload: NotePayload, owner_user_id: int | None
+) -> dict[str, Any]:
+    executed.append(payload.text)
+    return {"noted": payload.text}
+
+
+async def _describe(
+    db: AsyncSession, payload: NotePayload, owner_user_id: int | None
+) -> list[ChangeDisplayRow]:
+    return [ChangeDisplayRow(label="Note", value=payload.text)]
+
+
+@pytest.fixture(autouse=True)
+def note_type() -> Iterator[None]:
+    executed.clear()
+    change_queue.register(
+        ChangeExecutor(
+            change_type=NOTE,
+            title="Write a note",
+            payload_model=NotePayload,
+            execute=_execute,
+            describe=_describe,
+        )
+    )
+    yield
+    registry._EXECUTORS.pop(NOTE, None)
+
+
+def _propose(client: TestClient, note: str) -> int:
+    return client.post(
+        "/api/v1/changes", json={"change_type": NOTE, "payload": {"text": note}}
+    ).json()["id"]
+
+
+def test_a_card_shows_the_change_and_approving_swaps_it(
+    authenticated_client: TestClient,
+) -> None:
+    change_id = _propose(authenticated_client, "hi")
+
+    card = authenticated_client.get(f"/partials/changes/{change_id}", headers=HX)
+    assert card.status_code == 200
+    assert "Write a note" in card.text and "hi" in card.text
+    assert f'hx-post="/partials/changes/{change_id}/approve"' in card.text
+
+    approved = authenticated_client.post(
+        f"/partials/changes/{change_id}/approve", headers=HX
+    )
+    assert approved.status_code == 200
+    assert "Approved" in text(one(approved.text, "[data-change]"))
+    assert "/approve" not in approved.text
+    assert executed == ["hi"]
+
+
+def test_rejecting_runs_nothing(authenticated_client: TestClient) -> None:
+    change_id = _propose(authenticated_client, "no")
+
+    rejected = authenticated_client.post(
+        f"/partials/changes/{change_id}/reject", headers=HX
+    )
+
+    assert "Rejected" in text(one(rejected.text, "[data-change]"))
+    assert executed == []
+
+
+async def test_another_users_card_is_not_found(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    if acting_owner_user_id is None:
+        pytest.skip("a single-user stack has nobody else")
+    from app.models.user import User
+
+    other = User(email="someone-else@example.com", hashed_password="x")
+    async_db_session.add(other)
+    await async_db_session.flush()
+    row = await change_queue.propose(
+        async_db_session, NOTE, {"text": "theirs"}, owner_user_id=other.id
+    )
+    await async_db_session.commit()
+
+    for method, path in (("get", ""), ("post", "/approve")):
+        response = getattr(authenticated_client, method)(
+            f"/partials/changes/{row.id}{path}", headers=HX
+        )
+        assert response.status_code == 404
+    assert executed == []
+
+
+async def test_a_batch_approves_all_but_the_vetoed_rows(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    rows = await change_queue.propose_many(
+        async_db_session,
+        NOTE,
+        [{"text": "keep"}, {"text": "veto"}],
+        owner_user_id=acting_owner_user_id,
+    )
+    await async_db_session.commit()
+    batch = rows[0].batch_id
+
+    card = authenticated_client.get(f"/partials/changes/batch/{batch}", headers=HX)
+    assert "keep" in card.text and "veto" in card.text
+    assert len(select(card.text, "input[name=exclude_ids]")) == 2
+
+    resolved = authenticated_client.post(
+        f"/partials/changes/batch/{batch}/approve",
+        data={"exclude_ids": [str(rows[1].id)]},
+        headers=HX,
+    )
+
+    assert resolved.status_code == 200
+    assert executed == ["keep"]
+    card = text(one(resolved.text, "[data-change-batch]"))
+    assert "Approved" in card and "Rejected" in card
+
+
+def test_the_review_list_holds_only_what_waits(
+    authenticated_client: TestClient,
+) -> None:
+    waiting = _propose(authenticated_client, "waiting")
+    done = _propose(authenticated_client, "done")
+    authenticated_client.post(f"/partials/changes/{done}/approve", headers=HX)
+
+    review = authenticated_client.get("/partials/changes", headers=HX)
+
+    assert f"/partials/changes/{waiting}/approve" in review.text
+    assert f"/partials/changes/{done}/" not in review.text
+
+
+def test_a_chat_reply_carries_the_cards_its_tools_proposed() -> None:
+    from app.components.web_frontend import overseer_ai_chat
+
+    trace = [
+        {
+            "tool": "propose",
+            "component": {"kind": "pending_change", "pending_change_id": 7},
+        },
+        {
+            "tool": "propose_many",
+            "component": {"kind": "pending_change_batch", "batch_id": "b1"},
+        },
+        {
+            "tool": "pending",
+            "component": [{"kind": "pending_change", "pending_change_id": 7}],
+        },
+        {"tool": "search", "result": "3 hits"},
+    ]
+    message = SimpleNamespace(
+        id="m1",
+        role=SimpleNamespace(value="assistant"),
+        content="Filed it.",
+        metadata={"tool_trace": trace},
+    )
+
+    shaped = overseer_ai_chat.settled(message, "c1")
+
+    assert shaped["changes"] == [
+        "/partials/changes/7",
+        "/partials/changes/batch/b1",
+    ]
+
+
+def test_the_chat_surface_carries_the_review_list() -> None:
+    from app.components.web_frontend.rendering import templates
+
+    surface = templates.get_template("partials/chat/surface.html")
+    context = {
+        "assistant": "Illiana",
+        "chat_path": "/chat",
+        "stream_url": "/chat/stream",
+        "turn_defaults": {},
+        "messages": [],
+        "conversation_id": None,
+        "picker": False,
+        "voice": None,
+    }
+
+    assert 'hx-get="/partials/changes"' in surface.render(
+        context | {"approvals": "/partials/changes"}
+    )
+    assert "/partials/changes" not in surface.render(context | {"approvals": None})
+{% endif %}

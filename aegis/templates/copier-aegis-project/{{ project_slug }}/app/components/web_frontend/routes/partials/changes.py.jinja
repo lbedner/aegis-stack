@@ -1,0 +1,189 @@
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""Approval cards (#1368): the change queue as htmx fragments.
+
+A card renders the stored queue row through ``change_queue.card`` (the same
+builder the JSON routes in ``api/changes.py`` use), so what the user
+approves is what runs. Approving or rejecting swaps the card for its new
+state. Everything is scoped to the signed-in user by ``get_owner_user_id``:
+another user's card is a 404, never a card.
+"""
+
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.web_frontend.rendering import templates
+from app.core.chat_transcript import CARD_STATUS_LABELS
+from app.core.db import get_async_db
+from app.core.log import logger
+from app.services import change_queue
+from app.services.change_queue import PendingChange
+from app.services.shared.deps import get_owner_user_id
+
+PATH = "/partials/changes"
+router = APIRouter(prefix=PATH)
+
+# The badge tone each status shows in (the words are CARD_STATUS_LABELS,
+# shared with the Flet chat). Withdrawn is an outcome, not a status: a
+# rejection the proposing agent filed against itself.
+TONES = {"pending": "warn", "approved": "ok", "rejected": "error"}
+
+
+def card_url(marker: dict[str, Any]) -> str | None:
+    """Where the card a trace marker names is served, or None."""
+    if marker.get("kind") == "pending_change" and marker.get("pending_change_id"):
+        return f"{PATH}/{marker['pending_change_id']}"
+    if marker.get("kind") == "pending_change_batch" and marker.get("batch_id"):
+        return f"{PATH}/batch/{marker['batch_id']}"
+    return None
+
+
+async def _view(db: AsyncSession, row: PendingChange) -> dict[str, Any]:
+    """One row as its card shows it."""
+    card = await change_queue.card(db, row)
+    outcome = change_queue.outcome_of(row)
+    return card.model_dump() | {
+        "label": CARD_STATUS_LABELS.get(outcome, outcome),
+        "tone": TONES.get(outcome, "muted"),
+        "url": f"{PATH}/{row.id}",
+    }
+
+
+async def _row(db: AsyncSession, change_id: int, owner: int | None) -> PendingChange:
+    row = await change_queue.get_change(db, change_id, owner_user_id=owner)
+    if row is None:
+        raise HTTPException(status_code=404)
+    return row
+
+
+async def _batch(db: AsyncSession, batch_id: str, owner: int | None) -> dict[str, Any]:
+    rows = await change_queue.batch_rows(db, batch_id, owner_user_id=owner)
+    if not rows:
+        raise HTTPException(status_code=404)
+    views = [await _view(db, row) for row in rows]
+    return {
+        "batch_id": batch_id,
+        "url": f"{PATH}/batch/{batch_id}",
+        "title": views[0]["title"],
+        "rows": views,
+        "pending": any(v["status"] == "pending" for v in views),
+    }
+
+
+def _card(request: Request, change: dict[str, Any]) -> Response:
+    return templates.TemplateResponse(
+        request, "partials/changes/card.html", {"change": change}
+    )
+
+
+def _batch_card(request: Request, batch: dict[str, Any]) -> Response:
+    return templates.TemplateResponse(
+        request, "partials/changes/batch.html", {"batch": batch}
+    )
+
+
+@router.get("", response_class=HTMLResponse)
+async def review(
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    owner: int | None = Depends(get_owner_user_id),
+) -> Response:
+    """Every card still waiting for this user, a batch as one card."""
+    rows = await change_queue.list_changes(db, owner_user_id=owner, status="pending")
+    cards: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        if row.batch_id is None:
+            cards.append({"single": await _view(db, row)})
+        elif row.batch_id not in seen:
+            seen.add(row.batch_id)
+            cards.append({"batch": await _batch(db, row.batch_id, owner)})
+    return templates.TemplateResponse(
+        request, "partials/changes/review.html", {"cards": cards}
+    )
+
+
+@router.get("/{change_id}", response_class=HTMLResponse)
+async def show(
+    request: Request,
+    change_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    owner: int | None = Depends(get_owner_user_id),
+) -> Response:
+    return _card(request, await _view(db, await _row(db, change_id, owner)))
+
+
+@router.post("/{change_id}/approve", response_class=HTMLResponse)
+async def approve(
+    request: Request,
+    change_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    owner: int | None = Depends(get_owner_user_id),
+) -> Response:
+    """Run the stored change. A failure stays on the card as its error,
+    recorded like the JSON route records it."""
+    await _row(db, change_id, owner)
+    try:
+        await change_queue.approve(db, change_id, owner_user_id=owner)
+    except ValueError:
+        pass  # the row carries the error the card shows
+    except Exception:
+        logger.exception(f"Executing pending change {change_id} failed")
+    await db.commit()
+    return _card(request, await _view(db, await _row(db, change_id, owner)))
+
+
+@router.post("/{change_id}/reject", response_class=HTMLResponse)
+async def reject(
+    request: Request,
+    change_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    owner: int | None = Depends(get_owner_user_id),
+) -> Response:
+    await _row(db, change_id, owner)
+    row = await change_queue.reject(db, change_id, owner_user_id=owner)
+    await db.commit()
+    return _card(request, await _view(db, row))
+
+
+@router.get("/batch/{batch_id}", response_class=HTMLResponse)
+async def show_batch(
+    request: Request,
+    batch_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    owner: int | None = Depends(get_owner_user_id),
+) -> Response:
+    return _batch_card(request, await _batch(db, batch_id, owner))
+
+
+@router.post("/batch/{batch_id}/approve", response_class=HTMLResponse)
+async def approve_batch(
+    request: Request,
+    batch_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    owner: int | None = Depends(get_owner_user_id),
+) -> Response:
+    """Approve the batch's waiting rows, rejecting the ones ticked to skip."""
+    await _batch(db, batch_id, owner)
+    form = await request.form()
+    skipped = [int(v) for v in form.getlist("exclude_ids") if str(v).isdigit()]
+    await change_queue.approve_batch(
+        db, batch_id, owner_user_id=owner, exclude_ids=skipped
+    )
+    await db.commit()
+    return _batch_card(request, await _batch(db, batch_id, owner))
+
+
+@router.post("/batch/{batch_id}/reject", response_class=HTMLResponse)
+async def reject_batch(
+    request: Request,
+    batch_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    owner: int | None = Depends(get_owner_user_id),
+) -> Response:
+    await _batch(db, batch_id, owner)
+    await change_queue.reject_batch(db, batch_id, owner_user_id=owner)
+    await db.commit()
+    return _batch_card(request, await _batch(db, batch_id, owner))
+{% endif %}

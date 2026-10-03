@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 
 from app.components.backend.api.ai.service import ai_service
 from app.core.chat_transcript import (
+    card_markers,
     footer_line,
     strip_attachment_marker,
     trace_failed,
@@ -180,6 +181,31 @@ async def reply_agent_context(
     return context | {"used": reply_used(meta), "stay": True, "focus": focus}
 
 
+def _review_url() -> str:
+    from app.components.web_frontend.routes.partials.changes import PATH
+
+    return PATH
+
+
+def change_urls(trace: list[dict[str, Any]]) -> list[str]:
+    """The approval cards a reply's tools proposed (``propose``,
+    ``propose_many``) or listed (``pending``), once each, in order: the
+    trace keeps each card's identity as its ``component`` marker."""
+    cards = [card for entry in trace for card in card_markers(entry)]
+    if not cards:
+        return []
+    # Imported only when a card exists: the routes ship with the queue,
+    # which is the only thing that leaves these markers.
+    from app.components.web_frontend.routes.partials.changes import card_url
+
+    urls: list[str] = []
+    for card in cards:
+        url = card_url(card)
+        if url is not None and url not in urls:
+            urls.append(url)
+    return urls
+
+
 def settled(
     message: Any, conversation_id: str, icons: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -203,6 +229,7 @@ def settled(
             }
             for i, e in enumerate(meta.get("tool_trace") or [])
         ],
+        "changes": change_urls(meta.get("tool_trace") or []),
         "footer": footer_line(meta),
         "cut_off": cut_off(meta),
         # The agent registry lives in the database: no drawer without it.
@@ -267,6 +294,8 @@ async def surface_context() -> dict[str, Any]:
         "turn_defaults": TURN_DEFAULTS,
         "voice": VOICE if HAS_VOICE else None,
         "picker": PERSISTED,
+        # The change queue lives with a persisted AI backend.
+        "approvals": _review_url() if PERSISTED else None,
     }
 
 

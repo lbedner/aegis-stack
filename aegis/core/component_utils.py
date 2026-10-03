@@ -8,6 +8,18 @@ robustness throughout the codebase.
 
 import re
 
+# A comma not followed by a ``]`` that closes before the next ``[``: the
+# commas of ``inference[ollama,docker]`` stay inside their item.
+_TOP_LEVEL_COMMA = re.compile(r",(?![^\[]*\])")
+
+
+def split_bracket_list(value: str) -> list[str]:
+    """Split ``a[x,y],b`` on its top-level commas: ``['a[x,y]', 'b']``.
+
+    Items are stripped; empty ones are kept so callers can refuse them.
+    """
+    return [item.strip() for item in _TOP_LEVEL_COMMA.split(value)]
+
 
 def parse_component_name(component: str) -> tuple[str, str | None]:
     """

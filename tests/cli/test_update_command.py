@@ -63,6 +63,19 @@ class TestUpdateCommandBasics:
         assert "not generated with copier" in result.stderr.lower()
 
 
+@pytest.fixture
+def resolvable_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Any update target resolves, whatever git history the checkout holds.
+
+    The update pins its target to a full SHA before it starts. CI checks the
+    repo out shallow, without tags, so ``v<cli version>`` resolves nowhere
+    and the update would refuse before reaching what these tests exercise.
+    """
+    import aegis.commands.update as upd
+
+    monkeypatch.setattr(upd, "_resolve_target_commit", lambda *a: "f" * 40)
+
+
 def test_pending_update_in_linked_worktree(tmp_path: Path) -> None:
     """A linked worktree's .git pointer must not be treated as a directory."""
     repo = tmp_path / "repo"
@@ -94,12 +107,14 @@ def test_pending_update_in_linked_worktree(tmp_path: Path) -> None:
         target_ref="v0.13.0",
         template_root=repo,
         backup_tag="backup",
+        target_commit="a" * 40,
     )
 
     assert _load_pending_update(linked) == {
         "target_ref": "v0.13.0",
         "template_root": str(repo),
         "backup_tag": "backup",
+        "target_commit": "a" * 40,
     }
 
 
@@ -509,6 +524,7 @@ class TestUpdateCommandTemplatePath:
         assert "~/nonexistent" not in result.stderr
 
 
+@pytest.mark.usefixtures("resolvable_target")
 class TestUpdateCommandRollback:
     """Tests for rollback mechanism."""
 
@@ -765,6 +781,8 @@ class TestUpdateCommandRollback:
         assert answers_file.read_text() == version_before
         pending = project_path / ".git" / "aegis-update-pending.json"
         assert pending.exists()
+        # #1353 - the target is pinned to a full SHA while it is resolvable.
+        assert len(json.loads(pending.read_text())["target_commit"]) == 40
 
         # #1018 - finishing with markers still present refuses and names them.
         result = run_aegis_command(
@@ -823,6 +841,7 @@ class TestUpdateCommandRollback:
         assert result.stdout or result.stderr
 
 
+@pytest.mark.usefixtures("resolvable_target")
 class TestUpdateCommandPostGenTasks:
     """Tests for post-generation task handling."""
 
@@ -881,6 +900,7 @@ class TestUpdateCommandPostGenTasks:
         )
 
 
+@pytest.mark.usefixtures("resolvable_target")
 class TestUpdateSkipsPostGenOnConflicts:
     """Skip post-gen tasks when ``sync_template_changes`` reports conflicts.
 
@@ -1782,3 +1802,151 @@ class TestDryRunPreviewsFiles:
 
         assert result.success
         assert "could not preview" in strip_ansi_codes(result.stdout).lower()
+
+
+class TestShortShaTarget:
+    """A short-SHA ``--to-version`` must still advance ``_commit`` (#1353).
+
+    From uvx the template root is the installed package, not a repo, so the
+    ref is resolved against ``_src_path`` with ``git ls-remote``, which
+    matches ref names and never commits: ``--finish`` stamped
+    ``_template_version`` and printed "Update finished!" while ``_commit``
+    stayed at the old baseline, so the next update re-applied everything.
+    """
+
+    FULL = "33d6b105" + "0" * 32
+
+    @staticmethod
+    def _git_repo(path: Path) -> str:
+        path.mkdir()
+        for args in (
+            ["init", "-q"],
+            [
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "c",
+            ],
+        ):
+            subprocess.run(["git", "-C", str(path), *args], check=True)
+        return subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    def _project(self, path: Path) -> Path:
+        self._git_repo(path)
+        (path / ".copier-answers.yml").write_text(
+            "_commit: oldsha\n_src_path: gh:lbedner/aegis-stack\n"
+        )
+        return path
+
+    @staticmethod
+    def _nothing_resolves(monkeypatch: pytest.MonkeyPatch) -> None:
+        import aegis.commands.update as upd
+
+        monkeypatch.setattr(upd, "resolve_ref_to_commit", lambda ref, root: None)
+        monkeypatch.setattr(upd, "resolve_ref_to_commit_remote", lambda ref, url: None)
+
+    def test_a_short_sha_resolves_against_the_remote(self, tmp_path: Path) -> None:
+        from aegis.core import copier_updater
+
+        full = self._git_repo(tmp_path / "template")
+
+        assert (
+            copier_updater.resolve_ref_to_commit_remote(
+                full[:8], f"file://{tmp_path / 'template'}"
+            )
+            == full
+        )
+
+    def test_finish_stamps_the_commit_resolved_when_the_update_started(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import yaml
+
+        import aegis.commands.update as upd
+
+        project = self._project(tmp_path / "app")
+        self._nothing_resolves(monkeypatch)
+        monkeypatch.setattr(upd, "analyze_conflict_files", lambda p: [])
+        monkeypatch.setattr(upd, "_run_postgen", lambda p, a: True)
+
+        upd._finish_update(
+            project,
+            {
+                "target_ref": "33d6b105",
+                "template_root": str(project),
+                "backup_tag": None,
+                "target_commit": self.FULL,
+            },
+        )
+
+        answers = yaml.safe_load((project / ".copier-answers.yml").read_text())
+        assert answers["_commit"] == self.FULL
+
+    def test_finish_refuses_when_the_commit_cannot_be_resolved(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import typer
+
+        import aegis.commands.update as upd
+
+        project = self._project(tmp_path / "app")
+        self._nothing_resolves(monkeypatch)
+        monkeypatch.setattr(upd, "analyze_conflict_files", lambda p: [])
+        postgen = MagicMock(return_value=True)
+        monkeypatch.setattr(upd, "_run_postgen", postgen)
+        # A record written before the target was pinned at start.
+        pending = {
+            "target_ref": "33d6b105",
+            "template_root": str(project),
+            "backup_tag": None,
+        }
+        upd._pending_path(project).write_text(json.dumps(pending))
+
+        with pytest.raises(typer.Exit) as exc:
+            upd._finish_update(project, pending)
+
+        assert exc.value.exit_code == 1
+        assert not postgen.called
+        assert "oldsha" in (project / ".copier-answers.yml").read_text()
+        assert _load_pending_update(project) is not None
+
+    @patch("copier.run_update")
+    @patch("aegis.commands.update.create_backup_point")
+    @patch("aegis.commands.update.get_current_template_commit")
+    def test_an_unresolvable_target_is_refused_before_anything_changes(
+        self,
+        mock_get_commit: MagicMock,
+        mock_create_backup: MagicMock,
+        mock_copier_update: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        mock_get_commit.return_value = "different-commit"
+        self._nothing_resolves(monkeypatch)
+        project_path = project_factory("base")
+        answers_before = (project_path / ".copier-answers.yml").read_text()
+
+        result = run_aegis_command(
+            "update",
+            "--to-version",
+            "33d6b105",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.returncode == 1
+        assert "33d6b105" in strip_ansi_codes(result.stdout + result.stderr)
+        assert not mock_create_backup.called
+        assert not mock_copier_update.called
+        assert (project_path / ".copier-answers.yml").read_text() == answers_before

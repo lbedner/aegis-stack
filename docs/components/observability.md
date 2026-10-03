@@ -156,7 +156,10 @@ The health check queries the Logfire Query API (when `LOGFIRE_READ_TOKEN` is set
 - Top 20 slowest spans
 - Recent exceptions (last 24 hours)
 
-Results are cached for 2 minutes with a 5-minute backoff on failure to respect rate limits.
+The three queries run one at a time, and results are cached for 10 minutes with a 5-minute backoff on failure. The cache lives in a file in the system temp directory, keyed by the read token, so a hot reload keeps it.
+
+!!! tip "Use a read token per deployment"
+    Logfire's query limits belong to the read token: every process and every project holding the same token draws from one budget, and each query scans that Logfire project's last hour of spans. Give each deployment its own Logfire project and read token, or several stacks running at once can exhaust it and the dashboard falls back to `Rate limit exceeded` errors.
 
 ## Memory Footprint on Constrained Hosts
 

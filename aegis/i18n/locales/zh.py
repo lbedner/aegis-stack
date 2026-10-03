@@ -566,6 +566,7 @@ MESSAGES: dict[str, str] = {
     "update.finish_resuming": "正在恢复因冲突而中止的到 {ref} 的更新...",
     "update.finish_nothing": "没有待完成的冲突更新 - 无需完成 (nothing to finish)",
     "update.finish_blocked": "{count} 个文件仍包含冲突。请解决后运行：aegis update --finish",
+    "update.target_unresolved": "无法将 {ref} 解析为提交，更新将无法记录项目所处的版本。请使用标签、分支或完整的 SHA。",
     "update.finish_done": "更新已完成！",
     "update.next_finish": "   5. 解决冲突后运行：aegis update --finish",
     "update.failed": "更新失败：{error}",

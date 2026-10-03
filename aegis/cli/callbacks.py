@@ -5,7 +5,9 @@ This module contains callback functions used to validate and process
 CLI options before command execution.
 """
 
+import functools
 from collections.abc import Callable
+from typing import Any
 
 import typer
 
@@ -18,6 +20,7 @@ from ..core.component_utils import (
     extract_base_service_name,
     extract_engine_info,
     restore_engine_info,
+    split_bracket_list,
 )
 from ..core.dependency_resolver import DependencyResolver
 from ..core.insights_service_parser import parse_insights_service_config
@@ -30,6 +33,28 @@ from .interactive import set_ai_service_config, set_auth_level_selection
 from .utils import expand_scheduler_dependencies
 
 
+def _refuse_invalid_input(
+    callback: Callable[..., list[str] | None],
+) -> Callable[..., list[str] | None]:
+    """Turn the parsers' ``ValueError`` into a one-line error and exit 1.
+
+    The bracket parsers and resolvers raise ``ValueError`` for input the
+    user typed (``redis[``, ``payment[paypal]``); escaping the callback, it
+    reached the user as a traceback.
+    """
+
+    @functools.wraps(callback)
+    def refuse(*args: Any, **kwargs: Any) -> list[str] | None:
+        try:
+            return callback(*args, **kwargs)
+        except ValueError as e:
+            brand.error(str(e), err=True)
+            raise typer.Exit(1) from None
+
+    return refuse
+
+
+@_refuse_invalid_input
 def validate_and_resolve_components(
     ctx: typer.Context, param: typer.CallbackParam, value: str | None
 ) -> list[str] | None:
@@ -43,7 +68,7 @@ def validate_and_resolve_components(
         return None
 
     # Parse comma-separated string
-    components_raw = [c.strip() for c in value.split(",")]
+    components_raw = split_bracket_list(value)
 
     # Check for empty components before filtering
     if any(not c for c in components_raw):
@@ -99,44 +124,8 @@ def validate_and_resolve_components(
 
 
 def _split_service_list(value: str) -> list[str]:
-    """
-    Split comma-separated service list respecting bracket syntax.
-
-    Handles ai[langchain, openai] where commas inside brackets are preserved.
-
-    Args:
-        value: Comma-separated service string like "ai[langchain, openai], auth"
-
-    Returns:
-        List of service strings with brackets preserved
-    """
-    services = []
-    current = ""
-    bracket_depth = 0
-
-    for char in value:
-        if char == "[":
-            bracket_depth += 1
-            current += char
-        elif char == "]":
-            # Only decrement if we're inside brackets to prevent negative depth
-            # from mismatched brackets like "ai],auth"
-            if bracket_depth > 0:
-                bracket_depth -= 1
-            current += char
-        elif char == "," and bracket_depth == 0:
-            # Only split on comma if we're not inside brackets
-            if current.strip():
-                services.append(current.strip())
-            current = ""
-        else:
-            current += char
-
-    # Don't forget the last service
-    if current.strip():
-        services.append(current.strip())
-
-    return services
+    """Split a ``--services`` value on its top-level commas, dropping empties."""
+    return [service for service in split_bracket_list(value) if service]
 
 
 def _handle_ai_options(service: str) -> None:
@@ -204,6 +193,7 @@ def apply_service_option_handlers(selected_services: list[str]) -> None:
             raise typer.Exit(1) from None
 
 
+@_refuse_invalid_input
 def validate_and_resolve_services(
     ctx: typer.Context, param: typer.CallbackParam, value: str | None
 ) -> list[str] | None:

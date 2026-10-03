@@ -706,6 +706,7 @@ MESSAGES: dict[str, str] = {
     "update.finish_resuming": "Setze das wegen Konflikten abgebrochene Update auf {ref} fort...",
     "update.finish_nothing": "Kein konfliktbehaftetes Update ausstehend - nichts abzuschließen (nothing to finish)",
     "update.finish_blocked": "{count} Datei(en) enthalten noch Konflikte. Auflösen, dann ausführen: aegis update --finish",
+    "update.target_unresolved": "{ref} lässt sich keinem Commit zuordnen, daher könnte das Update nicht festhalten, auf welchem Stand es das Projekt lässt. Verwende einen Tag, einen Branch oder einen vollständigen SHA.",
     "update.finish_done": "Update abgeschlossen!",
     "update.next_finish": "   5. Nach dem Auflösen der Konflikte: aegis update --finish",
     "update.failed": "Update fehlgeschlagen: {error}",

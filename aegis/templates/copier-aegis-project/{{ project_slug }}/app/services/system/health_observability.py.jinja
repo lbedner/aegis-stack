@@ -6,14 +6,19 @@ Extracted from the system health module; registered via the same
 register_health_check machinery.
 """
 {% if include_observability %}
-import asyncio
-from datetime import UTC, datetime
+import hashlib
+import json
+import os
+from pathlib import Path
+import tempfile
+import time
 from typing import Any
 
 from app.core.config import settings
 from app.core.log import logger
 
 from .models import ComponentStatus, ComponentStatusType
+
 
 async def check_observability_health() -> ComponentStatus:
     """
@@ -73,22 +78,60 @@ async def check_observability_health() -> ComponentStatus:
         )
 
 
-# Cache for Logfire query results to avoid rate limiting
-# Free tier has per-minute AND per-hour limits
-_logfire_query_cache: dict[str, tuple[dict[str, Any], datetime]] = {}
-_logfire_last_attempt: datetime | None = None
-_LOGFIRE_CACHE_SECONDS = 120  # 2 minutes between successful queries (3 sub-queries per cycle)
-_LOGFIRE_RETRY_SECONDS = 300  # 5 minutes between retries on failure
+# A read token's query budget is shared by every process and every stack that
+# holds it, and Logfire's limits count queries, compute and data scanned. The
+# aggregates cover the last hour, so a ten-minute-old answer is still good.
+_LOGFIRE_CACHE_SECONDS = 600
+_LOGFIRE_RETRY_SECONDS = 300  # after a failure, wait this long before retrying
+# Outside the process, so a hot reload keeps the cache and the backoff.
+_CACHE_DIR = Path(tempfile.gettempdir())
+
+
+def _cache_file(read_token: str) -> Path:
+    """One file per read token: the same token reads the same data."""
+    digest = hashlib.sha256(read_token.encode()).hexdigest()[:16]
+    return _CACHE_DIR / f"aegis-logfire-query-{digest}.json"
+
+
+def _load_state(read_token: str) -> dict[str, Any]:
+    try:
+        return json.loads(_cache_file(read_token).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_state(read_token: str, state: dict[str, Any]) -> None:
+    path = _cache_file(read_token)
+    staging = path.with_suffix(f".{os.getpid()}.tmp")
+    try:
+        # Owner-only: it holds span names and exception messages.
+        fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(state, default=str))
+        staging.replace(path)
+    except OSError as e:
+        logger.warning(f"Logfire query cache not written: {e}")
+
+
+def _query_client_class() -> Any:
+    """``AsyncLogfireQueryClient`` from wherever this logfire keeps it."""
+    try:
+        from logfire.query_client import AsyncLogfireQueryClient
+    except ImportError:
+        # logfire < 5 kept it under experimental.
+        from logfire.experimental.query_client import AsyncLogfireQueryClient
+    return AsyncLogfireQueryClient
 
 
 async def _query_logfire_trace_data(read_token: str) -> dict[str, Any]:
     """
     Query Logfire Query API for trace statistics over the last hour.
 
-    Results are cached for 5 minutes to avoid hitting rate limits.
-    On failure, backs off for 5 minutes and returns stale cached data.
+    Results are cached for ten minutes, and a failure backs off for five,
+    returning the last good result meanwhile.
 
-    Runs three lightweight queries concurrently:
+    Runs three lightweight queries, one at a time (a read token's
+    concurrency limit answers three at once with 429s):
     1. Aggregate stats (span count, exceptions, avg/max duration, trace count)
     2. Top 20 slowest span types
     3. Recent exceptions
@@ -99,103 +142,67 @@ async def _query_logfire_trace_data(read_token: str) -> dict[str, Any]:
     Returns:
         Dict with trace analytics data for metadata
     """
-    global _logfire_last_attempt
+    now = time.time()
+    state = _load_state(read_token)
+    stale: dict[str, Any] | None = state.get("result")
 
-    now = datetime.now(UTC)
+    if stale is not None and now - state.get("cached_at", 0) < _LOGFIRE_CACHE_SECONDS:
+        return stale
+    if now - state.get("last_attempt", 0) < _LOGFIRE_RETRY_SECONDS:
+        return stale or {}
 
-    # Check cache - return cached data if still fresh
-    if "logfire" in _logfire_query_cache:
-        cached_result, cached_time = _logfire_query_cache["logfire"]
-        age = (now - cached_time).total_seconds()
-        if age < _LOGFIRE_CACHE_SECONDS:
-            return cached_result
-
-    # Backoff - don't retry if we attempted recently (even if it failed)
-    if _logfire_last_attempt is not None:
-        since_last = (now - _logfire_last_attempt).total_seconds()
-        if since_last < _LOGFIRE_RETRY_SECONDS:
-            # Return stale cache if available
-            if "logfire" in _logfire_query_cache:
-                stale_result, _ = _logfire_query_cache["logfire"]
-                return stale_result
-            return {}
-
-    # Mark attempt time BEFORE querying to prevent concurrent retries
-    _logfire_last_attempt = now
+    # Recorded before querying, so a concurrent caller backs off.
+    state["last_attempt"] = now
+    _save_state(read_token, state)
 
     try:
-        from logfire.experimental.query_client import AsyncLogfireQueryClient
+        client_class = _query_client_class()
     except ImportError:
         logger.warning("Logfire query client not available")
         return {"query_error": "logfire query client not installed"}
 
-    result: dict[str, Any] = {}
-
     try:
-        async with AsyncLogfireQueryClient(read_token=read_token) as client:
-            # Run all three queries concurrently
-            agg_task = asyncio.create_task(_query_aggregate_stats(client))
-            slow_task = asyncio.create_task(_query_slowest_spans(client))
-            exc_task = asyncio.create_task(_query_recent_exceptions(client))
-
-            agg_data = await agg_task
-            slow_data = await slow_task
-            exc_data = await exc_task
-
-        # Check for partial failures (None = sub-query failed)
-        all_succeeded = (
-            agg_data is not None
-            and slow_data is not None
-            and exc_data is not None
-        )
-
-        # Always assemble what we have (use defaults for failed sub-queries)
-        if agg_data is not None:
-            result.update(agg_data)
-        else:
-            result.update({
-                "total_spans": 0, "total_traces": 0, "exceptions": 0,
-                "avg_duration_ms": 0, "max_duration_ms": 0,
-            })
-        result["slowest_spans"] = slow_data if slow_data is not None else []
-        result["recent_exceptions"] = exc_data if exc_data is not None else []
-
-        if all_succeeded:
-            assert agg_data is not None and slow_data is not None  # for type narrowing
-            # All queries succeeded - cache the complete result
-            _logfire_query_cache["logfire"] = (result, now)
-            # Reset backoff on success so cache TTL controls refresh rate
-            _logfire_last_attempt = None
-            logger.info(
-                f"Logfire query refreshed: {agg_data.get('total_spans', 0)} spans, "
-                f"{agg_data.get('exceptions', 0)} exceptions, "
-                f"{len(slow_data)} slow spans"
-            )
-        else:
-            # Partial failure - log which queries failed, don't cache
-            failed = []
-            if agg_data is None:
-                failed.append("aggregate")
-            if slow_data is None:
-                failed.append("slowest_spans")
-            if exc_data is None:
-                failed.append("exceptions")
-            logger.warning(
-                f"Logfire partial query failure ({', '.join(failed)})"
-            )
-            # Prefer stale cache if it has richer data
-            if "logfire" in _logfire_query_cache:
-                stale_result, _ = _logfire_query_cache["logfire"]
-                return stale_result
-
+        async with client_class(read_token=read_token) as client:
+            agg_data = await _query_aggregate_stats(client)
+            slow_data = await _query_slowest_spans(client)
+            exc_data = await _query_recent_exceptions(client)
     except Exception as e:
         logger.warning(f"Logfire query API error: {e}")
-        result["query_error"] = str(e)
-        # Return stale cache if available rather than empty data
-        if "logfire" in _logfire_query_cache:
-            stale_result, _ = _logfire_query_cache["logfire"]
-            return stale_result
+        return stale or {"query_error": str(e)}
 
+    result: dict[str, Any] = dict(
+        agg_data
+        or {
+            "total_spans": 0,
+            "total_traces": 0,
+            "exceptions": 0,
+            "avg_duration_ms": 0,
+            "max_duration_ms": 0,
+        }
+    )
+    result["slowest_spans"] = slow_data if slow_data is not None else []
+    result["recent_exceptions"] = exc_data if exc_data is not None else []
+
+    failed = [
+        name
+        for name, data in (
+            ("aggregate", agg_data),
+            ("slowest_spans", slow_data),
+            ("exceptions", exc_data),
+        )
+        if data is None
+    ]
+    if failed:
+        logger.warning(f"Logfire partial query failure ({', '.join(failed)})")
+        return stale or result
+
+    # A good result replaces the backoff: the cache age decides the next query.
+    _save_state(read_token, {"result": result, "cached_at": now})
+    logger.info(
+        f"Logfire query refreshed: {result['total_spans']} spans, "
+        f"{result['exceptions']} exceptions, "
+        f"{len(result['slowest_spans'])} slow spans"
+    )
     return result
 
 

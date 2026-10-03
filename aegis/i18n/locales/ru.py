@@ -680,6 +680,7 @@ MESSAGES: dict[str, str] = {
     "update.finish_resuming": "Возобновление обновления до {ref}, остановленного из-за конфликтов...",
     "update.finish_nothing": "Нет незавершённого обновления с конфликтами - завершать нечего (nothing to finish)",
     "update.finish_blocked": "{count} файл(ов) всё ещё содержат конфликты. Разрешите их и выполните: aegis update --finish",
+    "update.target_unresolved": "Не удалось сопоставить {ref} с коммитом, поэтому обновление не сможет записать, на какой версии оставит проект. Укажите тег, ветку или полный SHA.",
     "update.finish_done": "Обновление завершено!",
     "update.next_finish": "   5. После разрешения конфликтов: aegis update --finish",
     "update.failed": "Обновление не удалось: {error}",

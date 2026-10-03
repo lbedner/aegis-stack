@@ -281,7 +281,12 @@ def _pending_path(project_path: Path) -> Path:
 
 
 def _record_pending_update(
-    project_path: Path, *, target_ref: str, template_root: Path, backup_tag: str | None
+    project_path: Path,
+    *,
+    target_ref: str,
+    template_root: Path,
+    backup_tag: str | None,
+    target_commit: str,
 ) -> None:
     """Remember a conflicted update so ``--finish`` can complete it (#1018).
 
@@ -294,6 +299,7 @@ def _record_pending_update(
                 "target_ref": target_ref,
                 "template_root": str(template_root),
                 "backup_tag": backup_tag,
+                "target_commit": target_commit,
             }
         )
     )
@@ -372,9 +378,19 @@ def _finish_update(target_path: Path, pending: dict[str, Any]) -> None:
         raise typer.Exit(1)
 
     answers = load_copier_answers(target_path) or {}
+    # Pinned when the update started; a record from before that re-resolves.
+    target_commit = pending.get("target_commit") or _resolve_target_commit(
+        pending["target_ref"], Path(pending["template_root"]), answers
+    )
+    if not target_commit:
+        brand.error(t("update.target_unresolved", ref=pending["target_ref"]))
+        raise typer.Exit(1)
     tasks_success = _run_postgen(target_path, answers)
     _advance_copier_tracking(
-        target_path, pending["target_ref"], Path(pending["template_root"])
+        target_path,
+        pending["target_ref"],
+        Path(pending["template_root"]),
+        target_commit=target_commit,
     )
     _pending_path(target_path).unlink(missing_ok=True)
     backup_tag = pending.get("backup_tag")
@@ -394,8 +410,28 @@ def _finish_update(target_path: Path, pending: dict[str, Any]) -> None:
     typer.echo(t("update.next_commit"))
 
 
+def _resolve_target_commit(
+    target_ref: str, template_root: Path, answers: dict[str, Any]
+) -> str | None:
+    """The full SHA ``target_ref`` names, locally or on the update's remote.
+
+    In a dev checkout ``template_root`` is a git repo and ``rev-parse``
+    resolves the ref. In production (pip/uvx) it is the installed package,
+    so the ref is resolved against the ``_src_path`` copier clones from.
+    """
+    commit = resolve_ref_to_commit(target_ref, template_root)
+    if commit:
+        return commit
+    repo_url = src_path_to_git_url(answers.get("_src_path") or GITHUB_TEMPLATE_URL)
+    return resolve_ref_to_commit_remote(target_ref, repo_url)
+
+
 def _advance_copier_tracking(
-    project_path: Path, target_ref: str, template_root: Path
+    project_path: Path,
+    target_ref: str,
+    template_root: Path,
+    *,
+    target_commit: str | None = None,
 ) -> None:
     """Stamp ``.copier-answers.yml`` with the version we just applied.
 
@@ -416,19 +452,11 @@ def _advance_copier_tracking(
 
     answers = yaml.safe_load(answers_file.read_text()) or {}
 
-    # Resolve the commit the update actually applied. In a dev checkout the
-    # template_root is a git repo and ``git rev-parse`` resolves the ref. In
-    # production (pip/uvx) template_root is the installed package directory —
-    # not a git repo — so the local resolve returns None and we fall back to
-    # resolving the ref against the remote the update pulled from (the
-    # ``_src_path`` copier cloned). Without this fallback ``_commit`` stays
-    # frozen at the original generation commit while ``_template_version``
-    # advances, so the NEXT update diffs from a stale baseline and can
-    # resurface already-applied changes / spurious conflicts.
-    target_commit = resolve_ref_to_commit(target_ref, template_root)
-    if not target_commit:
-        repo_url = src_path_to_git_url(answers.get("_src_path") or GITHUB_TEMPLATE_URL)
-        target_commit = resolve_ref_to_commit_remote(target_ref, repo_url)
+    # Without ``_commit`` advancing alongside ``_template_version`` the NEXT
+    # update diffs from a stale baseline and resurfaces applied changes.
+    target_commit = target_commit or _resolve_target_commit(
+        target_ref, template_root, answers
+    )
     if target_commit:
         answers["_commit"] = target_commit
 
@@ -787,6 +815,16 @@ def update_command(
             brand.error(t("update.cancelled"))
             raise typer.Exit(0)
 
+    # Pin the target to a full SHA while it is resolvable: the baseline
+    # advance (now or at ``--finish``) records it, and an update that could
+    # not record where it left the project must not start.
+    target_commit = _resolve_target_commit(
+        target_ref, template_root, load_copier_answers(target_path) or {}
+    )
+    if not target_commit:
+        brand.error(t("update.target_unresolved", ref=target_ref), err=True)
+        raise typer.Exit(1)
+
     # Create backup point before update
     typer.echo("")
     typer.echo(t("update.creating_backup"))
@@ -1040,6 +1078,7 @@ def update_command(
                 target_ref=target_ref,
                 template_root=template_root,
                 backup_tag=backup_tag,
+                target_commit=target_commit,
             )
         else:
             tasks_success = _run_postgen(target_path, answers)
@@ -1062,7 +1101,9 @@ def update_command(
         # must stay put so re-running still re-applies the same diff once
         # the user resolves the markers.
         if not sync_result.conflicts:
-            _advance_copier_tracking(target_path, target_ref, template_root)
+            _advance_copier_tracking(
+                target_path, target_ref, template_root, target_commit=target_commit
+            )
 
         # Show update result
         typer.echo("")

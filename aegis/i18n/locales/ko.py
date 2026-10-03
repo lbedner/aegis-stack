@@ -671,6 +671,7 @@ MESSAGES: dict[str, str] = {
     "update.finish_resuming": "충돌로 중단된 {ref} 업데이트를 재개합니다...",
     "update.finish_nothing": "보류 중인 충돌 업데이트가 없습니다 - 완료할 항목 없음 (nothing to finish)",
     "update.finish_blocked": "{count}개 파일에 아직 충돌이 있습니다. 해결 후 실행하세요: aegis update --finish",
+    "update.target_unresolved": "{ref}을(를) 커밋으로 확인할 수 없어 업데이트 후 프로젝트의 기준을 기록할 수 없습니다. 태그, 브랜치 또는 전체 SHA를 사용하세요.",
     "update.finish_done": "업데이트 완료!",
     "update.next_finish": "   5. 충돌 해결 후: aegis update --finish",
     "update.failed": "업데이트 실패: {error}",

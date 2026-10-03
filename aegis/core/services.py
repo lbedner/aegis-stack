@@ -14,6 +14,7 @@ from ..constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
+    PaymentProviders,
     StorageBackends,
 )
 from ..i18n import t
@@ -954,6 +955,16 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.DATABASE,
         ],
         recommended_components=[ComponentNames.WORKER],
+        # Bracket-syntax options: payment[stripe]
+        options=[
+            OptionSpec(
+                name="provider",
+                mode=OptionMode.SINGLE,
+                choices=list(PaymentProviders.ALL),
+                default=PaymentProviders.DEFAULT,
+                answer_key=AnswerKeys.PAYMENT_PROVIDER,
+            ),
+        ],
         # Round 7 wiring: 2 routers (API + pages) + dashboard card/modal.
         # Mirrors routing.py.jinja:36-38 + 80-83.
         wiring=PluginWiring(

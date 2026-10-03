@@ -152,6 +152,36 @@
 
 ### Fixed
 
+- **A comma inside brackets stays in its item.** `--components
+  "inference[ollama,docker]"` split at the inner comma and crashed, in
+  `init`, `aegis add`, `aegis remove` and `aegis remove-service` alike (the
+  inference docs' own `aegis add inference[ollama,docker]` hit it, and so
+  could the "Recreate this stack" line `init` prints). Every list now splits
+  only on top-level commas.
+- **`payment[stripe]` is accepted.** The payment service declared no
+  options, so spelling out its provider was refused as an unknown value; it
+  now declares `provider` (Stripe, the only one today).
+- **The Overseer's Logfire analytics work on Logfire 5, and stay inside the
+  query budget.** Logfire 5 moved the query client out of
+  `logfire.experimental`, so on new projects the health check reported
+  "query client not installed" and the trace analytics stayed empty; both
+  locations are tried now. The three queries run one at a time instead of
+  at once (the read token's concurrency limit answered with 429s), results
+  are cached for 10 minutes instead of 2, and the cache and failure backoff
+  live in an owner-only file keyed by the read token, so a hot reload no
+  longer starts over and queries again. The observability docs now say to
+  use a read token per deployment: the budget belongs to the token.
+- **`aegis update --to-version <short sha>` advances `_commit`.** Run from
+  uvx, the target was resolved with `git ls-remote`, which matches ref
+  names and never commits, so after a conflicted update `--finish` printed
+  "Update finished!" with `_commit` still at the old baseline and the next
+  update re-applied everything. The target is now resolved to a full SHA
+  when the update starts (an abbreviated SHA through a bare, treeless
+  clone), stored with a conflicted update for `--finish`, and an update
+  whose target resolves to nothing stops before changing a file.
+- **Bad `--components`/`--services` input is a one-line error, not a
+  traceback.** `redis[`, `payment[paypal]` and other malformed or unknown
+  bracket values now print what was wrong (and the valid choices) and exit 1.
 - **Projects on Python 3.13 import again with the AI service.** A method
   annotated with its own class (`AIServiceConfig.from_settings ->
   AIServiceConfig`) raises `NameError` at import on 3.13, which evaluates

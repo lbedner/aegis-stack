@@ -19,18 +19,17 @@ from app.services.ai.domains.chat.tools import register_tool
 
 
 def _turn_owner() -> int | None:
-    """Whose turn this is, as the queue's owner: the approval routes scope by
-    the signed-in user, so a card is filed under the user whose turn proposed
-    it, and an agent lists and withdraws only that user's cards.
-{%- if include_auth %}"""
-    from app.services.ai.domains.chat.user_memory import current_user_id
+    """Whose cards this turn files, lists and withdraws
+    (``current_owner_user_id``)."""
+    from app.services.ai.domains.chat.user_memory import current_owner_user_id
 
-    user_id = current_user_id.get()
-    return int(user_id) if user_id is not None and user_id.isdigit() else None
-{%- else %}
-    A single-user stack has nobody to scope by."""
-    return None
+    owner = current_owner_user_id.get()
+{%- if include_auth %}
+    # Unscoped, a turn without one would reach every user's cards.
+    if owner is None:
+        raise ValueError("no signed-in user to file this change for")
 {%- endif %}
+    return owner
 
 
 async def propose_many(
@@ -59,18 +58,12 @@ async def propose_many(
                 proposed_by_agent=current_agent_slug.get(),
                 conversation_id=current_conversation_id.get(),
             )
-            items = [
-                {
-                    "id": row.id,
-                    "pending_change_id": row.id,
-                    "status": row.status,
-                    # Tool results serialize into the model's context:
-                    # typed rows become plain dicts at this boundary.
-                    "display": [
-                        line.model_dump()
-                        for line in await change_queue.describe_change(session, row)
-                    ],
-                }
+            # Tool results serialize into the model's context: typed cards
+            # become plain dicts at this boundary.
+            cards = [
+                (await change_queue.card(session, row)).model_dump(
+                    include={"id", "status", "display"}
+                )
                 for row in rows
             ]
             await session.commit()
@@ -83,8 +76,8 @@ async def propose_many(
         "batch_id": rows[0].batch_id,
         "change_type": change_type,
         "title": change_queue.executor_for(change_type).title,
-        "count": len(items),
-        "items": items,
+        "count": len(cards),
+        "items": [card | {"pending_change_id": card["id"]} for card in cards],
     }
 
 
@@ -116,23 +109,16 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
                 proposed_by_agent=current_agent_slug.get(),
                 conversation_id=current_conversation_id.get(),
             )
-            display = [
-                line.model_dump()
-                for line in await change_queue.describe_change(session, row)
-            ]
+            card = await change_queue.card(session, row)
             await session.commit()
         except ValueError as e:
             return {
                 "error": str(e),
                 "registered_change_types": list(change_queue.registered_change_types()),
             }
-    return {
-        "pending_change_id": row.id,
-        "change_type": row.change_type,
-        "title": change_queue.executor_for(row.change_type).title,
-        "status": row.status,
-        "display": display,
-    }
+    return {"pending_change_id": card.id} | card.model_dump(
+        include={"change_type", "title", "status", "display"}
+    )
 
 
 async def pending(about: str | None = None) -> dict[str, Any]:
@@ -155,12 +141,16 @@ async def pending(about: str | None = None) -> dict[str, Any]:
     from app.services import change_queue
     from app.services.ai.domains.chat.user_memory import current_agent_slug
 
+    try:
+        owner = _turn_owner()
+    except ValueError as e:
+        return {"error": str(e)}
     needle = (about or "").strip().lower()
     horizon = utcnow() - timedelta(days=14)
     async with get_async_session() as session:
         rows = await change_queue.list_changes(
             session,
-            owner_user_id=_turn_owner(),
+            owner_user_id=owner,
             status=None,
             proposed_by_agent=current_agent_slug.get(),
         )

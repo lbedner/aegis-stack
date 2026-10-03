@@ -1,9 +1,10 @@
 {# Every card still waiting for the signed-in user, a batch as one card. #}
 {% from "components/macros/changes.html" import change_card, batch_card %}
+{% from "components/macros/feedback.html" import empty_state %}
 <section id="changes-review" data-changes-review>
   {% for card in cards %}
-  {% if card.single %}{{ change_card(card.single) }}{% else %}{{ batch_card(card.batch) }}{% endif %}
+  {% if card.rows %}{{ batch_card(card) }}{% else %}{{ change_card(card) }}{% endif %}
   {% else %}
-  <p class="text-xs text-aegis-muted">Nothing is waiting for your approval.</p>
+  {{ empty_state("Nothing is waiting for your approval.") }}
   {% endfor %}
 </section>

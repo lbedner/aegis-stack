@@ -30,6 +30,9 @@ class ChatScope:
 
     user_id: str
     surface: str
+    # The rest of the turn's identity, bound by ``memory_user``.
+    owner_user_id: int | None = None
+    conversation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,60 +6,25 @@ chat card calls. That is the whole contract a new service relies on.
 """
 
 from collections.abc import Iterator
+{%- if include_ai and ai_backend != "memory" %}
 from typing import Any
+{%- endif %}
 
 from fastapi.testclient import TestClient
-from pydantic import BaseModel, ConfigDict
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services import change_queue
-from app.services.change_queue import (
-    ChangeDisplayRow,
-    ChangeExecutor,
-    PendingChange,
-    registry,
-)
+from app.services.change_queue import PendingChange
+from tests._change_queue import executed, note_type
 
 NOTE = "test.note"
-executed: list[str] = []
-
-
-class NotePayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    text: str
-
-
-async def _execute(
-    db: AsyncSession, payload: NotePayload, owner_user_id: int | None
-) -> dict[str, Any]:
-    executed.append(payload.text)
-    return {"noted": payload.text}
-
-
-async def _describe(
-    db: AsyncSession, payload: NotePayload, owner_user_id: int | None
-) -> list[ChangeDisplayRow]:
-    return [ChangeDisplayRow(label="Note", value=payload.text)]
 
 
 @pytest.fixture(autouse=True)
-def note_type() -> Iterator[None]:
-    """A change type no shipped service owns, registered the way a new
-    service registers its own: one ``register`` call."""
-    executed.clear()
-    change_queue.register(
-        ChangeExecutor(
-            change_type=NOTE,
-            title="Write a note",
-            payload_model=NotePayload,
-            execute=_execute,
-            describe=_describe,
-        )
-    )
-    yield
-    registry._EXECUTORS.pop(NOTE, None)
+def _note() -> Iterator[None]:
+    with note_type(NOTE):
+        yield
 
 
 @pytest.mark.asyncio
@@ -121,26 +86,39 @@ async def test_rejecting_in_the_ui_executes_nothing(
 {%- if include_ai and ai_backend != "memory" %}
 
 
-@pytest.mark.asyncio
-async def test_the_chat_tool_proposes_a_registered_type(
-    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The model's one write door files a card for any registered type,
-    attributed to the agent and conversation of the turn."""
+@pytest.fixture
+def chat_tools(async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """The chat's queue tools, writing through the test session."""
     from contextlib import asynccontextmanager
 
     from app.services.ai.domains.chat import change_tools
-    from app.services.ai.domains.chat.tools import native_write_tool_names
-    from app.services.ai.domains.chat.user_memory import memory_user
 
     @asynccontextmanager
     async def test_session():  # type: ignore[no-untyped-def]
         yield async_db_session
 
     monkeypatch.setattr(change_tools, "get_async_session", test_session)
+    return change_tools
 
-    with memory_user("1", agent_slug="helper", conversation_id="conv-1"):
-        result = await change_tools.propose(NOTE, {"text": "from chat"})
+
+@pytest.mark.asyncio
+async def test_the_chat_tool_proposes_a_registered_type(
+    async_db_session: AsyncSession,
+    chat_tools: Any,
+    acting_owner_user_id: int | None,
+) -> None:
+    """The model's one write door files a card for any registered type,
+    attributed to the agent and conversation of the turn."""
+    from app.services.ai.domains.chat.tools import native_write_tool_names
+    from app.services.ai.domains.chat.user_memory import memory_user
+
+    with memory_user(
+        "1",
+        owner_user_id=acting_owner_user_id,
+        agent_slug="helper",
+        conversation_id="conv-1",
+    ):
+        result = await chat_tools.propose(NOTE, {"text": "from chat"})
 
     assert result["status"] == "pending"
     assert result["title"] == "Write a note"
@@ -161,41 +139,41 @@ async def test_the_chat_tool_proposes_a_registered_type(
 # construction rather than by a loop.
 @pytest.mark.queryspy(allow_n_plus_one=True)
 @pytest.mark.asyncio
-async def test_a_chat_proposal_belongs_to_the_turns_user(
+async def test_a_chat_proposal_belongs_to_the_turns_owner(
     async_db_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
+    chat_tools: Any,
     acting_owner_user_id: int | None,
 ) -> None:
-    """The approval routes scope by the signed-in user, so a card proposed
-    in a user's turn is filed under that user (#1367), and an agent's
-    ``pending`` lists only the cards of the user whose turn it is."""
-    from contextlib import asynccontextmanager
-
-    from app.services.ai.domains.chat import change_tools
+    """A card is filed under the turn's owner (#1367), whatever ``user_id``
+    names, and ``pending`` lists only that owner's cards."""
     from app.services.ai.domains.chat.user_memory import memory_user
 
-    @asynccontextmanager
-    async def test_session():  # type: ignore[no-untyped-def]
-        yield async_db_session
-
-    monkeypatch.setattr(change_tools, "get_async_session", test_session)
-    me = str(acting_owner_user_id if acting_owner_user_id is not None else 1)
-
-    with memory_user(me, agent_slug="helper", conversation_id="conv-1"):
-        result = await change_tools.propose(NOTE, {"text": "mine"})
-        mine = await change_tools.pending()
-    with memory_user("424242", agent_slug="helper", conversation_id="conv-2"):
-        theirs = await change_tools.pending()
+    with memory_user("api-user", owner_user_id=acting_owner_user_id):
+        result = await chat_tools.propose(NOTE, {"text": "mine"})
+        mine = await chat_tools.pending()
+    other = {% if include_auth %}424242{% else %}None{% endif %}
+    with memory_user("api-user", owner_user_id=other):
+        theirs = await chat_tools.pending()
 
     row = await change_queue.get_change(async_db_session, result["pending_change_id"])
     assert row is not None
     assert row.owner_user_id == acting_owner_user_id
     assert [c["pending_change_ids"] for c in mine["pending"]] == [[row.id]]
-
 {%- if include_auth %}
 
     # Another user's turn sees none of this user's cards.
     assert theirs["pending"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_turn_without_an_owner_touches_no_cards(chat_tools: Any) -> None:
+    """With auth, a turn nobody signed in to (an anonymous call, the CLI)
+    declines: unscoped, it would reach every user's cards."""
+    proposed = await chat_tools.propose(NOTE, {"text": "orphan"})
+    listed = await chat_tools.pending()
+
+    assert "no signed-in user" in proposed["error"]
+    assert "no signed-in user" in listed["error"]
 {%- else %}
 
     # Single-user: there is no one else to hide them from.

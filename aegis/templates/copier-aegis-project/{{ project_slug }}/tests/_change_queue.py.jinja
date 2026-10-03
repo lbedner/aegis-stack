@@ -1,0 +1,55 @@
+{% if include_finance or (include_ai and ai_backend != "memory") -%}
+"""A change type no shipped service owns, for the change queue's tests:
+registered the way a new service registers its own, with one ``register``
+call. ``executed`` lists what approvals ran."""
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services import change_queue
+from app.services.change_queue import ChangeDisplayRow, ChangeExecutor, registry
+
+executed: list[str] = []
+
+
+class NotePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+
+
+async def _execute(
+    db: AsyncSession, payload: NotePayload, owner_user_id: int | None
+) -> dict[str, Any]:
+    executed.append(payload.text)
+    return {"noted": payload.text}
+
+
+async def _describe(
+    db: AsyncSession, payload: NotePayload, owner_user_id: int | None
+) -> list[ChangeDisplayRow]:
+    return [ChangeDisplayRow(label="Note", value=payload.text)]
+
+
+@contextmanager
+def note_type(change_type: str) -> Iterator[None]:
+    """``change_type`` registered as "Write a note" for the block."""
+    executed.clear()
+    change_queue.register(
+        ChangeExecutor(
+            change_type=change_type,
+            title="Write a note",
+            payload_model=NotePayload,
+            execute=_execute,
+            describe=_describe,
+        )
+    )
+    try:
+        yield
+    finally:
+        registry._EXECUTORS.pop(change_type, None)
+{%- endif %}

@@ -70,9 +70,9 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {% if label %}</label>{% endif %}
 {% endmacro %}
 
-{% macro checkbox(name, checked=False, label=None) %}
+{% macro checkbox(name, checked=False, label=None, value=None) %}
 <label class="inline-flex items-center gap-2 text-xs text-aegis-muted cursor-pointer">
-  <input type="checkbox" name="{{ name }}" {% if checked %}checked{% endif %} class="accent-aegis-teal">
+  <input type="checkbox" name="{{ name }}" {% if value is not none %}value="{{ value }}"{% endif %} {% if checked %}checked{% endif %} class="accent-aegis-teal">
   {% if label %}<span>{{ label }}</span>{% endif %}
 </label>
 {% endmacro %}

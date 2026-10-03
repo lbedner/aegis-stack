@@ -13,12 +13,14 @@ from app.services.ai.service import (
 )
 from fastapi import (
     APIRouter,
+    Depends,
     HTTPException,
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.components.backend.api.ai.service import ai_service
+from app.services.shared.deps import get_optional_owner_user_id
 
 router = APIRouter()
 
@@ -57,7 +59,10 @@ class ConversationSummary(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
+async def chat(
+    request: ChatRequest,
+    owner_user_id: int | None = Depends(get_optional_owner_user_id),
+) -> ChatResponse:
     """
     Send a chat message and get AI response.
 
@@ -75,6 +80,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             message=request.message,
             conversation_id=request.conversation_id,
             user_id=request.user_id,
+            owner_user_id=owner_user_id,
             agent_slug=request.agent_slug,
             surface=request.surface,
             attachments=request.attachments,
@@ -117,7 +123,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
 
 @router.post("/chat/stream")
-async def chat_stream(request: ChatRequest) -> StreamingResponse:
+async def chat_stream(
+    request: ChatRequest,
+    owner_user_id: int | None = Depends(get_optional_owner_user_id),
+) -> StreamingResponse:
     """
     Stream a chat message with real-time Server-Sent Events.
 
@@ -143,6 +152,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 message=request.message,
                 conversation_id=request.conversation_id,
                 user_id=request.user_id,
+                owner_user_id=owner_user_id,
                 stream_delta=True,
                 agent_slug=request.agent_slug,
                 surface=request.surface,

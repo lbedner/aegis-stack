@@ -10,6 +10,7 @@ page's Chat section and in the drawer on every other Overseer page, one
 instance at a time.
 """
 
+import importlib
 import json
 import re
 from typing import Any
@@ -25,6 +26,7 @@ from app.core.chat_transcript import (
     trace_output,
 )
 
+from .main import CHANGES
 from .overseer_ai_common import HAS_VOICE, PARTIALS, PERSISTED, mark_urls
 from .rendering import templates
 
@@ -44,6 +46,9 @@ IMAGES_ONLY = "See the attached images."
 VOICE = {"reply": "live", "sound": "typing"}
 # The Overseer shell mounts the chat drawer wherever this is set.
 templates.env.globals["chat_path"] = PATH
+# The approval cards' routes. They ship with the change queue, which every
+# persisted AI stack has, and the queue is all that leaves card markers.
+CARDS: Any = importlib.import_module(CHANGES) if PERSISTED else None
 
 
 async def assistant_name() -> str:
@@ -181,29 +186,14 @@ async def reply_agent_context(
     return context | {"used": reply_used(meta), "stay": True, "focus": focus}
 
 
-def _review_url() -> str:
-    from app.components.web_frontend.routes.partials.changes import PATH
-
-    return PATH
-
-
 def change_urls(trace: list[dict[str, Any]]) -> list[str]:
     """The approval cards a reply's tools proposed (``propose``,
     ``propose_many``) or listed (``pending``), once each, in order: the
     trace keeps each card's identity as its ``component`` marker."""
-    cards = [card for entry in trace for card in card_markers(entry)]
-    if not cards:
+    if CARDS is None:
         return []
-    # Imported only when a card exists: the routes ship with the queue,
-    # which is the only thing that leaves these markers.
-    from app.components.web_frontend.routes.partials.changes import card_url
-
-    urls: list[str] = []
-    for card in cards:
-        url = card_url(card)
-        if url is not None and url not in urls:
-            urls.append(url)
-    return urls
+    markers = (card for entry in trace for card in card_markers(entry))
+    return list(dict.fromkeys(u for m in markers if (u := CARDS.card_url(m))))
 
 
 def settled(
@@ -295,7 +285,7 @@ async def surface_context() -> dict[str, Any]:
         "voice": VOICE if HAS_VOICE else None,
         "picker": PERSISTED,
         # The change queue lives with a persisted AI backend.
-        "approvals": _review_url() if PERSISTED else None,
+        "approvals": CARDS.PATH if CARDS else None,
     }
 
 

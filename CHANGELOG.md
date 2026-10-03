@@ -20,10 +20,14 @@
 
 ### Fixed
 
-- **Chat proposals are filed under the user whose turn it was.** On a
-  stack with auth, `propose` and `propose_many` filed every card with no
-  owner, so approving one answered 404; `pending` and `withdraw` now also
-  see only that user's cards.
+- **Chat proposals are filed under the signed-in user.** On a stack with
+  auth, `propose` and `propose_many` filed every card with no owner, so
+  approving one answered 404. The turn's owner is now part of its identity:
+  `memory_user(..., owner_user_id=)` binds it, the chat, stream and voice
+  routes pass the session's user (never the `user_id` the request names),
+  and a chat-kit turn takes it from `ChatScope.owner_user_id`. `pending` and
+  `withdraw` see only that user's cards, and on a stack with auth a turn with
+  no signed-in user files, lists and withdraws none.
 
 ## [0.14.0] - 2026-10-02
 

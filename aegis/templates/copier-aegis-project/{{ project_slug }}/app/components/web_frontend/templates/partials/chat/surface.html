@@ -16,7 +16,8 @@
      is never lost with the conversation it was made in. #}
   <details class="mb-3 text-xs" data-approvals>
     <summary class="cursor-pointer text-aegis-muted hover:text-aegis-text">Waiting for your approval</summary>
-    <div hx-get="{{ approvals }}" hx-trigger="load" hx-swap="innerHTML"></div>
+    {# Fetched when first opened: most visits never open it. #}
+    <div hx-get="{{ approvals }}" hx-trigger="toggle once from:closest details" hx-swap="innerHTML"></div>
   </details>
   {% endif %}
   <div class="relative flex-1 min-h-0">

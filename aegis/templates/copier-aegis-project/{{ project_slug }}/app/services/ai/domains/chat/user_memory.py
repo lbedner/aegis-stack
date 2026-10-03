@@ -49,6 +49,13 @@ current_agent_slug: ContextVar[str | None] = ContextVar(
 current_conversation_id: ContextVar[str | None] = ContextVar(
     "current_conversation_id", default=None
 )
+# Whose approval cards a turn files, lists and withdraws: the signed-in
+# user, which every chat route resolves from the session
+# (``get_optional_owner_user_id``) and binds through ``memory_user``. Never
+# derived from ``current_user_id``, which a client may name.
+current_owner_user_id: ContextVar[int | None] = ContextVar(
+    "current_owner_user_id", default=None
+)
 
 # The user a single-tenant install writes memory for. Chat turns without an
 # authenticated user (the dashboard's own surfaces) resolve to this, so the
@@ -60,10 +67,12 @@ DEFAULT_MEMORY_USER_ID = "0"
 def memory_user(
     user_id: str,
     *,
+    owner_user_id: int | None = None,
     agent_slug: str | None = None,
     conversation_id: str | None = None,
 ) -> Iterator[None]:
-    """Bind the turn's identity: whose turn, which agent, which chat.
+    """Bind the turn's identity: whose turn, whose cards
+    (``current_owner_user_id``), which agent, which chat.
 
     Every chat runtime wraps its model call in this. Without it a
     memory write has no owner (the tool declines and the model reads
@@ -71,12 +80,14 @@ def memory_user(
     the audit trail.
     """
     token = current_user_id.set(user_id)
+    owner_token = current_owner_user_id.set(owner_user_id)
     agent_token = current_agent_slug.set(agent_slug)
     conversation_token = current_conversation_id.set(conversation_id)
     try:
         yield
     finally:
         current_user_id.reset(token)
+        current_owner_user_id.reset(owner_token)
         current_agent_slug.reset(agent_token)
         current_conversation_id.reset(conversation_token)
 

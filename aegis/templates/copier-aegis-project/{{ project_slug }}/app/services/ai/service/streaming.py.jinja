@@ -103,6 +103,7 @@ class StreamingMixin(ChatMixin):
         message: str,
         conversation_id: str | None = None,
         user_id: str = "default",
+        owner_user_id: int | None = None,
         stream_delta: bool = False,
         agent_slug: str | None = None,
         surface: str | None = None,
@@ -119,6 +120,7 @@ class StreamingMixin(ChatMixin):
             message: The user's message
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
+            owner_user_id: The turn's owner (``current_owner_user_id``)
             stream_delta: Whether to stream delta changes or full content
             agent_slug: Agent row to speak as (None = the default agent)
             surface: Originating chat surface, recorded on new
@@ -200,6 +202,7 @@ class StreamingMixin(ChatMixin):
             with (
                 memory_user(
                     user_id,
+                    owner_user_id=owner_user_id,
                     agent_slug=agent_slug,
                     conversation_id=conversation.id,
                 ),

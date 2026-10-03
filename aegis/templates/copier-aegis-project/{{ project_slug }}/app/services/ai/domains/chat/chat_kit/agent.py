@@ -172,10 +172,11 @@ class ToolChatAgent(Generic[DepsT]):
             # the kit is generic over a deps type it never inspects, so
             # there is nowhere on deps to hang the turn's identity.
             agent_slug = getattr(self._agent, "name", None)
-            conversation_id = getattr(scope, "conversation_id", None)
+            conversation_id = scope.conversation_id
             with (
                 memory_user(
                     scope.user_id,
+                    owner_user_id=scope.owner_user_id,
                     agent_slug=agent_slug,
                     conversation_id=conversation_id,
                 ),

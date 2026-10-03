@@ -20,6 +20,7 @@ class VoiceMixin(StreamingMixin):
         audio: AudioInput,
         conversation_id: str | None = None,
         user_id: str = "default",
+        owner_user_id: int | None = None,
         agent_slug: str | None = None,
         surface: str | None = None,
         transcription_hint: str | None = None,
@@ -58,6 +59,7 @@ class VoiceMixin(StreamingMixin):
                 message=transcription.text,
                 conversation_id=conversation_id,
                 user_id=user_id,
+                owner_user_id=owner_user_id,
                 agent_slug=agent_slug,
                 surface=surface,
 {% if ai_rag %}

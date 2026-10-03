@@ -177,21 +177,23 @@ class TestUsageStatsEndpoint:
 
 
 {% endif %}
+def _reply() -> ConversationMessage:
+    """A stored assistant reply, as ``ai_service.chat`` returns one."""
+    return ConversationMessage(
+        id="m1",
+        role=MessageRole.ASSISTANT,
+        content="hi",
+        metadata={"conversation_id": "c1", "response_time_ms": 1.0},
+    )
+
+
 class TestChatAgentSlug:
     """The chat endpoints thread agent_slug through to the service."""
-
-    def _reply(self) -> ConversationMessage:
-        return ConversationMessage(
-            id="m1",
-            role=MessageRole.ASSISTANT,
-            content="hi",
-            metadata={"conversation_id": "c1", "response_time_ms": 1.0},
-        )
 
     def test_chat_passes_agent_slug(self, client: TestClient) -> None:
         with patch(
             "app.components.backend.api.ai.service.ai_service.chat",
-            new=AsyncMock(return_value=self._reply()),
+            new=AsyncMock(return_value=_reply()),
         ) as mock_chat:
             response = client.post(
                 "/api/v1/ai/chat",
@@ -204,7 +206,7 @@ class TestChatAgentSlug:
     def test_chat_defaults_agent_slug_to_none(self, client: TestClient) -> None:
         with patch(
             "app.components.backend.api.ai.service.ai_service.chat",
-            new=AsyncMock(return_value=self._reply()),
+            new=AsyncMock(return_value=_reply()),
         ) as mock_chat:
             response = client.post("/api/v1/ai/chat", json={"message": "hello"})
 
@@ -218,7 +220,7 @@ class TestChatAgentSlug:
         generic surface for every agent, not a per-surface upload."""
         with patch(
             "app.components.backend.api.ai.service.ai_service.chat",
-            new=AsyncMock(return_value=self._reply()),
+            new=AsyncMock(return_value=_reply()),
         ) as mock_chat:
             response = client.post(
                 "/api/v1/ai/chat",
@@ -243,12 +245,54 @@ class TestChatAgentSlug:
     def test_chat_defaults_attachments_to_empty(self, client: TestClient) -> None:
         with patch(
             "app.components.backend.api.ai.service.ai_service.chat",
-            new=AsyncMock(return_value=self._reply()),
+            new=AsyncMock(return_value=_reply()),
         ) as mock_chat:
             response = client.post("/api/v1/ai/chat", json={"message": "hello"})
 
         assert response.status_code == 200
         assert mock_chat.call_args.kwargs["attachments"] == []
+
+{%- if include_database %}
+
+
+class TestChatTurnOwner:
+    """The chat routes pass the signed-in user as the turn's owner
+    (``current_owner_user_id``), whatever ``user_id`` the body names."""
+
+    async def test_the_plain_route_passes_the_session_user(
+        self, authenticated_client: TestClient, acting_owner_user_id: int | None
+    ) -> None:
+        with patch(
+            "app.components.backend.api.ai.service.ai_service.chat",
+            new=AsyncMock(return_value=_reply()),
+        ) as mock_chat:
+            response = authenticated_client.post(
+                "/api/v1/ai/chat", json={"message": "hi", "user_id": "424242"}
+            )
+
+        assert response.status_code == 200
+        assert mock_chat.call_args.kwargs["owner_user_id"] == acting_owner_user_id
+
+    async def test_the_stream_passes_the_session_user(
+        self, authenticated_client: TestClient, acting_owner_user_id: int | None
+    ) -> None:
+        seen: list[int | None] = []
+
+        async def stream_chat(**kwargs: Any) -> Any:
+            seen.append(kwargs["owner_user_id"])
+            return
+            yield
+
+        with patch(
+            "app.components.backend.api.ai.service.ai_service.stream_chat",
+            new=stream_chat,
+        ):
+            authenticated_client.post(
+                "/api/v1/ai/chat/stream", json={"message": "hi", "user_id": "424242"}
+            )
+
+        assert seen == [acting_owner_user_id]
+{%- endif %}
 
 
 {% if ai_backend != "memory" %}

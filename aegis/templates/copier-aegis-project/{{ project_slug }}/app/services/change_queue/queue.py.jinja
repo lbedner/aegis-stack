@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+from app.core.chat_transcript import WITHDRAWN, card_outcome
 from app.core.time import utcnow
 from app.services.change_queue.models import PendingChange
 from app.services.change_queue.queries import batch_rows, get_change
@@ -251,7 +252,7 @@ async def withdraw(
         owner_user_id=owner_user_id,
         # The reason rides on the card: a retracted proposal the user can
         # still see needs to say why, or it reads as the agent flailing.
-        note=f"Withdrawn by {agent_slug}." + (f" {reason.strip()}" if reason else ""),
+        note=f"{WITHDRAWN} by {agent_slug}." + (f" {reason.strip()}" if reason else ""),
     )
 
 
@@ -293,12 +294,8 @@ async def card(db: AsyncSession, row: PendingChange) -> PendingChangeResponse:
 
 
 def outcome_of(row: PendingChange) -> str:
-    """The row's status as a person reads it: a rejection the proposing
-    agent filed against itself is "withdrawn", not the user saying no."""
-    note = str((row.result or {}).get("note") or "")
-    if row.status == "rejected" and note.startswith("Withdrawn"):
-        return "withdrawn"
-    return row.status
+    """The row's status as a person reads it (``card_outcome``)."""
+    return card_outcome(row.status, (row.result or {}).get("note"))
 
 
 async def describe_change(

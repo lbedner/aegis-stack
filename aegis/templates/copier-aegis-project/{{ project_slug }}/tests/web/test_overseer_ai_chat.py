@@ -97,6 +97,16 @@ def test_the_section_opens_on_the_latest_conversation(client: TestClient) -> Non
     assert one(html, "#chat-conversation").get("value") == "c1"
 
 
+def test_cards_waiting_for_approval_sit_beside_the_thread(
+    client: TestClient,
+) -> None:
+    """On the stacks that ship the change queue, the surface carries the
+    review list, fetched when it is first opened."""
+    found = select(_chat_page(client), "[data-approvals] [hx-get]")
+    expected = ["/partials/changes"] if overseer_ai_chat.CARDS else []
+    assert [e.get("hx-get") for e in found] == expected
+
+
 def test_the_assistant_is_the_agent_by_name(client: TestClient) -> None:
     html = _chat_page(client)
     assert text(one(html, "[data-role=assistant] [data-assistant]")) == "Illiana"

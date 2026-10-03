@@ -16,12 +16,22 @@ import pytest
 
 from app.components.web_frontend.rendering import templates
 
+HX = {"HX-Request": "true"}
+
 
 @pytest.fixture
 def hx(app: FastAPI) -> Generator[TestClient]:
     """A client whose every request carries ``HX-Request: true``."""
-    with TestClient(app, headers={"HX-Request": "true"}) as test_client:
+    with TestClient(app, headers=HX) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def hx_user(authenticated_client: TestClient) -> TestClient:
+    """``authenticated_client`` asking as htmx does: the signed-in user's
+    fragments."""
+    authenticated_client.headers.update(HX)
+    return authenticated_client
 
 
 @pytest.fixture

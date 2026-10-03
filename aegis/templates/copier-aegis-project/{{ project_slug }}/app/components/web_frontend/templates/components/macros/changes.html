@@ -3,66 +3,54 @@
    and in the review list. The rows are the queue's own description of the
    change, resolved from the database, never the model's words. Approve and
    Reject swap the card for its new state. #}
-{% from "components/macros/form.html" import action %}
-{% from "components/macros/layout.html" import badge %}
+{% from "components/macros/form.html" import action, checkbox %}
+{% from "components/macros/feedback.html" import error_banner %}
+{% from "components/macros/layout.html" import badge, facts %}
 
-{% macro _rows(display) %}
-<dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-  {% for line in display %}
-  <dt class="text-aegis-muted">{{ line.label }}</dt>
-  <dd class="text-aegis-text break-words">{{ line.value }}</dd>
-  {% endfor %}
-</dl>
+{# The frame both cards share: a title line, its right-hand side as the
+   caller's body, then ``rows``. A batch is a form so its "skip" boxes ride
+   along: htmx sends the enclosing form's fields with a button's POST. #}
+{% macro _card(tag, id, data, title, side) %}
+<{{ tag }} id="{{ id }}" {{ data }} class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
+  <div class="flex items-center justify-between gap-3">
+    <span class="font-medium text-aegis-text">{{ title }}</span>
+    <span class="text-xxs">{{ side }}</span>
+  </div>
+  {{ caller() }}
+</{{ tag }}>
 {% endmacro %}
 
-{% macro change_card(change) %}
-<div id="change-{{ change.id }}" data-change class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
-  <div class="flex items-center justify-between gap-3">
-    <span class="font-medium text-aegis-text">{{ change.title }}</span>
-    <span class="text-xxs">{{ badge(change.label, change.tone) }}</span>
-  </div>
-  {{ _rows(change.display) }}
-  {% if change.error %}<p class="mt-2 text-xs text-error">{{ change.error }}</p>{% endif %}
-  {% if change.status == "pending" %}
-  {% set target = 'hx-target="#change-' ~ change.id ~ '" hx-swap="outerHTML"' %}
-  <div class="mt-3 flex gap-2">
-    {{ action("Approve", 'hx-post="' ~ change.url ~ '/approve" ' ~ target, tone="primary") }}
-    {{ action("Reject", 'hx-post="' ~ change.url ~ '/reject" ' ~ target, tone="danger") }}
-  </div>
-  {% endif %}
+{% macro _actions(url, target, reject) %}
+{% set swap = 'hx-target="#' ~ target ~ '" hx-swap="outerHTML"' %}
+<div class="mt-3 flex gap-2">
+  {{ action("Approve", 'hx-post="' ~ url ~ '/approve" ' ~ swap, tone="primary") }}
+  {{ action(reject, 'hx-post="' ~ url ~ '/reject" ' ~ swap, tone="danger") }}
 </div>
 {% endmacro %}
 
+{% macro change_card(change) %}
+{% call _card("div", "change-" ~ change.id, "data-change", change.title, badge(change.label, change.tone)) %}
+  <div class="mt-2">{{ facts(change.display) }}</div>
+  {% if change.error %}<div class="mt-2">{{ error_banner([change.error]) }}</div>{% endif %}
+  {% if change.status == "pending" %}{{ _actions(change.url, "change-" ~ change.id, "Reject") }}{% endif %}
+{% endcall %}
+{% endmacro %}
+
 {% macro batch_card(batch) %}
-{# A form so the ticked "skip" boxes ride along: htmx sends the enclosing
-   form's fields with a button's POST. #}
-<form id="batch-{{ batch.batch_id }}" data-change-batch class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
-  <div class="flex items-center justify-between gap-3">
-    <span class="font-medium text-aegis-text">{{ batch.title }}</span>
-    <span class="text-xxs text-aegis-muted">{{ batch.rows|length }} {{ "change" if batch.rows|length == 1 else "changes" }}</span>
-  </div>
+{% set count = batch.rows|length %}
+{% call _card("form", "batch-" ~ batch.batch_id, "data-change-batch", batch.title, count ~ (" change" if count == 1 else " changes")) %}
   <ul class="mt-2 space-y-2">
     {% for row in batch.rows %}
     <li class="border-t border-aegis-border/50 pt-2 first:border-0 first:pt-0">
-      <div class="flex items-center justify-between gap-3 text-xs">
-        {% if row.status == "pending" %}
-        <label class="inline-flex items-center gap-2 text-aegis-muted cursor-pointer">
-          <input type="checkbox" name="exclude_ids" value="{{ row.id }}" class="accent-aegis-teal"> Skip this one
-        </label>
-        {% else %}<span></span>{% endif %}
-        <span class="text-xxs">{{ badge(row.label, row.tone) }}</span>
+      <div class="flex items-center justify-between gap-3">
+        {% if row.status == "pending" %}{{ checkbox("exclude_ids", label="Skip this one", value=row.id) }}{% endif %}
+        <span class="text-xxs ml-auto">{{ badge(row.label, row.tone) }}</span>
       </div>
-      {{ _rows(row.display) }}
-      {% if row.error %}<p class="mt-1 text-xs text-error">{{ row.error }}</p>{% endif %}
+      <div class="mt-2">{{ facts(row.display) }}</div>
+      {% if row.error %}<div class="mt-2">{{ error_banner([row.error]) }}</div>{% endif %}
     </li>
     {% endfor %}
   </ul>
-  {% if batch.pending %}
-  {% set target = 'hx-target="#batch-' ~ batch.batch_id ~ '" hx-swap="outerHTML"' %}
-  <div class="mt-3 flex gap-2">
-    {{ action("Approve", 'hx-post="' ~ batch.url ~ '/approve" ' ~ target, tone="primary") }}
-    {{ action("Reject all", 'hx-post="' ~ batch.url ~ '/reject" ' ~ target, tone="danger") }}
-  </div>
-  {% endif %}
-</form>
+  {% if batch.pending %}{{ _actions(batch.url, "batch-" ~ batch.batch_id, "Reject all") }}{% endif %}
+{% endcall %}
 {% endmacro %}

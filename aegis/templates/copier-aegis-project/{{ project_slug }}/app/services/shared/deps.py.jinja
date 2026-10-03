@@ -10,7 +10,7 @@ repeat the auth guard per endpoint.
 from fastapi import Depends
 
 from app.models.user import User
-from app.services.auth.deps import get_current_active_user
+from app.services.auth.deps import get_current_active_user, get_optional_user
 
 
 async def get_owner_user_id(
@@ -18,10 +18,23 @@ async def get_owner_user_id(
 ) -> int | None:
     """Owner scope = the authenticated user (auth service present)."""
     return current_user.id
+
+
+async def get_optional_owner_user_id(
+    user: User | None = Depends(get_optional_user),
+) -> int | None:
+    """The signed-in user's id on a route that also serves anonymous
+    callers, else ``None``."""
+    return user.id if user else None
 {%- else %}
 
 
 async def get_owner_user_id() -> int | None:
     """No auth service - single-user, so rows are unscoped."""
     return None
+
+
+# Nobody signs in, so a route that also serves anonymous callers scopes
+# the same way.
+get_optional_owner_user_id = get_owner_user_id
 {%- endif %}

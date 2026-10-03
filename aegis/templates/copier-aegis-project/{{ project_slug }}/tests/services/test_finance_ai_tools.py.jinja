@@ -496,7 +496,9 @@ async def test_propose_is_the_only_write_and_moves_nothing(
     )
     await session.commit()
 
-    with memory_user("1", agent_slug="finance-assistant", conversation_id="conv-9"):
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
         result = await ai_tools.propose(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
@@ -554,7 +556,9 @@ async def test_pending_hands_the_model_a_line_per_row_not_a_table(
     )
     await session.commit()
 
-    with memory_user("1", agent_slug="finance-assistant", conversation_id="conv-9"):
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
         await ai_tools.propose(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
@@ -597,7 +601,9 @@ async def test_pending_also_shows_what_the_user_decided(
     )
     await session.commit()
 
-    with memory_user("1", agent_slug="finance-assistant", conversation_id="conv-9"):
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
         filed = await ai_tools.propose(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
@@ -647,7 +653,9 @@ async def test_pending_narrows_to_the_card_asked_about(
     )
     await session.commit()
 
-    with memory_user("1", agent_slug="finance-assistant", conversation_id="conv-9"):
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
         for txn in (farm, deli):
             await ai_tools.propose(
                 "transaction.categorize",
@@ -687,7 +695,9 @@ async def test_pending_reports_a_withdrawal_as_withdrawn(
     )
     await session.commit()
 
-    with memory_user("1", agent_slug="finance-assistant", conversation_id="conv-9"):
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
         filed = await ai_tools.propose(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
@@ -730,7 +740,9 @@ async def test_pending_lists_cards_not_rows(
         payloads.append({"transaction_id": txn.id, "category_id": cat.id})
     await session.commit()
 
-    with memory_user("1", agent_slug="finance-assistant", conversation_id="conv-9"):
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
         filed = await ai_tools.propose_many("transaction.categorize", payloads)
         result = await ai_tools.pending(about="state farm")
 

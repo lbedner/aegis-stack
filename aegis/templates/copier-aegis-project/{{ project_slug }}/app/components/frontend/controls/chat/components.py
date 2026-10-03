@@ -21,14 +21,17 @@ from typing import Any
 
 import flet as ft
 
-from app.core.chat_transcript import CARD_STATUS_LABELS, card_markers
-
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.chat.display_rows import (
     _display_rows,
 )
 from app.components.frontend.controls.text import LabelText, SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.chat_transcript import (
+    CARD_STATUS,
+    card_markers,
+    card_outcome,
+)
 
 # on_action(change_id, "approve" | "reject") -> the updated change dict
 # (the API response), or None when the call failed and the card should
@@ -39,16 +42,14 @@ ChangeAction = Callable[[int, str], Awaitable[dict[str, Any] | None]]
 # fixed narrow width and centers in whatever column hosts it.
 CARD_WIDTH = 420
 
-_STATUS_COLORS = {
-    "pending": Theme.Colors.WARNING,
-    "approved": Theme.Colors.SUCCESS,
-    "rejected": Theme.Colors.ERROR,
-    "withdrawn": ft.Colors.OUTLINE,
-    "expired": ft.Colors.OUTLINE,
+_TONE_COLORS = {
+    "warn": Theme.Colors.WARNING,
+    "ok": Theme.Colors.SUCCESS,
+    "error": Theme.Colors.ERROR,
+    "muted": ft.Colors.OUTLINE,
 }
 _STATUS_COPY = {
-    status: (CARD_STATUS_LABELS[status], color)
-    for status, color in _STATUS_COLORS.items()
+    status: (label, _TONE_COLORS[tone]) for status, (label, tone) in CARD_STATUS.items()
 }
 
 
@@ -60,11 +61,9 @@ def _status_of(item: dict[str, Any]) -> tuple[str, str | None]:
     "no", it is the assistant taking its own proposal back, and the
     reason it gave is the one line worth reading.
     """
-    status = str(item.get("status", "pending"))
     note = item.get("note") or (item.get("result") or {}).get("note")
-    if status == "rejected" and note and str(note).startswith("Withdrawn"):
-        return "withdrawn", str(note)
-    return status, None
+    status = card_outcome(str(item.get("status", "pending")), note)
+    return status, str(note) if status == "withdrawn" else None
 
 
 BatchAction = Callable[[str, str, list[int]], Awaitable[dict[str, Any] | None]]

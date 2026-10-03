@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.change_queue.models import PendingChange
@@ -42,10 +42,12 @@ async def list_changes(
     owner_user_id: int | None = None,
     status: str | None = "pending",
     proposed_by_agent: str | None = None,
+    batch_ids: list[str] | None = None,
 ) -> list[PendingChange]:
     """Newest first. ``status=None`` returns the full audit trail;
     ``proposed_by_agent`` narrows to one proposer's cards, which is how an
-    agent sees its own open work before filing more."""
+    agent sees its own open work before filing more; ``batch_ids`` to the
+    rows of those batches, read in one query."""
     query = select(PendingChange).order_by(
         PendingChange.id.desc()  # type: ignore[attr-defined]
     )
@@ -53,6 +55,8 @@ async def list_changes(
         query = query.where(PendingChange.status == status)
     if proposed_by_agent is not None:
         query = query.where(PendingChange.proposed_by_agent == proposed_by_agent)
+    if batch_ids is not None:
+        query = query.where(col(PendingChange.batch_id).in_(batch_ids))
     query = query.where(
         *owner_filters(PendingChange.owner_user_id, owner_user_id)
     )

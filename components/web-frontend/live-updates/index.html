@@ -5462,6 +5462,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#time-series-and-live-charts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Time series and live charts
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -5504,6 +5515,10 @@ examples.</p>
    make memory use grow without bound.</li>
 <li>SSE comments keep the connection alive; they do not run a health check.
    Connections expire periodically so authentication is checked again.</li>
+<li>Every event stream's first frame is an <code>id:</code> naming its connection record
+   (the connections middleware adds it). The browser's own retry sends it back
+   as <code>Last-Event-ID</code>, which is how Server &gt; Connections tells a reconnect from
+   a new page opening the same stream.</li>
 </ol>
 <p>The Overseer implementation is <code>app/components/web_frontend/overseer_events.py</code>.
 Its producer uses the existing cached <code>get_system_status()</code> result. Page
@@ -5531,6 +5546,53 @@ Redis Streams and SSE when the worker component is installed.</p>
 CPU, and similar values still need a bounded server-side sampling cadence.
 Jobs and worker lifecycle events can publish immediately because those changes
 already originate inside the application.</p>
+<h2 id="time-series-and-live-charts">Time series and live charts</h2>
+<p>Anything the app polls or counts can be kept as a time series and charted
+live. A sampler names what it reads; <code>read</code> returns a <code>Sample</code>: numbers by
+series name, and the reading as a whole for the views that show it:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.series</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sample</span><span class="p">,</span> <span class="n">Sampler</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">queue_depths</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Sample</span><span class="p">:</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">depths</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;system&quot;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span> <span class="s2">&quot;media&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="k">return</span> <span class="n">Sample</span><span class="p">({</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">q</span><span class="si">}</span><span class="s2">:depth&quot;</span><span class="p">:</span> <span class="n">n</span> <span class="k">for</span> <span class="n">q</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">depths</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span> <span class="n">latest</span><span class="o">=</span><span class="n">depths</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">SAMPLERS</span> <span class="o">=</span> <span class="p">[</span><span class="n">Sampler</span><span class="p">(</span><span class="s2">&quot;containers&quot;</span><span class="p">,</span> <span class="n">ui_runtime</span><span class="o">.</span><span class="n">sample</span><span class="p">),</span> <span class="n">Sampler</span><span class="p">(</span><span class="s2">&quot;queues&quot;</span><span class="p">,</span> <span class="n">queue_depths</span><span class="p">)]</span>
+</span></code></pre></div>
+<p>Samplers are listed in <code>app/services/system/samplers.py</code> and run in the
+webserver from startup. Each tick's numbers are kept for an hour in the shared
+cache under <code>series:&lt;sampler&gt;:&lt;name&gt;</code> (Redis when the stack has it, so every
+process reads the same history; process memory otherwise), listed in an index
+set per sampler so reads never scan the keyspace. One process samples each
+tick.</p>
+<p>Polling costs only while someone looks. A view reads the sampler's last
+reading (<code>series.latest</code>) and marks it watched (<code>series.watch</code>); a watched
+sampler reads every <code>interval</code> (a second), an unwatched one every
+<code>idle_interval</code> (15 seconds), enough to keep the charts' history. Every viewer
+is served from the one reading, so ten open pages cost what one does.
+Something that happens rather than something polled is a point of its own:
+<code>series.record("llm:qwen2.5:7b:latency", 1.4)</code>, as every LLM call does when it
+finishes.</p>
+<p><code>series.read(prefix, window)</code> gives a window back and <code>series.chart(...)</code>
+turns it into <code>chart_panel</code> data, one line per series on the times they
+share, the axis spanning the window up to now. A window longer than
+<code>MAX_POINTS</code> seconds is averaged into buckets on fixed boundaries, so each
+bucket keeps its place as the window moves. The windows a chart offers are
+<code>series.WINDOWS</code> (15m, 30m, 1h, labelled like every other range row), picked
+with <code>range_chips</code> on the web and <code>DateRangeChips</code> in Flet; the choice lives
+in the query string (<code>?window=1800</code>) and the section's stream follows it.</p>
+<p>A chart goes live with <code>chart_panel(..., live="&lt;event&gt;")</code> inside an element
+with <code>sse-connect</code>: the stream re-sends <code>chart_data(id, data)</code> as that event
+and <code>charts.js</code> updates the drawn chart in place: a time chart (<code>"x": "time"</code>)
+slides along, its oldest points leaving and new ones joining the same line.
+<code>chart_panel(..., empty="...")</code> is said over a chart with nothing in its
+window. <code>fragments_events</code> sends several fragments (a table and its charts) on
+one stream. The data's <code>"format"</code> (<code>percent</code>, <code>bytes</code>, <code>seconds</code>, <code>money</code>)
+reads the same in the Flet charts (<code>LineChartCard.from_chart</code>).</p>
+<p>Overseer's Container section is the first user: CPU and memory per container
+over the last 15 minutes. A server outside Docker charts what it reports of
+itself instead (<code>ui_runtime.HOSTS</code>): Ollama on the host shows the memory each
+loaded model holds (the inference sampler, which also serves the Inference
+page's Models table) and each call's tokens per second and latency.</p>
 
 
 

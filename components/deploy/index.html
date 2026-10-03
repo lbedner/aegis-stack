@@ -2742,6 +2742,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#in-overseer-the-container-section" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Overseer: the Container section
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#checking-it" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5565,6 +5576,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#in-overseer-the-container-section" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Overseer: the Container section
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#checking-it" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5684,6 +5706,9 @@
 <li><strong>Restarts</strong> are not in the list, so <code>restarts</code> is <code>None</code> for the Docker backend.</li>
 <li><strong>Build</strong> is the image's <code>org.opencontainers.image.revision</code> label. <code>aegis deploy</code> stamps <code>BUILD_ID</code> into the server's <code>.env</code>, compose passes it to the image build as a build arg, and the Dockerfile labels the image with it (<code>dev</code> locally). Without the label it falls back to the short image id.</li>
 </ul>
+<h2 id="in-overseer-the-container-section">In Overseer: the Container section</h2>
+<p>Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a <strong>Container</strong> section, in Overseer's htmx pages and Flet modals alike. It shows one row per instance: state and health, CPU, memory used against its limit, network in and out, disk I/O, restarts, uptime, and the image with its build. It renders from the containers sampler's last reading (<code>app.core.series</code>), so it opens full, then refreshes every second while it is open, with CPU and memory charts over the last 15 minutes, 30 minutes or hour.</p>
+<p>Without the deploy component the backend is <code>none</code>: the section says so and points at <code>aegis add deploy</code> instead of showing the app's own process as if it were a container. A page with nothing running behind it (a SQLite database, which is a file) says that too, and a runtime that does not answer says why.</p>
 <h2 id="checking-it">Checking it</h2>
 <p>With the stack up, from inside the webserver container:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>webserver<span class="w"> </span>curl<span class="w"> </span>-s<span class="w"> </span>--unix-socket<span class="w"> </span>/var/run/docker-proxy/docker.sock<span class="w"> </span><span class="se">\</span>

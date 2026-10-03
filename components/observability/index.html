@@ -5978,7 +5978,11 @@
 <li>Top 20 slowest spans</li>
 <li>Recent exceptions (last 24 hours)</li>
 </ul>
-<p>Results are cached for 2 minutes with a 5-minute backoff on failure to respect rate limits.</p>
+<p>The three queries run one at a time, and results are cached for 10 minutes with a 5-minute backoff on failure. The cache lives in a file in the system temp directory, keyed by the read token, so a hot reload keeps it.</p>
+<div class="admonition tip">
+<p class="admonition-title">Use a read token per deployment</p>
+<p>Logfire's query limits belong to the read token: every process and every project holding the same token draws from one budget, and each query scans that Logfire project's last hour of spans. Give each deployment its own Logfire project and read token, or several stacks running at once can exhaust it and the dashboard falls back to <code>Rate limit exceeded</code> errors.</p>
+</div>
 <h2 id="memory-footprint-on-constrained-hosts">Memory Footprint on Constrained Hosts</h2>
 <p>The OpenTelemetry SDK that Logfire builds on is heavy: even with <code>send_to_logfire=False</code>, loading the SDK and its in-memory span batcher adds ~150-300 MiB of fixed overhead. On a 512 MiB container that is the difference between healthy and OOM-flapping.</p>
 <p>Two safeguards ship in the template:</p>

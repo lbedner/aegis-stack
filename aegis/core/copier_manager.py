@@ -6,6 +6,7 @@ the existing Cookiecutter engine. It's designed to maintain feature parity
 during the migration period.
 """
 
+import subprocess
 from pathlib import Path
 from typing import Any, Literal
 
@@ -44,6 +45,32 @@ from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .services import SERVICES
 from .template_generator import TemplateGenerator
 from .verbosity import is_verbose, verbose_print
+
+# The identity ``aegis init`` commits the generated project as, set in the
+# project's own git config so the first commit works on any machine.
+AEGIS_GIT_NAME = "Aegis Stack"
+AEGIS_GIT_EMAIL = "noreply@aegis-stack.dev"
+
+
+def ensure_commit_identity(project_path: Path) -> None:
+    """Let init commit on a machine where git knows nobody (CI), without
+    claiming the project for the bot where it knows its owner.
+
+    Set in the project's own config it would author every later commit
+    there, and ``aegis deploy`` would record the bot as the deployer.
+    """
+    known = subprocess.run(
+        ["git", "config", "user.email"],
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if known:
+        return
+    for key, value in (("user.name", AEGIS_GIT_NAME), ("user.email", AEGIS_GIT_EMAIL)):
+        subprocess.run(
+            ["git", "config", key, value], cwd=project_path, capture_output=True
+        )
 
 
 def derive_include_flags(template_context: dict[str, Any]) -> dict[str, bool]:
@@ -376,6 +403,8 @@ def generate_with_copier(
         AnswerKeys.SCHEDULER: is_scheduler_included,
         AnswerKeys.SCHEDULER_BACKEND: scheduler_backend_str,
         AnswerKeys.SECRETS: template_context.get(AnswerKeys.SECRETS) == "yes",
+        AnswerKeys.DEPLOY: template_context.get(AnswerKeys.DEPLOY) == "yes",
+        AnswerKeys.DATABASE: template_context.get(AnswerKeys.DATABASE) == "yes",
         # Finance tables live in a dedicated Postgres ``finance`` schema
         # (dropped on SQLite); the migration variant is engine-resolved.
         AnswerKeys.DATABASE_ENGINE: database_engine,
@@ -423,18 +452,7 @@ def generate_with_copier(
             check=True,
             capture_output=True,
         )
-        # Configure git user AFTER init (local config requires .git to exist)
-        # This is needed for commits to work in CI environments
-        subprocess.run(
-            ["git", "config", "user.name", "Aegis Stack"],
-            cwd=project_path,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.email", "noreply@aegis-stack.dev"],
-            cwd=project_path,
-            capture_output=True,
-        )
+        ensure_commit_identity(project_path)
         subprocess.run(
             ["git", "add", "."],
             cwd=project_path,

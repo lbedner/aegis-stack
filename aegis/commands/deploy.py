@@ -7,6 +7,7 @@ with backup/rollback strategy and post-deploy health checks.
 
 import re
 import shlex
+import socket
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -17,6 +18,7 @@ import yaml
 
 from ..cli import brand
 from ..constants import AnswerKeys, PostgresProviders
+from ..core.copier_manager import AEGIS_GIT_EMAIL, load_copier_answers
 from ..i18n import lazy_t, t
 
 _BACKUP_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
@@ -115,16 +117,51 @@ def _is_neon_database(project_path: str | None = None) -> bool:
     ``pg_dump``/``psql`` path for these projects. Any project missing or
     unreadable answers defaults to the local-container behavior.
     """
-    project_root = Path(project_path) if project_path else _get_project_root()
-    answers_path = project_root / AnswerKeys.ANSWERS_FILENAME
-    if not answers_path.exists():
-        return False
-    try:
-        with open(answers_path) as f:
-            answers = yaml.safe_load(f) or {}
-    except (OSError, yaml.YAMLError):
-        return False
+    answers = _project_answers(_get_project_root(project_path))
     return answers.get(AnswerKeys.POSTGRES_PROVIDER) == PostgresProviders.NEON
+
+
+def _project_answers(project_root: Path) -> dict:
+    """The project's ``.copier-answers.yml``; ``{}`` when it is missing or
+    unreadable, so a deploy falls back to the plain-container behavior."""
+    try:
+        return load_copier_answers(project_root)
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def _deploy_env_file(project_root: Path) -> Path | None:
+    """The env file a deploy ships to the server: ``.env.deploy`` over ``.env``."""
+    candidates = (project_root / ".env.deploy", project_root / ".env")
+    return next((path for path in candidates if path.exists()), None)
+
+
+def _admin_allowlist_set(project_root: Path) -> bool:
+    """The shipped env file sets ``ADMIN_IP_ALLOWLIST`` to something."""
+    env_file = _deploy_env_file(project_root)
+    if env_file is None:
+        return False
+    for line in env_file.read_text().splitlines():
+        key, _, value = line.partition("=")
+        if key.strip() == "ADMIN_IP_ALLOWLIST" and value.strip():
+            return True
+    return False
+
+
+def _print_deployed(config: dict, *, allowlist_set: bool, tls: bool = False) -> None:
+    """Where the deployed app answers, and how to reach its Overseer.
+
+    Traefik admits only private networks to the Overseer until
+    ``ADMIN_IP_ALLOWLIST`` says otherwise, so its link alone answers 403.
+    """
+    host = config.get("domain") or config["server"]["host"]
+    url = f"{'https' if tls else 'http'}://{host}"
+    typer.echo(t("deploy.app_running", url=url))
+    typer.echo(t("deploy.overseer", url=url))
+    if not allowlist_set:
+        typer.echo(t("deploy.overseer_allowlist"))
+    typer.echo(t("deploy.view_logs"))
+    typer.echo(t("deploy.check_status"))
 
 
 def _compose_prefix(deploy_path: str) -> str:
@@ -173,18 +210,14 @@ def _build_id(project_root: Path) -> str:
     return build
 
 
-def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> None:
+def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> str:
     """Copy the deploy env file to the server and stamp BUILD_ID into it.
 
     ``.env.deploy`` wins over ``.env``; neither existing is not an error
     (the server may already hold one). Both deploy paths call this so the
     stamp cannot be added to one and forgotten in the other.
     """
-    env_file: Path | None = None
-    for candidate in (project_root / ".env.deploy", project_root / ".env"):
-        if candidate.exists():
-            env_file = candidate
-            break
+    env_file = _deploy_env_file(project_root)
 
     remote_env = shlex.quote(f"{deploy_path}/.env")
     if env_file is not None:
@@ -196,12 +229,100 @@ def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> N
 
     build = _build_id(project_root)
     typer.echo(f"Stamping BUILD_ID={build}")
-    _run_remote(
-        host,
-        user,
-        f"touch {remote_env} && sed -i '/^BUILD_ID=/d' {remote_env} "
-        f"&& echo 'BUILD_ID={build}' >> {remote_env}",
+    _run_remote(host, user, _stamp_build_id_command(f"{deploy_path}/.env", build))
+    # A dirty tree's id carries the time: the deploy record names this one.
+    return build
+
+
+def _stamp_build_id_command(env_path: str, build: str) -> str:
+    """Shell that leaves exactly one ``BUILD_ID=<build>`` line in ``env_path``.
+
+    Rewritten through ``grep -v``, whose output ends every line with a
+    newline: a bare ``>>`` joined an ``.env`` that ends without one, and the
+    build id landed inside a comment. Portable (no ``sed -i``).
+    """
+    env = shlex.quote(env_path)
+    tmp = shlex.quote(f"{env_path}.build-id")
+    line = shlex.quote(f"BUILD_ID={build}")
+    return (
+        f"touch {env} && {{ grep -v '^BUILD_ID=' {env}; echo {line}; }} > {tmp} "
+        f"&& cat {tmp} > {env} && rm -f {tmp}"
     )
+
+
+def _deployer(project_root: Path) -> str | None:
+    """Who is deploying, as git knows them: ``Name <email>``."""
+
+    def read(*scope: str) -> tuple[str, ...]:
+        return tuple(
+            subprocess.run(
+                ["git", "-C", str(project_root), "config", *scope, key],
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            for key in ("user.name", "user.email")
+        )
+
+    name, email = read()
+    # ``aegis init`` commits as itself so the first commit works anywhere;
+    # that is not who is deploying.
+    if email == AEGIS_GIT_EMAIL:
+        name, email = read("--global")
+    if not (name or email):
+        return None
+    return f"{name} <{email}>".strip() if email else name
+
+
+def _live_build(host: str, user: str, deploy_path: str) -> str | None:
+    """The ``BUILD_ID`` the server's ``.env`` holds: what is live."""
+    env = shlex.quote(f"{deploy_path}/.env")
+    result = _run_remote_capture(
+        host, user, f"sed -n 's/^BUILD_ID=//p' {env} | tail -1"
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def _record_deploy(
+    project_root: Path,
+    host: str,
+    user: str,
+    deploy_path: str,
+    build_id: str,
+    *,
+    health: str | None,
+    backup: str | None = None,
+    rolled_back: bool = False,
+) -> None:
+    """Hand the app what only the deployer knows, through ``deploy record``
+    (see the template's ``app.components.deploy.history``). Projects without
+    deploy history have no such command; a failed write only warns."""
+    if not (project_root / "app" / "cli" / "deploy_cli.py").exists():
+        return
+    fields = {
+        "--build": build_id,
+        "--by": _deployer(project_root),
+        "--from": socket.gethostname(),
+        "--health": health,
+        "--backup": backup,
+    }
+    argv = ["python", "-m", "app.cli.main", "deploy", "record"]
+    argv += [part for flag, value in fields.items() if value for part in (flag, value)]
+    if rolled_back:
+        argv.append("--rolled-back")
+    result = _run_remote_capture(
+        host, user, _exec_command(deploy_path, "webserver", argv)
+    )
+    if result.returncode != 0:
+        brand.warn(t("deploy.record_failed", error=result.stderr.strip()))
+
+
+def _exec_command(deploy_path: str, service: str, argv: list[str]) -> str:
+    """``docker compose exec -T`` in ``service``, each argument quoted so it
+    reaches the container exactly as given."""
+    quoted = " ".join(shlex.quote(part) for part in argv)
+    return f"{_compose_prefix(deploy_path)} exec -T {shlex.quote(service)} {quoted}"
 
 
 def _run_remote_capture(
@@ -499,8 +620,35 @@ def _rollback_to_backup(
     return True
 
 
+def _health_check_command(name: str | None, *, tls: bool) -> str:
+    """The curl the server runs to check the app through Traefik.
+
+    With TLS, port 80 answers every request with a redirect, which curl
+    without ``-L`` counts as success: the check has to go through HTTPS, for
+    the name the router matches, pinned to this machine. ``-k`` because the
+    certificate may still be on its way from Let's Encrypt.
+    """
+    if not tls:
+        return "curl -sf --max-time 10 http://localhost/health/ -o /dev/null"
+    host = name or "localhost"
+    return (
+        f"curl -sfk --max-time 10 --resolve {host}:443:127.0.0.1 "
+        f"https://{host}/health/ -o /dev/null"
+    )
+
+
+def _public_address(config: dict, project_root: Path) -> tuple[str | None, bool]:
+    """The name the app answers on, and whether it is served over TLS.
+
+    ``ingress_domain`` first: it is the name Traefik's router matches.
+    """
+    answers = _project_answers(project_root)
+    name = answers.get("ingress_domain") or config.get("domain")
+    return name, answers.get("ingress_tls") is True
+
+
 def _run_health_check(
-    host: str, user: str, retries: int = 3, interval: int = 5
+    host: str, user: str, command: str, retries: int = 3, interval: int = 5
 ) -> bool:
     """Run health check against the deployed application.
 
@@ -516,11 +664,7 @@ def _run_health_check(
 
     for attempt in range(1, retries + 1):
         typer.echo(t("deploy.health_attempt", n=attempt, total=retries))
-        result = _run_remote_capture(
-            host,
-            user,
-            "curl -sf --max-time 10 http://localhost/health/ -o /dev/null",
-        )
+        result = _run_remote_capture(host, user, command)
         if result.returncode == 0:
             brand.success(t("deploy.health_passed"))
             return True
@@ -753,6 +897,7 @@ def _run_rolling_deploy(
     build: bool,
     health_check: bool,
     health_cfg: dict,
+    health_command: str,
     drain_timeout: int,
     rollout_timeout: int,
 ) -> None:
@@ -780,7 +925,7 @@ def _run_rolling_deploy(
         raise typer.Exit(1)
 
     # Step 2: scp .env (prefer .env.deploy) + stamp BUILD_ID
-    _upload_env(project_root, host, user, deploy_path)
+    build_id = _upload_env(project_root, host, user, deploy_path)
 
     prefix = _rolling_compose_prefix(deploy_path)
     running = _rolling_running_services(host, user, deploy_path)
@@ -844,15 +989,17 @@ def _run_rolling_deploy(
 
     # Step 9: health check
     if health_check:
-        healthy = _run_health_check(host, user, retries=health_cfg["retries"])
-        if not healthy:
-            brand.warn(t("deploy.health_failed_hint"))
-            raise typer.Exit(1)
-
+        healthy = _run_health_check(
+            host, user, health_command, retries=health_cfg["retries"]
+        )
+    health = None if not health_check else "passed" if healthy else "failed"
+    _record_deploy(project_root, host, user, deploy_path, build_id, health=health)
+    if health == "failed":
+        brand.warn(t("deploy.health_failed_hint"))
+        raise typer.Exit(1)
     _prune_docker(host, user)
 
     brand.success(f"\n{t('deploy.rolling_complete')}", bold=True)
-    typer.echo(t("deploy.app_running", host=host))
 
 
 # ---------------------------------------------------------------------------
@@ -1110,6 +1257,8 @@ def deploy_command(
     neon = _is_neon_database(project_path)
 
     project_root = Path(project_path) if project_path else _get_project_root()
+    name, tls = _public_address(config, project_root)
+    health_command = _health_check_command(name, tls=tls)
 
     # Before either path touches the server: a build needs room to land.
     _check_disk_space(host, user, deploy_path)
@@ -1123,8 +1272,12 @@ def deploy_command(
             build=build,
             health_check=health_check,
             health_cfg=health_cfg,
+            health_command=health_command,
             drain_timeout=drain_timeout,
             rollout_timeout=rollout_timeout,
+        )
+        _print_deployed(
+            config, allowlist_set=_admin_allowlist_set(project_root), tls=tls
         )
         return
 
@@ -1167,7 +1320,19 @@ def deploy_command(
         raise typer.Exit(1)
 
     # Step 3: Copy .env file (prefer .env.deploy for production values)
-    _upload_env(project_root, host, user, deploy_path)
+    build_id = _upload_env(project_root, host, user, deploy_path)
+
+    def record(health: str | None, *, rolled_back: bool = False) -> None:
+        _record_deploy(
+            project_root,
+            host,
+            user,
+            deploy_path,
+            build_id,
+            health=health,
+            backup=backup_timestamp,
+            rolled_back=rolled_back,
+        )
 
     # Step 4: Stop existing services
     typer.echo(t("deploy.stopping"))
@@ -1183,7 +1348,10 @@ def deploy_command(
         brand.error(t("deploy.start_failed"), err=True)
         if backup_timestamp and health_cfg["auto_rollback"]:
             brand.warn(t("deploy.auto_rollback"))
-            _rollback_to_backup(host, user, deploy_path, backup_timestamp, neon=neon)
+            rolled_back = _rollback_to_backup(
+                host, user, deploy_path, backup_timestamp, neon=neon
+            )
+            record("failed", rolled_back=rolled_back)
         raise typer.Exit(1)
 
     # Step 6: Restart Traefik if present
@@ -1198,9 +1366,7 @@ def deploy_command(
     # Step 7: Health check + auto-rollback
     if health_check:
         healthy = _run_health_check(
-            host,
-            user,
-            retries=health_cfg["retries"],
+            host, user, health_command, retries=health_cfg["retries"]
         )
         if not healthy:
             if backup_timestamp and health_cfg["auto_rollback"]:
@@ -1212,18 +1378,18 @@ def deploy_command(
                     brand.success(t("deploy.rolled_back", timestamp=backup_timestamp))
                 else:
                     brand.error(t("deploy.rollback_failed"), err=True)
+                record("failed", rolled_back=success)
                 raise typer.Exit(1)
             else:
+                record("failed")
                 brand.warn(t("deploy.health_failed_hint"))
                 raise typer.Exit(1)
 
+    record("passed" if health_check else None)
     _prune_docker(host, user)
 
     brand.success(f"\n{t('deploy.complete')}", bold=True)
-    typer.echo(t("deploy.app_running", host=host))
-    typer.echo(t("deploy.overseer", host=host))
-    typer.echo(t("deploy.view_logs"))
-    typer.echo(t("deploy.check_status"))
+    _print_deployed(config, allowlist_set=_admin_allowlist_set(project_root), tls=tls)
 
 
 def deploy_backup_command(
@@ -1365,9 +1531,21 @@ def deploy_rollback_command(
 
     brand.warn(t("deploy.rolling_back", backup=backup, host=host), bold=True)
 
+    rolled_back_from = _live_build(host, user, deploy_path)
     success = _rollback_to_backup(
         host, user, deploy_path, backup, neon=_is_neon_database(project_path)
     )
+    if success and rolled_back_from:
+        _record_deploy(
+            _get_project_root(project_path),
+            host,
+            user,
+            deploy_path,
+            rolled_back_from,
+            health=None,
+            backup=backup,
+            rolled_back=True,
+        )
     if success:
         # Restart Traefik if present
         prefix = _compose_prefix(deploy_path)
@@ -1577,10 +1755,7 @@ def deploy_exec_command(
     # scriptable, and a TTY would corrupt piped output. Each argument is
     # quoted individually so a command containing spaces, quotes or globs
     # reaches the container exactly as typed.
-    remote = (
-        f"{_compose_prefix(deploy_path)} exec -T {shlex.quote(service)} "
-        + " ".join(shlex.quote(part) for part in command)
-    )
+    remote = _exec_command(deploy_path, service, list(command))
     # No capture: stdout/stderr stream straight through to the caller.
     result = subprocess.run(["ssh", f"{user}@{host}", remote])
     # Propagate rather than swallow, so `set -e` and CI see the failure.

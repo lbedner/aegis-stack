@@ -902,8 +902,10 @@ MESSAGES: dict[str, str] = {
         "~/.docker/cli-plugins/ auf dem Deploy-Host installiert?"
     ),
     "deploy.rolling_complete": "Rolling-Deployment abgeschlossen!",
-    "deploy.app_running": "   Anwendung läuft unter: http://{host}",
-    "deploy.overseer": "   Overseer Dashboard: http://{host}/dashboard/",
+    "deploy.app_running": "   Anwendung läuft unter: {url}",
+    "deploy.overseer": "   Overseer Dashboard: {url}/dashboard/",
+    "deploy.overseer_allowlist": "   (Traefik lässt nur private Netze zu: trage deine IP in ADMIN_IP_ALLOWLIST in .env ein und deploye erneut, um es zu öffnen)",
+    "deploy.record_failed": "   Deploy-Verlauf nicht gespeichert: {error}",
     "deploy.view_logs": "   Logs anzeigen: aegis deploy-logs",
     "deploy.check_status": "   Status prüfen: aegis deploy-status",
     "deploy.backup_complete": "Backup abgeschlossen!",
@@ -1256,9 +1258,10 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_domain": (
         "Hostname, der per Cloudflare auf den Server zeigt (Standard: ein sslip.io-Name)"
     ),
-    "provision.help_opt_ssh_key": (
-        "Öffentlicher Schlüssel für root auf dem neuen Server"
-    ),
+    "provision.help_opt_ssh_key": "Öffentlicher Schlüssel für root auf dem neuen Server (Standard: der erste von ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
+    "provision.no_ssh_key": "Kein öffentlicher SSH-Schlüssel in {dir} gefunden (gesucht: {names}). Gib einen mit --ssh-key an.",
+    "provision.help_opt_email": "Adresse, unter der Let's Encrypt das HTTPS-Zertifikat registriert (Standard: die author_email des Projekts)",
+    "provision.email_required": "HTTPS braucht eine E-Mail-Adresse für Let's Encrypt, und die author_email des Projekts ist noch der Platzhalter. Gib eine mit --email an.",
     "provision.unknown_provider": (
         "Nicht unterstützter Anbieter: {provider}. Unterstützt: {supported}"
     ),

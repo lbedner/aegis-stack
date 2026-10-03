@@ -157,3 +157,94 @@ def test_the_image_carries_the_build_id_as_a_label() -> None:
     ).render({**get_copier_defaults(), "project_slug": "demo"})
     assert "ARG BUILD_ID=dev" in dockerfile
     assert 'org.opencontainers.image.revision="${BUILD_ID}"' in dockerfile
+
+
+# ---------------------------------------------------------------------------
+# Deploy history (DR-06): a table, only where the stack has a database
+# ---------------------------------------------------------------------------
+
+
+def test_with_a_database_deploy_history_ships_a_migration() -> None:
+    from aegis.core.migration_generator import get_services_needing_migrations
+
+    context = TemplateGenerator("demo", ["database", "deploy"]).get_template_context()
+
+    assert "deploy" in get_services_needing_migrations(context)
+
+
+def test_without_a_database_there_is_no_history_and_no_migration() -> None:
+    """Deploy stays composable: containers and logs without a database."""
+    from aegis.core.migration_generator import get_services_needing_migrations
+
+    context = TemplateGenerator("demo", ["deploy"]).get_template_context()
+
+    assert "deploy" not in get_services_needing_migrations(context)
+    assert ComponentNames.DATABASE not in COMPONENTS[ComponentNames.DEPLOY].requires
+
+
+def test_the_component_declares_its_history_migration_and_files() -> None:
+    from aegis.core.migration_generator import DEPLOY_MIGRATION
+
+    spec = COMPONENTS[ComponentNames.DEPLOY]
+    assert DEPLOY_MIGRATION in spec.migrations
+    history = spec.files.extras[AnswerKeys.DATABASE]
+    assert "app/components/deploy/models.py" in history
+    assert "app/cli/deploy_cli.py" in history
+
+
+def _history_tree(root: Any) -> list[Any]:
+    paths = [
+        root / p
+        for p in COMPONENTS[ComponentNames.DEPLOY].files.extras[AnswerKeys.DATABASE]
+    ]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# stub\n")
+    return paths
+
+
+@pytest.mark.parametrize(("database", "kept"), [("yes", True), ("no", False)])
+def test_init_keeps_the_history_files_only_with_a_database(
+    tmp_path: Any, database: str, kept: bool
+) -> None:
+    from aegis.core.post_gen_tasks import cleanup_components
+
+    paths = _history_tree(tmp_path)
+    context = TemplateGenerator(
+        "demo", ["database", "deploy"] if database == "yes" else ["deploy"]
+    ).get_template_context()
+
+    cleanup_components(tmp_path, context)
+
+    assert all(path.exists() is kept for path in paths)
+
+
+def test_its_history_lives_in_its_own_schema() -> None:
+    """Like the scheduler's and the secrets component's, apart from service
+    tables on Postgres; SQLite keeps it in the one file."""
+    from aegis.core.migration_generator import DEPLOY_MIGRATION
+
+    assert DEPLOY_MIGRATION.schema == "deploy"
+    env = Environment(loader=FileSystemLoader(str(get_template_path())))
+    template = env.get_template(
+        "{{ project_slug }}/app/components/deploy/models.py.jinja"
+    )
+    assert '"schema": "deploy"' in template.render(database_engine="postgres")
+    assert "schema" not in template.render(database_engine="sqlite").split('"""')[-1]
+
+
+@pytest.mark.parametrize("database", [True, False])
+def test_adding_deploy_copies_its_history_exactly_with_a_database(
+    database: bool,
+) -> None:
+    from aegis.core.component_files import get_component_files
+
+    files = get_component_files(
+        ComponentNames.DEPLOY, answers={AnswerKeys.DATABASE: database}
+    )
+
+    assert ("app/cli/deploy_cli.py" in files) is database
+    assert (
+        "app/components/deploy/models.py.jinja" in files
+        or "app/components/deploy/models.py" in files
+    ) is database

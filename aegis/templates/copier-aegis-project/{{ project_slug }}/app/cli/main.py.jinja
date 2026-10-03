@@ -113,6 +113,14 @@ except ImportError:
     # Secrets component not available, skip secrets commands
     pass
 
+# Conditionally register deploy command if deploy history is available
+try:
+    deploy_module = importlib.import_module("app.cli.deploy_cli")
+    app.add_typer(deploy_module.app, name="deploy")
+except ImportError:
+    # Deploy history not available (no deploy component or no database)
+    pass
+
 # Conditionally register comms command if comms service is available
 try:
     comms_module = importlib.import_module("app.cli.comms")

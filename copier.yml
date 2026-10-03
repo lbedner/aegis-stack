@@ -394,7 +394,6 @@ finance_snaptrade:
 
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"
-_include_migrations: "{{ include_auth or include_payment or include_insights or include_blog or include_documents or include_finance or (include_ai and ai_backend in ['sqlite', 'postgres']) }}"
 
 # Component-specific dependencies (computed)
 _scheduler_deps: "{% if include_scheduler %}apscheduler>=3.10.0{% endif %}"

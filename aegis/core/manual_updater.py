@@ -21,7 +21,6 @@ from aegis.constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
-    StorageBackends,
 )
 from aegis.i18n import t
 
@@ -1061,27 +1060,6 @@ class ManualUpdater:
             shared_files_need_manual_merge,
         )
 
-    def _answers_need_migrations(self, answers: dict[str, Any]) -> bool:
-        """Mirror of post-gen's ``needs_migrations`` gate (``post_gen_tasks``):
-        any table-bearing service, or a postgres-backed scheduler."""
-        ai_needs = bool(answers.get(AnswerKeys.AI)) and answers.get(
-            AnswerKeys.AI_BACKEND
-        ) in (StorageBackends.SQLITE, StorageBackends.POSTGRES)
-        scheduler_needs = (
-            bool(answers.get(AnswerKeys.SCHEDULER))
-            and answers.get(AnswerKeys.SCHEDULER_BACKEND) == StorageBackends.POSTGRES
-        )
-        return bool(
-            answers.get(AnswerKeys.AUTH)
-            or ai_needs
-            or answers.get(AnswerKeys.INSIGHTS)
-            or answers.get(AnswerKeys.PAYMENT)
-            or answers.get(AnswerKeys.BLOG)
-            or answers.get(AnswerKeys.DOCUMENTS)
-            or answers.get(AnswerKeys.FINANCE)
-            or scheduler_needs
-        )
-
     def _ensure_migration_skill(self, answers: dict[str, Any]) -> str | None:
         """Create the add-model-and-migration skill when migrations arrive.
 
@@ -1093,7 +1071,9 @@ class ManualUpdater:
 
         Returns the project-relative path if it created the file, else None.
         """
-        if not self._answers_need_migrations(answers):
+        from .migration_generator import get_services_needing_migrations
+
+        if not get_services_needing_migrations(answers):
             return None
         output_path = self.project_path / MIGRATION_SKILL_FILE
         if output_path.exists():

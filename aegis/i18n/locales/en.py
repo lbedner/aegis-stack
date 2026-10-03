@@ -916,8 +916,10 @@ MESSAGES: dict[str, str] = {
         "Rolling webserver swap failed; the previous container is still serving."
     ),
     "deploy.rolling_complete": "Rolling deploy complete!",
-    "deploy.app_running": ("   Application running at: http://{host}"),
-    "deploy.overseer": ("   Overseer dashboard: http://{host}/dashboard/"),
+    "deploy.app_running": ("   Application running at: {url}"),
+    "deploy.overseer": ("   Overseer dashboard: {url}/dashboard/"),
+    "deploy.overseer_allowlist": "   (Traefik admits only private networks to it: add your IP to ADMIN_IP_ALLOWLIST in .env and redeploy to open it)",
+    "deploy.record_failed": "   Deploy history not recorded: {error}",
     "deploy.view_logs": "   View logs: aegis deploy-logs",
     "deploy.check_status": "   Check status: aegis deploy-status",
     "deploy.backup_complete": "Backup complete!",
@@ -1358,7 +1360,10 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_domain": (
         "Hostname to point at the server through Cloudflare (default: an sslip.io name)"
     ),
-    "provision.help_opt_ssh_key": "Public key installed for root on the new server",
+    "provision.help_opt_ssh_key": "Public key installed for root on the new server (default: the first of ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
+    "provision.no_ssh_key": "No SSH public key found in {dir} (looked for {names}). Pass one with --ssh-key.",
+    "provision.help_opt_email": "Address Let's Encrypt registers the HTTPS certificate to (default: the project's author_email)",
+    "provision.email_required": "HTTPS needs an email address for Let's Encrypt, and this project's author_email is still the placeholder. Pass one with --email.",
     "provision.unknown_provider": (
         "Unsupported provider: {provider}. Supported: {supported}"
     ),

@@ -41,10 +41,12 @@ from .deploy import (
     _get_project_name,
     _get_project_root,
     _load_deploy_config,
+    _project_answers,
     _run_remote_capture,
     _save_deploy_config,
     deploy_command,
 )
+from .ingress import enable_tls, known_email
 
 PROVIDERS = ("hetzner",)
 HCLOUD_TOKEN_ENV = "HCLOUD_TOKEN"
@@ -173,6 +175,7 @@ def _provision(
     record: dict[str, Any],
     user_data: str,
     public_key: str,
+    email: str,
 ) -> None:
     def persist() -> None:
         _persist(root, config, record)
@@ -205,6 +208,9 @@ def _provision(
     persist()
     brand.success(t("provision.ready", hostname=hostname))
 
+    # A project generated without TLS has no :443 listener or resolver at
+    # all; the name the server just got needs both before the first deploy.
+    enable_tls(root, hostname, email)
     deploy_command(
         project_path=str(root),
         build=True,
@@ -246,13 +252,44 @@ def _on_failure(
     brand.success(t("provision.cleaned_up"))
 
 
-def _read_inputs(root: Path, ssh_key: str) -> tuple[str, str]:
+# Tried in order when ``--ssh-key`` is not given, as ``ssh`` itself would.
+DEFAULT_PUBLIC_KEYS = ("id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub")
+
+
+def _default_public_key() -> Path:
+    """The first of the user's usual public keys that exists."""
+    ssh_dir = Path.home() / ".ssh"
+    for name in DEFAULT_PUBLIC_KEYS:
+        if (ssh_dir / name).exists():
+            return ssh_dir / name
+    brand.error(
+        t("provision.no_ssh_key", dir=ssh_dir, names=", ".join(DEFAULT_PUBLIC_KEYS)),
+        err=True,
+    )
+    raise typer.Exit(1)
+
+
+def _acme_email(root: Path, email: str | None) -> str:
+    """The address Let's Encrypt registers the certificate to.
+
+    ``--email`` wins, then the project's ``author_email`` unless it is still
+    the generated placeholder, which Let's Encrypt refuses. Checked before
+    any server exists, so a missing address costs nothing.
+    """
+    found = email or known_email(_project_answers(root))
+    if found:
+        return found
+    brand.error(t("provision.email_required"), err=True)
+    raise typer.Exit(1)
+
+
+def _read_inputs(root: Path, ssh_key: str | None) -> tuple[str, str]:
     """The setup script as user-data and the public key; fail before any API call."""
     setup_script = root / "scripts" / "server-setup.sh"
     if not setup_script.exists():
         brand.error(t("deploy.setup_script_missing", path=setup_script), err=True)
         raise typer.Exit(1)
-    pubkey_path = Path(ssh_key).expanduser()
+    pubkey_path = Path(ssh_key).expanduser() if ssh_key else _default_public_key()
     if not pubkey_path.exists():
         brand.error(t("deploy.pubkey_missing", path=str(pubkey_path)), err=True)
         raise typer.Exit(1)
@@ -287,8 +324,11 @@ def deploy_provision_command(
     domain: str | None = typer.Option(
         None, "--domain", help=lazy_t("provision.help_opt_domain")
     ),
-    ssh_key: str = typer.Option(
-        "~/.ssh/id_ed25519.pub", "--ssh-key", help=lazy_t("provision.help_opt_ssh_key")
+    ssh_key: str | None = typer.Option(
+        None, "--ssh-key", help=lazy_t("provision.help_opt_ssh_key")
+    ),
+    email: str | None = typer.Option(
+        None, "--email", help=lazy_t("provision.help_opt_email")
     ),
     project_path: str | None = typer.Option(
         None, "--project-path", help=lazy_t("common.help_project_path")
@@ -305,6 +345,7 @@ def deploy_provision_command(
         - aegis deploy-provision
         - aegis deploy-provision --size cx33 --region fsn1
         - aegis deploy-provision --domain app.example.com
+        - aegis deploy-provision --email ops@example.com
     """
     if provider not in PROVIDERS:
         brand.error(
@@ -319,6 +360,7 @@ def deploy_provision_command(
     hcloud = HetznerClient(json_requester(HETZNER_API, _token(HCLOUD_TOKEN_ENV)))
     root = _get_project_root(project_path)
     user_data, public_key = _read_inputs(root, ssh_key)
+    acme_email = _acme_email(root, email)
 
     config = _load_deploy_config(str(root)) or {}
     record: dict[str, Any] = config.get("provision") or {}
@@ -347,7 +389,7 @@ def deploy_provision_command(
         _confirm_price(hcloud, record, yes)
 
     try:
-        _provision(hcloud, dns, root, config, record, user_data, public_key)
+        _provision(hcloud, dns, root, config, record, user_data, public_key, acme_email)
     except (Exception, KeyboardInterrupt) as exc:
         _on_failure(exc, hcloud, dns, root, config, record, yes)
         if isinstance(exc, ProvisionError | typer.Exit):

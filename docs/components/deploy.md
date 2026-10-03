@@ -80,6 +80,19 @@ Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis
 
 Without the deploy component the backend is `none`: the section says so and points at `aegis add deploy` instead of showing the app's own process as if it were a container. A page with nothing running behind it (a SQLite database, which is a file) says that too, and a runtime that does not answer says why.
 
+## Deploy history
+
+With a database, the component keeps a `deployment` table (in its own `deploy` schema on Postgres, like the scheduler's and secrets'): one row per build that went live. Two writers fill the same row, keyed by the build id:
+
+- **The app**, when a build it has not seen starts, writes the build id and when it started. This covers every way code reaches the server: `aegis deploy`, a CI deploy, a restart onto a new image. A plain restart of the same build writes nothing.
+- **`aegis deploy`**, after each deploy and rollback (and `aegis deploy-rollback`), adds what only the deployer knows: who deployed (your git name and email), from which machine, the health check result, the backup taken before it, and the build a rollback went back to. It runs `deploy record` in the webserver container; a failed write warns and never changes the deploy's result.
+
+```bash
+my-app deploy record --build a1b2c3d --by "Ada <ada@example.org>" --health passed
+```
+
+What is live is always the running build (`BUILD_ID`), never the newest row. Without a database the component still reads containers and logs, and there is no history.
+
 ## Checking it
 
 With the stack up, from inside the webserver container:

@@ -17,7 +17,7 @@ import typer
 from .. import __version__ as aegis_version
 from ..cli import brand
 from ..config.defaults import GITHUB_TEMPLATE_URL
-from ..constants import AnswerKeys, OllamaMode, StorageBackends
+from ..constants import AnswerKeys, OllamaMode
 from ..core.behavior_changes import behavior_changes_for
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
@@ -37,7 +37,10 @@ from ..core.copier_updater import (
     validate_clean_git_tree,
 )
 from ..core.manual_updater import detect_insights_sources
-from ..core.migration_generator import generate_missing_migrations
+from ..core.migration_generator import (
+    generate_missing_migrations,
+    get_services_needing_migrations,
+)
 from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from ..core.template_cleanup import (
     cleanup_nested_project_directory,
@@ -317,22 +320,9 @@ def _load_pending_update(project_path: Path) -> dict[str, Any] | None:
 
 def _run_postgen(target_path: Path, answers: dict[str, Any]) -> bool:
     """Missing migrations + post-generation tasks. Returns overall success."""
-    include_auth = answers.get(AnswerKeys.AUTH, False)
-    include_ai = answers.get(AnswerKeys.AI, False)
-    include_insights = answers.get(AnswerKeys.INSIGHTS, False)
-    include_payment = answers.get(AnswerKeys.PAYMENT, False)
-    include_blog = answers.get(AnswerKeys.BLOG, False)
-    include_documents = answers.get(AnswerKeys.DOCUMENTS, False)
-    ai_backend = answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
-    ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
-    include_migrations = (
-        include_auth
-        or ai_needs_migrations
-        or include_insights
-        or include_payment
-        or include_blog
-        or include_documents
-    )
+    # The one rule for which features own tables (secrets, deploy history
+    # and finance were missing from the list that stood here).
+    include_migrations = bool(get_services_needing_migrations(answers))
 
     # Migrations the project predates. A project generated before a
     # revision existed never receives it otherwise: ``add-service``

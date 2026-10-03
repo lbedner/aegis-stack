@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Approval cards in the htmx UI.** A change an agent proposes now shows
+  as a card in the htmx chat, under the reply that proposed it, and in a
+  "Waiting for your approval" list beside the thread: the change's title,
+  its rows as the queue describes them, and Approve / Reject, which swap
+  the card for its new state. A batch is one card with a per-row "skip".
+  The routes live at `/partials/changes` (scoped to the signed-in user, so
+  another user's card is a 404), and `change_queue.card()` builds the card
+  for these routes and the JSON ones alike.
+
+### Fixed
+
+- **Chat proposals are filed under the user whose turn it was.** On a
+  stack with auth, `propose` and `propose_many` filed every card with no
+  owner, so approving one answered 404; `pending` and `withdraw` now also
+  see only that user's cards.
+
 ## [0.14.0] - 2026-10-02
 
 ### Added

@@ -4,12 +4,21 @@
    shows), so the ids the scripts and the composer target stay unique.
    Needs: assistant, chat_path, stream_url, turn_defaults, messages,
    conversation_id, picker (the catalog is there to pick from), voice (how
-   a spoken turn is heard, or none). #}
+   a spoken turn is heard, or none), approvals (the change queue's
+   review list's URL, or none). #}
 {% from "components/macros/icons.html" import icon, sprite %}
 {% from "components/macros/chat.html" import button_classes, conversation_field, voice_states %}
 {{ sprite() }}
 <div id="chat" class="flex flex-col h-full"
      data-chat='{{ {"stream": stream_url, "defaults": turn_defaults, "path": chat_path}|tojson }}'>
+  {% if approvals %}
+  {# Every card still waiting for the user, beside the thread, so a proposal
+     is never lost with the conversation it was made in. #}
+  <details class="mb-3 text-xs" data-approvals>
+    <summary class="cursor-pointer text-aegis-muted hover:text-aegis-text">Waiting for your approval</summary>
+    <div hx-get="{{ approvals }}" hx-trigger="load" hx-swap="innerHTML"></div>
+  </details>
+  {% endif %}
   <div class="relative flex-1 min-h-0">
     <div id="chat-scroll" class="h-full overflow-y-auto pr-2">
       <ol id="chat-thread" class="space-y-6 pb-6">

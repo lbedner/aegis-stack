@@ -155,5 +155,51 @@ async def test_the_chat_tool_proposes_a_registered_type(
         "pending",
         "withdraw",
     } <= native_write_tool_names()
+
+
+# Lists ``pending`` for two users on purpose, so its read repeats by
+# construction rather than by a loop.
+@pytest.mark.queryspy(allow_n_plus_one=True)
+@pytest.mark.asyncio
+async def test_a_chat_proposal_belongs_to_the_turns_user(
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    acting_owner_user_id: int | None,
+) -> None:
+    """The approval routes scope by the signed-in user, so a card proposed
+    in a user's turn is filed under that user (#1367), and an agent's
+    ``pending`` lists only the cards of the user whose turn it is."""
+    from contextlib import asynccontextmanager
+
+    from app.services.ai.domains.chat import change_tools
+    from app.services.ai.domains.chat.user_memory import memory_user
+
+    @asynccontextmanager
+    async def test_session():  # type: ignore[no-untyped-def]
+        yield async_db_session
+
+    monkeypatch.setattr(change_tools, "get_async_session", test_session)
+    me = str(acting_owner_user_id if acting_owner_user_id is not None else 1)
+
+    with memory_user(me, agent_slug="helper", conversation_id="conv-1"):
+        result = await change_tools.propose(NOTE, {"text": "mine"})
+        mine = await change_tools.pending()
+    with memory_user("424242", agent_slug="helper", conversation_id="conv-2"):
+        theirs = await change_tools.pending()
+
+    row = await change_queue.get_change(async_db_session, result["pending_change_id"])
+    assert row is not None
+    assert row.owner_user_id == acting_owner_user_id
+    assert [c["pending_change_ids"] for c in mine["pending"]] == [[row.id]]
+
+{%- if include_auth %}
+
+    # Another user's turn sees none of this user's cards.
+    assert theirs["pending"] == []
+{%- else %}
+
+    # Single-user: there is no one else to hide them from.
+    assert theirs["pending"] == mine["pending"]
+{%- endif %}
 {%- endif %}
 {% endif %}

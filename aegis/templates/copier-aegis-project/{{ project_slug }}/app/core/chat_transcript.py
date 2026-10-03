@@ -175,3 +175,23 @@ def footer_line(meta: dict[str, Any]) -> str:
     if cost:
         parts.append(f"${cost:.4f}")
     return "  ·  ".join(parts)
+
+
+# What an approval card's status reads as, in every chat UI (the Flet chat
+# and the htmx one); each UI keeps its own colours.
+CARD_STATUS_LABELS: dict[str, str] = {
+    "pending": "Awaiting your approval",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "withdrawn": "Withdrawn",
+    "expired": "Expired",
+}
+
+
+def card_markers(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    """The approval cards a trace entry carries: its compact ``component``
+    markers (one per card, a ``pending`` listing several), each naming a
+    ``pending_change`` or a ``pending_change_batch``."""
+    marker = entry.get("component")
+    markers = marker if isinstance(marker, list) else [marker]
+    return [m for m in markers if isinstance(m, dict) and m.get("kind")]

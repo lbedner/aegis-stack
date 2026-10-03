@@ -8,8 +8,12 @@ Route modules import from those: full-page handlers live in
 ``routes/pages.py``, fragment handlers in ``routes/partials/``.
 """
 
+import importlib.util
+
 from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
+
+CHANGES = "app.components.web_frontend.routes.partials.changes"
 
 
 def create_web_frontend_app() -> APIRouter:
@@ -23,6 +27,11 @@ def create_web_frontend_app() -> APIRouter:
     from app.components.web_frontend.routes.pages import router as pages_router
 
     router.include_router(pages_router, include_in_schema=False)
+    # The change queue's approval cards (the signed-in user's, not the
+    # Overseer's alone), on the stacks that ship the queue.
+    if importlib.util.find_spec(CHANGES) is not None:
+        changes = importlib.import_module(CHANGES)
+        router.include_router(changes.router, include_in_schema=False)
     for route in router.routes:
         if isinstance(route, APIRoute):
             route.tags = ["overseer" if "/overseer" in route.path else "web"]

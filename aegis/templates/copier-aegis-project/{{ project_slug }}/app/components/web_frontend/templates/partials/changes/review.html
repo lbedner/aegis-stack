@@ -1,0 +1,9 @@
+{# Every card still waiting for the signed-in user, a batch as one card. #}
+{% from "components/macros/changes.html" import change_card, batch_card %}
+<section id="changes-review" data-changes-review>
+  {% for card in cards %}
+  {% if card.single %}{{ change_card(card.single) }}{% else %}{{ batch_card(card.batch) }}{% endif %}
+  {% else %}
+  <p class="text-xs text-aegis-muted">Nothing is waiting for your approval.</p>
+  {% endfor %}
+</section>

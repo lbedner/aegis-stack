@@ -16,7 +16,7 @@ from app.core.time import utcnow
 from app.services.change_queue.models import PendingChange
 from app.services.change_queue.queries import batch_rows, get_change
 from app.services.change_queue.registry import executor_for
-from app.services.change_queue.schemas import ChangeDisplayRow
+from app.services.change_queue.schemas import ChangeDisplayRow, PendingChangeResponse
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -281,6 +281,15 @@ async def withdraw_batch(
         )
         withdrawn += 1
     return withdrawn
+
+
+async def card(db: AsyncSession, row: PendingChange) -> PendingChangeResponse:
+    """The card for one row: what every confirmation surface renders (the
+    JSON routes and the htmx cards alike), built from the stored row."""
+    display = await describe_change(db, row)
+    return PendingChangeResponse.from_row(
+        row, title=executor_for(row.change_type).title, display=display
+    )
 
 
 def outcome_of(row: PendingChange) -> str:

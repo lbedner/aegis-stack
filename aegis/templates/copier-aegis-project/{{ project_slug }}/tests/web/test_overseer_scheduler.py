@@ -110,6 +110,7 @@ class TestSections:
             "Overview",
             "Jobs",
             "History",
+            "Container",
         ]
 
 

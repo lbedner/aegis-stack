@@ -9,10 +9,12 @@ the generic status page.
 from collections.abc import Awaitable, Callable
 from typing import Any, NamedTuple
 
+from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
 
 from . import (
     overseer_auth,
+    overseer_container,
     overseer_database,
     overseer_ingress,
     overseer_patterns,
@@ -107,7 +109,27 @@ STANDALONE = {
     for item in (overseer_patterns.ITEM, overseer_secrets.ITEM, overseer_settings.ITEM)
 }
 
-SECTIONED_PAGES: dict[tuple[str, str], SectionedPage] = {
+
+def _with_container(name: str, page: SectionedPage) -> SectionedPage:
+    """The page plus a Container section, when a container runs behind the
+    component ``name`` (``ui_runtime.page_of``, which Flet reads too)."""
+    if ui_runtime.page_of(name) != page.folder:
+        return page
+
+    async def context(
+        section: str, component: ComponentStatus, req: SectionRequest
+    ) -> dict[str, Any]:
+        if section == "container":
+            return await overseer_container.context(
+                page.folder, req.query.get("window")
+            )
+        return await page.context(section, component, req)
+
+    sections = (*page.sections, (None, overseer_container.SECTION))
+    return page._replace(sections=sections, context=context)
+
+
+_PAGES: dict[tuple[str, str], SectionedPage] = {
     ("patterns", "patterns"): SectionedPage(
         "patterns", overseer_patterns.SECTIONS, overseer_patterns.section_context
     ),
@@ -151,3 +173,5 @@ SECTIONED_PAGES: dict[tuple[str, str], SectionedPage] = {
         "worker", overseer_worker.SECTIONS, overseer_worker.section_context
     ),
 } | _optional_pages()
+
+SECTIONED_PAGES = {key: _with_container(key[1], page) for key, page in _PAGES.items()}

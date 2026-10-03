@@ -117,7 +117,7 @@ def _figures(html: str) -> dict[str, str]:
 
 
 class TestSections:
-    def test_five_sections_with_overview_first(self, postgres: TestClient) -> None:
+    def test_six_sections_with_overview_first(self, postgres: TestClient) -> None:
         html = _get(postgres)
         assert [text(a) for a in select(html, "#overseer-subnav nav a")] == [
             "Overview",
@@ -125,6 +125,7 @@ class TestSections:
             "Migrations",
             "Settings",
             "Activity",
+            "Container",
         ]
         assert text(one(html, "#overseer-subnav h2")) == "Database"
         assert "PostgreSQL 16.4" in text(one(html, "#overseer-subnav"))

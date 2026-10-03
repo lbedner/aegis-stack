@@ -42,6 +42,9 @@ _PAGES = {
     "ollama": "inference",
 }
 
+# Every page some container belongs on: the Container section shows there.
+PAGES = frozenset({*_PAGES.values(), "worker"})
+
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 _STAMPED = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z ?(.*)$", re.S)
 
@@ -84,7 +87,7 @@ class Service:
 
 @dataclass(frozen=True)
 class Stats:
-    cpu_percent: float
+    cpu_percent: float | None  # None until there is a reading to compare with
     memory_used: int
     memory_limit: int | None
     network_rx: int = 0

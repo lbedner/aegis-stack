@@ -228,6 +228,12 @@ def wants_fragment(request: Request) -> bool:
     return headers.get("HX-Request") == "true" and headers.get("HX-Boosted") != "true"
 
 
+def fragment(name: str, **context: Any) -> str:
+    """Template ``name`` rendered on its own: an SSE frame or a swapped
+    part, not a page."""
+    return templates.env.get_template(name).render(**context)
+
+
 def render(
     request: Request,
     name: str,

@@ -12,11 +12,11 @@ import pytest
 
 pytest.importorskip("app.services.ai", reason="no AI service in this stack")
 
-from app.components.web_frontend import overseer_ai_catalog  # noqa: E402
+from app.components.web_frontend import overseer_ai_catalog, ranges  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.services.ai.models import PROVIDERS  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
-from tests.web.dom import one, select, text, triggers  # noqa: E402
+from tests.web.dom import checked, one, select, text, triggers  # noqa: E402
 from tests.web.overseer import sign_in, status_with  # noqa: E402
 
 PAGE = "/overseer/services/ai"
@@ -277,10 +277,25 @@ def test_the_window_chips_narrow_the_range(
     seen: list[Any] = []
     client = _client(app, monkeypatch)
     _usage(monkeypatch, seen)
-    client.get(f"{PAGE}/usage?window=7d")
+    client.get(f"{PAGE}/usage?days=7")
     assert seen[-1]["start_time"] is not None
-    client.get(f"{PAGE}/usage?window=all")
+    client.get(f"{PAGE}/usage?days={ranges.ALL}")
     assert seen[-1]["start_time"] is None
+
+
+@persisted
+def test_the_window_row_is_the_apps_one(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same chips as every other time-window row (``ranges.WINDOWS``),
+    a week unless the address says otherwise."""
+    client = _client(app, monkeypatch)
+    _usage(monkeypatch)
+    html = _get(client, "usage?days=bogus")
+    assert [text(label) for label in select(html, "#ai-usage-window label")] == [
+        label for _days, label in ranges.WINDOWS
+    ]
+    assert checked(html, '#ai-usage-window input[name="days"]') == ["7"]
 
 
 @persisted

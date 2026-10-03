@@ -18,7 +18,7 @@ from app.core.log import logger
 
 from .overseer_live import fragment_events
 from .overseer_nav import page_url
-from .rendering import drawer_state, status_cell, templates, with_query
+from .rendering import drawer_state, fragment, status_cell, with_query
 
 PAGE = page_url("components", "backend") + "/connections"
 PARTIALS = "/partials/overseer/server/connections"
@@ -168,9 +168,7 @@ def connections_events(
 
     async def render() -> str:
         try:
-            return templates.env.get_template(TABLE).render(
-                **await table_context(query)
-            )
+            return fragment(TABLE, **await table_context(query))
         except Exception as exc:  # noqa: BLE001 - keep the stream, show nothing new
             logger.warning("Connections read failed", error=str(exc))
             return ""

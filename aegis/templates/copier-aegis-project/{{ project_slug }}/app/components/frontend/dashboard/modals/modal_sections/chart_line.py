@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     NumericText,
     SecondaryText,
 )
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
+    ChartColors,
     ChartPoint,
     LineSeries,
     axis_label_positions,
@@ -17,6 +21,7 @@ from app.components.frontend.dashboard.modals.modal_sections.chart_primitives im
     diverging_stop,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.formatting import format_value
 
 
 class LineChartCard(ft.Container):
@@ -47,6 +52,52 @@ class LineChartCard(ft.Container):
         )
     """
 
+    @classmethod
+    def from_chart(
+        cls, title: str, data: dict[str, Any], subtitle: str = ""
+    ) -> LineChartCard:
+        """The card for chart data as the htmx ``chart_panel`` takes it
+        (``app.core.series.chart``): a line per series in the shared
+        ramp, values read in the data's ``format``, times as HH:MM."""
+        fmt = data.get("format")
+        x_labels = (
+            [
+                datetime.fromtimestamp(ms / 1000).strftime("%H:%M")
+                for ms in data["labels"]
+            ]
+            if data.get("x") == "time"
+            else [str(label) for label in data["labels"]]
+        )
+        # ``"style": "events"`` (see ``series.chart``): dots, no line.
+        events = data.get("style") == "events"
+        series = []
+        for i, line in enumerate(data["series"]):
+            kept = [(x, v) for x, v in enumerate(line["values"]) if v is not None]
+            color = ChartColors.RAMP[i % len(ChartColors.RAMP)]
+            series.append(
+                LineSeries(
+                    label=line["label"],
+                    color=color,
+                    points=kept,
+                    fill=len(data["series"]) == 1 and not events,
+                    stroke_width=0 if events else 2,
+                    highlighted_indices=frozenset(range(len(kept)))
+                    if events
+                    else frozenset(),
+                    highlight_color=color,
+                    tooltips=[
+                        f"{line['label']}: {format_value(v, fmt)}" for _, v in kept
+                    ],
+                )
+            )
+        return cls(
+            title=title,
+            subtitle=subtitle,
+            x_labels=x_labels,
+            series=series,
+            y_format=lambda value: format_value(value, fmt),
+        )
+
     def __init__(
         self,
         *,
@@ -59,6 +110,7 @@ class LineChartCard(ft.Container):
         height: int = 214,
         min_y: float = 0,
         event_annotations: list[list[str]] | None = None,
+        y_format: Callable[[float], str] | None = None,
     ) -> None:
         super().__init__()
 
@@ -144,7 +196,7 @@ class LineChartCard(ft.Container):
                     ft.ChartAxisLabel(
                         value=tick,
                         label=NumericText(
-                            f"{int(tick):,}",
+                            y_format(tick) if y_format else f"{int(tick):,}",
                             size=9,
                             color=ft.Colors.ON_SURFACE_VARIANT,
                         ),

@@ -107,22 +107,36 @@
    a JSON data block; static/js/charts.js mounts Chart.js over every
    ``canvas[data-chart]`` on load and after each htmx settle. Data shape:
    ``{"labels": [...], "series": [{"label": ..., "values": [...]}],
-   "slices": [{"categories": [...]}], "format": "money"}`` (``slices`` only
-   for drilldowns; numbers are plain unless ``format`` is ``money``).
+   "slices": [{"categories": [...]}], "format": ...}`` (``slices`` only
+   for drilldowns; ``format`` as charts.js formatValue reads it). A live
+   time chart's data is ``series.chart``'s, which documents its keys.
    ``drilldown`` is the URL a slice click loads into the dialog; the
    slice's categories are appended as ``category=`` params. #}
-{% macro chart_panel(id, title, kind, data, drilldown=None, subtitle=None) %}
-{# ``title`` may be ``None``: the canvas keeps its aria-label either way. #}
+{% macro chart_panel(id, title, kind, data, drilldown=None, subtitle=None, live=None, empty=None) %}
+{# ``title`` may be ``None``: the canvas keeps its aria-label either way.
+   ``live``: the stream around it (``sse-connect``) re-sends
+   ``chart_data(id, ...)`` as the event ``id``, and charts.js updates the
+   drawn chart in place. ``empty`` is said over the chart while its data has no
+   ``points`` (``series.chart`` counts them; charts.js keeps it in step). #}
 {% call card(title, subtitle, id="chart-" ~ id) %}
 <div class="relative h-64">
   <canvas data-chart="{{ kind }}"
           data-chart-data="chart-{{ id }}-data"
           {% if drilldown %}data-drilldown="{{ drilldown }}"{% endif %}
           role="img" aria-label="{{ title or id|replace("-", " ") }}"></canvas>
+  {% if empty %}
+  <p data-chart-empty class="absolute inset-0 flex items-center justify-center bg-aegis-card text-sm text-aegis-muted{% if data.points %} hidden{% endif %}">{{ empty }}</p>
+  {% endif %}
 </div>
-<script type="application/json" id="chart-{{ id }}-data">{{ data|tojson }}</script>
+{% if live %}<div sse-swap="{{ id }}" hx-target="this">{{ chart_data(id, data) }}</div>{% else %}{{ chart_data(id, data) }}{% endif %}
 {% endcall %}
 {% endmacro %}
+
+{# A chart's data, as chart_panel renders it and as a live stream sends it
+   again. #}
+{% macro chart_data(id, data) -%}
+<script type="application/json" id="chart-{{ id }}-data">{{ data|tojson }}</script>
+{%- endmacro %}
 
 
 {# The one modal. Native <dialog>: focus trap, Escape and backdrop come

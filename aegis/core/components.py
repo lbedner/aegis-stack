@@ -523,6 +523,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/frontend/dashboard/modals/ollama_modal",
                 "tests/components/test_inference.py",
                 "tests/components/frontend/test_ollama_model_table.py",
+                "tests/_fake_ollama.py",
             ],
             extras={
                 # The Overseer's Inference page, only where the htmx frontend

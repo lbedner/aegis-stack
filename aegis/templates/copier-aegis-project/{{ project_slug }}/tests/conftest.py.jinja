@@ -146,6 +146,22 @@ def _fresh_system_status_cache():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The live charts' samplers (``app.core.series``) poll Docker and
+    Ollama: an app started in a test samples nothing, and each test's
+    sampled history starts empty."""
+    from app.core import series
+    from app.core.cache import CacheService
+
+    async def idle(samplers: Any) -> None:
+        return None
+
+    history = CacheService()
+    monkeypatch.setattr(series, "run", idle)
+    monkeypatch.setattr(series, "get_cache", lambda: history)
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _use_dict_backed_cache():
     import app.core.cache as cache_module

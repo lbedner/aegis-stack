@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 import pytest
 
+from app.components.deploy import docker
 from app.components.deploy.docker import (
     BUILD_LABEL,
     DockerRuntime,
@@ -43,6 +44,9 @@ def _container(cid: str, service: str, project: str = PROJECT) -> dict[str, Any]
 
 # Every path the backend asked for, so a test can prove inspect is never one.
 REQUESTED: list[str] = []
+STATS_ASKED: list[dict[str, str]] = []
+# One-shot samples to answer with, in order (STATS once they run out).
+SAMPLES: list[dict[str, Any]] = []
 INSPECT = re.compile(r"^(/v[\d.]+)?/containers/(?!json$)[^/]+/json$")
 
 
@@ -92,7 +96,8 @@ def _handler(request: httpx.Request) -> httpx.Response:
             json=[_container("a", "webserver"), _container("b", "worker-system")],
         )
     if path.endswith("/stats"):
-        return httpx.Response(200, json=STATS)
+        STATS_ASKED.append(dict(request.url.params))
+        return httpx.Response(200, json=SAMPLES.pop(0) if SAMPLES else STATS)
     if path.endswith("/logs"):
         body = _frame(
             1, '2026-10-02T20:45:39.5Z {"level": "error", "event": "boom"}\n'
@@ -200,6 +205,48 @@ async def test_stats_compute_cpu_and_memory_like_docker_stats() -> None:
     assert stats.memory_limit == 805_306_368
     assert (stats.network_rx, stats.network_tx) == (101, 52)
     assert (stats.disk_read, stats.disk_write) == (4096, 8192)
+
+
+def _one_shot(total: int, system: int) -> dict[str, Any]:
+    """A sample as ``one-shot`` sends it: no previous reading alongside."""
+    return {
+        **STATS,
+        "cpu_stats": {
+            "cpu_usage": {"total_usage": total},
+            "system_cpu_usage": system,
+            "online_cpus": 2,
+        },
+        "precpu_stats": {"cpu_usage": {"total_usage": 0}, "system_cpu_usage": 0},
+    }
+
+
+async def test_stats_take_one_sample_and_cpu_from_the_last_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Docker's default stats call waits a second for a second sample; a
+    one-shot read is immediate, so CPU comes from this read against the
+    last one. The first read has nothing to compare with yet, and a read
+    sooner than ``MIN_CPU_WINDOW`` after the last (the sampler and a viewer
+    in step) gets the last share rather than a fraction of a second's."""
+    clock = [0.0]
+    monkeypatch.setattr(docker.time, "monotonic", lambda: clock[0])
+    STATS_ASKED.clear()
+    SAMPLES[:] = [
+        _one_shot(1_000_000, 10_000_000),
+        _one_shot(3_000_000, 20_000_000),
+        _one_shot(3_000_100, 20_000_100),
+    ]
+    runtime = _runtime()
+    first = await runtime.stats("a")
+    clock[0] = 5.0
+    second = await runtime.stats("a")
+    clock[0] = 5.5
+    soon_after = await runtime.stats("a")
+    assert STATS_ASKED[0]["one-shot"] == "true"
+    assert first.cpu_percent is None
+    assert second.cpu_percent == pytest.approx(40.0)
+    assert soon_after.cpu_percent == pytest.approx(40.0)
+    assert first.memory_used == 100_000_000
 
 
 async def test_logs_parse_both_streams() -> None:

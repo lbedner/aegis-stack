@@ -9,6 +9,8 @@ by the CLI and dashboard tests that consume them.
 
 from datetime import UTC, datetime
 
+import pytest
+
 from app.core.formatting import format_relative_time
 
 NOW = datetime(2026, 5, 19, 12, 0, 0, tzinfo=UTC)
@@ -149,3 +151,24 @@ class TestSafeFilename:
         from app.core.formatting import safe_filename
 
         assert safe_filename('\r\n"', fallback="download") == "download"
+
+
+# Each chart format's reading, for format_value and its browser twin
+# (charts.js formatValue, tests/web/test_charts_js.py).
+CHART_FORMATS = [
+    (12.5, "percent", "12.5%"),
+    (128 * 2**20, "bytes", "128.0 MB"),
+    (1.24, "seconds", "1.2 s"),
+    (70.4, "seconds", "70 s"),
+    (-1234.5, "money", "-$1,234.50"),
+    (1234, None, "1,234"),
+]
+
+
+@pytest.mark.parametrize(("value", "fmt", "expected"), CHART_FORMATS)
+def test_a_charted_value_reads_in_its_charts_format(
+    value: float, fmt: str | None, expected: str
+) -> None:
+    from app.core.formatting import format_value
+
+    assert format_value(value, fmt) == expected

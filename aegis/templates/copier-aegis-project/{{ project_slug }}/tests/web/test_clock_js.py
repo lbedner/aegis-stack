@@ -4,23 +4,13 @@ The browser only turns angles the server computed; these are the rules it
 applies while a job is dragged to a new time.
 """
 
-import json
 from pathlib import Path
-import shutil
-import subprocess
 
 import pytest
 
+from tests.web.node import call
+
 CLOCK_JS = Path("app/components/web_frontend/static/js/clock.js")
-
-
-def _call(expression: str) -> object:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node not installed")
-    script = f"const c = require({json.dumps(str(CLOCK_JS.resolve()))}); console.log(JSON.stringify({expression}));"
-    out = subprocess.run([node, "-e", script], capture_output=True, text=True, check=True).stdout
-    return json.loads(out)
 
 
 @pytest.mark.parametrize(
@@ -33,21 +23,39 @@ def _call(expression: str) -> object:
         (0, 0, 180, 0, False),
     ],
 )
-def test_overlap_of_two_run_windows(a: float, sa: float, b: float, sb: float, expected: bool) -> None:
-    assert _call(f"c.overlaps({a}, {sa}, {b}, {sb})") is expected
+def test_overlap_of_two_run_windows(
+    a: float, sa: float, b: float, sb: float, expected: bool
+) -> None:
+    assert call(CLOCK_JS, f"c.overlaps({a}, {sa}, {b}, {sb})") is expected
 
 
 def test_moves_snap_to_five_minutes() -> None:
-    assert _call("[c.snap(31), c.snap(31.9), c.snap(359.9)]") == [31.25, 32.5, 0]
+    assert call(CLOCK_JS, "[c.snap(31), c.snap(31.9), c.snap(359.9)]") == [
+        31.25,
+        32.5,
+        0,
+    ]
 
 
 def test_times_read_off_the_dial() -> None:
-    assert _call("[c.clockTime(0), c.clockTime(30), c.clockTime(48.75), c.clockTime(359.75)]") == [
-        "00:00", "02:00", "03:15", "23:59",
+    assert call(
+        CLOCK_JS,
+        "[c.clockTime(0), c.clockTime(30), c.clockTime(48.75), c.clockTime(359.75)]",
+    ) == [
+        "00:00",
+        "02:00",
+        "03:15",
+        "23:59",
     ]
 
 
 def test_pointer_angle_is_clockwise_from_the_top() -> None:
-    assert _call("[c.pointerAngle(0, -1), c.pointerAngle(1, 0), c.pointerAngle(0, 1), c.pointerAngle(-1, 0)]") == [
-        0, 90, 180, 270,
+    assert call(
+        CLOCK_JS,
+        "[c.pointerAngle(0, -1), c.pointerAngle(1, 0), c.pointerAngle(0, 1), c.pointerAngle(-1, 0)]",
+    ) == [
+        0,
+        90,
+        180,
+        270,
     ]

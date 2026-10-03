@@ -24,7 +24,7 @@ from app.services.system.models import ComponentStatus, ComponentStatusType
 from .filters import color_tone
 from .overseer_live import fragment_events
 from .overseer_nav import SectionRequest
-from .rendering import page_number, pager, status_cell, templates, with_query
+from .rendering import fragment, page_number, pager, status_cell, with_query
 
 SECTIONS = (
     (None, {"overview": "Overview"}),
@@ -198,7 +198,7 @@ def add_trends(
 
 
 def render_queues(view: dict[str, Any]) -> str:
-    return templates.env.get_template(QUEUES_TEMPLATE).render(worker=view)
+    return fragment(QUEUES_TEMPLATE, worker=view)
 
 
 def queues_events(max_frames: int | None = None):  # noqa: ANN201 - async iterator

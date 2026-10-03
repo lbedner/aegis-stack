@@ -4,10 +4,14 @@ The Overseer's Server > Connections section reads ``history()``. Nothing
 else lists them: uvicorn keeps its own set but the app cannot reach it,
 and each stream's subscriber set only knows itself. A WebSocket is
 listed once accepted; an HTTP response once it starts as
-``text/event-stream``. A client that comes back (same kind, path, address
-and browser) within ``GRACE_SECONDS`` of dropping is the same connection
-reconnecting, so a Flet tab riding out a hot reload is one row with a
-timeline, not a new row each time.
+``text/event-stream``. A WebSocket client that comes back (same path,
+address and browser) within ``GRACE_SECONDS`` of dropping is the same
+connection reconnecting, so a Flet tab riding out a hot reload is one row
+with a timeline, not a new row each time. An event stream can say so
+exactly: its first frame is its record's id, the browser's own retry
+sends that back as ``Last-Event-ID``, and only that links it; a new page
+opening the same stream (every Overseer page opens ``/overseer/events``)
+is a new connection, and one that closes is closed.
 
 Each record names the server process that owns it, and each process
 renews a short heartbeat. A record left "up" by a process that died
@@ -65,6 +69,7 @@ class Connection:
     path: str
     client: str | None
     agent: str | None
+    last_id: str | None = None  # an event stream's retry: the record it lost
     opened_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     sent: int = 0
     received: int = 0
@@ -84,11 +89,13 @@ def _connection(scope: Scope, kind: str) -> Connection:
     client = scope.get("client")
     headers = dict(scope.get("headers") or [])
     agent = headers.get(b"user-agent")
+    last_id = headers.get(b"last-event-id")
     return Connection(
         kind=kind,
         path=scope.get("path", ""),
         client=client[0] if client else None,
         agent=agent.decode("latin-1") if agent else None,
+        last_id=last_id.decode("latin-1") if last_id else None,
     )
 
 
@@ -98,27 +105,48 @@ def _identity(conn: Connection) -> str:
     return sha1(raw.encode(), usedforsecurity=False).hexdigest()[:16]
 
 
+def _graced(kind: str) -> bool:
+    """Whether a closed connection of ``kind`` comes back as itself within
+    ``GRACE_SECONDS`` (a WebSocket). An event stream's retry names its record
+    (``Last-Event-ID``) instead, and one that closes is closed."""
+    return kind != "sse"
+
+
 def _event(record: dict[str, Any], what: str, detail: str | None = None) -> None:
     record["events"] = [*record["events"], (datetime.now(UTC), what, detail)][
         -MAX_EVENTS:
     ]
 
 
+async def _returning(conn: Connection, identity: str) -> dict[str, Any] | None:
+    """The record this connection picks up again, if it is one coming back:
+    the one an event stream's retry names, or a WebSocket's within the
+    grace window."""
+    cache = get_cache()
+    if not _graced(conn.kind):
+        record = await cache.get(RECORD + conn.last_id) if conn.last_id else None
+        return record if record and record["path"] == conn.path else None
+    returning = await cache.get(RECENT + identity)
+    if returning:
+        await cache.invalidate(RECENT + identity)
+    return await cache.get(RECORD + returning) if returning else None
+
+
 async def _record_open(conn: Connection) -> None:
     cache = get_cache()
     identity = _identity(conn)
-    returning = await cache.get(RECENT + identity)
-    record = await cache.get(RECORD + returning) if returning else None
+    record = await _returning(conn, identity)
+    if record is None and _graced(conn.kind):
+        record = await _orphan(identity)
     now = datetime.now(UTC)
-    if record is not None:
-        await cache.invalidate(RECENT + identity)
-        gap = int((now - record["closed_at"]).total_seconds())
-        _reopen(record, now)
-        _event(record, "reconnected", f"after {gap}s")
-    elif (record := await _orphan(identity)) is not None:
+    if record is not None and record["state"] == "up":  # its server died
         _event(record, "dropped", "server went away")
         _reopen(record, now)
         _event(record, "reconnected", "after a server restart")
+    elif record is not None:
+        gap = int((now - record["closed_at"]).total_seconds())
+        _reopen(record, now)
+        _event(record, "reconnected", f"after {gap}s")
     else:
         record = {
             "id": uuid4().hex[:12],
@@ -191,7 +219,8 @@ async def _record_close(conn: Connection, ended: str) -> None:
     record["received"] += conn.received
     _event(record, "dropped", ended)
     await cache.set(RECORD + record["id"], record, ttl=RECORD_TTL)
-    await cache.set(RECENT + _identity(conn), record["id"], ttl=GRACE_SECONDS)
+    if _graced(conn.kind):
+        await cache.set(RECENT + _identity(conn), record["id"], ttl=GRACE_SECONDS)
 
 
 async def _safely(step: str, work: Any) -> None:
@@ -206,6 +235,8 @@ async def _safely(step: str, work: Any) -> None:
 def _state(record: dict[str, Any], now: datetime, alive: set[str]) -> str:
     if record["state"] == "up":
         return "up" if record.get("owner") in alive else "closed"
+    if not _graced(record["kind"]):
+        return "closed"
     since = (now - record["closed_at"]).total_seconds()
     return "reconnecting" if since < GRACE_SECONDS else "closed"
 
@@ -271,6 +302,10 @@ class ConnectionsMiddleware:
             if opens:
                 _OPEN[key] = _connection(scope, kind)
                 await _safely("open", _record_open(_OPEN[key]))
+                await send(message)
+                if kind == "sse" and scope.get("method") == "GET":
+                    await _tell_id(send, _OPEN[key].record_id)
+                return
             elif kind_of == "websocket.close":
                 ended = "closed by server"
             elif key in _OPEN and (
@@ -279,7 +314,8 @@ class ConnectionsMiddleware:
             ):
                 _OPEN[key].sent += 1
             # Every message, a granian ``http.response.pathsend`` file
-            # included, goes on exactly as it came: this only counts.
+            # included, goes on exactly as it came: this only counts (and,
+            # once, tells an event stream its id).
             await send(message)
 
         try:
@@ -291,6 +327,15 @@ class ConnectionsMiddleware:
             conn = _OPEN.pop(key, None)
             if conn is not None:
                 await _safely("close", _record_close(conn, ended))
+
+
+async def _tell_id(send: Send, record_id: str | None) -> None:
+    """An ``id`` with no data dispatches nothing but stays the browser's
+    last event id, which its retry sends back (``Last-Event-ID``). A
+    posted stream (fetch, not EventSource) never gets one."""
+    if record_id is not None:
+        body = f"id: {record_id}\n\n".encode()
+        await send({"type": "http.response.body", "body": body, "more_body": True})
 
 
 def register_middleware(app: FastAPI) -> None:

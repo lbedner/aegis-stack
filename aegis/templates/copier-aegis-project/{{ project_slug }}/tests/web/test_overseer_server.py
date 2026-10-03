@@ -92,6 +92,7 @@ class TestSections:
             "Load Tests",
             "Routes",
             "Lifecycle",
+            "Container",
         ]
         assert text(one(subnav, 'a[aria-current="page"]')) == "Overview"
         none(html, '[role="tablist"]')

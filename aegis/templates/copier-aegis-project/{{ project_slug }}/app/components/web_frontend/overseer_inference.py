@@ -3,7 +3,9 @@
 The Flet Ollama modal's three tabs: Overview (what is loaded, how much
 VRAM it holds, where the server is), Models (every installed model, with
 load and unload) and Activity (models moving in and out of memory). Each
-render asks the server itself rather than the last health poll.
+render reads the inference sampler's last reading (``app.core.series``),
+taken once a second for every viewer while one looks, rather than the last
+health poll.
 
 A load or unload runs in the background (a large model takes a while to
 load) and the Models table streams over SSE while the page is open, so a
@@ -14,9 +16,11 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
+from app.components.inference import sampler
 from app.components.inference.activity import get_ollama_activity
 from app.components.inference.formatting import format_quantization
 from app.components.inference.ollama import OllamaClient, OllamaServerStatus
+from app.core import series
 from app.core.formatting import format_relative_time
 from app.core.log import logger
 from app.core.model_picker import format_context_window
@@ -24,7 +28,7 @@ from app.services.system.models import ComponentStatus
 
 from .overseer_live import fragment_events
 from .overseer_nav import SectionRequest
-from .rendering import status_cell, templates
+from .rendering import fragment, status_cell
 
 SECTIONS = (
     (None, {"overview": "Overview", "models": "Models", "activity": "Activity"}),
@@ -41,9 +45,8 @@ FAILED = {"load": "Load failed", "unload": "Unload failed"}
 MODELS_EVENTS = f"{PARTIALS}/models/events"
 MODELS_EVENT = "inference-models"
 MODELS_TEMPLATE = "pages/overseer/inference/_models_table.html"
-# ponytail: each viewer's stream polls Ollama on its own; share one reader
-# per process if many people watch this page at once.
-MODELS_INTERVAL_SECONDS = 1.0
+# The inference sampler's tick: every viewer reads its one reading.
+MODELS_INTERVAL_SECONDS = series.TICK_SECONDS
 
 # ponytail: process-local, so a second web worker does not see another's
 # in-flight load; move to Redis if the web tier runs more than one process.
@@ -146,9 +149,11 @@ def model_rows(server: OllamaServerStatus) -> list[dict[str, Any]]:
 
 
 async def _read_server() -> tuple[OllamaServerStatus, str]:
-    """The server as it is now, and where it was looked for."""
-    client = OllamaClient()
-    return await client.get_server_status(), client.base_url
+    """The server as the inference sampler last read it (once a tick for
+    every viewer, kept at full pace while one looks), and where it was
+    looked for; read here only before the first sample."""
+    found = await series.current(sampler.SAMPLER)
+    return found if found is not None else (await sampler.read()).latest
 
 
 def _reach(server: OllamaServerStatus, base_url: str) -> dict[str, Any]:
@@ -172,7 +177,7 @@ def models_events(max_frames: int | None = None) -> AsyncIterator[str]:
     """The Models table over SSE, sent again only when it changes."""
 
     async def render() -> str:
-        return templates.env.get_template(MODELS_TEMPLATE).render(**await models_view())
+        return fragment(MODELS_TEMPLATE, **await models_view())
 
     return fragment_events(MODELS_EVENT, render, MODELS_INTERVAL_SECONDS, max_frames)
 

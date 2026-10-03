@@ -128,6 +128,7 @@ def test_sections(client: TestClient) -> None:
         "Routers",
         "Services",
         "Middlewares",
+        "Container",
     ]
 
 

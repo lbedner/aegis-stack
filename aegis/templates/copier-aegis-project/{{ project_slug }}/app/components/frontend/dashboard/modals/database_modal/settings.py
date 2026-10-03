@@ -5,7 +5,7 @@ import flet as ft
 from app.services.system import ui_database
 from app.services.system.models import ComponentStatus
 
-from .table_tab import TableTab
+from ..table_tab import TableTab
 
 
 class SettingsTab(TableTab):

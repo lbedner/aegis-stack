@@ -18,6 +18,7 @@ from app.components.web_frontend.overseer_nav import (
 )
 from app.components.web_frontend.overseer_sections import SECTIONED_PAGES, STANDALONE
 from app.components.web_frontend.routes.partials import overseer_auth as overseer_auth_partials
+from app.components.web_frontend.routes.partials import overseer_container as overseer_container_partials
 from app.components.web_frontend.routes.partials import (
     overseer_scheduler as overseer_scheduler_partials,
 )
@@ -194,6 +195,7 @@ router.include_router(overseer_secrets_partials.router)
 router.include_router(overseer_redis_partials.router)
 router.include_router(overseer_storage_partials.router)
 router.include_router(overseer_server_partials.router)
+router.include_router(overseer_container_partials.router)
 {%- if include_blog %}
 router.include_router(overseer_blog_partials.router)
 {%- endif %}

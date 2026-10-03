@@ -372,7 +372,7 @@
   // any other swap into the thread (a loaded conversation) lands at its
   // newest message.
   document.body.addEventListener('htmx:afterSwap', (event) => {
-    if (event.detail.target.id !== 'chat-thread') return;
+    if (event.detail.target?.id !== 'chat-thread') return;
     watchGrowth();
     const bubble = thread().querySelector('[data-stream]');
     if (bubble && !controller) run(bubble);

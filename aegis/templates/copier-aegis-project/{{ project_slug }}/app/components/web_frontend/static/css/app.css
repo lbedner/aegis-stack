@@ -41,6 +41,28 @@
   border-radius: 9999px;
 }
 
+/* The bar along the top while a page or an htmx request loads (app.js sets
+   is-loading). It creeps towards the end and holds there until the page
+   arrives; the delay keeps a quick request from flashing it. */
+.aegis-page-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  height: 2px;
+  width: 0;
+  opacity: 0;
+  background: oklch(var(--p));
+  pointer-events: none;
+}
+.aegis-page-progress.is-loading {
+  width: 90%;
+  opacity: 1;
+  transition:
+    width 8s cubic-bezier(0.1, 0.7, 0.2, 1) 150ms,
+    opacity 0s linear 150ms;
+}
+
 /* The drawer (macros/layout.html) slides in from the right when it opens. */
 .aegis-drawer[open] {
   animation: aegis-drawer-in 180ms ease-out;

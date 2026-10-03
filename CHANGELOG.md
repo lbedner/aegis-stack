@@ -18,6 +18,40 @@
   another user's card is a 404), and `change_queue.card()` builds the card
   for these routes and the JSON ones alike.
 
+- **A Container section on every Overseer page with a container behind it.**
+  Server, Worker, Scheduler, Redis, Database (Postgres), Storage, Ingress and
+  Inference each gain a Container section in Overseer, htmx and Flet
+  alike: one row per instance with state and health, CPU, memory against its
+  limit, network, disk I/O, restarts, uptime, image and build, read from
+  `app.core.runtime` by the containers sampler and refreshed every second
+  while open; the section opens full, from the sampler's last reading.
+  Without the deploy component it says so (and points at `aegis add
+  deploy`) instead of showing empty numbers. Added once, for every page:
+  the section registry and `BaseDetailPopup` add it (a tab in a tabbed
+  Flet modal), and both share the rows (`ui_runtime.containers`).
+
+- **Live charts from time series, starting with containers.** Anything the
+  app polls can be a sampler (`app.core.series.Sampler`, listed in
+  `services/system/samplers.py`): its numbers are kept an hour in Redis (or
+  memory), one process sampling each tick, every second while someone
+  watches and every 15 seconds otherwise; every viewer is served from that
+  one reading. An LLM call records its tokens per second and latency as it
+  finishes, with no polling. The Container section charts each container's
+  CPU and memory over the last 15 minutes, drawn at once from history and
+  sliding along every second, in Overseer's htmx pages and Flet modals
+  alike; for Ollama on the host it charts each loaded model's memory, tokens
+  per second and latency instead, over 15 minutes, 30 minutes or an hour
+  (range chips; the choice stays in the address). Any `chart_panel` goes
+  live with `live=True` and says why it is empty with `empty=`; charts read `percent`, `bytes`,
+  `seconds` and times on round, clock-aligned ticks from zero, calls draw
+  as dots rather than a line between them, and hovering anywhere over a
+  chart shows every value at that moment.
+
+- **A progress bar along the top while a page loads.** A link to another
+  page, any htmx request, or a section still waiting on its live stream
+  (the Container section's first read) runs a thin teal bar; quick requests
+  never show it.
+
 ### Fixed
 
 - **Chat proposals are filed under the signed-in user.** On a stack with
@@ -29,6 +63,32 @@
   `withdraw` see only that user's cards, and on a stack with auth a turn with
   no signed-in user files, lists and withdraws none.
 
+- **Server > Connections tells a reconnect from a new page.** Every page
+  navigation counted as a reconnect of `/overseer/events`, and a section's
+  stream read "Reconnecting" for 30 s after you left it. An event stream's
+  first frame now names its connection record; only the browser's retry,
+  which sends that back as `Last-Event-ID`, links to it. A stream that
+  closes reads Closed; WebSockets keep their grace window.
+
+- **The Inference page asks Ollama once a tick for everyone.** Each
+  viewer's Models table polled Ollama four times a second; it now reads the
+  inference sampler's last reading.
+
+- **The Container section reads in a tenth of a second, not two.** Docker's
+  default stats call waits a second for a second sample; it now takes one
+  sample (`one-shot`) and measures CPU against the previous read, so CPU
+  shows "-" for the first few seconds.
+
+- **Live updates no longer throw in the browser.** Every Overseer live-stream
+  update raised a TypeError in the page's swap handlers (`app.js`, `chat.js`),
+  which read a swap target that stream updates do not carry.
+
+### Changed
+
+- **Overseer > AI > Usage picks its window from the app's range chips.** The
+  same `1d` to `All` row as every other time window (`ranges.py`), in the
+  address as `?days=30`, instead of its own `24h`, `7d`, `30d` and `All time`.
+
 ## [0.14.0] - 2026-10-02
 
 ### Added
@@ -38,8 +98,8 @@
   Overseer Settings page) and a statement that found the database locked are
   recorded with the process and the app code behind each (found along the
   task's awaits for an async session), kept an hour in Redis when the stack
-  has it, and shown on a new Activity tab of the Database page in both
-  Overseers. `database is locked` names its culprit instead of being guessed
+  has it, and shown on a new Activity tab of Overseer's Database page,
+  htmx and Flet alike. `database is locked` names its culprit instead of being guessed
   from timestamps.
 
 - **Agent tools declare what a call does.** `register_tool(..., effect=...)`

@@ -10,9 +10,11 @@ import flet as ft
 from app.components.frontend.controls import H2Text, SecondaryText, StatusTag
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .base_popup import BasePopup
+from .container_section import ContainerSection
 from .modal_constants import ModalLayout
 
 
@@ -73,6 +75,16 @@ class BaseDetailPopup(BasePopup):
         self.status_detail = status_detail
         self._status_tag: StatusTag | None = None
         self._title_row: ft.Row | None = None
+
+        # Every component with a container behind it shows that container: as
+        # a tab where the body is a tab bar, below the sections otherwise.
+        if (key := ui_runtime.page_of(component_data.name)) is not None:
+            if not scrollable and sections and isinstance(sections[0], ft.Tabs):
+                tab = ft.Column([ContainerSection(key)], scroll=ft.ScrollMode.AUTO)
+                sections[0].tabs.append(ft.Tab(text="Container", content=tab))
+            else:
+                divider = ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT)
+                sections = [*sections, divider, ContainerSection(key)]
 
         # Build sections container - scrollable or direct based on parameter
         if scrollable:

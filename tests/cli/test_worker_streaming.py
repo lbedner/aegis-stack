@@ -98,29 +98,25 @@ class TestEventWiring:
     def test_arq_queues_publish_lifecycle_events(
         self, project_factory: "ProjectFactory"
     ) -> None:
-        """arq queue files should publish lifecycle events via on_startup/after_job_end hooks."""
+        """arq has no middleware: ``arq_hooks.py`` publishes all 5 lifecycle
+        event types, and every arq queue takes its hooks from it."""
         project_path = project_factory("base_with_worker")
-        queues_dir = project_path / "app" / "components" / "worker" / "queues"
-        for queue_name in ["system.py", "load_test.py"]:
-            queue_file = queues_dir / queue_name
-            assert queue_file.exists(), f"{queue_name} not found"
-            content = queue_file.read_text()
-            assert "publish_event" in content, f"{queue_name} missing publish_event"
-            assert "on_startup" in content, f"{queue_name} missing on_startup"
-            assert "after_job_end" in content, f"{queue_name} missing after_job_end"
-
-    def test_both_queues_publish_events(
-        self, project_factory: "ProjectFactory"
-    ) -> None:
-        """Both system and load_test queue files should publish worker events."""
-        project_path = project_factory("base_with_worker")
-        queues_dir = project_path / "app" / "components" / "worker" / "queues"
-
-        system_content = (queues_dir / "system.py").read_text()
-        assert "publish_event" in system_content
-
-        load_test_content = (queues_dir / "load_test.py").read_text()
-        assert "publish_event" in load_test_content
+        worker_dir = project_path / "app" / "components" / "worker"
+        hooks = (worker_dir / "arq_hooks.py").read_text()
+        for event_type in [
+            "worker.started",
+            "worker.stopped",
+            "job.started",
+            "job.completed",
+            "job.failed",
+        ]:
+            assert event_type in hooks, f"Missing event type: {event_type}"
+        queues = [
+            q for q in (worker_dir / "queues").glob("*.py") if q.stem != "__init__"
+        ]
+        assert {q.name for q in queues} >= {"system.py", "load_test.py"}
+        for queue_file in queues:
+            assert "arq_hooks.for_queue(" in queue_file.read_text(), queue_file.name
 
 
 class TestSSEEndpoint:

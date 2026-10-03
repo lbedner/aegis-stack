@@ -120,6 +120,8 @@ def remove_dir(project_path: Path, dirpath: str) -> None:
 ARQ_ONLY_FILES = (
     "app/entrypoints/worker.py",
     "tests/components/test_worker_entrypoint.py",
+    # The queues' shared lifecycle hooks: arq has no middleware.
+    "app/components/worker/arq_hooks.py",
 )
 
 

@@ -30,6 +30,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core import db_activity
 from app.core.config import settings
 from app.core.log import logger
 
@@ -247,6 +248,10 @@ async_engine = create_async_engine(
 )
 {% endif %}
 
+
+# Long-held transactions and lock failures, for the Database pages.
+db_activity.watch(engine)
+db_activity.watch(async_engine.sync_engine)
 
 # Configure session factory with SQLModel Session (sync)
 SessionLocal = sessionmaker(

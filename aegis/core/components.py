@@ -318,6 +318,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
         files=FileManifest(
             primary=[
                 "app/core/db.py",
+                "app/core/db_activity.py",
+                "tests/core/test_db_activity.py",
+                "tests/components/frontend/test_database_activity_tab.py",
                 "app/components/frontend/dashboard/cards/database_card.py",
                 "app/components/frontend/dashboard/modals/database_modal",
                 # queryspy only means anything with a database, and the

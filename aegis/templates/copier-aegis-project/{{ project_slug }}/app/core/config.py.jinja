@@ -322,9 +322,9 @@ class Settings(
     TASK_HISTORY_TTL_SECONDS: Annotated[int, Configurable("Worker")] = 86400  # 24 hours
 
 {% endif %}
-
 {% if include_database %}
     # Database settings
+    DATABASE_SLOW_TRANSACTION_SECONDS: Annotated[float, Configurable("Database", "A transaction held this long is recorded on the Database page, seconds (0: off)")] = 2.0
 {% if database_engine == "postgres" %}
     DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
     DATABASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage

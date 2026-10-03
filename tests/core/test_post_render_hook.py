@@ -137,6 +137,7 @@ class TestTheArqEntrypointShipsOnlyWithArq:
     ARQ_ONLY = (
         "app/entrypoints/worker.py",
         "tests/components/test_worker_entrypoint.py",
+        "app/components/worker/arq_hooks.py",
     )
 
     def _tree(self, root: Path) -> None:

@@ -9,6 +9,15 @@
 
 ### Added
 
+- **Database activity: who held the lock.** A transaction held longer than
+  `DATABASE_SLOW_TRANSACTION_SECONDS` (2 s; 0 turns it off, and it is on the
+  Overseer Settings page) and a statement that found the database locked are
+  recorded with the process and the app code behind each (found along the
+  task's awaits for an async session), kept an hour in Redis when the stack
+  has it, and shown on a new Activity tab of the Database page in both
+  Overseers. `database is locked` names its culprit instead of being guessed
+  from timestamps.
+
 - **Agent tools declare what a call does.** `register_tool(..., effect=...)`
   takes `read` (the default), `proposes` (files a change the user approves)
   or `writes` (changes state at once), replacing the `native_write` flag.
@@ -182,6 +191,16 @@
 - **Bad `--components`/`--services` input is a one-line error, not a
   traceback.** `redis[`, `payment[paypal]` and other malformed or unknown
   bracket values now print what was wrong (and the valid choices) and exit 1.
+- **Building a model no longer writes its key into the process environment.**
+  `model_for` stamped the provider key into `os.environ` on every call, so it
+  outlived the call and answered for every model built after it (and leaked
+  between tests). The key now goes to the model's own provider client
+  (pydantic-ai's provider for the same name).
+- **arq's media queue records its jobs in task history.** Each arq queue
+  carried its own copy of the worker and job hooks, and the media queue's had
+  lost the task-history calls, so its jobs never appeared there. The hooks now
+  live once in `app/components/worker/arq_hooks.py` (arq stacks only), and
+  every queue assigns them in its own `WorkerSettings`, where arq reads them.
 - **Projects on Python 3.13 import again with the AI service.** A method
   annotated with its own class (`AIServiceConfig.from_settings ->
   AIServiceConfig`) raises `NameError` at import on 3.13, which evaluates

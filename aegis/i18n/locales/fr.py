@@ -710,6 +710,7 @@ MESSAGES: dict[str, str] = {
     "update.finish_resuming": "Reprise de la mise à jour vers {ref} interrompue par des conflits...",
     "update.finish_nothing": "Aucune mise à jour en conflit en attente - rien à terminer (nothing to finish)",
     "update.finish_blocked": "{count} fichier(s) contiennent encore des conflits. Résolvez-les, puis lancez : aegis update --finish",
+    "update.target_unresolved": "Impossible de résoudre {ref} en commit : la mise à jour ne pourrait pas noter où elle laisse le projet. Utilisez un tag, une branche ou un SHA complet.",
     "update.finish_done": "Mise à jour terminée !",
     "update.next_finish": "   5. Après résolution des conflits : aegis update --finish",
     "update.failed": "Mise à jour échouée : {error}",

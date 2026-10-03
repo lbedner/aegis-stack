@@ -17,6 +17,8 @@ Payment processing with Stripe: checkout sessions, subscriptions, webhooks, and 
 
     Stripe's free test mode requires no credit card. Sign up and copy your test secret key to get started.
 
+`payment[stripe]` spells the provider out; Stripe is the only one today, and plain `payment` picks it.
+
 ## What You Get
 
 - **Checkout sessions**: redirect users to Stripe's hosted payment page

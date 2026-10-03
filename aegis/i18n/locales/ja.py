@@ -692,6 +692,7 @@ MESSAGES: dict[str, str] = {
     "update.finish_resuming": "競合で中断した {ref} への更新を再開しています...",
     "update.finish_nothing": "保留中の競合更新はありません - 完了するものがありません (nothing to finish)",
     "update.finish_blocked": "{count} 個のファイルにまだ競合があります。解決してから実行してください：aegis update --finish",
+    "update.target_unresolved": "{ref} をコミットに解決できないため、更新後のプロジェクトの基準を記録できません。タグ、ブランチ、または完全な SHA を指定してください。",
     "update.finish_done": "更新が完了しました！",
     "update.next_finish": "   5. 競合を解決した後：aegis update --finish",
     "update.failed": "更新失敗：{error}",

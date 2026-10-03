@@ -8,6 +8,7 @@ native update mechanism with a copier.yml at the repository root.
 import logging
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 from copier import run_update
@@ -502,7 +503,46 @@ def resolve_ref_to_commit_remote(ref: str, repo_url: str) -> str | None:
             return sha
         if plain is None:
             plain = sha
+    if plain is None and _ABBREVIATED_SHA.fullmatch(ref):
+        return _resolve_commit_by_cloning(ref, repo_url)
     return plain
+
+
+_ABBREVIATED_SHA = re.compile(r"[0-9a-fA-F]{4,39}")
+
+
+def _resolve_commit_by_cloning(ref: str, repo_url: str) -> str | None:
+    """Expand an abbreviated commit SHA, which ``ls-remote`` cannot match.
+
+    ``ls-remote`` lists ref names only, so ``--to-version 33d6b105`` resolved
+    to nothing. A bare, treeless clone carries every commit but no file
+    contents, enough for ``rev-parse`` to expand the prefix.
+    """
+    with tempfile.TemporaryDirectory(prefix="aegis-resolve-") as clone:
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--bare",
+                    "--filter=tree:0",
+                    "--quiet",
+                    repo_url,
+                    clone,
+                ],
+                capture_output=True,
+                check=True,
+                timeout=120,
+            )
+            result = subprocess.run(
+                ["git", "-C", clone, "rev-parse", "--verify", f"{ref}^{{commit}}"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except (subprocess.SubprocessError, OSError):
+            return None
+    return result.stdout.strip()
 
 
 def resolve_version_to_ref(

@@ -724,6 +724,7 @@ MESSAGES: dict[str, str] = {
     "update.finish_resuming": "Resuming the update to {ref} that stopped on conflicts...",
     "update.finish_nothing": "No conflicted update pending - nothing to finish",
     "update.finish_blocked": "{count} file(s) still contain conflicts. Resolve them, then run: aegis update --finish",
+    "update.target_unresolved": "Cannot resolve {ref} to a commit, so the update could not record where it left the project. Use a tag, a branch or a full commit SHA.",
     "update.finish_done": "Update finished!",
     "update.next_finish": "   5. After resolving conflicts: aegis update --finish",
     "update.failed": "Update failed: {error}",

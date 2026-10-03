@@ -9,6 +9,7 @@ from pathlib import Path
 
 import typer
 
+from ..core.component_utils import split_bracket_list
 from ..core.copier_manager import is_copier_project
 from ..i18n import t
 from . import brand
@@ -73,7 +74,7 @@ def parse_comma_separated_list(value: str, item_type: str = "item") -> list[str]
     Raises:
         typer.Exit: If empty item names are found
     """
-    items = [item.strip() for item in value.split(",")]
+    items = split_bracket_list(value)
 
     if any(not item for item in items):
         if item_type == "component":

@@ -11,7 +11,7 @@ from datetime import date, timedelta
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.domains.chat.tools import registered_tool_names
+from app.core.tools import registered_tool_names
 import app.services.finance.ai_tools as ai_tools
 import app.services.finance.ai_write_tools as ai_write_tools
 from app.services.finance.domains.ledger.properties import set_property_metadata

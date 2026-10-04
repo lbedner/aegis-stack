@@ -205,7 +205,7 @@ async def test_the_chat_tool_proposes_a_registered_type(
 ) -> None:
     """The model's one write door files a card for any registered type,
     attributed to the agent and conversation of the turn."""
-    from app.services.ai.domains.chat.tools import native_write_tool_names
+    from app.core.tools import native_write_tool_names
     from app.services.ai.domains.chat.user_memory import memory_user
 
     with memory_user(

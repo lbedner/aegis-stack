@@ -18,7 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.time import utcnow
-from app.services.ai.domains.chat.tools import register_tool
+from app.core.tools import register_tool
 
 
 def _turn_owner() -> int | None:

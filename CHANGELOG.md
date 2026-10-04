@@ -244,6 +244,13 @@
 
 ### Changed
 
+- **The tool registry moved to core.** `register_tool`, tool effects and
+  `mcp_servable` live in `app.core.tools` and ship with every project, so a
+  service's tools exist whether or not the AI service is installed. AI
+  agents resolve their tools from it as before
+  (`app.services.ai.domains.chat.tools.resolve_tools`); update imports of
+  `register_tool` and friends to `app.core.tools`.
+
 - **A tool that declares no effect is treated as a write.** `register_tool`
   without `effect=` logs a warning and registers `"writes"`, so it never
   runs unseen inside code mode or reaches an MCP client; a rebind cannot

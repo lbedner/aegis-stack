@@ -13,7 +13,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.models.test import TestModel
 import pytest
 
-import app.services.ai.domains.chat.chat_kit.agent as kit_agent
+from app.core.tools import register_tool, unregister_tool
 from app.services.ai.domains.chat.agent_loader import AgentConfig, build_chat_agent
 from app.services.ai.domains.chat.chat_kit import (
     ChatScope,
@@ -22,7 +22,7 @@ from app.services.ai.domains.chat.chat_kit import (
     ErrorFrame,
     ToolChatAgent,
 )
-from app.services.ai.domains.chat.tools import register_tool, unregister_tool
+import app.services.ai.domains.chat.chat_kit.agent as kit_agent
 
 
 @dataclass

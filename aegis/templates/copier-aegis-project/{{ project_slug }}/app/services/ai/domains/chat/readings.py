@@ -34,7 +34,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from app.services.ai.domains.chat.tools import register_tool
+from app.core.tools import register_tool
 
 # Bounded: readings are context re-injected EVERY turn, so an unbounded
 # list would slowly crowd out the conversation itself. Oldest go first.

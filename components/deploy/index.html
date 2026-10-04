@@ -2753,6 +2753,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#deploy-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deploy history
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#checking-it" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5587,6 +5598,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#deploy-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deploy history
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#checking-it" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5709,15 +5731,24 @@
 <h2 id="in-overseer-the-container-section">In Overseer: the Container section</h2>
 <p>Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a <strong>Container</strong> section, in Overseer's htmx pages and Flet modals alike. It shows one row per instance: state and health, CPU, memory used against its limit, network in and out, disk I/O, restarts, uptime, and the image with its build. It renders from the containers sampler's last reading (<code>app.core.series</code>), so it opens full, then refreshes every second while it is open, with CPU and memory charts over the last 15 minutes, 30 minutes or hour.</p>
 <p>Without the deploy component the backend is <code>none</code>: the section says so and points at <code>aegis add deploy</code> instead of showing the app's own process as if it were a container. A page with nothing running behind it (a SQLite database, which is a file) says that too, and a runtime that does not answer says why.</p>
+<h2 id="deploy-history">Deploy history</h2>
+<p>With a database, the component keeps a <code>deployment</code> table (in its own <code>deploy</code> schema on Postgres, like the scheduler's and secrets'): one row per build that went live. Two writers fill the same row, keyed by the build id:</p>
+<ul>
+<li><strong>The app</strong>, when a build it has not seen starts, writes the build id and when it started. This covers every way code reaches the server: <code>aegis deploy</code>, a CI deploy, a restart onto a new image. A plain restart of the same build writes nothing.</li>
+<li><strong><code>aegis deploy</code></strong>, after each deploy and rollback (and <code>aegis deploy-rollback</code>), adds what only the deployer knows: who deployed (your git name and email), from which machine, the health check result, the backup taken before it, and the build a rollback went back to. It runs <code>deploy record</code> in the webserver container; a failed write warns and never changes the deploy's result.</li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>my-app<span class="w"> </span>deploy<span class="w"> </span>record<span class="w"> </span>--build<span class="w"> </span>a1b2c3d<span class="w"> </span>--by<span class="w"> </span><span class="s2">&quot;Ada &lt;ada@example.org&gt;&quot;</span><span class="w"> </span>--health<span class="w"> </span>passed
+</span></code></pre></div>
+<p>What is live is always the running build (<code>BUILD_ID</code>), never the newest row. Without a database the component still reads containers and logs, and there is no history.</p>
 <h2 id="checking-it">Checking it</h2>
 <p>With the stack up, from inside the webserver container:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>webserver<span class="w"> </span>curl<span class="w"> </span>-s<span class="w"> </span>--unix-socket<span class="w"> </span>/var/run/docker-proxy/docker.sock<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>http://docker/containers/json<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">200</span><span class="w">       </span><span class="c1"># answered</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>webserver<span class="w"> </span>curl<span class="w"> </span>-s<span class="w"> </span>-o<span class="w"> </span>/dev/null<span class="w"> </span>-w<span class="w"> </span><span class="s1">&#39;%{http_code}\n&#39;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--unix-socket<span class="w"> </span>/var/run/docker-proxy/docker.sock<span class="w"> </span>http://docker/images/json<span class="w">   </span><span class="c1"># 403</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>webserver<span class="w"> </span>curl<span class="w"> </span>-s<span class="w"> </span>--unix-socket<span class="w"> </span>/var/run/docker-proxy/docker.sock<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>http://docker/containers/json<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">200</span><span class="w">       </span><span class="c1"># answered</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>webserver<span class="w"> </span>curl<span class="w"> </span>-s<span class="w"> </span>-o<span class="w"> </span>/dev/null<span class="w"> </span>-w<span class="w"> </span><span class="s1">&#39;%{http_code}\n&#39;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--unix-socket<span class="w"> </span>/var/run/docker-proxy/docker.sock<span class="w"> </span>http://docker/images/json<span class="w">   </span><span class="c1"># 403</span>
 </span></code></pre></div>
 <h2 id="removing-it">Removing it</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>deploy
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>deploy
 </span></code></pre></div>
 <p>The <code>socket-proxy</code> service and its volume leave the compose files; the base compose files and <code>aegis deploy</code> itself stay.</p>
 

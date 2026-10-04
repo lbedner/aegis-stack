@@ -5197,6 +5197,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#no-server-yet-provision-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No server yet? Provision one
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5814,6 +5825,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#no-server-yet-provision-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No server yet? Provision one
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6124,27 +6146,36 @@
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># 3. Deploy your application</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>aegis<span class="w"> </span>deploy
 </span></code></pre></div>
-<p>Your application is now running at <code>http://your-server-ip</code>.</p>
+<p>Your application is now running at <code>http://your-server-ip</code>, or at the name <code>aegis deploy-provision</code> gave it. The Overseer at <code>/dashboard/</code> admits only private networks until you add your address to <code>ADMIN_IP_ALLOWLIST</code> (see <a href="../components/ingress/">Ingress</a>) and redeploy.</p>
+<h2 id="no-server-yet-provision-one">No server yet? Provision one</h2>
+<div class="admonition warning">
+<p class="admonition-title">Experimental Feature</p>
+<p>Run end to end against a live Hetzner account with an <code>sslip.io</code> name; the <code>--domain</code> path through Cloudflare is tested only against a mocked API.</p>
+</div>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">HCLOUD_TOKEN</span><span class="o">=</span>...<span class="w">      </span><span class="c1"># Hetzner Cloud API token, read &amp; write</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>aegis<span class="w"> </span>deploy-provision<span class="w"> </span>--email<span class="w"> </span>you@example.com
+</span></code></pre></div>
+<p>This replaces steps 1 and 2 above. It creates a server in your own Hetzner account (showing the monthly price first), points a name at it (<code>&lt;ip&gt;.sslip.io</code>, or yours with <code>--domain</code> and a Cloudflare token), turns on HTTPS for that name with Let's Encrypt, and runs <code>aegis deploy</code>. The server, the bill and the data stay yours. <code>aegis deploy-destroy</code> removes the server and its DNS record. All options: <a href="../cli-reference/#aegis-deploy-provision"><code>aegis deploy-provision</code></a>.</p>
 <h2 id="configuration">Configuration</h2>
 <p>Deployment settings are stored in <code>.aegis/deploy.yml</code>, created by <code>deploy-init</code>:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># .aegis/deploy.yml</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">server</span><span class="p">:</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.168.1.100</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/my-project</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nt">docker</span><span class="p">:</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">context</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-project-remote</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Optional: backup settings (defaults shown)</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nt">backup</span><span class="p">:</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="nt">keep_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">           </span><span class="c1"># Number of backups to retain</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="nt">include_database</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># pg_dump before deploy</span>
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
-</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># Optional: health check after deploy (defaults shown)</span>
-</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="nt">health_check</span><span class="p">:</span>
-</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">  </span><span class="nt">retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">              </span><span class="c1"># Number of retry attempts</span>
-</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">  </span><span class="nt">auto_rollback</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">     </span><span class="c1"># Rollback on failed health check</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># .aegis/deploy.yml</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">server</span><span class="p">:</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">192.168.1.100</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/my-project</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nt">docker</span><span class="p">:</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">context</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-project-remote</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># Optional: backup settings (defaults shown)</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nt">backup</span><span class="p">:</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">  </span><span class="nt">keep_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">           </span><span class="c1"># Number of backups to retain</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span><span class="nt">include_database</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># pg_dump before deploy</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="c1"># Optional: health check after deploy (defaults shown)</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="nt">health_check</span><span class="p">:</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">  </span><span class="nt">retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">              </span><span class="c1"># Number of retry attempts</span>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">  </span><span class="nt">auto_rollback</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">     </span><span class="c1"># Rollback on failed health check</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -6198,7 +6229,7 @@
 <h3 id="aegis-deploy-init">aegis deploy-init</h3>
 <p>Initialize deployment configuration for a project.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6208,20 +6239,20 @@
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Interactive (prompts for host)</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>aegis<span class="w"> </span>deploy-init
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Specify host directly</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Custom user and path</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span>--host<span class="w"> </span>myserver.com<span class="w"> </span>--user<span class="w"> </span>deploy<span class="w"> </span>--path<span class="w"> </span>/srv/myapp
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Interactive (prompts for host)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>aegis<span class="w"> </span>deploy-init
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Specify host directly</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Custom user and path</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span>--host<span class="w"> </span>myserver.com<span class="w"> </span>--user<span class="w"> </span>deploy<span class="w"> </span>--path<span class="w"> </span>/srv/myapp
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-setup">aegis deploy-setup</h3>
 <p>Provision a remote server for deployment. Run this <strong>once</strong> on a fresh server before your first deploy.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>aegis<span class="w"> </span>deploy-setup<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aegis<span class="w"> </span>deploy-setup<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6245,8 +6276,8 @@
 <li>If <code>--public-key</code> was passed, appends that key to the deploy user's <code>~/.ssh/authorized_keys</code> (idempotent — re-running with the same key is a no-op).</li>
 </ol>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aegis<span class="w"> </span>deploy-setup
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>aegis<span class="w"> </span>deploy-setup<span class="w"> </span>--public-key<span class="w"> </span>~/.ssh/id_ed25519.pub
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>aegis<span class="w"> </span>deploy-setup
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>aegis<span class="w"> </span>deploy-setup<span class="w"> </span>--public-key<span class="w"> </span>~/.ssh/id_ed25519.pub
 </span></code></pre></div></p>
 <div class="admonition note">
 <p class="admonition-title">Requires ingress component</p>
@@ -6256,7 +6287,7 @@
 <h3 id="aegis-deploy-cd-setup">aegis deploy-cd-setup</h3>
 <p>Wire up GitHub Actions continuous deployment in one command. Generates a dedicated SSH deploy key, installs the public key on your server, pushes the private key + host + user as repo secrets, and scaffolds <code>.github/workflows/deploy.yml</code>.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6284,10 +6315,10 @@
 <li>Securely deletes the temp private key (overwrites then unlinks)</li>
 </ol>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w">                </span><span class="c1"># one-shot setup with workflow_dispatch trigger</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--on-tag<span class="w">       </span><span class="c1"># also auto-deploy on v* tag pushes</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--dry-run<span class="w">      </span><span class="c1"># see the plan without touching anything</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w">        </span><span class="c1"># rotate the existing deploy key</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w">                </span><span class="c1"># one-shot setup with workflow_dispatch trigger</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--on-tag<span class="w">       </span><span class="c1"># also auto-deploy on v* tag pushes</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--dry-run<span class="w">      </span><span class="c1"># see the plan without touching anything</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w">        </span><span class="c1"># rotate the existing deploy key</span>
 </span></code></pre></div></p>
 <div class="admonition tip">
 <p class="admonition-title">Why a dedicated deploy key</p>
@@ -6297,10 +6328,10 @@
 <p class="admonition-title">Backing up the deploy key</p>
 <p>GitHub Actions secrets are <strong>write-only</strong> — once the private key is uploaded, you can't read it back from the API or UI. By default, <code>deploy-cd-setup</code> uploads the key and securely deletes the local copy, so the only place it exists is inside GitHub.</p>
 <p><strong>If you want a local backup</strong> (for a password manager, disaster recovery, or to use the same key from another CI provider), pass <code>--keep-key PATH</code> at setup time:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--keep-key<span class="w"> </span>~/.ssh/aegis_deploy_ci
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--keep-key<span class="w"> </span>~/.ssh/aegis_deploy_ci
 </span></code></pre></div></p>
 <p><strong>If you already ran setup without <code>--keep-key</code></strong> and want a copy now, rotate the key — there's no way to extract the existing one. Re-run with <code>--force --keep-key PATH</code>:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w"> </span>--keep-key<span class="w"> </span>~/.ssh/aegis_deploy_ci
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w"> </span>--keep-key<span class="w"> </span>~/.ssh/aegis_deploy_ci
 </span></code></pre></div>
 This generates a fresh key, replaces the public key on the server, overwrites the GitHub secret, and saves a local copy. The previous key is rotated out.</p>
 </div>
@@ -6308,7 +6339,7 @@ This generates a fresh key, replaces the public key on the server, overwrites th
 <h3 id="aegis-deploy">aegis deploy</h3>
 <p>Deploy (or redeploy) the application to the configured server.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>aegis<span class="w"> </span>deploy<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>aegis<span class="w"> </span>deploy<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6325,8 +6356,9 @@ This generates a fresh key, replaces the public key on the server, overwrites th
 <li><strong>Stops existing services</strong> with <code>docker compose down</code></li>
 <li><strong>Builds and starts services</strong> with production compose overrides</li>
 <li><strong>Restarts Traefik</strong> if the ingress component is present (ensures container re-discovery)</li>
-<li><strong>Runs health check</strong> against <code>/health/</code> endpoint</li>
+<li><strong>Runs health check</strong> against <code>/health/</code> endpoint (through HTTPS for the app's name when TLS is on)</li>
 <li><strong>Auto-rollback</strong> if health check fails, restores the backup from step 1</li>
+<li><strong>Records the deploy</strong> in the app's <a href="../components/deploy/#deploy-history">deploy history</a> when the project has the deploy component and a database: who deployed, from where, the health result, the backup and any rollback</li>
 </ol>
 <p><strong>Excluded from sync:</strong></p>
 <p>Files and directories excluded from the rsync transfer. The sync deletes, and
@@ -6348,20 +6380,20 @@ state from removal:</p>
   re-issuance and can hit rate limits)</li>
 </ul>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Full deploy with build (backup + health check enabled by default)</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>aegis<span class="w"> </span>deploy
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># Skip image rebuild (faster, uses cached images)</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>aegis<span class="w"> </span>deploy<span class="w"> </span>--no-build
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># Deploy without backup or health check (original behavior)</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>aegis<span class="w"> </span>deploy<span class="w"> </span>--no-backup<span class="w"> </span>--no-health-check
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Full deploy with build (backup + health check enabled by default)</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>aegis<span class="w"> </span>deploy
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Skip image rebuild (faster, uses cached images)</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>aegis<span class="w"> </span>deploy<span class="w"> </span>--no-build
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1"># Deploy without backup or health check (original behavior)</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>aegis<span class="w"> </span>deploy<span class="w"> </span>--no-backup<span class="w"> </span>--no-health-check
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-backup">aegis deploy-backup</h3>
 <p>Create a backup of the currently deployed application on the remote server.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>aegis<span class="w"> </span>deploy-backup<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>aegis<span class="w"> </span>deploy-backup<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6376,34 +6408,34 @@ state from removal:</p>
 </ol>
 <p>SQLite databases are automatically included in the file backup since they live in the deploy directory.</p>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>aegis<span class="w"> </span>deploy-backup
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>aegis<span class="w"> </span>deploy-backup
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-backups">aegis deploy-backups</h3>
 <p>List available deployment backups on the remote server.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>aegis<span class="w"> </span>deploy-backups<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>aegis<span class="w"> </span>deploy-backups<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Example output:</strong>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>Backups on 143.198.20.208 (3 total):
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>  Timestamp                Size         Database
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>  ──────────────────────── ──────────── ──────────
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>  2026-03-11_183045        42M          yes
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>  2026-03-10_120000        41M          no
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>  2026-03-09_090000        40M          yes
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>
-</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>Rollback with: aegis deploy-rollback --backup &lt;timestamp&gt;
+<div class="language-text highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>Backups on 143.198.20.208 (3 total):
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>  Timestamp                Size         Database
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>  ──────────────────────── ──────────── ──────────
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>  2026-03-11_183045        42M          yes
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>  2026-03-10_120000        41M          no
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>  2026-03-09_090000        40M          yes
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>Rollback with: aegis deploy-rollback --backup &lt;timestamp&gt;
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-rollback">aegis deploy-rollback</h3>
 <p>Rollback to a previous deployment backup.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>aegis<span class="w"> </span>deploy-rollback<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>aegis<span class="w"> </span>deploy-rollback<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6419,17 +6451,17 @@ state from removal:</p>
 <li>Restarts Traefik if present</li>
 </ol>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># Rollback to the most recent backup</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>aegis<span class="w"> </span>deploy-rollback
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
-</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1"># Rollback to a specific backup</span>
-</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>aegis<span class="w"> </span>deploy-rollback<span class="w"> </span>--backup<span class="w"> </span><span class="m">2026</span>-03-11_183045
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Rollback to the most recent backup</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>aegis<span class="w"> </span>deploy-rollback
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="c1"># Rollback to a specific backup</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>aegis<span class="w"> </span>deploy-rollback<span class="w"> </span>--backup<span class="w"> </span><span class="m">2026</span>-03-11_183045
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-logs">aegis deploy-logs</h3>
 <p>View logs from the deployed application.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6438,64 +6470,64 @@ state from removal:</p>
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># Follow all service logs</span>
-</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>aegis<span class="w"> </span>deploy-logs
-</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
-</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="c1"># View logs without following</span>
-</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>--no-follow
-</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>
-</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="c1"># View logs for a specific service</span>
-</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>--service<span class="w"> </span>webserver
-</span><span id="__span-19-9"><a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>-s<span class="w"> </span>traefik
-</span><span id="__span-19-10"><a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>-s<span class="w"> </span>redis
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Follow all service logs</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>aegis<span class="w"> </span>deploy-logs
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="c1"># View logs without following</span>
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>--no-follow
+</span><span id="__span-20-6"><a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>
+</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="c1"># View logs for a specific service</span>
+</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>--service<span class="w"> </span>webserver
+</span><span id="__span-20-9"><a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>-s<span class="w"> </span>traefik
+</span><span id="__span-20-10"><a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>-s<span class="w"> </span>redis
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-status">aegis deploy-status</h3>
 <p>Check the status of all deployed services.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>aegis<span class="w"> </span>deploy-status<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>aegis<span class="w"> </span>deploy-status<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>aegis<span class="w"> </span>deploy-status
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>aegis<span class="w"> </span>deploy-status
 </span></code></pre></div></p>
 <p>Shows the output of <code>docker compose ps</code> on the remote server, including container status, ports, and health.</p>
 <hr />
 <h3 id="aegis-deploy-stop">aegis deploy-stop</h3>
 <p>Stop all deployed services.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>aegis<span class="w"> </span>deploy-stop<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>aegis<span class="w"> </span>deploy-stop<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>aegis<span class="w"> </span>deploy-stop
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>aegis<span class="w"> </span>deploy-stop
 </span></code></pre></div></p>
 <p>Runs <code>docker compose down</code> on the remote server.</p>
 <hr />
 <h3 id="aegis-deploy-restart">aegis deploy-restart</h3>
 <p>Restart all deployed services.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>aegis<span class="w"> </span>deploy-restart<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>aegis<span class="w"> </span>deploy-restart<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>aegis<span class="w"> </span>deploy-restart
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>aegis<span class="w"> </span>deploy-restart
 </span></code></pre></div></p>
 <p>Runs <code>docker compose restart</code> on the remote server.</p>
 <hr />
 <h3 id="aegis-deploy-shell">aegis deploy-shell</h3>
 <p>Open an interactive shell in a deployed container.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>aegis<span class="w"> </span>deploy-shell<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>aegis<span class="w"> </span>deploy-shell<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6503,14 +6535,14 @@ state from removal:</p>
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="c1"># Shell into the webserver (default)</span>
-</span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a>aegis<span class="w"> </span>deploy-shell
-</span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a>
-</span><span id="__span-27-4"><a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a><span class="c1"># Shell into Redis</span>
-</span><span id="__span-27-5"><a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a>aegis<span class="w"> </span>deploy-shell<span class="w"> </span>--service<span class="w"> </span>redis
-</span><span id="__span-27-6"><a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a>
-</span><span id="__span-27-7"><a id="__codelineno-27-7" name="__codelineno-27-7" href="#__codelineno-27-7"></a><span class="c1"># Shell into Traefik</span>
-</span><span id="__span-27-8"><a id="__codelineno-27-8" name="__codelineno-27-8" href="#__codelineno-27-8"></a>aegis<span class="w"> </span>deploy-shell<span class="w"> </span>-s<span class="w"> </span>traefik
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="c1"># Shell into the webserver (default)</span>
+</span><span id="__span-28-2"><a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>aegis<span class="w"> </span>deploy-shell
+</span><span id="__span-28-3"><a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>
+</span><span id="__span-28-4"><a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a><span class="c1"># Shell into Redis</span>
+</span><span id="__span-28-5"><a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a>aegis<span class="w"> </span>deploy-shell<span class="w"> </span>--service<span class="w"> </span>redis
+</span><span id="__span-28-6"><a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>
+</span><span id="__span-28-7"><a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a><span class="c1"># Shell into Traefik</span>
+</span><span id="__span-28-8"><a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a>aegis<span class="w"> </span>deploy-shell<span class="w"> </span>-s<span class="w"> </span>traefik
 </span></code></pre></div></p>
 <p>Opens a <code>/bin/bash</code> session inside the container via SSH.</p>
 <hr />
@@ -6519,7 +6551,7 @@ state from removal:</p>
 <h3 id="aegis-ingress-enable">aegis ingress-enable</h3>
 <p>Configure TLS (HTTPS) with automatic Let's Encrypt certificates.</p>
 <p><strong>Usage:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
@@ -6537,30 +6569,30 @@ state from removal:</p>
 <li>Configures HTTP → HTTPS redirect</li>
 </ol>
 <p><strong>Examples:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="c1"># Interactive (prompts for domain and email)</span>
-</span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>aegis<span class="w"> </span>ingress-enable
-</span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a>
-</span><span id="__span-29-4"><a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a><span class="c1"># Fully specified</span>
-</span><span id="__span-29-5"><a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>--domain<span class="w"> </span>example.com<span class="w"> </span>--email<span class="w"> </span>admin@example.com
-</span><span id="__span-29-6"><a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a>
-</span><span id="__span-29-7"><a id="__codelineno-29-7" name="__codelineno-29-7" href="#__codelineno-29-7"></a><span class="c1"># Non-interactive</span>
-</span><span id="__span-29-8"><a id="__codelineno-29-8" name="__codelineno-29-8" href="#__codelineno-29-8"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>-d<span class="w"> </span>example.com<span class="w"> </span>-e<span class="w"> </span>admin@example.com<span class="w"> </span>-y
-</span><span id="__span-29-9"><a id="__codelineno-29-9" name="__codelineno-29-9" href="#__codelineno-29-9"></a>
-</span><span id="__span-29-10"><a id="__codelineno-29-10" name="__codelineno-29-10" href="#__codelineno-29-10"></a><span class="c1"># On a different project</span>
-</span><span id="__span-29-11"><a id="__codelineno-29-11" name="__codelineno-29-11" href="#__codelineno-29-11"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>-p<span class="w"> </span>../my-project<span class="w"> </span>-d<span class="w"> </span>example.com
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="c1"># Interactive (prompts for domain and email)</span>
+</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>aegis<span class="w"> </span>ingress-enable
+</span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>
+</span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a><span class="c1"># Fully specified</span>
+</span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>--domain<span class="w"> </span>example.com<span class="w"> </span>--email<span class="w"> </span>admin@example.com
+</span><span id="__span-30-6"><a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>
+</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a><span class="c1"># Non-interactive</span>
+</span><span id="__span-30-8"><a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>-d<span class="w"> </span>example.com<span class="w"> </span>-e<span class="w"> </span>admin@example.com<span class="w"> </span>-y
+</span><span id="__span-30-9"><a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a>
+</span><span id="__span-30-10"><a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a><span class="c1"># On a different project</span>
+</span><span id="__span-30-11"><a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>-p<span class="w"> </span>../my-project<span class="w"> </span>-d<span class="w"> </span>example.com
 </span></code></pre></div></p>
 <h3 id="full-tls-workflow">Full TLS Workflow</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="c1"># 1. Enable TLS on your project</span>
-</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>--domain<span class="w"> </span>example.com<span class="w"> </span>--email<span class="w"> </span>admin@example.com
-</span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>
-</span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a><span class="c1"># 2. Deploy to your server</span>
-</span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>aegis<span class="w"> </span>deploy
-</span><span id="__span-30-6"><a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>
-</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a><span class="c1"># 3. Ensure DNS is configured</span>
-</span><span id="__span-30-8"><a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a><span class="c1">#    Point your domain&#39;s A record to your server IP</span>
-</span><span id="__span-30-9"><a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a>
-</span><span id="__span-30-10"><a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a><span class="c1"># 4. Certificates auto-provision on first request</span>
-</span><span id="__span-30-11"><a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a><span class="c1">#    Traefik handles Let&#39;s Encrypt automatically</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># 1. Enable TLS on your project</span>
+</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>--domain<span class="w"> </span>example.com<span class="w"> </span>--email<span class="w"> </span>admin@example.com
+</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>
+</span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a><span class="c1"># 2. Deploy to your server</span>
+</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a>aegis<span class="w"> </span>deploy
+</span><span id="__span-31-6"><a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a>
+</span><span id="__span-31-7"><a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a><span class="c1"># 3. Ensure DNS is configured</span>
+</span><span id="__span-31-8"><a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a><span class="c1">#    Point your domain&#39;s A record to your server IP</span>
+</span><span id="__span-31-9"><a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a>
+</span><span id="__span-31-10"><a id="__codelineno-31-10" name="__codelineno-31-10" href="#__codelineno-31-10"></a><span class="c1"># 4. Certificates auto-provision on first request</span>
+</span><span id="__span-31-11"><a id="__codelineno-31-11" name="__codelineno-31-11" href="#__codelineno-31-11"></a><span class="c1">#    Traefik handles Let&#39;s Encrypt automatically</span>
 </span></code></pre></div>
 <p>After deployment:</p>
 <ul>
@@ -6575,41 +6607,41 @@ state from removal:</p>
 <hr />
 <h2 id="deployment-workflow">Deployment Workflow</h2>
 <h3 id="first-deployment">First Deployment</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># 1. Create project with ingress</span>
-</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--components<span class="w"> </span>ingress
-</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="nb">cd</span><span class="w"> </span>my-app
-</span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>
-</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="c1"># 2. Configure and test locally</span>
-</span><span id="__span-31-6"><a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a>uv<span class="w"> </span>sync<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>cp<span class="w"> </span>.env.example<span class="w"> </span>.env
-</span><span id="__span-31-7"><a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a>make<span class="w"> </span>serve<span class="w">  </span><span class="c1"># Verify everything works</span>
-</span><span id="__span-31-8"><a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a>
-</span><span id="__span-31-9"><a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a><span class="c1"># 3. Set up deployment</span>
-</span><span id="__span-31-10"><a id="__codelineno-31-10" name="__codelineno-31-10" href="#__codelineno-31-10"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span>--host<span class="w"> </span>your-server-ip
-</span><span id="__span-31-11"><a id="__codelineno-31-11" name="__codelineno-31-11" href="#__codelineno-31-11"></a>aegis<span class="w"> </span>deploy-setup
-</span><span id="__span-31-12"><a id="__codelineno-31-12" name="__codelineno-31-12" href="#__codelineno-31-12"></a>
-</span><span id="__span-31-13"><a id="__codelineno-31-13" name="__codelineno-31-13" href="#__codelineno-31-13"></a><span class="c1"># 4. Deploy</span>
-</span><span id="__span-31-14"><a id="__codelineno-31-14" name="__codelineno-31-14" href="#__codelineno-31-14"></a>aegis<span class="w"> </span>deploy
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="c1"># 1. Create project with ingress</span>
+</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--components<span class="w"> </span>ingress
+</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a><span class="nb">cd</span><span class="w"> </span>my-app
+</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>
+</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a><span class="c1"># 2. Configure and test locally</span>
+</span><span id="__span-32-6"><a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a>uv<span class="w"> </span>sync<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>cp<span class="w"> </span>.env.example<span class="w"> </span>.env
+</span><span id="__span-32-7"><a id="__codelineno-32-7" name="__codelineno-32-7" href="#__codelineno-32-7"></a>make<span class="w"> </span>serve<span class="w">  </span><span class="c1"># Verify everything works</span>
+</span><span id="__span-32-8"><a id="__codelineno-32-8" name="__codelineno-32-8" href="#__codelineno-32-8"></a>
+</span><span id="__span-32-9"><a id="__codelineno-32-9" name="__codelineno-32-9" href="#__codelineno-32-9"></a><span class="c1"># 3. Set up deployment</span>
+</span><span id="__span-32-10"><a id="__codelineno-32-10" name="__codelineno-32-10" href="#__codelineno-32-10"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span>--host<span class="w"> </span>your-server-ip
+</span><span id="__span-32-11"><a id="__codelineno-32-11" name="__codelineno-32-11" href="#__codelineno-32-11"></a>aegis<span class="w"> </span>deploy-setup
+</span><span id="__span-32-12"><a id="__codelineno-32-12" name="__codelineno-32-12" href="#__codelineno-32-12"></a>
+</span><span id="__span-32-13"><a id="__codelineno-32-13" name="__codelineno-32-13" href="#__codelineno-32-13"></a><span class="c1"># 4. Deploy</span>
+</span><span id="__span-32-14"><a id="__codelineno-32-14" name="__codelineno-32-14" href="#__codelineno-32-14"></a>aegis<span class="w"> </span>deploy
 </span></code></pre></div>
 <h3 id="subsequent-deployments">Subsequent Deployments</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="c1"># Make changes, then redeploy (auto-backup + health check)</span>
-</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>aegis<span class="w"> </span>deploy
-</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>
-</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a><span class="c1"># Or skip rebuild for config-only changes</span>
-</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a>aegis<span class="w"> </span>deploy<span class="w"> </span>--no-build
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="c1"># Make changes, then redeploy (auto-backup + health check)</span>
+</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a>aegis<span class="w"> </span>deploy
+</span><span id="__span-33-3"><a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a>
+</span><span id="__span-33-4"><a id="__codelineno-33-4" name="__codelineno-33-4" href="#__codelineno-33-4"></a><span class="c1"># Or skip rebuild for config-only changes</span>
+</span><span id="__span-33-5"><a id="__codelineno-33-5" name="__codelineno-33-5" href="#__codelineno-33-5"></a>aegis<span class="w"> </span>deploy<span class="w"> </span>--no-build
 </span></code></pre></div>
 <h3 id="backup-and-rollback">Backup and Rollback</h3>
 <p>Every <code>aegis deploy</code> automatically creates a backup before making changes. If the health check fails after deploy, the previous version is restored automatically.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="c1"># Create a manual backup</span>
-</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a>aegis<span class="w"> </span>deploy-backup
-</span><span id="__span-33-3"><a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a>
-</span><span id="__span-33-4"><a id="__codelineno-33-4" name="__codelineno-33-4" href="#__codelineno-33-4"></a><span class="c1"># List available backups</span>
-</span><span id="__span-33-5"><a id="__codelineno-33-5" name="__codelineno-33-5" href="#__codelineno-33-5"></a>aegis<span class="w"> </span>deploy-backups
-</span><span id="__span-33-6"><a id="__codelineno-33-6" name="__codelineno-33-6" href="#__codelineno-33-6"></a>
-</span><span id="__span-33-7"><a id="__codelineno-33-7" name="__codelineno-33-7" href="#__codelineno-33-7"></a><span class="c1"># Rollback to the most recent backup</span>
-</span><span id="__span-33-8"><a id="__codelineno-33-8" name="__codelineno-33-8" href="#__codelineno-33-8"></a>aegis<span class="w"> </span>deploy-rollback
-</span><span id="__span-33-9"><a id="__codelineno-33-9" name="__codelineno-33-9" href="#__codelineno-33-9"></a>
-</span><span id="__span-33-10"><a id="__codelineno-33-10" name="__codelineno-33-10" href="#__codelineno-33-10"></a><span class="c1"># Rollback to a specific backup</span>
-</span><span id="__span-33-11"><a id="__codelineno-33-11" name="__codelineno-33-11" href="#__codelineno-33-11"></a>aegis<span class="w"> </span>deploy-rollback<span class="w"> </span>--backup<span class="w"> </span><span class="m">2026</span>-03-11_183045
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="c1"># Create a manual backup</span>
+</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>aegis<span class="w"> </span>deploy-backup
+</span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>
+</span><span id="__span-34-4"><a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a><span class="c1"># List available backups</span>
+</span><span id="__span-34-5"><a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a>aegis<span class="w"> </span>deploy-backups
+</span><span id="__span-34-6"><a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>
+</span><span id="__span-34-7"><a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a><span class="c1"># Rollback to the most recent backup</span>
+</span><span id="__span-34-8"><a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>aegis<span class="w"> </span>deploy-rollback
+</span><span id="__span-34-9"><a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a>
+</span><span id="__span-34-10"><a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a><span class="c1"># Rollback to a specific backup</span>
+</span><span id="__span-34-11"><a id="__codelineno-34-11" name="__codelineno-34-11" href="#__codelineno-34-11"></a>aegis<span class="w"> </span>deploy-rollback<span class="w"> </span>--backup<span class="w"> </span><span class="m">2026</span>-03-11_183045
 </span></code></pre></div>
 <p><strong>How backups work:</strong></p>
 <ul>
@@ -6620,26 +6652,26 @@ state from removal:</p>
 <li>Backups are never synced or overwritten during deploys</li>
 </ul>
 <p><strong>Auto-rollback flow:</strong></p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>aegis deploy
-</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>  → backup current state
-</span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>  → sync new code
-</span><span id="__span-34-4"><a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>  → docker compose up
-</span><span id="__span-34-5"><a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a>  → health check (GET /health/)
-</span><span id="__span-34-6"><a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>    → pass: done
-</span><span id="__span-34-7"><a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a>    → fail: restore backup automatically
+<div class="language-text highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>aegis deploy
+</span><span id="__span-35-2"><a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>  → backup current state
+</span><span id="__span-35-3"><a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a>  → sync new code
+</span><span id="__span-35-4"><a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>  → docker compose up
+</span><span id="__span-35-5"><a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a>  → health check (GET /health/)
+</span><span id="__span-35-6"><a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>    → pass: done
+</span><span id="__span-35-7"><a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a>    → fail: restore backup automatically
 </span></code></pre></div>
 <h3 id="monitoring">Monitoring</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="c1"># Check service health</span>
-</span><span id="__span-35-2"><a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>aegis<span class="w"> </span>deploy-status
-</span><span id="__span-35-3"><a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a>
-</span><span id="__span-35-4"><a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a><span class="c1"># Follow logs in real-time</span>
-</span><span id="__span-35-5"><a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a>aegis<span class="w"> </span>deploy-logs
-</span><span id="__span-35-6"><a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>
-</span><span id="__span-35-7"><a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a><span class="c1"># Check a specific service</span>
-</span><span id="__span-35-8"><a id="__codelineno-35-8" name="__codelineno-35-8" href="#__codelineno-35-8"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>--service<span class="w"> </span>webserver
-</span><span id="__span-35-9"><a id="__codelineno-35-9" name="__codelineno-35-9" href="#__codelineno-35-9"></a>
-</span><span id="__span-35-10"><a id="__codelineno-35-10" name="__codelineno-35-10" href="#__codelineno-35-10"></a><span class="c1"># Debug inside a container</span>
-</span><span id="__span-35-11"><a id="__codelineno-35-11" name="__codelineno-35-11" href="#__codelineno-35-11"></a>aegis<span class="w"> </span>deploy-shell
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-36-1"><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="c1"># Check service health</span>
+</span><span id="__span-36-2"><a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>aegis<span class="w"> </span>deploy-status
+</span><span id="__span-36-3"><a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>
+</span><span id="__span-36-4"><a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a><span class="c1"># Follow logs in real-time</span>
+</span><span id="__span-36-5"><a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>aegis<span class="w"> </span>deploy-logs
+</span><span id="__span-36-6"><a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a>
+</span><span id="__span-36-7"><a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a><span class="c1"># Check a specific service</span>
+</span><span id="__span-36-8"><a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a>aegis<span class="w"> </span>deploy-logs<span class="w"> </span>--service<span class="w"> </span>webserver
+</span><span id="__span-36-9"><a id="__codelineno-36-9" name="__codelineno-36-9" href="#__codelineno-36-9"></a>
+</span><span id="__span-36-10"><a id="__codelineno-36-10" name="__codelineno-36-10" href="#__codelineno-36-10"></a><span class="c1"># Debug inside a container</span>
+</span><span id="__span-36-11"><a id="__codelineno-36-11" name="__codelineno-36-11" href="#__codelineno-36-11"></a>aegis<span class="w"> </span>deploy-shell
 </span></code></pre></div>
 <hr />
 <h2 id="next-steps">Next Steps</h2>

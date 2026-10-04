@@ -7063,13 +7063,21 @@ service needed stay; remove them separately with <code>aegis remove</code>.</p>
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-provision">aegis deploy-provision</h3>
+<div class="admonition warning">
+<p class="admonition-title">Experimental Feature</p>
+<p><code>deploy-provision</code> and <code>deploy-destroy</code> have run end to end against a live Hetzner account with an <code>sslip.io</code> name (server, HTTPS certificate, deploy, destroy). The <code>--domain</code> path through Cloudflare is tested only against a mocked API. Expect rough edges, and check your Hetzner console after a failed run.</p>
+</div>
 <p>Create a server in your own Hetzner Cloud account and deploy to it. Shows the
 monthly price and asks before creating anything. The server boots with the
 project's <code>scripts/server-setup.sh</code> as cloud-init user-data, so it arrives with
 Docker and the firewall ready. Provisioning then waits for SSH and cloud-init,
 points a name at the server, waits for that name to resolve (so the first
-Let's Encrypt request does not fail), writes <code>.aegis/deploy.yml</code> and runs
-<code>aegis deploy</code>.</p>
+Let's Encrypt request does not fail), turns HTTPS on for that name (the same
+change <code>aegis ingress-enable</code> makes, so a project generated without TLS gets
+it), writes <code>.aegis/deploy.yml</code> and runs <code>aegis deploy</code>.</p>
+<p>Let's Encrypt needs an email address: <code>--email</code>, or the project's
+<code>author_email</code> when it is not the generated placeholder. Without one the
+command stops before creating anything.</p>
 <p>Tokens are read from the environment at call time and never stored or printed
 (at most the last four characters are shown):</p>
 <ul>
@@ -7093,7 +7101,8 @@ to delete it; run it again to resume instead.</p>
 <li><code>--size TEXT</code>, Server type (default: <code>cx23</code>)</li>
 <li><code>--region TEXT</code>, Provider location (default: <code>nbg1</code>)</li>
 <li><code>--domain TEXT</code>, Hostname to point at the server through Cloudflare</li>
-<li><code>--ssh-key TEXT</code>, Public key installed for root (default: <code>~/.ssh/id_ed25519.pub</code>)</li>
+<li><code>--email TEXT</code>, Address Let's Encrypt registers the certificate to (default: the project's <code>author_email</code>)</li>
+<li><code>--ssh-key TEXT</code>, Public key installed for root (default: the first of <code>~/.ssh/id_ed25519.pub</code>, <code>id_ecdsa.pub</code>, <code>id_rsa.pub</code> that exists)</li>
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 <li><code>--yes, -y</code>, Skip the price confirmation</li>
 </ul>
@@ -7140,7 +7149,7 @@ host and user to GitHub Actions secrets, and scaffolds
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy">aegis deploy</h3>
-<p>Deploy the project to the configured server. Creates a backup, syncs files, builds Docker images, starts services, and runs a health check. Auto-rollback on failure.</p>
+<p>Deploy the project to the configured server. Creates a backup, syncs files, builds Docker images, starts services, and runs a health check (through HTTPS for the app's name when TLS is on). Auto-rollback on failure. With the deploy component and a database, it then records the deploy in the app's <a href="../components/deploy/#deploy-history">deploy history</a>: who deployed, from where, the health result, the backup and any rollback.</p>
 <p><strong>Usage:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>aegis<span class="w"> </span>deploy<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>

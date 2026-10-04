@@ -13,7 +13,8 @@ Public surface:
 - ``ContextProvider`` / ``StaticContextProvider`` — per-turn context blocks.
 - ``BudgetGuard`` / ``BudgetStatus`` — per-user daily spend control.
 - ``ChatScope`` / ``ChatMessage`` — identity + stored-turn value types.
-- Frames (``DeltaFrame`` / ``DoneFrame`` / ``BlockedFrame`` / ``ErrorFrame``)
+- Frames (``DeltaFrame`` / ``ToolFrame`` / ``CardFrame`` / ``DoneFrame`` /
+  ``BlockedFrame`` / ``ErrorFrame``)
   and ``ndjson_response`` — the streaming output contract.
 """
 
@@ -29,6 +30,7 @@ from .history import ConversationStore
 from .models import (
     BlockedFrame,
     BudgetStatus,
+    CardFrame,
     ChatMessage,
     ChatScope,
     DeltaFrame,
@@ -54,6 +56,7 @@ __all__ = [
     "DeltaFrame",
     "DoneFrame",
     "ToolFrame",
+    "CardFrame",
     "BlockedFrame",
     "ErrorFrame",
     "StreamFrame",

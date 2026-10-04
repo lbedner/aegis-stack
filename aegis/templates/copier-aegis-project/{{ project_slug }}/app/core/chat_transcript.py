@@ -201,10 +201,73 @@ def card_outcome(status: str, note: Any) -> str:
     return status
 
 
-def card_markers(entry: dict[str, Any]) -> list[dict[str, Any]]:
-    """The approval cards a trace entry carries: its compact ``component``
-    markers (one per card, a ``pending`` listing several), each naming a
-    ``pending_change`` or a ``pending_change_batch``."""
-    marker = entry.get("component")
-    markers = marker if isinstance(marker, list) else [marker]
+def card_component(
+    tool: str, content: Any
+) -> dict[str, Any] | list[dict[str, Any]] | None:
+    """The approval cards a queue tool's result names, compact and
+    parse-safe: a stored trace's ``component`` and a chat kit's
+    ``CardFrame`` both come from here.
+
+    A displayed result is clipped, and a large proposal batch truncates to
+    invalid JSON, so a card built by parsing it silently vanished. The card
+    needs only identity (the queue is read for the rows), so identity rides
+    here, under any cap. A ``pending`` listing carries one per card.
+    """
+    if tool not in ("propose", "propose_many", "pending"):
+        return None
+    data: Any = content
+    if isinstance(content, str):
+        try:
+            data = json.loads(content)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(data, dict) or data.get("error"):
+        return None
+    if tool == "pending":
+        rows = (data.get("pending") or []) + (data.get("decided") or [])
+        return _pending_markers(rows) or None
+    return _identity_marker(data)
+
+
+def _pending_markers(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One marker per listed card, in listing order."""
+    identities = [
+        {
+            **card,
+            "count": card.get("rows"),
+            "pending_change_id": (card.get("pending_change_ids") or [None])[0],
+        }
+        for card in cards
+    ]
+    return [m for m in map(_identity_marker, identities) if m is not None]
+
+
+def _identity_marker(data: dict[str, Any]) -> dict[str, Any] | None:
+    if data.get("batch_id"):
+        return {
+            "kind": "pending_change_batch",
+            "batch_id": data["batch_id"],
+            "change_type": data.get("change_type"),
+            "title": data.get("title"),
+            "count": data.get("count"),
+        }
+    if data.get("pending_change_id"):
+        return {
+            "kind": "pending_change",
+            "pending_change_id": data["pending_change_id"],
+            "change_type": data.get("change_type"),
+            "title": data.get("title"),
+            "status": data.get("status", "pending"),
+        }
+    return None
+
+
+def as_markers(component: Any) -> list[dict[str, Any]]:
+    """A ``card_component`` (one marker or a listing's several) as a list."""
+    markers = component if isinstance(component, list) else [component]
     return [m for m in markers if isinstance(m, dict) and m.get("kind")]
+
+
+def card_markers(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    """The approval cards a stored trace entry carries (``card_component``)."""
+    return as_markers(entry.get("component"))

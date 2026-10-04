@@ -205,6 +205,7 @@ async def test_stats_compute_cpu_and_memory_like_docker_stats() -> None:
     assert stats.memory_limit == 805_306_368
     assert (stats.network_rx, stats.network_tx) == (101, 52)
     assert (stats.disk_read, stats.disk_write) == (4096, 8192)
+    assert stats.cpus == 2  # what cpu_percent is out of: 100% a core
 
 
 def _one_shot(total: int, system: int) -> dict[str, Any]:
@@ -319,3 +320,24 @@ def test_the_deploy_component_installs_the_docker_backend() -> None:
         assert isinstance(runtime.get_runtime(), DockerRuntime)
     finally:
         runtime.set_runtime(None)
+
+
+async def test_restart_asks_the_proxy_to_restart_that_container() -> None:
+    asked: list[tuple[str, str]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        asked.append((request.method, request.url.path))
+        return httpx.Response(204)
+
+    backend = DockerRuntime(project=PROJECT, transport=httpx.MockTransport(handle))
+    await backend.restart("demo-redis-1")
+    assert asked == [("POST", "/containers/demo-redis-1/restart")]
+
+
+async def test_a_refused_restart_says_why() -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, text="forbidden by the proxy")
+
+    backend = DockerRuntime(project=PROJECT, transport=httpx.MockTransport(refuse))
+    with pytest.raises(RuntimeUnavailableError):
+        await backend.restart("demo-redis-1")

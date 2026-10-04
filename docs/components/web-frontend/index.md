@@ -47,23 +47,25 @@ untouched at `/dashboard`, and a `web_frontend` entry in `/health`. Removal is
 symmetric: `aegis remove htmx` deletes the component tree and regenerates the
 shared files that referenced it.
 
-For the first server-rendered Overseer page, include basic auth:
+Overseer comes with it at `/overseer`: every component and service as a list,
+cards or a map of the stack, each linking to its own page. To sign in to it,
+and keep it to admins, add auth:
 
 ```bash
 aegis init my-app --components htmx --services 'auth[basic]'
 ```
 
-Open `/overseer/login` to sign in. The form uses the shared auth and form
-macros and delegates to the existing auth endpoint. A successful sign-in
-opens the protected `/overseer` page, which is the starting point for the
-server-rendered dashboard.
+Then open `/overseer/login`. The form uses the shared auth and form macros and
+delegates to the existing auth endpoint.
 
 ### Who can open the Overseer
 
 The Overseer is operator access to the deployment: it shows its routes,
 source and live data, and runs user administration, scheduler jobs and model
-loads. So every Overseer page, live stream and action is open to admins only,
-not to every signed-in account. An admin is:
+loads. Without the auth service it is open: whoever reaches the app may use
+it, its writes (Restart, Secrets) included, like any route a stack serves
+without auth. With auth, every Overseer page, live stream and action is open
+to admins only, not to every signed-in account. An admin is:
 
 - an account whose email is in `ADMIN_USER_EMAILS`, or
 - an account with the `admin` role, when the auth service runs at the RBAC
@@ -82,8 +84,10 @@ With auth on and an empty allowlist, nobody reaches the Overseer: a signed-in
 account that is not an admin gets an "Admins only" page saying how to get in,
 and its fragments and streams answer 403. Signed out, Overseer pages redirect
 to `/overseer/login`. The check is one dependency on the pages router
-(`overseer_access.py`), and `tests/web/test_overseer_admin_gate.py` walks every
-Overseer route as a non-admin, so a new page cannot skip it. `require_admin`,
+(`overseer_access.py`, the one module that knows whether the stack has auth),
+and `tests/web/test_overseer_admin_gate.py` walks every Overseer route as a
+non-admin, so a new page cannot skip it; without auth,
+`tests/web/test_overseer_open.py` walks them signed out, and nothing refuses. `require_admin`,
 for API routes you protect yourself, uses the same definition (`is_admin`); the
 API's built-in operator routes keep their own checks.
 

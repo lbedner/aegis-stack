@@ -23,7 +23,7 @@ Reading containers, their stats and their logs means talking to the Docker Engin
                                          +------------------+
 ```
 
-- **Read-only.** The first cut answers `GET` for the container list, stats, logs, `/info` and `/system/df`. Every other path and every other method is refused, including the reads that would leak data: container inspect (`/containers/{id}/json` returns a container's whole environment, secrets included, for any container on the host), `/containers/{id}/export` and `/containers/{id}/archive`.
+- **Reads, and one write.** It answers `GET` for the container list, stats, logs, `/info` and `/system/df`. Every other path and every other method is refused, including the reads that would leak data: container inspect (`/containers/{id}/json` returns a container's whole environment, secrets included, for any container on the host), `/containers/{id}/export` and `/containers/{id}/archive`. The one write is `POST /containers/{name}/restart` (see Restart below).
 - **No network.** The proxy runs with `network_mode: none` and listens on a Unix socket in the `docker-proxy` volume, which the app containers mount. Nothing on the compose network can reach it.
 - **No privileges.** A read-only root filesystem, every Linux capability dropped, `no-new-privileges`. It runs as uid 0 only so it can open the host's socket on any host without knowing the host's `docker` group id.
 - **Same in prod.** The service carries both the `dev` and `prod` profiles; `aegis deploy` starts it with the rest of the stack.
@@ -34,9 +34,10 @@ The proxy is [wollomatic/socket-proxy](https://github.com/wollomatic/socket-prox
 command:
   - "-proxysocketendpoint=/var/run/docker-proxy/docker.sock"
   - '-allowGET=(/v1\.[0-9]+)?/(containers/json|containers/[a-zA-Z0-9_.-]+/(stats|logs)|info|system/df)'
+  - '-allowPOST=(/v1\.[0-9]+)?/containers/[a-zA-Z0-9_.-]+/restart'
 ```
 
-Write actions (restarting a container) will come as explicit additions to this allowlist, admin-only, confirmed and audited; nothing is writable today.
+A new write action is an explicit addition here, confirmed and audited, like Restart.
 
 ## Reading it from the app: `app.core.runtime`
 
@@ -76,7 +77,13 @@ Everything about an instance comes from the container list, never from inspect:
 
 ## In Overseer: the Container section
 
-Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a **Container** section, in Overseer's htmx pages and Flet modals alike. It shows one row per instance: state and health, CPU, memory used against its limit, network in and out, disk I/O, restarts, uptime, and the image with its build. It renders from the containers sampler's last reading (`app.core.series`), so it opens full, then refreshes every second while it is open, with CPU and memory charts over the last 15 minutes, 30 minutes or hour.
+Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a **Container** section, in Overseer's htmx pages and Flet modals alike. It shows one card per instance: its name, state and health, uptime, restarts and the image with its build, then a fixed strip of CPU, memory used against its limit, network in and out, and disk read and write, so a figure changing width moves nothing else. It renders from the containers sampler's last reading (`app.core.series`), so it opens full, then refreshes every second while it is open, with charts over the last 15 minutes, 30 minutes or hour: CPU, memory, and network and disk I/O as bytes per second (the sampler keeps Docker's running totals; a chart reads the rate between readings, and drops the step where a restart reset them).
+
+The Scheduler and Cache pages also open with a glance above their Overview: a line per container with its state, uptime, CPU, memory as a share of its limit (amber, then red, by the host memory check's rule), its Restart, and the way to its Container and Logs sections.
+
+### Restart
+
+Each card has a **Restart**, in htmx and Flet alike. It asks first, then calls `POST /api/v1/runtime/containers/{name}/restart`: with the auth service only an admin may call it, and without auth anyone who reaches the app may, like the rest of Overseer. Every attempt is audited (`runtime.container_restart`: who, from which address, which container, and whether it restarted, was refused or failed). The app refuses any container its own services do not list, since the proxy would restart any container on the host; without a deploy target there is nothing to restart. Restarting the webserver Overseer itself runs on answers first and restarts after: the confirm says the page will drop, the audit records `restarting`, and the page reconnects when the server is back.
 
 Without the deploy component the backend is `none`: the section says so and points at `aegis add deploy` instead of showing the app's own process as if it were a container. A page with nothing running behind it (a SQLite database, which is a file) says that too, and a runtime that does not answer says why.
 

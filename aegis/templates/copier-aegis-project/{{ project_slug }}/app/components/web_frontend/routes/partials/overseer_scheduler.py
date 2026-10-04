@@ -5,26 +5,19 @@ Flet does, so the API keeps its guard and its already-running check. Mounted
 by ``routes/pages.py`` at ``overseer_scheduler.PARTIALS``.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_scheduler
 from app.components.web_frontend.overseer_nav import find_installed
 from app.components.web_frontend.rendering import dialog
-from app.models.user import User
-from app.services.auth.deps import get_optional_user
-
-from .overseer_auth import signed_in
 
 router = APIRouter(prefix=overseer_scheduler.PARTIALS)
 
 
 @router.get("/confirm/run/{job_id}", response_class=HTMLResponse)
-async def confirm_run(
-    request: Request, job_id: str, user: User | None = Depends(get_optional_user)
-) -> Response:
+async def confirm_run(request: Request, job_id: str) -> Response:
     """Confirm running one scheduled job now."""
-    signed_in(user)
     item = find_installed("components", "scheduler")
     task = (
         next(

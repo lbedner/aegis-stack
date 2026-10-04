@@ -1,0 +1,42 @@
+{# Overseer's home as a map (overseer_map.layout, ``?view=map``): each process
+   a node at its place in its tier, linking to its page, with its state and
+   its containers' CPU and memory; the connections between them as lines (in
+   the worse of their ends' tones); what runs in the webserver as chips in
+   the Server's node. Rendered in the page and again for each frame. #}
+{% from "components/macros/layout.html" import badge %}
+{% from "pages/overseer/_glance_macros.html" import figures %}
+<div class="overflow-x-auto">
+  <div class="relative min-w-[960px]" style="height: {{ map_height }}px">
+    <svg class="absolute inset-0 w-full h-full" viewBox="0 0 {{ map_width }} {{ map_height }}" preserveAspectRatio="none" aria-hidden="true">
+      {% for link in map_links %}<path data-link class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}" />{% endfor %}
+    </svg>
+    {% for node in map_nodes %}
+    <section data-node="{{ node.key }}" class="absolute -translate-x-1/2 {{ 'w-80' if node.hosted else 'w-60' }} map-node rounded-lg border bg-aegis-card p-3 space-y-2 overflow-hidden" data-tone="{{ node.tone }}"
+             style="left: {{ node.left }}%; top: {{ node.top }}px; height: {{ node.height }}px">
+      <header class="flex items-center justify-between gap-2">
+        <a data-title href="{{ node.url }}" {{ hx_replace(node.url, "#overseer-main") }} class="text-sm font-semibold text-aegis-text hover:text-aegis-teal truncate">{{ node.title }}</a>
+        {{ badge(node.status or "unknown", node.tone) }}
+      </header>
+      {% if node.glance %}
+      {% for row in node.glance.rows[:2] %}
+      <div class="flex items-center gap-3 text-xs tabular-nums">
+        {{ figures(row) }}
+      </div>
+      {% endfor %}
+      {% else %}
+      <p class="text-xs text-aegis-muted truncate">{{ node.message }}</p>
+      {% endif %}
+      {% if node.hosted %}
+      <div class="grid grid-cols-3 gap-1.5 pt-1">
+        {% for chip in node.hosted %}
+        <a data-chip="{{ chip.key }}" href="{{ chip.url }}" {{ hx_replace(chip.url, "#overseer-main") }} title="{{ chip.message }}"
+           class="flex items-center gap-1.5 rounded border border-aegis-border px-1.5 py-1 text-xxs text-aegis-muted hover:text-aegis-text hover:border-aegis-muted truncate">
+          {% set health_status = chip.status %}{% include "pages/overseer/_status_dot.html" %}<span class="truncate">{{ chip.title }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+</div>

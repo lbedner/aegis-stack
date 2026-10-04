@@ -137,6 +137,7 @@ class TestSections:
             "Overview",
             "Users",
             "Sessions",
+            "Settings",
         ]
 
 

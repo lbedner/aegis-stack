@@ -186,6 +186,23 @@ def _get_system_info() -> dict[str, Any]:
         return {"error": str(e)}
 
 
+def warning_at(threshold: float) -> float:
+    """Where a warning starts below ``threshold``, in its units:
+    ``WARNING_PERCENT_OF_THRESHOLD`` of it (Overseer > Settings, Health)."""
+    return threshold * settings.WARNING_PERCENT_OF_THRESHOLD / 100
+
+
+def usage_status(percent: float, threshold: float) -> ComponentStatusType:
+    """A share of a resource in use: unhealthy at its alert threshold, a
+    warning from ``warning_at`` it (the host's memory, disk and CPU, and a
+    container's)."""
+    if percent >= threshold:
+        return ComponentStatusType.UNHEALTHY
+    if percent >= warning_at(threshold):
+        return ComponentStatusType.WARNING
+    return ComponentStatusType.HEALTHY
+
+
 async def _check_memory() -> ComponentStatus:
     """Check system memory usage."""
     try:
@@ -194,12 +211,7 @@ async def _check_memory() -> ComponentStatus:
         memory_percent = memory.percent
 
         # Determine status based on memory usage thresholds
-        if memory_percent >= settings.MEMORY_THRESHOLD_PERCENT:
-            status = ComponentStatusType.UNHEALTHY
-        elif memory_percent >= settings.MEMORY_THRESHOLD_PERCENT * 0.8:
-            status = ComponentStatusType.WARNING
-        else:
-            status = ComponentStatusType.HEALTHY
+        status = usage_status(memory_percent, settings.MEMORY_THRESHOLD_PERCENT)
 
         return ComponentStatus(
             name="memory",
@@ -230,12 +242,7 @@ async def _check_disk_space() -> ComponentStatus:
         disk_percent = (disk.used / disk.total) * 100
 
         # Determine status based on disk usage thresholds
-        if disk_percent >= settings.DISK_THRESHOLD_PERCENT:
-            status = ComponentStatusType.UNHEALTHY
-        elif disk_percent >= settings.DISK_THRESHOLD_PERCENT * 0.8:
-            status = ComponentStatusType.WARNING
-        else:
-            status = ComponentStatusType.HEALTHY
+        status = usage_status(disk_percent, settings.DISK_THRESHOLD_PERCENT)
 
         return ComponentStatus(
             name="disk",
@@ -265,12 +272,7 @@ async def _check_cpu_usage() -> ComponentStatus:
         cpu_percent = await asyncio.to_thread(psutil.cpu_percent, None)
 
         # Determine status based on CPU usage thresholds
-        if cpu_percent >= settings.CPU_THRESHOLD_PERCENT:
-            status = ComponentStatusType.UNHEALTHY
-        elif cpu_percent >= settings.CPU_THRESHOLD_PERCENT * 0.8:
-            status = ComponentStatusType.WARNING
-        else:
-            status = ComponentStatusType.HEALTHY
+        status = usage_status(cpu_percent, settings.CPU_THRESHOLD_PERCENT)
 
         return ComponentStatus(
             name="cpu",

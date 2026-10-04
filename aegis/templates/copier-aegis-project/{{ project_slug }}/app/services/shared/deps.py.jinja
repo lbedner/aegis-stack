@@ -3,14 +3,51 @@
 ``get_owner_user_id`` centralizes owner scoping in one place: it resolves to
 the authenticated user's id when the auth service is present, else ``None``
 (single-user / standalone) - so route handlers stay auth-agnostic and never
-repeat the auth guard per endpoint.
+repeat the auth guard per endpoint. ``get_admin_actor`` does the same for
+an operator's change: an admin with auth, anyone without.
 """
+
+from dataclasses import dataclass
+
 {%- if include_auth %}
 
 from fastapi import Depends
 
 from app.models.user import User
-from app.services.auth.deps import get_current_active_user, get_optional_user
+from app.services.auth.deps import (
+    get_current_active_user,
+    get_optional_user,
+    require_admin,
+)
+{%- endif %}
+
+
+@dataclass(frozen=True)
+class Actor:
+    """Who made a change: the signed-in user with the auth service; nobody
+    in particular without it, since whoever reaches the app may make it."""
+
+    id: int | None = None
+    email: str | None = None
+    name: str | None = None
+
+    @property
+    def label(self) -> str:
+        """Who to name in a record of the change."""
+        return self.email or "anonymous"
+{%- if include_auth %}
+
+
+def actor_of(user: User | None) -> Actor:
+    """``user`` as the maker of a change."""
+    if user is None:
+        return Actor()
+    return Actor(user.id, user.email, user.full_name or user.email)
+
+
+async def get_admin_actor(admin: User = Depends(require_admin)) -> Actor:
+    """An operator's change: admins only (``require_admin``)."""
+    return actor_of(admin)
 
 
 async def get_owner_user_id(
@@ -27,6 +64,16 @@ async def get_optional_owner_user_id(
     callers, else ``None``."""
     return user.id if user else None
 {%- else %}
+
+
+def actor_of(user: None = None) -> Actor:
+    """Nobody signs in: a change is anyone's."""
+    return Actor()
+
+
+async def get_admin_actor() -> Actor:
+    """No auth service: whoever reaches the app may make an operator's change."""
+    return Actor()
 
 
 async def get_owner_user_id() -> int | None:

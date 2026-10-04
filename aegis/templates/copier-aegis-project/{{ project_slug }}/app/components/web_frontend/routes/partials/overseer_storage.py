@@ -9,7 +9,7 @@ its keys are content hashes that database rows point at.
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_storage
@@ -17,10 +17,6 @@ from app.components.web_frontend.overseer_nav import page_url
 from app.components.web_frontend.rendering import dialog, go_to
 from app.core.formatting import safe_filename
 from app.core.storage import get_storage
-from app.models.user import User
-from app.services.auth.deps import get_optional_user
-
-from .overseer_auth import signed_in
 
 router = APIRouter(prefix=overseer_storage.PARTIALS)
 
@@ -48,11 +44,8 @@ def _filename(key: str) -> str:
 
 
 @router.get("/download")
-async def download(
-    bucket: str, key: str, user: User | None = Depends(get_optional_user)
-) -> Response:
+async def download(bucket: str, key: str) -> Response:
     """The object, as an attachment named after the last part of its key."""
-    signed_in(user)
     found = await _store().fetch(bucket, key)
     if found is None:
         raise HTTPException(status_code=404)
@@ -71,11 +64,9 @@ async def confirm_delete(
     request: Request,
     bucket: str,
     key: Annotated[list[str], Query()],
-    user: User | None = Depends(get_optional_user),
 ) -> Response:
     """The confirmation for one file (the row menu) or many (the checked
     ones); its button sends the DELETE below."""
-    signed_in(user)
     _writable(_store(), bucket)
     many = len(key) > 1
     target = urlencode({"bucket": bucket, "key": key}, doseq=True)
@@ -99,9 +90,7 @@ async def confirm_delete(
 async def delete_objects(
     bucket: str,
     key: Annotated[list[str], Query()],
-    user: User | None = Depends(get_optional_user),
 ) -> Response:
-    signed_in(user)
     store = _store()
     _writable(store, bucket)
     await store.remove_many(bucket, key)
@@ -113,10 +102,8 @@ async def upload(
     bucket: Annotated[str, Form()],
     file: UploadFile,
     prefix: Annotated[str, Form()] = "",
-    user: User | None = Depends(get_optional_user),
 ) -> Response:
     """Store the file in the open folder, then show that folder again."""
-    signed_in(user)
     store = _store()
     _writable(store, bucket)
     name = _filename(file.filename or "")

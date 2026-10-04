@@ -127,12 +127,20 @@ def default_of(name: str) -> Any:
     return None if value is PydanticUndefined else value
 
 
+def owners() -> set[str]:
+    """The keys of the components and services this stack has settings for."""
+    return {marker.owner for _, marker in _marked().values()}
+
+
 def declarations() -> list[secrets.Secret]:
-    """The settings, as ``app.core.secrets`` lists and stores them."""
+    """The settings, as ``app.core.secrets`` lists and stores them, each
+    under its owner's name (``get_component_title``)."""
+    from app.services.system.ui import get_component_title
+
     return [
         secrets.Secret(
             name,
-            owner=marker.owner,
+            owner=get_component_title(marker.owner),
             label=marker.label or field.description or "",
             secret=False,
             setting=True,

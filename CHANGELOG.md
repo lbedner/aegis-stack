@@ -20,6 +20,56 @@
   (`load_change_types`, like the model registry's `models`), so a project
   registers its own types in its own service, never by editing
   `change_queue/__init__.py`; finance's moved there (#1415).
+
+- **Overseer without auth.** The htmx Overseer ships with the web frontend,
+  not with auth: without the auth service it is open, its writes included,
+  and with it, admins only as before. `overseer_access` is the one module
+  that knows which (`tests/web/test_overseer_open.py` walks every route
+  signed out); the Secrets and Restart APIs mount without auth too, taking
+  an `Actor` from `get_admin_actor` (`app.services.shared.deps`). The Server
+  page's load-test runs no longer come back empty without auth.
+
+- **Restart a container from Overseer.** Every Container card (htmx and
+  Flet) has a Restart that asks first, then calls
+  `POST /api/v1/runtime/containers/{name}/restart` (admins only with auth);
+  every attempt is audited (`runtime.container_restart`), and a container
+  that is not this app's is refused. The socket proxy allows exactly that
+  one write.
+
+- **Thresholds in color, and where a warning starts.** CPU and memory
+  past a threshold take its tone across Overseer's pages: a container's
+  live figure and memory bar, the home page's sparklines, and dashed
+  warning and alert lines on the CPU and memory charts (each row and chart
+  carries its status, for the Flet modal to follow). One rule decides, the host
+  checks' own (`usage_status`), and where a warning starts is a setting,
+  `WARNING_PERCENT_OF_THRESHOLD` (80% of each threshold by default).
+
+- **Settings on each page, and easier to read.** A component's or
+  service's page has a Settings section with its own group (Authentication,
+  Database, Worker, Scheduler, AI, Server's traffic); Overseer > Settings
+  keeps every group. `Configurable`'s owner is now the component's or
+  service's registry key (`database`, `service_auth`), titled as the sidebar
+  titles it, so a new setting lands on its page with no table to update,
+  a page with none of its own included (its status, then Settings).
+  Every row is its name with what it is beneath, then its value with where
+  it comes from, and a test requires the description. `DATABASE_BACKUP_KEEP`,
+  `ACCESS_TOKEN_EXPIRE_MINUTES` and `REFRESH_TOKEN_EXPIRE_DAYS` join them.
+  The Database page's engine parameters section is now **Engine**, and a
+  page of one section has no sub-menu.
+
+- **Overseer's home: a list, cards or a map.** `/overseer` shows every
+  sidebar entry: as a list (each container's state, uptime, CPU, memory
+  share, Restart, Container and Logs), as cards (with CPU and memory
+  sparklines, or a few of a health check's own figures), or as a map of the
+  stack in tiers (`app.services.system.topology`), its connections drawn in
+  the worse of their ends' tones. One stream keeps it live.
+
+- **Container cards, and network and disk charts.** The Container section
+  draws a card per instance with a fixed strip of figures (no more jitter),
+  and charts network and disk I/O as bytes per second beside CPU and
+  memory. The Scheduler and Cache pages open with a glance at their
+  containers.
+
 - **Approval cards in a chat-kit turn.** `ToolChatAgent.stream_turn` yields
   a `CardFrame` when a tool's result proposed or listed approval cards
   (`propose`, `propose_many`, `pending`): the cards' identities, for the

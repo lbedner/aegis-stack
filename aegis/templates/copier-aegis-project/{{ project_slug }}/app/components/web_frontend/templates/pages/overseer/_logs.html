@@ -28,7 +28,9 @@
   {% if logs.note %}
   <p class="text-sm text-aegis-muted">{{ logs.note }}</p>
   {% else %}
-  <div class="flex {{ 'flex-col' if newest_first else 'flex-col-reverse' }} max-h-[36rem] overflow-y-auto rounded-lg border border-aegis-border bg-aegis-card">
+  {# Runs to the bottom of the window and scrolls inside, so the filters
+     above stay put. A stream, so flat on the canvas, not on a card. #}
+  <div data-scroll class="flex {{ 'flex-col' if newest_first else 'flex-col-reverse' }} h-[calc(100vh-16rem)] min-h-[24rem] overflow-y-auto border-t border-aegis-border">
     <table class="w-full text-xs">
       <tbody id="logs-lines" sse-swap="logs-lines" hx-swap="{{ 'afterbegin' if newest_first else 'beforeend' }}">
         {% with rows = logs.lines, tones = logs_tones, links = logs_links if logs_links is defined else none, q = logs_q %}{% include "pages/overseer/_logs_rows.html" %}{% endwith %}

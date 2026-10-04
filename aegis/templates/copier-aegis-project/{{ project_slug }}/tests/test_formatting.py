@@ -158,6 +158,8 @@ class TestSafeFilename:
 CHART_FORMATS = [
     (12.5, "percent", "12.5%"),
     (128 * 2**20, "bytes", "128.0 MB"),
+    (2048, "bytes_per_second", "2.0 KB/s"),
+    (512, "bytes_per_second", "512 B/s"),
     (1.24, "seconds", "1.2 s"),
     (70.4, "seconds", "70 s"),
     (-1234.5, "money", "-$1,234.50"),

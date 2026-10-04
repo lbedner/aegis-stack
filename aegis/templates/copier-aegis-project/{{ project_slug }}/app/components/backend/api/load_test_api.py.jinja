@@ -59,14 +59,9 @@ async def _with_store(
         await store.aclose()
 
 
-@router.get("/recent")
-async def list_recent_runs(
-    limit: int = Query(20, ge=1, le=100, description="Max runs to return"),
-{%- if include_auth %}
-    _current_user=Depends(get_current_active_user),
-{%- endif %}
-) -> list[dict[str, Any]]:
-    """Recent HTTP load-test runs, newest first."""
+async def recent_runs(limit: int) -> list[dict[str, Any]]:
+    """Recent HTTP load-test runs, newest first: the endpoint's, and
+    Overseer's Server page's."""
 
     async def _op(
         store: RedisResultStore[APILoadTestResult] | None,
@@ -77,6 +72,17 @@ async def list_recent_runs(
 
     items = await _with_store(_op)
     return [r.model_dump() for r in items]
+
+
+@router.get("/recent")
+async def list_recent_runs(
+    limit: int = Query(20, ge=1, le=100, description="Max runs to return"),
+{%- if include_auth %}
+    _current_user=Depends(get_current_active_user),
+{%- endif %}
+) -> list[dict[str, Any]]:
+    """Recent HTTP load-test runs, newest first."""
+    return await recent_runs(limit)
 
 
 @router.get("/{test_id}")

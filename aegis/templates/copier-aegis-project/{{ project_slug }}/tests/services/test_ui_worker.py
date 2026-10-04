@@ -165,25 +165,6 @@ class TestTrend:
     def test_nothing_finishing_is_stalled(self) -> None:
         assert ui_worker.drain(50, 0.0, net=0.0) == "stalled, nothing finishing"
 
-    def test_the_waiting_line_spans_the_box(self) -> None:
-        points = ui_worker.sparkline([0, 10, 5], width=100, height=20)
-        assert points == "0.0,20.0 50.0,0.0 100.0,10.0"
-
-    def test_a_flat_or_single_line_sits_on_the_floor(self) -> None:
-        assert (
-            ui_worker.sparkline([0, 0], width=100, height=20) == "0.0,20.0 100.0,20.0"
-        )
-        assert ui_worker.sparkline([], width=100, height=20) == ""
-
-    def test_a_steady_line_draws_the_same_however_long(self) -> None:
-        """An idle or steady queue must not change the page every sample."""
-        assert (
-            ui_worker.sparkline([0] * 3, width=100, height=20) == "0.0,20.0 100.0,20.0"
-        )
-        assert ui_worker.sparkline([7] * 2, width=100, height=20) == (
-            ui_worker.sparkline([7] * 50, width=100, height=20)
-        )
-
 
 class TestHeldCapacity:
     """What the workers report holding beats the configured limit."""

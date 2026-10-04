@@ -2,7 +2,7 @@
    per queue read left to right (waiting, running, done, then how the
    backlog is trending) and each queue's share of the waiting and finished
    work. #}
-{% from "components/macros/layout.html" import stats_strip, card, badge %}
+{% from "components/macros/layout.html" import stats_strip, card, badge, sparkline %}
 {% from "components/macros/feedback.html" import empty_state %}
 {% set w = worker %}
 {% macro shares(key, total, label) %}
@@ -56,7 +56,7 @@
       </div>
       <div data-trend class="flex flex-wrap items-end justify-between gap-3 border-t border-aegis-border/60 pt-4">
         <div class="flex items-end gap-3 min-w-0">
-          <svg class="worker-spark" viewBox="0 0 240 28" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{ q.spark }}" /></svg>
+          {{ sparkline(q.spark, "h-7 w-48 shrink-0 sm:w-60") }}
           <span class="text-xxs caps text-aegis-muted whitespace-nowrap">Waiting, last 5 min</span>
         </div>
         <span class="text-xs tabular-nums {{ 'text-aegis-teal' if q.drain == 'caught up' else 'text-aegis-text' }}">{{ q.drain }}</span>

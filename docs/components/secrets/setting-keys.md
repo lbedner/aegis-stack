@@ -4,7 +4,7 @@ There are four ways to set a key. All of them follow the same rules (a key set i
 
 ## Overseer
 
-The component's page, **Overseer > Components > Secrets**, lists every declared key, grouped by the code that reads it. A key not set in `.env` has **Set** (or **Replace**), which opens a dialog with an empty password field: a value goes in, and only its last four characters come back. A stored key also offers **Remove**, and any key with a check has **Test**. The Overseer is admin-only (see [Who can open the Overseer](../web-frontend/index.md#who-can-open-the-overseer)).
+The component's page, **Overseer > Components > Secrets**, lists every declared key, grouped by the code that reads it. A key not set in `.env` has **Set** (or **Replace**), which opens a dialog with an empty password field: a value goes in, and only its last four characters come back. A stored key also offers **Remove**, and any key with a check has **Test**. With auth, Overseer is admins only (see [Who can open the Overseer](../web-frontend/index.md#who-can-open-the-overseer)).
 
 ![The AI keys on the Secrets page: three set in .env, each with Test and "Change it in .env"; the providers not in use read Not used, each with Set](../../images/secrets_overseer_ai.png)
 
@@ -30,7 +30,7 @@ my-app secrets delete RESEND_API_KEY
 
 ## API
 
-Admin-only, with the auth service:
+Admins only with the auth service; open without it, like the rest of Overseer:
 
 | Route | Does |
 |---|---|

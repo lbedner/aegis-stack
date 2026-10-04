@@ -143,3 +143,9 @@ def test_no_configurable_setting_is_read_at_import() -> None:
         for name in _read_at_import(ast.parse(path.read_text())) & marked
     }
     assert not offenders, f"Read at import, so not Configurable: {sorted(offenders)}"
+
+
+def test_every_setting_says_what_it_is() -> None:
+    """The Settings page shows it under the name; a blank reads as a dash."""
+    blank = [entry.name for entry in saved_settings.declarations() if not entry.label]
+    assert not blank, f"Configurable without a description: {blank}"

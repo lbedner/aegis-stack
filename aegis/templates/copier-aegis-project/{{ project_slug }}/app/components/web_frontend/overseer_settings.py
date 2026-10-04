@@ -10,14 +10,19 @@ there."""
 
 from typing import Any
 
-from app.core import secrets
+from app.core import saved_settings, secrets
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_title
 
 from .overseer_nav import NavItem, SectionRequest
-from .overseer_secrets import base_row, page_context
+from .overseer_secrets import base_row, page_context, shown
 from .rendering import status_cell
 
-SECTIONS = ((None, {"overview": "Overview"}),)
+# The section a component's or service's page gets when it has settings
+# (``Configurable`` owner: its registry key); this page has every group.
+SECTION = {"settings": "Settings"}
+# This page is that one section, with every group (no sub-menu).
+SECTIONS = ((None, SECTION),)
 
 ITEM = NavItem(
     group="settings",
@@ -30,11 +35,11 @@ ITEM = NavItem(
 
 
 def _row(row: secrets.SecretStatus, writable: bool) -> dict[str, Any]:
-    state = status_cell(row.state, "ok" if row.is_set else "muted")
+    source = status_cell(row.state, "ok" if row.is_set else "muted")
+    value = shown(row, row.in_effect or "", False, source)
     return base_row(row) | {
-        "state": state,
-        "shown": {"text": row.in_effect or "", "missing": False},
-        "default": row.default or "",
+        # Its default beside where it comes from, once something else is set.
+        "shown": value | {"default": (row.default or "") if row.is_set else ""},
         "editable": writable and row.source != secrets.ENV,
         "set_label": "Change",
     }
@@ -46,4 +51,18 @@ async def section_context(
     """The settings by owner, and whether they can be saved here."""
     return page_context(await secrets.status(setting=True), _row) | {
         "section_subtitle": "What the app is configured with, apart from its credentials.",
+    }
+
+
+def owns(key: str) -> bool:
+    """Whether this stack has settings owned by ``key`` (a registry key)."""
+    return key in saved_settings.owners()
+
+
+async def owned_context(key: str) -> dict[str, Any]:
+    """A component's or service's own Settings section: its group alone."""
+    title = get_component_title(key)
+    rows = [row for row in await secrets.status(setting=True) if row.owner == title]
+    return page_context(rows, _row) | {
+        "section_subtitle": "Overseer > Settings lists every group.",
     }

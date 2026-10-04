@@ -1,9 +1,8 @@
-{%- if include_auth %}
-"""Admin API for the secrets store: list, set, delete and test declared
+"""The API for the secrets store: list, set, delete and test declared
 credentials. No route returns a value: status carries the source, the last
 four characters, and who set it when. The rules (declared names only,
 ``.env`` wins, read-only backends refuse) are ``app.core.secrets``'s; these
-routes add the admin check and map refusals to status codes.
+routes add the operator check (``get_admin_actor``) and map refusals to status codes.
 """
 
 from dataclasses import asdict
@@ -13,8 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.core import secrets
-from app.models.user import User
-from app.services.auth.deps import require_admin
+from app.services.shared.deps import Actor, get_admin_actor
 
 router = APIRouter(prefix="/secrets", tags=["secrets"])
 
@@ -67,7 +65,9 @@ class SecretValue(BaseModel):
 async def _status_of(name: str) -> SecretStatusResponse:
     row = await secrets.status_of(name)
     if row is None:  # a write refuses an undeclared name before this
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"{name} is not declared.")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=f"{name} is not declared."
+        )
     return SecretStatusResponse(**asdict(row))
 
 
@@ -79,7 +79,7 @@ def _refused(exc: Exception) -> HTTPException:
 
 @router.get("", response_model=list[SecretStatusResponse])
 async def list_secrets(
-    setting: bool = False, _admin: User = Depends(require_admin)
+    setting: bool = False, _actor: Actor = Depends(get_admin_actor)
 ) -> list[SecretStatusResponse]:
     """Every declared credential, or with ``setting`` every saved setting
     (``Configurable``): where it is set, never a credential's value."""
@@ -89,23 +89,25 @@ async def list_secrets(
 
 @router.put("/{name}", response_model=SecretSaved)
 async def set_secret(
-    name: str, body: SecretValue, admin: User = Depends(require_admin)
+    name: str, body: SecretValue, actor: Actor = Depends(get_admin_actor)
 ) -> SecretSaved:
     """Store a value for a declared name; answers with its status and its
     check. A key the provider refuses is 422 and is not stored."""
     try:
-        verdict = await secrets.put(name, body.value, actor=admin.email)
+        verdict = await secrets.put(name, body.value, actor=actor.label)
     except (secrets.UnknownSecretError, secrets.SecretsReadOnlyError) as exc:
         raise _refused(exc) from None
     except secrets.SecretRejectedError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from None
     saved = (await _status_of(name)).model_dump()
     return SecretSaved(**saved, check=asdict(verdict) if verdict else None)
 
 
 @router.get("/{name}/choices", response_model=list[ChoiceResponse])
 async def secret_choices(
-    name: str, _admin: User = Depends(require_admin)
+    name: str, _actor: Actor = Depends(get_admin_actor)
 ) -> list[ChoiceResponse]:
     """What the provider offers for ``name`` (an account's numbers, a mail
     provider's verified domains); empty when it cannot say."""
@@ -117,7 +119,9 @@ async def secret_choices(
 
 
 @router.post("/{name}/test", response_model=VerdictResponse)
-async def check_secret(name: str, _admin: User = Depends(require_admin)) -> VerdictResponse:
+async def check_secret(
+    name: str, _actor: Actor = Depends(get_admin_actor)
+) -> VerdictResponse:
     """Check the key in effect with its provider: one cheap call."""
     try:
         verdict = await secrets.test(name)
@@ -127,11 +131,10 @@ async def check_secret(name: str, _admin: User = Depends(require_admin)) -> Verd
 
 
 @router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_secret(name: str, admin: User = Depends(require_admin)) -> Response:
+async def delete_secret(name: str, actor: Actor = Depends(get_admin_actor)) -> Response:
     """Remove a stored value; ``.env`` and read-only backends refuse."""
     try:
-        await secrets.delete(name, actor=admin.email)
+        await secrets.delete(name, actor=actor.label)
     except (secrets.UnknownSecretError, secrets.SecretsReadOnlyError) as exc:
         raise _refused(exc) from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-{%- endif %}

@@ -1,17 +1,39 @@
-"""Shared setup for the Overseer page tests: a signed-in viewer and a
-health snapshot holding exactly the components a test hands in."""
+"""Shared setup for the Overseer page tests: a signed-in viewer (with auth;
+without it Overseer is open and nobody signs in) and a health snapshot
+holding exactly the components a test hands in."""
 
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 import pytest
 
 from app.components.web_frontend import overseer_nav
-from app.components.web_frontend.routes import pages
+from app.components.web_frontend.routes import overseer
+{%- if include_auth %}
 from app.core.config import settings
 from app.models.user import User
 from app.services.auth.deps import get_optional_user
+{%- endif %}
 from app.services.system.models import ComponentStatus, SystemStatus
+
+
+PREFIXES = ("/overseer", "/partials/overseer")
+
+
+def overseer_calls(app: FastAPI) -> list[tuple[str, str]]:
+    """Every (method, path) under Overseer, path parameters filled in."""
+    calls = []
+    for route in app.routes:
+        if not isinstance(route, APIRoute) or not route.path.startswith(PREFIXES):
+            continue
+        path = route.path
+        for name in route.param_convertors:
+            path = path.replace("{" + name + ":path}", "x").replace(
+                "{" + name + "}", "1"
+            )
+        calls.extend((method, path) for method in sorted(route.methods))
+    return calls
 
 
 def status_with(
@@ -46,17 +68,22 @@ def sign_in(
     status: SystemStatus,
     *,
     admin: bool = True,
-) -> User:
-    """Serve Overseer pages to a signed-in user from ``status``: an admin
+) -> {% if include_auth %}User{% else %}None{% endif %}:
+    """Serve Overseer pages from ``status`` to a signed-in user: an admin
     (on the allowlist, and the admin role under RBAC) unless ``admin`` is
-    False, which signs in an ordinary member the Overseer refuses."""
+    False, which signs in an ordinary member the Overseer refuses. Without
+    auth there is nobody to sign in."""
+    # Every Overseer route module that reads the snapshot sees this one.
+    for module in (overseer, overseer_nav):
+        monkeypatch.setattr(module, "last_system_status", lambda: status)
+{%- if include_auth %}
     user = User(id=1, email="ops@example.com", hashed_password="x", is_active=True)
     if "role" in User.model_fields:  # RBAC: the viewer administers users
         user.role = "admin" if admin else "user"
     monkeypatch.setattr(settings, "AUTH_ENABLED", True)
     monkeypatch.setattr(settings, "ADMIN_USER_EMAILS", [user.email] if admin else [])
     app.dependency_overrides[get_optional_user] = lambda: user
-    # Every Overseer route module that reads the snapshot sees this one.
-    for module in (pages, overseer_nav):
-        monkeypatch.setattr(module, "last_system_status", lambda: status)
     return user
+{%- else %}
+    return None
+{%- endif %}

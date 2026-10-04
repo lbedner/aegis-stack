@@ -8,6 +8,7 @@ same socket under its own path.
 
 from __future__ import annotations
 
+from importlib.util import find_spec
 import json
 from types import SimpleNamespace
 from typing import Any
@@ -24,11 +25,9 @@ from pydantic_ai.messages import (
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
+from app.components.web_frontend import overseer_access
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.components.web_frontend.routes.partials import chat_live
-from app.components.web_frontend.routes.partials import (
-    overseer_ai_chat as overseer_mount,
-)
 from app.services.ai.domains.voice import realtime_calls
 from app.services.system.models import ComponentStatus
 from tests._realtime import VOICE, FakeRealtime
@@ -48,7 +47,7 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         return None
 
     # The socket's own guard reads the session cookie; signed in here.
-    app.dependency_overrides[overseer_mount._signed_in_socket] = signed_in
+    app.dependency_overrides[overseer_access.overseer_socket_gate] = signed_in
     return TestClient(app)
 
 
@@ -204,6 +203,10 @@ def test_a_call_into_a_conversation_does_not_meet_them_again() -> None:
     assert chat_live.opening(SimpleNamespace(messages=[])) == chat_live.GREETING
 
 
+@pytest.mark.skipif(
+    find_spec("app.services.auth") is None,
+    reason="without auth a live call is open, as all of Overseer is",
+)
 def test_a_caller_who_is_not_signed_in_is_refused(app: FastAPI) -> None:
     """The socket's guard reads the session cookie: none, no call."""
     with (

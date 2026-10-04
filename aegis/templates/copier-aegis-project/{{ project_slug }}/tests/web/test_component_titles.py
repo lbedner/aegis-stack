@@ -6,7 +6,6 @@ from app.services.system.ui import get_component_title
 
 def test_overseer_titles_come_from_the_shared_registry() -> None:
     assert get_component_title("backend") == "Server"
-    assert get_component_title("service_auth") == "Authentication"
     assert get_component_title("frontend") == "Flet Frontend"
 
 

@@ -84,6 +84,7 @@ class FakeRuntime:
         self.followed = followed or {}
         # (instance, tail, since) for each logs read
         self.logged: list[tuple[str, int, datetime | None]] = []
+        self.restarted: list[str] = []
 
     async def services(self) -> list[Service]:
         self.listed += 1
@@ -113,6 +114,11 @@ class FakeRuntime:
         if self._fail:
             raise RuntimeUnavailableError("the socket proxy is not answering")
         return HOST
+
+    async def restart(self, instance: str) -> None:
+        if self._fail:
+            raise RuntimeUnavailableError("the socket proxy is not answering")
+        self.restarted.append(instance)
 
     async def aclose(self) -> None:
         return None

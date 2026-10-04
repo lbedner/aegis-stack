@@ -36,7 +36,6 @@ QUEUES_EVENT = "worker-queues"
 QUEUES_TEMPLATE = "pages/overseer/worker/_queues.html"
 QUEUES_INTERVAL_SECONDS = 3.0
 PILE_CELLS = 40
-SPARK_WIDTH, SPARK_HEIGHT = 240, 28
 PAGE_SIZE = 25
 STATUS_FILTERS = {"all": "All"} | {
     key: label for key, (label, _) in ui_worker.TASK_STATUSES.items()
@@ -152,9 +151,7 @@ def add_trends(
         net = ui_worker.net_rate(samples)
         q["rate"] = per_second
         q["drain"] = ui_worker.drain(q["queued"], per_second, net)
-        q["spark"] = ui_worker.sparkline(
-            [waiting for _, waiting, _ in samples], SPARK_WIDTH, SPARK_HEIGHT
-        )
+        q["spark"] = series.sparkline([waiting for _, waiting, _ in samples])
     return view
 
 

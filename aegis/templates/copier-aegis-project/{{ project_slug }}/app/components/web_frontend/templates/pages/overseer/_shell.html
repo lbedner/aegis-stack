@@ -1,5 +1,10 @@
 {% extends layout %}
 {% from "components/macros/layout.html" import sidebar_icon, theme_toggle %}
+{# Sign out, for a signed-in viewer only: without auth nobody signs in, and
+   there is no /logout. The rail and the phone header both draw it. #}
+{% macro sign_out(extra="") -%}
+{% if user %}<a href="/logout" class="{{ extra }} text-xs text-aegis-muted hover:text-aegis-text">Sign out</a>{% endif %}
+{%- endmacro %}
 {% block app_content %}
 <div x-data="{ mobileNav: false, sidebar: appearance().sidebar }" class="min-h-screen md:flex">
   <aside id="overseer-sidebar" aria-label="Overseer navigation"
@@ -88,8 +93,8 @@
         <span class="overseer-rail-hide">Collapse</span>
       </button>
       <div class="mt-2 border-t border-aegis-border pt-3 space-y-3">
-        <div class="flex items-center justify-between gap-2">{{ theme_toggle("up", rail=True) }}<a href="/logout" class="overseer-rail-none text-xs text-aegis-muted hover:text-aegis-text">Sign out</a></div>
-        <p class="overseer-rail-none text-xxs text-aegis-muted truncate">{{ user.email }}</p>
+        <div class="flex items-center justify-between gap-2">{{ theme_toggle("up", rail=True) }}{{ sign_out("overseer-rail-none") }}</div>
+        {% if user %}<p class="overseer-rail-none text-xxs text-aegis-muted truncate">{{ user.email }}</p>{% endif %}
       </div>
     </div>
   </aside>
@@ -100,9 +105,12 @@
     {% block overseer_subnav %}{% endblock %}
     <div class="min-w-0 flex-1">
       <div class="md:hidden flex items-center justify-between gap-3 px-5 py-3 border-b border-aegis-border">
-        {{ theme_toggle() }}<a href="/logout" class="text-xs text-aegis-muted hover:text-aegis-text">Sign out</a>
+        {{ theme_toggle() }}{{ sign_out() }}
       </div>
-      <div class="max-w-screen-xl mx-auto px-5 sm:px-8 lg:px-10 py-7 lg:py-10">
+      {# A document (Overview, Settings) keeps a reading column; a workspace
+         (Logs, Deployments, the Map), where the data is the page, runs to
+         the gutters. A page says which in ``overseer_width``. #}
+      <div data-width="{% block overseer_width %}document{% endblock %}" class="overseer-page px-5 sm:px-8 lg:px-10 py-7 lg:py-10">
         {% block overseer_content %}{% endblock %}
       </div>
     </div>

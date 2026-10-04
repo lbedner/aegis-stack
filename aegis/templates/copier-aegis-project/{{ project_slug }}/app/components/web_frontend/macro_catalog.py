@@ -173,6 +173,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ chip("7d", href="#macro-chip") }}
             </div>""",
         "copy_button": """{{ copy_button("redis://localhost:6379/0") }}""",
+        "sparkline": """{{ sparkline("0.0,20.0 30.0,8.0 60.0,14.0 90.0,2.0 120.0,10.0", extra="w-40 h-6") }}""",
         "copy_icon": """<span class="group inline-flex items-center gap-1.5">redis://localhost:6379/0{{ copy_icon("redis://localhost:6379/0", "opacity-0 group-hover:opacity-100") }}</span>""",
         "code_block": """
             {{ code_block("SELECT id, email FROM user LIMIT 10;", caption="users.sql", lang="sql") }}""",

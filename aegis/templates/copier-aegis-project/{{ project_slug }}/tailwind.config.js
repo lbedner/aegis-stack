@@ -28,7 +28,7 @@ const PALETTES = {
     accent: "#F59E0B",
     neutral: "#7E8A9A", // muted text and icons
     "base-100": "#111418", // card / surface
-    "base-200": "#090B0D", // page background
+    "base-200": "#000000", // page background: black, the data on lifted surfaces
     "base-300": "#272C36", // borders, dividers
     "base-content": "#EEF1F4",
     info: "#06B6D4",

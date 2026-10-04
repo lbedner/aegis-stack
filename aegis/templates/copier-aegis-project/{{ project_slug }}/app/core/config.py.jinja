@@ -130,17 +130,17 @@ class Settings(
     HEALTH_CHECK_ENABLED: bool = True
     HEALTH_CHECK_INTERVAL_MINUTES: int = 5  # Recommended interval for monitoring
 
-    # Health check performance settings
-    HEALTH_CHECK_TIMEOUT_SECONDS: Annotated[float, Configurable("Health")] = 2.0
-    SYSTEM_METRICS_CACHE_SECONDS: Annotated[int, Configurable("Health")] = 5
+    HEALTH_CHECK_TIMEOUT_SECONDS: Annotated[float, Configurable("health", "Seconds a health check waits before calling a component down")] = 2.0
+    SYSTEM_METRICS_CACHE_SECONDS: Annotated[int, Configurable("health", "Seconds the host's CPU, memory and disk readings are reused")] = 5
 
     # Basic alerting configuration
     ALERTING_ENABLED: bool = False
     ALERT_COOLDOWN_MINUTES: int = 60  # Minutes between repeated alerts for same issue
 
-    MEMORY_THRESHOLD_PERCENT: Annotated[float, Configurable("Health")] = 90.0
-    DISK_THRESHOLD_PERCENT: Annotated[float, Configurable("Health")] = 85.0
-    CPU_THRESHOLD_PERCENT: Annotated[float, Configurable("Health")] = 95.0
+    MEMORY_THRESHOLD_PERCENT: Annotated[float, Configurable("health", "Memory in use, percent, at which the host or a container is unhealthy")] = 90.0
+    DISK_THRESHOLD_PERCENT: Annotated[float, Configurable("health", "Disk in use, percent, at which the host is unhealthy")] = 85.0
+    CPU_THRESHOLD_PERCENT: Annotated[float, Configurable("health", "CPU in use, percent, at which the host or a container is unhealthy")] = 95.0
+    WARNING_PERCENT_OF_THRESHOLD: Annotated[float, Configurable("health", "Where a warning starts, as a percent of the memory, disk and CPU thresholds")] = 80.0
 
     # Where stored objects live: chat attachments, documents, anything
     # addressed by content hash. A directory today; the storage component
@@ -169,7 +169,7 @@ class Settings(
     # the scheduler at a mounted absolute path so prod dumps outlive the
     # container; restore from the scheduler, which is where they are visible.
     DATABASE_BACKUP_DIR: str = "backups"
-    DATABASE_BACKUP_KEEP: int = 7
+    DATABASE_BACKUP_KEEP: Annotated[int, Configurable("database", "Backups kept; older ones are removed")] = 7
 {%- endif %}
 
     # Flet frontend settings
@@ -207,7 +207,7 @@ class Settings(
     # a one-time warning. Set in ``.env`` for production deploys.
     ENCRYPTION_KEY: str | None = None
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    ACCESS_TOKEN_EXPIRE_MINUTES: Annotated[int, Configurable("service_auth", "Minutes a sign-in's access token lasts")] = 15
     # Dev-only multiplier on ``ACCESS_TOKEN_EXPIRE_MINUTES``. When
     # ``APP_ENV == "dev"``, the effective session length becomes
     # ``ACCESS_TOKEN_EXPIRE_MINUTES * DEV_TOKEN_EXPIRE_MULTIPLIER`` so
@@ -215,7 +215,7 @@ class Settings(
     # staging are unaffected (the multiplier doesn't fire). Override in
     # ``.env`` if 4x isn't enough — e.g. ``DEV_TOKEN_EXPIRE_MULTIPLIER=16``.
     DEV_TOKEN_EXPIRE_MULTIPLIER: int = 4
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 14
+    REFRESH_TOKEN_EXPIRE_DAYS: Annotated[int, Configurable("service_auth", "Days before a session has to sign in again")] = 14
     PASSWORD_RESET_EXPIRE_MINUTES: int = 60
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
 
@@ -231,8 +231,8 @@ class Settings(
     RATE_LIMIT_RESEND_VERIFICATION_WINDOW: int = 300
 
     # Account lockout settings
-    ACCOUNT_LOCKOUT_ATTEMPTS: Annotated[int, Configurable("Auth")] = 5
-    ACCOUNT_LOCKOUT_MINUTES: Annotated[int, Configurable("Auth")] = 15
+    ACCOUNT_LOCKOUT_ATTEMPTS: Annotated[int, Configurable("service_auth", "Failed sign-ins before an account is locked")] = 5
+    ACCOUNT_LOCKOUT_MINUTES: Annotated[int, Configurable("service_auth", "Minutes a locked account stays locked")] = 15
 
     # Proxy trust settings
     TRUST_PROXY_HEADERS: bool = False  # Set to True only behind a trusted reverse proxy
@@ -241,13 +241,13 @@ class Settings(
     # you") rendered in Overseer. Counts requests per client IP, bucketed
     # hourly; backed by Redis when present (shared across processes), in-memory
     # otherwise (per-process, resets on restart).
-    TRAFFIC_MONITOR_ENABLED: Annotated[bool, Configurable("Traffic")] = True
+    TRAFFIC_MONITOR_ENABLED: Annotated[bool, Configurable("backend", "Count requests per client address, for the Server page's traffic")] = True
     # Trailing window the Overseer panel ranks sources over (hours).
-    TRAFFIC_WINDOW_HOURS: Annotated[int, Configurable("Traffic")] = 24
+    TRAFFIC_WINDOW_HOURS: Annotated[int, Configurable("backend", "Hours of traffic the Server page ranks sources over")] = 24
     # Read-time dominance flag: a single source over this share of windowed
     # traffic (and clearing the absolute floor) is highlighted as "hammering."
-    TRAFFIC_DOMINANCE_SHARE: Annotated[float, Configurable("Traffic")] = 0.5
-    TRAFFIC_DOMINANCE_FLOOR: Annotated[int, Configurable("Traffic")] = 100
+    TRAFFIC_DOMINANCE_SHARE: Annotated[float, Configurable("backend", "Share of all traffic (0 to 1) that flags one source as hammering")] = 0.5
+    TRAFFIC_DOMINANCE_FLOOR: Annotated[int, Configurable("backend", "Fewest requests a source needs before it can be flagged")] = 100
 
     # HttpOnly session cookie holding the JWT after login / register /
     # OAuth callback. None = auto (off in dev, on otherwise). Set to
@@ -311,7 +311,7 @@ class Settings(
     # many times, so a task that kills its worker every run (OOM/SIGKILL never
     # acks, so xautoclaim re-yields it forever) can't loop and re-bill paid
     # work. 0 disables the guard.
-    WORKER_MAX_REDELIVERIES: Annotated[int, Configurable("Worker")] = 5
+    WORKER_MAX_REDELIVERIES: Annotated[int, Configurable("worker", "Redeliveries before a job that keeps killing its worker is dropped (0: never)")] = 5
 {%- endif %}
 
     # Redis connection settings for arq workers
@@ -323,12 +323,12 @@ class Settings(
     WORKER_HEALTH_CHECK_INTERVAL: int = 15  # In seconds (default: 15)
 
     # Task history retention (Redis Hashes auto-expire after this)
-    TASK_HISTORY_TTL_SECONDS: Annotated[int, Configurable("Worker")] = 86400  # 24 hours
+    TASK_HISTORY_TTL_SECONDS: Annotated[int, Configurable("worker", "Seconds a job's history is kept")] = 86400  # 24 hours
 
 {% endif %}
 {% if include_database %}
     # Database settings
-    DATABASE_SLOW_TRANSACTION_SECONDS: Annotated[float, Configurable("Database", "A transaction held this long is recorded on the Database page, seconds (0: off)")] = 2.0
+    DATABASE_SLOW_TRANSACTION_SECONDS: Annotated[float, Configurable("database", "A transaction held this long is recorded on the Database page, seconds (0: off)")] = 2.0
 {% if database_engine == "postgres" %}
     DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
     DATABASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage
@@ -390,8 +390,8 @@ class Settings(
 {% if ai_backend != "memory" %}
     # Batch sentiment scoring of conversations. OFF by default: the job
     # spends model tokens on every unscored conversation.
-    AI_SENTIMENT_ENABLED: Annotated[bool, Configurable("AI")] = False
-    AI_SENTIMENT_BATCH_LIMIT: Annotated[int, Configurable("AI")] = 20
+    AI_SENTIMENT_ENABLED: Annotated[bool, Configurable("service_ai", "Score conversations' sentiment in batches (spends model tokens)")] = False
+    AI_SENTIMENT_BATCH_LIMIT: Annotated[int, Configurable("service_ai", "Conversations scored per batch")] = 20
 {% endif %}
 
     # Provider API Keys (optional - many providers offer free tiers)
@@ -508,7 +508,7 @@ class Settings(
     # ledger without burying Review/Insights under years of stale findings.
     # 0 disables the window (full history). Rules with their own windows
     # (recurring detection, overspend, large transactions) are unaffected.
-    FINANCE_RULES_LOOKBACK_DAYS: Annotated[int, Configurable("Finance")] = 31
+    FINANCE_RULES_LOOKBACK_DAYS: Annotated[int, Configurable("service_finance", "Days of activity the reconciliation alerts consider (0: all history)")] = 31
     # Provider capabilities built into this stack. Credentials are set
     # separately in .env; these flags say which connect flows exist at all,
     # so the UI can offer them (and prompt for missing credentials) rather
@@ -539,12 +539,12 @@ class Settings(
     # Insights Service Configuration
 {% if insights_github %}
     INSIGHT_GITHUB_TOKEN: str | None = None  # PAT with 'repo' scope
-    INSIGHT_GITHUB_OWNER: Annotated[str, Configurable("Insights")] = ""
-    INSIGHT_GITHUB_REPO: Annotated[str, Configurable("Insights")] = ""
+    INSIGHT_GITHUB_OWNER: Annotated[str, Configurable("service_insights", "GitHub user or organization whose repository is tracked")] = ""
+    INSIGHT_GITHUB_REPO: Annotated[str, Configurable("service_insights", "GitHub repository tracked")] = ""
     INSIGHT_COLLECTION_GITHUB_HOURS: int = 6
 {% endif %}
 {% if insights_pypi %}
-    INSIGHT_PYPI_PACKAGE: Annotated[str, Configurable("Insights")] = ""
+    INSIGHT_PYPI_PACKAGE: Annotated[str, Configurable("service_insights", "PyPI package whose downloads are tracked")] = ""
     INSIGHT_COLLECTION_PYPI_HOURS: int = 24
 {% endif %}
 {% if insights_plausible %}
@@ -559,8 +559,8 @@ class Settings(
     # outside the source-specific blocks because it's project-level
     # metadata, not tied to any particular collector.
     INSIGHT_PROJECT_NAME: str = ""
-    INSIGHT_PROJECT_DESCRIPTION: Annotated[str, Configurable("Insights")] = ""
-    INSIGHT_PROJECT_HOMEPAGE: Annotated[str, Configurable("Insights")] = ""
+    INSIGHT_PROJECT_DESCRIPTION: Annotated[str, Configurable("service_insights", "One line about the project, on the Insights overview")] = ""
+    INSIGHT_PROJECT_HOMEPAGE: Annotated[str, Configurable("service_insights", "The project's homepage, linked from the Insights overview")] = ""
 {% endif %}
 
 {% if include_observability %}
@@ -592,7 +592,7 @@ class Settings(
 
 {% if include_scheduler %}
     # Scheduler settings: an IANA timezone name, which cron triggers inherit
-    SCHEDULER_TIMEZONE: Annotated[str, Configurable("Scheduler", choices=timezones)] = "UTC"
+    SCHEDULER_TIMEZONE: Annotated[str, Configurable("scheduler", "Timezone scheduled jobs run in", choices=timezones)] = "UTC"
 {% endif %}
 
 {% if include_ingress %}

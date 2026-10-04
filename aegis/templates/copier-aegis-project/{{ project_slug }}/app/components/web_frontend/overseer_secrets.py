@@ -82,27 +82,34 @@ def page_context(
 
 
 def base_row(row: secrets.SecretStatus) -> dict[str, Any]:
-    """What a Secrets or Settings row always carries."""
+    """What a Secrets or Settings row always carries: its name with what it
+    is (the first column), and where its actions go."""
     return {
         "name": row.name,
-        "label": row.label,
-        "when": updated(row),
+        "named": {"name": row.name, "label": row.label},
         "in_env": row.source == secrets.ENV,
         "url": f"{PARTIALS}/{row.name}",
     }
 
 
+def shown(
+    row: secrets.SecretStatus, text: str, missing: bool, source: dict[str, str]
+) -> dict[str, Any]:
+    """A row's value cell: the value, then where it comes from and when
+    (and by whom) it was saved, beneath it."""
+    return {"text": text, "missing": missing, "source": source, "when": updated(row)}
+
+
 def _row(row: secrets.SecretStatus, writable: bool) -> dict[str, Any]:
     if not row.is_set:
         # Needed by something enabled, or a provider this app could use.
-        state = status_cell(row.state, "warn" if row.needed else "muted")
+        source = status_cell(row.state, "warn" if row.needed else "muted")
         value = f"{row.name}=..."
     else:
-        state = status_cell(row.state, "ok")
+        source = status_cell(row.state, "ok")
         value = (f"•••• {row.hint}" if row.secret else row.hint) if row.hint else "Set"
     return base_row(row) | {
-        "state": state,
-        "shown": {"text": value, "missing": not row.is_set},
+        "shown": shown(row, value, not row.is_set, source),
         "editable": writable and row.live and row.source != secrets.ENV,
         # Read through ``settings``: only ``.env`` ever reaches that code.
         "env_only": writable and not row.live and row.source != secrets.ENV,

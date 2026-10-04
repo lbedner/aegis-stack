@@ -46,6 +46,8 @@ BUILD_LABEL = "org.opencontainers.image.revision"
 TIMEOUT = httpx.Timeout(10.0)
 # ``/system/df`` sizes every layer and volume; it can take a while.
 DISK_TIMEOUT = httpx.Timeout(60.0)
+# Docker waits up to 10 s for a container to stop before killing it.
+RESTART_TIMEOUT = httpx.Timeout(30.0)
 # Docker's humanized duration in the list's ``Status`` ("Up 5 hours").
 _UNIT_SECONDS = {
     "second": 1,
@@ -131,11 +133,11 @@ def _stats(data: dict[str, Any], before: tuple[int, int] | None) -> Stats:
     """The numbers ``docker stats`` shows, from one Engine API sample; CPU
     is the share used since ``before`` (None without one)."""
     cpu = data.get("cpu_stats") or {}
+    online = cpu.get("online_cpus") or 1
     percent = None
     if before is not None:
         now = _cpu_reading(cpu)
         cpu_delta, system_delta = now[0] - before[0], now[1] - before[1]
-        online = cpu.get("online_cpus") or 1
         percent = (
             cpu_delta / system_delta * online * 100.0
             if cpu_delta > 0 and system_delta > 0
@@ -151,6 +153,7 @@ def _stats(data: dict[str, Any], before: tuple[int, int] | None) -> Stats:
         cpu_percent=percent,
         memory_used=max(int(memory.get("usage", 0)) - int(cache), 0),
         memory_limit=memory.get("limit") or None,
+        cpus=online,
         network_rx=sum(int(n.get("rx_bytes", 0)) for n in networks),
         network_tx=sum(int(n.get("tx_bytes", 0)) for n in networks),
         disk_read=sum(int(e["value"]) for e in io if e.get("op", "").lower() == "read"),
@@ -210,13 +213,27 @@ class DockerRuntime:
         timeout: httpx.Timeout = TIMEOUT,
         **params: str,
     ) -> httpx.Response:
+        return await self._request(client, "GET", path, timeout, **params)
+
+    async def _request(
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        path: str,
+        timeout: httpx.Timeout = TIMEOUT,
+        **params: str,
+    ) -> httpx.Response:
+        """One call through the proxy; anything but a success (a path the
+        proxy refuses included) is ``RuntimeUnavailableError``."""
         try:
-            response = await client.get(path, params=params, timeout=timeout)
+            response = await client.request(
+                method, path, params=params, timeout=timeout
+            )
         except httpx.TransportError as error:
             raise RuntimeUnavailableError(
                 f"Docker socket proxy unreachable at {self._socket}: {error}"
             ) from error
-        if response.status_code != 200:
+        if not response.is_success:
             raise RuntimeUnavailableError(
                 f"Docker answered {path} with {response.status_code}: "
                 f"{response.text[:200]}"
@@ -336,6 +353,12 @@ class DockerRuntime:
             raise RuntimeUnavailableError(
                 f"Docker socket proxy unreachable at {self._socket}: {error}"
             ) from error
+
+    async def restart(self, instance: str) -> None:
+        """Restart one container: the one write the proxy allows."""
+        await self._request(
+            self._client(), "POST", f"/containers/{instance}/restart", RESTART_TIMEOUT
+        )
 
     async def disk(self) -> DiskUsage:
         client = self._client()

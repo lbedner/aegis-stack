@@ -209,8 +209,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/frontend/dashboard/modals/task_history_section.py",
             ],
             extras={
-                # The Overseer page's test: needs the web frontend, and the
-                # Overseer itself (auth's ``include_htmx`` group).
+                # The Overseer page's test: needs the web frontend too.
                 "include_htmx": ["tests/web/test_overseer_worker.py"],
             },
         ),
@@ -277,8 +276,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             # deletes them. Init-time memory-backend cleanup stays inline in
             # cleanup_components() (gated on scheduler_backend, not a toggle).
             extras={
-                # The Overseer page's test: needs the web frontend, and the
-                # Overseer itself (auth's ``include_htmx`` group).
+                # The Overseer page's test: needs the web frontend too.
                 "include_htmx": ["tests/web/test_overseer_scheduler.py"],
                 # Every file gated by ``scheduler_backend != "memory"``.
                 # Excluded from the memory add base (they would render empty),
@@ -335,6 +333,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 # The one way a test hands the app's session openers its own.
                 "tests/_session.py",
             ],
+            extras={
+                # The Overseer page's test: needs the web frontend too.
+                "include_htmx": ["tests/web/test_overseer_database.py"],
+            },
         ),
     ),
     "redis": ComponentSpec(
@@ -533,9 +535,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             ],
             extras={
                 # The Overseer's Inference page, only where the htmx frontend
-                # is. (It sits inside the Overseer, which auth brings; auth's
-                # own htmx list carries it too, so either one missing removes
-                # it.)
+                # is.
                 "include_htmx": [
                     "app/components/web_frontend/overseer_inference.py",
                     "app/components/web_frontend/routes/partials/overseer_inference.py",
@@ -627,6 +627,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/components/deploy",
                 "tests/components/test_deploy_runtime.py",
+                "app/components/backend/api/deploy",
+                "tests/api/test_deploy_endpoints.py",
             ],
             # Deploy history: only with a database to keep it in. Keyed by
             # the answer that gates it, so ``aegis add`` copies the group

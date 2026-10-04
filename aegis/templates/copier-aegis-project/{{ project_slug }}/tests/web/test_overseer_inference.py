@@ -198,10 +198,6 @@ async def test_the_stream_sends_the_table_only_when_it_changes(
     assert events[0].startswith(f"event: {overseer_inference.MODELS_EVENT}\n")
 
 
-def test_the_stream_needs_a_signed_in_user(client: TestClient) -> None:
-    assert client.get(overseer_inference.MODELS_EVENTS).status_code == 401
-
-
 def test_only_load_and_unload_are_actions(signed_in: TestClient) -> None:
     response = signed_in.post(
         f"{overseer_inference.PARTIALS}/delete", data={"model": "llama3.1:8b"}

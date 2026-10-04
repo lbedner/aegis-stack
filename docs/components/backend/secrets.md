@@ -94,6 +94,6 @@ Writes go through `await secrets.put(name, value, actor)`. With only `.env` they
 
 ## In the Overseer
 
-**Overseer > Secrets** (a top-level page; with the secrets component it moves to the component's own page under Components) lists every declared secret grouped by the code that reads it: its source, its last four characters, whether it is needed, and, for one that is missing, the `.env` line to add. A key with a check has a **Test** button. It never shows a value. Like every Overseer page it is admin-only (see [Who can open the Overseer](../web-frontend/index.md#who-can-open-the-overseer)).
+**Overseer > Secrets** (a top-level page; with the secrets component it moves to the component's own page under Components) lists every declared secret grouped by the code that reads it: its source, its last four characters, whether it is needed, and, for one that is missing, the `.env` line to add. A key with a check has a **Test** button. It never shows a value. Like every Overseer page it is admins only with auth (see [Who can open the Overseer](../web-frontend/index.md#who-can-open-the-overseer)).
 
 With the [secrets component](../secrets/index.md), the page (and the Flet dashboard's Secrets modal) also sets, replaces and removes keys not set in `.env`.

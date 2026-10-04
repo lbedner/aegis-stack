@@ -2,7 +2,7 @@
 
 Email and SMS/Voice each show what a provider is configured with and
 let it be edited: through the secrets store when the stack has one (the
-secrets API: admin-only, checked with the provider, audited, live), else
+secrets API, behind ``get_admin_actor``: checked with the provider, audited, live), else
 by writing ``.env`` in dev mode. That part was written twice - the same
 constructor preamble, the same rebuild-on-mode-change, the same cancel
 - and two copies of a contract is two places for it to drift.

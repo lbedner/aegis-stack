@@ -94,6 +94,7 @@ class TestSections:
             "Lifecycle",
             "Container",
             "Logs",
+            "Settings",
         ]
         assert text(one(subnav, 'a[aria-current="page"]')) == "Overview"
         none(html, '[role="tablist"]')
@@ -134,12 +135,6 @@ class TestSections:
 
     def test_unknown_section_is_404(self, signed_in: TestClient) -> None:
         assert signed_in.get("/overseer/components/backend/nope").status_code == 404
-
-    def test_sections_need_a_signed_in_user(self, client: TestClient) -> None:
-        response = client.get(
-            "/overseer/components/backend/routes", follow_redirects=False
-        )
-        assert response.status_code == 303
 
 
 class TestOverview:
@@ -273,7 +268,7 @@ class TestLoadTests:
     def test_lists_recent_runs(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        async def runs(**_: Any) -> list[dict[str, Any]]:
+        async def runs(limit: int) -> list[dict[str, Any]]:
             return [
                 {
                     "test_id": "t1",
@@ -295,7 +290,7 @@ class TestLoadTests:
                 }
             ]
 
-        monkeypatch.setattr(overseer_server, "list_recent_runs", runs)
+        monkeypatch.setattr(overseer_server, "recent_runs", runs)
         html = _get(signed_in, "load-tests")
         assert (
             text(one(html, "tbody tr:not([data-detail])").cssselect("td")[2])
@@ -311,10 +306,10 @@ class TestLoadTests:
     def test_store_failure_renders_a_notice(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        async def broken(**_: Any) -> list[dict[str, Any]]:
+        async def broken(limit: int) -> list[dict[str, Any]]:
             raise ConnectionError("redis down")
 
-        monkeypatch.setattr(overseer_server, "list_recent_runs", broken)
+        monkeypatch.setattr(overseer_server, "recent_runs", broken)
         one(_get(signed_in, "load-tests"), "[data-empty]")
 
 
@@ -511,9 +506,6 @@ class TestConnections:
         ]
         assert frame.startswith(f"event: {overseer_connections.EVENT}")
         assert "/api/v1/jobs/events" in frame and "/dashboard/ws" not in frame
-
-    def test_the_stream_needs_a_signed_in_user(self, client: TestClient) -> None:
-        assert client.get(overseer_connections.EVENTS).status_code == 401
 
     def test_nothing_remembered_says_so(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch

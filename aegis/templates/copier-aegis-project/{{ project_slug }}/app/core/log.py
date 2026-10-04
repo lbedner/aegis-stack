@@ -11,6 +11,7 @@ import logging
 import sys
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import TextIO
 
 import structlog
 from app.core.config import settings
@@ -23,7 +24,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 _logging_configured = False
 
 
-def setup_logging() -> None:
+def setup_logging(stream: TextIO = sys.stdout) -> None:
     """
     Configures logging for the entire application.
 
@@ -81,7 +82,7 @@ def setup_logging() -> None:
         )
 
     # Configure the root logger
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(stream)
     handler.setFormatter(formatter)
     root_logger = logging.getLogger()
 

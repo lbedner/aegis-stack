@@ -584,7 +584,6 @@ MESSAGES: dict[str, str] = {
     "ai.prov_current_local": "使用中（ローカル）",
     "ai.prov_need_key": "APIキー必要",
     "ai.prov_not_installed": "未インストール",
-    "ai.prov_error": "エラー",
     "ai.providers_tip": "ヒント：'{app} ai add-provider <名前>' で未インストールのプロバイダを追加できます。",
     # 使用状況パネル
     "ai.usage_title": "AI使用状況サマリー",
@@ -856,7 +855,6 @@ MESSAGES: dict[str, str] = {
     "loadtest.waiting_progress": "負荷テスト完了を待機中...",
     "loadtest.waiting_elapsed": "完了を待機中...（{elapsed}秒経過）",
     "loadtest.timeout_progress": "タイムアウト",
-    "loadtest.completed_progress": "負荷テスト完了！",
     # クイックテスト出力
     "loadtest.quick_cpu_title": "クイックCPU負荷テスト",
     "loadtest.quick_cpu_tasks": "{count} CPUインテンシブタスク",

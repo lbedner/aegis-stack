@@ -644,6 +644,34 @@ COMPONENTS: dict[str, ComponentSpec] = {
             },
         ),
     ),
+    "mcp": ComponentSpec(
+        readme=ReadmeWiring(
+            reach=(
+                "`<app> mcp`: the granted tools, over stdio, for Claude "
+                "Desktop, Claude Code or a local model"
+            ),
+        ),
+        name="mcp",
+        docs_path="components/mcp",
+        type=ComponentType.INFRASTRUCTURE,
+        description="MCP server: an outside assistant reads the app's tools",
+        long_description=(
+            "Serves the app's own registered tools to an outside assistant "
+            "(Claude Desktop, Claude Code, a local model) over MCP, through "
+            "FastMCP. A client sees only the tools granted in MCP_TOOLS, and "
+            "never a write; every call is recorded with the client that made it."
+        ),
+        pyproject_deps=["fastmcp>=3.2,<3.4"],
+        marker_path="app/components/mcp",
+        files=FileManifest(
+            primary=[
+                "app/components/mcp",
+                "app/cli/mcp_cli.py",
+                "tests/components/test_mcp.py",
+                "tests/components/test_mcp_proposals.py",
+            ],
+        ),
+    ),
 }
 
 

@@ -584,7 +584,6 @@ MESSAGES: dict[str, str] = {
     "ai.prov_current_local": "Aktuell (Lokal)",
     "ai.prov_need_key": "API Key fehlt",
     "ai.prov_not_installed": "Nicht installiert",
-    "ai.prov_error": "Fehler",
     "ai.providers_tip": "Tipp: '{app} ai add-provider <name>' zum Installieren fehlender Anbieter.",
     # Usage panel
     "ai.usage_title": "AI-Nutzungsübersicht",
@@ -856,7 +855,6 @@ MESSAGES: dict[str, str] = {
     "loadtest.waiting_progress": "Warte auf Lasttest-Abschluss...",
     "loadtest.waiting_elapsed": "Warte auf Abschluss... ({elapsed}s)",
     "loadtest.timeout_progress": "Zeitlimit erreicht",
-    "loadtest.completed_progress": "Lasttest abgeschlossen!",
     # Quick test output
     "loadtest.quick_cpu_title": "Schneller CPU-Lasttest",
     "loadtest.quick_cpu_tasks": "{count} CPU-intensive Tasks",

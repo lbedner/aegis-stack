@@ -24,7 +24,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.core.time import utcnow
-from app.core.tools import register_tool
+from app.core.tools import acting_as, register_tool
 from app.services.ai.domains.chat import queries
 from app.services.ai.models.agents import AgentUserMemory
 
@@ -40,22 +40,6 @@ MEMORY_CATEGORIES = (
 )
 
 current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
-# Attribution for writes made mid-turn (queue proposals): which agent
-# asked, in which conversation. Set by the same runtimes that bind the
-# user - a write with no author cannot be audited.
-current_agent_slug: ContextVar[str | None] = ContextVar(
-    "current_agent_slug", default=None
-)
-current_conversation_id: ContextVar[str | None] = ContextVar(
-    "current_conversation_id", default=None
-)
-# Whose approval cards a turn files, lists and withdraws: the signed-in
-# user, which every chat route resolves from the session
-# (``get_optional_owner_user_id``) and binds through ``memory_user``. Never
-# derived from ``current_user_id``, which a client may name.
-current_owner_user_id: ContextVar[int | None] = ContextVar(
-    "current_owner_user_id", default=None
-)
 
 # The user a single-tenant install writes memory for. Chat turns without an
 # authenticated user (the dashboard's own surfaces) resolve to this, so the
@@ -80,16 +64,11 @@ def memory_user(
     the audit trail.
     """
     token = current_user_id.set(user_id)
-    owner_token = current_owner_user_id.set(owner_user_id)
-    agent_token = current_agent_slug.set(agent_slug)
-    conversation_token = current_conversation_id.set(conversation_id)
     try:
-        yield
+        with acting_as(owner_user_id, agent_slug, conversation_id):
+            yield
     finally:
         current_user_id.reset(token)
-        current_owner_user_id.reset(owner_token)
-        current_agent_slug.reset(agent_token)
-        current_conversation_id.reset(conversation_token)
 
 
 SAVE_MEMORY_GUIDANCE = (

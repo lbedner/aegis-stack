@@ -3,11 +3,12 @@
 registered the way a new service registers its own, with one ``register``
 call. ``executed`` lists what approvals ran."""
 
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
+import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services import change_queue
@@ -53,4 +54,17 @@ def note_type(change_type: str) -> Iterator[None]:
         yield
     finally:
         registry._EXECUTORS.pop(change_type, None)
+
+
+def queue_tools_on(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """The queue's tools (``change_queue.tools``), writing through
+    ``session`` instead of opening their own."""
+    from app.services.change_queue import tools
+
+    @asynccontextmanager
+    async def test_session() -> AsyncIterator[AsyncSession]:
+        yield session
+
+    monkeypatch.setattr(tools, "get_async_session", test_session)
+    return tools
 {%- endif %}

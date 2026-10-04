@@ -113,6 +113,14 @@ except ImportError:
     # Secrets component not available, skip secrets commands
     pass
 
+# Conditionally register mcp command if the mcp component is available
+try:
+    mcp_module = importlib.import_module("app.cli.mcp_cli")
+    app.command("mcp", help=lazy_t("mcp.help"))(mcp_module.serve)
+except ImportError:
+    # MCP component not available, skip mcp command
+    pass
+
 # Conditionally register deploy command if deploy history is available
 try:
     deploy_module = importlib.import_module("app.cli.deploy_cli")

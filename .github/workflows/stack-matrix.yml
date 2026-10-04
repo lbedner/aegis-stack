@@ -78,6 +78,7 @@ jobs:
           - finance
           - finance_auth
           - finance_ai_rbac
+          - mcp_finance
           - comms
           - base_htmx
           - htmx_auth

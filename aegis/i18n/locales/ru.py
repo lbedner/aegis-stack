@@ -76,6 +76,7 @@ MESSAGES: dict[str, str] = {
     "component.inference": "Local model serving (Ollama)",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "Цель развёртывания (Docker Compose), читается Overseer",
+    "component.mcp": "MCP server: an outside assistant reads the app's tools",
     "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Описания сервисов ──────────────────────────────────────────────
@@ -1160,6 +1161,7 @@ MESSAGES: dict[str, str] = {
     "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
     "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.deploy.long": "Где работает приложение, в виде компонента: сегодня это Docker Compose на хосте. Добавляет прокси сокета, единственный контейнер с доступом к сокету Docker, который отвечает только на запросы чтения (контейнеры, статистика, логи, диск), чтобы Overseer показывал, что запущено, а веб-сервер никогда не держал сокет.",
+    "component.mcp.long": "Serves the app's own registered tools to an outside assistant (Claude Desktop, Claude Code, a local model) over MCP, through FastMCP. A client sees only the tools granted in MCP_TOOLS, and never a write; every call is recorded with the client that made it.",
     "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Полное управление пользователями с JWT-аутентификацией, сессионными cookie и ротацией refresh-токенов. Три уровня: базовый email/пароль, роли и права RBAC или мультитенантные организации. Включает регистрацию, вход и вкладку админ-панели.",

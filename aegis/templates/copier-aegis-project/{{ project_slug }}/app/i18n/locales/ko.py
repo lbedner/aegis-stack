@@ -584,7 +584,6 @@ MESSAGES: dict[str, str] = {
     "ai.prov_current_local": "현재 사용 중 (로컬)",
     "ai.prov_need_key": "API 키 필요",
     "ai.prov_not_installed": "미설치",
-    "ai.prov_error": "오류",
     "ai.providers_tip": "팁: '{app} ai add-provider <이름>'을 실행하여 누락된 제공자를 설치하세요.",
     # Usage panel
     "ai.usage_title": "AI 사용량 요약",
@@ -856,7 +855,6 @@ MESSAGES: dict[str, str] = {
     "loadtest.waiting_progress": "부하 테스트 완료 대기 중...",
     "loadtest.waiting_elapsed": "완료 대기 중... ({elapsed}초)",
     "loadtest.timeout_progress": "시간 초과됨",
-    "loadtest.completed_progress": "부하 테스트 완료!",
     # Quick test output
     "loadtest.quick_cpu_title": "빠른 CPU 부하 테스트",
     "loadtest.quick_cpu_tasks": "{count}개 CPU 집약적 작업",

@@ -31,8 +31,7 @@ from pydantic import BaseModel, ValidationError, computed_field, model_validator
 
 from app.core.chat_transcript import card_markers
 from app.core.db import get_async_session
-from app.core.tools import register_tool
-from app.services.ai.domains.chat.user_memory import current_conversation_id
+from app.core.tools import current_conversation_id, register_tool
 from app.services.ai.models.chat_card import ChatCard
 
 MARKER = "chat_card"

@@ -193,6 +193,13 @@ CARD_STATUS: dict[str, tuple[str, str]] = {
 WITHDRAWN = "Withdrawn"
 
 
+def proposer_line(proposed_by_agent: str | None) -> str | None:
+    """Who filed a card, as every card UI shows it: a card from an
+    outside assistant (``mcp:<client>``) must never read as the app's own
+    assistant's."""
+    return f"Proposed by {proposed_by_agent}" if proposed_by_agent else None
+
+
 def card_outcome(status: str, note: Any) -> str:
     """A card's status as a person reads it: a rejection the proposing
     agent filed against itself is "withdrawn", not the user saying no."""

@@ -1,0 +1,108 @@
+"""The MCP server: the app's granted tools, for an outside assistant.
+
+Tools are the registry's own callables (``app.core.tools``), registered by
+name: FastMCP builds each schema from the type hints and docstring the
+chat agents already read, so a read over MCP and the same read by an agent
+are one computation. Never ``FastMCP.from_fastapi``: that would turn every
+API route into a tool, writes included, and give one question two answers.
+"""
+
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+import time
+from typing import Any
+
+from fastmcp import FastMCP
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.tools import Tool
+from fastmcp.tools.tool import ToolResult
+from mcp import types
+
+from app.core.config import settings
+from app.core.log import logger
+from app.core.tools import acting_as, get_tool, mcp_servable
+
+
+@dataclass(frozen=True)
+class McpCall:
+    """One tool call, attributed to the client that made it. Measured the
+    way the agents' tool-call ledger measures (``tool_telemetry``)."""
+
+    tool: str
+    client: str
+    duration_ms: int
+    result_bytes: int
+    ok: bool
+
+
+def log_call(call: McpCall) -> None:
+    logger.info(
+        "mcp.call",
+        tool=call.tool,
+        client=call.client,
+        duration_ms=call.duration_ms,
+        result_bytes=call.result_bytes,
+        ok=call.ok,
+    )
+
+
+def _client_name(context: MiddlewareContext[Any]) -> str:
+    """The name the client gave at initialize, or ``unknown``."""
+    if context.fastmcp_context is None:
+        return "unknown"
+    params = context.fastmcp_context.session.client_params
+    return params.clientInfo.name if params is not None else "unknown"
+
+
+def _result_bytes(result: ToolResult) -> int:
+    return sum(
+        len(block.text.encode())
+        for block in result.content
+        if isinstance(block, types.TextContent)
+    )
+
+
+class Attribution(Middleware):
+    """Who is calling, for every call, in one place, so no tool has to
+    know it was reached over MCP: the call acts for MCP_OWNER_USER_ID as
+    the agent ``mcp:<client>`` (``acting_as``), and is recorded - tool,
+    client, duration, size, outcome."""
+
+    def __init__(self, record: Callable[[McpCall], None]) -> None:
+        self._record = record
+
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[types.CallToolRequestParams],
+        call_next: CallNext[types.CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        started = time.perf_counter()
+        result: ToolResult | None = None
+        client = _client_name(context)
+        try:
+            with acting_as(settings.MCP_OWNER_USER_ID, f"mcp:{client}"):
+                result = await call_next(context)
+            return result
+        finally:
+            self._record(
+                McpCall(
+                    tool=context.message.name,
+                    client=client,
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                    result_bytes=_result_bytes(result) if result else 0,
+                    ok=result is not None,
+                )
+            )
+
+
+def build_server(
+    grant: Iterable[str], *, record: Callable[[McpCall], None] = log_call
+) -> FastMCP:
+    """A server offering exactly the granted tools that MCP may serve:
+    reads and proposals, never a write (``mcp_servable``)."""
+    server = FastMCP(settings.PROJECT_NAME, middleware=[Attribution(record)])
+    for name in mcp_servable(grant):
+        tool = get_tool(name)
+        if tool is not None:
+            server.add_tool(Tool.from_function(tool.func, name=name))
+    return server

@@ -6,7 +6,9 @@ runs; approving or rejecting swaps the card for its new state.
 """
 
 from collections.abc import Iterator
+{%- if include_ai %}
 from types import SimpleNamespace
+{%- endif %}
 {%- if include_auth %}
 from typing import Any
 {%- endif %}
@@ -56,6 +58,23 @@ def test_a_card_shows_the_change_and_its_actions(hx_user: TestClient) -> None:
     assert card.status_code == 200
     assert "Write a note" in card.text and "hi" in card.text
     assert f'hx-post="/partials/changes/{change_id}/approve"' in card.text
+
+
+def test_a_card_names_who_proposed_it(hx_user: TestClient) -> None:
+    """A card filed by an outside assistant says which one, so it never
+    reads as the app's own assistant's."""
+    change_id = hx_user.post(
+        "/api/v1/changes",
+        json={
+            "change_type": NOTE,
+            "payload": {"text": "hi"},
+            "proposed_by_agent": "mcp:claude-code",
+        },
+    ).json()["id"]
+
+    card = hx_user.get(f"/partials/changes/{change_id}")
+
+    assert "mcp:claude-code" in text(one(card.text, "[data-change]"))
 
 
 def test_approving_runs_the_change_and_swaps_the_card(hx_user: TestClient) -> None:
@@ -152,7 +171,11 @@ async def test_the_review_list_holds_only_what_waits(
     assert batch.get("id") == f"batch-{rows[0].batch_id}"
     assert text(batch).index("first") < text(batch).index("second")
 
+{%- if include_ai %}
 
+
+# The chat surface ships with the AI service; the cards it draws are the
+# queue's, which finance has without it.
 def test_a_chat_reply_carries_the_cards_its_tools_proposed() -> None:
     from app.components.web_frontend import chat_surface
     from app.components.web_frontend.chat_surface import ChatSurface
@@ -186,4 +209,5 @@ def test_a_chat_reply_carries_the_cards_its_tools_proposed() -> None:
         "/partials/changes/7",
         "/partials/changes/batch/b1",
     ]
+{%- endif %}
 {% endif %}

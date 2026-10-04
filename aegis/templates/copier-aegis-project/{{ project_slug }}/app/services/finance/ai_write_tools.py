@@ -1,9 +1,9 @@
-{% if include_ai and ai_backend != "memory" %}"""The finance write surface for agents: the ids its proposals need.
+"""The finance write surface for agents: the ids its proposals need.
 
 Split from ``ai_tools`` (the read surface): ``categories``, ``bills``,
 ``bill_candidates`` and ``tags`` are the lookups a finance payload is
 built from. Filing the proposal itself is the shared queue's job - the
-``propose`` family lives in ``app.services.ai.domains.chat.change_tools``
+``propose`` family lives in ``app.services.change_queue.tools``
 and files a card for any service's change type, finance's included.
 Lookups read the turn's owner, as the read surface does.
 """
@@ -13,8 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.db import get_async_session
-from app.core.tools import register_tool
-from app.services.ai.domains.chat.user_memory import current_owner_user_id
+from app.core.tools import current_owner_user_id, register_tool
 
 
 async def categories() -> dict[str, Any]:
@@ -144,4 +143,3 @@ register_tool(
     replace=True,
     effect="read",
 )
-{% endif %}

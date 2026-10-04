@@ -1,11 +1,12 @@
-{% if ai_backend != "memory" %}"""The propose/approve queue's chat tools: propose, never mutate.
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""The propose/approve queue's tools: propose, never mutate.
 
-The model's only write door. ``propose`` and ``propose_many`` file
-pending changes of any registered type (``app.services.change_queue``);
-``pending``, ``withdraw`` and ``withdraw_batch`` let an agent see and
-retract its own cards. Execution happens only when the user approves in
-the app. The tools register ``effect="proposes"``, so code mode dispatches
-them as visible calls and MCP may serve them.
+A model's only write door, whoever runs it: a chat agent or an MCP
+client. ``propose`` and ``propose_many`` file pending changes of any
+registered type; ``pending``, ``withdraw`` and ``withdraw_batch`` let
+the author (``current_agent_slug``) see and retract its own cards.
+Execution happens only when the user approves in the app. The tools
+register ``effect="proposes"``, so code mode dispatches them as visible
+calls and MCP may serve them.
 """
 
 from __future__ import annotations
@@ -18,17 +19,21 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.time import utcnow
-from app.core.tools import register_tool
+from app.core.tools import (
+    current_agent_slug,
+    current_conversation_id,
+    current_owner_user_id,
+    register_tool,
+)
+from app.services import change_queue
 
 
-def _turn_owner() -> int | None:
-    """Whose cards this turn files, lists and withdraws
+def _owner() -> int | None:
+    """Whose cards this call files, lists and withdraws
     (``current_owner_user_id``)."""
-    from app.services.ai.domains.chat.user_memory import current_owner_user_id
-
     owner = current_owner_user_id.get()
 {%- if include_auth %}
-    # Unscoped, a turn without one would reach every user's cards.
+    # Unscoped, a call without one would reach every user's cards.
     if owner is None:
         raise ValueError("no signed-in user to file this change for")
 {%- endif %}
@@ -39,8 +44,6 @@ async def change_types() -> dict[str, Any]:
     """The changes you can propose: each change type's title, when to use
     it, and its payload's JSON schema (``propose``'s ``payload`` must match
     it exactly). Read this before proposing a type you have not used."""
-    from app.services import change_queue
-
     return change_queue.change_type_contracts()
 
 
@@ -52,8 +55,6 @@ async def _committed(
     """Run ``work`` in one committed session. A refusal (a bad payload,
     another agent's card, no signed-in user) is the tool's error result,
     with the change-type contracts when the refusal was a proposal."""
-    from app.services import change_queue
-
     async with get_async_session() as session:
         try:
             result = await work(session)
@@ -76,18 +77,12 @@ async def propose_many(
     payload follows the change type's contract. Never claim the changes
     happened - they are pending until the user acts.
     """
-    from app.services import change_queue
-    from app.services.ai.domains.chat.user_memory import (
-        current_agent_slug,
-        current_conversation_id,
-    )
-
     async def work(session: AsyncSession) -> dict[str, Any]:
         rows = await change_queue.propose_many(
             session,
             change_type,
             payloads,
-            owner_user_id=_turn_owner(),
+            owner_user_id=_owner(),
             proposed_by_agent=current_agent_slug.get(),
             conversation_id=current_conversation_id.get(),
         )
@@ -120,18 +115,12 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     ONE change per call; never claim a change happened - it is pending
     until the user acts.
     """
-    from app.services import change_queue
-    from app.services.ai.domains.chat.user_memory import (
-        current_agent_slug,
-        current_conversation_id,
-    )
-
     async def work(session: AsyncSession) -> dict[str, Any]:
         row = await change_queue.propose(
             session,
             change_type,
             payload,
-            owner_user_id=_turn_owner(),
+            owner_user_id=_owner(),
             proposed_by_agent=current_agent_slug.get(),
             conversation_id=current_conversation_id.get(),
         )
@@ -153,18 +142,15 @@ async def pending(about: str | None = None) -> dict[str, Any]:
     card does, with one example row). Read this before filing a
     replacement so you can withdraw what it supersedes yourself -
     withdraw_batch(batch_id) for a whole card, withdraw(id) for one row -
-    instead of asking the user to reject them. Calling it also redraws the
-    listed cards in the chat, decided ones in their final state, so when
+    instead of asking the user to reject them. In a chat, calling it also
+    redraws the listed cards, decided ones in their final state, so when
     the user asks to see a card again or what became of it, call this and
     point at the card. ``about`` narrows to cards mentioning it ("state
     farm"): always pass it when the user asked about one card, or every
     card you ever filed is redrawn. Other agents' cards and the user's own
     are not listed and cannot be withdrawn."""
-    from app.services import change_queue
-    from app.services.ai.domains.chat.user_memory import current_agent_slug
-
     try:
-        owner = _turn_owner()
+        owner = _owner()
     except ValueError as e:
         return {"error": str(e)}
     needle = (about or "").strip().lower()
@@ -209,10 +195,13 @@ async def pending(about: str | None = None) -> dict[str, Any]:
         if card["rows"] > 1:
             card["summary"] = f"{card['rows']} rows, e.g. {card['summary']}"
         listing["pending" if "pending" in statuses else "decided"].append(card)
-    listing["note"] = (
-        "These cards are redrawn in the chat for the user, decided ones in "
-        "their final state. Point at them; never list their rows."
-    )
+    if current_conversation_id.get():
+        # Only a chat redraws them; an MCP client's user sees nothing unless
+        # the client says it.
+        listing["note"] = (
+            "These cards are redrawn in the chat for the user, decided ones in "
+            "their final state. Point at them; never list their rows."
+        )
     return listing
 
 
@@ -223,15 +212,12 @@ async def withdraw(pending_change_id: int, reason: str | None = None) -> dict[st
     short ``reason`` ("superseded by the five-row card"). Only the agent
     that proposed a change can withdraw it. Use it yourself, immediately,
     instead of asking the user to reject the card."""
-    from app.services import change_queue
-    from app.services.ai.domains.chat.user_memory import current_agent_slug
-
     async def work(session: AsyncSession) -> dict[str, Any]:
         row = await change_queue.withdraw(
             session,
             pending_change_id,
             agent_slug=current_agent_slug.get(),
-            owner_user_id=_turn_owner(),
+            owner_user_id=_owner(),
             reason=reason,
         )
         return {
@@ -248,15 +234,12 @@ async def withdraw_batch(batch_id: str, reason: str | None = None) -> dict[str, 
     row of one propose_many batch, one transaction, one reason the user
     will see on the folded card ("superseded by the five-row card").
     Prefer this over withdrawing a batch row by row."""
-    from app.services import change_queue
-    from app.services.ai.domains.chat.user_memory import current_agent_slug
-
     async def work(session: AsyncSession) -> dict[str, Any]:
         withdrawn = await change_queue.withdraw_batch(
             session,
             batch_id,
             agent_slug=current_agent_slug.get(),
-            owner_user_id=_turn_owner(),
+            owner_user_id=_owner(),
             reason=reason,
         )
         return {"batch_id": batch_id, "withdrawn": withdrawn}

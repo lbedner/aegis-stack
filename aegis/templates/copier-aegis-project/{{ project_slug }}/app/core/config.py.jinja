@@ -186,6 +186,16 @@ class Settings(
     # generating the project.
     PROJECT_DESCRIPTION: str = "{{ project_description }}"
 {%- endif %}
+{%- if include_mcp %}
+
+    # The tools an MCP client may call (``<app> mcp``), by registered name; a
+    # write is never served (``app.core.tools.mcp_servable``). In ``.env``: a
+    # JSON list.
+    MCP_TOOLS: list[str] = {{ '["ledger", "accounts", "quote", "categories", "bills", "bill_candidates", "tags"]' if include_finance else "[]" }}
+    # Whose data an MCP call reads and whose cards it files; None reads
+    # every row (a single-tenant install). With auth, proposals need it.
+    MCP_OWNER_USER_ID: int | None = None
+{%- endif %}
 
     # Authentication settings
     # Without the auth service (or set false in .env) a dev user is synthesized

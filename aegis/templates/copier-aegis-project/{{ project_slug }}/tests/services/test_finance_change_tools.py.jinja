@@ -1,0 +1,317 @@
+{% if include_finance and include_ai and ai_backend != "memory" %}"""Finance changes through the shared queue's chat tools: propose files a
+card the user approves, and pending lists an agent's own cards.
+
+Each tool opens its own session in production; tests point that at the
+transactional test session.
+"""
+
+from datetime import date
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.change_queue import tools as change_tools
+from app.services.finance.service import FinanceService
+from tests._change_queue import queue_tools_on
+from tests.services._finance_factories import (
+    seed_account,
+)
+
+
+@pytest.fixture
+def session(async_db_session: AsyncSession) -> AsyncSession:
+    return async_db_session
+
+
+@pytest.fixture
+def svc(session: AsyncSession) -> FinanceService:
+    return FinanceService(session)
+
+
+@pytest.fixture(autouse=True)
+def _tools_use_test_session(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    queue_tools_on(session, monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_propose_is_the_only_write_and_moves_nothing(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """FW-05: the sandbox's one write tool records a pending change with
+    the turn's attribution and touches nothing in the ledger."""
+    from sqlmodel import select
+
+    from app.services.ai.domains.chat.user_memory import memory_user
+    from app.services.change_queue import PendingChange
+
+    account = await seed_account(svc)
+    from app.services.finance.models import FinanceCategory
+
+    cat = FinanceCategory(
+        owner_user_id=1,
+        name="Food & Dining:Groceries",
+        slug="pc-groceries",
+        classification="expense",
+    )
+    session.add(cat)
+    await session.flush()
+    txn = await svc.create_transaction(
+        account_id=account.id,
+        amount=-897,
+        txn_date=date(2026, 6, 10),
+        owner_user_id=1,
+        name="Shelly's Deli",
+    )
+    await session.commit()
+
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
+        result = await change_tools.propose(
+            "transaction.categorize",
+            {"transaction_id": txn.id, "category_id": cat.id},
+        )
+
+    assert result["status"] == "pending"
+    assert result["change_type"] == "transaction.categorize"
+    row = (
+        await session.exec(
+            select(PendingChange).where(
+                PendingChange.id == result["pending_change_id"]
+            )
+        )
+    ).one()
+    assert row.proposed_by_agent == "finance-assistant"
+    assert row.conversation_id == "conv-9"
+    await session.refresh(txn)
+    assert txn.category_id is None  # proposing moved nothing
+
+
+@pytest.mark.asyncio
+async def test_pending_hands_the_model_a_line_per_row_not_a_table(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """A local model retypes whatever rows it is handed. The card draws
+    its own rows, so the listing carries one flat line per row and says
+    so, and never the label/value table the card is built from."""
+    from app.services.ai.domains.chat.user_memory import memory_user
+    from app.services.finance.models import FinanceCategory
+
+    account = await seed_account(svc)
+    cat = FinanceCategory(
+        owner_user_id=1,
+        name="Auto:Transportation",
+        slug="pc-transport",
+        classification="expense",
+    )
+    session.add(cat)
+    await session.flush()
+    txn = await svc.create_transaction(
+        account_id=account.id,
+        amount=-16840,
+        txn_date=date(2026, 9, 5),
+        owner_user_id=1,
+        name="State Farm Auto",
+    )
+    await session.commit()
+
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
+        await change_tools.propose(
+            "transaction.categorize",
+            {"transaction_id": txn.id, "category_id": cat.id},
+        )
+        result = await change_tools.pending()
+
+    (entry,) = result["pending"]
+    assert "display" not in entry
+    assert "State Farm Auto" in entry["summary"]
+    assert "Transportation" in entry["summary"]
+    assert "redrawn" in result["note"]
+
+
+@pytest.mark.asyncio
+async def test_pending_also_shows_what_the_user_decided(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """"Show me the card" after a rejection must show the rejection, so
+    recently decided cards ride along under ``decided`` with their
+    status, and the chat redraws them in their resolved state."""
+    from app.services import change_queue
+    from app.services.ai.domains.chat.user_memory import memory_user
+    from app.services.finance.models import FinanceCategory
+
+    account = await seed_account(svc)
+    cat = FinanceCategory(
+        owner_user_id=1,
+        name="Auto:Transportation",
+        slug="pc-transport-2",
+        classification="expense",
+    )
+    session.add(cat)
+    await session.flush()
+    txn = await svc.create_transaction(
+        account_id=account.id,
+        amount=-16840,
+        txn_date=date(2026, 8, 5),
+        owner_user_id=1,
+        name="State Farm Auto",
+    )
+    await session.commit()
+
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
+        filed = await change_tools.propose(
+            "transaction.categorize",
+            {"transaction_id": txn.id, "category_id": cat.id},
+        )
+        await change_queue.reject(session, filed["pending_change_id"], owner_user_id=None)
+        await session.commit()
+        result = await change_tools.pending()
+
+    assert result["pending"] == []
+    (entry,) = result["decided"]
+    assert entry["pending_change_ids"] == [filed["pending_change_id"]]
+    assert entry["status"] == "rejected"
+    assert entry["decided_at"]
+
+
+@pytest.mark.asyncio
+async def test_pending_narrows_to_the_card_asked_about(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """"What happened to the State Farm card" must not redraw every card
+    ever decided: ``about`` keeps the rows whose summary mentions it."""
+    from app.services.ai.domains.chat.user_memory import memory_user
+    from app.services.finance.models import FinanceCategory
+
+    account = await seed_account(svc)
+    cat = FinanceCategory(
+        owner_user_id=1,
+        name="Auto:Transportation",
+        slug="pc-transport-3",
+        classification="expense",
+    )
+    session.add(cat)
+    await session.flush()
+    farm = await svc.create_transaction(
+        account_id=account.id,
+        amount=-16840,
+        txn_date=date(2026, 7, 5),
+        owner_user_id=1,
+        name="State Farm Auto",
+    )
+    deli = await svc.create_transaction(
+        account_id=account.id,
+        amount=-897,
+        txn_date=date(2026, 7, 6),
+        owner_user_id=1,
+        name="Shelly's Deli",
+    )
+    await session.commit()
+
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
+        for txn in (farm, deli):
+            await change_tools.propose(
+                "transaction.categorize",
+                {"transaction_id": txn.id, "category_id": cat.id},
+            )
+        result = await change_tools.pending(about="state farm")
+
+    assert [e["summary"].split(" /")[0] for e in result["pending"]] == [
+        "Transaction: State Farm Auto ($168.40 on Jul 5, 2026)"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_pending_reports_a_withdrawal_as_withdrawn(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """A card the assistant retracted itself is not one the user said no
+    to; the listing must not let it retell its own cleanup as a rejection."""
+    from app.services.ai.domains.chat.user_memory import memory_user
+    from app.services.finance.models import FinanceCategory
+
+    account = await seed_account(svc)
+    cat = FinanceCategory(
+        owner_user_id=1,
+        name="Auto:Transportation",
+        slug="pc-transport-4",
+        classification="expense",
+    )
+    session.add(cat)
+    await session.flush()
+    txn = await svc.create_transaction(
+        account_id=account.id,
+        amount=-16840,
+        txn_date=date(2026, 6, 5),
+        owner_user_id=1,
+        name="State Farm Auto",
+    )
+    await session.commit()
+
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
+        filed = await change_tools.propose(
+            "transaction.categorize",
+            {"transaction_id": txn.id, "category_id": cat.id},
+        )
+        await change_tools.withdraw(filed["pending_change_id"], reason="Superseded.")
+        result = await change_tools.pending(about="state farm")
+
+    (entry,) = result["decided"]
+    assert entry["status"] == "withdrawn"
+
+
+@pytest.mark.asyncio
+async def test_pending_lists_cards_not_rows(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """A batch is one entry: its row count, its ids, and ONE example line.
+    Handed five row lines, a local model retypes them as a table under
+    the card that already shows them."""
+    from app.services.ai.domains.chat.user_memory import memory_user
+    from app.services.finance.models import FinanceCategory
+
+    account = await seed_account(svc)
+    cat = FinanceCategory(
+        owner_user_id=1,
+        name="Auto:Transportation",
+        slug="pc-transport-5",
+        classification="expense",
+    )
+    session.add(cat)
+    await session.flush()
+    payloads = []
+    for month in (5, 6, 7):
+        txn = await svc.create_transaction(
+            account_id=account.id,
+            amount=-16840,
+            txn_date=date(2026, month, 5),
+            owner_user_id=1,
+            name="State Farm Auto",
+        )
+        payloads.append({"transaction_id": txn.id, "category_id": cat.id})
+    await session.commit()
+
+    with memory_user(
+        "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
+    ):
+        filed = await change_tools.propose_many("transaction.categorize", payloads)
+        result = await change_tools.pending(about="state farm")
+
+    (card,) = result["pending"]
+    assert card["batch_id"] == filed["batch_id"]
+    assert card["rows"] == 3
+    assert sorted(card["pending_change_ids"]) == sorted(
+        i["pending_change_id"] for i in filed["items"]
+    )
+    assert card["summary"].count("State Farm Auto") == 1
+{% endif %}

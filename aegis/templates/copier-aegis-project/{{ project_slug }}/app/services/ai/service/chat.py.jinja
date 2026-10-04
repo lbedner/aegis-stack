@@ -55,21 +55,16 @@ from app.services.ai.service.prompt import PromptMixin, history_char_budget
 {%- else %}
 from app.services.ai.service.prompt import PromptMixin
 {%- endif %}
-{%- if ai_backend != "memory" %}
 
-# Importing registers the propose/approve queue's tools, so any
-# service's registered change types can be proposed from chat.
-import app.services.ai.domains.chat.change_tools  # noqa: F401
-{%- endif %}
-{%- if include_finance and ai_backend != "memory" %}
-
-# Importing registers the finance host tools (ledger, accounts, quote)
-# so DB-granted names resolve in every process that serves chat - the
-# API, the CLI, and code-mode agents alike.
-import app.services.finance.ai_tools  # noqa: F401{%- endif %}
-{% if ai_rag %}
+from app.core.tools import load_tools
+{%- if ai_rag %}
 from app.services.ai.domains.chat.rag_context import RAGContext
-{% endif %}
+{%- endif %}
+
+# Every registered tool, so DB-granted names resolve in every process that
+# serves chat - the API, the CLI, and code-mode agents alike.
+load_tools()
+
 
 @dataclass
 class TurnSetup:

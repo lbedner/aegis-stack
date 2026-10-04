@@ -627,7 +627,6 @@ MESSAGES: dict[str, str] = {
     "ai.prov_current_local": "当前（本地）",
     "ai.prov_need_key": "需要 API 密钥",
     "ai.prov_not_installed": "未安装",
-    "ai.prov_error": "错误",
     "ai.providers_tip": "提示：运行 '{app} ai add-provider <名称>' 安装缺少的服务商。",
     # 用量面板
     "ai.usage_title": "AI 用量概览",
@@ -918,7 +917,6 @@ MESSAGES: dict[str, str] = {
     "loadtest.waiting_progress": "等待测试完成...",
     "loadtest.waiting_elapsed": "等待中... ({elapsed} 秒)",
     "loadtest.timeout_progress": "等待超时",
-    "loadtest.completed_progress": "测试完成！",
     # 快速测试输出
     "loadtest.quick_cpu_title": "CPU 快速压力测试",
     "loadtest.quick_cpu_tasks": "{count} 个 CPU 密集型任务",
@@ -1313,4 +1311,6 @@ MESSAGES: dict[str, str] = {
     "blog.col_failed": "Failed",
     "blog.col_kind": "Kind",
     "blog.col_count": "Count",
+    # ── MCP ──────────────────────────────────────────────────────────
+    "mcp.help": "通过 stdio 为 MCP 客户端提供本应用已授权的工具（MCP_TOOLS）。",
 }

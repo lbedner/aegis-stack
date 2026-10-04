@@ -288,6 +288,7 @@ class TestInteractiveServiceSelection:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 True,  # auth service
                 True,  # database confirmation for auth
                 False,  # payment service
@@ -325,6 +326,7 @@ class TestInteractiveServiceSelection:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # auth service
                 False,  # payment service
                 False,  # AI service

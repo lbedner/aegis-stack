@@ -27,6 +27,7 @@ Selected capabilities:
 {% endif %}{% if include_payment %}- Payment ({{ payment_provider }}): checkout and billing.
 {% endif %}{% if include_secrets %}- Secrets: encrypted credential store; read keys with `await secrets.get(name)`.
 {% endif %}{% if include_deploy %}- Deploy ({{ deploy_target }}): the socket-proxy service gives `app.core.runtime` read-only Docker access.
+{% endif %}{% if include_mcp %}- MCP: `<app> mcp` serves the tools granted in `MCP_TOOLS` over stdio; register a tool with `app.core.tools.register_tool` and declare its `effect`.
 {% endif %}{% if include_observability %}- Observability: metrics and tracing.
 {% endif %}{% if include_ingress %}- Ingress: reverse proxy and TLS.
 {% endif %}

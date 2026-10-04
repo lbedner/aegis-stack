@@ -307,6 +307,22 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet"],
     ),
     StackCombination(
+        name="mcp_finance",
+        # MCP over stdio serving finance's read tools, without the AI
+        # service: the registry is core, so the tools need no agent.
+        components=["database", "scheduler", "mcp"],
+        services=["finance"],
+        description="MCP component serving finance tools, no AI service",
+        expected_files=[
+            "app/components/mcp/__init__.py",
+            "app/components/mcp/server.py",
+            "app/cli/mcp_cli.py",
+            "tests/components/test_mcp.py",
+        ],
+        expected_docker_services=["webserver", "scheduler"],
+        expected_pyproject_deps=["fastapi", "flet", "fastmcp"],
+    ),
+    StackCombination(
         name="ai_langchain",
         components=["database"],
         services=["ai[sqlite,langchain,openai]"],

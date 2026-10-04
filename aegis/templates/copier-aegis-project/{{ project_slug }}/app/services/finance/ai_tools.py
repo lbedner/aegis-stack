@@ -1,4 +1,4 @@
-{% if include_ai and ai_backend != "memory" %}"""Finance host tools: the data surface code-mode agents compute over.
+"""Finance host tools: the data surface code-mode agents compute over.
 
 Deliberately few and wide: results land in the code-mode sandbox rather
 than the prompt, so a broad payload the model slices in code beats a
@@ -20,8 +20,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from app.core.db import get_async_session
-from app.core.tools import register_tool
-from app.services.ai.domains.chat.user_memory import current_owner_user_id
+from app.core.tools import current_owner_user_id, register_tool
 from app.services.finance.constants import UNCATEGORIZED_CATEGORY_NAMES
 from app.services.finance.domains.investments import queries as investment_queries
 from app.services.finance.domains.investments.securities import (
@@ -438,22 +437,14 @@ register_tool(
     effect="read",
 )
 
-# The id lookups proposals need live in their own module, and the
-# propose family is the shared queue's; importing both here keeps
-# "import ai_tools" the one line that registers the whole finance tool
-# surface.
-from app.services.ai.domains.chat.change_tools import (  # noqa: E402,F401
-    pending,
-    propose,
-    propose_many,
-    withdraw,
-    withdraw_batch,
-)
+# The id lookups proposals need live in their own module; importing it
+# here keeps "import ai_tools" the one line that registers the whole
+# finance tool surface. Filing a proposal is the shared queue's job
+# (``change_queue.tools``), which ``load_tools`` registers.
 from app.services.finance.ai_write_tools import (  # noqa: E402,F401
     bill_candidates,
     bills,
     categories,
     tags,
 )
-{% else %}"""Finance host tools ship only with the AI service on a persistent backend."""
-{% endif %}
+

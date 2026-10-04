@@ -191,6 +191,11 @@ deploy_target:
     - "compose"
   when: "{{ include_deploy }}"
 
+include_mcp:
+  type: bool
+  help: "Include the MCP server (an outside assistant reads the app's tools)?"
+  default: false
+
 include_storage:
   type: bool
   help: "Include S3 object storage (SeaweedFS container in dev)?"

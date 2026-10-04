@@ -54,6 +54,12 @@
 
 ### Fixed
 
+- **A change that is not yours is a 404 on every route.** The JSON
+  approve and reject answered 400 ("pending change not found") and the
+  batch routes 200 with nothing done, where the htmx cards answered 404.
+  Both routers now resolve the card or batch through one dependency
+  (`change_queue.deps.owned_change` / `owned_batch`); approving a card
+  already decided is still a 400.
 - **Approval cards read each row once.** A batch's approve and reject
   resolve the rows already read (`change_queue.approve_rows` /
   `reject_rows`, and `approve_row` / `reject_row` for one), where they read

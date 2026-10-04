@@ -32,6 +32,15 @@ def _turn_owner() -> int | None:
     return owner
 
 
+async def change_types() -> dict[str, Any]:
+    """The changes you can propose: each change type's title, when to use
+    it, and its payload's JSON schema (``propose``'s ``payload`` must match
+    it exactly). Read this before proposing a type you have not used."""
+    from app.services import change_queue
+
+    return change_queue.change_type_contracts()
+
+
 async def propose_many(
     change_type: str, payloads: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -70,7 +79,7 @@ async def propose_many(
         except ValueError as e:
             return {
                 "error": str(e),
-                "registered_change_types": list(change_queue.registered_change_types()),
+                "change_types": change_queue.change_type_contracts(),
             }
     return {
         "batch_id": rows[0].batch_id,
@@ -114,7 +123,7 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         except ValueError as e:
             return {
                 "error": str(e),
-                "registered_change_types": list(change_queue.registered_change_types()),
+                "change_types": change_queue.change_type_contracts(),
             }
     return {"pending_change_id": card.id} | card.model_dump(
         include={"change_type", "title", "status", "display"}
@@ -253,6 +262,12 @@ async def withdraw_batch(batch_id: str, reason: str | None = None) -> dict[str, 
 
 # Built-in registration: importing this module makes the tools grantable
 # via the agent registry. replace=True keeps re-imports idempotent.
+register_tool(
+    "change_types",
+    change_types,
+    description="The change types you can propose, each with its payload's schema",
+    replace=True,
+)
 register_tool(
     "propose",
     propose,

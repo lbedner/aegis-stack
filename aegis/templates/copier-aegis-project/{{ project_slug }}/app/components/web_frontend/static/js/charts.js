@@ -256,7 +256,9 @@ function slide(dataset, points) {
   const same = last && points.find((point) => point.x === last.x);
   if (same) last.y = same.y;
   const after = last ? last.x : -Infinity;
-  points.filter((point) => point.x > after).forEach((point) => live.push(point));
+  points.filter((point) => point.x > after).forEach((point) => {
+    live.push(point);
+  });
 }
 
 // A live chart's data script swapped in again (``chart_panel(live=...)``):
@@ -273,7 +275,9 @@ function refresh(Chart, script) {
   if (chart.data.datasets.length !== data.series.length) {
     chart.data.datasets = datasets(canvas.dataset.chart, data);
   } else if (timed(data)) {
-    data.series.forEach((series, i) => slide(chart.data.datasets[i], values(data, series)));
+    data.series.forEach((series, i) => {
+      slide(chart.data.datasets[i], values(data, series));
+    });
   } else {
     data.series.forEach((series, i) => {
       Object.assign(chart.data.datasets[i], { label: series.label, data: series.values });
@@ -298,8 +302,12 @@ function mount(root) {
     .filter((script) => !drawn.has(script.id));
   if (!canvases.length && !fresh.length) return;
   ensureChartJs().then((Chart) => {
-    canvases.forEach((canvas) => build(Chart, canvas));
-    fresh.forEach((script) => refresh(Chart, script));
+    canvases.forEach((canvas) => {
+      build(Chart, canvas);
+    });
+    fresh.forEach((script) => {
+      refresh(Chart, script);
+    });
   });
 }
 

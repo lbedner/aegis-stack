@@ -219,6 +219,20 @@ def test_init_keeps_the_history_files_only_with_a_database(
     assert all(path.exists() is kept for path in paths)
 
 
+def test_a_stack_without_deploy_keeps_none_of_its_history(tmp_path: Any) -> None:
+    """A database alone does not bring deploy's history (#1412): its files
+    outside ``app/components/deploy`` (the startup hook, the CLI, the test)
+    go with the component, however the database answer reads."""
+    from aegis.core.post_gen_tasks import cleanup_components
+
+    paths = _history_tree(tmp_path)
+    context = TemplateGenerator("demo", ["database"]).get_template_context()
+
+    cleanup_components(tmp_path, context)
+
+    assert [path for path in paths if path.exists()] == []
+
+
 def test_its_history_lives_in_its_own_schema() -> None:
     """Like the scheduler's and the secrets component's, apart from service
     tables on Postgres; SQLite keeps it in the one file."""

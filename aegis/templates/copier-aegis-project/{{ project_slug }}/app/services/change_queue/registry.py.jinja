@@ -4,13 +4,23 @@ One entry per mutation kind, registered by the service that owns the
 mutation: a payload contract, an executor, a describer - never new
 queue machinery. The payload model validates at propose time (a card
 the user cannot safely approve should never exist) and again at approve
-time (the world may have moved between the two).
+time (the world may have moved between the two), and it is also the
+contract an agent reads (``change_type_contracts``): one home for what a
+payload holds.
+
+A service registers its types in ``app/services/<service>/change_types.py``;
+``load_change_types`` imports every such module, as the model registry
+imports every ``models``, so a project adds types without editing this
+package.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+import importlib
+from pathlib import Path
+import pkgutil
 from typing import Any
 
 from pydantic import BaseModel
@@ -38,6 +48,9 @@ class ChangeExecutor:
     describe: Callable[
         [AsyncSession, Any, int | None], Awaitable[list[ChangeDisplayRow]]
     ]
+    # When an agent should propose it; the payload's own fields (and their
+    # ``Field(description=...)``) say what it holds.
+    description: str = ""
 
 
 _EXECUTORS: dict[str, ChangeExecutor] = {}
@@ -62,4 +75,35 @@ def executor_for(change_type: str) -> ChangeExecutor:
 
 def registered_change_types() -> tuple[str, ...]:
     return tuple(sorted(_EXECUTORS))
+
+
+def change_type_contracts() -> dict[str, dict[str, Any]]:
+    """Every registered type as an agent reads it: its title, when to use
+    it, and the payload's JSON schema, straight from the payload model."""
+    return {
+        name: {
+            "title": executor.title,
+            "description": executor.description,
+            "schema": executor.payload_model.model_json_schema(),
+        }
+        for name, executor in sorted(_EXECUTORS.items())
+    }
+
+
+def load_change_types() -> list[str]:
+    """Import every service's ``change_types`` module, registering its
+    types. Read from the filesystem, so no other service package is
+    imported to find them. Returns the module names imported."""
+    import app.services as services
+
+    loaded: list[str] = []
+    for service in pkgutil.iter_modules(services.__path__):
+        if not service.ispkg or service.name == "change_queue":
+            continue
+        root = Path(service.module_finder.path) / service.name  # type: ignore[union-attr]
+        if (root / "change_types.py").is_file():
+            name = f"app.services.{service.name}.change_types"
+            importlib.import_module(name)
+            loaded.append(name)
+    return loaded
 {% endif %}

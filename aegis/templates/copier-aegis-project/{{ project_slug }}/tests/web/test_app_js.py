@@ -210,3 +210,50 @@ def test_the_bar_runs_while_part_of_the_page_is_still_on_its_way() -> None:
     Container section's first read) keeps the bar going until it lands."""
     out = run(PENDING_HARNESS, APP_JS=APP_JS)
     assert out == [True, False]
+
+
+SCROLL_HARNESS = (
+    STUBS
+    + """
+const shown = [];
+document.querySelector = (sel) => ({ scrollIntoView: (how) => shown.push([sel, how.block]) });
+require(APP_JS);
+const button = { dataset: { scrollTo: '#rows > tr:last-child' } };
+fire('click', { target: { closest: (sel) => (sel === '[data-scroll-to]' ? button : null) } });
+fire('click', { target: { closest: () => null } });
+console.log(JSON.stringify({ shown }));
+"""
+)
+
+
+def test_a_scroll_button_brings_its_target_into_view() -> None:
+    """A ``data-scroll-to`` button scrolls to the element its selector names
+    (a list's first or last row); a click elsewhere scrolls nothing."""
+    assert run(SCROLL_HARNESS, APP_JS=APP_JS)["shown"] == [
+        ["#rows > tr:last-child", "nearest"]
+    ]
+
+
+MARK_HARNESS = (
+    STUBS
+    + """
+const { markCurrent } = require(APP_JS);
+const link = (href) => {
+  const attrs = {};
+  return { attrs, getAttribute: () => href,
+           setAttribute: (k, v) => { attrs[k] = v; },
+           removeAttribute: (k) => { delete attrs[k]; } };
+};
+const links = ['/overseer', '/overseer/services/payment', '/overseer/services/ai'].map(link);
+links[2].attrs['aria-current'] = 'page';
+markCurrent(links, '/overseer/services/payment/transactions');
+console.log(JSON.stringify(links.map((l) => l.attrs['aria-current'] || null)));
+"""
+)
+
+
+def test_the_sidebar_marks_the_page_it_leads_to() -> None:
+    """The sidebar stays put across navigation, so the current mark moves
+    to the link whose page holds the new address (a section under it
+    included), and only the home link for the home page itself."""
+    assert run(MARK_HARNESS, APP_JS=APP_JS) == [None, "page", None]

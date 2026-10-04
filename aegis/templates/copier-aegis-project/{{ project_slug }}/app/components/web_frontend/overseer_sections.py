@@ -16,7 +16,9 @@ from . import (
     overseer_auth,
     overseer_container,
     overseer_database,
+    overseer_deployments,
     overseer_ingress,
+    overseer_logs,
     overseer_patterns,
     overseer_redis,
     overseer_scheduler,
@@ -106,12 +108,23 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
 # Overseer pages that are not a component or service in the health tree.
 STANDALONE = {
     item.name: item
-    for item in (overseer_patterns.ITEM, overseer_secrets.ITEM, overseer_settings.ITEM)
+    for item in (
+        overseer_patterns.ITEM,
+        overseer_logs.ITEM,
+        overseer_deployments.ITEM,
+        overseer_secrets.ITEM,
+        overseer_settings.ITEM,
+    )
 }
 
 
-def _with_container(name: str, page: SectionedPage) -> SectionedPage:
-    """The page plus a Container section, when a container runs behind the
+# The sections every page with a container behind it gets, in order: each
+# module has a ``SECTION`` label and ``context(page, query)``.
+RUNTIME_SECTIONS = (overseer_container, overseer_logs)
+
+
+def _with_runtime(name: str, page: SectionedPage) -> SectionedPage:
+    """The page plus the runtime sections, when a container runs behind the
     component ``name`` (``ui_runtime.page_of``, which Flet reads too)."""
     if ui_runtime.page_of(name) != page.folder:
         return page
@@ -119,19 +132,26 @@ def _with_container(name: str, page: SectionedPage) -> SectionedPage:
     async def context(
         section: str, component: ComponentStatus, req: SectionRequest
     ) -> dict[str, Any]:
-        if section == "container":
-            return await overseer_container.context(
-                page.folder, req.query.get("window")
-            )
+        for module in RUNTIME_SECTIONS:
+            if section in module.SECTION:
+                return await module.context(page.folder, req.query)
         return await page.context(section, component, req)
 
-    sections = (*page.sections, (None, overseer_container.SECTION))
-    return page._replace(sections=sections, context=context)
+    labels = {key: label for m in RUNTIME_SECTIONS for key, label in m.SECTION.items()}
+    return page._replace(sections=(*page.sections, (None, labels)), context=context)
 
 
 _PAGES: dict[tuple[str, str], SectionedPage] = {
     ("patterns", "patterns"): SectionedPage(
         "patterns", overseer_patterns.SECTIONS, overseer_patterns.section_context
+    ),
+    ("logs", "logs"): SectionedPage(
+        "logs", overseer_logs.SECTIONS, overseer_logs.section_context
+    ),
+    ("deployments", "deployments"): SectionedPage(
+        "deployments",
+        overseer_deployments.SECTIONS,
+        overseer_deployments.section_context,
     ),
     ("secrets", "secrets"): SectionedPage(
         "secrets", overseer_secrets.SECTIONS, overseer_secrets.section_context
@@ -174,4 +194,4 @@ _PAGES: dict[tuple[str, str], SectionedPage] = {
     ),
 } | _optional_pages()
 
-SECTIONED_PAGES = {key: _with_container(key[1], page) for key, page in _PAGES.items()}
+SECTIONED_PAGES = {key: _with_runtime(key[1], page) for key, page in _PAGES.items()}

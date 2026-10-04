@@ -93,6 +93,7 @@ class TestSections:
             "Routes",
             "Lifecycle",
             "Container",
+            "Logs",
         ]
         assert text(one(subnav, 'a[aria-current="page"]')) == "Overview"
         none(html, '[role="tablist"]')
@@ -111,6 +112,17 @@ class TestSections:
         html = _get(signed_in, "routes")
         one(html, "#overseer-sidebar")
         one(html, "#overseer-main #overseer-subnav")
+
+    def test_the_sidebar_is_never_swapped_so_it_keeps_its_scroll(
+        self, signed_in: TestClient
+    ) -> None:
+        """A sidebar link replaces only what is right of it; app.js moves
+        the sidebar's current mark (``markCurrent``)."""
+        links = select(_get(signed_in), "#overseer-sidebar a[hx-get]")
+        assert links
+        assert {(a.get("hx-target"), a.get("hx-select")) for a in links} == {
+            ("#overseer-main", "#overseer-main")
+        }
 
     def test_status_dot_follows_the_live_sidebar_event(
         self, signed_in: TestClient

@@ -3,6 +3,8 @@ queue's state, how full it is, and its share of the work."""
 
 from typing import Any
 
+import pytest
+
 from app.services.system import ui_worker
 from app.services.system.models import ComponentStatus
 
@@ -194,3 +196,36 @@ class TestHeldCapacity:
 
     def test_without_a_report_the_configured_limit_stands(self) -> None:
         assert ui_worker.overview(_worker(_queue("q")), held={})["slots"] == 10
+
+
+class TestQueuesSampler:
+    """The queues are a sampler (``app.core.series``): one health check a
+    tick for every viewer, each queue's waiting and finished counts kept as
+    series so a reconnecting view keeps its trend."""
+
+    async def test_a_reading_is_the_worker_and_each_queues_counts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        worker = _worker(
+            _queue("system", queued_jobs=30, jobs_completed=90, jobs_failed=2)
+        )
+
+        async def checked() -> ComponentStatus:
+            return worker
+
+        async def reports() -> list[dict[str, str]]:
+            return [{"queue": "system", "concurrency": "4"}]
+
+        monkeypatch.setattr(ui_worker, "load_worker", checked)
+        monkeypatch.setattr(ui_worker, "load_runtime", reports)
+        sample = await ui_worker.read_queues()
+        assert sample.values == {"system:queued": 30, "system:done": 92}
+        assert sample.latest == (worker, [{"queue": "system", "concurrency": "4"}])
+
+    def test_kept_series_become_the_trends_samples(self) -> None:
+        found = {
+            "system:queued": [(0.0, 300.0), (10.0, 276.0)],
+            "system:done": [(0.0, 100.0), (10.0, 124.0)],
+        }
+        assert ui_worker.samples(found, "system") == [(0.0, 300, 100), (10.0, 276, 124)]
+        assert ui_worker.samples(found, "other") == []

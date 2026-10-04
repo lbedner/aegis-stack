@@ -8,6 +8,7 @@ from app.components.frontend.dashboard.modals.base_detail_popup import BaseDetai
 from app.components.frontend.dashboard.modals.container_section import (
     ContainerSection,
 )
+from app.components.frontend.dashboard.modals.logs_section import LogsSection
 from app.components.frontend.dashboard.modals.modal_sections import (
     DateRangeChips,
     LineChartCard,
@@ -90,8 +91,9 @@ def test_a_tabbed_modal_gets_a_container_tab() -> None:
     tabs = PulseTabs(tabs=[ft.Tab(text="Overview", content=ft.Text("x"))])
     component = ComponentStatus(name="cache", message="", metadata={})
     BaseDetailPopup(FakePage(), component, "Title", sections=[tabs], scrollable=False)  # type: ignore[arg-type]
-    assert [t.text for t in tabs.tabs] == ["Overview", "Container"]
-    assert any(isinstance(c, ContainerSection) for c in walk(tabs.tabs[-1]))
+    assert [t.text for t in tabs.tabs] == ["Overview", "Container", "Logs"]
+    assert any(isinstance(c, ContainerSection) for c in walk(tabs.tabs[1]))
+    assert any(isinstance(c, LogsSection) for c in walk(tabs.tabs[2]))
 
 
 async def test_a_chart_with_nothing_in_its_window_says_so(

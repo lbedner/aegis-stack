@@ -15,7 +15,11 @@ from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .base_popup import BasePopup
 from .container_section import ContainerSection
+from .logs_section import LogsSection
 from .modal_constants import ModalLayout
+
+# What every component with a container behind it shows, in order.
+RUNTIME_SECTIONS = (("Container", ContainerSection), ("Logs", LogsSection))
 
 
 class BaseDetailPopup(BasePopup):
@@ -76,15 +80,18 @@ class BaseDetailPopup(BasePopup):
         self._status_tag: StatusTag | None = None
         self._title_row: ft.Row | None = None
 
-        # Every component with a container behind it shows that container: as
-        # a tab where the body is a tab bar, below the sections otherwise.
+        # Every component with a container behind it shows that container and
+        # its logs: as tabs where the body is a tab bar, below the sections
+        # otherwise.
         if (key := ui_runtime.page_of(component_data.name)) is not None:
-            if not scrollable and sections and isinstance(sections[0], ft.Tabs):
-                tab = ft.Column([ContainerSection(key)], scroll=ft.ScrollMode.AUTO)
-                sections[0].tabs.append(ft.Tab(text="Container", content=tab))
-            else:
-                divider = ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT)
-                sections = [*sections, divider, ContainerSection(key)]
+            tabbed = not scrollable and sections and isinstance(sections[0], ft.Tabs)
+            for title, section in RUNTIME_SECTIONS:
+                if tabbed:
+                    tab = ft.Column([section(key)], scroll=ft.ScrollMode.AUTO)
+                    sections[0].tabs.append(ft.Tab(text=title, content=tab))
+                else:
+                    divider = ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT)
+                    sections = [*sections, divider, section(key)]
 
         # Build sections container - scrollable or direct based on parameter
         if scrollable:
@@ -221,3 +228,39 @@ class BaseDetailPopup(BasePopup):
         self.hide()
         if self.page:
             self.page.update()
+
+
+class PagePopup(BaseDetailPopup):
+    """An Overseer page outside the health tree (Logs, Deployments) as a
+    popup the header opens (``open_on``): a subclass names it (``TITLE``,
+    ``SUBTITLE``) and builds its one section; no status badge, since no
+    health check stands behind it."""
+
+    TITLE: str
+    SUBTITLE: str
+
+    def __init__(self, page: ft.Page) -> None:
+        super().__init__(
+            page=page,
+            component_data=ComponentStatus(
+                name=self.TITLE.lower(), status=ComponentStatusType.INFO, message=""
+            ),
+            title_text=self.TITLE,
+            subtitle_text=self.SUBTITLE,
+            sections=[self.section()],
+        )
+        if self._status_tag is not None:
+            self._status_tag.visible = False
+
+    def section(self) -> ft.Control:
+        raise NotImplementedError
+
+    @classmethod
+    def open_on(cls, page: ft.Page) -> None:
+        """Show the page's one popup of this kind, adding it the first time."""
+        popup = next((c for c in page.overlay if isinstance(c, cls)), None)
+        if popup is None:
+            popup = cls(page)
+            page.overlay.append(popup)
+        popup.show()
+        page.update()

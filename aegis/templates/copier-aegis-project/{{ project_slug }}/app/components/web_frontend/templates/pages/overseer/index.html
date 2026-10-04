@@ -11,7 +11,7 @@
     {% if navigation[group] %}
     <ul class="space-y-2">
       {% for entry in navigation[group] %}
-      <li><a href="{{ entry.url }}" hx-get="{{ entry.url }}" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+      <li><a href="{{ entry.url }}" {{ hx_replace(entry.url, "#overseer-main") }}
              class="flex items-center justify-between gap-3 text-sm text-aegis-text hover:text-aegis-teal">
         <span>{{ entry.title }}</span><span class="inline-flex items-center" sse-swap="{{ entry.event }}" hx-target="this">
           {% set health_status = entry.status %}{% include "pages/overseer/_status_dot.html" %}

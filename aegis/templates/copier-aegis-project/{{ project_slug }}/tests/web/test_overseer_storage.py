@@ -134,6 +134,7 @@ def test_sections_are_overview_and_browse(signed_in: TestClient) -> None:
         "Overview",
         "Browse",
         "Container",
+        "Logs",
     ]
 
 

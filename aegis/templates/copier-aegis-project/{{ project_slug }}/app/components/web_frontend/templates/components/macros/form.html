@@ -5,6 +5,8 @@
 #}
 
 
+{% from "components/macros/icons.html" import icon %}
+
 {%- set _primary_button_classes -%}
 text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5 hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
 {%- endset -%}
@@ -30,11 +32,7 @@ text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-4 p
   class="{{ _primary_button_classes }} w-full">
   <span x-show="!loading">{{ idle_label }}</span>
   <span x-show="loading" x-cloak class="inline-flex items-center gap-2">
-    {# Tailwind's `animate-spin` + a minimal ring-quarter SVG. No deps. #}
-    <svg class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-    </svg>
+    {{ icon("spinner", "animate-spin w-4 h-4") }}
     {{ loading_label }}
   </span>
 </button>
@@ -53,7 +51,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    filter bar; ``block`` lays it out full-width inside a ``field()``. #}
 {% macro select(name, options, selected=None, blank="All", label=None, block=False) %}
 {% if label %}<label class="inline-flex items-center gap-2 text-xs text-aegis-muted"><span>{{ label }}</span>{% endif %}
-<select name="{{ name }}" class="{{ _control_classes }}{% if block %} block w-full mt-1{% endif %}">
+<select name="{{ name }}" class="{{ _control_classes }} select-caret pr-8{% if block %} block w-full mt-1{% endif %}">
   {% if blank is not none %}<option value="">{{ blank }}</option>{% endif %}
   {% for option in options %}
   {% set oid = option["id"] if option is mapping else option.id %}
@@ -75,6 +73,27 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
   <input type="checkbox" name="{{ name }}" {% if value is not none %}value="{{ value }}"{% endif %} {% if checked %}checked{% endif %} class="accent-aegis-teal">
   {% if label %}<span>{{ label }}</span>{% endif %}
 </label>
+{% endmacro %}
+
+{# A dropdown of checkboxes, posting ``name`` once per tick: a multi-pick
+   filter. ``options`` are dicts with ``value``, ``label``, ``checked`` and
+   an optional ``count``. Kept across the swaps of the form it sits in
+   (``hx-preserve``, which needs the ``id``), so the menu stays open while
+   several are ticked. #}
+{% macro checklist(id, name, label, options) %}
+{% set ticked = options|selectattr("checked")|list|length %}
+<details id="{{ id }}" hx-preserve class="relative">
+  <summary class="list-none cursor-pointer text-xs px-2.5 py-1 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text">{{ label }}{% if ticked %}: {{ ticked }}{% endif %}</summary>
+  <div class="absolute z-20 mt-1 w-64 max-h-80 overflow-y-auto rounded-lg border border-aegis-border bg-aegis-card shadow-xl p-2 space-y-0.5">
+    {% for o in options %}
+    <label class="flex items-center gap-2 px-2 py-1 rounded text-sm hover:bg-aegis-border/30 cursor-pointer">
+      <input type="checkbox" name="{{ name }}" value="{{ o.value }}" {% if o.checked %}checked{% endif %} class="checkbox checkbox-xs">
+      <span class="flex-1 truncate">{{ o.label }}</span>
+      {% if o.count is defined %}<span class="text-xxs text-aegis-muted tabular-nums">{{ "{:,}".format(o.count) }}</span>{% endif %}
+    </label>
+    {% endfor %}
+  </div>
+</details>
 {% endmacro %}
 
 {# A stable id lets htmx restore focus when a search result replaces the form. #}

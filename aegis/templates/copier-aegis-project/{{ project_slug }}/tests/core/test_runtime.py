@@ -45,14 +45,39 @@ class TestLogLines:
         assert line.event == "slow"
         assert line.stream == "stdout"
 
+    def test_a_json_line_keeps_its_other_fields_and_its_traceback(self) -> None:
+        line = parse_log_line(
+            '{"level": "error", "event": "failed", "order": 7, "user": "a",'
+            ' "exception": "Traceback (most recent call last):\\nValueError: x"}',
+            "stdout",
+        )
+        assert line.fields == (("order", "7"), ("user", "a"))
+        assert line.trace == "Traceback (most recent call last):\nValueError: x"
+
     def test_a_console_line_loses_its_colour_codes(self) -> None:
         line = parse_log_line(
             "2026-10-02T20:45:39Z \x1b[2m12:00\x1b[0m [\x1b[32minfo\x1b[0m] started",
             "stderr",
         )
         assert line.text == "12:00 [info] started"
-        assert line.level is None
         assert line.stream == "stderr"
+
+    @pytest.mark.parametrize(
+        ("raw", "level"),
+        [
+            ("12:00:01 [info     ] Task started", "info"),  # structlog console
+            ("[2026-10-04 00:41:12,464][taskiq][WARNING][MainProcess] slow", "warning"),
+            ("INFO:     127.0.0.1:5000 - GET / 200", "info"),  # uvicorn
+            ("WARNING:root:disk nearly full", "warning"),  # logging's default
+            ("[WARN] retrying", "warning"),
+            ("Retrying after error: timeout", None),  # a word, not a level
+            ("plain text", None),
+        ],
+    )
+    def test_a_plain_line_gives_the_level_it_is_tagged_with(
+        self, raw: str, level: str | None
+    ) -> None:
+        assert parse_log_line(raw, "stdout").level == level
 
     def test_a_line_without_a_timestamp_keeps_its_text(self) -> None:
         line = parse_log_line("plain text", "stdout")

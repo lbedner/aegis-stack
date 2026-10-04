@@ -76,47 +76,24 @@ class Host:
     charts: tuple[Chart, ...]
 
 
-HOSTS = {
-    "inference": Host(
-        "Ollama runs on this machine, outside Docker: what it holds in "
-        "memory, and how fast it answers this app.",
-        (
-            Chart(
-                "model-memory",
-                "Model memory",
-                f"{series.INFERENCE}:",
-                series.MEMORY,
-                "bytes",
-                empty="No model loaded in {window}.",
-            ),
-            Chart(
-                "tokens",
-                "Tokens per second",
-                f"{series.LLM}:",
-                series.TOKENS_PER_SECOND,
-                within="model-memory",
-                empty="No calls to a loaded model in {window}.",
-                style="events",
-            ),
-            Chart(
-                "latency",
-                "Latency",
-                f"{series.LLM}:",
-                series.LATENCY,
-                "seconds",
-                within="model-memory",
-                empty="No calls to a loaded model in {window}.",
-                style="events",
-            ),
-        ),
-    ),
-}
+def host_of(page: str) -> Host | None:
+    """A page whose server can run outside Docker (Ollama on the host), as
+    the component that owns it registers it (``samplers.HOSTS``): looked up
+    at call time, since the registry imports this module."""
+    from app.services.system.samplers import HOSTS
+
+    return HOSTS.get(page)
 
 
 def page_of(component: str) -> str | None:
     """The page a health component's containers show on, if any has one."""
     page = _COMPONENT_PAGES.get(component, component)
     return page if page in runtime.PAGES else None
+
+
+def component_of(page: str) -> str:
+    """The health component a page shows (``page_of`` the other way)."""
+    return next((c for c, p in _COMPONENT_PAGES.items() if p == page), page)
 
 
 async def sample() -> Sample:
@@ -157,15 +134,16 @@ CONTAINERS = Sampler(SAMPLER, sample)
 
 async def containers(page: str, *, wait: bool = True) -> dict[str, Any]:
     """``{"rows": [...], "note": str | None}`` for one page; a page whose
-    server runs outside Docker says so (``HOSTS``). Before the first
+    server runs outside Docker says so (``host_of``). Before the first
     sample, ``wait=False`` gives ``PENDING`` rather than read the runtime."""
-    view = await _containers(page, wait)
-    if not view["rows"] and page in HOSTS:
-        return _note(HOSTS[page].note)
+    host = host_of(page)
+    view = await _containers(page, wait, host is not None)
+    if not view["rows"] and host is not None:
+        return _note(host.note)
     return view
 
 
-async def _containers(page: str, wait: bool) -> dict[str, Any]:
+async def _containers(page: str, wait: bool, hosted: bool) -> dict[str, Any]:
     """A page served from the containers sampler (``series.current``); a
     page whose server can run outside Docker reads its last reading without
     keeping Docker at full pace for it (its charts keep their own)."""
@@ -173,15 +151,13 @@ async def _containers(page: str, wait: bool) -> dict[str, Any]:
         return _note(NO_DEPLOY)
     try:
         tables = await (
-            series.latest(SAMPLER)
-            if page in HOSTS
-            else series.current(CONTAINERS, fill=wait)
+            series.latest(SAMPLER) if hosted else series.current(CONTAINERS, fill=wait)
         )
     except RuntimeUnavailableError as exc:
         return _note(f"The runtime did not answer: {exc}")
     if tables is not None:
         return _page(tables, page)
-    return _note(NO_CONTAINER) if page in HOSTS else PENDING
+    return _note(NO_CONTAINER) if hosted else PENDING
 
 
 def _deployed() -> bool:
@@ -203,7 +179,7 @@ async def charts(
 ) -> list[dict[str, Any]]:
     """The page's charts from what was sampled (no runtime call): its
     containers', or, for a server outside Docker, what it reports of itself
-    (``HOSTS``), over the last ``window`` seconds.
+    (``host_of``), over the last ``window`` seconds.
     ``[{"key", "title", "subtitle", "data", "empty"}]``; empty with nothing
     to chart."""
     specs = await _charts_for(page)
@@ -240,10 +216,11 @@ async def charts(
 async def _charts_for(page: str) -> tuple[Chart, ...]:
     """A page's container charts; for one whose server can run outside
     Docker, its own when no container runs it (the last reading says)."""
-    if page not in HOSTS:
+    host = host_of(page)
+    if host is None:
         return CONTAINER_CHARTS if _deployed() else ()
     tables = await series.latest(SAMPLER) if _deployed() else None
-    return CONTAINER_CHARTS if tables and tables.get(page) else HOSTS[page].charts
+    return CONTAINER_CHARTS if tables and tables.get(page) else host.charts
 
 
 def _label(name: str) -> str:

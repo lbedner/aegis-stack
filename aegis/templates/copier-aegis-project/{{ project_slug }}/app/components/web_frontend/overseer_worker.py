@@ -7,10 +7,9 @@ is open. Tasks and Lifecycle are the Flet worker modal's Activity and
 Lifecycle tabs, read from the same task history and queue registry.
 """
 
-from collections import deque
-import time
 from typing import Any
 
+from app.core import series
 from app.core.formatting import (
     format_duration_ms,
     format_relative_time,
@@ -36,23 +35,12 @@ QUEUES_EVENTS = "/overseer/events/worker-queues"
 QUEUES_EVENT = "worker-queues"
 QUEUES_TEMPLATE = "pages/overseer/worker/_queues.html"
 QUEUES_INTERVAL_SECONDS = 3.0
-# The live view's memory: ~5 minutes of samples per queue at the interval.
-TREND_SAMPLES = 100
 PILE_CELLS = 40
 SPARK_WIDTH, SPARK_HEIGHT = 240, 28
 PAGE_SIZE = 25
 STATUS_FILTERS = {"all": "All"} | {
     key: label for key, (label, _) in ui_worker.TASK_STATUSES.items()
 }
-
-
-async def load_worker() -> ComponentStatus:
-    """A fresh read of every queue, from the worker health check."""
-    try:
-        from app.services.system.health_worker import check_worker_health
-    except ImportError:
-        return ComponentStatus(name="worker", message="No worker installed")
-    return await check_worker_health()
 
 
 async def load_tasks(
@@ -125,23 +113,6 @@ def load_lifecycle(queue: str) -> dict[str, list[dict[str, Any]]]:
     }
 
 
-async def load_runtime() -> list[dict[str, str]]:
-    """What each live worker process reports it is running with."""
-    try:
-        from app.components.worker.runtime import read_runtime
-    except ImportError:
-        return []
-    import redis.asyncio as aioredis
-
-    from app.services.system.redis_keys import redis_url
-
-    client = aioredis.from_url(redis_url())
-    try:
-        return await read_runtime(client)
-    finally:
-        await client.aclose()
-
-
 def misnamed_queues() -> list[str]:
     """Names in ``Settings.WORKER_QUEUES`` that match no queue: a worker
     refuses to start on them, and this page says which."""
@@ -154,20 +125,11 @@ def misnamed_queues() -> list[str]:
     return unknown_queues(settings.WORKER_QUEUES, discover_worker_queues())
 
 
-def _held(reports: list[dict[str, str]]) -> dict[str, int]:
-    """Jobs each queue's reporting processes may hold, summed."""
-    held: dict[str, int] = {}
-    for r in reports:
-        if r.get("concurrency", "").isdigit():
-            held[r["queue"]] = held.get(r["queue"], 0) + int(r["concurrency"])
-    return held
-
-
-async def queues_view(worker: ComponentStatus | None = None) -> dict[str, Any]:
-    """The queues and totals for ``_queues.html``."""
-    reports = await load_runtime()
-    worker = worker or await load_worker()
-    view = ui_worker.overview(worker, held=_held(reports))
+async def queues_view() -> dict[str, Any]:
+    """The queues and totals for ``_queues.html``, from the queues sampler's
+    reading."""
+    worker, reports = await series.reading(ui_worker.QUEUES)
+    view = ui_worker.overview(worker, held=ui_worker.held(reports))
     # With no queues to show, an unhealthy worker's message is the page.
     unhealthy = worker.status == ComponentStatusType.UNHEALTHY
     view["problem"] = worker.message if unhealthy and not view["queues"] else None
@@ -180,21 +142,28 @@ async def queues_view(worker: ComponentStatus | None = None) -> dict[str, Any]:
 
 
 def add_trends(
-    view: dict[str, Any], history: dict[str, deque[ui_worker.Sample]], now: float
+    view: dict[str, Any], found: dict[str, list[tuple[float, float]]]
 ) -> dict[str, Any]:
-    """Record this reading in ``history`` and give each queue its rate, when
-    its backlog drains, and a line of its waiting jobs over time."""
+    """Give each queue its rate, when its backlog drains, and a line of its
+    waiting jobs over time, from the sampler's kept series (``found``)."""
     for q in view["queues"]:
-        samples = history.setdefault(q["name"], deque(maxlen=TREND_SAMPLES))
-        samples.append((now, q["queued"], q["completed"] + q["failed"]))
-        per_second = ui_worker.rate(list(samples))
-        net = ui_worker.net_rate(list(samples))
+        samples = ui_worker.samples(found, q["name"])
+        per_second = ui_worker.rate(samples)
+        net = ui_worker.net_rate(samples)
         q["rate"] = per_second
         q["drain"] = ui_worker.drain(q["queued"], per_second, net)
         q["spark"] = ui_worker.sparkline(
             [waiting for _, waiting, _ in samples], SPARK_WIDTH, SPARK_HEIGHT
         )
     return view
+
+
+async def live_queues() -> dict[str, Any]:
+    """The queues with their trends, as the page and its stream show them:
+    the reading first, so the series it keeps are in the trend."""
+    view = await queues_view()
+    found = await series.read(f"{ui_worker.QUEUES_SAMPLER}:", ui_worker.TREND_SECONDS)
+    return add_trends(view, found)
 
 
 def render_queues(view: dict[str, Any]) -> str:
@@ -204,12 +173,9 @@ def render_queues(view: dict[str, Any]) -> str:
 def queues_events(max_frames: int | None = None):  # noqa: ANN201 - async iterator
     """The queues over SSE, sent again only when they change."""
 
-    history: dict[str, deque[ui_worker.Sample]] = {}
-
     async def render() -> str:
         try:
-            view = await queues_view()
-            return render_queues(add_trends(view, history, time.monotonic()))
+            return render_queues(await live_queues())
         except Exception as exc:  # noqa: BLE001 - keep the stream, show nothing new
             logger.warning("Worker queue read failed", error=str(exc))
             return ""
@@ -310,7 +276,9 @@ def _runtime_card(report: dict[str, str]) -> dict[str, Any]:
 
 async def _runtime() -> dict[str, Any]:
     return {
-        "runtime": [_runtime_card(r) for r in await load_runtime()],
+        "runtime": [
+            _runtime_card(r) for r in (await series.reading(ui_worker.QUEUES))[1]
+        ],
         "misnamed": misnamed_queues(),
     }
 
@@ -334,7 +302,7 @@ async def section_context(
         return {
             # The header renders once; every number lives in the live stream.
             "header_message": None,
-            "worker": add_trends(await queues_view(), {}, time.monotonic()),
+            "worker": await live_queues(),
             "queues_events": QUEUES_EVENTS,
             "queues_event": QUEUES_EVENT,
         }

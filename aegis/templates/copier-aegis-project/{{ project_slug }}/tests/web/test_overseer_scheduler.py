@@ -111,6 +111,7 @@ class TestSections:
             "Jobs",
             "History",
             "Container",
+            "Logs",
         ]
 
 
